@@ -1,8 +1,17 @@
 export const queryKeys = {
   contracts: {
     all: ["contracts"] as const,
-    list: (filters?: Record<string, unknown>) => ["contracts", "list", filters] as const,
+    list: (facilityId: string, filters?: Record<string, unknown>) =>
+      ["contracts", "list", facilityId, filters] as const,
     detail: (id: string) => ["contracts", "detail", id] as const,
+    stats: (facilityId: string) => ["contracts", "stats", facilityId] as const,
+  },
+  contractTerms: {
+    all: ["contractTerms"] as const,
+    list: (contractId: string) => ["contractTerms", "list", contractId] as const,
+  },
+  categories: {
+    all: ["categories"] as const,
   },
   vendors: {
     all: ["vendors"] as const,
