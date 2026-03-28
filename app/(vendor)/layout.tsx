@@ -1,17 +1,25 @@
-export default function VendorLayout({
+import { requireRole } from "@/lib/actions/auth"
+import { vendorNav } from "@/lib/constants"
+import { PortalShell } from "@/components/shared/shells/portal-shell"
+
+export default async function VendorLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  // Will become <PortalShell role="vendor" /> in Phase 1
+  const session = await requireRole("vendor")
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-64 border-r bg-sidebar p-4 lg:block">
-        <p className="text-sm font-medium text-sidebar-foreground">
-          Vendor Portal
-        </p>
-      </aside>
-      <main className="flex-1 p-6">{children}</main>
-    </div>
+    <PortalShell
+      role="vendor"
+      navItems={vendorNav}
+      user={{
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image,
+      }}
+    >
+      {children}
+    </PortalShell>
   )
 }

@@ -1,17 +1,25 @@
-export default function FacilityLayout({
+import { requireRole } from "@/lib/actions/auth"
+import { facilityNav } from "@/lib/constants"
+import { PortalShell } from "@/components/shared/shells/portal-shell"
+
+export default async function FacilityLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  // Will become <PortalShell role="facility" /> in Phase 1
+  const session = await requireRole("facility")
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-64 border-r bg-sidebar p-4 lg:block">
-        <p className="text-sm font-medium text-sidebar-foreground">
-          Facility Portal
-        </p>
-      </aside>
-      <main className="flex-1 p-6">{children}</main>
-    </div>
+    <PortalShell
+      role="facility"
+      navItems={facilityNav}
+      user={{
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image,
+      }}
+    >
+      {children}
+    </PortalShell>
   )
 }

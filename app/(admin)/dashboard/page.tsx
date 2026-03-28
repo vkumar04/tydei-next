@@ -1,8 +1,19 @@
+import { LayoutDashboard } from "lucide-react"
+import { PageHeader } from "@/components/shared/page-header"
+import { EmptyState } from "@/components/shared/empty-state"
+
 export default function AdminDashboard() {
   return (
-    <div>
-      <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-      <p className="text-muted-foreground">Coming in Phase 10</p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Admin Dashboard"
+        description="Platform overview and management"
+      />
+      <EmptyState
+        icon={LayoutDashboard}
+        title="Admin Dashboard"
+        description="Platform metrics and management tools coming soon"
+      />
     </div>
   )
 }
