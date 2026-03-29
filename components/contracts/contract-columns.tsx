@@ -1,11 +1,13 @@
 "use client"
 
+import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Contract, Vendor, ProductCategory } from "@prisma/client"
 import { Eye, Pencil, Trash2 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
+import { Badge } from "@/components/ui/badge"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
 
 type ContractWithVendor = Contract & {
@@ -25,16 +27,20 @@ export function getContractColumns(
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: "Contract Name",
       cell: ({ row }) => (
-        <div>
+        <Link
+          href={`/dashboard/contracts/${row.original.id}`}
+          className="block hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
           <p className="font-medium">{row.original.name}</p>
           {row.original.contractNumber && (
             <p className="text-xs text-muted-foreground">
               {row.original.contractNumber}
             </p>
           )}
-        </div>
+        </Link>
       ),
     },
     {
@@ -46,9 +52,9 @@ export function getContractColumns(
       accessorKey: "contractType",
       header: "Type",
       cell: ({ row }) => (
-        <span className="capitalize">
+        <Badge variant="outline" className="capitalize">
           {row.original.contractType.replace("_", " ")}
-        </span>
+        </Badge>
       ),
     },
     {
@@ -63,18 +69,22 @@ export function getContractColumns(
     },
     {
       accessorKey: "effectiveDate",
-      header: "Effective",
+      header: "Effective Date",
       cell: ({ row }) => formatDate(row.original.effectiveDate),
     },
     {
       accessorKey: "expirationDate",
-      header: "Expiration",
+      header: "Expiration Date",
       cell: ({ row }) => formatDate(row.original.expirationDate),
     },
     {
       accessorKey: "totalValue",
-      header: "Value",
-      cell: ({ row }) => formatCurrency(Number(row.original.totalValue)),
+      header: () => <div className="text-right">Value</div>,
+      cell: ({ row }) => (
+        <div className="text-right font-medium">
+          {formatCurrency(Number(row.original.totalValue))}
+        </div>
+      ),
     },
     {
       id: "actions",

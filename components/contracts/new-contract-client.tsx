@@ -2,11 +2,11 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeft, ArrowRight, Loader2, Sparkles, Save, FileText } from "lucide-react"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractTerm } from "@/lib/actions/contract-terms"
-import { PageHeader } from "@/components/shared/page-header"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
@@ -104,6 +104,30 @@ export function NewContractClient({
     router.push(`/dashboard/contracts/${contract.id}`)
   }
 
+  async function handleSaveAsDraft() {
+    // Set status to draft regardless of validation
+    form.setValue("status", "draft")
+
+    const values = form.getValues()
+    // Only require a name for draft
+    if (!values.name) {
+      toast.error("Please enter a contract name")
+      return
+    }
+
+    const contract = await createMutation.mutateAsync(values)
+
+    // Create terms for the new contract
+    for (const term of terms) {
+      await createContractTerm({
+        ...term,
+        contractId: contract.id,
+      })
+    }
+
+    router.push(`/dashboard/contracts/${contract.id}`)
+  }
+
   async function handleNext() {
     if (step === "basic") {
       const isValid = await form.trigger()
@@ -113,21 +137,24 @@ export function NewContractClient({
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="New Contract"
-        description="Create a new vendor contract"
-        action={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setAiExtractOpen(true)}>
-              <Sparkles className="size-4" /> AI Extract
-            </Button>
-            <Button variant="outline" onClick={() => router.back()}>
-              Cancel
-            </Button>
-          </div>
-        }
-      />
+    <div className="flex flex-col gap-6">
+      {/* Page Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" asChild>
+          <Link href="/dashboard/contracts">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">New Contract</h1>
+          <p className="text-muted-foreground">Create a new vendor contract</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setAiExtractOpen(true)}>
+            <Sparkles className="mr-2 h-4 w-4" /> AI Extract
+          </Button>
+        </div>
+      </div>
 
       <AIExtractDialog
         open={aiExtractOpen}
@@ -137,7 +164,10 @@ export function NewContractClient({
 
       <Tabs value={step} onValueChange={(v) => goToStep(v as typeof step)}>
         <TabsList>
-          <TabsTrigger value="basic">Basic Info</TabsTrigger>
+          <TabsTrigger value="basic" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Basic Info
+          </TabsTrigger>
           <TabsTrigger value="terms">Terms & Tiers</TabsTrigger>
           <TabsTrigger value="review">Review</TabsTrigger>
         </TabsList>
@@ -170,24 +200,36 @@ export function NewContractClient({
           onClick={prevStep}
           disabled={isFirstStep}
         >
-          <ArrowLeft className="size-4" /> Previous
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
         </Button>
 
-        {isLastStep ? (
-          <Button
-            onClick={handleSubmit}
-            disabled={createMutation.isPending}
-          >
-            {createMutation.isPending && (
-              <Loader2 className="animate-spin" />
-            )}
-            Create Contract
-          </Button>
-        ) : (
-          <Button onClick={handleNext}>
-            Next <ArrowRight className="size-4" />
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isLastStep ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={handleSaveAsDraft}
+                disabled={createMutation.isPending}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                Save as Draft
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Create Contract
+              </Button>
+            </>
+          ) : (
+            <Button onClick={handleNext}>
+              Next <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )

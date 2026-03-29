@@ -2,19 +2,19 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeft, Loader2, Save, X } from "lucide-react"
 import { useContract, useUpdateContract } from "@/hooks/use-contracts"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { upsertContractTiers, createContractTerm, deleteContractTerm } from "@/lib/actions/contract-terms"
-import { PageHeader } from "@/components/shared/page-header"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
-import type { TermFormValues } from "@/lib/validators/contract-terms"
 
 interface EditContractClientProps {
   contractId: string
@@ -144,21 +144,45 @@ export function EditContractClient({
   if (!contract) return null
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={`Edit: ${contract.name}`}
-        description="Update contract details"
-        action={
-          <Button variant="outline" onClick={() => router.back()}>
-            Cancel
+    <div className="flex flex-col gap-6">
+      {/* Page Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" asChild>
+          <Link href={`/dashboard/contracts/${contractId}`}>
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">Edit Contract</h1>
+          <p className="text-muted-foreground">{contract.name}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/dashboard/contracts/${contractId}`}>
+              <X className="mr-2 h-4 w-4" />
+              Cancel
+            </Link>
           </Button>
-        }
-      />
+          <Button onClick={handleSave} disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </div>
 
       <Tabs defaultValue="basic">
         <TabsList>
-          <TabsTrigger value="basic">Basic Info</TabsTrigger>
-          <TabsTrigger value="terms">Terms & Tiers</TabsTrigger>
+          <TabsTrigger value="basic">Contract Details</TabsTrigger>
+          <TabsTrigger value="terms">
+            Terms & Rebates
+            {terms.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{terms.length}</Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
@@ -178,13 +202,6 @@ export function EditContractClient({
           <ContractDocumentsList documents={contract.documents} />
         </TabsContent>
       </Tabs>
-
-      <div className="flex justify-end border-t pt-4">
-        <Button onClick={handleSave} disabled={updateMutation.isPending}>
-          {updateMutation.isPending && <Loader2 className="animate-spin" />}
-          Save Changes
-        </Button>
-      </div>
     </div>
   )
 }

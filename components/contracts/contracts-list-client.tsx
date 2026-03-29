@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Plus, FileText, DollarSign, TrendingUp } from "lucide-react"
 import type { ContractStatus, ContractType } from "@prisma/client"
 import { useContracts, useContractStats, useDeleteContract } from "@/hooks/use-contracts"
@@ -47,6 +48,9 @@ export function ContractsListClient({ facilityId, userId }: ContractsListClientP
     [router]
   )
 
+  const contracts = data?.contracts ?? []
+  const isEmpty = !isLoading && contracts.length === 0
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -59,7 +63,7 @@ export function ContractsListClient({ facilityId, userId }: ContractsListClientP
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard
           title="Total Contracts"
           value={stats?.totalContracts ?? 0}
@@ -67,13 +71,13 @@ export function ContractsListClient({ facilityId, userId }: ContractsListClientP
           description="Active and pending"
         />
         <MetricCard
-          title="Total Value"
+          title="Total Contract Value"
           value={formatCurrency(stats?.totalValue ?? 0)}
           icon={DollarSign}
           description="All contracts"
         />
         <MetricCard
-          title="Total Rebates"
+          title="Total Rebates Earned"
           value={formatCurrency(stats?.totalRebates ?? 0)}
           icon={TrendingUp}
           description="Rebates earned"
@@ -82,25 +86,38 @@ export function ContractsListClient({ facilityId, userId }: ContractsListClientP
 
       <Tabs defaultValue="contracts">
         <TabsList>
-          <TabsTrigger value="contracts">Contracts</TabsTrigger>
+          <TabsTrigger value="contracts">All Contracts</TabsTrigger>
           <TabsTrigger value="pending">Pending Submissions</TabsTrigger>
         </TabsList>
         <TabsContent value="contracts" className="mt-4">
-          <DataTable
-            columns={columns}
-            data={data?.contracts ?? []}
-            searchKey="name"
-            searchPlaceholder="Search contracts..."
-            isLoading={isLoading}
-            filterComponent={
-              <ContractFilters
-                status={statusFilter}
-                onStatusChange={setStatusFilter}
-                type={typeFilter}
-                onTypeChange={setTypeFilter}
-              />
-            }
-          />
+          {isEmpty ? (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-16">
+              <FileText className="h-10 w-10 text-muted-foreground/50" />
+              <p className="text-muted-foreground">No contracts found</p>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/dashboard/contracts/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create your first contract
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={contracts}
+              searchKey="name"
+              searchPlaceholder="Search contracts..."
+              isLoading={isLoading}
+              filterComponent={
+                <ContractFilters
+                  status={statusFilter}
+                  onStatusChange={setStatusFilter}
+                  type={typeFilter}
+                  onTypeChange={setTypeFilter}
+                />
+              }
+            />
+          )}
         </TabsContent>
         <TabsContent value="pending" className="mt-4">
           <PendingContractsTab facilityId={facilityId} userId={userId ?? ""} />
