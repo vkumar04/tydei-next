@@ -1,4 +1,8 @@
+"use client"
+
 import type { ReactNode } from "react"
+import { motion } from "motion/react"
+import { fadeIn } from "@/lib/animations"
 
 interface PageHeaderProps {
   title: string
@@ -8,7 +12,12 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, action }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between">
+    <motion.div
+      className="flex items-start justify-between"
+      variants={fadeIn}
+      initial="hidden"
+      animate="show"
+    >
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         {description && (
@@ -16,6 +25,6 @@ export function PageHeader({ title, description, action }: PageHeaderProps) {
         )}
       </div>
       {action && <div>{action}</div>}
-    </div>
+    </motion.div>
   )
 }

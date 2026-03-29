@@ -1,3 +1,5 @@
+"use client"
+
 import {
   Building2,
   Truck,
@@ -6,8 +8,10 @@ import {
   DollarSign,
   CreditCard,
 } from "lucide-react"
+import { motion } from "motion/react"
 import { MetricCard } from "@/components/shared/cards/metric-card"
 import { formatCurrency, formatCompactNumber } from "@/lib/formatting"
+import { staggerContainer } from "@/lib/animations"
 
 interface AdminStatsProps {
   stats: {
@@ -22,13 +26,18 @@ interface AdminStatsProps {
 
 export function AdminStats({ stats }: AdminStatsProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <motion.div
+      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+      variants={staggerContainer}
+      initial="hidden"
+      animate="show"
+    >
       <MetricCard title="Facilities" value={stats.totalFacilities} icon={Building2} />
       <MetricCard title="Vendors" value={stats.totalVendors} icon={Truck} />
       <MetricCard title="Users" value={formatCompactNumber(stats.totalUsers)} icon={Users} />
       <MetricCard title="Active Contracts" value={formatCompactNumber(stats.totalContracts)} icon={FileText} />
       <MetricCard title="MRR" value={formatCurrency(stats.mrr)} icon={DollarSign} />
       <MetricCard title="Subscriptions" value={stats.activeSubscriptions} icon={CreditCard} />
-    </div>
+    </motion.div>
   )
 }

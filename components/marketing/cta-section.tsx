@@ -1,11 +1,21 @@
+"use client"
+
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
+import { motion } from "motion/react"
 import { Button } from "@/components/ui/button"
+import { scaleIn } from "@/lib/animations"
 
 export function CtaSection() {
   return (
     <section className="px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-      <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-accent/10 to-primary/5 p-8 text-center sm:p-12">
+      <motion.div
+        className="mx-auto max-w-4xl overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-accent/10 to-primary/5 p-8 text-center sm:p-12"
+        variants={scaleIn}
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true }}
+      >
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
           Ready to Take Control of Your Contracts?
         </h2>
@@ -24,7 +34,7 @@ export function CtaSection() {
             <Link href="/login">Sign In</Link>
           </Button>
         </div>
-      </div>
+      </motion.div>
     </section>
   )
 }

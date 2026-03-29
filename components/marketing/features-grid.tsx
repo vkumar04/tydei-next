@@ -1,3 +1,5 @@
+"use client"
+
 import {
   FileText,
   Calculator,
@@ -6,7 +8,9 @@ import {
   ArrowLeftRight,
   Sparkles,
 } from "lucide-react"
+import { motion } from "motion/react"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 const features = [
   {
@@ -45,7 +49,13 @@ export function FeaturesGrid() {
   return (
     <section id="features" className="px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="text-center">
+        <motion.div
+          className="text-center"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        >
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
             Everything You Need
           </h2>
@@ -53,24 +63,29 @@ export function FeaturesGrid() {
             Purpose-built tools for healthcare contract intelligence, from
             intake to optimization.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <motion.div
+          className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true }}
+        >
           {features.map((feature) => (
-            <Card
-              key={feature.title}
-              className="bg-card/80 backdrop-blur-lg transition-colors hover:bg-card"
-            >
-              <CardHeader>
-                <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                  <feature.icon className="size-5 text-primary" />
-                </div>
-                <CardTitle className="text-lg">{feature.title}</CardTitle>
-                <CardDescription>{feature.description}</CardDescription>
-              </CardHeader>
-            </Card>
+            <motion.div key={feature.title} variants={fadeInUp}>
+              <Card className="bg-card/80 backdrop-blur-lg transition-colors hover:bg-card">
+                <CardHeader>
+                  <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-primary/10">
+                    <feature.icon className="size-5 text-primary" />
+                  </div>
+                  <CardTitle className="text-lg">{feature.title}</CardTitle>
+                  <CardDescription>{feature.description}</CardDescription>
+                </CardHeader>
+              </Card>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
     </section>
   )

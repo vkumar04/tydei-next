@@ -12,6 +12,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
+import { motion } from "motion/react"
 import { Search } from "lucide-react"
 import {
   Table,
@@ -21,6 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+
+const MotionTableRow = motion.create(TableRow)
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -127,10 +130,12 @@ export function DataTable<TData, TValue>({
               ))
             ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
+                <MotionTableRow
                   key={row.id}
                   onClick={() => onRowClick?.(row.original)}
                   className={onRowClick ? "cursor-pointer" : ""}
+                  whileHover={{ scale: 1.005 }}
+                  transition={{ duration: 0.15 }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -140,7 +145,7 @@ export function DataTable<TData, TValue>({
                       )}
                     </TableCell>
                   ))}
-                </TableRow>
+                </MotionTableRow>
               ))
             ) : (
               <TableRow>

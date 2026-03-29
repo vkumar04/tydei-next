@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { motion } from "motion/react"
 import { PageHeader } from "@/components/shared/page-header"
 import { DashboardFilters } from "./dashboard-filters"
 import { DashboardStats } from "./dashboard-stats"
@@ -20,6 +21,7 @@ import {
   useRecentContracts,
   useRecentAlerts,
 } from "@/hooks/use-dashboard"
+import { staggerContainer } from "@/lib/animations"
 
 function getDefaultRange() {
   const now = new Date()
@@ -62,7 +64,12 @@ export function DashboardClient({ facilityId }: DashboardClientProps) {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <motion.div
+        className="grid gap-4 lg:grid-cols-2"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+      >
         {rebateChart.data ? (
           <EarnedRebateChart data={rebateChart.data} />
         ) : (
@@ -83,9 +90,14 @@ export function DashboardClient({ facilityId }: DashboardClientProps) {
         ) : (
           <Skeleton className="h-[380px] rounded-xl" />
         )}
-      </div>
+      </motion.div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <motion.div
+        className="grid gap-4 lg:grid-cols-2"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+      >
         {recentContracts.data ? (
           <RecentContracts contracts={recentContracts.data} />
         ) : (
@@ -96,7 +108,7 @@ export function DashboardClient({ facilityId }: DashboardClientProps) {
         ) : (
           <Skeleton className="h-[300px] rounded-xl" />
         )}
-      </div>
+      </motion.div>
     </div>
   )
 }

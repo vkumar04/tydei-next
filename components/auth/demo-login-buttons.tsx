@@ -1,8 +1,10 @@
 "use client"
 
 import { Building2, Truck, ShieldCheck } from "lucide-react"
+import { motion } from "motion/react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 const DEMO_ACCOUNTS = {
   facility: { email: "demo-facility@tydei.com", password: "demo-facility-2024" },
@@ -29,25 +31,31 @@ export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
         <span className="text-xs text-muted-foreground">or try a demo</span>
         <Separator className="flex-1" />
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <motion.div
+        className="grid grid-cols-3 gap-2"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+      >
         {roles.map(({ role, label, icon: Icon }) => (
-          <Button
-            key={role}
-            variant="outline"
-            size="sm"
-            type="button"
-            disabled={isLoading}
-            onClick={() => {
-              const creds = DEMO_ACCOUNTS[role]
-              onFill(creds.email, creds.password)
-            }}
-            className="text-xs"
-          >
-            <Icon className="mr-1 size-3" />
-            {label}
-          </Button>
+          <motion.div key={role} variants={fadeInUp}>
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              disabled={isLoading}
+              onClick={() => {
+                const creds = DEMO_ACCOUNTS[role]
+                onFill(creds.email, creds.password)
+              }}
+              className="w-full text-xs"
+            >
+              <Icon className="mr-1 size-3" />
+              {label}
+            </Button>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </div>
   )
 }

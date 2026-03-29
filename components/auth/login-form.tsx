@@ -7,12 +7,14 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { motion } from "motion/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { signIn } from "@/lib/auth"
 import { loginSchema, type LoginInput } from "@/lib/validators"
 import { DemoLoginButtons } from "./demo-login-buttons"
+import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 export function LoginForm() {
   const router = useRouter()
@@ -53,8 +55,14 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="space-y-2">
+    <motion.form
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-4"
+      variants={staggerContainer}
+      initial="hidden"
+      animate="show"
+    >
+      <motion.div variants={fadeInUp} className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
@@ -65,9 +73,9 @@ export function LoginForm() {
         {errors.email && (
           <p className="text-xs text-destructive">{errors.email.message}</p>
         )}
-      </div>
+      </motion.div>
 
-      <div className="space-y-2">
+      <motion.div variants={fadeInUp} className="space-y-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="password">Password</Label>
           <Link
@@ -86,21 +94,25 @@ export function LoginForm() {
         {errors.password && (
           <p className="text-xs text-destructive">{errors.password.message}</p>
         )}
-      </div>
+      </motion.div>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
-        Sign In
-      </Button>
+      <motion.div variants={fadeInUp}>
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
+          Sign In
+        </Button>
+      </motion.div>
 
-      <DemoLoginButtons onFill={handleDemoFill} isLoading={isLoading} />
+      <motion.div variants={fadeInUp}>
+        <DemoLoginButtons onFill={handleDemoFill} isLoading={isLoading} />
+      </motion.div>
 
-      <p className="text-center text-sm text-muted-foreground">
+      <motion.p variants={fadeInUp} className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
         <Link href="/sign-up" className="text-primary hover:underline">
           Sign up
         </Link>
-      </p>
-    </form>
+      </motion.p>
+    </motion.form>
   )
 }

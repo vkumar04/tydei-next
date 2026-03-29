@@ -1,6 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
+import { motion } from "motion/react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PageHeader } from "@/components/shared/page-header"
 import { AdminStats } from "./admin-stats"
@@ -12,6 +13,7 @@ import {
   getAdminPendingActions,
 } from "@/lib/actions/admin/dashboard"
 import { queryKeys } from "@/lib/query-keys"
+import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 export function AdminDashboardClient() {
   const stats = useQuery({
@@ -41,18 +43,27 @@ export function AdminDashboardClient() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {activity.data ? (
-          <ActivityFeed activities={activity.data} />
-        ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
-        )}
-        {pending.data ? (
-          <PendingActions actions={pending.data} />
-        ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
-        )}
-      </div>
+      <motion.div
+        className="grid gap-4 lg:grid-cols-2"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+      >
+        <motion.div variants={fadeInUp}>
+          {activity.data ? (
+            <ActivityFeed activities={activity.data} />
+          ) : (
+            <Skeleton className="h-[380px] rounded-xl" />
+          )}
+        </motion.div>
+        <motion.div variants={fadeInUp}>
+          {pending.data ? (
+            <PendingActions actions={pending.data} />
+          ) : (
+            <Skeleton className="h-[380px] rounded-xl" />
+          )}
+        </motion.div>
+      </motion.div>
     </div>
   )
 }

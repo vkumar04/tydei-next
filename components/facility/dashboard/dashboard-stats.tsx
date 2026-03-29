@@ -1,8 +1,10 @@
 "use client"
 
+import { motion } from "motion/react"
 import { MetricCard } from "@/components/shared/cards/metric-card"
 import { DollarSign, TrendingUp, Bell, ShieldCheck } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
+import { staggerContainer } from "@/lib/animations"
 
 interface DashboardStatsProps {
   stats: {
@@ -15,7 +17,12 @@ interface DashboardStatsProps {
 
 export function DashboardStats({ stats }: DashboardStatsProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <motion.div
+      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      variants={staggerContainer}
+      initial="hidden"
+      animate="show"
+    >
       <MetricCard
         title="Total Contract Value"
         value={formatCurrency(stats.totalContractValue)}
@@ -36,6 +43,6 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
         value={formatPercent(stats.complianceRate, 0)}
         icon={ShieldCheck}
       />
-    </div>
+    </motion.div>
   )
 }

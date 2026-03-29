@@ -1,9 +1,13 @@
+"use client"
+
+import { motion } from "motion/react"
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 const capabilities = [
   {
@@ -37,27 +41,42 @@ export function CapabilitiesSection() {
   return (
     <section id="capabilities" className="px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
       <div className="mx-auto max-w-3xl">
-        <div className="text-center">
+        <motion.div
+          className="text-center"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        >
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
             Platform Capabilities
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
             Deep visibility into every dimension of your supply chain contracts.
           </p>
-        </div>
+        </motion.div>
 
-        <Accordion type="single" collapsible className="mt-12">
-          {capabilities.map((cap) => (
-            <AccordionItem key={cap.title} value={cap.title}>
-              <AccordionTrigger className="text-left text-base font-medium">
-                {cap.title}
-              </AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                {cap.description}
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true }}
+        >
+          <Accordion type="single" collapsible className="mt-12">
+            {capabilities.map((cap) => (
+              <motion.div key={cap.title} variants={fadeInUp}>
+                <AccordionItem value={cap.title}>
+                  <AccordionTrigger className="text-left text-base font-medium">
+                    {cap.title}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground">
+                    {cap.description}
+                  </AccordionContent>
+                </AccordionItem>
+              </motion.div>
+            ))}
+          </Accordion>
+        </motion.div>
       </div>
     </section>
   )
