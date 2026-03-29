@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import { AI_CREDIT_COSTS, type AIAction } from "@/lib/ai/config"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ export async function getAICredits(input: {
   const remaining =
     credit.monthlyCredits + credit.rolloverCredits - credit.usedCredits
 
-  return {
+  return serialize({
     id: credit.id,
     tierId: credit.tierId,
     monthlyCredits: credit.monthlyCredits,
@@ -55,7 +56,7 @@ export async function getAICredits(input: {
     remaining: Math.max(0, remaining),
     billingPeriodStart: credit.billingPeriodStart.toISOString().slice(0, 10),
     billingPeriodEnd: credit.billingPeriodEnd.toISOString().slice(0, 10),
-  }
+  })
 }
 
 // ─── Use Credits ────────────────────────────────────────────────
@@ -117,14 +118,14 @@ export async function getAIUsageHistory(
     take: 50,
   })
 
-  return records.map((r) => ({
+  return serialize(records.map((r) => ({
     id: r.id,
     action: r.action,
     creditsUsed: r.creditsUsed,
     userName: r.userName,
     description: r.description,
     createdAt: r.createdAt.toISOString(),
-  }))
+  })))
 }
 
 // ─── Check Credits ──────────────────────────────────────────────

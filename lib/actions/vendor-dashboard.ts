@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
+import { serialize } from "@/lib/serialize"
 
 // ─── Vendor Dashboard Stats ─────────────────────────────────────
 
@@ -25,12 +26,12 @@ export async function getVendorDashboardStats(vendorId: string) {
       }),
     ])
 
-  return {
+  return serialize({
     totalContracts,
     totalSpend: Number(contractAgg._sum.totalValue ?? 0),
     totalRebates: Number(rebateAgg._sum.rebateEarned ?? 0),
     activeFacilities: activeFacilities.length,
-  }
+  })
 }
 
 // ─── Vendor Spend Trend ─────────────────────────────────────────
@@ -62,9 +63,9 @@ export async function getVendorSpendTrend(input: {
     monthMap.set(key, entry)
   }
 
-  return Array.from(monthMap.entries()).map(([month, data]) => ({
+  return serialize(Array.from(monthMap.entries()).map(([month, data]) => ({
     month,
     spend: data.spend,
     rebate: data.rebate,
-  }))
+  })))
 }

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { linearRegression, seasonalDecompose } from "@/lib/analysis/forecasting"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export async function getSpendForecast(input: {
   const values = periodData.map((p) => Number(p.totalSpend))
   const labels = periodData.map((p) => p.periodStart.toISOString().slice(0, 7))
 
-  return buildForecast(labels, values, periods)
+  return serialize(buildForecast(labels, values, periods))
 }
 
 // ─── Rebate Forecast ────────────────────────────────────────────
@@ -65,7 +66,7 @@ export async function getRebateForecast(input: {
   const values = periodData.map((p) => Number(p.rebateEarned))
   const labels = periodData.map((p) => p.periodStart.toISOString().slice(0, 7))
 
-  return buildForecast(labels, values, periods)
+  return serialize(buildForecast(labels, values, periods))
 }
 
 // ─── Helpers ────────────────────────────────────────────────────

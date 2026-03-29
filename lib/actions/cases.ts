@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ export async function getCases(input: {
     prisma.case.count({ where }),
   ])
 
-  return {
+  return serialize({
     cases: records.map((c) => ({
       id: c.id,
       caseNumber: c.caseNumber,
@@ -147,7 +148,7 @@ export async function getCases(input: {
       supplyCount: c.supplies.length,
     })),
     total,
-  }
+  })
 }
 
 // ─── Get Single Case ────────────────────────────────────────────
@@ -163,7 +164,7 @@ export async function getCase(id: string): Promise<CaseDetail> {
     },
   })
 
-  return {
+  return serialize({
     id: c.id,
     caseNumber: c.caseNumber,
     surgeonName: c.surgeonName,
@@ -189,7 +190,7 @@ export async function getCase(id: string): Promise<CaseDetail> {
       extendedCost: Number(s.extendedCost),
       isOnContract: s.isOnContract,
     })),
-  }
+  })
 }
 
 // ─── Import Cases ───────────────────────────────────────────────
@@ -318,7 +319,7 @@ export async function getSurgeonScorecards(
     }
   }
 
-  return Array.from(surgeonMap.entries()).map(([name, data]) => {
+  return serialize(Array.from(surgeonMap.entries()).map(([name, data]) => {
     const caseCount = data.cases.length
     const topProcedures = Array.from(data.cptCounts.entries())
       .sort((a, b) => b[1] - a[1])
@@ -337,7 +338,7 @@ export async function getSurgeonScorecards(
           : 0,
       topProcedures,
     }
-  })
+  }))
 }
 
 // ─── CPT Analysis ───────────────────────────────────────────────
@@ -378,7 +379,7 @@ export async function getCPTAnalysis(
     }
   }
 
-  return Array.from(cptMap.entries())
+  return serialize(Array.from(cptMap.entries())
     .map(([code, data]) => ({
       cptCode: code,
       description: null,
@@ -394,7 +395,7 @@ export async function getCPTAnalysis(
         })
       ),
     }))
-    .sort((a, b) => b.caseCount - a.caseCount)
+    .sort((a, b) => b.caseCount - a.caseCount))
 }
 
 // ─── Compare Surgeons ───────────────────────────────────────────
@@ -472,7 +473,7 @@ export async function compareSurgeons(input: {
     },
   ]
 
-  return { surgeons: input.surgeonNames, dimensions, barData }
+  return serialize({ surgeons: input.surgeonNames, dimensions, barData })
 }
 
 // ─── Case Costing Report ────────────────────────────────────────
@@ -534,7 +535,7 @@ export async function getCaseCostingReportData(input: {
     surgeonMap.set(c.surgeonName, entry)
   }
 
-  return {
+  return serialize({
     totalCases,
     totalSpend,
     avgCostPerCase: totalCases > 0 ? totalSpend / totalCases : 0,
@@ -551,5 +552,5 @@ export async function getCaseCostingReportData(input: {
       .sort(([, a], [, b]) => b.spend - a.spend)
       .slice(0, 10)
       .map(([name, data]) => ({ name, ...data })),
-  }
+  })
 }

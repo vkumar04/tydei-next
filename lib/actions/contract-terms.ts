@@ -11,17 +11,19 @@ import {
   type TierInput,
 } from "@/lib/validators/contract-terms"
 import { z } from "zod"
+import { serialize } from "@/lib/serialize"
 
 // ─── Get Terms ───────────────────────────────────────────────────
 
 export async function getContractTerms(contractId: string) {
   await requireFacility()
 
-  return prisma.contractTerm.findMany({
+  const terms = await prisma.contractTerm.findMany({
     where: { contractId },
     include: { tiers: { orderBy: { tierNumber: "asc" } } },
     orderBy: { createdAt: "asc" },
   })
+  return serialize(terms)
 }
 
 // ─── Create Term ─────────────────────────────────────────────────
@@ -56,7 +58,7 @@ export async function createContractTerm(input: CreateTermInput) {
     include: { tiers: { orderBy: { tierNumber: "asc" } } },
   })
 
-  return term
+  return serialize(term)
 }
 
 // ─── Update Term ─────────────────────────────────────────────────
@@ -81,7 +83,7 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
     include: { tiers: { orderBy: { tierNumber: "asc" } } },
   })
 
-  return term
+  return serialize(term)
 }
 
 // ─── Delete Term ─────────────────────────────────────────────────
@@ -119,5 +121,5 @@ export async function upsertContractTiers(termId: string, tiers: TierInput[]) {
     )
   )
 
-  return created
+  return serialize(created)
 }

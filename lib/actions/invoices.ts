@@ -9,6 +9,7 @@ import {
   type InvoiceFilters,
 } from "@/lib/validators/invoices"
 import type { Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── List Invoices ──────────────────────────────────────────────
 
@@ -41,20 +42,20 @@ export async function getInvoices(input: InvoiceFilters) {
     prisma.invoice.count({ where }),
   ])
 
-  return {
+  return serialize({
     invoices: invoices.map((inv) => ({
       ...inv,
       flaggedCount: inv.lineItems.length,
       lineItemCount: inv._count.lineItems,
     })),
     total,
-  }
+  })
 }
 
 // ─── Get Invoice Detail ─────────────────────────────────────────
 
 export async function getInvoice(id: string) {
-  return prisma.invoice.findUniqueOrThrow({
+  const invoice = await prisma.invoice.findUniqueOrThrow({
     where: { id },
     include: {
       vendor: { select: { id: true, name: true } },
@@ -63,6 +64,7 @@ export async function getInvoice(id: string) {
       lineItems: { orderBy: { createdAt: "asc" } },
     },
   })
+  return serialize(invoice)
 }
 
 // ─── Import Invoice ─────────────────────────────────────────────
@@ -76,7 +78,7 @@ export async function importInvoice(input: ImportInvoiceInput) {
     0
   )
 
-  return prisma.invoice.create({
+  const invoice = await prisma.invoice.create({
     data: {
       invoiceNumber: data.invoiceNumber,
       facilityId: data.facilityId,
@@ -97,6 +99,7 @@ export async function importInvoice(input: ImportInvoiceInput) {
     },
     include: { lineItems: true },
   })
+  return serialize(invoice)
 }
 
 // ─── Validate Invoice ───────────────────────────────────────────
@@ -168,12 +171,12 @@ export async function validateInvoice(id: string) {
     0
   )
 
-  return {
+  return serialize({
     invoiceId: id,
     lineItems: results,
     discrepancyCount,
     averageVariance: discrepancyCount > 0 ? totalVariance / discrepancyCount : 0,
-  }
+  })
 }
 
 // ─── Flag Line Item ─────────────────────────────────────────────

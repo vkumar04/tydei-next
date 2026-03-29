@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/actions/auth"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
 import type { CreditTierId } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ export async function getSubscriptions(input: {
 
   const subs = await stripe.subscriptions.list(params as Parameters<typeof stripe.subscriptions.list>[0])
 
-  return {
+  return serialize({
     subscriptions: subs.data.map((s) => ({
       id: s.id,
       customerEmail: null,
@@ -50,7 +51,7 @@ export async function getSubscriptions(input: {
       currentPeriodEnd: new Date(((s as unknown as Record<string, unknown>).current_period_end as number ?? 0) * 1000).toISOString(),
     })),
     total: subs.data.length,
-  }
+  })
 }
 
 // ─── Get Stripe Invoices ────────────────────────────────────────
@@ -69,7 +70,7 @@ export async function getStripeInvoices(input: {
 
   const invoices = await stripe.invoices.list(params as Parameters<typeof stripe.invoices.list>[0])
 
-  return {
+  return serialize({
     invoices: invoices.data.map((inv) => ({
       id: inv.id,
       customerEmail: inv.customer_email,
@@ -79,7 +80,7 @@ export async function getStripeInvoices(input: {
       pdfUrl: inv.invoice_pdf ?? null,
     })),
     total: invoices.data.length,
-  }
+  })
 }
 
 // ─── Get MRR Data ───────────────────────────────────────────────
@@ -106,7 +107,7 @@ export async function getMRRData(
     results.push({ month, mrr: activeFacilities * 499 })
   }
 
-  return results
+  return serialize(results)
 }
 
 // ─── Update AI Credit Tier ──────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { serialize } from "@/lib/serialize"
 
 // ─── Get Vendor Name Mappings ───────────────────────────────────
 
@@ -29,7 +30,7 @@ export async function getVendorNameMappings(input: {
     prisma.vendorNameMapping.count({ where }),
   ])
 
-  return { mappings, total }
+  return serialize({ mappings, total })
 }
 
 // ─── Confirm Vendor Name Mapping ────────────────────────────────
@@ -65,7 +66,7 @@ export async function createVendorNameMapping(input: {
 }) {
   await requireFacility()
 
-  return prisma.vendorNameMapping.create({
+  const mapping = await prisma.vendorNameMapping.create({
     data: {
       cogVendorName: input.cogVendorName,
       mappedVendorId: input.mappedVendorId,
@@ -73,6 +74,7 @@ export async function createVendorNameMapping(input: {
       confidenceScore: input.confidenceScore,
     },
   })
+  return serialize(mapping)
 }
 
 // ─── Delete Mapping ─────────────────────────────────────────────

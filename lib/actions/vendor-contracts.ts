@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import type { ContractStatus, Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── Vendor Contracts List ──────────────────────────────────────
 
@@ -45,7 +46,7 @@ export async function getVendorContracts(input: {
     prisma.contract.count({ where }),
   ])
 
-  return { contracts, total }
+  return serialize({ contracts, total })
 }
 
 // ─── Vendor Contract Detail ─────────────────────────────────────
@@ -53,7 +54,7 @@ export async function getVendorContracts(input: {
 export async function getVendorContractDetail(id: string, vendorId: string) {
   await requireVendor()
 
-  return prisma.contract.findUniqueOrThrow({
+  const contract = await prisma.contract.findUniqueOrThrow({
     where: { id },
     include: {
       vendor: { select: { id: true, name: true, logoUrl: true } },
@@ -67,4 +68,5 @@ export async function getVendorContractDetail(id: string, vendorId: string) {
       periods: { orderBy: { periodEnd: "desc" }, take: 4 },
     },
   })
+  return serialize(contract)
 }

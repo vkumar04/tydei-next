@@ -10,6 +10,7 @@ import {
   generateOffContractAlerts,
   generateRebateDueAlerts,
 } from "@/lib/alerts/generate-alerts"
+import { serialize } from "@/lib/serialize"
 
 // ─── List Alerts ─────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ export async function getAlerts(input: AlertFilters) {
     prisma.alert.count({ where }),
   ])
 
-  return { alerts, total }
+  return serialize({ alerts, total })
 }
 
 // ─── Single Alert ────────────────────────────────────────────────
@@ -56,7 +57,7 @@ export async function getAlerts(input: AlertFilters) {
 export async function getAlert(id: string) {
   await requireFacility()
 
-  return prisma.alert.findUniqueOrThrow({
+  const alert = await prisma.alert.findUniqueOrThrow({
     where: { id },
     include: {
       contract: {
@@ -69,6 +70,7 @@ export async function getAlert(id: string) {
       facility: { select: { id: true, name: true } },
     },
   })
+  return serialize(alert)
 }
 
 // ─── Unread Count ────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import {
   type POFilters,
 } from "@/lib/validators/purchase-orders"
 import type { POStatus, Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── List Purchase Orders ───────────────────────────────────────
 
@@ -40,7 +41,7 @@ export async function getPurchaseOrders(input: POFilters) {
     prisma.purchaseOrder.count({ where }),
   ])
 
-  return { orders, total }
+  return serialize({ orders, total })
 }
 
 // ─── Get Single PO ──────────────────────────────────────────────
@@ -48,7 +49,7 @@ export async function getPurchaseOrders(input: POFilters) {
 export async function getPurchaseOrder(id: string) {
   await requireFacility()
 
-  return prisma.purchaseOrder.findUniqueOrThrow({
+  const po = await prisma.purchaseOrder.findUniqueOrThrow({
     where: { id },
     include: {
       vendor: { select: { id: true, name: true } },
@@ -56,6 +57,7 @@ export async function getPurchaseOrder(id: string) {
       lineItems: { orderBy: { createdAt: "asc" } },
     },
   })
+  return serialize(po)
 }
 
 // ─── Create PO ──────────────────────────────────────────────────
@@ -74,7 +76,7 @@ export async function createPurchaseOrder(input: CreatePOInput) {
   })
   const poNumber = `PO-${String(count + 1).padStart(5, "0")}`
 
-  return prisma.purchaseOrder.create({
+  const po = await prisma.purchaseOrder.create({
     data: {
       poNumber,
       facilityId: data.facilityId,
@@ -100,6 +102,7 @@ export async function createPurchaseOrder(input: CreatePOInput) {
     },
     include: { lineItems: true },
   })
+  return serialize(po)
 }
 
 // ─── Update PO Status ───────────────────────────────────────────
@@ -150,7 +153,7 @@ export async function searchProducts(input: {
     take: 20,
   })
 
-  return results.map((r) => ({
+  return serialize(results.map((r) => ({
     id: r.id,
     vendorItemNo: r.vendorItemNo,
     description: r.productDescription,
@@ -158,5 +161,5 @@ export async function searchProducts(input: {
     listPrice: r.listPrice ? Number(r.listPrice) : null,
     uom: r.uom,
     vendorId: r.vendorId,
-  }))
+  })))
 }

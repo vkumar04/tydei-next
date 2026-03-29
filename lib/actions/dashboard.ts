@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import type { Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── Dashboard Stats ─────────────────────────────────────────────
 
@@ -50,12 +51,12 @@ export async function getDashboardStats(input: {
   const complianceRate =
     totalContracts > 0 ? Math.round((compliantContracts / totalContracts) * 100) : 100
 
-  return {
+  return serialize({
     totalContractValue: Number(contractAgg._sum.totalValue ?? 0),
     totalRebatesEarned: Number(rebateAgg._sum.rebateEarned ?? 0),
     activeAlertCount: alertCount,
     complianceRate,
-  }
+  })
 }
 
 // ─── Earned Rebate by Month ──────────────────────────────────────
@@ -94,10 +95,10 @@ export async function getEarnedRebateByMonth(input: {
     entry[vendorName] = (entry[vendorName] ?? 0) + Number(period.rebateEarned)
   }
 
-  return Array.from(monthMap.entries()).map(([month, vendors]) => ({
+  return serialize(Array.from(monthMap.entries()).map(([month, vendors]) => ({
     month,
     ...vendors,
-  }))
+  })))
 }
 
 // ─── Spend by Vendor ─────────────────────────────────────────────
@@ -129,11 +130,11 @@ export async function getSpendByVendor(input: {
   })
   const vendorMap = new Map(vendors.map((v) => [v.id, v.name]))
 
-  return records.map((r) => ({
+  return serialize(records.map((r) => ({
     vendor: vendorMap.get(r.vendorId!) ?? "Unknown",
     total: Number(r._sum.extendedPrice ?? 0),
     categories: {} as Record<string, number>,
-  }))
+  })))
 }
 
 // ─── Contract Lifecycle ──────────────────────────────────────────
@@ -147,7 +148,7 @@ export async function getContractLifecycle(facilityId: string) {
     prisma.contract.count({ where: { facilityId, status: "expiring" } }),
   ])
 
-  return { active, expired, expiring }
+  return serialize({ active, expired, expiring })
 }
 
 // ─── Spend Needed for Tier ───────────────────────────────────────
@@ -166,7 +167,7 @@ export async function getSpendNeededForTier(facilityId: string) {
     },
   })
 
-  return contracts
+  return serialize(contracts
     .filter((c) => c.terms.some((t) => t.tiers.length > 0))
     .map((c) => {
       const currentSpend = c.periods[0] ? Number(c.periods[0].totalSpend) : 0
@@ -184,7 +185,7 @@ export async function getSpendNeededForTier(facilityId: string) {
         tiers,
       }
     })
-    .slice(0, 8)
+    .slice(0, 8))
 }
 
 // ─── Recent Contracts ────────────────────────────────────────────
@@ -192,12 +193,13 @@ export async function getSpendNeededForTier(facilityId: string) {
 export async function getRecentContracts(facilityId: string, limit = 5) {
   await requireFacility()
 
-  return prisma.contract.findMany({
+  const contracts = await prisma.contract.findMany({
     where: { facilityId },
     include: { vendor: { select: { id: true, name: true, logoUrl: true } } },
     orderBy: { updatedAt: "desc" },
     take: limit,
   })
+  return serialize(contracts)
 }
 
 // ─── Recent Alerts ───────────────────────────────────────────────
@@ -205,9 +207,10 @@ export async function getRecentContracts(facilityId: string, limit = 5) {
 export async function getRecentAlerts(facilityId: string, limit = 5) {
   await requireFacility()
 
-  return prisma.alert.findMany({
+  const alerts = await prisma.alert.findMany({
     where: { facilityId, status: { in: ["new_alert", "read"] } },
     orderBy: { createdAt: "desc" },
     take: limit,
   })
+  return serialize(alerts)
 }

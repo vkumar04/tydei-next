@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
+import { serialize } from "@/lib/serialize"
 
 export interface VendorPORow {
   id: string
@@ -22,12 +23,12 @@ export async function getVendorPurchaseOrders(vendorId: string): Promise<VendorP
     take: 50,
   })
 
-  return pos.map((p) => ({
+  return serialize(pos.map((p) => ({
     id: p.id,
     poNumber: p.poNumber,
     facilityName: p.facility.name,
     orderDate: p.orderDate.toISOString(),
     totalCost: Number(p.totalCost ?? 0),
     status: p.status,
-  }))
+  })))
 }

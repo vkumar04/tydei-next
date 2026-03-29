@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { calculateMACRS, type DepreciationSchedule } from "@/lib/analysis/depreciation"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ export async function calculateDepreciation(input: {
   convention: "half_year" | "mid_quarter"
 }): Promise<DepreciationSchedule> {
   await requireFacility()
-  return calculateMACRS(input.assetCost, input.recoveryPeriod, input.convention)
+  return serialize(calculateMACRS(input.assetCost, input.recoveryPeriod, input.convention))
 }
 
 // ─── Price Projections ──────────────────────────────────────────
@@ -62,13 +63,13 @@ export async function getPriceProjections(input: {
   })
 
   if (records.length === 0) {
-    return Array.from({ length: input.periods }, (_, i) => ({
+    return serialize(Array.from({ length: input.periods }, (_, i) => ({
       period: i + 1,
       month: getMonthLabel(i + 1),
       projectedPrice: 0,
       currentPrice: 0,
       changePercent: 0,
-    }))
+    })))
   }
 
   const currentPrice =
@@ -77,7 +78,7 @@ export async function getPriceProjections(input: {
   // Estimate monthly trend from data (simple linear regression proxy)
   const monthlyRate = -0.5 // assume slight price decrease trend %/month
 
-  return Array.from({ length: input.periods }, (_, i) => {
+  return serialize(Array.from({ length: input.periods }, (_, i) => {
     const factor = 1 + (monthlyRate * (i + 1)) / 100
     const projected = Math.round(currentPrice * factor * 100) / 100
     return {
@@ -88,7 +89,7 @@ export async function getPriceProjections(input: {
       changePercent:
         Math.round(((projected - currentPrice) / currentPrice) * 10000) / 100,
     }
-  })
+  }))
 }
 
 function getMonthLabel(offsetMonths: number): string {
@@ -127,12 +128,12 @@ export async function getVendorSpendTrends(input: {
     map.set(key, (map.get(key) ?? 0) + Number(r.extendedPrice))
   }
 
-  return Array.from(map.entries())
+  return serialize(Array.from(map.entries())
     .map(([key, spend]) => {
       const [month, vendorName] = key.split("|")
       return { month: month!, vendorName: vendorName!, spend }
     })
-    .sort((a, b) => a.month.localeCompare(b.month))
+    .sort((a, b) => a.month.localeCompare(b.month)))
 }
 
 // ─── Category Spend Trends ──────────────────────────────────────
@@ -169,10 +170,10 @@ export async function getCategorySpendTrends(input: {
     map.set(key, (map.get(key) ?? 0) + Number(r.extendedPrice))
   }
 
-  return Array.from(map.entries())
+  return serialize(Array.from(map.entries())
     .map(([key, spend]) => {
       const [month, categoryName] = key.split("|")
       return { month: month!, categoryName: categoryName!, spend }
     })
-    .sort((a, b) => a.month.localeCompare(b.month))
+    .sort((a, b) => a.month.localeCompare(b.month)))
 }

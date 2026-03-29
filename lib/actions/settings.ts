@@ -9,6 +9,7 @@ import {
   type UpdateVendorProfileInput,
   type NotificationPreferences,
 } from "@/lib/validators/settings"
+import { serialize } from "@/lib/serialize"
 
 // ─── Facility Profile ────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ export async function getFacilityProfile(facilityId: string): Promise<FacilityPr
     include: { healthSystem: { select: { name: true } } },
   })
 
-  return {
+  return serialize({
     id: facility.id,
     name: facility.name,
     type: facility.type,
@@ -44,7 +45,7 @@ export async function getFacilityProfile(facilityId: string): Promise<FacilityPr
     beds: facility.beds,
     organizationId: facility.organizationId,
     healthSystemName: facility.healthSystem?.name ?? null,
-  }
+  })
 }
 
 export async function updateFacilityProfile(
@@ -91,7 +92,7 @@ export async function getVendorProfile(vendorId: string): Promise<VendorProfile>
     where: { id: vendorId },
   })
 
-  return {
+  return serialize({
     id: vendor.id,
     name: vendor.name,
     displayName: vendor.displayName,
@@ -103,7 +104,7 @@ export async function getVendorProfile(vendorId: string): Promise<VendorProfile>
     address: vendor.address,
     division: vendor.division,
     organizationId: vendor.organizationId,
-  }
+  })
 }
 
 export async function updateVendorProfile(
@@ -232,7 +233,7 @@ export async function getTeamMembers(organizationId: string): Promise<TeamMember
     orderBy: { createdAt: "asc" },
   })
 
-  return members.map((m) => ({
+  return serialize(members.map((m) => ({
     id: m.id,
     userId: m.user.id,
     name: m.user.name,
@@ -240,7 +241,7 @@ export async function getTeamMembers(organizationId: string): Promise<TeamMember
     image: m.user.image,
     role: m.role,
     createdAt: m.createdAt.toISOString(),
-  }))
+  })))
 }
 
 export async function inviteTeamMember(input: {
@@ -292,13 +293,13 @@ export async function getFeatureFlags(facilityId: string): Promise<FeatureFlagDa
     where: { facilityId },
   })
 
-  return {
+  return serialize({
     purchaseOrdersEnabled: flags?.purchaseOrdersEnabled ?? true,
     aiAgentEnabled: flags?.aiAgentEnabled ?? true,
     vendorPortalEnabled: flags?.vendorPortalEnabled ?? true,
     advancedReportsEnabled: flags?.advancedReportsEnabled ?? true,
     caseCostingEnabled: flags?.caseCostingEnabled ?? true,
-  }
+  })
 }
 
 export async function updateFeatureFlags(
@@ -333,7 +334,7 @@ export async function getVendorTeamMembers(
     orderBy: { createdAt: "asc" },
   })
 
-  return members.map((m) => {
+  return serialize(members.map((m) => {
     // Sub-role is stored in the role field as "role:subRole"
     const [role, subRole] = m.role.includes(":") ? m.role.split(":") : [m.role, null]
     return {
@@ -346,7 +347,7 @@ export async function getVendorTeamMembers(
       subRole: subRole ?? null,
       createdAt: m.createdAt.toISOString(),
     }
-  })
+  }))
 }
 
 export async function inviteVendorTeamMember(input: {

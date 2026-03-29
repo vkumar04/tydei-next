@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import type { ConnectionStatus } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 export interface ConnectionData {
   id: string
@@ -39,7 +40,7 @@ export async function getConnections(input: {
     orderBy: { invitedAt: "desc" },
   })
 
-  return connections.map((c) => ({
+  return serialize(connections.map((c) => ({
     id: c.id,
     facilityId: c.facilityId,
     facilityName: c.facilityName,
@@ -51,7 +52,7 @@ export async function getConnections(input: {
     invitedAt: c.invitedAt.toISOString(),
     respondedAt: c.respondedAt?.toISOString() ?? null,
     message: c.message,
-  }))
+  })))
 }
 
 // ─── Send Connection Invite ──────────────────────────────────────
@@ -118,7 +119,7 @@ export async function sendConnectionInvite(input: {
     },
   })
 
-  return {
+  return serialize({
     id: connection.id,
     facilityId: connection.facilityId,
     facilityName: connection.facilityName,
@@ -130,7 +131,7 @@ export async function sendConnectionInvite(input: {
     invitedAt: connection.invitedAt.toISOString(),
     respondedAt: null,
     message: connection.message,
-  }
+  })
 }
 
 // ─── Accept Connection ───────────────────────────────────────────

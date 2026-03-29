@@ -8,17 +8,19 @@ import {
   type CreatePendingContractInput,
   type UpdatePendingContractInput,
 } from "@/lib/validators/pending-contracts"
+import { serialize } from "@/lib/serialize"
 
 // ─── Vendor: List Pending ───────────────────────────────────────
 
 export async function getVendorPendingContracts(vendorId: string) {
   await requireVendor()
 
-  return prisma.pendingContract.findMany({
+  const contracts = await prisma.pendingContract.findMany({
     where: { vendorId },
     include: { facility: { select: { id: true, name: true } } },
     orderBy: { submittedAt: "desc" },
   })
+  return serialize(contracts)
 }
 
 // ─── Vendor: Create ─────────────────────────────────────────────
@@ -27,7 +29,7 @@ export async function createPendingContract(input: CreatePendingContractInput) {
   await requireVendor()
   const data = createPendingContractSchema.parse(input)
 
-  return prisma.pendingContract.create({
+  const contract = await prisma.pendingContract.create({
     data: {
       vendorId: data.vendorId,
       vendorName: data.vendorName,
@@ -45,6 +47,7 @@ export async function createPendingContract(input: CreatePendingContractInput) {
       status: "submitted",
     },
   })
+  return serialize(contract)
 }
 
 // ─── Vendor: Update ─────────────────────────────────────────────
@@ -53,7 +56,7 @@ export async function updatePendingContract(id: string, input: UpdatePendingCont
   await requireVendor()
   const data = updatePendingContractSchema.parse(input)
 
-  return prisma.pendingContract.update({
+  const contract = await prisma.pendingContract.update({
     where: { id },
     data: {
       ...(data.contractName !== undefined && { contractName: data.contractName }),
@@ -67,6 +70,7 @@ export async function updatePendingContract(id: string, input: UpdatePendingCont
       ...(data.notes !== undefined && { notes: data.notes }),
     },
   })
+  return serialize(contract)
 }
 
 // ─── Vendor: Withdraw ───────────────────────────────────────────
@@ -85,11 +89,12 @@ export async function withdrawPendingContract(id: string) {
 export async function getFacilityPendingContracts(facilityId: string) {
   await requireFacility()
 
-  return prisma.pendingContract.findMany({
+  const contracts = await prisma.pendingContract.findMany({
     where: { facilityId, status: "submitted" },
     include: { vendor: { select: { id: true, name: true, logoUrl: true } } },
     orderBy: { submittedAt: "desc" },
   })
+  return serialize(contracts)
 }
 
 // ─── Facility: Approve ──────────────────────────────────────────
@@ -117,7 +122,7 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
     data: { status: "approved", reviewedAt: new Date(), reviewedBy },
   })
 
-  return contract
+  return serialize(contract)
 }
 
 // ─── Facility: Reject ───────────────────────────────────────────

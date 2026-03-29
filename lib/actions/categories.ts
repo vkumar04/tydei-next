@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import type { ProductCategory } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -15,10 +16,11 @@ export interface CategoryNode extends ProductCategory {
 export async function getCategories() {
   await requireFacility()
 
-  return prisma.productCategory.findMany({
+  const categories = await prisma.productCategory.findMany({
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   })
+  return serialize(categories)
 }
 
 // ─── Get Category Tree ──────────────────────────────────────────
@@ -51,7 +53,7 @@ export async function getCategoryTree(): Promise<CategoryNode[]> {
     }
   }
 
-  return roots
+  return serialize(roots)
 }
 
 // ─── Create Category ────────────────────────────────────────────
@@ -63,13 +65,14 @@ export async function createCategory(input: {
 }) {
   await requireFacility()
 
-  return prisma.productCategory.create({
+  const category = await prisma.productCategory.create({
     data: {
       name: input.name,
       description: input.description,
       parentId: input.parentId,
     },
   })
+  return serialize(category)
 }
 
 // ─── Update Category ────────────────────────────────────────────
@@ -80,7 +83,7 @@ export async function updateCategory(
 ) {
   await requireFacility()
 
-  return prisma.productCategory.update({
+  const category = await prisma.productCategory.update({
     where: { id },
     data: {
       ...(input.name !== undefined && { name: input.name }),
@@ -88,6 +91,7 @@ export async function updateCategory(
       ...(input.parentId !== undefined && { parentId: input.parentId }),
     },
   })
+  return serialize(category)
 }
 
 // ─── Delete Category ────────────────────────────────────────────
@@ -109,9 +113,10 @@ export async function deleteCategory(id: string) {
 export async function getCategoryMappings() {
   await requireFacility()
 
-  return prisma.categoryMapping.findMany({
+  const mappings = await prisma.categoryMapping.findMany({
     orderBy: { createdAt: "desc" },
   })
+  return serialize(mappings)
 }
 
 export async function confirmCategoryMapping(

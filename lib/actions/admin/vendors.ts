@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireAdmin } from "@/lib/actions/auth"
 import type { AdminCreateVendorInput, AdminUpdateVendorInput } from "@/lib/validators/admin"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export async function adminGetVendors(input: {
     prisma.vendor.count({ where }),
   ])
 
-  return {
+  return serialize({
     vendors: vendors.map((v) => ({
       id: v.id,
       name: v.name,
@@ -57,7 +58,7 @@ export async function adminGetVendors(input: {
       createdAt: v.createdAt.toISOString(),
     })),
     total,
-  }
+  })
 }
 
 // ─── Create Vendor ──────────────────────────────────────────────
@@ -65,7 +66,8 @@ export async function adminGetVendors(input: {
 export async function adminCreateVendor(input: AdminCreateVendorInput) {
   await requireAdmin()
 
-  return prisma.vendor.create({ data: input })
+  const vendor = await prisma.vendor.create({ data: input })
+  return serialize(vendor)
 }
 
 // ─── Update Vendor ──────────────────────────────────────────────
@@ -73,7 +75,8 @@ export async function adminCreateVendor(input: AdminCreateVendorInput) {
 export async function adminUpdateVendor(id: string, input: AdminUpdateVendorInput) {
   await requireAdmin()
 
-  return prisma.vendor.update({ where: { id }, data: input })
+  const vendor = await prisma.vendor.update({ where: { id }, data: input })
+  return serialize(vendor)
 }
 
 // ─── Delete Vendor ──────────────────────────────────────────────

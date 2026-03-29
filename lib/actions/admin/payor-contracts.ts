@@ -7,6 +7,7 @@ import type {
   UpdatePayorContractInput,
   PayorContractRate,
 } from "@/lib/validators/payor-contracts"
+import { serialize } from "@/lib/serialize"
 
 // ─── List Payor Contracts ───────────────────────────────────────
 
@@ -34,7 +35,7 @@ export async function getPayorContracts(input: {
     prisma.payorContract.count({ where }),
   ])
 
-  return {
+  return serialize({
     contracts: contracts.map((c) => ({
       ...c,
       effectiveDate: c.effectiveDate.toISOString(),
@@ -44,7 +45,7 @@ export async function getPayorContracts(input: {
       facilityName: c.facility.name,
     })),
     total,
-  }
+  })
 }
 
 // ─── Create Payor Contract ──────────────────────────────────────
@@ -52,7 +53,7 @@ export async function getPayorContracts(input: {
 export async function createPayorContract(input: CreatePayorContractInput) {
   await requireAdmin()
 
-  return prisma.payorContract.create({
+  const contract = await prisma.payorContract.create({
     data: {
       payorName: input.payorName,
       payorType: input.payorType,
@@ -68,6 +69,7 @@ export async function createPayorContract(input: CreatePayorContractInput) {
       notes: input.notes,
     },
   })
+  return serialize(contract)
 }
 
 // ─── Update Payor Contract ──────────────────────────────────────
@@ -81,7 +83,8 @@ export async function updatePayorContract(id: string, input: UpdatePayorContract
   if (input.cptRates) data.cptRates = JSON.parse(JSON.stringify(input.cptRates))
   if (input.grouperRates) data.grouperRates = JSON.parse(JSON.stringify(input.grouperRates))
 
-  return prisma.payorContract.update({ where: { id }, data })
+  const contract = await prisma.payorContract.update({ where: { id }, data })
+  return serialize(contract)
 }
 
 // ─── Delete Payor Contract ──────────────────────────────────────

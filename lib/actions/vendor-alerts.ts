@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import type { AlertFilters } from "@/lib/validators/alerts"
 import type { Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── Vendor Alerts ──────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "
     prisma.alert.count({ where }),
   ])
 
-  return { alerts, total }
+  return serialize({ alerts, total })
 }
 
 // ─── Vendor Alert Actions ───────────────────────────────────────

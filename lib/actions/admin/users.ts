@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireAdmin } from "@/lib/actions/auth"
 import type { UserRole } from "@prisma/client"
 import type { AdminCreateUserInput, AdminUpdateUserInput } from "@/lib/validators/admin"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ export async function adminGetUsers(input: {
     prisma.user.count({ where }),
   ])
 
-  return {
+  return serialize({
     users: users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -64,7 +65,7 @@ export async function adminGetUsers(input: {
       createdAt: u.createdAt.toISOString(),
     })),
     total,
-  }
+  })
 }
 
 // ─── Create User ────────────────────────────────────────────────
@@ -74,12 +75,13 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
 
   const { password: _password, ...userData } = input
 
-  return prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       ...userData,
       emailVerified: true,
     },
   })
+  return serialize(user)
 }
 
 // ─── Update User ────────────────────────────────────────────────
@@ -87,7 +89,8 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
 export async function adminUpdateUser(id: string, input: AdminUpdateUserInput) {
   await requireAdmin()
 
-  return prisma.user.update({ where: { id }, data: input })
+  const user = await prisma.user.update({ where: { id }, data: input })
+  return serialize(user)
 }
 
 // ─── Delete User ────────────────────────────────────────────────

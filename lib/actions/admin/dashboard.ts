@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAdmin } from "@/lib/actions/auth"
+import { serialize } from "@/lib/serialize"
 
 // ─── Admin Dashboard Stats ──────────────────────────────────────
 
@@ -17,14 +18,14 @@ export async function getAdminDashboardStats() {
       prisma.facility.count({ where: { status: "active" } }),
     ])
 
-  return {
+  return serialize({
     totalFacilities,
     totalVendors,
     totalUsers,
     totalContracts,
     mrr: activeSubscriptions * 499, // placeholder MRR calc
     activeSubscriptions,
-  }
+  })
 }
 
 // ─── Recent Activity ────────────────────────────────────────────
@@ -63,9 +64,9 @@ export async function getAdminRecentActivity(limit = 10): Promise<ActivityEntry[
     })),
   ]
 
-  return entries
+  return serialize(entries
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, limit)
+    .slice(0, limit))
 }
 
 // ─── Pending Actions ────────────────────────────────────────────
@@ -89,5 +90,5 @@ export async function getAdminPendingActions() {
     }),
   ])
 
-  return { newFacilitySetups, trialExpirations, failedPayments }
+  return serialize({ newFacilitySetups, trialExpirations, failedPayments })
 }

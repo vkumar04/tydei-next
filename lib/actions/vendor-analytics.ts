@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ export async function getVendorMarketShare(input: {
     share: Number(r._sum.extendedPrice ?? 0),
   }))
 
-  return { byCategory, byFacility, trend: [] }
+  return serialize({ byCategory, byFacility, trend: [] })
 }
 
 // ─── Performance KPIs ───────────────────────────────────────────
@@ -129,7 +130,7 @@ export async function getVendorPerformance(vendorId: string): Promise<VendorPerf
   const totalRebate = Number(periods._sum.rebateEarned ?? 0)
   const avgRebateRate = totalSpend > 0 ? (totalRebate / totalSpend) * 100 : 0
 
-  return {
+  return serialize({
     compliance: 85 + Math.random() * 15,
     delivery: 80 + Math.random() * 20,
     quality: 75 + Math.random() * 25,
@@ -138,7 +139,7 @@ export async function getVendorPerformance(vendorId: string): Promise<VendorPerf
     activeFacilities: activeFacilities.length,
     avgRebateRate: Math.round(avgRebateRate * 100) / 100,
     totalSpend,
-  }
+  })
 }
 
 // ─── Product Benchmarks ─────────────────────────────────────────
@@ -159,12 +160,12 @@ export async function getProductBenchmarks(input: {
     take: 50,
   })
 
-  return benchmarks.map((b) => ({
+  return serialize(benchmarks.map((b) => ({
     vendorItemNo: b.vendorItemNo,
     description: b.description,
     category: b.category,
     nationalAvgPrice: b.nationalAvgPrice ? Number(b.nationalAvgPrice) : null,
     yourPrice: b.percentile50 ? Number(b.percentile50) : null,
     percentile: null,
-  }))
+  })))
 }

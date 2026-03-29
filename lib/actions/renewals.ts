@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import { addDays } from "date-fns"
+import { serialize } from "@/lib/serialize"
 
 export interface ExpiringContract {
   id: string
@@ -70,7 +71,7 @@ export async function getExpiringContracts(input: {
     orderBy: { expirationDate: "asc" },
   })
 
-  return contracts.map((c) => {
+  return serialize(contracts.map((c) => {
     const totalSpend = c.periods.reduce((sum, p) => sum + Number(p.totalSpend), 0)
     const totalRebate = c.periods.reduce((sum, p) => sum + Number(p.rebateEarned), 0)
     const latestTier = c.periods[0]?.tierAchieved ?? null
@@ -94,7 +95,7 @@ export async function getExpiringContracts(input: {
       tierAchieved: latestTier,
       autoRenewal: c.autoRenewal,
     }
-  })
+  }))
 }
 
 // ─── Get Renewal Summary ─────────────────────────────────────────
@@ -128,7 +129,7 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
     recommendation = "Urgent: Contract expiring soon. Initiate renewal immediately."
   }
 
-  return {
+  return serialize({
     contract: {
       id: contract.id,
       name: contract.name,
@@ -143,7 +144,7 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
     totalRebate,
     tierAchieved,
     renewalRecommendation: recommendation,
-  }
+  })
 }
 
 // ─── Initiate Renewal ────────────────────────────────────────────
@@ -221,5 +222,5 @@ export async function initiateRenewal(contractId: string) {
     })
   }
 
-  return renewal
+  return serialize(renewal)
 }

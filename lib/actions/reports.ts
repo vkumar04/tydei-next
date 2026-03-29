@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { serialize } from "@/lib/serialize"
 
 // ─── Report Data ─────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ export async function getReportData(input: {
     orderBy: { name: "asc" },
   })
 
-  return {
+  return serialize({
     contracts: contracts.map((c) => ({
       id: c.id,
       name: c.name,
@@ -57,7 +58,7 @@ export async function getReportData(input: {
     reportType,
     dateFrom,
     dateTo,
-  }
+  })
 }
 
 // ─── Contract Period Data ────────────────────────────────────────
@@ -79,7 +80,7 @@ export async function getContractPeriodData(input: {
     orderBy: { periodStart: "asc" },
   })
 
-  return periods.map((p) => ({
+  return serialize(periods.map((p) => ({
     id: p.id,
     periodStart: p.periodStart.toISOString(),
     periodEnd: p.periodEnd.toISOString(),
@@ -90,7 +91,7 @@ export async function getContractPeriodData(input: {
     paymentExpected: Number(p.paymentExpected),
     paymentActual: Number(p.paymentActual),
     tierAchieved: p.tierAchieved,
-  }))
+  })))
 }
 
 // ─── Export CSV ──────────────────────────────────────────────────
@@ -149,7 +150,7 @@ export async function getPriceDiscrepancies(facilityId: string) {
     take: 100,
   })
 
-  return lineItems.map((li) => ({
+  return serialize(lineItems.map((li) => ({
     id: li.id,
     invoiceId: li.invoice.id,
     invoiceNumber: li.invoice.invoiceNumber,
@@ -163,5 +164,5 @@ export async function getPriceDiscrepancies(facilityId: string) {
     quantity: li.invoiceQuantity,
     totalLineCost: Number(li.totalLineCost),
     isFlagged: li.isFlagged,
-  }))
+  })))
 }

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireAdmin } from "@/lib/actions/auth"
 import type { AdminCreateFacilityInput, AdminUpdateFacilityInput } from "@/lib/validators/admin"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ export async function adminGetFacilities(input: {
     prisma.facility.count({ where }),
   ])
 
-  return {
+  return serialize({
     facilities: facilities.map((f) => ({
       id: f.id,
       name: f.name,
@@ -65,7 +66,7 @@ export async function adminGetFacilities(input: {
       createdAt: f.createdAt.toISOString(),
     })),
     total,
-  }
+  })
 }
 
 // ─── Create Facility ────────────────────────────────────────────
@@ -73,7 +74,8 @@ export async function adminGetFacilities(input: {
 export async function adminCreateFacility(input: AdminCreateFacilityInput) {
   await requireAdmin()
 
-  return prisma.facility.create({ data: input })
+  const facility = await prisma.facility.create({ data: input })
+  return serialize(facility)
 }
 
 // ─── Update Facility ────────────────────────────────────────────
@@ -81,7 +83,8 @@ export async function adminCreateFacility(input: AdminCreateFacilityInput) {
 export async function adminUpdateFacility(id: string, input: AdminUpdateFacilityInput) {
   await requireAdmin()
 
-  return prisma.facility.update({ where: { id }, data: input })
+  const facility = await prisma.facility.update({ where: { id }, data: input })
+  return serialize(facility)
 }
 
 // ─── Delete Facility ────────────────────────────────────────────

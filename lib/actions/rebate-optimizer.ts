@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { serialize } from "@/lib/serialize"
 
 export interface RebateOpportunity {
   contractId: string
@@ -106,9 +107,9 @@ export async function getRebateOpportunities(facilityId: string): Promise<Rebate
     }
   }
 
-  return opportunities.sort(
+  return serialize(opportunities.sort(
     (a, b) => b.projectedAdditionalRebate - a.projectedAdditionalRebate
-  )
+  ))
 }
 
 // ─── Set Spend Target ────────────────────────────────────────────
@@ -168,7 +169,7 @@ export async function getSpendTargets(facilityId: string): Promise<SpendTarget[]
     orderBy: { createdAt: "desc" },
   })
 
-  return alerts
+  return serialize(alerts
     .filter((a) => {
       const meta = a.metadata as Record<string, unknown> | null
       return meta?.type === "spend_target" && a.contract
@@ -191,5 +192,5 @@ export async function getSpendTargets(facilityId: string): Promise<SpendTarget[]
             ? Math.min(100, (currentSpend / targetSpend) * 100)
             : 0,
       }
-    })
+    }))
 }

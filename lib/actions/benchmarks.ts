@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import { z } from "zod"
+import { serialize } from "@/lib/serialize"
 
 const benchmarkFiltersSchema = z.object({
   category: z.string().optional(),
@@ -55,14 +56,15 @@ export async function getBenchmarks(input: BenchmarkFilters) {
     prisma.productBenchmark.count({ where }),
   ])
 
-  return { benchmarks, total, page: filters.page, pageSize: filters.pageSize }
+  return serialize({ benchmarks, total, page: filters.page, pageSize: filters.pageSize })
 }
 
 // ─── Get Single Benchmark ───────────────────────────────────────
 
 export async function getBenchmark(id: string) {
   await requireAuth()
-  return prisma.productBenchmark.findUniqueOrThrow({ where: { id } })
+  const benchmark = await prisma.productBenchmark.findUniqueOrThrow({ where: { id } })
+  return serialize(benchmark)
 }
 
 // ─── Create Benchmark ───────────────────────────────────────────
@@ -70,7 +72,8 @@ export async function getBenchmark(id: string) {
 export async function createBenchmark(input: CreateBenchmarkInput) {
   await requireAuth()
   const data = createBenchmarkSchema.parse(input)
-  return prisma.productBenchmark.create({ data })
+  const benchmark = await prisma.productBenchmark.create({ data })
+  return serialize(benchmark)
 }
 
 // ─── Update Benchmark ───────────────────────────────────────────
@@ -80,14 +83,16 @@ export async function updateBenchmark(
   input: Partial<CreateBenchmarkInput>
 ) {
   await requireAuth()
-  return prisma.productBenchmark.update({ where: { id }, data: input })
+  const benchmark = await prisma.productBenchmark.update({ where: { id }, data: input })
+  return serialize(benchmark)
 }
 
 // ─── Delete Benchmark ───────────────────────────────────────────
 
 export async function deleteBenchmark(id: string) {
   await requireAuth()
-  return prisma.productBenchmark.delete({ where: { id } })
+  const benchmark = await prisma.productBenchmark.delete({ where: { id } })
+  return serialize(benchmark)
 }
 
 // ─── Bulk Import Benchmarks ─────────────────────────────────────
@@ -95,5 +100,6 @@ export async function deleteBenchmark(id: string) {
 export async function bulkImportBenchmarks(items: CreateBenchmarkInput[]) {
   await requireAuth()
   const validated = items.map((item) => createBenchmarkSchema.parse(item))
-  return prisma.productBenchmark.createMany({ data: validated, skipDuplicates: true })
+  const result = await prisma.productBenchmark.createMany({ data: validated, skipDuplicates: true })
+  return serialize(result)
 }

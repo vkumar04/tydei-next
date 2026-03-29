@@ -9,6 +9,7 @@ import {
   type BulkImportPricingInput,
 } from "@/lib/validators/pricing-files"
 import type { Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── List Pricing Files ─────────────────────────────────────────
 
@@ -37,7 +38,7 @@ export async function getPricingFiles(input: PricingFilters) {
     prisma.pricingFile.count({ where }),
   ])
 
-  return { files, total }
+  return serialize({ files, total })
 }
 
 // ─── Bulk Import Pricing File Entries ───────────────────────────

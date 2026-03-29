@@ -11,6 +11,7 @@ import {
   type UpdateContractInput,
 } from "@/lib/validators/contracts"
 import type { Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ export async function getContracts(input: ContractFilters) {
     prisma.contract.count({ where }),
   ])
 
-  return { contracts, total }
+  return serialize({ contracts, total })
 }
 
 // ─── Single Contract ─────────────────────────────────────────────
@@ -80,7 +81,7 @@ export async function getContract(id: string) {
     },
   })
 
-  return contract
+  return serialize(contract)
 }
 
 // ─── Contract Stats ──────────────────────────────────────────────
@@ -108,11 +109,11 @@ export async function getContractStats() {
     _sum: { rebateEarned: true },
   })
 
-  return {
+  return serialize({
     totalContracts,
     totalValue: Number(aggregates._sum.totalValue ?? 0),
     totalRebates: Number(rebateResult._sum?.rebateEarned ?? 0),
-  }
+  })
 }
 
 // ─── Create Contract ─────────────────────────────────────────────
@@ -152,7 +153,7 @@ export async function createContract(input: CreateContractInput) {
     },
   })
 
-  return contract
+  return serialize(contract)
 }
 
 // ─── Update Contract ─────────────────────────────────────────────
@@ -197,7 +198,7 @@ export async function updateContract(id: string, input: UpdateContractInput) {
     data: updateData,
   })
 
-  return contract
+  return serialize(contract)
 }
 
 // ─── Delete Contract ─────────────────────────────────────────────

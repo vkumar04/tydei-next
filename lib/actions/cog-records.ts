@@ -11,6 +11,7 @@ import {
   type BulkImportInput,
 } from "@/lib/validators/cog-records"
 import type { Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── List COG Records ───────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export async function getCOGRecords(input: COGFilters) {
     prisma.cOGRecord.count({ where }),
   ])
 
-  return { records, total }
+  return serialize({ records, total })
 }
 
 // ─── Create Single COG Record ───────────────────────────────────
@@ -63,7 +64,7 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
   const session = await requireFacility()
   const data = createCOGRecordSchema.parse(input)
 
-  return prisma.cOGRecord.create({
+  const record = await prisma.cOGRecord.create({
     data: {
       facilityId: session.facility.id,
       vendorId: data.vendorId,
@@ -80,6 +81,7 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
       createdBy: session.user.id,
     },
   })
+  return serialize(record)
 }
 
 // ─── Bulk Import COG Records ────────────────────────────────────
@@ -184,8 +186,8 @@ export async function getCOGImportHistory(facilityId: string) {
     take: 50,
   })
 
-  return records.map((r) => ({
+  return serialize(records.map((r) => ({
     date: r.createdAt,
     recordCount: r._count.id,
-  }))
+  })))
 }

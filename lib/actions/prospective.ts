@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { serialize } from "@/lib/serialize"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -123,14 +124,14 @@ export async function analyzeProposal(input: {
     complianceLikelihood: 70,
   })
 
-  return {
+  return serialize({
     itemComparisons,
     totalCurrentCost: Math.round(totalCurrentCost * 100) / 100,
     totalProposedCost: Math.round(totalProposedCost * 100) / 100,
     totalSavings: Math.round(totalSavings * 100) / 100,
     totalSavingsPercent: Math.round(totalSavingsPercent * 100) / 100,
     dealScore,
-  }
+  })
 }
 
 // ─── Score a Deal ───────────────────────────────────────────────
@@ -218,7 +219,7 @@ export async function getFinancialProjections(input: {
     })
   }
 
-  return projections
+  return serialize(projections)
 }
 
 // ─── Vendor: Create Proposal (in-memory, stored as alert metadata) ──
@@ -256,7 +257,7 @@ export async function createProposal(input: {
     },
   })
 
-  return {
+  return serialize({
     id: alert.id,
     vendorId: vendor.id,
     facilityIds: input.facilityIds,
@@ -265,7 +266,7 @@ export async function createProposal(input: {
     totalProposedCost: totalCost,
     dealScore: null,
     createdAt: alert.createdAt.toISOString(),
-  }
+  })
 }
 
 // ─── Vendor: Get Proposals ──────────────────────────────────────
@@ -283,7 +284,7 @@ export async function getVendorProposals(
     orderBy: { createdAt: "desc" },
   })
 
-  return alerts
+  return serialize(alerts
     .filter((a) => {
       const meta = a.metadata as Record<string, unknown> | null
       return meta?.type === "vendor_proposal"
@@ -300,5 +301,5 @@ export async function getVendorProposals(
         dealScore: null,
         createdAt: a.createdAt.toISOString(),
       }
-    })
+    }))
 }

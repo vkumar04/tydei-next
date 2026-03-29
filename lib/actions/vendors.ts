@@ -11,17 +11,19 @@ import {
   type UpdateVendorInput,
 } from "@/lib/validators/vendors"
 import type { Prisma } from "@prisma/client"
+import { serialize } from "@/lib/serialize"
 
 // ─── List Vendors (simple - for dropdowns) ──────────────────────
 
 export async function getVendors() {
   await requireFacility()
 
-  return prisma.vendor.findMany({
+  const vendors = await prisma.vendor.findMany({
     where: { status: "active" },
     select: { id: true, name: true, displayName: true },
     orderBy: { name: "asc" },
   })
+  return serialize(vendors)
 }
 
 // ─── List Vendors (full with filters) ───────────────────────────
@@ -58,7 +60,7 @@ export async function getVendorList(input: VendorFilters) {
     prisma.vendor.count({ where }),
   ])
 
-  return { vendors, total }
+  return serialize({ vendors, total })
 }
 
 // ─── Single Vendor ──────────────────────────────────────────────
@@ -66,10 +68,11 @@ export async function getVendorList(input: VendorFilters) {
 export async function getVendor(id: string) {
   await requireFacility()
 
-  return prisma.vendor.findUniqueOrThrow({
+  const vendor = await prisma.vendor.findUniqueOrThrow({
     where: { id },
     include: { divisions: true, childVendors: true },
   })
+  return serialize(vendor)
 }
 
 // ─── Create Vendor ──────────────────────────────────────────────
@@ -78,7 +81,7 @@ export async function createVendor(input: CreateVendorInput) {
   await requireFacility()
   const data = createVendorSchema.parse(input)
 
-  return prisma.vendor.create({
+  const vendor = await prisma.vendor.create({
     data: {
       name: data.name,
       code: data.code,
@@ -92,6 +95,7 @@ export async function createVendor(input: CreateVendorInput) {
       tier: data.tier,
     },
   })
+  return serialize(vendor)
 }
 
 // ─── Update Vendor ──────────────────────────────────────────────
@@ -100,7 +104,7 @@ export async function updateVendor(id: string, input: UpdateVendorInput) {
   await requireFacility()
   const data = updateVendorSchema.parse(input)
 
-  return prisma.vendor.update({
+  const vendor = await prisma.vendor.update({
     where: { id },
     data: {
       ...(data.name !== undefined && { name: data.name }),
@@ -119,6 +123,7 @@ export async function updateVendor(id: string, input: UpdateVendorInput) {
       ...(data.tier !== undefined && { tier: data.tier }),
     },
   })
+  return serialize(vendor)
 }
 
 // ─── Deactivate Vendor ──────────────────────────────────────────
