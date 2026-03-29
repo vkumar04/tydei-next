@@ -1,0 +1,191 @@
+"use server"
+
+import { prisma } from "@/lib/db"
+import { requireFacility } from "@/lib/actions/auth"
+import {
+  cogFiltersSchema,
+  createCOGRecordSchema,
+  bulkImportSchema,
+  type COGFilters,
+  type CreateCOGRecordInput,
+  type BulkImportInput,
+} from "@/lib/validators/cog-records"
+import type { Prisma } from "@prisma/client"
+
+// ─── List COG Records ───────────────────────────────────────────
+
+export async function getCOGRecords(input: COGFilters) {
+  const { facility } = await requireFacility()
+  const filters = cogFiltersSchema.parse(input)
+
+  const conditions: Prisma.COGRecordWhereInput[] = [
+    { facilityId: facility.id },
+  ]
+
+  if (filters.search) {
+    conditions.push({
+      OR: [
+        { inventoryDescription: { contains: filters.search, mode: "insensitive" } },
+        { inventoryNumber: { contains: filters.search, mode: "insensitive" } },
+        { vendorItemNo: { contains: filters.search, mode: "insensitive" } },
+      ],
+    })
+  }
+  if (filters.vendorId) conditions.push({ vendorId: filters.vendorId })
+  if (filters.dateFrom) {
+    conditions.push({ transactionDate: { gte: new Date(filters.dateFrom) } })
+  }
+  if (filters.dateTo) {
+    conditions.push({ transactionDate: { lte: new Date(filters.dateTo) } })
+  }
+
+  const where: Prisma.COGRecordWhereInput = { AND: conditions }
+  const page = filters.page ?? 1
+  const pageSize = filters.pageSize ?? 20
+
+  const [records, total] = await Promise.all([
+    prisma.cOGRecord.findMany({
+      where,
+      include: { vendor: { select: { id: true, name: true } } },
+      orderBy: { transactionDate: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.cOGRecord.count({ where }),
+  ])
+
+  return { records, total }
+}
+
+// ─── Create Single COG Record ───────────────────────────────────
+
+export async function createCOGRecord(input: CreateCOGRecordInput) {
+  const session = await requireFacility()
+  const data = createCOGRecordSchema.parse(input)
+
+  return prisma.cOGRecord.create({
+    data: {
+      facilityId: session.facility.id,
+      vendorId: data.vendorId,
+      vendorName: data.vendorName,
+      inventoryNumber: data.inventoryNumber,
+      inventoryDescription: data.inventoryDescription,
+      vendorItemNo: data.vendorItemNo,
+      manufacturerNo: data.manufacturerNo,
+      unitCost: data.unitCost,
+      extendedPrice: data.extendedPrice,
+      quantity: data.quantity,
+      transactionDate: new Date(data.transactionDate),
+      category: data.category,
+      createdBy: session.user.id,
+    },
+  })
+}
+
+// ─── Bulk Import COG Records ────────────────────────────────────
+
+export async function bulkImportCOGRecords(input: BulkImportInput) {
+  const session = await requireFacility()
+  const data = bulkImportSchema.parse(input)
+
+  let imported = 0
+  let skipped = 0
+  let errors = 0
+
+  for (const record of data.records) {
+    try {
+      if (data.duplicateStrategy !== "keep_both") {
+        const existing = await prisma.cOGRecord.findFirst({
+          where: {
+            facilityId: session.facility.id,
+            inventoryNumber: record.inventoryNumber,
+            transactionDate: new Date(record.transactionDate),
+            vendorItemNo: record.vendorItemNo ?? undefined,
+          },
+        })
+
+        if (existing) {
+          if (data.duplicateStrategy === "skip") {
+            skipped++
+            continue
+          }
+          // overwrite
+          await prisma.cOGRecord.update({
+            where: { id: existing.id },
+            data: {
+              vendorId: record.vendorId,
+              vendorName: record.vendorName,
+              inventoryDescription: record.inventoryDescription,
+              manufacturerNo: record.manufacturerNo,
+              unitCost: record.unitCost,
+              extendedPrice: record.extendedPrice,
+              quantity: record.quantity,
+              category: record.category,
+            },
+          })
+          imported++
+          continue
+        }
+      }
+
+      await prisma.cOGRecord.create({
+        data: {
+          facilityId: session.facility.id,
+          vendorId: record.vendorId,
+          vendorName: record.vendorName,
+          inventoryNumber: record.inventoryNumber,
+          inventoryDescription: record.inventoryDescription,
+          vendorItemNo: record.vendorItemNo,
+          manufacturerNo: record.manufacturerNo,
+          unitCost: record.unitCost,
+          extendedPrice: record.extendedPrice,
+          quantity: record.quantity,
+          transactionDate: new Date(record.transactionDate),
+          category: record.category,
+          createdBy: session.user.id,
+        },
+      })
+      imported++
+    } catch {
+      errors++
+    }
+  }
+
+  return { imported, skipped, errors }
+}
+
+// ─── Delete COG Record ──────────────────────────────────────────
+
+export async function deleteCOGRecord(id: string) {
+  await requireFacility()
+  await prisma.cOGRecord.delete({ where: { id } })
+}
+
+// ─── Bulk Delete ────────────────────────────────────────────────
+
+export async function bulkDeleteCOGRecords(ids: string[]) {
+  await requireFacility()
+  const result = await prisma.cOGRecord.deleteMany({
+    where: { id: { in: ids } },
+  })
+  return { deleted: result.count }
+}
+
+// ─── Import History (aggregate by date) ─────────────────────────
+
+export async function getCOGImportHistory(facilityId: string) {
+  await requireFacility()
+
+  const records = await prisma.cOGRecord.groupBy({
+    by: ["createdAt"],
+    where: { facilityId },
+    _count: { id: true },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  })
+
+  return records.map((r) => ({
+    date: r.createdAt,
+    recordCount: r._count.id,
+  }))
+}

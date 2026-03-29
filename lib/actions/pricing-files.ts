@@ -1,0 +1,91 @@
+"use server"
+
+import { prisma } from "@/lib/db"
+import { requireFacility } from "@/lib/actions/auth"
+import {
+  pricingFiltersSchema,
+  bulkImportPricingSchema,
+  type PricingFilters,
+  type BulkImportPricingInput,
+} from "@/lib/validators/pricing-files"
+import type { Prisma } from "@prisma/client"
+
+// ─── List Pricing Files ─────────────────────────────────────────
+
+export async function getPricingFiles(input: PricingFilters) {
+  const { facility } = await requireFacility()
+  const filters = pricingFiltersSchema.parse(input)
+
+  const conditions: Prisma.PricingFileWhereInput[] = [
+    { facilityId: facility.id },
+  ]
+
+  if (filters.vendorId) conditions.push({ vendorId: filters.vendorId })
+
+  const where: Prisma.PricingFileWhereInput = { AND: conditions }
+  const page = filters.page ?? 1
+  const pageSize = filters.pageSize ?? 20
+
+  const [files, total] = await Promise.all([
+    prisma.pricingFile.findMany({
+      where,
+      include: { vendor: { select: { id: true, name: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.pricingFile.count({ where }),
+  ])
+
+  return { files, total }
+}
+
+// ─── Bulk Import Pricing File Entries ───────────────────────────
+
+export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
+  const { facility } = await requireFacility()
+  const data = bulkImportPricingSchema.parse(input)
+
+  let imported = 0
+  let errors = 0
+
+  for (const record of data.records) {
+    try {
+      await prisma.pricingFile.create({
+        data: {
+          vendorId: data.vendorId,
+          facilityId: facility.id,
+          vendorItemNo: record.vendorItemNo,
+          manufacturerNo: record.manufacturerNo,
+          productDescription: record.productDescription,
+          listPrice: record.listPrice,
+          contractPrice: record.contractPrice,
+          effectiveDate: new Date(record.effectiveDate),
+          expirationDate: record.expirationDate
+            ? new Date(record.expirationDate)
+            : null,
+          category: record.category,
+          uom: record.uom,
+        },
+      })
+      imported++
+    } catch {
+      errors++
+    }
+  }
+
+  return { imported, errors }
+}
+
+// ─── Delete Pricing Files by Vendor ─────────────────────────────
+
+export async function deletePricingFilesByVendor(
+  vendorId: string,
+  facilityId: string
+) {
+  await requireFacility()
+
+  await prisma.pricingFile.deleteMany({
+    where: { vendorId, facilityId },
+  })
+}

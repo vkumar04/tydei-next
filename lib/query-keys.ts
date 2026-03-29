@@ -12,11 +12,26 @@ export const queryKeys = {
   },
   categories: {
     all: ["categories"] as const,
+    tree: () => ["categories", "tree"] as const,
+    mappings: () => ["categories", "mappings"] as const,
   },
   vendors: {
     all: ["vendors"] as const,
     list: (filters?: Record<string, unknown>) => ["vendors", "list", filters] as const,
     detail: (id: string) => ["vendors", "detail", id] as const,
+    mappings: () => ["vendors", "mappings"] as const,
+  },
+  cogRecords: {
+    all: ["cogRecords"] as const,
+    list: (facilityId: string, filters?: Record<string, unknown>) =>
+      ["cogRecords", "list", facilityId, filters] as const,
+    importHistory: (facilityId: string) =>
+      ["cogRecords", "importHistory", facilityId] as const,
+  },
+  pricingFiles: {
+    all: ["pricingFiles"] as const,
+    list: (facilityId: string, vendorId?: string) =>
+      ["pricingFiles", "list", facilityId, vendorId] as const,
   },
   facilities: {
     all: ["facilities"] as const,
@@ -28,14 +43,6 @@ export const queryKeys = {
     list: (filters?: Record<string, unknown>) => ["alerts", "list", filters] as const,
     detail: (id: string) => ["alerts", "detail", id] as const,
     count: (portalType?: string) => ["alerts", "count", portalType] as const,
-  },
-  cogRecords: {
-    all: ["cogRecords"] as const,
-    list: (filters?: Record<string, unknown>) => ["cogRecords", "list", filters] as const,
-  },
-  pricingFiles: {
-    all: ["pricingFiles"] as const,
-    list: (filters?: Record<string, unknown>) => ["pricingFiles", "list", filters] as const,
   },
   purchaseOrders: {
     all: ["purchaseOrders"] as const,
