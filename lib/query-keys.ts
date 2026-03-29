@@ -104,8 +104,17 @@ export const queryKeys = {
   },
   cases: {
     all: ["cases"] as const,
-    list: (filters?: Record<string, unknown>) => ["cases", "list", filters] as const,
+    list: (facilityId: string, filters?: Record<string, unknown>) =>
+      ["cases", "list", facilityId, filters] as const,
     detail: (id: string) => ["cases", "detail", id] as const,
+    surgeonScorecards: (facilityId: string) =>
+      ["cases", "surgeonScorecards", facilityId] as const,
+    cptAnalysis: (facilityId: string) =>
+      ["cases", "cptAnalysis", facilityId] as const,
+    surgeonComparison: (facilityId: string, surgeons: string[]) =>
+      ["cases", "comparison", facilityId, surgeons] as const,
+    reportData: (facilityId: string, filters?: Record<string, unknown>) =>
+      ["cases", "reportData", facilityId, filters] as const,
   },
   renewals: {
     expiring: (entityId: string, windowDays: number) =>
@@ -117,6 +126,22 @@ export const queryKeys = {
       ["rebateOptimizer", "opportunities", facilityId] as const,
     spendTargets: (facilityId: string) =>
       ["rebateOptimizer", "spendTargets", facilityId] as const,
+  },
+  analysis: {
+    depreciation: (contractId: string, input?: Record<string, unknown>) =>
+      ["analysis", "depreciation", contractId, input] as const,
+    priceProjections: (facilityId: string, filters?: Record<string, unknown>) =>
+      ["analysis", "priceProjections", facilityId, filters] as const,
+    vendorSpendTrends: (facilityId: string, dateRange?: DateRange) =>
+      ["analysis", "vendorSpendTrends", facilityId, dateRange] as const,
+    categorySpendTrends: (facilityId: string, dateRange?: DateRange) =>
+      ["analysis", "categorySpendTrends", facilityId, dateRange] as const,
+    proposalAnalysis: (facilityId: string) =>
+      ["analysis", "proposalAnalysis", facilityId] as const,
+  },
+  prospective: {
+    vendorProposals: (vendorId: string) =>
+      ["prospective", "vendorProposals", vendorId] as const,
   },
   settings: {
     facilityProfile: (facilityId: string) =>
