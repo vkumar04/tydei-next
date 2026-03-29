@@ -1,4 +1,4 @@
-import { generateObject } from "ai"
+import { generateText, Output } from "ai"
 import { geminiModel } from "@/lib/ai/config"
 import { supplyMatchSchema } from "@/lib/ai/schemas"
 
@@ -14,9 +14,9 @@ export async function POST(request: Request) {
       )
       .join("\n")
 
-    const { object } = await generateObject({
+    const result = await generateText({
       model: geminiModel,
-      schema: supplyMatchSchema,
+      output: Output.object({ schema: supplyMatchSchema }),
       prompt: `Match this surgical supply to the closest item in the contract pricing list.
 
 Supply to match:
@@ -30,7 +30,7 @@ If no reasonable match exists (confidence < 0.3), return null for matchedVendorI
 Explain your reasoning for the match or lack thereof.`,
     })
 
-    return Response.json(object)
+    return Response.json(result.output)
   } catch (error) {
     console.error("Supply matching error:", error)
     return Response.json({ error: "Matching failed" }, { status: 500 })

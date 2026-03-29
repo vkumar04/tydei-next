@@ -1,4 +1,4 @@
-import { generateObject } from "ai"
+import { generateText, Output } from "ai"
 import { geminiProModel } from "@/lib/ai/config"
 import { dealScoreSchema } from "@/lib/ai/schemas"
 
@@ -6,9 +6,9 @@ export async function POST(request: Request) {
   try {
     const { contractData, cogData, benchmarkData } = await request.json()
 
-    const { object } = await generateObject({
+    const result = await generateText({
       model: geminiProModel,
-      schema: dealScoreSchema,
+      output: Output.object({ schema: dealScoreSchema }),
       prompt: `Analyze this healthcare supply chain contract deal and score it across 5 dimensions (0-100 each).
 
 Contract Data:
@@ -29,7 +29,7 @@ Score each dimension considering:
 Provide an overall score (weighted average), a brief recommendation, and 3-5 actionable negotiation advice points.`,
     })
 
-    return Response.json(object)
+    return Response.json(result.output)
   } catch (error) {
     console.error("Deal scoring error:", error)
     return Response.json({ error: "Scoring failed" }, { status: 500 })
