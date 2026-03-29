@@ -10,13 +10,15 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { AISupplyMatch } from "@/components/facility/case-costing/ai-supply-match"
 import type { CaseDetail } from "@/lib/actions/cases"
 
 interface CaseDetailViewProps {
   caseData: CaseDetail
+  contractPricing?: Array<{ vendorItemNo: string; description?: string; unitPrice: number }>
 }
 
-export function CaseDetailView({ caseData }: CaseDetailViewProps) {
+export function CaseDetailView({ caseData, contractPricing = [] }: CaseDetailViewProps) {
   const onContract = caseData.supplies.filter((s) => s.isOnContract)
   const offContract = caseData.supplies.filter((s) => !s.isOnContract)
 
@@ -80,6 +82,7 @@ export function CaseDetailView({ caseData }: CaseDetailViewProps) {
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Extended</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>AI Match</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -94,6 +97,16 @@ export function CaseDetailView({ caseData }: CaseDetailViewProps) {
                     <Badge variant={s.isOnContract ? "default" : "secondary"}>
                       {s.isOnContract ? "On-Contract" : "Off"}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {!s.isOnContract && contractPricing.length > 0 && (
+                      <AISupplyMatch
+                        supplyName={s.materialName}
+                        vendorItemNo={s.vendorItemNo ?? undefined}
+                        contractPricing={contractPricing}
+                        onMatch={() => {}}
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

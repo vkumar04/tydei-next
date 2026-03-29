@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, Sparkles } from "lucide-react"
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
 import { PageHeader } from "@/components/shared/page-header"
 import { ContractDetailOverview } from "@/components/contracts/contract-detail-overview"
@@ -43,6 +43,14 @@ export function ContractDetailClient({
         description={contract.contractNumber ?? undefined}
         action={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(`/dashboard/contracts/${contractId}/score`)
+              }
+            >
+              <Sparkles className="size-4" /> AI Score
+            </Button>
             <Button
               variant="outline"
               onClick={() =>

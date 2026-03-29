@@ -156,4 +156,8 @@ export const queryKeys = {
     connections: (entityId: string) =>
       ["settings", "connections", entityId] as const,
   },
+  ai: {
+    credits: (entityId: string) => ["ai", "credits", entityId] as const,
+    usageHistory: (creditId: string) => ["ai", "usageHistory", creditId] as const,
+  },
 } as const
