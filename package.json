@@ -7,10 +7,10 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "oxlint .",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push --config prisma/prisma.config.ts",
+    "db:migrate": "prisma migrate dev --config prisma/prisma.config.ts",
     "db:seed": "bun run prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio --config prisma/prisma.config.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.53",
@@ -30,6 +30,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.3.1",
     "lucide-react": "^1.7.0",
     "next": "^16.2.1",
     "next-themes": "^0.4.6",
