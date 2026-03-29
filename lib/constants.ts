@@ -75,6 +75,21 @@ export const poStatusConfig: Record<string, StatusConfig> = {
   cancelled: { label: "Cancelled", variant: "destructive" },
 }
 
+export const pendingContractStatusConfig: Record<string, StatusConfig> = {
+  draft: { label: "Draft", variant: "outline" },
+  submitted: { label: "Submitted", variant: "secondary" },
+  approved: { label: "Approved", variant: "default", className: "bg-emerald-600 hover:bg-emerald-600" },
+  rejected: { label: "Rejected", variant: "destructive" },
+  revision_requested: { label: "Revision Requested", variant: "secondary", className: "bg-amber-600 hover:bg-amber-600 text-white" },
+  withdrawn: { label: "Withdrawn", variant: "outline" },
+}
+
+export const invoiceStatusConfig: Record<string, StatusConfig> = {
+  pending: { label: "Pending", variant: "secondary" },
+  validated: { label: "Validated", variant: "default", className: "bg-emerald-600 hover:bg-emerald-600" },
+  flagged: { label: "Flagged", variant: "destructive" },
+}
+
 export const alertSeverityConfig: Record<string, StatusConfig> = {
   high: { label: "High", variant: "destructive" },
   medium: { label: "Medium", variant: "secondary", className: "bg-amber-600 hover:bg-amber-600 text-white" },

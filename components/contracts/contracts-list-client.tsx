@@ -12,13 +12,16 @@ import { DataTable } from "@/components/shared/tables/data-table"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { getContractColumns } from "@/components/contracts/contract-columns"
 import { ContractFilters } from "@/components/contracts/contract-filters"
+import { PendingContractsTab } from "@/components/facility/contracts/pending-contracts-tab"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface ContractsListClientProps {
   facilityId: string
+  userId?: string
 }
 
-export function ContractsListClient({ facilityId }: ContractsListClientProps) {
+export function ContractsListClient({ facilityId, userId }: ContractsListClientProps) {
   const router = useRouter()
   const [statusFilter, setStatusFilter] = useState<ContractStatus | "all">("all")
   const [typeFilter, setTypeFilter] = useState<ContractType | "all">("all")
@@ -77,21 +80,32 @@ export function ContractsListClient({ facilityId }: ContractsListClientProps) {
         />
       </div>
 
-      <DataTable
-        columns={columns}
-        data={data?.contracts ?? []}
-        searchKey="name"
-        searchPlaceholder="Search contracts..."
-        isLoading={isLoading}
-        filterComponent={
-          <ContractFilters
-            status={statusFilter}
-            onStatusChange={setStatusFilter}
-            type={typeFilter}
-            onTypeChange={setTypeFilter}
+      <Tabs defaultValue="contracts">
+        <TabsList>
+          <TabsTrigger value="contracts">Contracts</TabsTrigger>
+          <TabsTrigger value="pending">Pending Submissions</TabsTrigger>
+        </TabsList>
+        <TabsContent value="contracts" className="mt-4">
+          <DataTable
+            columns={columns}
+            data={data?.contracts ?? []}
+            searchKey="name"
+            searchPlaceholder="Search contracts..."
+            isLoading={isLoading}
+            filterComponent={
+              <ContractFilters
+                status={statusFilter}
+                onStatusChange={setStatusFilter}
+                type={typeFilter}
+                onTypeChange={setTypeFilter}
+              />
+            }
           />
-        }
-      />
+        </TabsContent>
+        <TabsContent value="pending" className="mt-4">
+          <PendingContractsTab facilityId={facilityId} userId={userId ?? ""} />
+        </TabsContent>
+      </Tabs>
 
       <ConfirmDialog
         open={!!deleteTarget}

@@ -72,15 +72,35 @@ export const queryKeys = {
     priceDiscrepancies: (facilityId: string) =>
       ["reports", "priceDiscrepancies", facilityId] as const,
   },
+  vendorContracts: {
+    all: ["vendorContracts"] as const,
+    list: (vendorId: string, filters?: Record<string, unknown>) =>
+      ["vendorContracts", "list", vendorId, filters] as const,
+    detail: (id: string) => ["vendorContracts", "detail", id] as const,
+  },
+  pendingContracts: {
+    vendor: (vendorId: string) => ["pendingContracts", "vendor", vendorId] as const,
+    facility: (facilityId: string) => ["pendingContracts", "facility", facilityId] as const,
+  },
+  vendorDashboard: {
+    stats: (vendorId: string) => ["vendorDashboard", "stats", vendorId] as const,
+    spendTrend: (vendorId: string, dateRange?: DateRange) =>
+      ["vendorDashboard", "spendTrend", vendorId, dateRange] as const,
+  },
   purchaseOrders: {
     all: ["purchaseOrders"] as const,
-    list: (filters?: Record<string, unknown>) => ["purchaseOrders", "list", filters] as const,
+    list: (facilityId: string, filters?: Record<string, unknown>) =>
+      ["purchaseOrders", "list", facilityId, filters] as const,
     detail: (id: string) => ["purchaseOrders", "detail", id] as const,
+    productSearch: (facilityId: string, query: string) =>
+      ["purchaseOrders", "productSearch", facilityId, query] as const,
   },
   invoices: {
     all: ["invoices"] as const,
-    list: (filters?: Record<string, unknown>) => ["invoices", "list", filters] as const,
+    list: (entityId: string, filters?: Record<string, unknown>) =>
+      ["invoices", "list", entityId, filters] as const,
     detail: (id: string) => ["invoices", "detail", id] as const,
+    validation: (id: string) => ["invoices", "validation", id] as const,
   },
   cases: {
     all: ["cases"] as const,

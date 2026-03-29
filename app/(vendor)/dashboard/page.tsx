@@ -1,19 +1,8 @@
-import { LayoutDashboard } from "lucide-react"
-import { PageHeader } from "@/components/shared/page-header"
-import { EmptyState } from "@/components/shared/empty-state"
+import { requireVendor } from "@/lib/actions/auth"
+import { VendorDashboardClient } from "@/components/vendor/dashboard/vendor-dashboard-client"
 
-export default function VendorDashboard() {
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Vendor Dashboard"
-        description="Overview of your contracts and facility relationships"
-      />
-      <EmptyState
-        icon={LayoutDashboard}
-        title="Vendor Dashboard"
-        description="Vendor analytics and KPIs coming soon"
-      />
-    </div>
-  )
+export default async function VendorDashboard() {
+  const { vendor } = await requireVendor()
+
+  return <VendorDashboardClient vendorId={vendor.id} />
 }

@@ -2,7 +2,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { ContractsListClient } from "@/components/contracts/contracts-list-client"
 
 export default async function ContractsPage() {
-  const { facility } = await requireFacility()
+  const session = await requireFacility()
 
-  return <ContractsListClient facilityId={facility.id} />
+  return <ContractsListClient facilityId={session.facility.id} userId={session.user.id} />
 }
