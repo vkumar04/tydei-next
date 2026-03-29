@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { signIn } from "@/lib/auth"
-import { getDemoCredentials } from "@/lib/actions/auth"
 import { loginSchema, type LoginInput } from "@/lib/validators"
 import { DemoLoginButtons } from "./demo-login-buttons"
 
@@ -22,6 +21,7 @@ export function LoginForm() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -47,25 +47,9 @@ export function LoginForm() {
     }
   }
 
-  async function handleDemoLogin(role: "facility" | "vendor" | "admin") {
-    setIsLoading(true)
-    try {
-      const creds = await getDemoCredentials(role)
-      const result = await signIn.email({
-        email: creds.email,
-        password: creds.password,
-      })
-      if (result.error) {
-        toast.error("Demo account unavailable")
-      } else {
-        router.push(creds.redirectTo)
-        router.refresh()
-      }
-    } catch {
-      toast.error("Demo login failed")
-    } finally {
-      setIsLoading(false)
-    }
+  function handleDemoFill(email: string, password: string) {
+    setValue("email", email)
+    setValue("password", password)
   }
 
   return (
@@ -109,7 +93,7 @@ export function LoginForm() {
         Sign In
       </Button>
 
-      <DemoLoginButtons onDemoLogin={handleDemoLogin} isLoading={isLoading} />
+      <DemoLoginButtons onFill={handleDemoFill} isLoading={isLoading} />
 
       <p className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}

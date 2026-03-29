@@ -4,8 +4,14 @@ import { Building2, Truck, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 
+const DEMO_ACCOUNTS = {
+  facility: { email: "demo-facility@tydei.com", password: "demo-facility-2024" },
+  vendor: { email: "demo-vendor@tydei.com", password: "demo-vendor-2024" },
+  admin: { email: "demo-admin@tydei.com", password: "demo-admin-2024" },
+} as const
+
 interface DemoLoginButtonsProps {
-  onDemoLogin: (role: "facility" | "vendor" | "admin") => void
+  onFill: (email: string, password: string) => void
   isLoading: boolean
 }
 
@@ -15,7 +21,7 @@ const roles = [
   { role: "admin" as const, label: "Admin Demo", icon: ShieldCheck },
 ]
 
-export function DemoLoginButtons({ onDemoLogin, isLoading }: DemoLoginButtonsProps) {
+export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -29,8 +35,12 @@ export function DemoLoginButtons({ onDemoLogin, isLoading }: DemoLoginButtonsPro
             key={role}
             variant="outline"
             size="sm"
+            type="button"
             disabled={isLoading}
-            onClick={() => onDemoLogin(role)}
+            onClick={() => {
+              const creds = DEMO_ACCOUNTS[role]
+              onFill(creds.email, creds.password)
+            }}
             className="text-xs"
           >
             <Icon className="mr-1 size-3" />
