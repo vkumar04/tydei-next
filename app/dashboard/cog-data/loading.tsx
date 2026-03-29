@@ -1,14 +1,29 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { Card } from "@/components/ui/card"
 
 export default function COGDataLoading() {
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-4 w-72" />
+      <div className="space-y-1">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-4 w-64" />
       </div>
-      <Skeleton className="h-10 w-80" />
-      <Skeleton className="h-[400px] w-full rounded-md" />
+
+      <div className="flex gap-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-9 w-24 rounded-md" />
+        ))}
+      </div>
+
+      <Card className="p-4">
+        <Skeleton className="mb-4 h-9 w-64" />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      </Card>
     </div>
   )
 }

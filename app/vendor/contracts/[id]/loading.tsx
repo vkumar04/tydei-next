@@ -1,17 +1,43 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { Card } from "@/components/ui/card"
 
 export default function VendorContractDetailLoading() {
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-4 w-40" />
+      <div className="space-y-1">
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-4 w-32" />
       </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
-        <Skeleton className="h-[400px] rounded-xl" />
-        <Skeleton className="h-[400px] rounded-xl" />
+        <Card className="p-6">
+          <Skeleton className="mb-4 h-5 w-32" />
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card className="p-6">
+          <Skeleton className="mb-4 h-5 w-32" />
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex justify-between">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
-      <Skeleton className="h-[200px] rounded-xl" />
+
+      <Card className="p-6">
+        <Skeleton className="mb-4 h-5 w-32" />
+        <Skeleton className="h-24 w-full rounded" />
+      </Card>
     </div>
   )
 }
