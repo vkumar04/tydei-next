@@ -1,19 +1,8 @@
-import { LayoutDashboard } from "lucide-react"
-import { PageHeader } from "@/components/shared/page-header"
-import { EmptyState } from "@/components/shared/empty-state"
+import { requireAdmin } from "@/lib/actions/auth"
+import { AdminDashboardClient } from "@/components/admin/admin-dashboard-client"
 
-export default function AdminDashboard() {
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Admin Dashboard"
-        description="Platform overview and management"
-      />
-      <EmptyState
-        icon={LayoutDashboard}
-        title="Admin Dashboard"
-        description="Platform metrics and management tools coming soon"
-      />
-    </div>
-  )
+export default async function AdminDashboard() {
+  await requireAdmin()
+
+  return <AdminDashboardClient />
 }

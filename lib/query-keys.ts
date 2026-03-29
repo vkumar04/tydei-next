@@ -160,4 +160,45 @@ export const queryKeys = {
     credits: (entityId: string) => ["ai", "credits", entityId] as const,
     usageHistory: (creditId: string) => ["ai", "usageHistory", creditId] as const,
   },
+  admin: {
+    stats: () => ["admin", "stats"] as const,
+    activity: () => ["admin", "activity"] as const,
+    pendingActions: () => ["admin", "pendingActions"] as const,
+    facilities: (filters?: Record<string, unknown>) =>
+      ["admin", "facilities", filters] as const,
+    vendors: (filters?: Record<string, unknown>) =>
+      ["admin", "vendors", filters] as const,
+    users: (filters?: Record<string, unknown>) =>
+      ["admin", "users", filters] as const,
+    subscriptions: (filters?: Record<string, unknown>) =>
+      ["admin", "subscriptions", filters] as const,
+    invoices: (filters?: Record<string, unknown>) =>
+      ["admin", "invoices", filters] as const,
+    mrr: (months: number) => ["admin", "mrr", months] as const,
+    payorContracts: (filters?: Record<string, unknown>) =>
+      ["admin", "payorContracts", filters] as const,
+  },
+  vendorAnalytics: {
+    marketShare: (vendorId: string, filters?: Record<string, unknown>) =>
+      ["vendorAnalytics", "marketShare", vendorId, filters] as const,
+    performance: (vendorId: string) =>
+      ["vendorAnalytics", "performance", vendorId] as const,
+    benchmarks: (vendorId: string, category?: string) =>
+      ["vendorAnalytics", "benchmarks", vendorId, category] as const,
+  },
+  changeProposals: {
+    byContract: (contractId: string) =>
+      ["changeProposals", "byContract", contractId] as const,
+    pendingForFacility: (facilityId: string) =>
+      ["changeProposals", "pending", facilityId] as const,
+  },
+  reportSchedules: {
+    list: (facilityId: string) => ["reportSchedules", facilityId] as const,
+  },
+  forecasting: {
+    spend: (facilityId: string, input?: Record<string, unknown>) =>
+      ["forecasting", "spend", facilityId, input] as const,
+    rebate: (facilityId: string, input?: Record<string, unknown>) =>
+      ["forecasting", "rebate", facilityId, input] as const,
+  },
 } as const
