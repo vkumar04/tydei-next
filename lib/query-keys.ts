@@ -1,3 +1,5 @@
+export type DateRange = { from: string; to: string }
+
 export const queryKeys = {
   contracts: {
     all: ["contracts"] as const,
@@ -40,9 +42,35 @@ export const queryKeys = {
   },
   alerts: {
     all: ["alerts"] as const,
-    list: (filters?: Record<string, unknown>) => ["alerts", "list", filters] as const,
+    list: (portalType: string, entityId: string, filters?: Record<string, unknown>) =>
+      ["alerts", "list", portalType, entityId, filters] as const,
     detail: (id: string) => ["alerts", "detail", id] as const,
-    count: (portalType?: string) => ["alerts", "count", portalType] as const,
+    unreadCount: (portalType: string, entityId: string) =>
+      ["alerts", "unreadCount", portalType, entityId] as const,
+  },
+  dashboard: {
+    stats: (facilityId: string, dateRange: DateRange) =>
+      ["dashboard", "stats", facilityId, dateRange] as const,
+    earnedRebate: (facilityId: string, dateRange: DateRange) =>
+      ["dashboard", "earnedRebate", facilityId, dateRange] as const,
+    spendByVendor: (facilityId: string, dateRange: DateRange) =>
+      ["dashboard", "spendByVendor", facilityId, dateRange] as const,
+    contractLifecycle: (facilityId: string) =>
+      ["dashboard", "contractLifecycle", facilityId] as const,
+    spendNeededForTier: (facilityId: string) =>
+      ["dashboard", "spendNeededForTier", facilityId] as const,
+    recentContracts: (facilityId: string) =>
+      ["dashboard", "recentContracts", facilityId] as const,
+    recentAlerts: (facilityId: string) =>
+      ["dashboard", "recentAlerts", facilityId] as const,
+  },
+  reports: {
+    data: (facilityId: string, reportType: string, dateRange: DateRange) =>
+      ["reports", "data", facilityId, reportType, dateRange] as const,
+    periodData: (contractId: string, dateRange?: DateRange) =>
+      ["reports", "periodData", contractId, dateRange] as const,
+    priceDiscrepancies: (facilityId: string) =>
+      ["reports", "priceDiscrepancies", facilityId] as const,
   },
   purchaseOrders: {
     all: ["purchaseOrders"] as const,
