@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { Menu, X } from "lucide-react"
+import { Menu, X, LayoutDashboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
+import { useSession } from "@/lib/auth"
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -14,6 +15,8 @@ const navLinks = [
 
 export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { data: session } = useSession()
+  const isLoggedIn = !!session?.user
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-lg">
@@ -39,12 +42,23 @@ export function SiteHeader() {
 
         <div className="hidden items-center gap-2 md:flex">
           <ThemeToggle />
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/login">Sign In</Link>
-          </Button>
-          <Button size="sm" asChild>
-            <Link href="/sign-up">Get Started</Link>
-          </Button>
+          {isLoggedIn ? (
+            <Button size="sm" asChild>
+              <Link href="/dashboard">
+                <LayoutDashboard className="mr-2 size-4" />
+                Dashboard
+              </Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link href="/sign-up">Get Started</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         <Button
@@ -72,12 +86,20 @@ export function SiteHeader() {
             ))}
             <div className="flex items-center gap-2 pt-2">
               <ThemeToggle />
-              <Button variant="ghost" size="sm" asChild className="flex-1">
-                <Link href="/login">Sign In</Link>
-              </Button>
-              <Button size="sm" asChild className="flex-1">
-                <Link href="/sign-up">Get Started</Link>
-              </Button>
+              {isLoggedIn ? (
+                <Button size="sm" asChild className="flex-1">
+                  <Link href="/dashboard">Dashboard</Link>
+                </Button>
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" asChild className="flex-1">
+                    <Link href="/login">Sign In</Link>
+                  </Button>
+                  <Button size="sm" asChild className="flex-1">
+                    <Link href="/sign-up">Get Started</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
