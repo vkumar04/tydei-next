@@ -11,8 +11,8 @@ export default async function VendorContractsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Contracts"
-        description="View and manage your facility contracts"
+        title="My Contracts"
+        description="Manage your contracts and submissions with facilities"
         action={
           <Button asChild>
             <Link href="/vendor/contracts/new">

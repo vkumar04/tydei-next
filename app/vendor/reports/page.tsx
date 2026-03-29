@@ -7,7 +7,10 @@ export default async function VendorReportsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reports" description="View contract and performance reports" />
+      <PageHeader
+        title="Reports"
+        description="Generate and download performance and compliance reports"
+      />
       <VendorReportsClient vendorId={vendor.id} />
     </div>
   )

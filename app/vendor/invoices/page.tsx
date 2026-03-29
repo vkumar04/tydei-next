@@ -9,7 +9,7 @@ export default async function VendorInvoicesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Invoices"
-        description="Track your submitted invoices and validation status"
+        description="Submit and track invoices to facilities with automatic contract validation"
       />
       <VendorInvoiceList vendorId={vendor.id} />
     </div>

@@ -2,11 +2,19 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Contract, Facility, ProductCategory } from "@prisma/client"
-import { Eye } from "lucide-react"
+import { Eye, MoreHorizontal, FileText, Building2 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 type ContractWithFacility = Contract & {
   facility: Pick<Facility, "id" | "name"> | null
@@ -19,7 +27,7 @@ export function getVendorContractColumns(
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: "Contract Name",
       cell: ({ row }) => (
         <div>
           <p className="font-medium">{row.original.name}</p>
@@ -33,6 +41,12 @@ export function getVendorContractColumns(
       accessorKey: "facility.name",
       header: "Facility",
       accessorFn: (row) => row.facility?.name ?? "N/A",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-muted-foreground" />
+          {row.original.facility?.name ?? "N/A"}
+        </div>
+      ),
     },
     {
       accessorKey: "contractType",
@@ -65,10 +79,29 @@ export function getVendorContractColumns(
     },
     {
       id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
       cell: ({ row }) => (
-        <Button variant="ghost" size="icon" onClick={() => onView(row.original.id)}>
-          <Eye className="size-4" />
-        </Button>
+        <div className="text-right">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onView(row.original.id)}>
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onView(row.original.id)}>
+                <FileText className="h-4 w-4 mr-2" />
+                Download PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       ),
     },
   ]

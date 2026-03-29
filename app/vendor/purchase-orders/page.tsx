@@ -7,7 +7,10 @@ export default async function VendorPurchaseOrdersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Purchase Orders" description="View purchase orders from your facilities" />
+      <PageHeader
+        title="Purchase Orders"
+        description="View and manage purchase orders from healthcare facilities"
+      />
       <VendorPurchaseOrdersClient vendorId={vendor.id} />
     </div>
   )

@@ -3,8 +3,16 @@
 import { useState, useCallback } from "react"
 import { PageHeader } from "@/components/shared/page-header"
 import { AlertsList } from "@/components/shared/alerts/alerts-list"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import {
+  AlertTriangle,
+  Clock,
+  FileText,
+  CheckCircle2,
+} from "lucide-react"
 import {
   useVendorAlerts,
   useResolveVendorAlert,
@@ -12,22 +20,20 @@ import {
   useBulkResolveVendorAlerts,
   useBulkDismissVendorAlerts,
 } from "@/hooks/use-vendor-alerts"
-import type { AlertType } from "@prisma/client"
+import type { AlertSeverity } from "@prisma/client"
 
-const TABS: { label: string; value: AlertType | "all" }[] = [
+const SEVERITY_TABS: { label: string; value: AlertSeverity | "all" }[] = [
   { label: "All", value: "all" },
-  { label: "Off-Contract", value: "off_contract" },
-  { label: "Expiring", value: "expiring_contract" },
-  { label: "Tier Threshold", value: "tier_threshold" },
-  { label: "Rebate Due", value: "rebate_due" },
+  { label: "High", value: "high" },
+  { label: "Medium", value: "medium" },
+  { label: "Low", value: "low" },
 ]
 
 export default function VendorAlertsPage() {
-  const [tab, setTab] = useState<AlertType | "all">("all")
+  const [tab, setTab] = useState<AlertSeverity | "all">("all")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  // vendorId will be empty string for now -- the hook uses requireVendor() server-side
-  const filters = tab === "all" ? {} : { alertType: tab as AlertType }
+  const filters = tab === "all" ? {} : { severity: tab as AlertSeverity }
   const { data, isLoading } = useVendorAlerts("", filters)
   const resolve = useResolveVendorAlert()
   const dismiss = useDismissVendorAlert()
@@ -35,6 +41,13 @@ export default function VendorAlertsPage() {
   const bulkDismiss = useBulkDismissVendorAlerts()
 
   const alerts = data?.alerts ?? []
+
+  // Always fetch unfiltered alerts for summary counts
+  const { data: allData } = useVendorAlerts("", {})
+  const allAlerts = allData?.alerts ?? []
+  const computedHighCount = allAlerts.filter((a) => a.severity === "high").length
+  const computedMediumCount = allAlerts.filter((a) => a.severity === "medium").length
+  const computedLowCount = allAlerts.filter((a) => a.severity === "low").length
 
   const handleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -53,7 +66,7 @@ export default function VendorAlertsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Alerts"
-        description="Monitor your contract alerts and notifications"
+        description="Contract expirations, compliance issues, and action items"
         action={
           selectedIds.size > 0 ? (
             <div className="flex items-center gap-2">
@@ -67,13 +80,79 @@ export default function VendorAlertsPage() {
           ) : undefined
         }
       />
-      <Tabs value={tab} onValueChange={(v) => { setTab(v as AlertType | "all"); setSelectedIds(new Set()) }}>
+
+      {/* Alert Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/30">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{computedHighCount}</div>
+                <div className="text-sm text-muted-foreground">High Priority</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{computedMediumCount}</div>
+                <div className="text-sm text-muted-foreground">Medium Priority</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{computedLowCount}</div>
+                <div className="text-sm text-muted-foreground">Low Priority</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30">
+                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{allAlerts.length}</div>
+                <div className="text-sm text-muted-foreground">Total Active</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Severity Tabs */}
+      <Tabs value={tab} onValueChange={(v) => { setTab(v as AlertSeverity | "all"); setSelectedIds(new Set()) }}>
         <TabsList>
-          {TABS.map((t) => (
-            <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+          {SEVERITY_TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value}>
+              {t.label}
+              {t.value !== "all" && (
+                <Badge variant="secondary" className="ml-2">
+                  {t.value === "high" ? computedHighCount : t.value === "medium" ? computedMediumCount : computedLowCount}
+                </Badge>
+              )}
+            </TabsTrigger>
           ))}
         </TabsList>
       </Tabs>
+
       <AlertsList
         alerts={alerts}
         isLoading={isLoading}
