@@ -1,7 +1,8 @@
 "use client"
 
 import type { ColumnDef } from "@tanstack/react-table"
-import type { COGRecord, Vendor } from "@prisma/client"
+import type { COGRecord } from "@prisma/client"
+import { Badge } from "@/components/ui/badge"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
 import { Trash2 } from "lucide-react"
@@ -20,7 +21,7 @@ export function getCOGColumns({
   return [
     {
       accessorKey: "inventoryNumber",
-      header: "Inv #",
+      header: "Item #",
       cell: ({ row }) => (
         <span className="font-mono text-xs">
           {row.original.inventoryNumber}
@@ -31,7 +32,10 @@ export function getCOGColumns({
       accessorKey: "inventoryDescription",
       header: "Description",
       cell: ({ row }) => (
-        <span className="max-w-[200px] truncate block">
+        <span
+          className="max-w-[200px] truncate block font-medium"
+          title={row.original.inventoryDescription}
+        >
           {row.original.inventoryDescription}
         </span>
       ),
@@ -40,34 +44,55 @@ export function getCOGColumns({
       accessorKey: "vendor.name",
       header: "Vendor",
       cell: ({ row }) =>
-        row.original.vendor?.name ?? row.original.vendorName ?? "—",
-    },
-    {
-      accessorKey: "vendorItemNo",
-      header: "Item No",
-      cell: ({ row }) => row.original.vendorItemNo ?? "—",
+        row.original.vendor?.name ?? row.original.vendorName ?? "\u2014",
     },
     {
       accessorKey: "unitCost",
       header: "Unit Cost",
-      cell: ({ row }) => formatCurrency(Number(row.original.unitCost), true),
-    },
-    {
-      accessorKey: "quantity",
-      header: "Qty",
+      cell: ({ row }) => (
+        <span className="text-right font-medium">
+          {formatCurrency(Number(row.original.unitCost), true)}
+        </span>
+      ),
     },
     {
       accessorKey: "extendedPrice",
-      header: "Extended",
-      cell: ({ row }) =>
-        row.original.extendedPrice
-          ? formatCurrency(Number(row.original.extendedPrice), true)
-          : "—",
+      header: "Extended Price",
+      cell: ({ row }) => (
+        <span className="text-right font-medium">
+          {row.original.extendedPrice
+            ? formatCurrency(Number(row.original.extendedPrice), true)
+            : "\u2014"}
+        </span>
+      ),
     },
     {
       accessorKey: "transactionDate",
-      header: "Date",
-      cell: ({ row }) => formatDate(row.original.transactionDate),
+      header: "Transaction Date",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {formatDate(row.original.transactionDate)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "category",
+      header: "Category",
+      cell: ({ row }) =>
+        row.original.category ? (
+          <Badge variant="outline">{row.original.category}</Badge>
+        ) : (
+          <span className="text-muted-foreground">\u2014</span>
+        ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: () => (
+        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+          Active
+        </Badge>
+      ),
     },
     {
       id: "actions",

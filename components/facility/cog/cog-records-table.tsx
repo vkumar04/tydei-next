@@ -1,11 +1,10 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus, Upload } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useCOGRecords, useDeleteCOGRecord } from "@/hooks/use-cog"
 import { useVendorList } from "@/hooks/use-vendor-crud"
 import { getCOGColumns } from "@/components/facility/cog/cog-columns"
-import { COGImportDialog } from "@/components/facility/cog/cog-import-dialog"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
@@ -24,9 +23,11 @@ interface COGRecordsTableProps {
 
 export function COGRecordsTable({ facilityId }: COGRecordsTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
-  const [importOpen, setImportOpen] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; desc: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    desc: string
+  } | null>(null)
 
   const filters = { ...(vendorFilter && { vendorId: vendorFilter }) }
   const { data, isLoading, refetch } = useCOGRecords(facilityId, filters)
@@ -44,43 +45,36 @@ export function COGRecordsTable({ facilityId }: COGRecordsTableProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Button size="sm" onClick={() => setImportOpen(true)}>
-          <Upload className="size-4" /> Import
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setManualOpen(true)}>
-          <Plus className="size-4" /> Add Record
-        </Button>
-      </div>
-
       <DataTable
         columns={columns}
         data={data?.records ?? []}
         searchKey="inventoryDescription"
-        searchPlaceholder="Search COG records..."
+        searchPlaceholder="Search by description, vendor item, or inventory number..."
         isLoading={isLoading}
         filterComponent={
-          <Select value={vendorFilter} onValueChange={setVendorFilter}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="All vendors" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All vendors</SelectItem>
-              {vendorData?.vendors.map((v) => (
-                <SelectItem key={v.id} value={v.id}>
-                  {v.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <>
+            <Select value={vendorFilter} onValueChange={setVendorFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="All vendors" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All vendors</SelectItem>
+                {vendorData?.vendors.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setManualOpen(true)}
+            >
+              <Plus className="mr-1 h-4 w-4" /> Add Record
+            </Button>
+          </>
         }
-      />
-
-      <COGImportDialog
-        facilityId={facilityId}
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        onComplete={() => refetch()}
       />
 
       <COGManualEntry

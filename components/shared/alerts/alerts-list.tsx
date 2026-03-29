@@ -3,8 +3,8 @@
 import { AlertCard } from "./alert-card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { BellOff } from "lucide-react"
 import type { Alert } from "@prisma/client"
 
 type AlertWithRelations = Alert & {
@@ -24,8 +24,14 @@ interface AlertsListProps {
 }
 
 export function AlertsList({
-  alerts, onResolve, onDismiss, onNavigate,
-  selectedIds, onSelect, onSelectAll, isLoading,
+  alerts,
+  onResolve,
+  onDismiss,
+  onNavigate,
+  selectedIds,
+  onSelect,
+  onSelectAll,
+  isLoading,
 }: AlertsListProps) {
   if (isLoading) {
     return (
@@ -39,34 +45,44 @@ export function AlertsList({
 
   if (alerts.length === 0) {
     return (
-      <p className="py-12 text-center text-sm text-muted-foreground">No alerts found.</p>
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <BellOff className="h-12 w-12 text-muted-foreground/50 mb-4" />
+        <h3 className="font-semibold">No alerts</h3>
+        <p className="text-sm text-muted-foreground">You&apos;re all caught up!</p>
+      </div>
     )
   }
 
   const allSelected = alerts.length > 0 && alerts.every((a) => selectedIds.has(a.id))
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 px-1">
-        <Checkbox checked={allSelected} onCheckedChange={onSelectAll} />
+    <div className="space-y-1">
+      {/* Select all checkbox */}
+      <div className="flex items-center gap-4 px-4 py-2 border-b">
+        <Checkbox
+          checked={allSelected}
+          onCheckedChange={(checked) => onSelectAll(checked as boolean)}
+        />
         <span className="text-sm text-muted-foreground">
-          {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select all"}
+          {selectedIds.size > 0
+            ? `${selectedIds.size} selected`
+            : `Select all (${alerts.length})`}
         </span>
       </div>
-      <ScrollArea className="h-[calc(100vh-320px)]">
-        <div className="space-y-2 pr-3">
-          {alerts.map((alert) => (
-            <AlertCard
-              key={alert.id}
-              alert={alert}
-              selected={selectedIds.has(alert.id)}
-              onSelect={(checked) => onSelect(alert.id, checked as boolean)}
-              onResolve={() => onResolve(alert.id)}
-              onDismiss={() => onDismiss(alert.id)}
-              onNavigate={() => onNavigate(alert.id)}
-            />
-          ))}
-        </div>
+
+      {/* Scrollable alert items */}
+      <ScrollArea className="h-[500px]">
+        {alerts.map((alert) => (
+          <AlertCard
+            key={alert.id}
+            alert={alert}
+            selected={selectedIds.has(alert.id)}
+            onSelect={(checked) => onSelect(alert.id, checked as boolean)}
+            onResolve={() => onResolve(alert.id)}
+            onDismiss={() => onDismiss(alert.id)}
+            onNavigate={() => onNavigate(alert.id)}
+          />
+        ))}
       </ScrollArea>
     </div>
   )

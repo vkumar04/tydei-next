@@ -1,9 +1,8 @@
 "use client"
 
-import { Building2, Truck, ShieldCheck } from "lucide-react"
+import { Building2, Truck } from "lucide-react"
 import { motion } from "motion/react"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 const DEMO_ACCOUNTS = {
@@ -20,19 +19,21 @@ interface DemoLoginButtonsProps {
 const roles = [
   { role: "facility" as const, label: "Facility Demo", icon: Building2 },
   { role: "vendor" as const, label: "Vendor Demo", icon: Truck },
-  { role: "admin" as const, label: "Admin Demo", icon: ShieldCheck },
 ]
 
 export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Separator className="flex-1" />
-        <span className="text-xs text-muted-foreground">or try a demo</span>
-        <Separator className="flex-1" />
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-card px-2 text-muted-foreground">Or</span>
+        </div>
       </div>
       <motion.div
-        className="grid grid-cols-3 gap-2"
+        className="grid grid-cols-2 gap-2"
         variants={staggerContainer}
         initial="hidden"
         animate="show"
@@ -41,16 +42,15 @@ export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
           <motion.div key={role} variants={fadeInUp}>
             <Button
               variant="outline"
-              size="sm"
               type="button"
               disabled={isLoading}
               onClick={() => {
                 const creds = DEMO_ACCOUNTS[role]
                 onFill(creds.email, creds.password)
               }}
-              className="w-full text-xs"
+              className="w-full"
             >
-              <Icon className="mr-1 size-3" />
+              <Icon className="mr-2 size-4" />
               {label}
             </Button>
           </motion.div>

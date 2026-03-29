@@ -4,6 +4,34 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 
+// ─── Contracts List (for report selector) ───────────────────────
+
+export async function getContracts(facilityId: string) {
+  await requireFacility()
+
+  const contracts = await prisma.contract.findMany({
+    where: {
+      facilityId,
+      status: { in: ["active", "expiring"] },
+    },
+    include: {
+      vendor: { select: { id: true, name: true } },
+    },
+    orderBy: { name: "asc" },
+  })
+
+  return serialize(
+    contracts.map((c) => ({
+      id: c.id,
+      name: c.name,
+      contractType: c.contractType,
+      status: c.status,
+      vendorId: c.vendor.id,
+      vendorName: c.vendor.name,
+    }))
+  )
+}
+
 // ─── Report Data ─────────────────────────────────────────────────
 
 export async function getReportData(input: {

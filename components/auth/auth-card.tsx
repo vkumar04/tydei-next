@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { motion } from "motion/react"
 import {
   Card,
@@ -22,20 +21,28 @@ interface AuthCardProps {
 export function AuthCard({ title, description, children, footer }: AuthCardProps) {
   return (
     <motion.div variants={scaleIn} initial="hidden" animate="show">
-      <Card className="w-full">
+      <div className="flex items-center justify-center gap-2 mb-6">
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent">
+          <span className="text-lg font-bold text-primary-foreground">T</span>
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">TYDEi</h1>
+          <p className="text-sm text-muted-foreground">Platform</p>
+        </div>
+      </div>
+
+      <Card className="w-full border-0 shadow-lg">
         <CardHeader className="text-center">
-          <Link href="/" className="mx-auto mb-2 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">T</span>
-            </div>
-            <span className="text-lg font-bold">TYDEi</span>
-          </Link>
           <CardTitle>{title}</CardTitle>
           {description && <CardDescription>{description}</CardDescription>}
         </CardHeader>
         <CardContent>{children}</CardContent>
         {footer && <CardFooter className="justify-center">{footer}</CardFooter>}
       </Card>
+
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        By signing in, you agree to our Terms of Service and Privacy Policy
+      </p>
     </motion.div>
   )
 }

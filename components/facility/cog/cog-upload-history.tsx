@@ -1,8 +1,10 @@
 "use client"
 
-import { History } from "lucide-react"
+import { History, FileSpreadsheet } from "lucide-react"
 import { useCOGImportHistory } from "@/hooks/use-cog"
 import { formatDate } from "@/lib/formatting"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -35,32 +37,60 @@ export function COGUploadHistory({ facilityId }: COGUploadHistoryProps) {
     return (
       <EmptyState
         icon={History}
-        title="No Import History"
+        title="No Uploaded Files"
         description="Import COG data to see upload history here"
       />
     )
   }
 
   return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead className="text-right">Records</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.map((entry, i) => (
-            <TableRow key={i}>
-              <TableCell>{formatDate(entry.date)}</TableCell>
-              <TableCell className="text-right">
-                {entry.recordCount}
-              </TableCell>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileSpreadsheet className="h-5 w-5" />
+          Uploaded COG Files
+        </CardTitle>
+        <CardDescription>
+          Purchase order and invoice files imported into the system
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>File Name</TableHead>
+              <TableHead>Upload Date</TableHead>
+              <TableHead className="text-right">Records</TableHead>
+              <TableHead>Status</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {data.map((entry, i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">
+                      COG Import - {formatDate(entry.date)}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(entry.date)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {entry.recordCount.toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                    Processed
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   )
 }

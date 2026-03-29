@@ -109,8 +109,8 @@ export function LoginForm() {
 
       <motion.p variants={fadeInUp} className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <Link href="/sign-up" className="text-primary hover:underline">
-          Sign up
+        <Link href="/sign-up" className="font-medium text-primary hover:underline">
+          Contact your administrator
         </Link>
       </motion.p>
     </motion.form>

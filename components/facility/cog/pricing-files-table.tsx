@@ -1,13 +1,10 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Upload } from "lucide-react"
 import { usePricingFiles } from "@/hooks/use-pricing-files"
 import { useVendorList } from "@/hooks/use-vendor-crud"
 import { getPricingColumns } from "@/components/facility/cog/pricing-columns"
-import { PricingImportDialog } from "@/components/facility/cog/pricing-import-dialog"
 import { DataTable } from "@/components/shared/tables/data-table"
-import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
@@ -22,9 +19,8 @@ interface PricingFilesTableProps {
 
 export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
-  const [importOpen, setImportOpen] = useState(false)
 
-  const { data, isLoading, refetch } = usePricingFiles(
+  const { data, isLoading } = usePricingFiles(
     facilityId,
     vendorFilter || undefined
   )
@@ -33,17 +29,11 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Button size="sm" onClick={() => setImportOpen(true)}>
-          <Upload className="size-4" /> Import Pricing File
-        </Button>
-      </div>
-
       <DataTable
         columns={columns}
         data={data?.files ?? []}
         searchKey="productDescription"
-        searchPlaceholder="Search pricing files..."
+        searchPlaceholder="Search items, SKUs..."
         isLoading={isLoading}
         filterComponent={
           <Select value={vendorFilter} onValueChange={setVendorFilter}>
@@ -60,13 +50,6 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
             </SelectContent>
           </Select>
         }
-      />
-
-      <PricingImportDialog
-        facilityId={facilityId}
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        onComplete={() => refetch()}
       />
     </div>
   )
