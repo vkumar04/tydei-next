@@ -7,6 +7,12 @@ import { seedVendors } from "./seeds/vendors"
 import { seedCategories } from "./seeds/categories"
 import { seedUsers } from "./seeds/users"
 import { seedContracts } from "./seeds/contracts"
+import { seedContractPeriods } from "./seeds/contract-periods"
+import { seedRebates } from "./seeds/rebates"
+import { seedFeatureFlags } from "./seeds/feature-flags"
+import { seedPayorContracts } from "./seeds/payor-contracts"
+import { seedBenchmarks } from "./seeds/benchmarks"
+import { seedPendingContracts } from "./seeds/pending-contracts"
 import { seedCOGRecords } from "./seeds/cog-records"
 import { seedPricingFiles } from "./seeds/pricing-files"
 import { seedAlerts } from "./seeds/alerts"
@@ -28,6 +34,20 @@ async function main() {
   const { categories } = await seedCategories(prisma)
   const { users, organizations } = await seedUsers(prisma, { facilities, vendors })
   const { contracts } = await seedContracts(prisma, { facilities, vendors, categories, users })
+
+  // Depends on contracts + facilities
+  await seedContractPeriods(prisma, { contracts, facilities })
+  await seedRebates(prisma, { contracts, facilities })
+  await seedPendingContracts(prisma, { vendors, facilities })
+
+  // Depends on facilities only
+  await seedFeatureFlags(prisma, { facilities })
+  await seedPayorContracts(prisma, { facilities })
+
+  // No dependencies
+  await seedBenchmarks(prisma)
+
+  // Existing seeds
   await seedCOGRecords(prisma, { facilities, vendors })
   await seedPricingFiles(prisma, { facilities, vendors })
   await seedAlerts(prisma, { facilities, vendors, contracts })

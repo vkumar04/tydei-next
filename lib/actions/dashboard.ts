@@ -20,8 +20,9 @@ export async function getDashboardStats(input: {
       prisma.contract.aggregate({
         where: {
           facilityId,
-          effectiveDate: { gte: new Date(dateFrom) },
-          expirationDate: { lte: new Date(dateTo) },
+          status: { in: ["active", "expiring"] },
+          effectiveDate: { lte: new Date(dateTo) },
+          expirationDate: { gte: new Date(dateFrom) },
         },
         _sum: { totalValue: true },
       }),
