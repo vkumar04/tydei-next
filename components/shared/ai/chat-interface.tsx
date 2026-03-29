@@ -44,7 +44,7 @@ export function ChatInterface({ portalType }: ChatInterfaceProps) {
   const isEmpty = messages.length === 0
 
   return (
-    <Card className="flex h-[600px] flex-col">
+    <Card className="flex h-[calc(100vh-12rem)] flex-col">
       <ScrollArea className="flex-1 p-4">
         {isEmpty ? (
           <div className="flex h-full flex-col items-center justify-center gap-6 py-16">
