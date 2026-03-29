@@ -1,5 +1,5 @@
 import { generateText, Output } from "ai"
-import { geminiProModel } from "@/lib/ai/config"
+import { geminiModel } from "@/lib/ai/config"
 import { dealScoreSchema } from "@/lib/ai/schemas"
 
 export async function POST(request: Request) {
@@ -7,7 +7,7 @@ export async function POST(request: Request) {
     const { contractData, cogData, benchmarkData } = await request.json()
 
     const result = await generateText({
-      model: geminiProModel,
+      model: geminiModel,
       output: Output.object({ schema: dealScoreSchema }),
       prompt: `Analyze this healthcare supply chain contract deal and score it across 5 dimensions (0-100 each).
 
