@@ -49,9 +49,6 @@ export function COGImportDialog({
 
   const handleFile = async (file: File) => {
     await parser.parseFile(file)
-    if (parser.data) {
-      importState.setParsedData(parser.data.headers, parser.data.rows)
-    }
   }
 
   // After parsing finishes, push data into import state
