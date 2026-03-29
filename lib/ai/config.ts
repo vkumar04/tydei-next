@@ -1,7 +1,7 @@
 import { google } from "@ai-sdk/google"
 
-export const geminiModel = google("gemini-1.5-flash")
-export const geminiProModel = google("gemini-1.5-pro")
+export const geminiModel = google("gemini-2.5-flash")
+export const geminiProModel = google("gemini-2.5-pro")
 
 export const AI_CREDIT_COSTS = {
   document_extraction_per_page: 2,

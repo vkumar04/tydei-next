@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useRef, useEffect, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 import { useChat } from "@ai-sdk/react"
-import { TextStreamChatTransport } from "ai"
+import { DefaultChatTransport } from "ai"
 import { Send, Loader2 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
@@ -17,26 +17,19 @@ interface ChatInterfaceProps {
   entityId: string
 }
 
-export function ChatInterface({ portalType, entityId }: ChatInterfaceProps) {
-  const scrollRef = useRef<HTMLDivElement>(null)
+export function ChatInterface({ portalType }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
 
   const { messages, sendMessage, status } = useChat({
-    transport: new TextStreamChatTransport({
+    transport: new DefaultChatTransport({
       api: "/api/ai/chat",
-      body: { portalType, entityId },
+      body: { portalType },
     }),
   })
 
   const isLoading = status === "streaming" || status === "submitted"
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages])
-
-  function handleSubmit(e: FormEvent) {
+  function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!input.trim() || isLoading) return
     sendMessage({ text: input })
@@ -52,7 +45,7 @@ export function ChatInterface({ portalType, entityId }: ChatInterfaceProps) {
 
   return (
     <Card className="flex h-[600px] flex-col">
-      <ScrollArea ref={scrollRef} className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4">
         {isEmpty ? (
           <div className="flex h-full flex-col items-center justify-center gap-6 py-16">
             <p className="text-sm text-muted-foreground">
@@ -66,11 +59,7 @@ export function ChatInterface({ portalType, entityId }: ChatInterfaceProps) {
         ) : (
           <div className="space-y-4">
             {messages.map((m) => (
-              <ChatMessage
-                key={m.id}
-                message={m}
-                isUser={m.role === "user"}
-              />
+              <ChatMessage key={m.id} role={m.role} parts={m.parts} />
             ))}
             {isLoading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -82,10 +71,7 @@ export function ChatInterface({ portalType, entityId }: ChatInterfaceProps) {
         )}
       </ScrollArea>
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex items-center gap-2 border-t p-4"
-      >
+      <form onSubmit={onSubmit} className="flex items-center gap-2 border-t p-4">
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}

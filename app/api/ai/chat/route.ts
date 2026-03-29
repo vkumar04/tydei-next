@@ -1,10 +1,18 @@
-import { streamText, stepCountIs } from "ai"
+import {
+  streamText,
+  convertToModelMessages,
+  stepCountIs,
+  type UIMessage,
+} from "ai"
 import { geminiModel } from "@/lib/ai/config"
 import { chatTools } from "@/lib/ai/tools"
 import { facilitySystemPrompt, vendorSystemPrompt } from "@/lib/ai/prompts"
 
 export async function POST(request: Request) {
-  const { messages, portalType } = await request.json()
+  const {
+    messages,
+    portalType,
+  }: { messages: UIMessage[]; portalType: string } = await request.json()
 
   const systemPrompt =
     portalType === "vendor" ? vendorSystemPrompt : facilitySystemPrompt
@@ -12,10 +20,10 @@ export async function POST(request: Request) {
   const result = streamText({
     model: geminiModel,
     system: systemPrompt,
-    messages,
+    messages: await convertToModelMessages(messages),
     tools: chatTools,
     stopWhen: stepCountIs(5),
   })
 
-  return result.toTextStreamResponse()
+  return result.toUIMessageStreamResponse()
 }
