@@ -64,7 +64,13 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### Demo Accounts
 
-After seeding, register new accounts via the sign-up flow. The seed creates demo organizations and data. Use the demo login buttons on the login page for quick access.
+After seeding, use the demo login buttons on the login page or these credentials:
+
+| Email | Password | Portal |
+|-------|----------|--------|
+| demo-facility@tydei.com | demo-facility-2024 | `/dashboard` (Facility) |
+| demo-vendor@tydei.com | demo-vendor-2024 | `/vendor` (Vendor) |
+| demo-admin@tydei.com | demo-admin-2024 | `/admin` (Admin) |
 
 ## Environment Variables
 

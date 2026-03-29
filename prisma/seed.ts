@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client"
 import { Pool } from "pg"
 import { PrismaPg } from "@prisma/adapter-pg"
+import { hashPassword } from "better-auth/crypto"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const adapter = new PrismaPg(pool)
@@ -8,6 +9,55 @@ const prisma = new PrismaClient({ adapter })
 
 async function main() {
   console.log("Seeding TYDEi database...")
+
+  // ─── Clean existing data ────────────────────────────────────────
+  console.log("  Clearing existing data...")
+  await prisma.aIUsageRecord.deleteMany()
+  await prisma.aICredit.deleteMany()
+  await prisma.reportSchedule.deleteMany()
+  await prisma.caseCostingFile.deleteMany()
+  await prisma.caseSupply.deleteMany()
+  await prisma.caseProcedure.deleteMany()
+  await prisma.case.deleteMany()
+  await prisma.surgeonUsage.deleteMany()
+  await prisma.invoiceLineItem.deleteMany()
+  await prisma.invoice.deleteMany()
+  await prisma.pOLineItem.deleteMany()
+  await prisma.purchaseOrder.deleteMany()
+  await prisma.alert.deleteMany()
+  await prisma.contractChangeProposal.deleteMany()
+  await prisma.pendingContract.deleteMany()
+  await prisma.contractDocument.deleteMany()
+  await prisma.contractPricing.deleteMany()
+  await prisma.contractTier.deleteMany()
+  await prisma.contractTermProduct.deleteMany()
+  await prisma.contractTermProcedure.deleteMany()
+  await prisma.contractTerm.deleteMany()
+  await prisma.contractPeriod.deleteMany()
+  await prisma.rebate.deleteMany()
+  await prisma.payment.deleteMany()
+  await prisma.credit.deleteMany()
+  await prisma.contractFacility.deleteMany()
+  await prisma.contract.deleteMany()
+  await prisma.cOGRecord.deleteMany()
+  await prisma.pricingFile.deleteMany()
+  await prisma.vendorNameMapping.deleteMany()
+  await prisma.categoryMapping.deleteMany()
+  await prisma.productBenchmark.deleteMany()
+  await prisma.payorContract.deleteMany()
+  await prisma.connection.deleteMany()
+  await prisma.featureFlag.deleteMany()
+  await prisma.member.deleteMany()
+  await prisma.invitation.deleteMany()
+  await prisma.session.deleteMany()
+  await prisma.account.deleteMany()
+  await prisma.user.deleteMany()
+  await prisma.organization.deleteMany()
+  await prisma.vendorDivision.deleteMany()
+  await prisma.vendor.deleteMany()
+  await prisma.productCategory.deleteMany()
+  await prisma.facility.deleteMany()
+  await prisma.healthSystem.deleteMany()
 
   // ─── Health Systems ─────────────────────────────────────────────
   const lighthouse = await prisma.healthSystem.create({
@@ -157,13 +207,15 @@ async function main() {
   ])
 
   // ─── Demo Users ─────────────────────────────────────────────────
-  // Better Auth manages users via its API, but we seed directly for demo purposes.
-  // Passwords are hashed by Better Auth at signup. For seeding, we create accounts with
-  // a known credential pattern that Better Auth will recognize.
+  // Hash passwords using Better Auth's crypto so login actually works
+  const facilityHash = await hashPassword("demo-facility-2024")
+  const vendorHash = await hashPassword("demo-vendor-2024")
+  const adminHash = await hashPassword("demo-admin-2024")
+
   const facilityUser = await prisma.user.create({
     data: {
       name: "Facility Demo",
-      email: "facility@demo.com",
+      email: "demo-facility@tydei.com",
       emailVerified: true,
       role: "facility",
     },
@@ -174,8 +226,7 @@ async function main() {
       userId: facilityUser.id,
       accountId: facilityUser.id,
       providerId: "credential",
-      // Better Auth hashes passwords internally; this is seeded for reference
-      password: "$2b$10$dummyhashforfacilitydemoaccount00000000000000000000",
+      password: facilityHash,
     },
   })
 
@@ -190,7 +241,7 @@ async function main() {
   const vendorUser = await prisma.user.create({
     data: {
       name: "Vendor Demo",
-      email: "vendor@demo.com",
+      email: "demo-vendor@tydei.com",
       emailVerified: true,
       role: "vendor",
     },
@@ -201,7 +252,7 @@ async function main() {
       userId: vendorUser.id,
       accountId: vendorUser.id,
       providerId: "credential",
-      password: "$2b$10$dummyhashforvendordemoaccount000000000000000000000",
+      password: vendorHash,
     },
   })
 
@@ -216,7 +267,7 @@ async function main() {
   const adminUser = await prisma.user.create({
     data: {
       name: "Admin Demo",
-      email: "admin@demo.com",
+      email: "demo-admin@tydei.com",
       emailVerified: true,
       role: "admin",
     },
@@ -227,7 +278,7 @@ async function main() {
       userId: adminUser.id,
       accountId: adminUser.id,
       providerId: "credential",
-      password: "$2b$10$dummyhashforadmindemoaccount0000000000000000000000",
+      password: adminHash,
     },
   })
 
@@ -487,7 +538,7 @@ async function main() {
   console.log("  Facilities: 4")
   console.log("  Vendors: 3")
   console.log("  Product Categories: 5")
-  console.log("  Demo Users: 3 (facility@demo.com, vendor@demo.com, admin@demo.com)")
+  console.log("  Demo Users: 3 (demo-facility@tydei.com, demo-vendor@tydei.com, demo-admin@tydei.com)")
   console.log("  Contracts: 7 (with terms and tiers)")
   console.log("  COG Records:", cogData.length)
   console.log("  Alerts:", alerts.length)
