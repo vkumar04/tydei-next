@@ -1,35 +1,77 @@
 "use client"
 
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
-  CartesianGrid, ResponsiveContainer, Legend,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
 } from "recharts"
-import { ChartCard } from "@/components/shared/charts/chart-card"
+import { TrendingUp } from "lucide-react"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { chartTooltipStyle } from "@/lib/chart-config"
 
 interface VendorSpendChartProps {
   data: { month: string; spend: number; rebate: number }[]
 }
 
+function formatCurrency(value: number) {
+  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
+  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`
+  return `$${value.toFixed(0)}`
+}
+
 export function VendorSpendChart({ data }: VendorSpendChartProps) {
+  const hasData = data.length > 0
+
   return (
-    <ChartCard title="Spend & Rebate Trend" description="Monthly spend and rebates">
-      <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-          <XAxis dataKey="month" className="text-xs" />
-          <YAxis className="text-xs" />
-          <Tooltip
-            contentStyle={chartTooltipStyle}
-            formatter={(value) =>
-              new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number(value))
-            }
-          />
-          <Legend />
-          <Bar dataKey="spend" fill="var(--primary)" name="Spend" radius={[4, 4, 0, 0]} />
-          <Line dataKey="rebate" stroke="var(--chart-2)" name="Rebate" strokeWidth={2} dot={false} />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </ChartCard>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <CardTitle>Aggregate Spend Trend</CardTitle>
+            <CardDescription>Monthly spend on your contracts</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {hasData ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" className="text-xs" />
+              <YAxis tickFormatter={formatCurrency} className="text-xs" />
+              <Tooltip
+                contentStyle={chartTooltipStyle}
+                formatter={(value) => [formatCurrency(Number(value)), "Spend"]}
+                labelFormatter={(label) => `Month: ${label}`}
+              />
+              <Line
+                type="monotone"
+                dataKey="spend"
+                stroke="#10b981"
+                strokeWidth={2}
+                dot={{ fill: "#10b981" }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+            <TrendingUp className="h-12 w-12 mb-4 opacity-50" />
+            <p className="text-lg font-medium">No spend data available</p>
+            <p className="text-sm">Data will appear as facilities upload COG records</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

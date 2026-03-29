@@ -1,9 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import { motion } from "motion/react"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PageHeader } from "@/components/shared/page-header"
 import { AdminStats } from "./admin-stats"
 import { ActivityFeed } from "./activity-feed"
 import { PendingActions } from "./pending-actions"
@@ -13,7 +11,6 @@ import {
   getAdminPendingActions,
 } from "@/lib/actions/admin/dashboard"
 import { queryKeys } from "@/lib/query-keys"
-import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 export function AdminDashboardClient() {
   const stats = useQuery({
@@ -30,40 +27,39 @@ export function AdminDashboardClient() {
   })
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Admin Dashboard" description="Platform overview and management" />
+    <div className="flex flex-col gap-6">
+      {/* Page header */}
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold tracking-tight text-balance">
+          Admin Dashboard
+        </h1>
+        <p className="text-muted-foreground">
+          Platform overview and management
+        </p>
+      </div>
 
       {stats.data ? (
         <AdminStats stats={stats.data} />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-[120px] rounded-xl" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[140px] rounded-xl" />
           ))}
         </div>
       )}
 
-      <motion.div
-        className="grid gap-4 lg:grid-cols-2"
-        variants={staggerContainer}
-        initial="hidden"
-        animate="show"
-      >
-        <motion.div variants={fadeInUp}>
-          {activity.data ? (
-            <ActivityFeed activities={activity.data} />
-          ) : (
-            <Skeleton className="h-[380px] rounded-xl" />
-          )}
-        </motion.div>
-        <motion.div variants={fadeInUp}>
-          {pending.data ? (
-            <PendingActions actions={pending.data} />
-          ) : (
-            <Skeleton className="h-[380px] rounded-xl" />
-          )}
-        </motion.div>
-      </motion.div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {activity.data ? (
+          <ActivityFeed activities={activity.data} />
+        ) : (
+          <Skeleton className="h-[380px] rounded-xl" />
+        )}
+        {pending.data ? (
+          <PendingActions actions={pending.data} />
+        ) : (
+          <Skeleton className="h-[380px] rounded-xl" />
+        )}
+      </div>
     </div>
   )
 }

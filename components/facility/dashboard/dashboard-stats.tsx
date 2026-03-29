@@ -2,17 +2,33 @@
 
 import { motion } from "motion/react"
 import { MetricCard } from "@/components/shared/cards/metric-card"
-import { DollarSign, TrendingUp, Bell, ShieldCheck } from "lucide-react"
-import { formatCurrency, formatPercent } from "@/lib/formatting"
+import {
+  FileSignature,
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
+} from "lucide-react"
+import { formatCurrency, formatCompactNumber } from "@/lib/formatting"
 import { staggerContainer } from "@/lib/animations"
 
 interface DashboardStatsProps {
   stats: {
-    totalContractValue: number
-    totalRebatesEarned: number
-    activeAlertCount: number
-    complianceRate: number
+    activeContractCount: number
+    recentContractsAdded: number
+    totalSpend: number
+    onContractSpend: number
+    onContractPercent: number
+    rebatesEarned: number
+    rebatesCollected: number
+    collectionRate: number
+    pendingAlertCount: number
   }
+}
+
+function formatCurrencyShort(value: number): string {
+  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
+  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`
+  return `$${value.toFixed(0)}`
 }
 
 export function DashboardStats({ stats }: DashboardStatsProps) {
@@ -24,24 +40,44 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       animate="show"
     >
       <MetricCard
-        title="Total Contract Value"
-        value={formatCurrency(stats.totalContractValue)}
+        title="Active Contracts"
+        value={stats.activeContractCount.toString()}
+        icon={FileSignature}
+        change={
+          stats.recentContractsAdded > 0
+            ? `+${stats.recentContractsAdded}`
+            : "0"
+        }
+        changeType="positive"
+        description="from last month"
+      />
+      <MetricCard
+        title="Total Spend"
+        value={formatCurrencyShort(stats.totalSpend)}
         icon={DollarSign}
+        change={`${stats.onContractPercent.toFixed(1)}%`}
+        changeType={stats.onContractPercent >= 50 ? "positive" : "negative"}
+        secondaryValue={formatCurrencyShort(stats.onContractSpend)}
+        secondaryLabel="On Contract"
+        description="YTD spend"
       />
       <MetricCard
-        title="Rebates Earned"
-        value={formatCurrency(stats.totalRebatesEarned)}
+        title="Rebates"
+        value={formatCurrencyShort(stats.rebatesEarned)}
         icon={TrendingUp}
+        change={`${stats.collectionRate.toFixed(1)}%`}
+        changeType={stats.collectionRate >= 80 ? "positive" : "negative"}
+        secondaryValue={formatCurrencyShort(stats.rebatesCollected)}
+        secondaryLabel="Collected"
+        description="earned from contracts"
       />
       <MetricCard
-        title="Active Alerts"
-        value={stats.activeAlertCount}
-        icon={Bell}
-      />
-      <MetricCard
-        title="Compliance Rate"
-        value={formatPercent(stats.complianceRate, 0)}
-        icon={ShieldCheck}
+        title="Pending Alerts"
+        value={stats.pendingAlertCount.toString()}
+        icon={AlertTriangle}
+        change={stats.pendingAlertCount.toString()}
+        changeType={stats.pendingAlertCount === 0 ? "positive" : "negative"}
+        description="action needed"
       />
     </motion.div>
   )

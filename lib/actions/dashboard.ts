@@ -2,7 +2,6 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
-import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 
 // ─── Dashboard Stats ─────────────────────────────────────────────
@@ -15,49 +14,147 @@ export async function getDashboardStats(input: {
   await requireFacility()
   const { facilityId, dateFrom, dateTo } = input
 
-  const [contractAgg, rebateAgg, alertCount, totalContracts, compliantContracts] =
-    await Promise.all([
-      prisma.contract.aggregate({
-        where: {
-          facilityId,
-          status: { in: ["active", "expiring"] },
-          effectiveDate: { lte: new Date(dateTo) },
-          expirationDate: { gte: new Date(dateFrom) },
-        },
-        _sum: { totalValue: true },
-      }),
-      prisma.contractPeriod.aggregate({
-        where: {
-          facilityId,
-          periodStart: { gte: new Date(dateFrom) },
-          periodEnd: { lte: new Date(dateTo) },
-        },
-        _sum: { rebateEarned: true },
-      }),
-      prisma.alert.count({
-        where: { facilityId, status: { in: ["new_alert", "read"] } },
-      }),
-      prisma.contract.count({
-        where: { facilityId, status: "active" },
-      }),
-      prisma.contract.count({
-        where: {
-          facilityId,
-          status: "active",
-          terms: { some: {} },
-        },
-      }),
-    ])
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-  const complianceRate =
-    totalContracts > 0 ? Math.round((compliantContracts / totalContracts) * 100) : 100
+  const [
+    activeContractCount,
+    recentContractsAdded,
+    totalSpendAgg,
+    onContractSpendAgg,
+    rebateEarnedAgg,
+    rebateCollectedAgg,
+    alertCount,
+  ] = await Promise.all([
+    prisma.contract.count({
+      where: { facilityId, status: { in: ["active", "expiring"] } },
+    }),
+    prisma.contract.count({
+      where: {
+        facilityId,
+        status: { in: ["active", "expiring"] },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: {
+        facilityId,
+        transactionDate: { gte: new Date(dateFrom), lte: new Date(dateTo) },
+      },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: {
+        facilityId,
+        transactionDate: { gte: new Date(dateFrom), lte: new Date(dateTo) },
+        vendorId: { not: null },
+      },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.contractPeriod.aggregate({
+      where: {
+        facilityId,
+        periodStart: { gte: new Date(dateFrom) },
+        periodEnd: { lte: new Date(dateTo) },
+      },
+      _sum: { rebateEarned: true },
+    }),
+    prisma.contractPeriod.aggregate({
+      where: {
+        facilityId,
+        periodStart: { gte: new Date(dateFrom) },
+        periodEnd: { lte: new Date(dateTo) },
+      },
+      _sum: { rebateCollected: true },
+    }),
+    prisma.alert.count({
+      where: { facilityId, status: { in: ["new_alert", "read"] } },
+    }),
+  ])
+
+  const totalSpend = Number(totalSpendAgg._sum.extendedPrice ?? 0)
+  const onContractSpend = Number(onContractSpendAgg._sum.extendedPrice ?? 0)
+  const onContractPercent = totalSpend > 0 ? (onContractSpend / totalSpend) * 100 : 0
+  const rebatesEarned = Number(rebateEarnedAgg._sum.rebateEarned ?? 0)
+  const rebatesCollected = Number(rebateCollectedAgg._sum.rebateCollected ?? 0)
+  const collectionRate = rebatesEarned > 0 ? (rebatesCollected / rebatesEarned) * 100 : 0
 
   return serialize({
-    totalContractValue: Number(contractAgg._sum.totalValue ?? 0),
-    totalRebatesEarned: Number(rebateAgg._sum.rebateEarned ?? 0),
-    activeAlertCount: alertCount,
-    complianceRate,
+    activeContractCount,
+    recentContractsAdded,
+    totalSpend,
+    onContractSpend,
+    onContractPercent,
+    rebatesEarned,
+    rebatesCollected,
+    collectionRate,
+    pendingAlertCount: alertCount,
   })
+}
+
+// ─── Monthly Spend Trend ─────────────────────────────────────────
+
+export async function getMonthlySpend(input: {
+  facilityId: string
+  dateFrom: string
+  dateTo: string
+}) {
+  await requireFacility()
+  const { facilityId, dateFrom, dateTo } = input
+
+  const records = await prisma.cOGRecord.findMany({
+    where: {
+      facilityId,
+      transactionDate: { gte: new Date(dateFrom), lte: new Date(dateTo) },
+    },
+    select: { transactionDate: true, extendedPrice: true },
+  })
+
+  const monthMap = new Map<string, number>()
+  for (const r of records) {
+    if (!r.transactionDate) continue
+    const key = r.transactionDate.toISOString().slice(0, 7)
+    monthMap.set(key, (monthMap.get(key) ?? 0) + Number(r.extendedPrice ?? 0))
+  }
+
+  return serialize(
+    Array.from(monthMap.entries())
+      .map(([month, spend]) => ({ month, spend }))
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .slice(-12)
+  )
+}
+
+// ─── Spend by Category ───────────────────────────────────────────
+
+export async function getSpendByCategory(input: {
+  facilityId: string
+  dateFrom: string
+  dateTo: string
+}) {
+  await requireFacility()
+  const { facilityId, dateFrom, dateTo } = input
+
+  const records = await prisma.cOGRecord.findMany({
+    where: {
+      facilityId,
+      transactionDate: { gte: new Date(dateFrom), lte: new Date(dateTo) },
+    },
+    select: { category: true, extendedPrice: true },
+  })
+
+  const catMap = new Map<string, number>()
+  for (const r of records) {
+    const cat = r.category || "Uncategorized"
+    catMap.set(cat, (catMap.get(cat) ?? 0) + Number(r.extendedPrice ?? 0))
+  }
+
+  return serialize(
+    Array.from(catMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8)
+  )
 }
 
 // ─── Earned Rebate by Month ──────────────────────────────────────
@@ -134,7 +231,6 @@ export async function getSpendByVendor(input: {
   return serialize(records.map((r) => ({
     vendor: vendorMap.get(r.vendorId!) ?? "Unknown",
     total: Number(r._sum.extendedPrice ?? 0),
-    categories: {} as Record<string, number>,
   })))
 }
 

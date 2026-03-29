@@ -1,27 +1,22 @@
 "use client"
 
 import { useState } from "react"
-import { motion } from "motion/react"
-import { PageHeader } from "@/components/shared/page-header"
 import { DashboardFilters } from "./dashboard-filters"
 import { DashboardStats } from "./dashboard-stats"
-import { EarnedRebateChart } from "./earned-rebate-chart"
+import { TotalSpendChart } from "./total-spend-chart"
 import { SpendByVendorChart } from "./spend-by-vendor-chart"
-import { ContractLifecycleChart } from "./contract-lifecycle-chart"
-import { SpendTierChart } from "./spend-tier-chart"
+import { SpendByCategoryChart } from "./spend-by-category-chart"
 import { RecentContracts } from "./recent-contracts"
 import { RecentAlerts } from "./recent-alerts"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   useDashboardStats,
-  useEarnedRebateByMonth,
+  useMonthlySpend,
   useSpendByVendor,
-  useContractLifecycle,
-  useSpendNeededForTier,
+  useSpendByCategory,
   useRecentContracts,
   useRecentAlerts,
 } from "@/hooks/use-dashboard"
-import { staggerContainer } from "@/lib/animations"
 
 function getDefaultRange() {
   const now = new Date()
@@ -39,76 +34,71 @@ export function DashboardClient({ facilityId }: DashboardClientProps) {
   const [dateRange, setDateRange] = useState(getDefaultRange)
 
   const stats = useDashboardStats(facilityId, dateRange)
-  const rebateChart = useEarnedRebateByMonth(facilityId, dateRange)
+  const monthlySpend = useMonthlySpend(facilityId, dateRange)
   const spendChart = useSpendByVendor(facilityId, dateRange)
-  const lifecycle = useContractLifecycle(facilityId)
-  const tierChart = useSpendNeededForTier(facilityId)
+  const categoryChart = useSpendByCategory(facilityId, dateRange)
   const recentContracts = useRecentContracts(facilityId)
   const recentAlerts = useRecentAlerts(facilityId)
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Dashboard"
-        description="Overview of your contracts, spend, and performance"
-        action={<DashboardFilters dateRange={dateRange} onDateRangeChange={setDateRange} />}
-      />
+    <div className="flex flex-col gap-6">
+      {/* Page header */}
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold tracking-tight text-balance">Dashboard</h1>
+        <p className="text-muted-foreground">
+          Overview of your contract performance and analytics
+        </p>
+      </div>
 
+      {/* Filters */}
+      <DashboardFilters dateRange={dateRange} onDateRangeChange={setDateRange} />
+
+      {/* Metrics cards */}
       {stats.data ? (
         <DashboardStats stats={stats.data} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[120px] rounded-xl" />
+            <Skeleton key={i} className="h-[140px] rounded-xl" />
           ))}
         </div>
       )}
 
-      <motion.div
-        className="grid gap-4 lg:grid-cols-2"
-        variants={staggerContainer}
-        initial="hidden"
-        animate="show"
-      >
-        {rebateChart.data ? (
-          <EarnedRebateChart data={rebateChart.data} />
+      {/* Charts - v0 layout: full-width spend trend, then 2-col vendor + category */}
+      <div className="space-y-6">
+        {monthlySpend.data ? (
+          <TotalSpendChart data={monthlySpend.data} />
         ) : (
           <Skeleton className="h-[380px] rounded-xl" />
         )}
-        {spendChart.data ? (
-          <SpendByVendorChart data={spendChart.data} />
-        ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
-        )}
-        {lifecycle.data ? (
-          <ContractLifecycleChart data={lifecycle.data} />
-        ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
-        )}
-        {tierChart.data ? (
-          <SpendTierChart data={tierChart.data} />
-        ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
-        )}
-      </motion.div>
 
-      <motion.div
-        className="grid gap-4 lg:grid-cols-2"
-        variants={staggerContainer}
-        initial="hidden"
-        animate="show"
-      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {spendChart.data ? (
+            <SpendByVendorChart data={spendChart.data} />
+          ) : (
+            <Skeleton className="h-[380px] rounded-xl" />
+          )}
+          {categoryChart.data ? (
+            <SpendByCategoryChart data={categoryChart.data} />
+          ) : (
+            <Skeleton className="h-[380px] rounded-xl" />
+          )}
+        </div>
+      </div>
+
+      {/* Recent data */}
+      <div className="grid gap-6 lg:grid-cols-2">
         {recentContracts.data ? (
           <RecentContracts contracts={recentContracts.data} />
         ) : (
-          <Skeleton className="h-[300px] rounded-xl" />
+          <Skeleton className="h-96 rounded-xl" />
         )}
         {recentAlerts.data ? (
           <RecentAlerts alerts={recentAlerts.data} />
         ) : (
-          <Skeleton className="h-[300px] rounded-xl" />
+          <Skeleton className="h-96 rounded-xl" />
         )}
-      </motion.div>
+      </div>
     </div>
   )
 }

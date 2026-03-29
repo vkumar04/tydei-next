@@ -4,10 +4,9 @@ import { useQuery } from "@tanstack/react-query"
 import { queryKeys, type DateRange } from "@/lib/query-keys"
 import {
   getDashboardStats,
-  getEarnedRebateByMonth,
+  getMonthlySpend,
   getSpendByVendor,
-  getContractLifecycle,
-  getSpendNeededForTier,
+  getSpendByCategory,
   getRecentContracts,
   getRecentAlerts,
 } from "@/lib/actions/dashboard"
@@ -20,11 +19,11 @@ export function useDashboardStats(facilityId: string, dateRange: DateRange) {
   })
 }
 
-export function useEarnedRebateByMonth(facilityId: string, dateRange: DateRange) {
+export function useMonthlySpend(facilityId: string, dateRange: DateRange) {
   return useQuery({
-    queryKey: queryKeys.dashboard.earnedRebate(facilityId, dateRange),
+    queryKey: queryKeys.dashboard.monthlySpend(facilityId, dateRange),
     queryFn: () =>
-      getEarnedRebateByMonth({ facilityId, dateFrom: dateRange.from, dateTo: dateRange.to }),
+      getMonthlySpend({ facilityId, dateFrom: dateRange.from, dateTo: dateRange.to }),
   })
 }
 
@@ -36,17 +35,11 @@ export function useSpendByVendor(facilityId: string, dateRange: DateRange) {
   })
 }
 
-export function useContractLifecycle(facilityId: string) {
+export function useSpendByCategory(facilityId: string, dateRange: DateRange) {
   return useQuery({
-    queryKey: queryKeys.dashboard.contractLifecycle(facilityId),
-    queryFn: () => getContractLifecycle(facilityId),
-  })
-}
-
-export function useSpendNeededForTier(facilityId: string) {
-  return useQuery({
-    queryKey: queryKeys.dashboard.spendNeededForTier(facilityId),
-    queryFn: () => getSpendNeededForTier(facilityId),
+    queryKey: queryKeys.dashboard.spendByCategory(facilityId, dateRange),
+    queryFn: () =>
+      getSpendByCategory({ facilityId, dateFrom: dateRange.from, dateTo: dateRange.to }),
   })
 }
 

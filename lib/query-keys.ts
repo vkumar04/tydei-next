@@ -51,10 +51,14 @@ export const queryKeys = {
   dashboard: {
     stats: (facilityId: string, dateRange: DateRange) =>
       ["dashboard", "stats", facilityId, dateRange] as const,
-    earnedRebate: (facilityId: string, dateRange: DateRange) =>
-      ["dashboard", "earnedRebate", facilityId, dateRange] as const,
+    monthlySpend: (facilityId: string, dateRange: DateRange) =>
+      ["dashboard", "monthlySpend", facilityId, dateRange] as const,
     spendByVendor: (facilityId: string, dateRange: DateRange) =>
       ["dashboard", "spendByVendor", facilityId, dateRange] as const,
+    spendByCategory: (facilityId: string, dateRange: DateRange) =>
+      ["dashboard", "spendByCategory", facilityId, dateRange] as const,
+    earnedRebate: (facilityId: string, dateRange: DateRange) =>
+      ["dashboard", "earnedRebate", facilityId, dateRange] as const,
     contractLifecycle: (facilityId: string) =>
       ["dashboard", "contractLifecycle", facilityId] as const,
     spendNeededForTier: (facilityId: string) =>

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { PageHeader } from "@/components/shared/page-header"
 import { VendorStats } from "./vendor-stats"
 import { VendorSpendChart } from "./vendor-spend-chart"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -24,18 +23,23 @@ export function VendorDashboardClient({ vendorId }: VendorDashboardClientProps) 
   const trend = useVendorSpendTrend(vendorId, dateRange)
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Vendor Dashboard"
-        description="Overview of your contracts and facility relationships"
-      />
+    <div className="flex flex-col gap-6">
+      {/* Page header */}
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold tracking-tight text-balance">
+          Vendor Dashboard
+        </h1>
+        <p className="text-muted-foreground">
+          Overview of your contracts and facility relationships
+        </p>
+      </div>
 
       {stats.data ? (
         <VendorStats stats={stats.data} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[120px] rounded-xl" />
+            <Skeleton key={i} className="h-[140px] rounded-xl" />
           ))}
         </div>
       )}

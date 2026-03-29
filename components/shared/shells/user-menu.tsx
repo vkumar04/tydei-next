@@ -39,10 +39,10 @@ export function UserMenu({ user }: UserMenuProps) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <SidebarMenuButton className="w-full">
-          <Avatar className="size-6">
+          <Avatar className="h-8 w-8">
             <AvatarFallback className="text-xs">{initials}</AvatarFallback>
           </Avatar>
-          <div className="flex flex-col text-left">
+          <div className="flex flex-1 flex-col items-start text-left" style={{ maxWidth: 120 }}>
             <span className="truncate text-sm font-medium">{user.name}</span>
             <span className="truncate text-xs text-sidebar-foreground/60">
               {user.email}
@@ -53,10 +53,6 @@ export function UserMenu({ user }: UserMenuProps) {
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <UserIcon className="mr-2 size-4" />
-          Profile
-        </DropdownMenuItem>
         <DropdownMenuItem>
           <Settings className="mr-2 size-4" />
           Settings

@@ -1,15 +1,15 @@
 "use client"
 
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { Building2 } from "lucide-react"
+import { TrendingUp } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/card"
 import { chartTooltipStyle } from "@/lib/chart-config"
 
-interface SpendByVendorChartProps {
-  data: { vendor: string; total: number }[]
+interface TotalSpendChartProps {
+  data: { month: string; spend: number }[]
 }
 
 function formatCurrency(value: number) {
@@ -29,50 +29,46 @@ function formatCurrency(value: number) {
   return `$${value.toFixed(0)}`
 }
 
-export function SpendByVendorChart({ data }: SpendByVendorChartProps) {
+export function TotalSpendChart({ data }: TotalSpendChartProps) {
   const hasData = data.length > 0
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-muted-foreground" />
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <div>
-            <CardTitle>Top Vendors by Spend</CardTitle>
-            <CardDescription>Highest spending vendors</CardDescription>
+            <CardTitle>Total Spend</CardTitle>
+            <CardDescription>Monthly spend over time</CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         {hasData ? (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data} layout="vertical">
+            <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                type="number"
-                tickFormatter={formatCurrency}
-                className="text-xs"
-              />
-              <YAxis
-                type="category"
-                dataKey="vendor"
-                width={100}
-                className="text-xs"
-                tickFormatter={(value) =>
-                  value.length > 12 ? value.slice(0, 12) + "..." : value
-                }
-              />
+              <XAxis dataKey="month" className="text-xs" />
+              <YAxis tickFormatter={formatCurrency} className="text-xs" />
               <Tooltip
                 contentStyle={chartTooltipStyle}
                 formatter={(value) => [formatCurrency(Number(value)), "Spend"]}
+                labelFormatter={(label) => `Month: ${label}`}
               />
-              <Bar dataKey="total" fill="#10b981" radius={[0, 4, 4, 0]} />
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="spend"
+                stroke="#10b981"
+                strokeWidth={2}
+                dot={{ fill: "#10b981" }}
+              />
+            </LineChart>
           </ResponsiveContainer>
         ) : (
           <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
-            <Building2 className="h-10 w-10 mb-3 opacity-50" />
-            <p className="font-medium">No vendor data available</p>
+            <TrendingUp className="h-12 w-12 mb-4 opacity-50" />
+            <p className="text-lg font-medium">No spend data available</p>
+            <p className="text-sm">Import COG data to see charts</p>
           </div>
         )}
       </CardContent>

@@ -1,77 +1,122 @@
 "use client"
 
-import { Upload, BarChart3, ShieldCheck } from "lucide-react"
+import { Building2, TrendingUp, Shield, CheckCircle2 } from "lucide-react"
 import { motion } from "motion/react"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 const props = [
   {
-    icon: Upload,
+    icon: Building2,
     title: "Vendors Enter Data",
     description:
-      "Vendors upload pricing files, COG data, and contract terms directly. No more spreadsheet exchanges or manual re-entry.",
+      "Vendors input their own contract terms, tier structures, and pricing directly into the system",
+    features: [
+      "Contract terms and conditions",
+      "Rebate tier structures",
+      "Pricing and market share data",
+    ],
   },
   {
-    icon: BarChart3,
+    icon: TrendingUp,
     title: "Vendors Track Progress",
     description:
-      "Real-time dashboards let vendors monitor market share, rebate tiers, and compliance metrics across all facility relationships.",
+      "Real-time dashboards let vendors monitor their own performance across all your facilities",
+    features: [
+      "Spend and volume tracking",
+      "Tier achievement status",
+      "Market share compliance",
+    ],
   },
   {
-    icon: ShieldCheck,
+    icon: Shield,
     title: "You Stay in Control",
     description:
-      "Facilities approve every change, validate invoices automatically, and receive alerts when spending drifts off-contract.",
+      "Approve changes, validate calculations, and maintain full visibility without the manual work",
+    features: [
+      "Approval workflows",
+      "Calculation audit trails",
+      "Discrepancy alerts",
+    ],
   },
 ]
 
 export function ValueProps() {
   return (
-    <section id="about" className="px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <motion.div
-          className="text-center"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        >
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            How It Works
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            A dual-portal platform where vendors and facilities collaborate
-            transparently on contract data.
-          </p>
-        </motion.div>
+    <section
+      id="about"
+      className="border-y bg-gradient-to-b from-primary/5 to-background"
+    >
+      <div className="container mx-auto px-4 py-20">
+        <div className="mx-auto max-w-5xl">
+          <motion.div
+            className="text-center mb-12"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          >
+            <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
+              The TYDEi Advantage
+            </Badge>
+            <h2 className="mb-4 text-3xl font-bold text-foreground md:text-4xl text-balance">
+              Stop Chasing Vendors. Let Them Work for You.
+            </h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
+              Give vendors their own portal to manage contracts, track rebates, and ensure
+              compliance. Your job becomes oversight, not administration.
+            </p>
+          </motion.div>
 
-        <motion.div
-          className="mt-12 grid gap-6 sm:grid-cols-3"
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true }}
-        >
-          {props.map((prop, i) => (
-            <motion.div key={prop.title} variants={fadeInUp}>
-              <Card className="bg-card/80 backdrop-blur-lg">
-                <CardHeader>
-                  <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                    <prop.icon className="size-5 text-primary" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                      {i + 1}
-                    </span>
-                    <CardTitle className="text-lg">{prop.title}</CardTitle>
-                  </div>
-                  <CardDescription className="mt-2">{prop.description}</CardDescription>
-                </CardHeader>
-              </Card>
-            </motion.div>
-          ))}
-        </motion.div>
+          <motion.div
+            className="grid gap-8 md:grid-cols-3"
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true }}
+          >
+            {props.map((prop) => (
+              <motion.div key={prop.title} variants={fadeInUp}>
+                <Card className="relative overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+                  <CardHeader>
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mb-2">
+                      <prop.icon className="h-7 w-7 text-primary" />
+                    </div>
+                    <CardTitle className="text-xl">{prop.title}</CardTitle>
+                    <CardDescription className="text-base">
+                      {prop.description}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2 text-sm text-muted-foreground">
+                      {prop.features.map((feature) => (
+                        <li key={feature} className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          <motion.div
+            className="mt-12 text-center"
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+          >
+            <p className="text-lg font-medium text-foreground mb-2">
+              {'"We reduced contract admin time by 85% by letting vendors manage their own data."'}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              - Supply Chain Director, Regional Health System
+            </p>
+          </motion.div>
+        </div>
       </div>
     </section>
   )
