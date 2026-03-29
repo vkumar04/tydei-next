@@ -5,20 +5,21 @@ export function proxy(request: NextRequest) {
 
   const sessionToken = request.cookies.get("better-auth.session_token")?.value
 
-  const isAuthRoute =
-    pathname.startsWith("/login") || pathname.startsWith("/sign-up")
-  const isFacilityRoute = pathname.startsWith("/dashboard")
-  const isVendorRoute = pathname.startsWith("/vendor")
-  const isAdminRoute = pathname.startsWith("/admin")
-  const isProtectedRoute = isFacilityRoute || isVendorRoute || isAdminRoute
+  const isLoginRoute = pathname === "/login"
+  const isProtectedRoute =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/vendor") ||
+    pathname.startsWith("/admin")
 
   // Redirect unauthenticated users to login
   if (isProtectedRoute && !sessionToken) {
-    return NextResponse.redirect(new URL("/login", request.url))
+    const url = new URL("/login", request.url)
+    url.searchParams.set("callbackUrl", pathname)
+    return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users away from auth pages
-  if (isAuthRoute && sessionToken) {
+  // Redirect authenticated users from login to dashboard
+  if (isLoginRoute && sessionToken) {
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 

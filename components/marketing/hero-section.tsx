@@ -38,14 +38,14 @@ export function HeroSection() {
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button size="lg" asChild>
-            <Link href="/sign-up">
+            <Link href="/dashboard">
               <Building2 className="mr-2 size-4" />
               Facility Portal
               <ArrowRight className="ml-2 size-4" />
             </Link>
           </Button>
           <Button size="lg" variant="outline" asChild>
-            <Link href="/sign-up">
+            <Link href="/vendor/dashboard">
               <Truck className="mr-2 size-4" />
               Vendor Portal
             </Link>
