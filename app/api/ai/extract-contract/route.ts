@@ -1,4 +1,4 @@
-import { generateObject } from "ai"
+import { generateText, Output } from "ai"
 import { geminiModel } from "@/lib/ai/config"
 import { extractedContractSchema } from "@/lib/ai/schemas"
 
@@ -11,27 +11,55 @@ export async function POST(request: Request) {
       return Response.json({ error: "No file provided" }, { status: 400 })
     }
 
-    const buffer = await file.arrayBuffer()
-    const text = new TextDecoder().decode(buffer)
+    // Convert file to base64 data URL for the AI SDK
+    const arrayBuffer = await file.arrayBuffer()
+    const uint8Array = new Uint8Array(arrayBuffer)
+    const binaryString = Array.from(uint8Array, (byte) =>
+      String.fromCharCode(byte)
+    ).join("")
+    const base64Data = btoa(binaryString)
 
-    const { object } = await generateObject({
+    const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
+    const mediaType = isPDF ? "application/pdf" : "text/plain"
+    const dataUrl = `data:${mediaType};base64,${base64Data}`
+
+    const result = await generateText({
       model: geminiModel,
-      schema: extractedContractSchema,
-      prompt: `Extract structured contract data from the following PDF text content.
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Extract structured contract data from this document.
 If a field is not clearly present, make your best inference from context.
 For dates, use YYYY-MM-DD format.
-For contract type, choose the closest match from: usage, capital, service, tie_in, grouped, pricing_only.
-
-PDF Content:
-${text.slice(0, 15000)}`,
+For contract type, choose from: usage, capital, service, tie_in, grouped, pricing_only.
+Extract all terms and tier structures you can find.`,
+            },
+            {
+              type: "file",
+              data: dataUrl,
+              mediaType,
+            },
+          ],
+        },
+      ],
+      output: Output.object({ schema: extractedContractSchema }),
     })
 
-    const fieldCount = Object.keys(object).filter(
-      (k) => object[k as keyof typeof object] !== undefined
+    const extracted = result.output
+    if (!extracted) {
+      return Response.json({ error: "No data extracted" }, { status: 422 })
+    }
+
+    // Calculate confidence based on how many fields were populated
+    const fieldCount = Object.keys(extracted).filter(
+      (k) => extracted[k as keyof typeof extracted] !== undefined
     ).length
     const confidence = Math.min(0.95, fieldCount / 9)
 
-    return Response.json({ extracted: object, confidence })
+    return Response.json({ extracted, confidence })
   } catch (error) {
     console.error("Contract extraction error:", error)
     return Response.json({ error: "Extraction failed" }, { status: 500 })
