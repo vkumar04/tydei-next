@@ -13,6 +13,7 @@ import {
   Legend,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { CHART_COLORS, chartTooltipStyle } from "@/lib/chart-config"
 
 interface SpendTrendItem {
   month: string
@@ -50,13 +51,7 @@ export function SpendTrendChart({ data, groupBy }: SpendTrendChartProps) {
     return { chartData, groups: Array.from(groupSet).slice(0, 5) }
   }, [data, groupBy])
 
-  const COLORS = [
-    "hsl(var(--primary))",
-    "hsl(var(--destructive))",
-    "hsl(var(--chart-3, 200 80% 50%))",
-    "hsl(var(--chart-4, 40 90% 50%))",
-    "hsl(var(--chart-5, 280 65% 55%))",
-  ]
+  const COLORS = CHART_COLORS
 
   return (
     <ChartCard
@@ -74,11 +69,7 @@ export function SpendTrendChart({ data, groupBy }: SpendTrendChartProps) {
           />
           <Tooltip
             formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
-            contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-            }}
+            contentStyle={chartTooltipStyle}
           />
           <Legend />
           {groups.map((name, i) => (
@@ -94,7 +85,7 @@ export function SpendTrendChart({ data, groupBy }: SpendTrendChartProps) {
             type="monotone"
             dataKey="total"
             name="Total"
-            stroke="hsl(var(--foreground))"
+            stroke="var(--foreground)"
             strokeWidth={2}
             dot={false}
           />

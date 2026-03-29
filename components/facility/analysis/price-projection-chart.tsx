@@ -11,6 +11,7 @@ import {
   ReferenceLine,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 import type { PriceProjection } from "@/lib/actions/analysis"
 
 interface PriceProjectionChartProps {
@@ -40,15 +41,11 @@ export function PriceProjectionChart({ projections }: PriceProjectionChartProps)
           />
           <Tooltip
             formatter={(value) => [`$${Number(value).toFixed(2)}`, ""]}
-            contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-            }}
+            contentStyle={chartTooltipStyle}
           />
           <ReferenceLine
             y={data[0]?.current ?? 0}
-            stroke="hsl(var(--muted-foreground))"
+            stroke="var(--muted-foreground)"
             strokeDasharray="3 3"
             label="Current"
           />
@@ -56,7 +53,7 @@ export function PriceProjectionChart({ projections }: PriceProjectionChartProps)
             type="monotone"
             dataKey="projected"
             name="Projected Price"
-            stroke="hsl(var(--primary))"
+            stroke="var(--primary)"
             strokeWidth={2}
             dot={false}
           />

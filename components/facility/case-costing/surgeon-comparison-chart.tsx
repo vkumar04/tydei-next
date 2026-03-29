@@ -11,14 +11,8 @@ import {
   Tooltip,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { CHART_COLORS, chartTooltipStyle } from "@/lib/chart-config"
 import type { SurgeonComparison } from "@/lib/actions/cases"
-
-const COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--destructive))",
-  "hsl(var(--chart-3, 200 80% 50%))",
-  "hsl(var(--chart-4, 40 90% 50%))",
-]
 
 interface SurgeonComparisonChartProps {
   comparison: SurgeonComparison
@@ -49,19 +43,13 @@ export function SurgeonComparisonChart({ comparison }: SurgeonComparisonChartPro
               key={name}
               name={name}
               dataKey={name}
-              stroke={COLORS[i % COLORS.length]}
-              fill={COLORS[i % COLORS.length]}
+              stroke={CHART_COLORS[i % CHART_COLORS.length]}
+              fill={CHART_COLORS[i % CHART_COLORS.length]}
               fillOpacity={0.15}
             />
           ))}
           <Legend />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-            }}
-          />
+          <Tooltip contentStyle={chartTooltipStyle} />
         </RadarChart>
       </ResponsiveContainer>
     </ChartCard>

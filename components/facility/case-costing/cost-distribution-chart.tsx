@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 import type { CaseWithRelations } from "@/lib/actions/cases"
 
 interface CostDistributionChartProps {
@@ -46,14 +47,8 @@ export function CostDistributionChart({ cases }: CostDistributionChartProps) {
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis dataKey="range" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
           <YAxis className="fill-muted-foreground" tick={{ fontSize: 11 }} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-            }}
-          />
-          <Bar dataKey="count" name="Cases" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          <Bar dataKey="count" name="Cases" fill="var(--primary)" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>

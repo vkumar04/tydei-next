@@ -5,6 +5,7 @@ import {
   CartesianGrid, ResponsiveContainer, Legend,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 
 interface VendorSpendChartProps {
   data: { month: string; spend: number; rebate: number }[]
@@ -19,14 +20,14 @@ export function VendorSpendChart({ data }: VendorSpendChartProps) {
           <XAxis dataKey="month" className="text-xs" />
           <YAxis className="text-xs" />
           <Tooltip
-            contentStyle={{ borderRadius: 8, border: "1px solid var(--border)" }}
+            contentStyle={chartTooltipStyle}
             formatter={(value) =>
               new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number(value))
             }
           />
           <Legend />
-          <Bar dataKey="spend" fill="hsl(var(--primary))" name="Spend" radius={[4, 4, 0, 0]} />
-          <Line dataKey="rebate" stroke="hsl(var(--chart-2))" name="Rebate" strokeWidth={2} dot={false} />
+          <Bar dataKey="spend" fill="var(--primary)" name="Spend" radius={[4, 4, 0, 0]} />
+          <Line dataKey="rebate" stroke="var(--chart-2)" name="Rebate" strokeWidth={2} dot={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </ChartCard>

@@ -7,8 +7,10 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   ResponsiveContainer,
+  Tooltip,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 
 interface PerformanceRadarProps {
   scores: {
@@ -36,10 +38,11 @@ export function PerformanceRadar({ scores }: PerformanceRadarProps) {
           <PolarRadiusAxis domain={[0, 100]} tick={false} />
           <Radar
             dataKey="score"
-            stroke="hsl(var(--primary))"
-            fill="hsl(var(--primary))"
+            stroke="var(--primary)"
+            fill="var(--primary)"
             fillOpacity={0.2}
           />
+          <Tooltip contentStyle={chartTooltipStyle} />
         </RadarChart>
       </ResponsiveContainer>
     </ChartCard>

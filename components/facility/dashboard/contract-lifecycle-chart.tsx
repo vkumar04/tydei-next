@@ -2,6 +2,7 @@
 
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 
 interface ContractLifecycleChartProps {
   data: { active: number; expired: number; expiring: number }
@@ -38,7 +39,7 @@ export function ContractLifecycleChart({ data }: ContractLifecycleChartProps) {
               <Cell key={entry.name} fill={entry.color} />
             ))}
           </Pie>
-          <Tooltip />
+          <Tooltip contentStyle={chartTooltipStyle} />
           <Legend />
         </PieChart>
       </ResponsiveContainer>

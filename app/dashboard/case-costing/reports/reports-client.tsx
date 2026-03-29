@@ -15,6 +15,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 
 interface CaseCostingReportsClientProps {
   facilityId: string
@@ -70,14 +71,10 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                 />
                 <Tooltip
                   formatter={(v) => [`$${Number(v).toLocaleString()}`, ""]}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                  }}
+                  contentStyle={chartTooltipStyle}
                 />
-                <Bar dataKey="spend" name="Spend" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="reimbursement" name="Reimbursement" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} opacity={0.5} />
+                <Bar dataKey="spend" name="Spend" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="reimbursement" name="Reimbursement" fill="var(--muted-foreground)" radius={[4, 4, 0, 0]} opacity={0.5} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>

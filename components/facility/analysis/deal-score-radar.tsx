@@ -10,6 +10,7 @@ import {
   Tooltip,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 import type { DealScore } from "@/lib/actions/prospective"
 
 interface DealScoreRadarProps {
@@ -51,17 +52,11 @@ export function DealScoreRadar({ score }: DealScoreRadarProps) {
           <Radar
             name="Score"
             dataKey="value"
-            stroke="hsl(var(--primary))"
-            fill="hsl(var(--primary))"
+            stroke="var(--primary)"
+            fill="var(--primary)"
             fillOpacity={0.2}
           />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-            }}
-          />
+          <Tooltip contentStyle={chartTooltipStyle} />
         </RadarChart>
       </ResponsiveContainer>
     </ChartCard>

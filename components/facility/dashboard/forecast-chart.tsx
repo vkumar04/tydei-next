@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 
 interface DataPoint {
   period: string
@@ -35,23 +36,23 @@ export function ForecastChart({ data, metric }: ForecastChartProps) {
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis dataKey="period" className="text-xs" />
           <YAxis className="text-xs" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
-          <Tooltip formatter={(v) => [`$${Number(v).toLocaleString()}`, ""]} />
+          <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [`$${Number(v).toLocaleString()}`, ""]} />
           <Area
             dataKey="upper"
             stroke="none"
-            fill="hsl(var(--primary))"
+            fill="var(--primary)"
             fillOpacity={0.05}
           />
           <Area
             dataKey="lower"
             stroke="none"
-            fill="hsl(var(--background))"
+            fill="var(--background)"
             fillOpacity={1}
           />
           <Line
             type="monotone"
             dataKey="actual"
-            stroke="hsl(var(--primary))"
+            stroke="var(--primary)"
             strokeWidth={2}
             dot={{ r: 3 }}
             connectNulls={false}
@@ -59,7 +60,7 @@ export function ForecastChart({ data, metric }: ForecastChartProps) {
           <Line
             type="monotone"
             dataKey="forecast"
-            stroke="hsl(var(--primary))"
+            stroke="var(--primary)"
             strokeWidth={2}
             strokeDasharray="6 3"
             dot={{ r: 3, strokeDasharray: "" }}

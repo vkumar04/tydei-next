@@ -2,6 +2,7 @@
 
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 import type { ContractPeriodRow } from "./report-columns"
 
 interface ReportTrendChartProps {
@@ -27,7 +28,7 @@ export function ReportTrendChart({ data, metric }: ReportTrendChartProps) {
         <LineChart data={chartData}>
           <XAxis dataKey="period" tick={{ fontSize: 12 }} />
           <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip />
+          <Tooltip contentStyle={chartTooltipStyle} />
           <Line
             type="monotone"
             dataKey="value"

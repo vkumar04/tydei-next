@@ -13,6 +13,7 @@ import {
   Legend,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 import type { RebateOpportunity } from "@/lib/actions/rebate-optimizer"
 
 interface OptimizerChartProps {
@@ -56,15 +57,11 @@ export function OptimizerChart({ opportunities }: OptimizerChartProps) {
           />
           <Tooltip
             formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
-            contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-            }}
+            contentStyle={chartTooltipStyle}
           />
           <Legend />
-          <Bar dataKey="currentSpend" name="Current Spend" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="nextTierThreshold" name="Next Tier Threshold" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} opacity={0.4} />
+          <Bar dataKey="currentSpend" name="Current Spend" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="nextTierThreshold" name="Next Tier Threshold" fill="var(--muted-foreground)" radius={[4, 4, 0, 0]} opacity={0.4} />
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>

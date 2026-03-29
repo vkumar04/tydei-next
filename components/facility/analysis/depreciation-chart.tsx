@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 import type { DepreciationSchedule } from "@/lib/analysis/depreciation"
 
 interface DepreciationChartProps {
@@ -39,16 +40,12 @@ export function DepreciationChart({ schedule }: DepreciationChartProps) {
           />
           <Tooltip
             formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
-            contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: "8px",
-            }}
+            contentStyle={chartTooltipStyle}
           />
           <Bar
             dataKey="depreciation"
             name="Depreciation"
-            fill="hsl(var(--primary))"
+            fill="var(--primary)"
             radius={[4, 4, 0, 0]}
           />
         </BarChart>

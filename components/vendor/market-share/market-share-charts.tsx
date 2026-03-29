@@ -13,15 +13,8 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { CHART_COLORS, chartTooltipStyle } from "@/lib/chart-config"
 import type { MarketShareData } from "@/lib/actions/vendor-analytics"
-
-const COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-]
 
 interface MarketShareChartsProps {
   data: MarketShareData
@@ -40,10 +33,10 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
           <PieChart>
             <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, value }) => `${name}: ${value}%`}>
               {pieData.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip formatter={(v) => [`${Number(v)}%`, "Share"]} />
+            <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [`${Number(v)}%`, "Share"]} />
           </PieChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -54,8 +47,8 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis type="number" className="text-xs" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
             <YAxis type="category" dataKey="facility" className="text-xs" width={120} />
-            <Tooltip formatter={(v) => [`$${Number(v).toLocaleString()}`, "Spend"]} />
-            <Bar dataKey="share" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+            <Tooltip contentStyle={chartTooltipStyle} formatter={(v) => [`$${Number(v).toLocaleString()}`, "Spend"]} />
+            <Bar dataKey="share" fill="var(--primary)" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>

@@ -3,14 +3,7 @@
 import { useMemo } from "react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
-
-const CHART_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-]
+import { CHART_COLORS, chartTooltipStyle } from "@/lib/chart-config"
 
 interface EarnedRebateChartProps {
   data: Record<string, string | number>[]
@@ -33,7 +26,7 @@ export function EarnedRebateChart({ data }: EarnedRebateChartProps) {
         <BarChart data={data}>
           <XAxis dataKey="month" tick={{ fontSize: 12 }} />
           <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip />
+          <Tooltip contentStyle={chartTooltipStyle} />
           <Legend />
           {vendorKeys.map((key, i) => (
             <Bar

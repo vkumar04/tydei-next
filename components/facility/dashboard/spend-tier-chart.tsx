@@ -2,6 +2,7 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
+import { chartTooltipStyle } from "@/lib/chart-config"
 
 interface SpendTierChartProps {
   data: {
@@ -34,7 +35,7 @@ export function SpendTierChart({ data }: SpendTierChartProps) {
         <BarChart data={chartData}>
           <XAxis dataKey="name" tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip />
+          <Tooltip contentStyle={chartTooltipStyle} />
           <Legend />
           <Bar dataKey="Current Spend" fill="var(--chart-1)" />
           {tierKeys.map((key, i) => (
