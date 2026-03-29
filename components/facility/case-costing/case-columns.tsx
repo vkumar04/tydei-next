@@ -17,7 +17,32 @@ export function getCaseColumns(
     {
       accessorKey: "totalSpend",
       header: "Total Spend",
-      cell: ({ row }) => `$${row.original.totalSpend.toLocaleString()}`,
+      cell: ({ row, table }) => {
+        const val = row.original.totalSpend
+        const allRows = table.getFilteredRowModel().rows
+        const avg =
+          allRows.length > 0
+            ? allRows.reduce(
+                (s, r) => s + (r.original as CaseWithRelations).totalSpend,
+                0
+              ) / allRows.length
+            : 0
+        const isBelow = avg > 0 && val < avg * 0.9
+        const isAbove = avg > 0 && val > avg * 1.1
+        return (
+          <span
+            className={
+              isBelow
+                ? "text-emerald-600 font-medium"
+                : isAbove
+                  ? "text-red-600 font-medium"
+                  : ""
+            }
+          >
+            ${val.toLocaleString()}
+          </span>
+        )
+      },
     },
     {
       accessorKey: "totalReimbursement",
@@ -54,7 +79,11 @@ export function getCaseColumns(
     {
       id: "actions",
       cell: ({ row }) => (
-        <Button variant="ghost" size="icon" onClick={() => onView(row.original)}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onView(row.original)}
+        >
           <Eye className="size-4" />
         </Button>
       ),

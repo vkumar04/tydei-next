@@ -16,7 +16,7 @@ export default async function PurchaseOrdersPage() {
         action={
           <Button asChild>
             <Link href="/dashboard/purchase-orders/new">
-              <Plus className="size-4" /> New PO
+              <Plus className="size-4" /> Create PO
             </Link>
           </Button>
         }

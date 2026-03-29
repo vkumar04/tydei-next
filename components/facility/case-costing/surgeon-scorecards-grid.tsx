@@ -7,9 +7,13 @@ import type { SurgeonScorecard } from "@/lib/actions/cases"
 
 interface SurgeonScorecardsGridProps {
   scorecards: SurgeonScorecard[]
+  avgCostPerCase?: number
 }
 
-export function SurgeonScorecardsGrid({ scorecards }: SurgeonScorecardsGridProps) {
+export function SurgeonScorecardsGrid({
+  scorecards,
+  avgCostPerCase = 0,
+}: SurgeonScorecardsGridProps) {
   const [search, setSearch] = useState("")
 
   const filtered = scorecards.filter((s) =>
@@ -24,11 +28,21 @@ export function SurgeonScorecardsGrid({ scorecards }: SurgeonScorecardsGridProps
         onChange={(e) => setSearch(e.target.value)}
         className="max-w-sm"
       />
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((s) => (
-          <SurgeonScorecardCard key={s.surgeonName} scorecard={s} />
-        ))}
-      </div>
+      {filtered.length === 0 ? (
+        <p className="py-8 text-center text-muted-foreground">
+          No surgeons found.
+        </p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((s) => (
+            <SurgeonScorecardCard
+              key={s.surgeonName}
+              scorecard={s}
+              avgCostPerCase={avgCostPerCase}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

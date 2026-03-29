@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   getInvoices,
   getInvoice,
+  getInvoiceSummary,
   importInvoice,
   validateInvoice,
   flagInvoiceLineItem,
@@ -17,6 +18,14 @@ export function useInvoices(entityId: string, filters?: Partial<InvoiceFilters>)
   return useQuery({
     queryKey: queryKeys.invoices.list(entityId, filters),
     queryFn: () => getInvoices({ ...filters }),
+  })
+}
+
+export function useInvoiceSummary(facilityId: string) {
+  return useQuery({
+    queryKey: queryKeys.invoices.list(facilityId, { summary: true }),
+    queryFn: () => getInvoiceSummary(facilityId),
+    enabled: !!facilityId,
   })
 }
 

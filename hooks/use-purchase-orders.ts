@@ -8,6 +8,8 @@ import {
   createPurchaseOrder,
   updatePOStatus,
   searchProducts,
+  getPOStats,
+  getFacilityVendors,
 } from "@/lib/actions/purchase-orders"
 import type { POFilters, CreatePOInput } from "@/lib/validators/purchase-orders"
 import type { POStatus } from "@prisma/client"
@@ -59,5 +61,19 @@ export function useProductSearch(facilityId: string, query: string, vendorId?: s
     queryKey: queryKeys.purchaseOrders.productSearch(facilityId, query),
     queryFn: () => searchProducts({ facilityId, query, vendorId }),
     enabled: query.length >= 2,
+  })
+}
+
+export function usePOStats(facilityId: string) {
+  return useQuery({
+    queryKey: queryKeys.purchaseOrders.stats(facilityId),
+    queryFn: () => getPOStats(facilityId),
+  })
+}
+
+export function useFacilityVendors(facilityId: string) {
+  return useQuery({
+    queryKey: queryKeys.purchaseOrders.vendors(facilityId),
+    queryFn: () => getFacilityVendors(facilityId),
   })
 }

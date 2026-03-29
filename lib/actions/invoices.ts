@@ -33,7 +33,15 @@ export async function getInvoices(input: InvoiceFilters) {
         facility: { select: { id: true, name: true } },
         purchaseOrder: { select: { id: true, poNumber: true } },
         _count: { select: { lineItems: true } },
-        lineItems: { where: { isFlagged: true }, select: { id: true } },
+        lineItems: {
+          select: {
+            id: true,
+            isFlagged: true,
+            invoicePrice: true,
+            invoiceQuantity: true,
+            contractPrice: true,
+          },
+        },
       },
       orderBy: { invoiceDate: "desc" },
       skip: (page - 1) * pageSize,
@@ -43,12 +51,70 @@ export async function getInvoices(input: InvoiceFilters) {
   ])
 
   return serialize({
-    invoices: invoices.map((inv) => ({
-      ...inv,
-      flaggedCount: inv.lineItems.length,
-      lineItemCount: inv._count.lineItems,
-    })),
+    invoices: invoices.map((inv) => {
+      const flaggedCount = inv.lineItems.filter((li) => li.isFlagged).length
+      const lineItemCount = inv._count.lineItems
+      // Compute contract total from line items with contract pricing
+      const totalContractCost = inv.lineItems.reduce((sum, li) => {
+        const cp = li.contractPrice !== null ? Number(li.contractPrice) : Number(li.invoicePrice)
+        return sum + cp * li.invoiceQuantity
+      }, 0)
+      const totalInvoiceCostNum = Number(inv.totalInvoiceCost ?? 0)
+      const variance = totalInvoiceCostNum - totalContractCost
+      const variancePercent =
+        totalContractCost > 0 ? (variance / totalContractCost) * 100 : 0
+
+      return {
+        ...inv,
+        lineItems: undefined, // strip raw line items from payload
+        flaggedCount,
+        lineItemCount,
+        totalContractCost,
+        variance,
+        variancePercent,
+      }
+    }),
     total,
+  })
+}
+
+// ─── Invoice Summary Stats ──────────────────────────────────────
+
+export async function getInvoiceSummary(facilityId: string) {
+  const invoices = await prisma.invoice.findMany({
+    where: { facilityId },
+    select: {
+      totalInvoiceCost: true,
+      status: true,
+      lineItems: {
+        select: {
+          invoicePrice: true,
+          invoiceQuantity: true,
+          contractPrice: true,
+        },
+      },
+    },
+  })
+
+  let totalInvoiced = 0
+  let totalContracted = 0
+
+  for (const inv of invoices) {
+    totalInvoiced += Number(inv.totalInvoiceCost ?? 0)
+    for (const li of inv.lineItems) {
+      const cp = li.contractPrice !== null ? Number(li.contractPrice) : Number(li.invoicePrice)
+      totalContracted += cp * li.invoiceQuantity
+    }
+  }
+
+  const totalVariance = totalInvoiced - totalContracted
+  const variancePercent = totalContracted > 0 ? (totalVariance / totalContracted) * 100 : 0
+
+  return serialize({
+    totalInvoiced,
+    totalContracted,
+    totalVariance,
+    variancePercent,
   })
 }
 

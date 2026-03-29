@@ -67,12 +67,12 @@ export const alertTypeConfig: Record<string, StatusConfig> = {
 }
 
 export const poStatusConfig: Record<string, StatusConfig> = {
-  draft: { label: "Draft", variant: "outline" },
-  pending: { label: "Pending", variant: "secondary" },
-  approved: { label: "Approved", variant: "default", className: "bg-emerald-600 hover:bg-emerald-600" },
-  sent: { label: "Sent", variant: "default" },
-  completed: { label: "Completed", variant: "secondary" },
-  cancelled: { label: "Cancelled", variant: "destructive" },
+  draft: { label: "Draft", variant: "secondary", className: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300" },
+  pending: { label: "Pending", variant: "secondary", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
+  approved: { label: "Approved", variant: "secondary", className: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
+  sent: { label: "Sent", variant: "secondary", className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
+  completed: { label: "Completed", variant: "secondary", className: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
+  cancelled: { label: "Cancelled", variant: "secondary", className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
 }
 
 export const pendingContractStatusConfig: Record<string, StatusConfig> = {

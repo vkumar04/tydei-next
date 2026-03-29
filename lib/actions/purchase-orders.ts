@@ -44,6 +44,53 @@ export async function getPurchaseOrders(input: POFilters) {
   return serialize({ orders, total })
 }
 
+// ─── PO Stats ──────────────────────────────────────────────────
+
+export async function getPOStats(facilityId: string) {
+  await requireFacility()
+
+  const facilityWhere: Prisma.PurchaseOrderWhereInput = { facilityId }
+
+  const [totalCount, pendingCount, totalValueAgg, totalItemsAgg] =
+    await Promise.all([
+      prisma.purchaseOrder.count({ where: facilityWhere }),
+      prisma.purchaseOrder.count({
+        where: { ...facilityWhere, status: "pending" },
+      }),
+      prisma.purchaseOrder.aggregate({
+        where: facilityWhere,
+        _sum: { totalCost: true },
+      }),
+      prisma.pOLineItem.aggregate({
+        where: { purchaseOrder: facilityWhere },
+        _sum: { quantity: true },
+      }),
+    ])
+
+  return serialize({
+    totalPOs: totalCount,
+    pendingApproval: pendingCount,
+    totalValue: Number(totalValueAgg._sum.totalCost ?? 0),
+    totalItems: Number(totalItemsAgg._sum.quantity ?? 0),
+  })
+}
+
+// ─── Facility Vendors (for filter dropdown) ────────────────────
+
+export async function getFacilityVendors(facilityId: string) {
+  await requireFacility()
+
+  const vendors = await prisma.vendor.findMany({
+    where: {
+      contracts: { some: { facilityId } },
+    },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  })
+
+  return serialize(vendors)
+}
+
 // ─── Get Single PO ──────────────────────────────────────────────
 
 export async function getPurchaseOrder(id: string) {
