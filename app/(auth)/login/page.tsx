@@ -1,15 +1,13 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AuthCard } from "@/components/auth/auth-card"
+import { LoginForm } from "@/components/auth/login-form"
 
 export default function LoginPage() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sign In</CardTitle>
-        <CardDescription>Login form coming in Phase 1</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">Placeholder</p>
-      </CardContent>
-    </Card>
+    <AuthCard
+      title="Sign In"
+      description="Enter your credentials to access your portal"
+    >
+      <LoginForm />
+    </AuthCard>
   )
 }

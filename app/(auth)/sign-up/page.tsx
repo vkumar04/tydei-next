@@ -1,15 +1,13 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AuthCard } from "@/components/auth/auth-card"
+import { SignUpForm } from "@/components/auth/sign-up-form"
 
 export default function SignUpPage() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create Account</CardTitle>
-        <CardDescription>Sign up form coming in Phase 1</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">Placeholder</p>
-      </CardContent>
-    </Card>
+    <AuthCard
+      title="Create Account"
+      description="Get started with TYDEi for your organization"
+    >
+      <SignUpForm />
+    </AuthCard>
   )
 }

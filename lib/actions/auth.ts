@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db"
 import type { UserRole } from "@prisma/client"
 import { roleConfig } from "@/lib/constants"
 
+// ─── Session Guards ──────────────────────────────────────────────
+
 export async function requireAuth() {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -77,4 +79,32 @@ export async function requireVendor() {
 
 export async function requireAdmin() {
   return requireRole("admin")
+}
+
+// ─── Demo Login ──────────────────────────────────────────────────
+
+const DEMO_ACCOUNTS: Record<string, { email: string; password: string; redirect: string }> = {
+  facility: { email: "demo-facility@tydei.com", password: "demo-facility-2024", redirect: "/dashboard" },
+  vendor: { email: "demo-vendor@tydei.com", password: "demo-vendor-2024", redirect: "/vendor/dashboard" },
+  admin: { email: "demo-admin@tydei.com", password: "demo-admin-2024", redirect: "/admin/dashboard" },
+}
+
+export async function getDemoCredentials(role: "facility" | "vendor" | "admin") {
+  const account = DEMO_ACCOUNTS[role]
+  if (!account) throw new Error("Invalid demo role")
+  return { email: account.email, password: account.password, redirectTo: account.redirect }
+}
+
+// ─── Forgot / Reset Password ────────────────────────────────────
+
+export async function requestPasswordReset(email: string) {
+  await auth.api.requestPasswordReset({
+    body: { email, redirectTo: "/reset-password" },
+  })
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  await auth.api.resetPassword({
+    body: { token, newPassword },
+  })
 }
