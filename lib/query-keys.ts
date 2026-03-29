@@ -107,4 +107,28 @@ export const queryKeys = {
     list: (filters?: Record<string, unknown>) => ["cases", "list", filters] as const,
     detail: (id: string) => ["cases", "detail", id] as const,
   },
+  renewals: {
+    expiring: (entityId: string, windowDays: number) =>
+      ["renewals", "expiring", entityId, windowDays] as const,
+    summary: (contractId: string) => ["renewals", "summary", contractId] as const,
+  },
+  rebateOptimizer: {
+    opportunities: (facilityId: string) =>
+      ["rebateOptimizer", "opportunities", facilityId] as const,
+    spendTargets: (facilityId: string) =>
+      ["rebateOptimizer", "spendTargets", facilityId] as const,
+  },
+  settings: {
+    facilityProfile: (facilityId: string) =>
+      ["settings", "facilityProfile", facilityId] as const,
+    vendorProfile: (vendorId: string) =>
+      ["settings", "vendorProfile", vendorId] as const,
+    notifications: (entityId: string) =>
+      ["settings", "notifications", entityId] as const,
+    team: (orgId: string) => ["settings", "team", orgId] as const,
+    featureFlags: (facilityId: string) =>
+      ["settings", "featureFlags", facilityId] as const,
+    connections: (entityId: string) =>
+      ["settings", "connections", entityId] as const,
+  },
 } as const

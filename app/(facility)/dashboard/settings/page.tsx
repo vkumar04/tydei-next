@@ -2,7 +2,12 @@ import { requireFacility } from "@/lib/actions/auth"
 import { SettingsClient } from "@/components/facility/settings/settings-client"
 
 export default async function SettingsPage() {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
-  return <SettingsClient />
+  return (
+    <SettingsClient
+      facilityId={facility.id}
+      organizationId={facility.organizationId ?? ""}
+    />
+  )
 }
