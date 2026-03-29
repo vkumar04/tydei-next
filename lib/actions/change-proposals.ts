@@ -1,27 +1,26 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireAuth } from "@/lib/actions/auth"
-import type { CreateChangeProposalInput } from "@/lib/validators/change-proposals"
+import { requireAuth, requireFacility, requireVendor } from "@/lib/actions/auth"
+import type { CreateChangeProposalInput, ReviewChangeProposalInput } from "@/lib/validators/change-proposals"
+import { createChangeProposalSchema, reviewChangeProposalSchema } from "@/lib/validators/change-proposals"
 
-// ─── Create Change Proposal ─────────────────────────────────────
+// ─── Get Single Proposal ────────────────────────────────────────
 
-export async function createChangeProposal(input: CreateChangeProposalInput) {
+export async function getChangeProposal(id: string) {
   await requireAuth()
 
-  return prisma.contractChangeProposal.create({
-    data: {
-      contractId: input.contractId,
-      vendorId: input.vendorId,
-      vendorName: input.vendorName,
-      facilityId: input.facilityId,
-      facilityName: input.facilityName,
-      proposalType: input.proposalType,
-      changes: JSON.parse(JSON.stringify(input.changes)),
-      proposedTerms: input.proposedTerms ? JSON.parse(JSON.stringify(input.proposedTerms)) : undefined,
-      vendorMessage: input.vendorMessage,
-    },
+  const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
+    where: { id },
+    include: { contract: { select: { name: true, vendorName: true } } },
   })
+
+  return {
+    ...proposal,
+    contractName: proposal.contract.name,
+    submittedAt: proposal.submittedAt.toISOString(),
+    reviewedAt: proposal.reviewedAt?.toISOString() ?? null,
+  }
 }
 
 // ─── Get Proposals by Contract ──────────────────────────────────
@@ -44,7 +43,7 @@ export async function getChangeProposals(contractId: string) {
 // ─── Get Pending Proposals for Facility ─────────────────────────
 
 export async function getPendingProposals(facilityId: string) {
-  await requireAuth()
+  await requireFacility()
 
   const proposals = await prisma.contractChangeProposal.findMany({
     where: { facilityId, status: "pending" },
@@ -60,25 +59,81 @@ export async function getPendingProposals(facilityId: string) {
   }))
 }
 
-// ─── Review Change Proposal ─────────────────────────────────────
+// ─── Get Vendor's Own Proposals ─────────────────────────────────
+
+export async function getVendorProposals(vendorId: string) {
+  await requireVendor()
+
+  const proposals = await prisma.contractChangeProposal.findMany({
+    where: { vendorId },
+    include: { contract: { select: { name: true } } },
+    orderBy: { submittedAt: "desc" },
+  })
+
+  return proposals.map((p) => ({
+    ...p,
+    contractName: p.contract.name,
+    submittedAt: p.submittedAt.toISOString(),
+    reviewedAt: p.reviewedAt?.toISOString() ?? null,
+  }))
+}
+
+// ─── Create Change Proposal (Vendor) ────────────────────────────
+
+export async function createChangeProposal(input: CreateChangeProposalInput) {
+  await requireVendor()
+  const data = createChangeProposalSchema.parse(input)
+
+  return prisma.contractChangeProposal.create({
+    data: {
+      contractId: data.contractId,
+      vendorId: data.vendorId,
+      vendorName: data.vendorName,
+      facilityId: data.facilityId,
+      facilityName: data.facilityName,
+      proposalType: data.proposalType,
+      changes: JSON.parse(JSON.stringify(data.changes)),
+      proposedTerms: data.proposedTerms
+        ? JSON.parse(JSON.stringify(data.proposedTerms))
+        : undefined,
+      vendorMessage: data.vendorMessage,
+    },
+  })
+}
+
+// ─── Review Change Proposal (Facility) ──────────────────────────
 
 export async function reviewChangeProposal(
   id: string,
-  input: {
-    action: "approve" | "reject" | "revision_requested"
-    reviewedBy: string
-    notes?: string
-  }
+  input: ReviewChangeProposalInput
 ) {
-  await requireAuth()
+  await requireFacility()
+  const data = reviewChangeProposalSchema.parse(input)
 
-  await prisma.contractChangeProposal.update({
+  const statusMap = {
+    approve: "approved",
+    reject: "rejected",
+    revision_requested: "revision_requested",
+  } as const
+
+  return prisma.contractChangeProposal.update({
     where: { id },
     data: {
-      status: input.action === "approve" ? "approved" : input.action === "reject" ? "rejected" : "revision_requested",
-      reviewedBy: input.reviewedBy,
-      reviewNotes: input.notes,
+      status: statusMap[data.action],
+      reviewedBy: data.reviewedBy,
+      reviewNotes: data.notes,
       reviewedAt: new Date(),
     },
+  })
+}
+
+// ─── Withdraw Proposal (Vendor) ─────────────────────────────────
+
+export async function withdrawChangeProposal(id: string) {
+  const { vendor } = await requireVendor()
+
+  return prisma.contractChangeProposal.updateMany({
+    where: { id, vendorId: vendor.id, status: "pending" },
+    data: { status: "rejected", reviewNotes: "Withdrawn by vendor" },
   })
 }
