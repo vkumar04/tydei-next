@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useState, useRef, useEffect, type FormEvent } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import { Send, Loader2 } from "lucide-react"
+import { Send, Loader2, Sparkles, RefreshCw } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import { ChatMessage } from "@/components/shared/ai/chat-message"
 import { SuggestedQuestions } from "@/components/shared/ai/suggested-questions"
 import { suggestedQuestions } from "@/lib/ai/prompts"
@@ -19,8 +21,9 @@ interface ChatInterfaceProps {
 
 export function ChatInterface({ portalType }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/ai/chat",
       body: { portalType },
@@ -28,6 +31,13 @@ export function ChatInterface({ portalType }: ChatInterfaceProps) {
   })
 
   const isLoading = status === "streaming" || status === "submitted"
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -37,19 +47,41 @@ export function ChatInterface({ portalType }: ChatInterfaceProps) {
   }
 
   function handleSuggestion(question: string) {
+    if (isLoading) return
     sendMessage({ text: question })
+  }
+
+  function handleReset() {
+    setMessages([])
   }
 
   const questions = suggestedQuestions[portalType]
   const isEmpty = messages.length === 0
 
   return (
-    <Card className="flex h-[calc(100vh-12rem)] flex-col">
-      <ScrollArea className="flex-1 p-4">
+    <Card className="flex flex-1 flex-col overflow-hidden">
+      {/* Optional reset button when there are messages */}
+      {!isEmpty && (
+        <div className="flex items-center justify-end border-b px-4 py-2">
+          <Button variant="outline" size="sm" onClick={handleReset}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            New Chat
+          </Button>
+        </div>
+      )}
+
+      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
         {isEmpty ? (
           <div className="flex h-full flex-col items-center justify-center gap-6 py-16">
-            <p className="text-sm text-muted-foreground">
-              Ask a question about your contracts, spending, or rebates
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+              <Sparkles className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="text-xl font-semibold">
+              How can I help you today?
+            </h2>
+            <p className="max-w-md text-center text-sm text-muted-foreground">
+              I can analyze your contracts, calculate rebates, review
+              performance, and help identify cost-saving opportunities.
             </p>
             <SuggestedQuestions
               questions={[...questions]}
@@ -62,27 +94,50 @@ export function ChatInterface({ portalType }: ChatInterfaceProps) {
               <ChatMessage key={m.id} role={m.role} parts={m.parts} />
             ))}
             {isLoading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Thinking...
-              </div>
+              <ChatMessage
+                role="assistant"
+                parts={[]}
+                isLoading
+              />
             )}
           </div>
         )}
       </ScrollArea>
 
-      <form onSubmit={onSubmit} className="flex items-center gap-2 border-t p-4">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about contracts, spending, rebates..."
-          disabled={isLoading}
-          className="flex-1"
-        />
-        <Button type="submit" size="icon" disabled={isLoading || !input.trim()}>
-          <Send className="size-4" />
-        </Button>
-      </form>
+      <Separator />
+
+      <div className="p-4">
+        <form onSubmit={onSubmit} className="flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask about contracts, rebates, surgeon performance..."
+            disabled={isLoading}
+            className="flex-1"
+          />
+          <Button type="submit" disabled={isLoading || !input.trim()}>
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </Button>
+        </form>
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          AI responses are based on your contract data and may require
+          verification
+        </p>
+      </div>
+
+      {/* Capability badges */}
+      {isEmpty && (
+        <div className="flex flex-wrap gap-2 border-t px-4 py-3">
+          <Badge variant="secondary">Contract Analysis</Badge>
+          <Badge variant="secondary">Rebate Calculations</Badge>
+          <Badge variant="secondary">Market Share</Badge>
+          <Badge variant="secondary">Cost Optimization</Badge>
+        </div>
+      )}
     </Card>
   )
 }

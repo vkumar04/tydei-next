@@ -10,16 +10,20 @@ interface SuggestedQuestionsProps {
 
 export function SuggestedQuestions({ questions, onSelect }: SuggestedQuestionsProps) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className="grid gap-3 sm:grid-cols-2 w-full max-w-3xl">
       {questions.map((q) => (
         <Button
           key={q}
           variant="outline"
-          className="h-auto justify-start whitespace-normal px-3 py-2 text-left text-xs"
+          className="h-auto flex-col items-start gap-2 whitespace-normal p-4 text-left"
           onClick={() => onSelect(q)}
         >
-          <MessageSquare className="mr-2 size-3.5 shrink-0" />
-          {q}
+          <div className="flex items-center gap-2">
+            <MessageSquare className="size-4 text-primary" />
+            <span className="text-xs text-muted-foreground line-clamp-2">
+              {q}
+            </span>
+          </div>
         </Button>
       ))}
     </div>
