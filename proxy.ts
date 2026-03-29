@@ -3,7 +3,10 @@ import { type NextRequest, NextResponse } from "next/server"
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  const sessionToken = request.cookies.get("better-auth.session_token")?.value
+  // Better Auth uses __Secure- prefix on HTTPS
+  const sessionToken =
+    request.cookies.get("__Secure-better-auth.session_token")?.value ||
+    request.cookies.get("better-auth.session_token")?.value
 
   const isLoginRoute = pathname === "/login"
   const isProtectedRoute =
