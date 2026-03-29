@@ -3,8 +3,9 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Plus } from "lucide-react"
+import { Plus, FileText, CheckCircle, DollarSign, Building2, Eye, Pencil, Trash2 } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { DataTable } from "@/components/shared/tables/data-table"
@@ -20,11 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
-import { Pencil, Trash2 } from "lucide-react"
 import {
   getPayorContracts,
   createPayorContract,
-  updatePayorContract,
   deletePayorContract,
 } from "@/lib/actions/admin/payor-contracts"
 import { queryKeys } from "@/lib/query-keys"
@@ -39,6 +38,8 @@ interface PayorContractRow {
   effectiveDate: string
   expirationDate: string
   status: string
+  cptRates: unknown[]
+  grouperRates: unknown[]
 }
 
 export function PayorContractTable() {
@@ -62,23 +63,43 @@ export function PayorContractTable() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.payorContracts() }); setDeleting(null); toast.success("Payor contract deleted") },
   })
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge className="bg-green-100 text-green-800">Active</Badge>
+      case "expired":
+        return <Badge variant="destructive">Expired</Badge>
+      case "pending":
+        return <Badge variant="secondary">Pending</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
   const columns: ColumnDef<PayorContractRow>[] = [
-    { accessorKey: "payorName", header: "Payor" },
-    { accessorKey: "payorType", header: "Type", cell: ({ row }) => <span className="capitalize">{row.original.payorType.replace("_", " ")}</span> },
-    { accessorKey: "contractNumber", header: "Contract #" },
+    { accessorKey: "payorName", header: "Payor", cell: ({ row }) => <span className="font-medium">{row.original.payorName}</span> },
     { accessorKey: "facilityName", header: "Facility" },
+    { accessorKey: "contractNumber", header: "Contract #", cell: ({ row }) => <span className="font-mono text-sm">{row.original.contractNumber}</span> },
     { accessorKey: "effectiveDate", header: "Effective", cell: ({ row }) => formatDate(row.original.effectiveDate) },
-    { accessorKey: "expirationDate", header: "Expiration", cell: ({ row }) => formatDate(row.original.expirationDate) },
+    { accessorKey: "expirationDate", header: "Expires", cell: ({ row }) => formatDate(row.original.expirationDate) },
+    {
+      id: "cptRates",
+      header: "CPT Rates",
+      cell: ({ row }) => (
+        <Badge variant="outline">{(row.original.cptRates ?? []).length} rates</Badge>
+      ),
+    },
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => <Badge variant={row.original.status === "active" ? "default" : "secondary"}>{row.original.status}</Badge>,
+      cell: ({ row }) => getStatusBadge(row.original.status),
     },
     {
       id: "actions",
       cell: ({ row }) => (
         <TableActionMenu
           actions={[
+            { label: "View Rates", icon: Eye, onClick: () => {} },
             { label: "Edit", icon: Pencil, onClick: () => {} },
             { label: "Delete", icon: Trash2, onClick: () => setDeleting(row.original), variant: "destructive" },
           ]}
@@ -103,46 +124,107 @@ export function PayorContractTable() {
     })
   }
 
+  const contracts = (data?.contracts ?? []) as unknown as PayorContractRow[]
+  const activeContracts = contracts.filter((c) => c.status === "active")
+  const totalCptRates = contracts.reduce((sum, c) => sum + (c.cptRates ?? []).length, 0)
+  const uniquePayors = new Set(contracts.map((c) => c.payorName)).size
+
   return (
     <>
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Contracts</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{contracts.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Contracts</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activeContracts.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total CPT Rates</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalCptRates}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Payors Covered</CardTitle>
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{uniquePayors}</div>
+          </CardContent>
+        </Card>
+      </div>
+
       <DataTable
         columns={columns}
-        data={(data?.contracts ?? []) as unknown as PayorContractRow[]}
+        data={contracts}
         searchKey="payorName"
         searchPlaceholder="Search payor contracts..."
         isLoading={isLoading}
         filterComponent={
-          <Button size="sm" onClick={() => { setFormData({}); setFormOpen(true) }}>
-            <Plus className="size-4" /> Add Payor Contract
+          <Button size="sm" className="gap-2" onClick={() => { setFormData({}); setFormOpen(true) }}>
+            <Plus className="size-4" /> Add Contract
           </Button>
         }
       />
       <FormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
-        title="Create Payor Contract"
+        title="Upload Payor Contract"
+        description="Add a payor contract with reimbursement rates for case costing."
         onSubmit={handleSubmit}
         isSubmitting={createMut.isPending}
       >
-        <Field label="Payor Name" required>
-          <Input value={formData.payorName ?? ""} onChange={(e) => setFormData({ ...formData, payorName: e.target.value })} />
-        </Field>
-        <Field label="Type">
-          <Select value={formData.payorType ?? "commercial"} onValueChange={(v) => setFormData({ ...formData, payorType: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="commercial">Commercial</SelectItem>
-              <SelectItem value="medicare_advantage">Medicare Advantage</SelectItem>
-              <SelectItem value="medicaid_managed">Medicaid Managed</SelectItem>
-              <SelectItem value="workers_comp">Workers Comp</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Payor Name" required>
+            <Select value={formData.payorName ?? ""} onValueChange={(v) => setFormData({ ...formData, payorName: v })}>
+              <SelectTrigger><SelectValue placeholder="Select payor..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Anthem Blue Cross Blue Shield">Anthem BCBS</SelectItem>
+                <SelectItem value="United Healthcare">United Healthcare</SelectItem>
+                <SelectItem value="Cigna">Cigna</SelectItem>
+                <SelectItem value="Aetna">Aetna</SelectItem>
+                <SelectItem value="Humana">Humana</SelectItem>
+                <SelectItem value="Blue Cross Blue Shield">Blue Cross Blue Shield</SelectItem>
+                <SelectItem value="Medicare Advantage">Medicare Advantage</SelectItem>
+                <SelectItem value="Medicaid Managed Care">Medicaid Managed Care</SelectItem>
+                <SelectItem value="Workers Compensation">Workers Compensation</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Contract Type">
+            <Select value={formData.payorType ?? "commercial"} onValueChange={(v) => setFormData({ ...formData, payorType: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="commercial">Commercial</SelectItem>
+                <SelectItem value="medicare_advantage">Medicare Advantage</SelectItem>
+                <SelectItem value="medicaid_managed">Medicaid Managed</SelectItem>
+                <SelectItem value="workers_comp">Workers Comp</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
         <Field label="Contract Number" required>
-          <Input value={formData.contractNumber ?? ""} onChange={(e) => setFormData({ ...formData, contractNumber: e.target.value })} />
+          <Input value={formData.contractNumber ?? ""} onChange={(e) => setFormData({ ...formData, contractNumber: e.target.value })} placeholder="e.g., ASC-2024-001" />
         </Field>
         <Field label="Facility ID" required>
-          <Input value={formData.facilityId ?? ""} onChange={(e) => setFormData({ ...formData, facilityId: e.target.value })} />
+          <Input value={formData.facilityId ?? ""} onChange={(e) => setFormData({ ...formData, facilityId: e.target.value })} placeholder="Select facility..." />
         </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Effective Date" required>

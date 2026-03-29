@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Plus } from "lucide-react"
+import { Building2, CheckCircle, Users, FileText, Plus } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
@@ -50,16 +51,77 @@ export function FacilityTable() {
     (f) => setDeleting(f)
   )
 
+  const facilities = data?.facilities ?? []
+  const activeFacilities = facilities.filter((f) => f.status === "active")
+  const totalUsers = facilities.reduce((sum, f) => sum + f.userCount, 0)
+  const totalContracts = facilities.reduce((sum, f) => sum + f.contractCount, 0)
+
   return (
     <>
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{facilities.length}</p>
+                <p className="text-xs text-muted-foreground">Total Facilities</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100">
+                <CheckCircle className="h-5 w-5 text-green-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{activeFacilities.length}</p>
+                <p className="text-xs text-muted-foreground">Active</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
+                <Users className="h-5 w-5 text-blue-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{totalUsers}</p>
+                <p className="text-xs text-muted-foreground">Total Users</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100">
+                <FileText className="h-5 w-5 text-purple-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{totalContracts}</p>
+                <p className="text-xs text-muted-foreground">Total Contracts</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <DataTable
         columns={columns}
-        data={data?.facilities ?? []}
+        data={facilities}
         searchKey="name"
         searchPlaceholder="Search facilities..."
         isLoading={isLoading}
         filterComponent={
-          <Button size="sm" onClick={() => setFormOpen(true)}>
+          <Button size="sm" className="gap-2" onClick={() => setFormOpen(true)}>
             <Plus className="size-4" /> Add Facility
           </Button>
         }

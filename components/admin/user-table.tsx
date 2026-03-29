@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Plus } from "lucide-react"
+import { Plus, Users, CheckCircle, Building2, Truck } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTable } from "@/components/shared/tables/data-table"
@@ -77,24 +78,86 @@ export function UserTable() {
     }
   }
 
+  const users = data?.users ?? []
+  const activeUsers = users.filter((u) => u.role !== "admin")
+  const facilityUsers = users.filter((u) => u.role === "facility")
+  const vendorUsers = users.filter((u) => u.role === "vendor")
+
   return (
     <>
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{users.length}</p>
+                <p className="text-xs text-muted-foreground">Total Users</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100">
+                <CheckCircle className="h-5 w-5 text-green-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{activeUsers.length}</p>
+                <p className="text-xs text-muted-foreground">Active</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
+                <Building2 className="h-5 w-5 text-blue-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{facilityUsers.length}</p>
+                <p className="text-xs text-muted-foreground">Facility Users</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100">
+                <Truck className="h-5 w-5 text-purple-700" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{vendorUsers.length}</p>
+                <p className="text-xs text-muted-foreground">Vendor Users</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs + Table */}
       <Tabs value={roleFilter} onValueChange={setRoleFilter} className="mb-4">
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="admin">Admin</TabsTrigger>
           <TabsTrigger value="facility">Facility</TabsTrigger>
           <TabsTrigger value="vendor">Vendor</TabsTrigger>
+          <TabsTrigger value="admin">Admin</TabsTrigger>
         </TabsList>
       </Tabs>
       <DataTable
         columns={columns}
-        data={data?.users ?? []}
+        data={users}
         searchKey="name"
         searchPlaceholder="Search users..."
         isLoading={isLoading}
         filterComponent={
-          <Button size="sm" onClick={() => { setFormData({}); setFormOpen(true) }}>
+          <Button size="sm" className="gap-2" onClick={() => { setFormData({}); setFormOpen(true) }}>
             <Plus className="size-4" /> Add User
           </Button>
         }
@@ -103,6 +166,7 @@ export function UserTable() {
         open={formOpen || !!editing}
         onOpenChange={(open) => { if (!open) { setFormOpen(false); setEditing(null) } }}
         title={editing ? "Edit User" : "Create User"}
+        description={editing ? "Modify user details" : "Create a new user account and assign a role"}
         onSubmit={handleSubmit}
         isSubmitting={createMut.isPending || updateMut.isPending}
       >

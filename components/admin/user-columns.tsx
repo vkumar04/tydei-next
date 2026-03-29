@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, CheckCircle, XCircle } from "lucide-react"
 import { formatDate } from "@/lib/formatting"
 import type { AdminUserRow } from "@/lib/actions/admin/users"
 
@@ -20,17 +20,27 @@ export function getUserColumns(
 ): ColumnDef<AdminUserRow>[] {
   return [
     {
-      id: "avatar",
-      header: "",
+      accessorKey: "name",
+      header: "User",
       cell: ({ row }) => (
-        <Avatar className="size-8">
-          <AvatarImage src={row.original.image ?? undefined} />
-          <AvatarFallback>{row.original.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-        </Avatar>
+        <div className="flex items-center gap-3">
+          <Avatar className="h-9 w-9">
+            <AvatarImage src={row.original.image ?? undefined} />
+            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+              {row.original.name
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="font-medium">{row.original.name}</p>
+            <p className="text-xs text-muted-foreground">{row.original.email}</p>
+          </div>
+        </div>
       ),
     },
-    { accessorKey: "name", header: "Name" },
-    { accessorKey: "email", header: "Email" },
     {
       accessorKey: "role",
       header: "Role",
@@ -40,11 +50,29 @@ export function getUserColumns(
         </Badge>
       ),
     },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = (row.original as AdminUserRow & { status?: string }).status ?? "active"
+        return (
+          <Badge variant={status === "active" ? "default" : "secondary"}>
+            {status === "active" ? (
+              <><CheckCircle className="mr-1 h-3 w-3" /> Active</>
+            ) : (
+              <><XCircle className="mr-1 h-3 w-3" /> Inactive</>
+            )}
+          </Badge>
+        )
+      },
+    },
     { accessorKey: "organizationName", header: "Organization" },
     {
       accessorKey: "createdAt",
-      header: "Created",
-      cell: ({ row }) => formatDate(row.original.createdAt),
+      header: "Last Active",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{formatDate(row.original.createdAt)}</span>
+      ),
     },
     {
       id: "actions",
