@@ -66,8 +66,11 @@ export function useCheckCredits(
 }
 
 export function useCreditGuard(credit: AICredit | null | undefined) {
-  const isLow = credit ? credit.remaining < 20 : false
-  const isEmpty = credit ? credit.remaining <= 0 : true
+  // No credit record = unlimited (no billing set up yet)
+  if (!credit) return { isLow: false, isEmpty: false, remaining: Infinity }
 
-  return { isLow, isEmpty, remaining: credit?.remaining ?? 0 }
+  const isLow = credit.remaining < 20
+  const isEmpty = credit.remaining <= 0
+
+  return { isLow, isEmpty, remaining: credit.remaining }
 }
