@@ -136,7 +136,7 @@ export function POList({ facilityId }: POListProps) {
             onClick={() => toast.info("Scan feature coming soon")}
           >
             <ScanLine className="mr-2 h-4 w-4" />
-            Scan PO
+            Scan UDI
           </Button>
           <Button
             variant="outline"
@@ -295,6 +295,7 @@ export function POList({ facilityId }: POListProps) {
                       <TableHead>Vendor</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
+                      <TableHead>Delivery</TableHead>
                       <TableHead>Items</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead className="w-[80px]">Actions</TableHead>
@@ -322,6 +323,19 @@ export function POList({ facilityId }: POListProps) {
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             {formatDate(po.orderDate)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Clock className="h-4 w-4" />
+                            <span>
+                              {formatDate(
+                                new Date(
+                                  new Date(po.orderDate).getTime() +
+                                    7 * 24 * 60 * 60 * 1000
+                                )
+                              )}
+                            </span>
                           </div>
                         </TableCell>
                         <TableCell>

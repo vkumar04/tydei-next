@@ -24,6 +24,17 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts"
 import {
   Select,
   SelectContent,
@@ -179,7 +190,7 @@ export function InvoiceValidationClient({
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Add Invoices
+            Import Invoice
           </Button>
           <Button onClick={() => toast.info("Export coming soon")}>
             <Download className="mr-2 h-4 w-4" />
@@ -282,6 +293,15 @@ export function InvoiceValidationClient({
           </CardContent>
         </Card>
       </div>
+
+      {/* Tabs: Discrepancies + Analytics */}
+      <Tabs defaultValue="discrepancies" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="discrepancies">Discrepancies</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="discrepancies" className="space-y-6">
 
       {/* Recovery Progress */}
       <Card>
@@ -556,6 +576,148 @@ export function InvoiceValidationClient({
           </div>
         </CardContent>
       </Card>
+
+        </TabsContent>
+
+        {/* Analytics Tab */}
+        <TabsContent value="analytics" className="space-y-6">
+          {/* Variance by Vendor */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Variance by Vendor</CardTitle>
+              <CardDescription>
+                Invoice pricing variance trends by vendor
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={(() => {
+                      const vendorMap = new Map<string, { overcharges: number; undercharges: number }>()
+                      for (const inv of filteredInvoices) {
+                        const name = inv.vendor.name
+                        const existing = vendorMap.get(name) ?? { overcharges: 0, undercharges: 0 }
+                        if (inv.variance > 0) {
+                          existing.overcharges += inv.variance
+                        } else {
+                          existing.undercharges += Math.abs(inv.variance)
+                        }
+                        vendorMap.set(name, existing)
+                      }
+                      return Array.from(vendorMap.entries()).map(([vendor, vals]) => ({
+                        vendor,
+                        ...vals,
+                      }))
+                    })()}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="vendor" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
+                    <YAxis
+                      tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    />
+                    <RechartsTooltip
+                      formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                      }}
+                    />
+                    <Legend />
+                    <Bar dataKey="overcharges" name="Overcharges" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="undercharges" name="Undercharges" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Monthly Variance Trend */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Monthly Variance Trend</CardTitle>
+              <CardDescription>
+                Total invoice variance over time
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={(() => {
+                      const monthMap = new Map<string, number>()
+                      for (const inv of filteredInvoices) {
+                        const d = new Date(inv.invoiceDate)
+                        const key = d.toLocaleString("default", { month: "short", year: "2-digit" })
+                        monthMap.set(key, (monthMap.get(key) ?? 0) + inv.variance)
+                      }
+                      return Array.from(monthMap.entries()).map(([month, variance]) => ({
+                        month,
+                        variance,
+                      }))
+                    })()}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="month" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                    <YAxis
+                      tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    />
+                    <RechartsTooltip
+                      formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                      }}
+                    />
+                    <Bar dataKey="variance" name="Variance" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Summary Stats */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-sm text-muted-foreground">
+                  Avg Variance per Invoice
+                </p>
+                <p className="text-2xl font-bold mt-1">
+                  {filteredInvoices.length > 0
+                    ? formatCurrency(
+                        filteredInvoices.reduce((s, i) => s + i.variance, 0) /
+                          filteredInvoices.length
+                      )
+                    : "$0"}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-sm text-muted-foreground">
+                  Invoices Over Contract
+                </p>
+                <p className="text-2xl font-bold text-red-600 mt-1">
+                  {filteredInvoices.filter((i) => i.variance > 0.01).length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-sm text-muted-foreground">
+                  Invoices at or Below Contract
+                </p>
+                <p className="text-2xl font-bold text-green-600 mt-1">
+                  {filteredInvoices.filter((i) => i.variance <= 0.01).length}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Invoice Details Dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>

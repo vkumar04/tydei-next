@@ -20,34 +20,33 @@ import {
   useBulkResolveVendorAlerts,
   useBulkDismissVendorAlerts,
 } from "@/hooks/use-vendor-alerts"
-import type { AlertSeverity } from "@prisma/client"
-
-const SEVERITY_TABS: { label: string; value: AlertSeverity | "all" }[] = [
-  { label: "All", value: "all" },
-  { label: "High", value: "high" },
-  { label: "Medium", value: "medium" },
-  { label: "Low", value: "low" },
-]
+type StatusTab = "all" | "active" | "resolved"
 
 export default function VendorAlertsPage() {
-  const [tab, setTab] = useState<AlertSeverity | "all">("all")
+  const [tab, setTab] = useState<StatusTab>("active")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  const filters = tab === "all" ? {} : { severity: tab as AlertSeverity }
-  const { data, isLoading } = useVendorAlerts("", filters)
+  // Fetch active alerts (new_alert + read)
+  const { data: activeData, isLoading: activeLoading } = useVendorAlerts("", {})
+  // Fetch resolved alerts
+  const { data: resolvedData, isLoading: resolvedLoading } = useVendorAlerts("", { status: "resolved" })
+
   const resolve = useResolveVendorAlert()
   const dismiss = useDismissVendorAlert()
   const bulkResolve = useBulkResolveVendorAlerts()
   const bulkDismiss = useBulkDismissVendorAlerts()
 
-  const alerts = data?.alerts ?? []
+  const activeAlerts = activeData?.alerts ?? []
+  const resolvedAlerts = resolvedData?.alerts ?? []
 
-  // Always fetch unfiltered alerts for summary counts
-  const { data: allData } = useVendorAlerts("", {})
-  const allAlerts = allData?.alerts ?? []
-  const computedHighCount = allAlerts.filter((a) => a.severity === "high").length
-  const computedMediumCount = allAlerts.filter((a) => a.severity === "medium").length
-  const computedLowCount = allAlerts.filter((a) => a.severity === "low").length
+  // Compute severity counts from active alerts
+  const computedHighCount = activeAlerts.filter((a) => a.severity === "high").length
+  const computedMediumCount = activeAlerts.filter((a) => a.severity === "medium").length
+  const computedLowCount = activeAlerts.filter((a) => a.severity === "low").length
+
+  // Pick the visible list based on tab
+  const visibleAlerts = tab === "resolved" ? resolvedAlerts : tab === "active" ? activeAlerts : [...activeAlerts, ...resolvedAlerts]
+  const isLoading = tab === "resolved" ? resolvedLoading : tab === "active" ? activeLoading : activeLoading || resolvedLoading
 
   const handleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -59,8 +58,8 @@ export default function VendorAlertsPage() {
   }, [])
 
   const handleSelectAll = useCallback((checked: boolean) => {
-    setSelectedIds(checked ? new Set(alerts.map((a) => a.id)) : new Set())
-  }, [alerts])
+    setSelectedIds(checked ? new Set(visibleAlerts.map((a) => a.id)) : new Set())
+  }, [visibleAlerts])
 
   return (
     <div className="space-y-6">
@@ -129,40 +128,41 @@ export default function VendorAlertsPage() {
                 <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{allAlerts.length}</div>
-                <div className="text-sm text-muted-foreground">Total Active</div>
+                <div className="text-2xl font-bold">{resolvedAlerts.length}</div>
+                <div className="text-sm text-muted-foreground">Resolved</div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Severity Tabs */}
-      <Tabs value={tab} onValueChange={(v) => { setTab(v as AlertSeverity | "all"); setSelectedIds(new Set()) }}>
+      {/* Status Tabs: Active / Resolved */}
+      <Tabs value={tab} onValueChange={(v) => { setTab(v as StatusTab); setSelectedIds(new Set()) }}>
         <TabsList>
-          {SEVERITY_TABS.map((t) => (
-            <TabsTrigger key={t.value} value={t.value}>
-              {t.label}
-              {t.value !== "all" && (
-                <Badge variant="secondary" className="ml-2">
-                  {t.value === "high" ? computedHighCount : t.value === "medium" ? computedMediumCount : computedLowCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-          ))}
+          <TabsTrigger value="active">
+            Active
+            <Badge variant="secondary" className="ml-2">{activeAlerts.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="resolved">
+            Resolved
+            <Badge variant="secondary" className="ml-2">{resolvedAlerts.length}</Badge>
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      <AlertsList
-        alerts={alerts}
-        isLoading={isLoading}
-        selectedIds={selectedIds}
-        onSelect={handleSelect}
-        onSelectAll={handleSelectAll}
-        onResolve={(id) => resolve.mutate(id)}
-        onDismiss={(id) => dismiss.mutate(id)}
-        onNavigate={() => {}}
-      />
+      <div className={tab === "resolved" ? "opacity-60" : undefined}>
+        <AlertsList
+          alerts={visibleAlerts}
+          isLoading={isLoading}
+          selectedIds={selectedIds}
+          onSelect={handleSelect}
+          onSelectAll={handleSelectAll}
+          onResolve={(id) => resolve.mutate(id)}
+          onDismiss={(id) => dismiss.mutate(id)}
+          onNavigate={() => {}}
+          emptyMessage={tab === "resolved" ? "Resolved alerts will appear here" : undefined}
+        />
+      </div>
     </div>
   )
 }

@@ -16,6 +16,7 @@ export interface ExpiringContract {
   expirationDate: string
   daysUntilExpiry: number
   status: string
+  contractType: string
   totalSpend: number
   totalRebate: number
   tierAchieved: number | null
@@ -90,6 +91,7 @@ export async function getExpiringContracts(input: {
       expirationDate: c.expirationDate.toISOString(),
       daysUntilExpiry,
       status: c.status,
+      contractType: c.contractType,
       totalSpend,
       totalRebate,
       tierAchieved: latestTier,

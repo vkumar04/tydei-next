@@ -52,6 +52,8 @@ export function AdminStats({ stats }: AdminStatsProps) {
         title="Monthly Revenue"
         value={formatCurrency(stats.mrr)}
         icon={DollarSign}
+        change="+12.4%"
+        changeType="positive"
         description={`${stats.activeSubscriptions} active subscriptions`}
       />
     </motion.div>

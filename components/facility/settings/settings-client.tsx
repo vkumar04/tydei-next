@@ -15,6 +15,24 @@ import { NotificationSettings } from "@/components/facility/settings/notificatio
 import { TeamTable } from "@/components/shared/settings/team-table"
 import { InviteMemberDialog } from "@/components/shared/settings/invite-member-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Progress } from "@/components/ui/progress"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   User,
   Mail,
@@ -41,6 +59,13 @@ import {
   Crown,
   AlertTriangle,
   TrendingUp,
+  Link2,
+  Send,
+  Clock,
+  X,
+  Check,
+  CheckCircle2,
+  FileText,
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -55,6 +80,15 @@ import {
   useFeatureFlags,
   useUpdateFeatureFlags,
 } from "@/hooks/use-settings"
+import {
+  useConnections,
+  useSendConnectionInvite,
+  useAcceptConnection,
+  useRejectConnection,
+  useRemoveConnection,
+} from "@/hooks/use-connections"
+import { useCredits, useUsageHistory } from "@/hooks/use-ai-credits"
+import { AI_CREDIT_COSTS, type AIAction } from "@/lib/ai/config"
 import type { FeatureFlagData } from "@/lib/actions/settings"
 import { toast } from "sonner"
 
@@ -69,10 +103,27 @@ const TEAM_ROLES = [
   { value: "viewer", label: "Viewer" },
 ]
 
+const AI_ACTION_LABELS: Record<string, string> = {
+  document_extraction_per_page: "Document Extraction",
+  contract_classification: "Contract Classification",
+  full_contract_analysis: "Full Contract Analysis",
+  ai_chat_question: "AI Chat Question",
+  ai_contract_description: "Contract Description",
+  ai_recommendation: "AI Recommendation",
+  rebate_calculation: "Rebate Calculation",
+  contract_comparison: "Contract Comparison",
+  market_share_analysis: "Market Share Analysis",
+  report_generation: "Report Generation",
+  supply_matching: "Supply Matching",
+}
+
 export function SettingsClient({ facilityId, organizationId }: SettingsClientProps) {
   const [activeTab, setActiveTab] = useState("profile")
   const [inviteOpen, setInviteOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [inviteVendorDialogOpen, setInviteVendorDialogOpen] = useState(false)
+  const [newInviteVendorName, setNewInviteVendorName] = useState("")
+  const [newInviteMessage, setNewInviteMessage] = useState("")
 
   const profile = useFacilityProfile(facilityId)
   const updateProfile = useUpdateFacilityProfile(facilityId)
@@ -84,6 +135,15 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
   const updateRole = useUpdateTeamMemberRole(organizationId)
   const flags = useFeatureFlags(facilityId)
   const updateFlags = useUpdateFeatureFlags(facilityId)
+  const connectionData = useConnections(facilityId, "facility")
+  const sendInvite = useSendConnectionInvite(facilityId)
+  const acceptConn = useAcceptConnection(facilityId)
+  const rejectConn = useRejectConnection(facilityId)
+  const removeConn = useRemoveConnection(facilityId)
+  const creditsQuery = useCredits(facilityId, "facility")
+  const usageQuery = useUsageHistory(creditsQuery.data?.id)
+
+  const facilityName = profile.data?.name ?? "Facility"
 
   return (
     <div className="flex flex-col gap-6">
@@ -121,9 +181,17 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             <Building2 className="h-4 w-4 hidden sm:inline" />
             Facilities
           </TabsTrigger>
+          <TabsTrigger value="connections" className="gap-2">
+            <Link2 className="h-4 w-4 hidden sm:inline" />
+            Connections
+          </TabsTrigger>
           <TabsTrigger value="features" className="gap-2">
             <ToggleLeft className="h-4 w-4 hidden sm:inline" />
             Features
+          </TabsTrigger>
+          <TabsTrigger value="ai-credits" className="gap-2">
+            <Sparkles className="h-4 w-4 hidden sm:inline" />
+            AI Credits
           </TabsTrigger>
         </TabsList>
 
@@ -643,6 +711,272 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
           </Card>
         </TabsContent>
 
+        {/* ─── Connections Tab ──────────────────────────────────── */}
+        <TabsContent value="connections" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Vendor Connections</CardTitle>
+                  <CardDescription>Manage connections with vendor partners</CardDescription>
+                </div>
+                <Dialog open={inviteVendorDialogOpen} onOpenChange={setInviteVendorDialogOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Invite Vendor to Connect</DialogTitle>
+                      <DialogDescription>
+                        Send a connection invite to a vendor. They will be able to share pricing and manage contracts with your facility.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="vendor-name">Vendor Name</Label>
+                        <Input
+                          id="vendor-name"
+                          placeholder="e.g., Stryker, Arthrex, Medtronic"
+                          value={newInviteVendorName}
+                          onChange={(e) => setNewInviteVendorName(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="invite-message">Message (Optional)</Label>
+                        <Textarea
+                          id="invite-message"
+                          placeholder="Add a personal message to the invite..."
+                          value={newInviteMessage}
+                          onChange={(e) => setNewInviteMessage(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setInviteVendorDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          if (newInviteVendorName.trim()) {
+                            sendInvite.mutate({
+                              fromType: "facility",
+                              fromId: facilityId,
+                              fromName: facilityName,
+                              toEmail: `contact@${newInviteVendorName.trim().toLowerCase().replace(/\s/g, "")}.com`,
+                              toName: newInviteVendorName.trim(),
+                              message: newInviteMessage || undefined,
+                            })
+                            setNewInviteVendorName("")
+                            setNewInviteMessage("")
+                            setInviteVendorDialogOpen(false)
+                            toast.success(`Connection invite sent to ${newInviteVendorName}`)
+                          }
+                        }}
+                        disabled={!newInviteVendorName.trim()}
+                      >
+                        <Send className="mr-2 h-4 w-4" />
+                        Send Invite
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                <Button onClick={() => setInviteVendorDialogOpen(true)}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Invite Vendor
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {connectionData.isLoading ? (
+                <Skeleton className="h-[300px] rounded-xl" />
+              ) : (
+                <>
+                  {/* Connection Stats */}
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="rounded-lg border p-4">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        <span className="font-medium">Active</span>
+                      </div>
+                      <p className="mt-2 text-2xl font-bold">
+                        {connectionData.data?.filter(c => c.status === "accepted").length ?? 0}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Connected vendors</p>
+                    </div>
+                    <div className="rounded-lg border p-4">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-5 w-5 text-amber-500" />
+                        <span className="font-medium">Pending</span>
+                      </div>
+                      <p className="mt-2 text-2xl font-bold">
+                        {connectionData.data?.filter(c => c.status === "pending" && c.inviteType === "vendor_to_facility").length ?? 0}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Awaiting your response</p>
+                    </div>
+                    <div className="rounded-lg border p-4">
+                      <div className="flex items-center gap-2">
+                        <Send className="h-5 w-5 text-blue-500" />
+                        <span className="font-medium">Sent</span>
+                      </div>
+                      <p className="mt-2 text-2xl font-bold">
+                        {connectionData.data?.filter(c => c.status === "pending" && c.inviteType === "facility_to_vendor").length ?? 0}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Awaiting vendor response</p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Pending Invites Received */}
+                  {(connectionData.data?.filter(c => c.status === "pending" && c.inviteType === "vendor_to_facility").length ?? 0) > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-amber-500" />
+                        Pending Connection Requests
+                      </h3>
+                      <div className="space-y-3">
+                        {connectionData.data
+                          ?.filter(c => c.status === "pending" && c.inviteType === "vendor_to_facility")
+                          .map(connection => (
+                            <div key={connection.id} className="flex items-center justify-between rounded-lg border p-4 bg-amber-50 dark:bg-amber-900/10">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-10 w-10">
+                                  <AvatarFallback className="bg-amber-100 text-amber-700">
+                                    {connection.vendorName.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium">{connection.vendorName}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Invited by {connection.invitedByEmail} &bull; {new Date(connection.invitedAt).toLocaleDateString()}
+                                  </p>
+                                  {connection.message && (
+                                    <p className="text-sm mt-1 italic">&quot;{connection.message}&quot;</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => rejectConn.mutate(connection.id)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => acceptConn.mutate(connection.id)}
+                                >
+                                  <Check className="mr-1 h-4 w-4" />
+                                  Accept
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Active Connections */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <Link2 className="h-4 w-4 text-green-500" />
+                      Active Connections
+                    </h3>
+                    {(connectionData.data?.filter(c => c.status === "accepted").length ?? 0) === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No active vendor connections</p>
+                        <p className="text-sm">Invite vendors to connect and share pricing data</p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Vendor</TableHead>
+                            <TableHead>Connected Since</TableHead>
+                            <TableHead>Initiated By</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {connectionData.data
+                            ?.filter(c => c.status === "accepted")
+                            .map(connection => (
+                              <TableRow key={connection.id}>
+                                <TableCell>
+                                  <div className="flex items-center gap-3">
+                                    <Avatar className="h-8 w-8">
+                                      <AvatarFallback className="bg-green-100 text-green-700">
+                                        {connection.vendorName.slice(0, 2).toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="font-medium">{connection.vendorName}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>{new Date(connection.respondedAt || connection.invitedAt).toLocaleDateString()}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">
+                                    {connection.inviteType === "facility_to_vendor" ? "You" : connection.vendorName}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => removeConn.mutate(connection.id)}
+                                  >
+                                    Disconnect
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+
+                  {/* Sent Invites */}
+                  {(connectionData.data?.filter(c => c.status === "pending" && c.inviteType === "facility_to_vendor").length ?? 0) > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold flex items-center gap-2">
+                        <Send className="h-4 w-4 text-blue-500" />
+                        Sent Invites (Awaiting Response)
+                      </h3>
+                      <div className="space-y-2">
+                        {connectionData.data
+                          ?.filter(c => c.status === "pending" && c.inviteType === "facility_to_vendor")
+                          .map(connection => (
+                            <div key={connection.id} className="flex items-center justify-between rounded-lg border p-3">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback className="bg-blue-100 text-blue-700">
+                                    {connection.vendorName.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium">{connection.vendorName}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Sent {new Date(connection.invitedAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeConn.mutate(connection.id)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* ─── Features Tab ──────────────────────────────────────── */}
         <TabsContent value="features" className="space-y-6">
           <Card>
@@ -873,6 +1207,150 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
               preserved.
             </AlertDescription>
           </Alert>
+        </TabsContent>
+
+        {/* ─── AI Credits Tab ──────────────────────────────────── */}
+        <TabsContent value="ai-credits" className="space-y-6">
+          {/* Credit Overview */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Credits Used</CardDescription>
+                <CardTitle className="text-3xl">
+                  {creditsQuery.data ? creditsQuery.data.usedCredits.toLocaleString() : "0"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {creditsQuery.data && (
+                  <div className="space-y-2">
+                    <Progress
+                      value={creditsQuery.data.monthlyCredits > 0
+                        ? Math.round((creditsQuery.data.usedCredits / (creditsQuery.data.monthlyCredits + creditsQuery.data.rolloverCredits)) * 100)
+                        : 0}
+                      className="h-2"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {creditsQuery.data.monthlyCredits > 0
+                        ? `${Math.round((creditsQuery.data.usedCredits / (creditsQuery.data.monthlyCredits + creditsQuery.data.rolloverCredits)) * 100)}% of ${(creditsQuery.data.monthlyCredits + creditsQuery.data.rolloverCredits).toLocaleString()} total credits`
+                        : "No credit limit configured"}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Remaining Credits</CardDescription>
+                <CardTitle className="text-3xl text-green-600">
+                  {creditsQuery.data ? creditsQuery.data.remaining.toLocaleString() : "Unlimited"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  {creditsQuery.data?.rolloverCredits
+                    ? `Includes ${creditsQuery.data.rolloverCredits.toLocaleString()} rollover credits`
+                    : "Resets at end of billing period"}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Current Plan</CardDescription>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  Enterprise
+                  <Badge variant="secondary">Unlimited/mo</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" size="sm" className="w-full">
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Upgrade Plan
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Usage Breakdown */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Usage by Feature
+              </CardTitle>
+              <CardDescription>See which AI features are consuming the most credits</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Feature</TableHead>
+                    <TableHead className="text-center">Credits/Use</TableHead>
+                    <TableHead className="text-right">Total Credits</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.entries(AI_CREDIT_COSTS).map(([action, cost]) => (
+                    <TableRow key={action}>
+                      <TableCell className="font-medium">{AI_ACTION_LABELS[action] ?? action}</TableCell>
+                      <TableCell className="text-center text-muted-foreground">{cost}</TableCell>
+                      <TableCell className="text-right">-</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Recent Activity */}
+          {usageQuery.data && usageQuery.data.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Recent AI Activity
+                </CardTitle>
+                <CardDescription>Last 10 AI actions in your organization</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {usageQuery.data.slice(0, 10).map((record) => (
+                    <div key={record.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{record.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {record.userName} - {new Date(record.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="outline">{record.creditsUsed} credits</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Credit Costs Reference */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Credit Costs Reference</CardTitle>
+              <CardDescription>How many credits each AI feature uses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {Object.entries(AI_CREDIT_COSTS).map(([action, cost]) => (
+                  <div key={action} className="flex items-center justify-between p-3 rounded-lg border">
+                    <span className="text-sm">{AI_ACTION_LABELS[action] ?? action}</span>
+                    <Badge variant="secondary">{cost} credits</Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -17,9 +17,10 @@ interface VendorContractListProps {
 
 const TABS: { label: string; value: ContractStatus | "all" }[] = [
   { label: "All", value: "all" },
+  { label: "Draft", value: "draft" },
+  { label: "Submitted", value: "pending" },
   { label: "Active", value: "active" },
   { label: "Expired", value: "expired" },
-  { label: "Pending", value: "pending" },
 ]
 
 export function VendorContractList({ vendorId }: VendorContractListProps) {

@@ -15,7 +15,7 @@ interface VendorRenewalsClientProps {
 }
 
 export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
-  const { data: contracts, isLoading } = useExpiringContracts(vendorId, 120, "vendor")
+  const { data: contracts, isLoading } = useExpiringContracts(vendorId, 365, "vendor")
 
   const handleExportCalendar = () => {
     toast.success("Calendar exported", {
@@ -36,7 +36,7 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
             <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-semibold mb-2">No Expiring Contracts</h3>
             <p className="text-muted-foreground text-center max-w-md mb-4">
-              No contracts are expiring within the next 120 days. Check back later or extend the window.
+              No contracts are expiring within the next year. Check back later or extend the window.
             </p>
             <Button asChild>
               <Link href="/vendor/contracts">View All Contracts</Link>

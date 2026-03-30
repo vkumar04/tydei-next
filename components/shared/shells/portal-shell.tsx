@@ -1,9 +1,18 @@
 "use client"
 
+import { useState } from "react"
 import type { ReactNode } from "react"
 import Link from "next/link"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
-import { FileText, Search, Bell, Upload } from "lucide-react"
+import {
+  FileText,
+  Search,
+  Bell,
+  Upload,
+  FileSignature,
+  DollarSign,
+  ArrowRight,
+} from "lucide-react"
 import {
   SidebarProvider,
   Sidebar,
@@ -13,6 +22,14 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -93,11 +110,50 @@ export function PortalShell({
 
           {/* Header actions */}
           <div className="flex items-center gap-1">
-            {/* Import button */}
-            <Button variant="outline" size="sm" className="hidden md:flex">
-              <Upload className="mr-2 h-4 w-4" />
-              Import Data
-            </Button>
+            {/* Import button with dialog */}
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="hidden md:flex">
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import Data
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Import Data</DialogTitle>
+                  <DialogDescription>
+                    Choose a data type to import. You will be taken to the
+                    appropriate page to upload your files.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-3 py-4">
+                  <Link href="/dashboard/cog-data">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Import COG Data
+                      </span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/dashboard/contracts/new">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileSignature className="h-4 w-4" />
+                        Import Contract
+                      </span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+              </DialogContent>
+            </Dialog>
             <ThemeToggle />
             {/* Alerts bell */}
             <Link href={role === "vendor" ? "/vendor/alerts" : "/dashboard/alerts"}>

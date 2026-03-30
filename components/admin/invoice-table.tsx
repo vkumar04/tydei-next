@@ -23,13 +23,25 @@ const columns: ColumnDef<StripeInvoiceRow>[] = [
     ),
   },
   {
-    accessorKey: "customerEmail",
+    accessorKey: "customerName",
     header: "Organization",
+    cell: ({ row }) => {
+      const name = row.original.customerName
+      const email = row.original.customerEmail
+      const display = name || (email ? (email.length > 30 ? email.slice(0, 27) + "..." : email) : "Unknown")
+      return (
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate" title={name || email || undefined}>{display}</span>
+        </div>
+      )
+    },
+  },
+  {
+    accessorKey: "period",
+    header: "Period",
     cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <Building2 className="h-4 w-4 text-muted-foreground" />
-        {row.original.customerEmail ?? "Unknown"}
-      </div>
+      <span className="text-muted-foreground">{row.original.period ?? "-"}</span>
     ),
   },
   {
@@ -67,5 +79,5 @@ interface InvoiceTableProps {
 }
 
 export function InvoiceTable({ invoices }: InvoiceTableProps) {
-  return <DataTable columns={columns} data={invoices} searchKey="customerEmail" searchPlaceholder="Search invoices..." />
+  return <DataTable columns={columns} data={invoices} searchKey="customerName" searchPlaceholder="Search invoices..." />
 }

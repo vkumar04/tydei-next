@@ -56,32 +56,15 @@ const dateRangePresets = [
   { label: "Last year", getValue: () => ({ from: subYears(new Date(), 1), to: new Date() }) },
 ]
 
-// Load facilities from localStorage or return empty
-function getStoredFacilities(): { id: string; name: string }[] {
-  if (typeof window === "undefined") return []
-  try {
-    const stored = localStorage.getItem("tydei_facilities")
-    if (stored) {
-      const parsed = JSON.parse(stored).filter(
-        (f: { status?: string }) => !f.status || f.status === "active"
-      )
-      if (parsed.length > 0) return parsed
-    }
-  } catch {
-    // ignore
-  }
-  return []
-}
-
 export function DashboardFilters({ dateRange, onDateRangeChange }: DashboardFiltersProps) {
   const [mounted, setMounted] = useState(false)
-  const [facilities, setFacilities] = useState<{ id: string; name: string }[]>([])
+  // TODO: fetch facilities from server action instead of hardcoded empty list
+  const [facilities] = useState<{ id: string; name: string }[]>([])
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>([])
   const [selectedVendors, setSelectedVendors] = useState<string[]>([])
   const [contractType, setContractType] = useState("all")
 
   useEffect(() => {
-    setFacilities(getStoredFacilities())
     setMounted(true)
   }, [])
 

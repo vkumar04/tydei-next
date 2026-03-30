@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -29,7 +30,22 @@ import {
   Download,
   TrendingUp,
   Filter,
+  Mail,
+  FileText,
 } from "lucide-react"
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts"
 import { DateRangePicker } from "@/components/shared/forms/date-range-picker"
 import { ReportPeriodTable } from "./report-period-table"
 import { ReportTrendChart } from "./report-trend-chart"
@@ -46,13 +62,14 @@ const ALL_REPORT_TABS = [
   { label: "Capital", value: "capital" },
   { label: "Tie-In", value: "tie_in" },
   { label: "Grouped", value: "grouped" },
+  { label: "Pricing Only", value: "pricing_only" },
   { label: "Overview", value: "overview" },
   { label: "Calculation Audit", value: "calculations" },
 ] as const
 
 type ReportTab = (typeof ALL_REPORT_TABS)[number]["value"]
 
-const DATA_REPORT_TYPES = ["usage", "service", "capital", "tie_in", "grouped"] as const
+const DATA_REPORT_TYPES = ["usage", "service", "capital", "tie_in", "grouped", "pricing_only"] as const
 
 function getDefaultRange() {
   const now = new Date()
@@ -84,7 +101,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
 
   // Determine the server-side report type (overview/calculations reuse "usage" data)
   const serverReportType = useMemo(() => {
-    if (activeTab === "overview" || activeTab === "calculations") return "usage"
+    if (activeTab === "overview" || activeTab === "calculations" || activeTab === "pricing_only") return "usage"
     return activeTab
   }, [activeTab])
 
@@ -139,6 +156,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
           service: "service",
           tie_in: "tie_in",
           grouped: "grouped",
+          pricing_only: "pricing_only",
         }
         const mapped = typeMap[(contract as { contractType: string }).contractType]
         if (mapped) setActiveTab(mapped)
@@ -329,6 +347,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
                         {tab === "capital" && "Capital Contract Performance"}
                         {tab === "tie_in" && "Tie-In Contract Performance"}
                         {tab === "grouped" && "Grouped Contract Report"}
+                        {tab === "pricing_only" && "Pricing Only Contract"}
                       </CardTitle>
                       <CardDescription>
                         From {dateRange.from} To {dateRange.to}
@@ -348,6 +367,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
                       {tab === "capital" && "Capital Contract"}
                       {tab === "tie_in" && "Tie-In Contract"}
                       {tab === "grouped" && "Grouped Contract"}
+                      {tab === "pricing_only" && "Pricing Only"}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -388,6 +408,79 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Scheduled Reports */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5" />
+                Scheduled Reports
+              </CardTitle>
+              <CardDescription>
+                Automated report delivery to facility contacts
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm">
+              Add Schedule
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[
+              {
+                id: "1",
+                name: "Weekly Rebate Summary",
+                frequency: "weekly",
+                nextRun: "Mar 31, 2026",
+                recipients: 3,
+              },
+              {
+                id: "2",
+                name: "Monthly Usage Report",
+                frequency: "monthly",
+                nextRun: "Apr 01, 2026",
+                recipients: 5,
+              },
+              {
+                id: "3",
+                name: "Quarterly Calculation Audit",
+                frequency: "quarterly",
+                nextRun: "Apr 01, 2026",
+                recipients: 2,
+              },
+            ].map((schedule) => (
+              <div
+                key={schedule.id}
+                className="flex items-center justify-between rounded-lg border p-4"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                    <FileText className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium">{schedule.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {schedule.frequency.charAt(0).toUpperCase() +
+                        schedule.frequency.slice(1)}{" "}
+                      &bull; Next run: {schedule.nextRun} &bull;{" "}
+                      {schedule.recipients} recipients
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Switch defaultChecked />
+                  <Button variant="ghost" size="sm">
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -537,63 +630,152 @@ function OverviewTab({
     )
   }
 
+  // Build pie chart data from contracts
+  const lifecycleData = useMemo(() => {
+    if (!data?.contracts) return []
+    const active = data.contracts.length
+    // Placeholder expired/expiring counts -- real data would come from contract status
+    return [
+      { name: "Active", value: active, color: "#22c55e" },
+      { name: "Expired", value: 0, color: "#ef4444" },
+      { name: "Expiring", value: 0, color: "#eab308" },
+    ].filter((d) => d.value > 0)
+  }, [data])
+
+  // Build monthly bar chart data from periods
+  const monthlyChartData = useMemo(() => {
+    const monthMap = new Map<string, { spend: number; rebate: number }>()
+    for (const p of allPeriods) {
+      const d = new Date(p.periodStart)
+      const key = d.toLocaleString("default", { month: "short" })
+      const existing = monthMap.get(key) ?? { spend: 0, rebate: 0 }
+      existing.spend += p.totalSpend
+      existing.rebate += p.rebateEarned
+      monthMap.set(key, existing)
+    }
+    return Array.from(monthMap.entries()).map(([month, vals]) => ({
+      month,
+      spend: vals.spend,
+      rebate: vals.rebate,
+    }))
+  }, [allPeriods])
+
   // All-contracts overview
   return (
     <div className="grid gap-6 md:grid-cols-2">
+      {/* Contract Lifecycle PieChart */}
       <Card>
         <CardHeader>
           <CardTitle>Contract Life Cycle</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 grid-cols-2">
-            <MetricCard label="Active Contracts" value={String(contractCount)} />
-            <MetricCard label="Combined Spend" value={formatCurrency(totalSpend)} />
-            <MetricCard
-              label="Total Rebates"
-              value={formatCurrency(totalRebate)}
-              className="text-green-600"
-            />
-            <MetricCard
-              label="Total Volume"
-              value={allPeriods.reduce((s, p) => s + p.totalVolume, 0).toLocaleString()}
-            />
-          </div>
+          {lifecycleData.length > 0 ? (
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={lifecycleData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ name, value }: { name?: string; value?: number }) =>
+                      `${name ?? ""}: ${value ?? 0}`
+                    }
+                  >
+                    {lifecycleData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="grid gap-4 grid-cols-2">
+              <MetricCard label="Active Contracts" value={String(contractCount)} />
+              <MetricCard label="Combined Spend" value={formatCurrency(totalSpend)} />
+              <MetricCard
+                label="Total Rebates"
+                value={formatCurrency(totalRebate)}
+                className="text-green-600"
+              />
+              <MetricCard
+                label="Total Volume"
+                value={allPeriods
+                  .reduce((s, p) => s + p.totalVolume, 0)
+                  .toLocaleString()}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
+      {/* Earned Rebate Monthly BarChart */}
       <Card>
         <CardHeader>
           <CardTitle>Earned Rebate Monthly</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {data?.contracts.map((c) => {
-              const spend = c.periods.reduce((s, p) => s + p.totalSpend, 0)
-              const rebate = c.periods.reduce((s, p) => s + p.rebateEarned, 0)
-              return (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between text-sm border-b pb-2 last:border-0"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{c.name}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {c.contractType}
-                    </Badge>
+          {monthlyChartData.length > 0 ? (
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyChartData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  />
+                  <YAxis
+                    tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  />
+                  <RechartsTooltip
+                    formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="spend" name="Spend" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="rebate" name="Rebate" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {data?.contracts.map((c) => {
+                const spend = c.periods.reduce((s, p) => s + p.totalSpend, 0)
+                const rebate = c.periods.reduce((s, p) => s + p.rebateEarned, 0)
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between text-sm border-b pb-2 last:border-0"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{c.name}</span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {c.contractType}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span>{formatCurrency(spend)}</span>
+                      <span className="text-green-600">{formatCurrency(rebate)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span>{formatCurrency(spend)}</span>
-                    <span className="text-green-600">{formatCurrency(rebate)}</span>
-                  </div>
-                </div>
-              )
-            })}
-            {(!data?.contracts || data.contracts.length === 0) && (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                No contract data for the selected period.
-              </p>
-            )}
-          </div>
+                )
+              })}
+              {(!data?.contracts || data.contracts.length === 0) && (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  No contract data for the selected period.
+                </p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

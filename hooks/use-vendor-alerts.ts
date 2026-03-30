@@ -9,12 +9,12 @@ import {
   bulkResolveVendorAlerts,
   bulkDismissVendorAlerts,
 } from "@/lib/actions/vendor-alerts"
-import type { AlertType, AlertSeverity } from "@prisma/client"
+import type { AlertType, AlertSeverity, AlertStatus } from "@prisma/client"
 import { toast } from "sonner"
 
 export function useVendorAlerts(
   vendorId: string,
-  filters?: { alertType?: AlertType; severity?: AlertSeverity }
+  filters?: { alertType?: AlertType; severity?: AlertSeverity; status?: AlertStatus }
 ) {
   return useQuery({
     queryKey: queryKeys.alerts.list("vendor", vendorId, filters),

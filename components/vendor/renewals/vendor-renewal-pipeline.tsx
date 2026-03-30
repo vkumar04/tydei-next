@@ -53,8 +53,8 @@ const statusConfig = {
 
 function getStatus(daysUntilExpiry: number): "critical" | "warning" | "upcoming" | "ok" {
   if (daysUntilExpiry <= 30) return "critical"
-  if (daysUntilExpiry <= 60) return "warning"
-  if (daysUntilExpiry <= 120) return "upcoming"
+  if (daysUntilExpiry <= 90) return "warning"
+  if (daysUntilExpiry <= 180) return "upcoming"
   return "ok"
 }
 
@@ -161,7 +161,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Expiring in 60 Days</p>
+                <p className="text-sm text-muted-foreground">Expiring in 90 Days</p>
                 <p className="text-2xl font-bold">{stats.warning + stats.critical}</p>
                 <p className="text-xs text-muted-foreground mt-1">start discussions</p>
               </div>
@@ -223,18 +223,20 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
               <span>30 days</span>
               <span>60 days</span>
               <span>90 days</span>
-              <span>120 days</span>
+              <span>180 days</span>
+              <span>1 year</span>
             </div>
             <div className="h-2 rounded-full bg-muted relative">
-              <div className="absolute inset-y-0 left-0 w-[25%] rounded-l-full bg-red-200 dark:bg-red-900/50" />
-              <div className="absolute inset-y-0 left-[25%] w-[25%] bg-yellow-200 dark:bg-yellow-900/50" />
-              <div className="absolute inset-y-0 left-[50%] w-[25%] bg-blue-200 dark:bg-blue-900/50" />
+              {/* 30/365 ≈ 8%, 60/365 ≈ 17%, 90/365 ≈ 25% */}
+              <div className="absolute inset-y-0 left-0 w-[8%] rounded-l-full bg-red-200 dark:bg-red-900/50" />
+              <div className="absolute inset-y-0 left-[8%] w-[17%] bg-yellow-200 dark:bg-yellow-900/50" />
+              <div className="absolute inset-y-0 left-[25%] w-[25%] bg-blue-200 dark:bg-blue-900/50" />
             </div>
 
             {/* Contract markers */}
             <div className="relative h-16 mt-2">
               {renewals.map((renewal) => {
-                const maxDays = 120
+                const maxDays = 365
                 const position = Math.min((renewal.daysUntilExpiry / maxDays) * 100, 100)
                 const color =
                   renewal.status === "critical" ? "bg-red-500" :
@@ -293,6 +295,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
                     <TableRow>
                       <TableHead>Facility</TableHead>
                       <TableHead>Contract</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Expiration</TableHead>
                       <TableHead>Days Left</TableHead>
                       <TableHead>Total Spend</TableHead>
@@ -321,6 +324,11 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
                               <FileText className="h-4 w-4 text-muted-foreground" />
                               <span>{renewal.name}</span>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="capitalize">
+                              {renewal.contractType?.replace(/_/g, " ") ?? "N/A"}
+                            </Badge>
                           </TableCell>
                           <TableCell>{formatDate(renewal.expirationDate)}</TableCell>
                           <TableCell>
