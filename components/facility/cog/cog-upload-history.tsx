@@ -20,9 +20,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 interface COGUploadHistoryProps {
   facilityId: string
   variant?: "cog" | "pricing"
+  onImport?: () => void
 }
 
-export function COGUploadHistory({ facilityId, variant = "cog" }: COGUploadHistoryProps) {
+export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGUploadHistoryProps) {
   const { data, isLoading } = useCOGImportHistory(facilityId)
 
   if (isLoading) {
@@ -59,7 +60,7 @@ export function COGUploadHistory({ facilityId, variant = "cog" }: COGUploadHisto
               Vendor pricing files used to match COG data
             </CardDescription>
           </div>
-          <Button>
+          <Button onClick={onImport}>
             <Upload className="mr-2 h-4 w-4" />
             Import Data
           </Button>
@@ -131,7 +132,7 @@ export function COGUploadHistory({ facilityId, variant = "cog" }: COGUploadHisto
               Purchase order and invoice files imported into the system
             </CardDescription>
           </div>
-          <Button>
+          <Button onClick={onImport}>
             <Upload className="mr-2 h-4 w-4" />
             Import Data
           </Button>

@@ -16,6 +16,7 @@ import { PricingFilesTable } from "@/components/facility/cog/pricing-files-table
 import { COGUploadHistory } from "@/components/facility/cog/cog-upload-history"
 import { COGImportDialog } from "@/components/facility/cog/cog-import-dialog"
 import { PricingImportDialog } from "@/components/facility/cog/pricing-import-dialog"
+import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { useCOGStats } from "@/hooks/use-cog"
 import { formatCurrency } from "@/lib/formatting"
 
@@ -26,6 +27,7 @@ interface COGDataClientProps {
 export function COGDataClient({ facilityId }: COGDataClientProps) {
   const [cogImportOpen, setCogImportOpen] = useState(false)
   const [pricingImportOpen, setPricingImportOpen] = useState(false)
+  const [manualEntryOpen, setManualEntryOpen] = useState(false)
 
   // Fetch aggregated stats from server (not from paginated records)
   const { data: stats, refetch: refetchStats } = useCOGStats(facilityId)
@@ -51,7 +53,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <Upload className="mr-2 h-4 w-4" />
             Import Data
           </Button>
-          <Button onClick={() => setPricingImportOpen(true)}>
+          <Button onClick={() => setManualEntryOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Add COG Entry
           </Button>
@@ -141,11 +143,11 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         </TabsContent>
 
         <TabsContent value="cogFiles" className="space-y-4">
-          <COGUploadHistory facilityId={facilityId} />
+          <COGUploadHistory facilityId={facilityId} onImport={() => setCogImportOpen(true)} />
         </TabsContent>
 
         <TabsContent value="pricing" className="space-y-4">
-          <COGUploadHistory facilityId={facilityId} variant="pricing" />
+          <COGUploadHistory facilityId={facilityId} variant="pricing" onImport={() => setPricingImportOpen(true)} />
         </TabsContent>
 
         <TabsContent value="pricingList" className="space-y-4">
@@ -166,6 +168,13 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         open={pricingImportOpen}
         onOpenChange={setPricingImportOpen}
         onComplete={() => {}}
+      />
+
+      <COGManualEntry
+        facilityId={facilityId}
+        open={manualEntryOpen}
+        onOpenChange={setManualEntryOpen}
+        onComplete={() => refetchStats()}
       />
     </div>
   )
