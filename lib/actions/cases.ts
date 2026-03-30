@@ -50,8 +50,13 @@ export interface SurgeonScorecard {
   caseCount: number
   totalSpend: number
   avgSpendPerCase: number
+  totalReimbursement: number
+  totalMargin: number
+  avgMargin: number
+  marginPercent: number
   complianceRate: number
   onContractPercent: number
+  trend: "up" | "down"
   topProcedures: { cptCode: string; count: number }[]
 }
 
@@ -285,6 +290,8 @@ export async function getSurgeonScorecards(
     {
       cases: typeof cases
       totalSpend: number
+      totalReimbursement: number
+      totalMargin: number
       compliant: number
       onContract: number
       totalSupplies: number
@@ -298,6 +305,8 @@ export async function getSurgeonScorecards(
       surgeonMap.set(name, {
         cases: [],
         totalSpend: 0,
+        totalReimbursement: 0,
+        totalMargin: 0,
         compliant: 0,
         onContract: 0,
         totalSupplies: 0,
@@ -307,6 +316,8 @@ export async function getSurgeonScorecards(
     const entry = surgeonMap.get(name)!
     entry.cases.push(c)
     entry.totalSpend += Number(c.totalSpend)
+    entry.totalReimbursement += Number(c.totalReimbursement)
+    entry.totalMargin += Number(c.margin)
     if (c.complianceStatus === "compliant") entry.compliant++
 
     for (const s of c.supplies) {
@@ -326,16 +337,26 @@ export async function getSurgeonScorecards(
       .slice(0, 5)
       .map(([cptCode, count]) => ({ cptCode, count }))
 
+    const marginPercent =
+      data.totalReimbursement > 0
+        ? (data.totalMargin / data.totalReimbursement) * 100
+        : 0
+
     return {
       surgeonName: name,
       caseCount,
       totalSpend: data.totalSpend,
       avgSpendPerCase: caseCount > 0 ? data.totalSpend / caseCount : 0,
+      totalReimbursement: data.totalReimbursement,
+      totalMargin: data.totalMargin,
+      avgMargin: caseCount > 0 ? data.totalMargin / caseCount : 0,
+      marginPercent: Math.round(marginPercent * 10) / 10,
       complianceRate: caseCount > 0 ? (data.compliant / caseCount) * 100 : 0,
       onContractPercent:
         data.totalSupplies > 0
           ? (data.onContract / data.totalSupplies) * 100
           : 0,
+      trend: (marginPercent >= 25 ? "up" : "down") as "up" | "down",
       topProcedures,
     }
   }))
