@@ -1,6 +1,7 @@
 import { generateText, generateObject } from "ai"
 import { geminiModel } from "@/lib/ai/config"
 import { extractedContractSchema } from "@/lib/ai/schemas"
+import { uploadFile } from "@/lib/storage"
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +14,12 @@ export async function POST(request: Request) {
 
     const arrayBuffer = await file.arrayBuffer()
     const fileData = new Uint8Array(arrayBuffer)
+
+    // Upload original file to S3 for archival
+    const timestamp = Date.now()
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+    const s3Key = `contracts/${timestamp}-${safeName}`
+    await uploadFile(s3Key, fileData, file.type || "application/octet-stream")
 
     const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
     const mediaType = isPDF ? "application/pdf" : "text/plain"
@@ -73,7 +80,7 @@ ${extractedText}`,
     ).length
     const confidence = Math.min(0.95, fieldCount / 9)
 
-    return Response.json({ extracted, confidence })
+    return Response.json({ extracted, confidence, s3Key })
   } catch (error) {
     console.error("Contract extraction error:", error)
     return Response.json({ error: "Extraction failed" }, { status: 500 })

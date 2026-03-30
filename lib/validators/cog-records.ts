@@ -46,6 +46,8 @@ export const bulkImportSchema = z.object({
   facilityId: z.string().min(1),
   records: z.array(cogRecordInputSchema).min(1),
   duplicateStrategy: z.enum(["skip", "overwrite", "keep_both"]),
+  /** S3 key of the uploaded source CSV file (optional). */
+  sourceFileKey: z.string().optional(),
 })
 
 export type BulkImportInput = z.infer<typeof bulkImportSchema>
