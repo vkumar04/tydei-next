@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Loader2 } from "lucide-react"
 import {
   Dialog,
@@ -46,30 +46,42 @@ export function COGImportDialog({
     skipped: number
     errors: number
   } | null>(null)
+  // Track whether we already forwarded the current parser.data to importState
+  const forwarded = useRef(false)
 
   const handleFile = async (file: File) => {
+    forwarded.current = false
     await parser.parseFile(file)
   }
 
-  // After parsing finishes, push data into import state
-  if (parser.data && importState.step === "upload") {
-    importState.setParsedData(parser.data.headers, parser.data.rows)
-  }
+  // Move parsed data into import state via useEffect (not during render)
+  useEffect(() => {
+    if (parser.data && importState.step === "upload" && !forwarded.current) {
+      forwarded.current = true
+      importState.setParsedData(parser.data.headers, parser.data.rows)
+    }
+  }, [parser.data, importState])
 
   const handleImport = async () => {
     importState.setStep("import")
-    const res = await importMutation.mutateAsync({
-      facilityId,
-      records: importState.mappedRecords,
-      duplicateStrategy: importState.duplicateStrategy,
-    })
-    setResult(res)
+    try {
+      const res = await importMutation.mutateAsync({
+        facilityId,
+        records: importState.mappedRecords,
+        duplicateStrategy: importState.duplicateStrategy,
+      })
+      setResult(res)
+    } catch {
+      // Error is handled by the mutation's onError callback
+      importState.setStep("preview")
+    }
   }
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
       importState.reset()
       parser.reset()
+      forwarded.current = false
       setResult(null)
       if (result) onComplete()
     }
@@ -101,7 +113,11 @@ export function COGImportDialog({
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => importState.setStep("upload")}
+                onClick={() => {
+                  forwarded.current = false
+                  parser.reset()
+                  importState.setStep("upload")
+                }}
               >
                 Back
               </Button>
@@ -146,7 +162,7 @@ export function COGImportDialog({
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={importMutation.isPending}
+                disabled={importMutation.isPending || importState.mappedRecords.length === 0}
               >
                 {importMutation.isPending && (
                   <Loader2 className="animate-spin" />

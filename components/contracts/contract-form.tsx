@@ -82,13 +82,6 @@ const contractTypes = [
   },
 ] as const
 
-const performancePeriods = [
-  { value: "monthly", label: "Monthly" },
-  { value: "quarterly", label: "Quarterly" },
-  { value: "semi_annual", label: "Semi-Annual" },
-  { value: "annual", label: "Annual" },
-] as const
-
 function parseDateString(dateStr: string | undefined): Date | undefined {
   if (!dateStr) return undefined
   try {
@@ -137,17 +130,17 @@ export function ContractFormBasicInfo({
             >
               <Input
                 {...register("name")}
-                placeholder="e.g., Medtronic Spine Implants"
+                placeholder="e.g., Arthrex2024"
               />
             </Field>
 
             <Field
-              label="Contract Number"
+              label="Contract ID"
               error={errors.contractNumber?.message}
             >
               <Input
                 {...register("contractNumber")}
-                placeholder="e.g., CTR-2025-001"
+                placeholder="e.g., ART-2024-001"
               />
             </Field>
           </div>
@@ -346,11 +339,10 @@ export function ContractFormBasicInfo({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {performancePeriods.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="monthly">Monthly - Evaluated every month</SelectItem>
+                  <SelectItem value="quarterly">Quarterly - Evaluated every 3 months</SelectItem>
+                  <SelectItem value="semi_annual">Semi-Annual - Evaluated every 6 months</SelectItem>
+                  <SelectItem value="annual">Annual - Evaluated yearly</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -369,11 +361,10 @@ export function ContractFormBasicInfo({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {performancePeriods.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="monthly">Monthly - Paid every month</SelectItem>
+                  <SelectItem value="quarterly">Quarterly - Paid every 3 months</SelectItem>
+                  <SelectItem value="semi_annual">Semi-Annual - Paid every 6 months</SelectItem>
+                  <SelectItem value="annual">Annual - Paid yearly</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -410,7 +401,7 @@ export function ContractFormBasicInfo({
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
-              label="Total Value ($)"
+              label="Contract Total"
               error={errors.totalValue?.message}
             >
               <div className="relative">
@@ -428,7 +419,7 @@ export function ContractFormBasicInfo({
             </Field>
 
             <Field
-              label="Annual Value ($)"
+              label="Annual Value"
               error={errors.annualValue?.message}
             >
               <div className="relative">

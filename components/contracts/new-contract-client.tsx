@@ -143,7 +143,7 @@ export function NewContractClient({
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Contract</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-balance">New Contract</h1>
           <p className="text-muted-foreground">
             Create a new vendor contract
           </p>
@@ -165,11 +165,11 @@ export function NewContractClient({
         <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="ai" className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
-            AI Extract
+            AI Assistant
           </TabsTrigger>
           <TabsTrigger value="pdf" className="flex items-center gap-2">
             <Upload className="h-4 w-4" />
-            PDF Upload
+            Upload PDF
           </TabsTrigger>
           <TabsTrigger value="manual" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
@@ -177,7 +177,7 @@ export function NewContractClient({
           </TabsTrigger>
         </TabsList>
 
-        {/* AI Extract Tab */}
+        {/* AI Assistant Tab */}
         <TabsContent value="ai" className="mt-4">
           <Card>
             <CardHeader>
@@ -203,7 +203,7 @@ export function NewContractClient({
           </Card>
         </TabsContent>
 
-        {/* PDF Upload Tab */}
+        {/* Upload PDF Tab */}
         <TabsContent value="pdf" className="mt-4">
           <Card>
             <CardHeader>
@@ -250,7 +250,7 @@ export function NewContractClient({
                     <CardTitle>Contract Terms</CardTitle>
                     <CardDescription>
                       Define rebate tiers, pricing terms, market share
-                      commitments, and other contract conditions
+                      commitments, carve-outs, and other contract conditions
                     </CardDescription>
                   </CardHeader>
                   <CardContent>

@@ -45,14 +45,36 @@ export function useCOGImport() {
 
   const setParsedData = useCallback(
     (headers: string[], rows: Record<string, string>[]) => {
-      // Auto-map by fuzzy matching header names to target fields
+      // Normalise a string for matching: lowercase, strip non-alphanumeric
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+
+      // Common CSV/Excel aliases for each target field
+      const ALIASES: Record<string, string[]> = {
+        inventoryNumber: ["inventorynumber", "inventoryno", "invno", "invnumber", "itemno", "itemnumber", "sku"],
+        inventoryDescription: ["inventorydescription", "description", "desc", "itemdescription", "itemdesc", "productdescription"],
+        vendorName: ["vendorname", "vendor", "suppliername", "supplier"],
+        vendorItemNo: ["vendoritemno", "vendoritemnumber", "vendoritem", "supplieritemno"],
+        manufacturerNo: ["manufacturerno", "manufacturernumber", "mfgno", "mfgnumber", "manufacturer"],
+        unitCost: ["unitcost", "unitprice", "cost", "price", "eachprice"],
+        extendedPrice: ["extendedprice", "extprice", "extendedcost", "totalcost", "totalprice", "lineamount", "linetotal", "amount"],
+        quantity: ["quantity", "qty", "units", "count"],
+        transactionDate: ["transactiondate", "date", "invoicedate", "orderdate", "txndate", "purchasedate"],
+        category: ["category", "cat", "productcategory", "itemcategory", "department", "dept"],
+      }
+
       const autoMapping: Record<string, string> = {}
       for (const field of TARGET_FIELDS) {
-        const match = headers.find(
-          (h) =>
-            h.toLowerCase().replace(/[_\s-]/g, "") ===
-            field.key.toLowerCase().replace(/[_\s-]/g, "")
-        )
+        // Try exact normalised match first
+        let match = headers.find((h) => norm(h) === norm(field.key))
+        // Then try aliases
+        if (!match) {
+          const aliases = ALIASES[field.key] ?? []
+          match = headers.find((h) => aliases.includes(norm(h)))
+        }
+        // Then try label match (e.g. "Unit Cost" matches field.label "Unit Cost")
+        if (!match) {
+          match = headers.find((h) => norm(h) === norm(field.label))
+        }
         if (match) autoMapping[field.key] = match
       }
       setState((prev) => ({
@@ -80,27 +102,55 @@ export function useCOGImport() {
   const buildRecords = useCallback((): COGRecordInput[] => {
     const { rows, mapping } = state
     return rows
-      .map((row) => ({
-        inventoryNumber: row[mapping.inventoryNumber ?? ""] ?? "",
-        inventoryDescription: row[mapping.inventoryDescription ?? ""] ?? "",
-        vendorName: row[mapping.vendorName ?? ""] || undefined,
-        vendorItemNo: row[mapping.vendorItemNo ?? ""] || undefined,
-        manufacturerNo: row[mapping.manufacturerNo ?? ""] || undefined,
-        unitCost: parseFloat(
+      .map((row) => {
+        const rawQty = mapping.quantity
+          ? parseInt(row[mapping.quantity] ?? "", 10)
+          : 1
+        const qty = Number.isFinite(rawQty) && rawQty >= 1 ? rawQty : 1
+
+        const rawUnitCost = parseFloat(
           (row[mapping.unitCost ?? ""] ?? "0").replace(/[^0-9.-]/g, "")
-        ),
-        extendedPrice: mapping.extendedPrice
-          ? parseFloat(
-              (row[mapping.extendedPrice] ?? "0").replace(/[^0-9.-]/g, "")
-            )
-          : undefined,
-        quantity: mapping.quantity
-          ? parseInt(row[mapping.quantity] ?? "1", 10)
-          : 1,
-        transactionDate: row[mapping.transactionDate ?? ""] ?? "",
-        category: row[mapping.category ?? ""] || undefined,
-      }))
-      .filter((r) => r.inventoryNumber && r.inventoryDescription && r.unitCost)
+        )
+        const unitCost = Number.isFinite(rawUnitCost) ? rawUnitCost : 0
+
+        let extendedPrice: number | undefined
+        if (mapping.extendedPrice) {
+          const rawExt = parseFloat(
+            (row[mapping.extendedPrice] ?? "0").replace(/[^0-9.-]/g, "")
+          )
+          extendedPrice = Number.isFinite(rawExt) ? rawExt : undefined
+        }
+
+        // Normalise the transaction date to ISO format so the server can parse it
+        const rawDate = (row[mapping.transactionDate ?? ""] ?? "").trim()
+        let transactionDate = rawDate
+        if (rawDate) {
+          const d = new Date(rawDate)
+          if (!isNaN(d.getTime())) {
+            transactionDate = d.toISOString().slice(0, 10) // YYYY-MM-DD
+          }
+        }
+
+        return {
+          inventoryNumber: row[mapping.inventoryNumber ?? ""] ?? "",
+          inventoryDescription: row[mapping.inventoryDescription ?? ""] ?? "",
+          vendorName: row[mapping.vendorName ?? ""] || undefined,
+          vendorItemNo: row[mapping.vendorItemNo ?? ""] || undefined,
+          manufacturerNo: row[mapping.manufacturerNo ?? ""] || undefined,
+          unitCost,
+          extendedPrice,
+          quantity: qty,
+          transactionDate,
+          category: row[mapping.category ?? ""] || undefined,
+        }
+      })
+      .filter(
+        (r) =>
+          r.inventoryNumber &&
+          r.inventoryDescription &&
+          r.unitCost > 0 &&
+          r.transactionDate
+      )
   }, [state])
 
   const goToPreview = useCallback(() => {

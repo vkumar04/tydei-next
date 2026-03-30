@@ -1,4 +1,4 @@
-import { generateText, Output } from "ai"
+import { generateText, generateObject } from "ai"
 import { geminiModel } from "@/lib/ai/config"
 import { extractedContractSchema } from "@/lib/ai/schemas"
 
@@ -11,14 +11,14 @@ export async function POST(request: Request) {
       return Response.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Convert file to Uint8Array for the AI SDK
     const arrayBuffer = await file.arrayBuffer()
     const fileData = new Uint8Array(arrayBuffer)
 
     const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
     const mediaType = isPDF ? "application/pdf" : "text/plain"
 
-    const result = await generateText({
+    // Step 1: Extract text content from the document
+    const extraction = await generateText({
       model: geminiModel,
       messages: [
         {
@@ -26,11 +26,16 @@ export async function POST(request: Request) {
           content: [
             {
               type: "text",
-              text: `Extract structured contract data from this document.
-If a field is not clearly present, make your best inference from context.
-For dates, use YYYY-MM-DD format.
-For contract type, choose from: usage, capital, service, tie_in, grouped, pricing_only.
-Extract all terms and tier structures you can find.`,
+              text: `Read this contract document carefully and extract ALL relevant information including:
+- Contract name/title
+- Vendor/manufacturer name
+- Contract type (usage, capital, service, tie_in, grouped, or pricing_only)
+- Effective date and expiration date (in YYYY-MM-DD format)
+- Total contract value
+- Any description or summary
+- All rebate terms, tier structures, spend thresholds, and rebate percentages
+
+Return all the information you find as detailed text.`,
             },
             {
               type: "file",
@@ -40,10 +45,24 @@ Extract all terms and tier structures you can find.`,
           ],
         },
       ],
-      output: Output.object({ schema: extractedContractSchema }),
     })
 
-    const extracted = result.output
+    const extractedText = extraction.text
+    if (!extractedText) {
+      return Response.json({ error: "Could not read document" }, { status: 422 })
+    }
+
+    // Step 2: Parse the extracted text into structured data
+    const result = await generateObject({
+      model: geminiModel,
+      schema: extractedContractSchema,
+      prompt: `Parse this contract information into structured data. If a field is not clearly present, make your best inference from context. For dates use YYYY-MM-DD format. For contract type choose from: usage, capital, service, tie_in, grouped, pricing_only.
+
+Contract information:
+${extractedText}`,
+    })
+
+    const extracted = result.object
     if (!extracted) {
       return Response.json({ error: "No data extracted" }, { status: 422 })
     }
