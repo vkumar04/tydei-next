@@ -48,6 +48,7 @@ export async function getContracts(input: ContractFilters) {
       include: {
         vendor: { select: { id: true, name: true, logoUrl: true } },
         productCategory: { select: { id: true, name: true } },
+        facility: { select: { id: true, name: true } },
       },
       orderBy: { updatedAt: "desc" },
       skip: ((filters.page ?? 1) - 1) * (filters.pageSize ?? 20),

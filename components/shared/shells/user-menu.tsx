@@ -1,9 +1,12 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { LogOut, Settings, User as UserIcon } from "lucide-react"
+import Link from "next/link"
+import { LogOut, Settings, ChevronDown } from "lucide-react"
 import { authClient } from "@/lib/auth"
+import type { PortalRole } from "@/lib/types"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,15 +15,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  SidebarMenuButton,
-} from "@/components/ui/sidebar"
 
 interface UserMenuProps {
   user: { name: string; email: string; image?: string | null }
+  role?: PortalRole
 }
 
-export function UserMenu({ user }: UserMenuProps) {
+export function UserMenu({ user, role }: UserMenuProps) {
   const router = useRouter()
 
   const initials = user.name
@@ -30,6 +31,13 @@ export function UserMenu({ user }: UserMenuProps) {
     .toUpperCase()
     .slice(0, 2)
 
+  const settingsHref =
+    role === "vendor"
+      ? "/vendor/settings"
+      : role === "admin"
+        ? "/admin/settings"
+        : "/dashboard/settings"
+
   async function handleSignOut() {
     await authClient.signOut()
     router.push("/login")
@@ -38,29 +46,39 @@ export function UserMenu({ user }: UserMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <SidebarMenuButton className="w-full">
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-2 px-2 text-sidebar-foreground hover:bg-sidebar-accent"
+        >
           <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+            <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
+              {initials}
+            </AvatarFallback>
           </Avatar>
-          <div className="flex flex-1 flex-col items-start text-left" style={{ maxWidth: 120 }}>
-            <span className="truncate text-sm font-medium">{user.name}</span>
-            <span className="truncate text-xs text-sidebar-foreground/60">
+          <div className="flex flex-1 flex-col items-start text-left">
+            <span className="text-sm font-medium truncate max-w-[120px]">
+              {user.name}
+            </span>
+            <span className="text-xs text-sidebar-foreground/70 truncate max-w-[120px]">
               {user.email}
             </span>
           </div>
-        </SidebarMenuButton>
+          <ChevronDown className="h-4 w-4 text-sidebar-foreground/70" />
+        </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <Settings className="mr-2 size-4" />
-          Settings
+        <DropdownMenuItem asChild>
+          <Link href={settingsHref}>
+            <Settings className="mr-2 h-4 w-4" />
+            Settings
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut}>
-          <LogOut className="mr-2 size-4" />
-          Sign Out
+        <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+          <LogOut className="mr-2 h-4 w-4" />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

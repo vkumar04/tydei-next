@@ -13,10 +13,9 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarNav } from "@/components/shared/shells/sidebar-nav"
 import { UserMenu } from "@/components/shared/shells/user-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
@@ -31,12 +30,6 @@ interface PortalShellProps {
   children: ReactNode
 }
 
-const portalLabels: Record<PortalRole, string> = {
-  facility: "Facility Portal",
-  vendor: "Vendor Portal",
-  admin: "Admin Portal",
-}
-
 export function PortalShell({
   role,
   navItems,
@@ -49,67 +42,83 @@ export function PortalShell({
   return (
     <SidebarProvider>
       <Sidebar>
-        <SidebarHeader className="p-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
-              <FileText className="h-4 w-4 text-sidebar-primary-foreground" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-sidebar-foreground">
-                TYDEi
-              </span>
-              <span className="text-xs text-sidebar-foreground/60">
-                {portalLabels[role]}
-              </span>
-            </div>
+        <SidebarHeader className="p-0">
+          {/* Logo */}
+          <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
+            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
+                <FileText className="h-5 w-5 text-sidebar-primary-foreground" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-sidebar-foreground">
+                  TYDEi
+                </span>
+                <span className="text-xs text-sidebar-foreground/70">
+                  Platform
+                </span>
+              </div>
+            </Link>
           </div>
+          {/* Facility / Organization Selector */}
           {sidebarHeader && (
-            <>
-              <Separator className="my-2 bg-sidebar-border" />
+            <div className="border-b border-sidebar-border px-4 py-3">
               {sidebarHeader}
-            </>
+            </div>
           )}
         </SidebarHeader>
-        <SidebarContent>
-          <SidebarNav items={navItems} badgeCounts={badgeCounts} />
+        <SidebarContent className="p-0">
+          <ScrollArea className="flex-1 px-3 py-4">
+            <SidebarNav items={navItems} badgeCounts={badgeCounts} />
+          </ScrollArea>
         </SidebarContent>
-        <SidebarFooter className="p-4">
-          <UserMenu user={user} />
+        <SidebarFooter className="border-t border-sidebar-border p-4">
+          <UserMenu user={user} role={role} />
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-16 items-center gap-2 border-b bg-card px-4">
+        <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6">
           <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          {/* Search bar */}
-          <div className="relative hidden lg:block lg:max-w-md lg:flex-1">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search contracts, vendors..."
-              className="pl-9 h-9"
-            />
+
+          {/* Search */}
+          <div className="flex-1 lg:max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="search"
+                placeholder="Search contracts, vendors, reports..."
+                className="h-9 w-full rounded-lg border bg-background pl-9 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+
+          {/* Header actions */}
+          <div className="flex items-center gap-1">
             {/* Import button */}
-            <Button variant="outline" size="sm" className="hidden sm:flex gap-2">
-              <Upload className="h-4 w-4" />
-              Import
-            </Button>
-            {/* Alerts bell */}
-            <Button variant="ghost" size="icon" className="relative" asChild>
-              <Link href={role === "vendor" ? "/vendor/alerts" : "/dashboard/alerts"}>
-                <Bell className="h-4 w-4" />
-                {(alertCount ?? 0) > 0 && (
-                  <Badge className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive p-0 text-[10px] text-destructive-foreground">
-                    {alertCount}
-                  </Badge>
-                )}
-              </Link>
+            <Button variant="outline" size="sm" className="hidden md:flex">
+              <Upload className="mr-2 h-4 w-4" />
+              Import Data
             </Button>
             <ThemeToggle />
+            {/* Alerts bell */}
+            <Link href={role === "vendor" ? "/vendor/alerts" : "/dashboard/alerts"}>
+              <Button variant="ghost" size="icon" className="relative h-9 w-9">
+                <Bell className="h-4 w-4" />
+                {(alertCount ?? 0) > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
+                    {(alertCount ?? 0) > 9 ? "9+" : alertCount}
+                  </span>
+                )}
+              </Button>
+            </Link>
           </div>
         </header>
-        <main className="flex-1 p-4 lg:p-6">{children}</main>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-auto bg-secondary/30">
+          <div className="container mx-auto p-4 lg:p-6">
+            {children}
+          </div>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   )

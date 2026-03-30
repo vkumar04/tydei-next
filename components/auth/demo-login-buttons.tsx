@@ -1,6 +1,5 @@
 "use client"
 
-import { Building2, Truck } from "lucide-react"
 import { motion } from "motion/react"
 import { Button } from "@/components/ui/button"
 import { staggerContainer, fadeInUp } from "@/lib/animations"
@@ -17,8 +16,8 @@ interface DemoLoginButtonsProps {
 }
 
 const roles = [
-  { role: "facility" as const, label: "Facility Demo", icon: Building2 },
-  { role: "vendor" as const, label: "Vendor Demo", icon: Truck },
+  { role: "facility" as const, label: "Facility Demo" },
+  { role: "vendor" as const, label: "Vendor Demo" },
 ]
 
 export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
@@ -38,7 +37,7 @@ export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
         initial="hidden"
         animate="show"
       >
-        {roles.map(({ role, label, icon: Icon }) => (
+        {roles.map(({ role, label }) => (
           <motion.div key={role} variants={fadeInUp}>
             <Button
               variant="outline"
@@ -50,7 +49,6 @@ export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
               }}
               className="w-full"
             >
-              <Icon className="mr-2 size-4" />
               {label}
             </Button>
           </motion.div>

@@ -1,11 +1,11 @@
 "use client"
 
 import { motion } from "motion/react"
+import { FileText } from "lucide-react"
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -20,10 +20,11 @@ interface AuthCardProps {
 
 export function AuthCard({ title, description, children, footer }: AuthCardProps) {
   return (
-    <motion.div variants={scaleIn} initial="hidden" animate="show">
-      <div className="flex items-center justify-center gap-2 mb-6">
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent">
-          <span className="text-lg font-bold text-primary-foreground">T</span>
+    <motion.div className="flex flex-col gap-6" variants={scaleIn} initial="hidden" animate="show">
+      {/* Logo */}
+      <div className="flex items-center justify-center gap-2">
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
+          <FileText className="h-7 w-7 text-primary-foreground" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">TYDEi</h1>
@@ -31,18 +32,19 @@ export function AuthCard({ title, description, children, footer }: AuthCardProps
         </div>
       </div>
 
-      <Card className="w-full border-0 shadow-lg">
+      <Card className="border-0 shadow-lg">
         <CardHeader className="text-center">
-          <CardTitle>{title}</CardTitle>
+          <CardTitle className="text-2xl">{title}</CardTitle>
           {description && <CardDescription>{description}</CardDescription>}
         </CardHeader>
         <CardContent>{children}</CardContent>
-        {footer && <CardFooter className="justify-center">{footer}</CardFooter>}
       </Card>
 
-      <p className="mt-6 text-center text-xs text-muted-foreground">
+      <p className="text-center text-xs text-muted-foreground">
         By signing in, you agree to our Terms of Service and Privacy Policy
       </p>
+
+      {footer}
     </motion.div>
   )
 }

@@ -76,19 +76,10 @@ export function LoginForm() {
       </motion.div>
 
       <motion.div variants={fadeInUp} className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="password">Password</Label>
-          <Link
-            href="/forgot-password"
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Forgot password?
-          </Link>
-        </div>
+        <Label htmlFor="password">Password</Label>
         <Input
           id="password"
           type="password"
-          placeholder="********"
           {...register("password")}
         />
         {errors.password && (
@@ -99,7 +90,7 @@ export function LoginForm() {
       <motion.div variants={fadeInUp}>
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
-          Sign In
+          Sign in
         </Button>
       </motion.div>
 
@@ -109,7 +100,7 @@ export function LoginForm() {
 
       <motion.p variants={fadeInUp} className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <Link href="/sign-up" className="font-medium text-primary hover:underline">
+        <Link href="/auth/sign-up" className="font-medium text-primary hover:underline">
           Contact your administrator
         </Link>
       </motion.p>

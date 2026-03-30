@@ -4,12 +4,8 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { motion } from "motion/react"
 import * as Icons from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { NavItem, BadgeCounts } from "@/lib/types"
-import {
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { staggerContainer, fadeInUp } from "@/lib/animations"
 
@@ -22,8 +18,13 @@ export function SidebarNav({ items, badgeCounts }: SidebarNavProps) {
   const pathname = usePathname()
 
   return (
-    <SidebarMenu className="px-2">
-      <motion.div variants={staggerContainer} initial="hidden" animate="show">
+    <nav className="flex flex-col gap-1">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+        className="flex flex-col gap-1"
+      >
         {items.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -42,26 +43,27 @@ export function SidebarNav({ items, badgeCounts }: SidebarNavProps) {
 
           return (
             <motion.div key={item.href} variants={fadeInUp}>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                  <Link href={item.href}>
-                    {IconComponent && <IconComponent className="size-4" />}
-                    <span className="flex-1">{item.label}</span>
-                    {badgeCount != null && badgeCount > 0 && (
-                      <Badge
-                        variant="destructive"
-                        className="ml-auto h-5 min-w-5 px-1 text-xs"
-                      >
-                        {badgeCount}
-                      </Badge>
-                    )}
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <Link
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+              >
+                {IconComponent && <IconComponent className="h-4 w-4" />}
+                <span className="flex-1">{item.label}</span>
+                {badgeCount != null && badgeCount > 0 && (
+                  <Badge className="ml-auto h-5 min-w-5 justify-center bg-destructive text-destructive-foreground text-xs">
+                    {badgeCount}
+                  </Badge>
+                )}
+              </Link>
             </motion.div>
           )
         })}
       </motion.div>
-    </SidebarMenu>
+    </nav>
   )
 }

@@ -59,7 +59,7 @@ export function DashboardClient({ facilityId }: DashboardClientProps) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[140px] rounded-xl" />
+            <Skeleton key={i} className="h-32" />
           ))}
         </div>
       )}
@@ -69,19 +69,19 @@ export function DashboardClient({ facilityId }: DashboardClientProps) {
         {monthlySpend.data ? (
           <TotalSpendChart data={monthlySpend.data} />
         ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
+          <Skeleton className="h-80" />
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {spendChart.data ? (
             <SpendByVendorChart data={spendChart.data} />
           ) : (
-            <Skeleton className="h-[380px] rounded-xl" />
+            <Skeleton className="h-80" />
           )}
           {categoryChart.data ? (
             <SpendByCategoryChart data={categoryChart.data} />
           ) : (
-            <Skeleton className="h-[380px] rounded-xl" />
+            <Skeleton className="h-80" />
           )}
         </div>
       </div>
@@ -91,12 +91,12 @@ export function DashboardClient({ facilityId }: DashboardClientProps) {
         {recentContracts.data ? (
           <RecentContracts contracts={recentContracts.data} />
         ) : (
-          <Skeleton className="h-96 rounded-xl" />
+          <Skeleton className="h-96" />
         )}
         {recentAlerts.data ? (
           <RecentAlerts alerts={recentAlerts.data} />
         ) : (
-          <Skeleton className="h-96 rounded-xl" />
+          <Skeleton className="h-96" />
         )}
       </div>
     </div>
