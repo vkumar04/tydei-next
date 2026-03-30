@@ -53,10 +53,10 @@ export function ScoreIndicator({
 
   const color =
     score >= 85
-      ? "text-green-600 bg-green-50"
+      ? "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20"
       : score >= 70
-        ? "text-amber-600 bg-amber-50"
-        : "text-red-600 bg-red-50"
+        ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20"
+        : "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20"
 
   return (
     <div className="flex flex-col items-center">
@@ -161,7 +161,7 @@ export function SurgeonDetailDialog({
                   <div className="text-sm text-muted-foreground">
                     Gross Margin
                   </div>
-                  <div className="text-2xl font-bold text-green-600">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                     ${Math.round(surgeon.totalMargin).toLocaleString()}
                   </div>
                   <div className="text-xs text-muted-foreground">
@@ -291,7 +291,7 @@ export function SurgeonDetailDialog({
                   <div className="text-sm text-muted-foreground">
                     Total Spend
                   </div>
-                  <div className="text-2xl font-bold text-red-600">
+                  <div className="text-2xl font-bold text-red-600 dark:text-red-400">
                     ${Math.round(surgeon.totalSpend).toLocaleString()}
                   </div>
                 </CardContent>
@@ -301,7 +301,7 @@ export function SurgeonDetailDialog({
                   <div className="text-sm text-muted-foreground">
                     Net Margin
                   </div>
-                  <div className="text-2xl font-bold text-green-600">
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                     ${Math.round(surgeon.totalMargin).toLocaleString()}
                   </div>
                 </CardContent>
@@ -320,7 +320,7 @@ export function SurgeonDetailDialog({
                     </span>
                     <span className="text-muted-foreground">reimbursement</span>
                     <span>-</span>
-                    <span className="text-red-600 font-semibold">
+                    <span className="text-red-600 dark:text-red-400 font-semibold">
                       ${Math.round(surgeon.totalSpend).toLocaleString()}
                     </span>
                     <span className="text-muted-foreground">spend</span>

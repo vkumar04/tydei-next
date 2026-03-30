@@ -64,7 +64,7 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
             <CheckCircle2 className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{activeCount}</div>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{activeCount}</div>
           </CardContent>
         </Card>
         <Card>

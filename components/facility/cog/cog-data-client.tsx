@@ -91,7 +91,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">On Contract</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {onContractCount}
                 </p>
               </div>
@@ -104,7 +104,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Off Contract</p>
-                <p className="text-2xl font-bold text-red-600">
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                   {offContractCount}
                 </p>
               </div>
@@ -117,7 +117,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Savings</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {formatCurrency(totalSavings)}
                 </p>
               </div>

@@ -677,7 +677,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
                   <div className="flex items-center gap-2">
                     <span className="font-medium">Active</span>
                   </div>
-                  <p className="mt-2 text-2xl font-bold text-green-600">1</p>
+                  <p className="mt-2 text-2xl font-bold text-green-600 dark:text-green-400">1</p>
                 </div>
                 <div className="rounded-lg border p-4">
                   <div className="flex items-center gap-2">
@@ -704,7 +704,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
                       </p>
                     </div>
                   </div>
-                  <Badge className="bg-green-100 text-green-800">Active</Badge>
+                  <Badge className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">Active</Badge>
                 </div>
               )}
             </CardContent>
@@ -904,7 +904,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
                                 <TableCell>
                                   <div className="flex items-center gap-3">
                                     <Avatar className="h-8 w-8">
-                                      <AvatarFallback className="bg-green-100 text-green-700">
+                                      <AvatarFallback className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
                                         {connection.vendorName.slice(0, 2).toUpperCase()}
                                       </AvatarFallback>
                                     </Avatar>
@@ -921,7 +921,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
                                     onClick={() => removeConn.mutate(connection.id)}
                                   >
                                     Disconnect
@@ -948,7 +948,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
                             <div key={connection.id} className="flex items-center justify-between rounded-lg border p-3">
                               <div className="flex items-center gap-3">
                                 <Avatar className="h-8 w-8">
-                                  <AvatarFallback className="bg-blue-100 text-blue-700">
+                                  <AvatarFallback className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
                                     {connection.vendorName.slice(0, 2).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
@@ -1241,7 +1241,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>Remaining Credits</CardDescription>
-                <CardTitle className="text-3xl text-green-600">
+                <CardTitle className="text-3xl text-green-600 dark:text-green-400">
                   {creditsQuery.data ? creditsQuery.data.remaining.toLocaleString() : "Unlimited"}
                 </CardTitle>
               </CardHeader>

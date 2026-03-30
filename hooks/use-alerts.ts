@@ -34,7 +34,7 @@ export function useUnreadAlertCount(facilityId: string) {
   return useQuery({
     queryKey: queryKeys.alerts.unreadCount("facility", facilityId),
     queryFn: () => getUnreadAlertCount({ facilityId, portalType: "facility" }),
-    refetchInterval: 60_000,
+    refetchInterval: 30_000,
   })
 }
 

@@ -2,12 +2,21 @@ import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import ExcelJS from "exceljs"
+import { rateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: await getHeaders() })
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { success, retryAfterMs } = rateLimit(`parse-file:${session.user.id}`, 30, 60_000)
+    if (!success) {
+      return NextResponse.json(
+        { error: "Too many requests", retryAfter: Math.ceil(retryAfterMs / 1000) },
+        { status: 429 }
+      )
     }
 
     const formData = await request.formData()

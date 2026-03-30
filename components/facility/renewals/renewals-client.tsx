@@ -321,7 +321,7 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
       {/* Critical Alert */}
       {stats.critical > 0 && (
         <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
           <AlertTitle className="text-red-800 dark:text-red-200">
             Immediate Attention Required
           </AlertTitle>
@@ -406,7 +406,7 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                   <p className="text-sm text-muted-foreground">
                     Uncollected Rebates
                   </p>
-                  <p className="text-2xl font-bold text-red-600">
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                     -{formatCurrency(stats.uncollectedRebates)}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -529,7 +529,7 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList>
                 <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="critical" className="text-red-600">
+                <TabsTrigger value="critical" className="text-red-600 dark:text-red-400">
                   Critical (
                   {
                     contractsWithStatus.filter(
@@ -599,7 +599,7 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                               <span
                                 className={
                                   contract.daysUntilExpiry <= 30
-                                    ? "text-red-600 font-medium"
+                                    ? "text-red-600 dark:text-red-400 font-medium"
                                     : ""
                                 }
                               >
@@ -677,10 +677,10 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {selectedStatus === "critical" && (
-                      <AlertTriangle className="h-5 w-5 text-red-600" />
+                      <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
                     )}
                     {selectedStatus === "warning" && (
-                      <Clock className="h-5 w-5 text-yellow-600" />
+                      <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                     )}
                     {selectedStatus === "upcoming" && (
                       <Calendar className="h-5 w-5 text-blue-600" />
@@ -724,13 +724,13 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Rebates Earned</p>
-                  <p className="text-xl font-bold text-green-600">
+                  <p className="text-xl font-bold text-green-600 dark:text-green-400">
                     {formatCurrency(selectedRenewalData.rebatesEarned)}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Uncollected</p>
-                  <p className="text-xl font-bold text-red-600">
+                  <p className="text-xl font-bold text-red-600 dark:text-red-400">
                     -{formatCurrency(selectedRenewalData.rebatesEarned - selectedRenewalData.rebatesCollected)}
                   </p>
                 </div>

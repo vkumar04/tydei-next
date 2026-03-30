@@ -12,6 +12,7 @@ import {
 } from "@/lib/validators/contracts"
 import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
+import { logAudit } from "@/lib/audit"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -160,13 +161,22 @@ export async function createContract(input: CreateContractInput) {
     },
   })
 
+  await logAudit({
+    userId: session.user.id,
+    action: "contract.created",
+    entityType: "contract",
+    entityId: contract.id,
+    metadata: { name: data.name, vendorId: data.vendorId },
+  })
+
   return serialize(contract)
 }
 
 // ─── Update Contract ─────────────────────────────────────────────
 
 export async function updateContract(id: string, input: UpdateContractInput) {
-  const { facility } = await requireFacility()
+  const session = await requireFacility()
+  const { facility } = session
   const data = updateContractSchema.parse(input)
 
   // Verify ownership before updating
@@ -217,13 +227,22 @@ export async function updateContract(id: string, input: UpdateContractInput) {
     data: updateData,
   })
 
+  await logAudit({
+    userId: session.user.id,
+    action: "contract.updated",
+    entityType: "contract",
+    entityId: id,
+    metadata: { updatedFields: Object.keys(updateData) },
+  })
+
   return serialize(contract)
 }
 
 // ─── Delete Contract ─────────────────────────────────────────────
 
 export async function deleteContract(id: string) {
-  const { facility } = await requireFacility()
+  const session = await requireFacility()
+  const { facility } = session
 
   // Verify ownership before deleting
   await prisma.contract.findUniqueOrThrow({
@@ -238,4 +257,11 @@ export async function deleteContract(id: string) {
   })
 
   await prisma.contract.delete({ where: { id } })
+
+  await logAudit({
+    userId: session.user.id,
+    action: "contract.deleted",
+    entityType: "contract",
+    entityId: id,
+  })
 }

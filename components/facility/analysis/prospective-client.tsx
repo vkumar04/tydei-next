@@ -282,10 +282,10 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
 
   // Variance color coding helper (red=bad, yellow=neutral, green=good)
   const getVarianceColor = (savingsPercent: number) => {
-    if (savingsPercent > 5) return "text-emerald-600"
-    if (savingsPercent > 0) return "text-emerald-500"
-    if (savingsPercent > -3) return "text-amber-600"
-    return "text-red-600"
+    if (savingsPercent > 5) return "text-emerald-600 dark:text-emerald-400"
+    if (savingsPercent > 0) return "text-emerald-500 dark:text-emerald-400"
+    if (savingsPercent > -3) return "text-amber-600 dark:text-amber-400"
+    return "text-red-600 dark:text-red-400"
   }
 
   const getVarianceBg = (savingsPercent: number) => {
@@ -323,7 +323,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                 <p className="text-sm text-muted-foreground">
                   Proposals Analyzed
                 </p>
-                <p className="text-2xl font-bold text-emerald-600">
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                   {analysis ? 1 : 0}
                 </p>
               </div>
@@ -357,7 +357,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                 <p className="text-sm text-muted-foreground">
                   Total Value (COG-Based)
                 </p>
-                <p className="text-2xl font-bold text-amber-600">
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
                   {analysis
                     ? formatCurrency(analysis.totalProposedCost)
                     : "$0"}
@@ -471,8 +471,8 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                     <p
                       className={`text-2xl font-bold ${
                         analysis.totalSavingsPercent >= 0
-                          ? "text-emerald-600"
-                          : "text-red-600"
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-red-600 dark:text-red-400"
                       }`}
                     >
                       {analysis.totalSavingsPercent >= 0 ? "-" : "+"}
@@ -483,7 +483,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                     <p className="text-sm text-emerald-700 dark:text-emerald-300">
                       Items Below COG
                     </p>
-                    <p className="text-2xl font-bold text-emerald-600">
+                    <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                       {
                         analysis.itemComparisons.filter((i) => i.savings > 0)
                           .length
@@ -494,7 +494,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                     <p className="text-sm text-red-700 dark:text-red-300">
                       Items Above COG
                     </p>
-                    <p className="text-2xl font-bold text-red-600">
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                       {
                         analysis.itemComparisons.filter((i) => i.savings < 0)
                           .length
@@ -511,7 +511,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                         <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
                           Potential Annual Savings
                         </p>
-                        <p className="text-3xl font-bold text-emerald-600">
+                        <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
                           {formatCurrency(analysis.totalSavings)}
                         </p>
                       </div>
@@ -568,7 +568,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                             {Math.abs(item.savingsPercent).toFixed(1)}%
                           </TableCell>
                           <TableCell
-                            className={`text-right font-medium ${item.savings >= 0 ? "text-emerald-600" : "text-red-600"}`}
+                            className={`text-right font-medium ${item.savings >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
                           >
                             {item.savings >= 0 ? "" : "-"}$
                             {Math.abs(item.savings).toFixed(2)}
@@ -614,12 +614,12 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                   <CardContent className="py-4">
                     <div className="flex items-center gap-4">
                       {analysis.dealScore.recommendation === "reject" ? (
-                        <X className="h-8 w-8 text-red-600" />
+                        <X className="h-8 w-8 text-red-600 dark:text-red-400" />
                       ) : analysis.dealScore.recommendation ===
                         "negotiate" ? (
-                        <AlertTriangle className="h-8 w-8 text-amber-600" />
+                        <AlertTriangle className="h-8 w-8 text-amber-600 dark:text-amber-400" />
                       ) : (
-                        <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+                        <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
                       )}
                       <div className="flex-1">
                         <h3 className={`font-semibold text-lg ${rec.color}`}>
@@ -691,7 +691,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                           Total Savings
                         </p>
                         <p
-                          className={`text-2xl font-bold ${analysis.totalSavings >= 0 ? "text-emerald-600" : "text-red-600"}`}
+                          className={`text-2xl font-bold ${analysis.totalSavings >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
                         >
                           {formatCurrency(analysis.totalSavings)}
                         </p>
@@ -840,7 +840,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                             key={i}
                             className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-900"
                           >
-                            <AlertTriangle className="h-4 w-4 mt-0.5 text-red-600 shrink-0" />
+                            <AlertTriangle className="h-4 w-4 mt-0.5 text-red-600 dark:text-red-400 shrink-0" />
                             <span className="text-sm text-red-800 dark:text-red-200">
                               {risk}
                             </span>
@@ -928,7 +928,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                             {row.proposed}
                           </TableCell>
                           <TableCell
-                            className={`text-right font-medium ${row.favorable ? "text-emerald-600" : "text-red-600"}`}
+                            className={`text-right font-medium ${row.favorable ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
                           >
                             {row.delta}
                           </TableCell>
@@ -1027,8 +1027,8 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                         <p
                           className={`text-xl font-bold ${
                             scenarioAnalysis.totalSavings >= 0
-                              ? "text-emerald-600"
-                              : "text-red-600"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-red-600 dark:text-red-400"
                           }`}
                         >
                           {formatCurrency(scenarioAnalysis.totalSavings)}
@@ -1041,8 +1041,8 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                         <p
                           className={`text-xl font-bold ${
                             scenarioAnalysis.totalSavingsPercent >= 0
-                              ? "text-emerald-600"
-                              : "text-red-600"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-red-600 dark:text-red-400"
                           }`}
                         >
                           {scenarioAnalysis.totalSavingsPercent.toFixed(1)}%
@@ -1177,8 +1177,8 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                       <TableCell
                         className={
                           analysis.totalSavings >= 0
-                            ? "text-emerald-600"
-                            : "text-red-600"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400"
                         }
                       >
                         {formatCurrency(analysis.totalSavings)} (

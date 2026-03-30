@@ -60,7 +60,7 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold">{overallShare}%</span>
-              <div className="flex items-center text-sm text-green-600">
+              <div className="flex items-center text-sm text-green-600 dark:text-green-400">
                 <TrendingUp className="h-4 w-4 mr-1" />
                 +{(overallShare * 0.05).toFixed(1)}%
               </div>
@@ -77,7 +77,7 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-green-600">
+              <span className="text-3xl font-bold text-green-600 dark:text-green-400">
                 +{(overallShare - 25).toFixed(1)}%
               </span>
             </div>

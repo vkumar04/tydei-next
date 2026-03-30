@@ -196,7 +196,7 @@ export function POList({ facilityId }: POListProps) {
             {statsLoading ? (
               <Skeleton className="h-7 w-20" />
             ) : (
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                 {stats?.totalItems ?? 0}
               </div>
             )}

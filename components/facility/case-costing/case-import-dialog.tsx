@@ -616,40 +616,40 @@ export function CaseImportDialog({
 
         <div className="space-y-6 py-4">
           {/* Auto-Detection Info */}
-          <Alert className="bg-green-50 border-green-200">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertTitle className="text-green-800">
+          <Alert className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900">
+            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <AlertTitle className="text-green-800 dark:text-green-200">
               Auto-Detection Enabled
             </AlertTitle>
-            <AlertDescription className="text-green-700 text-sm">
+            <AlertDescription className="text-green-700 dark:text-green-300 text-sm">
               <p>
                 The system automatically detects and maps columns from your CSV
                 files. Just upload your files and we will find matching columns
                 for:
               </p>
               <div className="flex flex-wrap gap-2 mt-2">
-                <span className="bg-green-100 px-2 py-0.5 rounded text-xs">
+                <span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">
                   Case ID / Encounter / MRN
                 </span>
-                <span className="bg-green-100 px-2 py-0.5 rounded text-xs">
+                <span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">
                   Surgeon / Physician / Doctor
                 </span>
-                <span className="bg-green-100 px-2 py-0.5 rounded text-xs">
+                <span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">
                   Facility / Hospital / Location
                 </span>
-                <span className="bg-green-100 px-2 py-0.5 rounded text-xs">
+                <span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">
                   Date / Surgery Date / DOS
                 </span>
-                <span className="bg-green-100 px-2 py-0.5 rounded text-xs">
+                <span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">
                   CPT / Procedure Code
                 </span>
-                <span className="bg-green-100 px-2 py-0.5 rounded text-xs">
+                <span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">
                   Material / Item / Supply
                 </span>
-                <span className="bg-green-100 px-2 py-0.5 rounded text-xs">
+                <span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">
                   Cost / Price / Amount
                 </span>
-                <span className="bg-green-100 px-2 py-0.5 rounded text-xs">
+                <span className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">
                   Quantity / Qty / Count
                 </span>
               </div>

@@ -187,7 +187,7 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Earned YTD</p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                     {formatCurrency(stats.totalEarned)}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -399,7 +399,7 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
                           <p className="text-sm text-muted-foreground">
                             Current Rebate
                           </p>
-                          <p className="text-lg font-bold text-green-600">
+                          <p className="text-lg font-bold text-green-600 dark:text-green-400">
                             {contract.currentTier}%
                           </p>
                         </div>
@@ -439,10 +439,10 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
                               <Badge
                                 className={
                                   contract.percentToNextTier >= 70
-                                    ? "bg-green-100 text-green-800"
+                                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
                                     : contract.percentToNextTier >= 40
-                                      ? "bg-yellow-100 text-yellow-800"
-                                      : "bg-gray-100 text-gray-800"
+                                      ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300"
+                                      : "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300"
                                 }
                               >
                                 {contract.percentToNextTier >= 70
@@ -585,7 +585,7 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Current Rebate</p>
-                    <p className="font-medium text-green-600">
+                    <p className="font-medium text-green-600 dark:text-green-400">
                       {formatCurrency(
                         (selectedContract.currentSpend *
                           selectedContract.currentTier) /
@@ -656,13 +656,13 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
                     </div>
                     <div>
                       <p className="text-muted-foreground">New Rebate</p>
-                      <p className="font-medium text-green-600">
+                      <p className="font-medium text-green-600 dark:text-green-400">
                         {formatCurrency(calculatedResult.newRebate)}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Increase</p>
-                      <p className="font-medium text-green-600">
+                      <p className="font-medium text-green-600 dark:text-green-400">
                         +{formatCurrency(calculatedResult.increase)}
                       </p>
                     </div>

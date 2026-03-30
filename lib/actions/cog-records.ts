@@ -12,6 +12,7 @@ import {
 } from "@/lib/validators/cog-records"
 import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
+import { logAudit } from "@/lib/audit"
 
 // ─── List COG Records ───────────────────────────────────────────
 
@@ -152,6 +153,13 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
       errors++
     }
   }
+
+  await logAudit({
+    userId: session.user.id,
+    action: "cog.imported",
+    entityType: "cogRecord",
+    metadata: { imported, skipped, errors, totalRecords: data.records.length },
+  })
 
   return { imported, skipped, errors }
 }

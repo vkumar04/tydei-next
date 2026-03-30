@@ -233,7 +233,7 @@ export function InvoiceValidationClient({
                   <Skeleton className="mt-1 h-7 w-24" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold text-red-600">
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                       {formatCurrency(totalVariance)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -279,7 +279,7 @@ export function InvoiceValidationClient({
                   <Skeleton className="mt-1 h-7 w-24" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold text-green-600">
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                       {formatCurrency(totalVariance > 0 ? totalVariance : 0)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -504,7 +504,7 @@ export function InvoiceValidationClient({
                           <TableCell className="text-right">
                             {invoice.variance > 0.01 ? (
                               <div className="flex items-center justify-end gap-2">
-                                <span className="text-red-600 font-medium">
+                                <span className="text-red-600 dark:text-red-400 font-medium">
                                   +{formatCurrency(invoice.variance)}
                                 </span>
                                 <Badge variant="outline" className="text-xs">
@@ -513,7 +513,7 @@ export function InvoiceValidationClient({
                               </div>
                             ) : invoice.variance < -0.01 ? (
                               <div className="flex items-center justify-end gap-2">
-                                <span className="text-green-600 font-medium">
+                                <span className="text-green-600 dark:text-green-400 font-medium">
                                   {formatCurrency(invoice.variance)}
                                 </span>
                                 <Badge variant="outline" className="text-xs">
@@ -521,7 +521,7 @@ export function InvoiceValidationClient({
                                 </Badge>
                               </div>
                             ) : (
-                              <span className="text-green-600">Match</span>
+                              <span className="text-green-600 dark:text-green-400">Match</span>
                             )}
                           </TableCell>
                           <TableCell>
@@ -700,7 +700,7 @@ export function InvoiceValidationClient({
                 <p className="text-sm text-muted-foreground">
                   Invoices Over Contract
                 </p>
-                <p className="text-2xl font-bold text-red-600 mt-1">
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
                   {filteredInvoices.filter((i) => i.variance > 0.01).length}
                 </p>
               </CardContent>
@@ -710,7 +710,7 @@ export function InvoiceValidationClient({
                 <p className="text-sm text-muted-foreground">
                   Invoices at or Below Contract
                 </p>
-                <p className="text-2xl font-bold text-green-600 mt-1">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
                   {filteredInvoices.filter((i) => i.variance <= 0.01).length}
                 </p>
               </CardContent>
@@ -721,7 +721,7 @@ export function InvoiceValidationClient({
 
       {/* Invoice Details Dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
@@ -759,7 +759,7 @@ export function InvoiceValidationClient({
                 </div>
                 <div className="p-4 rounded-lg bg-red-50 dark:bg-red-950/30">
                   <p className="text-sm text-muted-foreground">Variance</p>
-                  <p className="text-xl font-bold text-red-600">
+                  <p className="text-xl font-bold text-red-600 dark:text-red-400">
                     {selectedInvoice.variance > 0 ? "+" : ""}
                     {formatCurrency(selectedInvoice.variance)}
                   </p>

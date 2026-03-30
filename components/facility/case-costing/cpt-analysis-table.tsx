@@ -41,9 +41,9 @@ export function CPTAnalysisTable({ analyses }: CPTAnalysisTableProps) {
             <span
               className={
                 isBelow
-                  ? "text-emerald-600 font-medium"
+                  ? "text-emerald-600 dark:text-emerald-400 font-medium"
                   : isAbove
-                    ? "text-red-600 font-medium"
+                    ? "text-red-600 dark:text-red-400 font-medium"
                     : ""
               }
             >

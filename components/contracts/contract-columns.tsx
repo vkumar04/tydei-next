@@ -147,7 +147,7 @@ export function getContractColumns(
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="text-red-600"
+              className="text-red-600 dark:text-red-400"
               onClick={(e) => {
                 e.stopPropagation()
                 actions.onDelete(row.original)

@@ -148,10 +148,10 @@ export function ContractsListClient({
             <CardTitle className="text-sm font-medium">
               Total Rebates Earned
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
+            <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
               {formatCurrency(stats?.totalRebates ?? 0)}
             </div>
           </CardContent>

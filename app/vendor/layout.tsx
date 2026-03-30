@@ -25,6 +25,7 @@ export default async function VendorLayout({
         image: result.user.image,
       }}
       alertCount={alertCount}
+      vendorId={result.vendor.id}
     >
       {children}
     </PortalShell>

@@ -38,7 +38,7 @@ export function MetricCard({
             {change && (
               <div
                 className={`flex items-center gap-1 text-sm font-medium ${
-                  changeType === "positive" ? "text-green-600" : "text-red-600"
+                  changeType === "positive" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                 }`}
               >
                 {changeType === "positive" ? (

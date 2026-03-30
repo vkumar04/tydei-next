@@ -231,6 +231,7 @@ model User {
   createdContracts Contract[] @relation("CreatedByUser")
   payments         Payment[]
   credits          Credit[]
+  auditLogs        AuditLog[]
 
   @@map("user")
 }
@@ -1203,6 +1204,26 @@ model AIUsageRecord {
   credit AICredit @relation(fields: [creditId], references: [id], onDelete: Cascade)
 
   @@map("ai_usage_record")
+}
+
+// ─── Audit Logging ───────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String // "contract.created", "alert.resolved", "cog.imported", etc.
+  entityType String // "contract", "alert", "cogRecord", etc.
+  entityId   String?
+  metadata   Json? // Additional context
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
 }
 
 // ─── Report Scheduling ────────────────────────────────────────────

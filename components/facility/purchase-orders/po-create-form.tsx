@@ -338,7 +338,7 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
               <FileText className="h-4 w-4" />
               Order Header
             </h4>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Select Vendor *</Label>
                 <Select
@@ -390,7 +390,7 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
               <User className="h-4 w-4" />
               Patient &amp; Billing Information
             </h4>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Patient MRN</Label>
                 <Input
@@ -428,7 +428,7 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
               <DollarSign className="h-4 w-4" />
               Payment &amp; Accounting
             </h4>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Payment Terms</Label>
                 <Select value={paymentTerms} onValueChange={setPaymentTerms}>
@@ -570,7 +570,7 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
                                   <Badge variant="outline" className="text-xs">
                                     Contract
                                   </Badge>
-                                  <span className="font-medium text-green-600">
+                                  <span className="font-medium text-green-600 dark:text-green-400">
                                     ${(result.contractPrice ?? 0).toFixed(2)}
                                   </span>
                                 </div>
@@ -613,7 +613,7 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
                     {selectedResult && (
                       <div className="flex items-center justify-between p-2 bg-muted rounded-lg text-sm">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                           <span className="font-mono">{selectedResult.vendorItemNo}</span>
                           <span className="text-muted-foreground truncate max-w-[200px]">
                             {selectedResult.description}
@@ -665,7 +665,7 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
                     {/* Exception Form (within scan mode) */}
                     {showExceptionForm && (
                       <div className="p-3 border rounded-lg bg-background space-y-3">
-                        <div className="flex items-center gap-2 text-amber-600">
+                        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
                           <Clock className="h-4 w-4" />
                           <span className="text-sm font-medium">
                             Product not in catalog - Add as exception
