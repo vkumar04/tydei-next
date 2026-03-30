@@ -129,7 +129,7 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
                   <Skeleton className="h-8 w-24" />
                 ) : (
                   <>
-                    <div className="text-2xl font-bold text-green-600">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                       ${Math.round(totalMargin).toLocaleString()}
                     </div>
                     <p className="text-xs text-muted-foreground">

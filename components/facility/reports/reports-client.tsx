@@ -52,6 +52,7 @@ import { ReportTrendChart } from "./report-trend-chart"
 import { queryKeys } from "@/lib/query-keys"
 import { getReportData, getContracts } from "@/lib/actions/reports"
 import { formatCurrency } from "@/lib/formatting"
+import { useExportPDF } from "@/hooks/use-export-pdf"
 import type { ContractPeriodRow } from "./report-columns"
 
 /* ─── Constants ───────────────────────────────────────────────── */
@@ -90,6 +91,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
   const [dateRange, setDateRange] = useState(getDefaultRange)
   const [metric, setMetric] = useState<"totalSpend" | "rebateEarned" | "totalVolume">("totalSpend")
   const [selectedContractId, setSelectedContractId] = useState("all")
+  const { exportPDF, isExporting } = useExportPDF()
 
   /* ── Queries ─────────────────────────────────────────────────── */
 
@@ -181,9 +183,28 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
             <Clock className="h-4 w-4" />
             Schedule Report
           </Button>
-          <Button className="gap-2">
+          <Button
+            className="gap-2"
+            disabled={isExporting}
+            onClick={() => {
+              if (selectedContractId !== "all") {
+                exportPDF({
+                  type: "contract",
+                  id: selectedContractId,
+                  facilityId,
+                  dateRange,
+                })
+              } else {
+                exportPDF({
+                  type: "rebate",
+                  facilityId,
+                  dateRange,
+                })
+              }
+            }}
+          >
             <Download className="h-4 w-4" />
-            Export PDF
+            {isExporting ? "Exporting..." : "Export PDF"}
           </Button>
         </div>
       </div>
@@ -195,7 +216,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <AlertTriangle className="h-5 w-5 text-red-500" />
-                <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+                <Badge className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30">
                   Action Required
                 </Badge>
               </div>
@@ -205,7 +226,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
               <p className="text-sm text-muted-foreground mt-1">
                 Identify pricing variances between contracts and actual purchases
               </p>
-              <div className="flex items-center gap-1 mt-3 text-sm text-red-600 font-medium">
+              <div className="flex items-center gap-1 mt-3 text-sm text-red-600 dark:text-red-400 font-medium">
                 View Report <ArrowRight className="h-4 w-4" />
               </div>
             </CardContent>
@@ -534,7 +555,7 @@ function OverviewTab({
               <MetricCard
                 label="Rebate Earned"
                 value={formatCurrency(totalRebate)}
-                className="text-green-600"
+                className="text-green-600 dark:text-green-400"
               />
               <MetricCard label="Days Remaining" value="287" />
             </div>
@@ -600,7 +621,7 @@ function OverviewTab({
             <div className="grid gap-4 md:grid-cols-3">
               <div className="p-4 rounded-lg border">
                 <p className="text-sm text-muted-foreground mb-1">Compliance Rate</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {totalSpend > 0 ? "94%" : "0%"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">Purchases on contract</p>
@@ -618,7 +639,7 @@ function OverviewTab({
               </div>
               <div className="p-4 rounded-lg border">
                 <p className="text-sm text-muted-foreground mb-1">Projected Annual Rebate</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {formatCurrency(Math.round(totalRebate * 12 / Math.max(allPeriods.length, 1)))}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">At current pace</p>
@@ -701,7 +722,7 @@ function OverviewTab({
               <MetricCard
                 label="Total Rebates"
                 value={formatCurrency(totalRebate)}
-                className="text-green-600"
+                className="text-green-600 dark:text-green-400"
               />
               <MetricCard
                 label="Total Volume"
@@ -764,7 +785,7 @@ function OverviewTab({
                     </div>
                     <div className="flex items-center gap-4">
                       <span>{formatCurrency(spend)}</span>
-                      <span className="text-green-600">{formatCurrency(rebate)}</span>
+                      <span className="text-green-600 dark:text-green-400">{formatCurrency(rebate)}</span>
                     </div>
                   </div>
                 )
@@ -833,7 +854,7 @@ function CalculationAuditTab({
         <MetricCard
           label="Rebate Earned"
           value={formatCurrency(totalRebateEarned)}
-          className="text-green-600"
+          className="text-green-600 dark:text-green-400"
         />
         <MetricCard
           label="Rebate Collected"
@@ -870,7 +891,7 @@ function CalculationAuditTab({
                 </div>
                 <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 text-sm">
                   <span className="text-muted-foreground">Rebate Earned</span>
-                  <p className="font-bold text-lg text-green-600">
+                  <p className="font-bold text-lg text-green-600 dark:text-green-400">
                     {formatCurrency(cRebEarned)}
                   </p>
                 </div>

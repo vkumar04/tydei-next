@@ -76,7 +76,7 @@ export function getPricingColumns(): ColumnDef<PricingFileWithVendor>[] {
         const savings = list - contract
         const pct = list > 0 ? ((savings / list) * 100).toFixed(0) : "0"
         return (
-          <span className="text-right text-green-600">
+          <span className="text-right text-green-600 dark:text-green-400">
             {formatCurrency(savings)} ({pct}%)
           </span>
         )

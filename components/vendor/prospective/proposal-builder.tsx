@@ -890,7 +890,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
 
       <div className="space-y-6">
         {/* Multi-facility and Grouped Options */}
-        <div className="grid grid-cols-2 gap-4 p-4 rounded-lg border bg-muted/30">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg border bg-muted/30">
           <div className="flex items-center gap-3">
             <Checkbox
               id="multiFacility"
@@ -1392,10 +1392,10 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
                   <div className="flex items-center gap-2">
                     <Sparkles className={`h-4 w-4 ${
                       aiSuggestions.data.dealStrength === "strong"
-                        ? "text-green-600"
+                        ? "text-green-600 dark:text-green-400"
                         : aiSuggestions.data.dealStrength === "weak"
-                        ? "text-red-600"
-                        : "text-amber-600"
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-amber-600 dark:text-amber-400"
                     }`} />
                     <span className="text-sm font-semibold">
                       Deal Strength: {(aiSuggestions.data.dealStrength || "moderate").charAt(0).toUpperCase() + (aiSuggestions.data.dealStrength || "moderate").slice(1)}
@@ -1705,7 +1705,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
                                   </span>
                                 </>
                               ) : (
-                                <span className="text-amber-600">No usage data</span>
+                                <span className="text-amber-600 dark:text-amber-400">No usage data</span>
                               )}
                             </div>
                           </div>
@@ -1804,11 +1804,11 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Total Opportunity</p>
-                    <p className="font-semibold text-green-600">
+                    <p className="font-semibold text-green-600 dark:text-green-400">
                       {totalOpportunity > 0 ? formatCurrencyShort(totalOpportunity) : "-"}
                     </p>
                     {hasPricing && additionalOpportunity > 0 && (
-                      <p className="text-[10px] text-amber-600">+{formatCurrencyShort(additionalOpportunity)} unpriced</p>
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">+{formatCurrencyShort(additionalOpportunity)} unpriced</p>
                     )}
                   </div>
                 </div>
@@ -1914,9 +1914,9 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Estimated Annual Rebate</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrencyShort(calculateEstimatedRebate())}</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrencyShort(calculateEstimatedRebate())}</p>
                 </div>
-                <TrendingUp className="h-8 w-8 text-green-600" />
+                <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
             </CardContent>
           </Card>

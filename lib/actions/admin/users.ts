@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/actions/auth"
 import type { UserRole } from "@prisma/client"
 import type { AdminCreateUserInput, AdminUpdateUserInput } from "@/lib/validators/admin"
 import { serialize } from "@/lib/serialize"
+import { logAudit } from "@/lib/audit"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export async function adminGetUsers(input: {
 // ─── Create User ────────────────────────────────────────────────
 
 export async function adminCreateUser(input: AdminCreateUserInput) {
-  await requireAdmin()
+  const session = await requireAdmin()
 
   const { password: _password, ...userData } = input
 
@@ -82,19 +83,37 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
     },
     select: { id: true, name: true, email: true, role: true, createdAt: true },
   })
+
+  await logAudit({
+    userId: session.user.id,
+    action: "user.created",
+    entityType: "user",
+    entityId: user.id,
+    metadata: { email: user.email, role: user.role },
+  })
+
   return serialize(user)
 }
 
 // ─── Update User ────────────────────────────────────────────────
 
 export async function adminUpdateUser(id: string, input: AdminUpdateUserInput) {
-  await requireAdmin()
+  const session = await requireAdmin()
 
   const user = await prisma.user.update({
     where: { id },
     data: input,
     select: { id: true, name: true, email: true, role: true, createdAt: true },
   })
+
+  await logAudit({
+    userId: session.user.id,
+    action: "user.updated",
+    entityType: "user",
+    entityId: id,
+    metadata: { updatedFields: Object.keys(input) },
+  })
+
   return serialize(user)
 }
 

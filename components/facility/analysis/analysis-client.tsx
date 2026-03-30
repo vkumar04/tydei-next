@@ -398,8 +398,8 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
                           className={`text-xl font-bold ${
                             (projections[projections.length - 1]
                               ?.changePercent ?? 0) < 0
-                              ? "text-emerald-600"
-                              : "text-red-600"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-red-600 dark:text-red-400"
                           }`}
                         >
                           {(

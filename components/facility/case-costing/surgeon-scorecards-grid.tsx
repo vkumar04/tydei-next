@@ -154,7 +154,7 @@ export function SurgeonScorecardsGrid({
                 Total Margin
               </span>
             </div>
-            <div className="text-2xl font-bold mt-1 text-green-600">
+            <div className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">
               ${Math.round(totals.totalMargin).toLocaleString()}
             </div>
           </CardContent>
@@ -262,9 +262,9 @@ export function SurgeonScorecardsGrid({
                         <span
                           className={
                             isBelowAvg
-                              ? "text-emerald-600 font-medium"
+                              ? "text-emerald-600 dark:text-emerald-400 font-medium"
                               : isAboveAvg
-                                ? "text-red-600 font-medium"
+                                ? "text-red-600 dark:text-red-400 font-medium"
                                 : ""
                           }
                         >
@@ -298,7 +298,7 @@ export function SurgeonScorecardsGrid({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="font-semibold text-green-600">
+                        <div className="font-semibold text-green-600 dark:text-green-400">
                           ${Math.round(sc.totalMargin).toLocaleString()}
                         </div>
                         <div className="text-xs text-muted-foreground">

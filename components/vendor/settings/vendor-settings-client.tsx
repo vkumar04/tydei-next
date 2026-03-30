@@ -622,7 +622,7 @@ export function VendorSettingsClient({
                                 <TableCell>
                                   <div className="flex items-center gap-3">
                                     <Avatar className="h-8 w-8">
-                                      <AvatarFallback className="bg-green-100 text-green-700">
+                                      <AvatarFallback className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
                                         {connection.facilityName.slice(0, 2).toUpperCase()}
                                       </AvatarFallback>
                                     </Avatar>
@@ -639,7 +639,7 @@ export function VendorSettingsClient({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
                                     onClick={() => removeConn.mutate(connection.id)}
                                   >
                                     Disconnect
@@ -666,7 +666,7 @@ export function VendorSettingsClient({
                             <div key={connection.id} className="flex items-center justify-between rounded-lg border p-3">
                               <div className="flex items-center gap-3">
                                 <Avatar className="h-8 w-8">
-                                  <AvatarFallback className="bg-blue-100 text-blue-700">
+                                  <AvatarFallback className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
                                     {connection.facilityName.slice(0, 2).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
@@ -768,21 +768,21 @@ export function VendorSettingsClient({
                     <TableCell>Jan 1, 2024</TableCell>
                     <TableCell>Enterprise Plan - Monthly</TableCell>
                     <TableCell>$2,499.00</TableCell>
-                    <TableCell><Badge variant="outline" className="text-green-600 border-green-600">Paid</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-600 dark:border-green-400">Paid</Badge></TableCell>
                     <TableCell><Button variant="ghost" size="sm">Download</Button></TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Dec 1, 2023</TableCell>
                     <TableCell>Enterprise Plan - Monthly</TableCell>
                     <TableCell>$2,499.00</TableCell>
-                    <TableCell><Badge variant="outline" className="text-green-600 border-green-600">Paid</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-600 dark:border-green-400">Paid</Badge></TableCell>
                     <TableCell><Button variant="ghost" size="sm">Download</Button></TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Nov 1, 2023</TableCell>
                     <TableCell>Enterprise Plan - Monthly</TableCell>
                     <TableCell>$2,499.00</TableCell>
-                    <TableCell><Badge variant="outline" className="text-green-600 border-green-600">Paid</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-600 dark:border-green-400">Paid</Badge></TableCell>
                     <TableCell><Button variant="ghost" size="sm">Download</Button></TableCell>
                   </TableRow>
                 </TableBody>
@@ -823,7 +823,7 @@ export function VendorSettingsClient({
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>Remaining Credits</CardDescription>
-                <CardTitle className="text-3xl text-green-600">
+                <CardTitle className="text-3xl text-green-600 dark:text-green-400">
                   {creditsQuery.data ? creditsQuery.data.remaining.toLocaleString() : "Unlimited"}
                 </CardTitle>
               </CardHeader>

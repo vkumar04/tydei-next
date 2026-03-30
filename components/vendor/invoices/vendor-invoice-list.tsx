@@ -43,10 +43,10 @@ type InvoiceStatus = "draft" | "submitted" | "pending" | "validated" | "disputed
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   draft: { label: "Draft", color: "bg-gray-100 text-gray-700", icon: Clock },
-  submitted: { label: "Submitted", color: "bg-blue-100 text-blue-700", icon: FileText },
-  pending: { label: "Pending", color: "bg-blue-100 text-blue-700", icon: FileText },
-  validated: { label: "Validated", color: "bg-green-100 text-green-700", icon: CheckCircle2 },
-  disputed: { label: "Disputed", color: "bg-red-100 text-red-700", icon: AlertTriangle },
+  submitted: { label: "Submitted", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300", icon: FileText },
+  pending: { label: "Pending", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300", icon: FileText },
+  validated: { label: "Validated", color: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300", icon: CheckCircle2 },
+  disputed: { label: "Disputed", color: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300", icon: AlertTriangle },
   approved: { label: "Approved", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 },
   paid: { label: "Paid", color: "bg-purple-100 text-purple-700", icon: DollarSign },
 }
@@ -238,7 +238,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
               <AlertTriangle className="h-4 w-4 text-red-500" />
               <span className="text-sm text-muted-foreground">Disputed</span>
             </div>
-            <div className="text-2xl font-bold mt-1 text-red-600">{stats.disputed}</div>
+            <div className="text-2xl font-bold mt-1 text-red-600 dark:text-red-400">{stats.disputed}</div>
           </CardContent>
         </Card>
         <Card>
@@ -279,7 +279,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
 
       {/* View Invoice Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selectedInvoice && (
             <>
               <DialogHeader>
@@ -323,7 +323,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
                     <p className="text-sm text-muted-foreground">Variance</p>
                     <p className="font-medium">
                       {formatCurrency(selectedInvoice.variance)}{" "}
-                      <span className={selectedInvoice.variancePercent > 0 ? "text-red-600" : "text-green-600"}>
+                      <span className={selectedInvoice.variancePercent > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}>
                         ({selectedInvoice.variancePercent > 0 ? "+" : ""}
                         {selectedInvoice.variancePercent.toFixed(1)}%)
                       </span>

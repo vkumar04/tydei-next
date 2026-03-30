@@ -6,7 +6,6 @@ import Link from "next/link"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
 import {
   FileText,
-  Search,
   Bell,
   Upload,
   FileSignature,
@@ -36,6 +35,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarNav } from "@/components/shared/shells/sidebar-nav"
 import { UserMenu } from "@/components/shared/shells/user-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
+import { CommandSearch } from "@/components/shared/shells/command-search"
+import { AlertBell } from "@/components/shared/shells/alert-bell"
 
 interface PortalShellProps {
   role: PortalRole
@@ -44,6 +45,8 @@ interface PortalShellProps {
   badgeCounts?: BadgeCounts
   sidebarHeader?: ReactNode
   alertCount?: number
+  facilityId?: string
+  vendorId?: string
   children: ReactNode
 }
 
@@ -54,6 +57,8 @@ export function PortalShell({
   badgeCounts,
   sidebarHeader,
   alertCount,
+  facilityId,
+  vendorId,
   children,
 }: PortalShellProps) {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
@@ -98,16 +103,9 @@ export function PortalShell({
         <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6">
           <SidebarTrigger className="-ml-1" />
 
-          {/* Search */}
+          {/* Search — opens Cmd+K command palette */}
           <div className="flex-1 lg:max-w-md">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                placeholder="Search contracts, vendors, reports..."
-                className="h-9 w-full rounded-lg border bg-background pl-9 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+            <CommandSearch />
           </div>
 
           {/* Header actions */}
@@ -163,17 +161,13 @@ export function PortalShell({
               </DialogContent>
             </Dialog>
             <ThemeToggle />
-            {/* Alerts bell */}
-            <Link href={role === "vendor" ? "/vendor/alerts" : "/dashboard/alerts"}>
-              <Button variant="ghost" size="icon" className="relative h-9 w-9">
-                <Bell className="h-4 w-4" />
-                {(alertCount ?? 0) > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
-                    {(alertCount ?? 0) > 9 ? "9+" : alertCount}
-                  </span>
-                )}
-              </Button>
-            </Link>
+            {/* Alerts bell — polls for new alerts every 30s */}
+            <AlertBell
+              role={role}
+              facilityId={facilityId}
+              vendorId={vendorId}
+              initialCount={alertCount}
+            />
           </div>
         </header>
 

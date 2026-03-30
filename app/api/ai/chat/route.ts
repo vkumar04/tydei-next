@@ -9,11 +9,20 @@ import { auth } from "@/lib/auth-server"
 import { geminiModel } from "@/lib/ai/config"
 import { chatTools } from "@/lib/ai/tools"
 import { facilitySystemPrompt, vendorSystemPrompt } from "@/lib/ai/prompts"
+import { rateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) {
     return new Response("Unauthorized", { status: 401 })
+  }
+
+  const { success, retryAfterMs } = rateLimit(`ai-chat:${session.user.id}`, 20, 60_000)
+  if (!success) {
+    return Response.json(
+      { error: "Too many requests", retryAfter: Math.ceil(retryAfterMs / 1000) },
+      { status: 429 }
+    )
   }
 
   const {

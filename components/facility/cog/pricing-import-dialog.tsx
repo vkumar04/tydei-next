@@ -146,7 +146,7 @@ export function PricingImportDialog({
                   <p className="text-xs text-muted-foreground">Imported</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-red-600">{result.errors}</p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">{result.errors}</p>
                   <p className="text-xs text-muted-foreground">Errors</p>
                 </div>
               </div>

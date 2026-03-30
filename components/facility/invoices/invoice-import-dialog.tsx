@@ -283,7 +283,7 @@ export function InvoiceImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import New Invoices</DialogTitle>
           <DialogDescription>
@@ -294,7 +294,7 @@ export function InvoiceImportDialog({
         </DialogHeader>
 
         {!importMethod ? (
-          <div className="grid grid-cols-3 gap-4 py-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-6">
             <button
               onClick={() => setImportMethod("edi")}
               className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed hover:border-primary hover:bg-muted/50 transition-colors"
@@ -315,7 +315,7 @@ export function InvoiceImportDialog({
               className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed hover:border-primary hover:bg-muted/50 transition-colors"
             >
               <div className="p-3 rounded-full bg-green-100 dark:bg-green-900">
-                <ScanLine className="h-6 w-6 text-green-600" />
+                <ScanLine className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
               <div className="text-center">
                 <p className="font-medium">OCR Scan</p>
@@ -435,7 +435,7 @@ export function InvoiceImportDialog({
                     <FileText className="h-4 w-4" />
                     Invoice Header
                   </h4>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="invoiceNumber">Invoice Number *</Label>
                       <Input
@@ -547,7 +547,7 @@ export function InvoiceImportDialog({
                     <Hash className="h-4 w-4" />
                     Reference Numbers
                   </h4>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="poNumber">PO Number *</Label>
                       <Input

@@ -27,7 +27,7 @@ export function VendorContractStatus({ data }: VendorContractStatusProps) {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm">Active</span>
-              <span className="font-medium text-green-600">{data.active}</span>
+              <span className="font-medium text-green-600 dark:text-green-400">{data.active}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm">Pending</span>

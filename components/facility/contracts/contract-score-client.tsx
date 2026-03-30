@@ -87,9 +87,9 @@ interface ScoreDimensions {
 // ---------------------------------------------------------------------------
 
 function getScoreColor(score: number) {
-  if (score >= 80) return "text-green-600"
-  if (score >= 60) return "text-yellow-600"
-  return "text-red-600"
+  if (score >= 80) return "text-green-600 dark:text-green-400"
+  if (score >= 60) return "text-yellow-600 dark:text-yellow-400"
+  return "text-red-600 dark:text-red-400"
 }
 
 function getScoreBgClass(score: number) {
@@ -108,9 +108,9 @@ function getScoreLabel(score: number) {
 }
 
 function getScoreIcon(score: number) {
-  if (score >= 80) return <CheckCircle2 className="h-5 w-5 text-green-600" />
-  if (score >= 60) return <AlertTriangle className="h-5 w-5 text-yellow-600" />
-  return <XCircle className="h-5 w-5 text-red-600" />
+  if (score >= 80) return <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+  if (score >= 60) return <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+  return <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
 }
 
 function mapRecommendation(
@@ -590,7 +590,7 @@ export function ContractScoreClient({
                     <div className="text-sm text-muted-foreground">
                       Annual Value
                     </div>
-                    <div className="text-2xl font-bold text-green-600">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                       {new Intl.NumberFormat("en-US", {
                         style: "currency",
                         currency: "USD",
@@ -831,13 +831,13 @@ export function ContractScoreClient({
                   >
                     <div className="shrink-0">
                       {rec.type === "success" && (
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                       )}
                       {rec.type === "warning" && (
-                        <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                        <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                       )}
                       {rec.type === "danger" && (
-                        <XCircle className="h-5 w-5 text-red-600" />
+                        <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
                       )}
                     </div>
                     <div>
@@ -865,15 +865,15 @@ export function ContractScoreClient({
                 >
                   <div className="text-lg font-semibold mb-2">
                     {overallScore >= 80 ? (
-                      <span className="text-green-600">
+                      <span className="text-green-600 dark:text-green-400">
                         This contract is performing well
                       </span>
                     ) : overallScore >= 60 ? (
-                      <span className="text-yellow-600">
+                      <span className="text-yellow-600 dark:text-yellow-400">
                         This contract has room for improvement
                       </span>
                     ) : (
-                      <span className="text-red-600">
+                      <span className="text-red-600 dark:text-red-400">
                         This contract needs attention
                       </span>
                     )}

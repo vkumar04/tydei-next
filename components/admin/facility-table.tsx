@@ -76,8 +76,8 @@ export function FacilityTable() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100">
-                <CheckCircle className="h-5 w-5 text-green-700" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30">
+                <CheckCircle className="h-5 w-5 text-green-700 dark:text-green-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{activeFacilities.length}</p>
@@ -89,8 +89,8 @@ export function FacilityTable() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
-                <Users className="h-5 w-5 text-blue-700" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Users className="h-5 w-5 text-blue-700 dark:text-blue-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{totalUsers}</p>

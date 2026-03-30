@@ -24,7 +24,7 @@ const columns: ColumnDef<ItemComparison>[] = [
     cell: ({ row }) => {
       const val = row.original.savings
       return (
-        <span className={val >= 0 ? "text-emerald-600" : "text-red-600"}>
+        <span className={val >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
           ${Math.abs(val).toFixed(2)} {val < 0 ? "loss" : ""}
         </span>
       )

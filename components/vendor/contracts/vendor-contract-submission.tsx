@@ -287,8 +287,8 @@ export function VendorContractSubmission({
                         className={cn(
                           "h-8 w-8",
                           extractionComplete
-                            ? "text-green-600"
-                            : "text-blue-600"
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-blue-600 dark:text-blue-400"
                         )}
                       />
                       <div className="text-left">
@@ -322,7 +322,7 @@ export function VendorContractSubmission({
                       </div>
                     )}
                     {extractionComplete && (
-                      <div className="flex items-center justify-center gap-2 text-green-600">
+                      <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
                         <CheckCircle2 className="h-5 w-5" />
                         <span>Data extracted successfully</span>
                       </div>
@@ -754,7 +754,7 @@ export function VendorContractSubmission({
                         key={doc.url}
                         className="flex items-center gap-2 p-2 rounded bg-white/50 dark:bg-black/20"
                       >
-                        <FileText className="h-4 w-4 text-green-600" />
+                        <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
                             {doc.name}

@@ -237,7 +237,7 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totalRebatesPaid)}</div>
-            <div className="flex items-center gap-1 text-xs text-green-600 mt-1">
+            <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 mt-1">
               <ArrowUpRight className="h-3 w-3" />
               <span>+12% from last period</span>
             </div>
@@ -252,10 +252,10 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
           <CardContent>
             <div className="text-2xl font-bold">{avgCompliance.toFixed(1)}%</div>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline" className="text-green-600">
+              <Badge variant="outline" className="text-green-600 dark:text-green-400">
                 {contractsExceeding} exceeding
               </Badge>
-              <Badge variant="outline" className="text-yellow-600">
+              <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400">
                 {contractsAtRisk} at risk
               </Badge>
             </div>
@@ -427,7 +427,7 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
                           <span className="text-sm">{contract.compliance}%</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right text-green-600">
+                      <TableCell className="text-right text-green-600 dark:text-green-400">
                         {formatCurrency(contract.rebatePaid)}
                       </TableCell>
                       <TableCell>
@@ -552,7 +552,7 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
                         {formatCurrency(contract.actualSpend)}
                       </TableCell>
                       <TableCell className="text-right">{contract.rebateRate}%</TableCell>
-                      <TableCell className="text-right text-green-600 font-medium">
+                      <TableCell className="text-right text-green-600 dark:text-green-400 font-medium">
                         {formatCurrency(contract.rebatePaid)}
                       </TableCell>
                       <TableCell className="text-right">
@@ -592,7 +592,7 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">Total Rebates</div>
-                    <div className="font-bold text-green-600">
+                    <div className="font-bold text-green-600 dark:text-green-400">
                       {formatCurrency(filteredContracts.reduce((s, c) => s + c.rebatePaid, 0))}
                     </div>
                   </div>
@@ -633,7 +633,7 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
                         <Badge variant="outline">{tier.rebateRate}% rebate</Badge>
                       </div>
                       {tier.achieved ? (
-                        <Badge className="bg-green-100 text-green-800">
+                        <Badge className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           Achieved
                         </Badge>
@@ -664,7 +664,7 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="rounded-lg border p-4 text-center">
-                    <div className="text-2xl font-bold text-green-600">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                       {formatCurrency(totalRebatesPaid)}
                     </div>
                     <div className="text-sm text-muted-foreground">Total Paid YTD</div>
@@ -762,10 +762,10 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
                         <span
                           className={
                             cat.pct >= 100
-                              ? "text-green-600"
+                              ? "text-green-600 dark:text-green-400"
                               : cat.pct >= 90
                                 ? ""
-                                : "text-yellow-600"
+                                : "text-yellow-600 dark:text-yellow-400"
                           }
                         >
                           {cat.pct.toFixed(1)}%
@@ -773,7 +773,7 @@ export function PerformanceDashboard({ data }: PerformanceDashboardProps) {
                       </TableCell>
                       <TableCell>
                         {cat.pct >= 100 ? (
-                          <Badge className="bg-green-100 text-green-800">Exceeding</Badge>
+                          <Badge className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">Exceeding</Badge>
                         ) : cat.pct >= 90 ? (
                           <Badge variant="secondary">On Track</Badge>
                         ) : (

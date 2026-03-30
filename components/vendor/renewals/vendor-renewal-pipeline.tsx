@@ -130,7 +130,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
       {/* Critical Alert */}
       {stats.critical > 0 && (
         <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
           <AlertTitle className="text-red-800 dark:text-red-200">Urgent: Contracts Expiring Soon</AlertTitle>
           <AlertDescription className="text-red-700 dark:text-red-300">
             {stats.critical} contract(s) expire within 30 days representing{" "}
@@ -274,7 +274,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="critical" className="text-red-600">
+              <TabsTrigger value="critical" className="text-red-600 dark:text-red-400">
                 Urgent ({renewals.filter((r) => r.status === "critical").length})
               </TabsTrigger>
               <TabsTrigger value="warning" className="text-yellow-600">
@@ -332,12 +332,12 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
                           </TableCell>
                           <TableCell>{formatDate(renewal.expirationDate)}</TableCell>
                           <TableCell>
-                            <span className={renewal.daysUntilExpiry <= 30 ? "text-red-600 font-medium" : ""}>
+                            <span className={renewal.daysUntilExpiry <= 30 ? "text-red-600 dark:text-red-400 font-medium" : ""}>
                               {renewal.daysUntilExpiry} days
                             </span>
                           </TableCell>
                           <TableCell>{formatCurrency(renewal.totalSpend)}</TableCell>
-                          <TableCell className="text-green-600">{formatCurrency(renewal.totalRebate)}</TableCell>
+                          <TableCell className="text-green-600 dark:text-green-400">{formatCurrency(renewal.totalRebate)}</TableCell>
                           <TableCell>
                             <Badge className={statusConfig[renewal.status].color}>
                               <StatusIcon className="mr-1 h-3 w-3" />
@@ -393,7 +393,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
                   <Card>
                     <CardContent className="pt-4">
                       <p className="text-xs text-muted-foreground">Days Until Expiration</p>
-                      <p className={`text-2xl font-bold ${selectedRenewal.daysUntilExpiry <= 30 ? "text-red-600" : ""}`}>
+                      <p className={`text-2xl font-bold ${selectedRenewal.daysUntilExpiry <= 30 ? "text-red-600 dark:text-red-400" : ""}`}>
                         {selectedRenewal.daysUntilExpiry}
                       </p>
                     </CardContent>
@@ -407,7 +407,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
                   <Card>
                     <CardContent className="pt-4">
                       <p className="text-xs text-muted-foreground">Rebate Earned</p>
-                      <p className="text-2xl font-bold text-green-600">{formatCurrency(selectedRenewal.totalRebate)}</p>
+                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(selectedRenewal.totalRebate)}</p>
                     </CardContent>
                   </Card>
                   <Card>

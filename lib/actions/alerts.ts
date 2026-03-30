@@ -10,7 +10,9 @@ import {
   generateOffContractAlerts,
   generateRebateDueAlerts,
 } from "@/lib/alerts/generate-alerts"
+import { sendAlertNotification } from "@/lib/actions/notifications"
 import { serialize } from "@/lib/serialize"
+import { logAudit } from "@/lib/audit"
 
 // ─── List Alerts ─────────────────────────────────────────────────
 
@@ -103,20 +105,32 @@ export async function markAlertRead(id: string) {
 // ─── Resolve ─────────────────────────────────────────────────────
 
 export async function resolveAlert(id: string) {
-  const { facility } = await requireFacility()
+  const session = await requireFacility()
   await prisma.alert.update({
-    where: { id, facilityId: facility.id },
+    where: { id, facilityId: session.facility.id },
     data: { status: "resolved", resolvedAt: new Date() },
+  })
+  await logAudit({
+    userId: session.user.id,
+    action: "alert.resolved",
+    entityType: "alert",
+    entityId: id,
   })
 }
 
 // ─── Dismiss ─────────────────────────────────────────────────────
 
 export async function dismissAlert(id: string) {
-  const { facility } = await requireFacility()
+  const session = await requireFacility()
   await prisma.alert.update({
-    where: { id, facilityId: facility.id },
+    where: { id, facilityId: session.facility.id },
     data: { status: "dismissed", dismissedAt: new Date() },
+  })
+  await logAudit({
+    userId: session.user.id,
+    action: "alert.dismissed",
+    entityType: "alert",
+    entityId: id,
   })
 }
 
@@ -157,11 +171,24 @@ export async function generateAlerts(_facilityId?: string) {
   const allAlerts = [...expiring, ...tier, ...offContract, ...rebate]
 
   if (allAlerts.length > 0) {
-    await prisma.alert.createMany({
-      data: allAlerts.map((a) => ({
-        ...a,
-        metadata: (a.metadata ?? {}) as Record<string, string | number | boolean>,
-      })),
+    // createMany doesn't return IDs in Prisma, so we create individually to get IDs for notifications
+    const created = await prisma.$transaction(
+      allAlerts.map((a) =>
+        prisma.alert.create({
+          data: {
+            ...a,
+            metadata: (a.metadata ?? {}) as Record<string, string | number | boolean>,
+          },
+          select: { id: true },
+        })
+      )
+    )
+
+    // Send email notifications in the background (fire-and-forget)
+    Promise.allSettled(
+      created.map((alert) => sendAlertNotification(alert.id))
+    ).catch(() => {
+      // Swallow errors — email delivery is best-effort
     })
   }
 

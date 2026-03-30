@@ -97,15 +97,15 @@ const poStatusConfig: Record<string, { label: string; color: string; description
   pending_approval: { label: "Pending Approval", color: "bg-orange-100 text-orange-800", description: "Awaiting facility review" },
   pending: { label: "Pending", color: "bg-orange-100 text-orange-800", description: "Awaiting facility review" },
   draft: { label: "Draft", color: "bg-gray-100 text-gray-800", description: "Draft order" },
-  approved: { label: "Approved", color: "bg-green-100 text-green-800", description: "Facility approved - ready to process" },
-  rejected: { label: "Rejected", color: "bg-red-100 text-red-800", description: "Facility declined this order" },
-  sent: { label: "Sent", color: "bg-blue-100 text-blue-800", description: "Order sent to facility" },
-  acknowledged: { label: "Acknowledged", color: "bg-cyan-100 text-cyan-800", description: "Facility confirmed receipt" },
-  processing: { label: "Processing", color: "bg-yellow-100 text-yellow-800", description: "Order being prepared" },
+  approved: { label: "Approved", color: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300", description: "Facility approved - ready to process" },
+  rejected: { label: "Rejected", color: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300", description: "Facility declined this order" },
+  sent: { label: "Sent", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300", description: "Order sent to facility" },
+  acknowledged: { label: "Acknowledged", color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300", description: "Facility confirmed receipt" },
+  processing: { label: "Processing", color: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300", description: "Order being prepared" },
   shipped: { label: "Shipped", color: "bg-purple-100 text-purple-800", description: "Order in transit" },
   fulfilled: { label: "Fulfilled", color: "bg-green-200 text-green-900", description: "Order completed" },
   completed: { label: "Completed", color: "bg-green-200 text-green-900", description: "Order completed" },
-  cancelled: { label: "Cancelled", color: "bg-red-100 text-red-800", description: "Order cancelled" },
+  cancelled: { label: "Cancelled", color: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300", description: "Order cancelled" },
 }
 
 // ─── Line Item Type ────────────────────────────────────────────────
@@ -647,11 +647,11 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Approved</CardTitle>
             <CheckCircle2
-              className={`h-4 w-4 ${stats.approved > 0 ? "text-green-600" : "text-muted-foreground"}`}
+              className={`h-4 w-4 ${stats.approved > 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
             />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${stats.approved > 0 ? "text-green-600" : ""}`}>
+            <div className={`text-2xl font-bold ${stats.approved > 0 ? "text-green-600 dark:text-green-400" : ""}`}>
               {stats.approved}
             </div>
             <p className="text-xs text-muted-foreground">Ready to process</p>
@@ -687,11 +687,11 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Rejected</CardTitle>
             <XCircle
-              className={`h-4 w-4 ${stats.rejected > 0 ? "text-red-600" : "text-muted-foreground"}`}
+              className={`h-4 w-4 ${stats.rejected > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
             />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${stats.rejected > 0 ? "text-red-600" : ""}`}>
+            <div className={`text-2xl font-bold ${stats.rejected > 0 ? "text-red-600 dark:text-red-400" : ""}`}>
               {stats.rejected}
             </div>
             <p className="text-xs text-muted-foreground">Declined by facility</p>
@@ -883,7 +883,7 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
                       Showing {facilityProducts.length} products from{" "}
                       {selectedFacilityObj?.name} price file
                       {selectedFacilityObj?.contractId && (
-                        <span className="text-green-600 ml-1">(Contract pricing)</span>
+                        <span className="text-green-600 dark:text-green-400 ml-1">(Contract pricing)</span>
                       )}
                     </p>
                   )}
@@ -999,7 +999,7 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
                                         {formatCurrency(displayPrice)}
                                       </div>
                                       {hasContractPrice && (
-                                        <div className="text-xs text-green-600">
+                                        <div className="text-xs text-green-600 dark:text-green-400">
                                           Contract price
                                         </div>
                                       )}

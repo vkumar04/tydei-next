@@ -53,7 +53,7 @@ export function CaseDetailView({ caseData, contractPricing = [] }: CaseDetailVie
           </div>
           <div>
             <span className="text-muted-foreground">Margin:</span>{" "}
-            <span className={caseData.margin >= 0 ? "text-emerald-600" : "text-red-600"}>
+            <span className={caseData.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
               ${caseData.margin.toLocaleString()}
             </span>
           </div>

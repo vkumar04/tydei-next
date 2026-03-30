@@ -25,6 +25,7 @@ export default async function FacilityLayout({
         image: result.user.image,
       }}
       alertCount={alertCount}
+      facilityId={result.facility.id}
     >
       {children}
     </PortalShell>

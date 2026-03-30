@@ -91,11 +91,11 @@ export function getInvoiceColumns(
         const v = row.original.variance
         const vp = row.original.variancePercent
         if (Math.abs(v) < 0.01) {
-          return <span className="text-green-600">Match</span>
+          return <span className="text-green-600 dark:text-green-400">Match</span>
         }
         return (
           <div className="flex items-center gap-2">
-            <span className={v > 0 ? "font-medium text-red-600" : "font-medium text-green-600"}>
+            <span className={v > 0 ? "font-medium text-red-600 dark:text-red-400" : "font-medium text-green-600 dark:text-green-400"}>
               {v > 0 ? "+" : ""}
               {formatCurrency(v)}
             </span>

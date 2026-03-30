@@ -178,9 +178,9 @@ export function COGUploadHistory({ facilityId, variant = "cog" }: COGUploadHisto
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="text-sm">
-                      <span className="text-green-600">{entry.recordCount.toLocaleString()}</span>
+                      <span className="text-green-600 dark:text-green-400">{entry.recordCount.toLocaleString()}</span>
                       <span className="text-muted-foreground"> / </span>
-                      <span className="text-amber-600">0</span>
+                      <span className="text-amber-600 dark:text-amber-400">0</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -220,7 +220,7 @@ export function COGUploadHistory({ facilityId, variant = "cog" }: COGUploadHisto
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">Contract Match Rate</p>
-            <p className="text-2xl font-bold text-green-600">0%</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">0%</p>
           </CardContent>
         </Card>
       </div>

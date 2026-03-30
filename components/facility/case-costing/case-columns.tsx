@@ -33,9 +33,9 @@ export function getCaseColumns(
           <span
             className={
               isBelow
-                ? "text-emerald-600 font-medium"
+                ? "text-emerald-600 dark:text-emerald-400 font-medium"
                 : isAbove
-                  ? "text-red-600 font-medium"
+                  ? "text-red-600 dark:text-red-400 font-medium"
                   : ""
             }
           >
@@ -56,7 +56,7 @@ export function getCaseColumns(
       cell: ({ row }) => {
         const val = row.original.margin
         return (
-          <span className={val >= 0 ? "text-emerald-600" : "text-red-600"}>
+          <span className={val >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
             ${val.toLocaleString()}
           </span>
         )
