@@ -8,16 +8,16 @@ import { serialize } from "@/lib/serialize"
 // ─── Vendor Contracts List ──────────────────────────────────────
 
 export async function getVendorContracts(input: {
-  vendorId: string
+  vendorId?: string
   status?: ContractStatus | "all"
   search?: string
   page?: number
   pageSize?: number
 }) {
-  await requireVendor()
-  const { vendorId, status, search, page = 1, pageSize = 20 } = input
+  const { vendor } = await requireVendor()
+  const { status, search, page = 1, pageSize = 20 } = input
 
-  const conditions: Prisma.ContractWhereInput[] = [{ vendorId }]
+  const conditions: Prisma.ContractWhereInput[] = [{ vendorId: vendor.id }]
 
   if (status && status !== "all") conditions.push({ status })
   if (search) {
@@ -51,11 +51,11 @@ export async function getVendorContracts(input: {
 
 // ─── Vendor Contract Detail ─────────────────────────────────────
 
-export async function getVendorContractDetail(id: string, vendorId: string) {
-  await requireVendor()
+export async function getVendorContractDetail(id: string, _vendorId?: string) {
+  const { vendor } = await requireVendor()
 
   const contract = await prisma.contract.findUniqueOrThrow({
-    where: { id },
+    where: { id, vendorId: vendor.id },
     include: {
       vendor: { select: { id: true, name: true, logoUrl: true } },
       facility: { select: { id: true, name: true } },

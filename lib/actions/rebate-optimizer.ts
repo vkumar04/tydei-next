@@ -31,8 +31,9 @@ export interface SpendTarget {
 
 // ─── Get Rebate Opportunities ────────────────────────────────────
 
-export async function getRebateOpportunities(facilityId: string): Promise<RebateOpportunity[]> {
-  await requireFacility()
+export async function getRebateOpportunities(_facilityId?: string): Promise<RebateOpportunity[]> {
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
 
   const contracts = await prisma.contract.findMany({
     where: {
@@ -116,11 +117,11 @@ export async function getRebateOpportunities(facilityId: string): Promise<Rebate
 
 export async function setSpendTarget(input: {
   contractId: string
-  facilityId: string
+  facilityId?: string
   targetSpend: number
   targetDate: string
 }): Promise<void> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   // Use Alert model to persist spend target as metadata (avoids schema migration)
   await prisma.alert.create({
@@ -132,7 +133,7 @@ export async function setSpendTarget(input: {
       severity: "low",
       status: "new_alert",
       contractId: input.contractId,
-      facilityId: input.facilityId,
+      facilityId: facility.id,
       metadata: {
         type: "spend_target",
         targetSpend: input.targetSpend,
@@ -144,12 +145,12 @@ export async function setSpendTarget(input: {
 
 // ─── Get Spend Targets ───────────────────────────────────────────
 
-export async function getSpendTargets(facilityId: string): Promise<SpendTarget[]> {
-  await requireFacility()
+export async function getSpendTargets(_facilityId?: string): Promise<SpendTarget[]> {
+  const { facility } = await requireFacility()
 
   const alerts = await prisma.alert.findMany({
     where: {
-      facilityId,
+      facilityId: facility.id,
       alertType: "tier_threshold",
       status: "new_alert",
     },

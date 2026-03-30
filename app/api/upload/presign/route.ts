@@ -24,6 +24,26 @@ export async function POST(request: Request) {
       )
     }
 
+    const ALLOWED_CONTENT_TYPES = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "text/csv",
+      "text/plain",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+    ]
+
+    if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
+      return NextResponse.json(
+        { error: "File type not allowed" },
+        { status: 400 }
+      )
+    }
+
     const userId = session.user.id
     const timestamp = Date.now()
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_")
@@ -34,7 +54,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ uploadUrl, key })
   } catch (error) {
     console.error("Presign error:", error)
-    const message = error instanceof Error ? error.message : "Presign failed"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Presign failed" }, { status: 500 })
   }
 }

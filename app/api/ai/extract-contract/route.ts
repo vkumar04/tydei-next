@@ -1,10 +1,17 @@
 import { generateText, Output } from "ai"
+import { headers } from "next/headers"
+import { auth } from "@/lib/auth-server"
 import { geminiModel } from "@/lib/ai/config"
 import { extractedContractSchema } from "@/lib/ai/schemas"
 import { uploadFile } from "@/lib/storage"
 
 export async function POST(request: Request) {
   try {
+    const session = await auth.api.getSession({ headers: await headers() })
+    if (!session) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file = formData.get("file") as File | null
 
@@ -16,9 +23,10 @@ export async function POST(request: Request) {
     const fileData = new Uint8Array(arrayBuffer)
 
     // Upload original file to S3 for archival
+    const userId = session.user.id
     const timestamp = Date.now()
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const s3Key = `contracts/${timestamp}-${safeName}`
+    const s3Key = `contracts/${userId}/${timestamp}-${safeName}`
     await uploadFile(s3Key, fileData, file.type || "application/octet-stream")
 
     const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")

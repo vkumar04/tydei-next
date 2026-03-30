@@ -12,11 +12,11 @@ import { serialize } from "@/lib/serialize"
 
 // ─── Vendor: List Pending ───────────────────────────────────────
 
-export async function getVendorPendingContracts(vendorId: string) {
-  await requireVendor()
+export async function getVendorPendingContracts(_vendorId?: string) {
+  const { vendor } = await requireVendor()
 
   const contracts = await prisma.pendingContract.findMany({
-    where: { vendorId },
+    where: { vendorId: vendor.id },
     include: { facility: { select: { id: true, name: true } } },
     orderBy: { submittedAt: "desc" },
   })
@@ -86,11 +86,11 @@ export async function withdrawPendingContract(id: string) {
 
 // ─── Facility: List Pending ─────────────────────────────────────
 
-export async function getFacilityPendingContracts(facilityId: string) {
-  await requireFacility()
+export async function getFacilityPendingContracts(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
   const contracts = await prisma.pendingContract.findMany({
-    where: { facilityId, status: "submitted" },
+    where: { facilityId: facility.id, status: "submitted" },
     include: { vendor: { select: { id: true, name: true, logoUrl: true } } },
     orderBy: { submittedAt: "desc" },
   })

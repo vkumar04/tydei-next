@@ -6,8 +6,9 @@ import { serialize } from "@/lib/serialize"
 
 // ─── Vendor Dashboard Stats ─────────────────────────────────────
 
-export async function getVendorDashboardStats(vendorId: string) {
-  await requireVendor()
+export async function getVendorDashboardStats(_vendorId?: string) {
+  const { vendor: sessionVendor } = await requireVendor()
+  const vendorId = sessionVendor.id
 
   const [
     activeContracts,
@@ -58,8 +59,9 @@ export async function getVendorDashboardStats(vendorId: string) {
 
 // ─── Vendor Market Share by Category ────────────────────────────
 
-export async function getVendorMarketShareByCategory(vendorId: string) {
-  await requireVendor()
+export async function getVendorMarketShareByCategory(_vendorId?: string) {
+  const { vendor: sessionVendor } = await requireVendor()
+  const vendorId = sessionVendor.id
 
   // Get vendor spend per category
   const vendorByCategory = await prisma.cOGRecord.groupBy({
@@ -103,8 +105,9 @@ export async function getVendorMarketShareByCategory(vendorId: string) {
 
 // ─── Vendor Contract Status Breakdown ───────────────────────────
 
-export async function getVendorContractStatusBreakdown(vendorId: string) {
-  await requireVendor()
+export async function getVendorContractStatusBreakdown(_vendorId?: string) {
+  const { vendor: sessionVendor } = await requireVendor()
+  const vendorId = sessionVendor.id
 
   const [active, pending, expired] = await Promise.all([
     prisma.contract.count({
@@ -123,8 +126,9 @@ export async function getVendorContractStatusBreakdown(vendorId: string) {
 
 // ─── Vendor Recent Contracts ────────────────────────────────────
 
-export async function getVendorRecentContracts(vendorId: string) {
-  await requireVendor()
+export async function getVendorRecentContracts(_vendorId?: string) {
+  const { vendor: sessionVendor } = await requireVendor()
+  const vendorId = sessionVendor.id
 
   const contracts = await prisma.contract.findMany({
     where: { vendorId },
@@ -151,12 +155,13 @@ export async function getVendorRecentContracts(vendorId: string) {
 // ─── Vendor Spend Trend ─────────────────────────────────────────
 
 export async function getVendorSpendTrend(input: {
-  vendorId: string
+  vendorId?: string
   dateFrom: string
   dateTo: string
 }) {
-  await requireVendor()
-  const { vendorId, dateFrom, dateTo } = input
+  const { vendor } = await requireVendor()
+  const vendorId = vendor.id
+  const { dateFrom, dateTo } = input
 
   const periods = await prisma.contractPeriod.findMany({
     where: {

@@ -24,14 +24,14 @@ export interface ForecastResult {
 // ─── Spend Forecast ─────────────────────────────────────────────
 
 export async function getSpendForecast(input: {
-  facilityId: string
+  facilityId?: string
   contractId?: string
   periods: number
 }): Promise<ForecastResult> {
-  await requireFacility()
-  const { facilityId, contractId, periods } = input
+  const { facility } = await requireFacility()
+  const { contractId, periods } = input
 
-  const where: Record<string, unknown> = { facilityId }
+  const where: Record<string, unknown> = { facilityId: facility.id }
   if (contractId) where.contractId = contractId
 
   const periodData = await prisma.contractPeriod.findMany({
@@ -48,14 +48,14 @@ export async function getSpendForecast(input: {
 // ─── Rebate Forecast ────────────────────────────────────────────
 
 export async function getRebateForecast(input: {
-  facilityId: string
+  facilityId?: string
   contractId?: string
   periods: number
 }): Promise<ForecastResult> {
-  await requireFacility()
-  const { facilityId, contractId, periods } = input
+  const { facility } = await requireFacility()
+  const { contractId, periods } = input
 
-  const where: Record<string, unknown> = { facilityId }
+  const where: Record<string, unknown> = { facilityId: facility.id }
   if (contractId) where.contractId = contractId
 
   const periodData = await prisma.contractPeriod.findMany({

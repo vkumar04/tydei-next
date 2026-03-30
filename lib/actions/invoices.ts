@@ -14,10 +14,10 @@ import { serialize } from "@/lib/serialize"
 // ─── List Invoices ──────────────────────────────────────────────
 
 export async function getInvoices(input: InvoiceFilters) {
+  const { facility } = await requireFacility()
   const filters = invoiceFiltersSchema.parse(input)
 
-  const conditions: Prisma.InvoiceWhereInput[] = []
-  if (filters.facilityId) conditions.push({ facilityId: filters.facilityId })
+  const conditions: Prisma.InvoiceWhereInput[] = [{ facilityId: facility.id }]
   if (filters.vendorId) conditions.push({ vendorId: filters.vendorId })
   if (filters.status) conditions.push({ status: filters.status })
 
@@ -80,9 +80,11 @@ export async function getInvoices(input: InvoiceFilters) {
 
 // ─── Invoice Summary Stats ──────────────────────────────────────
 
-export async function getInvoiceSummary(facilityId: string) {
+export async function getInvoiceSummary(_facilityId?: string) {
+  const { facility } = await requireFacility()
+
   const invoices = await prisma.invoice.findMany({
-    where: { facilityId },
+    where: { facilityId: facility.id },
     select: {
       totalInvoiceCost: true,
       status: true,
@@ -121,8 +123,10 @@ export async function getInvoiceSummary(facilityId: string) {
 // ─── Get Invoice Detail ─────────────────────────────────────────
 
 export async function getInvoice(id: string) {
+  const { facility } = await requireFacility()
+
   const invoice = await prisma.invoice.findUniqueOrThrow({
-    where: { id },
+    where: { id, facilityId: facility.id },
     include: {
       vendor: { select: { id: true, name: true } },
       facility: { select: { id: true, name: true } },

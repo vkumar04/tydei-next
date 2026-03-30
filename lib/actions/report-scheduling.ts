@@ -10,11 +10,11 @@ import { serialize } from "@/lib/serialize"
 
 // ─── List Schedules ─────────────────────────────────────────────
 
-export async function getReportSchedules(facilityId: string) {
-  await requireFacility()
+export async function getReportSchedules(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
   const schedules = await prisma.reportSchedule.findMany({
-    where: { facilityId },
+    where: { facilityId: facility.id },
     orderBy: { createdAt: "desc" },
   })
 

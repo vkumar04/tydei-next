@@ -8,12 +8,12 @@ import { serialize } from "@/lib/serialize"
 
 // ─── Vendor Alerts ──────────────────────────────────────────────
 
-export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "portalType"> & { vendorId: string }) {
-  await requireVendor()
-  const { vendorId, alertType, severity, status, page = 1, pageSize = 20 } = input
+export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "portalType"> & { vendorId?: string }) {
+  const { vendor } = await requireVendor()
+  const { alertType, severity, status, page = 1, pageSize = 20 } = input
 
   const conditions: Prisma.AlertWhereInput[] = [
-    { vendorId },
+    { vendorId: vendor.id },
     { portalType: "vendor" },
   ]
 
@@ -47,34 +47,34 @@ export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "
 // ─── Vendor Alert Actions ───────────────────────────────────────
 
 export async function resolveVendorAlert(id: string) {
-  await requireVendor()
+  const { vendor } = await requireVendor()
   await prisma.alert.update({
-    where: { id },
+    where: { id, vendorId: vendor.id },
     data: { status: "resolved", resolvedAt: new Date() },
   })
 }
 
 export async function dismissVendorAlert(id: string) {
-  await requireVendor()
+  const { vendor } = await requireVendor()
   await prisma.alert.update({
-    where: { id },
+    where: { id, vendorId: vendor.id },
     data: { status: "dismissed", dismissedAt: new Date() },
   })
 }
 
 export async function bulkResolveVendorAlerts(ids: string[]) {
-  await requireVendor()
+  const { vendor } = await requireVendor()
   const result = await prisma.alert.updateMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, vendorId: vendor.id },
     data: { status: "resolved", resolvedAt: new Date() },
   })
   return { resolved: result.count }
 }
 
 export async function bulkDismissVendorAlerts(ids: string[]) {
-  await requireVendor()
+  const { vendor } = await requireVendor()
   const result = await prisma.alert.updateMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, vendorId: vendor.id },
     data: { status: "dismissed", dismissedAt: new Date() },
   })
   return { dismissed: result.count }

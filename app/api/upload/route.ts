@@ -18,6 +18,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
+    const ALLOWED_CONTENT_TYPES = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "text/csv",
+      "text/plain",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+    ]
+
+    if (!ALLOWED_CONTENT_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: "File type not allowed" }, { status: 400 })
+    }
+
+    const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 400 })
+    }
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = new Uint8Array(arrayBuffer)
 
@@ -31,7 +53,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ url: key, key })
   } catch (error) {
     console.error("Upload error:", error)
-    const message = error instanceof Error ? error.message : "Upload failed"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 })
   }
 }

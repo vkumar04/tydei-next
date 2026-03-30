@@ -7,12 +7,13 @@ import { serialize } from "@/lib/serialize"
 // ─── Dashboard Stats ─────────────────────────────────────────────
 
 export async function getDashboardStats(input: {
-  facilityId: string
+  facilityId?: string
   dateFrom: string
   dateTo: string
 }) {
-  await requireFacility()
-  const { facilityId, dateFrom, dateTo } = input
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
+  const { dateFrom, dateTo } = input
 
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
@@ -95,12 +96,13 @@ export async function getDashboardStats(input: {
 // ─── Monthly Spend Trend ─────────────────────────────────────────
 
 export async function getMonthlySpend(input: {
-  facilityId: string
+  facilityId?: string
   dateFrom: string
   dateTo: string
 }) {
-  await requireFacility()
-  const { facilityId, dateFrom, dateTo } = input
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
+  const { dateFrom, dateTo } = input
 
   const records = await prisma.cOGRecord.findMany({
     where: {
@@ -128,12 +130,13 @@ export async function getMonthlySpend(input: {
 // ─── Spend by Category ───────────────────────────────────────────
 
 export async function getSpendByCategory(input: {
-  facilityId: string
+  facilityId?: string
   dateFrom: string
   dateTo: string
 }) {
-  await requireFacility()
-  const { facilityId, dateFrom, dateTo } = input
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
+  const { dateFrom, dateTo } = input
 
   const records = await prisma.cOGRecord.findMany({
     where: {
@@ -160,12 +163,13 @@ export async function getSpendByCategory(input: {
 // ─── Earned Rebate by Month ──────────────────────────────────────
 
 export async function getEarnedRebateByMonth(input: {
-  facilityId: string
+  facilityId?: string
   dateFrom: string
   dateTo: string
 }) {
-  await requireFacility()
-  const { facilityId, dateFrom, dateTo } = input
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
+  const { dateFrom, dateTo } = input
 
   const periods = await prisma.contractPeriod.findMany({
     where: {
@@ -202,12 +206,13 @@ export async function getEarnedRebateByMonth(input: {
 // ─── Spend by Vendor ─────────────────────────────────────────────
 
 export async function getSpendByVendor(input: {
-  facilityId: string
+  facilityId?: string
   dateFrom: string
   dateTo: string
 }) {
-  await requireFacility()
-  const { facilityId, dateFrom, dateTo } = input
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
+  const { dateFrom, dateTo } = input
 
   const records = await prisma.cOGRecord.groupBy({
     by: ["vendorId"],
@@ -236,8 +241,9 @@ export async function getSpendByVendor(input: {
 
 // ─── Contract Lifecycle ──────────────────────────────────────────
 
-export async function getContractLifecycle(facilityId: string) {
-  await requireFacility()
+export async function getContractLifecycle(_facilityId?: string) {
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
 
   const [active, expired, expiring] = await Promise.all([
     prisma.contract.count({ where: { facilityId, status: "active" } }),
@@ -250,8 +256,9 @@ export async function getContractLifecycle(facilityId: string) {
 
 // ─── Spend Needed for Tier ───────────────────────────────────────
 
-export async function getSpendNeededForTier(facilityId: string) {
-  await requireFacility()
+export async function getSpendNeededForTier(_facilityId?: string) {
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
 
   const contracts = await prisma.contract.findMany({
     where: { facilityId, status: "active" },
@@ -287,8 +294,9 @@ export async function getSpendNeededForTier(facilityId: string) {
 
 // ─── Recent Contracts ────────────────────────────────────────────
 
-export async function getRecentContracts(facilityId: string, limit = 5) {
-  await requireFacility()
+export async function getRecentContracts(_facilityId?: string, limit = 5) {
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
 
   const contracts = await prisma.contract.findMany({
     where: { facilityId },
@@ -301,8 +309,9 @@ export async function getRecentContracts(facilityId: string, limit = 5) {
 
 // ─── Recent Alerts ───────────────────────────────────────────────
 
-export async function getRecentAlerts(facilityId: string, limit = 5) {
-  await requireFacility()
+export async function getRecentAlerts(_facilityId?: string, limit = 5) {
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
 
   const alerts = await prisma.alert.findMany({
     where: { facilityId, status: { in: ["new_alert", "read"] } },

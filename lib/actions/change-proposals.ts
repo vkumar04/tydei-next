@@ -43,11 +43,11 @@ export async function getChangeProposals(contractId: string) {
 
 // ─── Get Pending Proposals for Facility ─────────────────────────
 
-export async function getPendingProposals(facilityId: string) {
-  await requireFacility()
+export async function getPendingProposals(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
   const proposals = await prisma.contractChangeProposal.findMany({
-    where: { facilityId, status: "pending" },
+    where: { facilityId: facility.id, status: "pending" },
     include: { contract: { select: { name: true } } },
     orderBy: { submittedAt: "desc" },
   })
@@ -62,11 +62,11 @@ export async function getPendingProposals(facilityId: string) {
 
 // ─── Get Vendor's Own Proposals ─────────────────────────────────
 
-export async function getVendorProposals(vendorId: string) {
-  await requireVendor()
+export async function getVendorProposals(_vendorId?: string) {
+  const { vendor } = await requireVendor()
 
   const proposals = await prisma.contractChangeProposal.findMany({
-    where: { vendorId },
+    where: { vendorId: vendor.id },
     include: { contract: { select: { name: true } } },
     orderBy: { submittedAt: "desc" },
   })

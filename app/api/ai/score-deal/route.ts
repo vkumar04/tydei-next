@@ -1,9 +1,16 @@
 import { generateText, Output } from "ai"
+import { headers } from "next/headers"
+import { auth } from "@/lib/auth-server"
 import { geminiModel } from "@/lib/ai/config"
 import { dealScoreSchema } from "@/lib/ai/schemas"
 
 export async function POST(request: Request) {
   try {
+    const session = await auth.api.getSession({ headers: await headers() })
+    if (!session) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const { contractData, cogData, benchmarkData } = await request.json()
 
     const result = await generateText({

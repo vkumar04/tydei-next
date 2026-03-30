@@ -26,11 +26,11 @@ export interface FacilityProfile {
   healthSystemName: string | null
 }
 
-export async function getFacilityProfile(facilityId: string): Promise<FacilityProfile> {
-  await requireFacility()
+export async function getFacilityProfile(_facilityId?: string): Promise<FacilityProfile> {
+  const { facility: sessionFacility } = await requireFacility()
 
   const facility = await prisma.facility.findUniqueOrThrow({
-    where: { id: facilityId },
+    where: { id: sessionFacility.id },
     include: { healthSystem: { select: { name: true } } },
   })
 
@@ -49,14 +49,14 @@ export async function getFacilityProfile(facilityId: string): Promise<FacilityPr
 }
 
 export async function updateFacilityProfile(
-  facilityId: string,
+  _facilityId: string,
   input: UpdateFacilityProfileInput
 ): Promise<void> {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const data = updateFacilityProfileSchema.parse(input)
 
   await prisma.facility.update({
-    where: { id: facilityId },
+    where: { id: facility.id },
     data: {
       name: data.name,
       type: data.type,
@@ -85,11 +85,11 @@ export interface VendorProfile {
   organizationId: string | null
 }
 
-export async function getVendorProfile(vendorId: string): Promise<VendorProfile> {
-  await requireVendor()
+export async function getVendorProfile(_vendorId?: string): Promise<VendorProfile> {
+  const { vendor: sessionVendor } = await requireVendor()
 
   const vendor = await prisma.vendor.findUniqueOrThrow({
-    where: { id: vendorId },
+    where: { id: sessionVendor.id },
   })
 
   return serialize({
@@ -108,14 +108,14 @@ export async function getVendorProfile(vendorId: string): Promise<VendorProfile>
 }
 
 export async function updateVendorProfile(
-  vendorId: string,
+  _vendorId: string,
   input: UpdateVendorProfileInput
 ): Promise<void> {
-  await requireVendor()
+  const { vendor } = await requireVendor()
   const data = updateVendorProfileSchema.parse(input)
 
   await prisma.vendor.update({
-    where: { id: vendorId },
+    where: { id: vendor.id },
     data: {
       name: data.name,
       displayName: data.displayName || null,
@@ -286,11 +286,11 @@ export interface FeatureFlagData {
   caseCostingEnabled: boolean
 }
 
-export async function getFeatureFlags(facilityId: string): Promise<FeatureFlagData> {
-  await requireFacility()
+export async function getFeatureFlags(_facilityId?: string): Promise<FeatureFlagData> {
+  const { facility } = await requireFacility()
 
   const flags = await prisma.featureFlag.findUnique({
-    where: { facilityId },
+    where: { facilityId: facility.id },
   })
 
   return serialize({
@@ -303,14 +303,14 @@ export async function getFeatureFlags(facilityId: string): Promise<FeatureFlagDa
 }
 
 export async function updateFeatureFlags(
-  facilityId: string,
+  _facilityId: string,
   flags: Partial<FeatureFlagData>
 ): Promise<void> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   await prisma.featureFlag.upsert({
-    where: { facilityId },
-    create: { facilityId, ...flags },
+    where: { facilityId: facility.id },
+    create: { facilityId: facility.id, ...flags },
     update: flags,
   })
 }

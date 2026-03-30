@@ -39,7 +39,7 @@ export async function uploadFile(
 /**
  * Generate a pre-signed download URL.
  */
-export async function getSignedUrl(key: string, expiresIn = 3600) {
+export async function getSignedUrl(key: string, expiresIn = 900) {
   const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
   return awsGetSignedUrl(s3, command, { expiresIn })
 }
@@ -57,7 +57,7 @@ export async function deleteFile(key: string) {
 export async function getUploadPresignedUrl(
   key: string,
   contentType: string,
-  expiresIn = 3600
+  expiresIn = 300
 ) {
   const command = new PutObjectCommand({
     Bucket: BUCKET,

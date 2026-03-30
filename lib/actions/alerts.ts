@@ -55,10 +55,10 @@ export async function getAlerts(input: AlertFilters) {
 // ─── Single Alert ────────────────────────────────────────────────
 
 export async function getAlert(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const alert = await prisma.alert.findUniqueOrThrow({
-    where: { id },
+    where: { id, facilityId: facility.id },
     include: {
       contract: {
         select: {
@@ -93,9 +93,9 @@ export async function getUnreadAlertCount(input: {
 // ─── Mark Read ───────────────────────────────────────────────────
 
 export async function markAlertRead(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   await prisma.alert.update({
-    where: { id },
+    where: { id, facilityId: facility.id },
     data: { status: "read", readAt: new Date() },
   })
 }
@@ -103,9 +103,9 @@ export async function markAlertRead(id: string) {
 // ─── Resolve ─────────────────────────────────────────────────────
 
 export async function resolveAlert(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   await prisma.alert.update({
-    where: { id },
+    where: { id, facilityId: facility.id },
     data: { status: "resolved", resolvedAt: new Date() },
   })
 }
@@ -113,9 +113,9 @@ export async function resolveAlert(id: string) {
 // ─── Dismiss ─────────────────────────────────────────────────────
 
 export async function dismissAlert(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   await prisma.alert.update({
-    where: { id },
+    where: { id, facilityId: facility.id },
     data: { status: "dismissed", dismissedAt: new Date() },
   })
 }
@@ -123,9 +123,9 @@ export async function dismissAlert(id: string) {
 // ─── Bulk Resolve ────────────────────────────────────────────────
 
 export async function bulkResolveAlerts(ids: string[]) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const result = await prisma.alert.updateMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, facilityId: facility.id },
     data: { status: "resolved", resolvedAt: new Date() },
   })
   return { resolved: result.count }
@@ -134,9 +134,9 @@ export async function bulkResolveAlerts(ids: string[]) {
 // ─── Bulk Dismiss ────────────────────────────────────────────────
 
 export async function bulkDismissAlerts(ids: string[]) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const result = await prisma.alert.updateMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, facilityId: facility.id },
     data: { status: "dismissed", dismissedAt: new Date() },
   })
   return { dismissed: result.count }
@@ -144,14 +144,14 @@ export async function bulkDismissAlerts(ids: string[]) {
 
 // ─── Generate Alerts ─────────────────────────────────────────────
 
-export async function generateAlerts(facilityId: string) {
-  await requireFacility()
+export async function generateAlerts(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
   const [expiring, tier, offContract, rebate] = await Promise.all([
-    generateExpiringContractAlerts(facilityId),
-    generateTierThresholdAlerts(facilityId),
-    generateOffContractAlerts(facilityId),
-    generateRebateDueAlerts(facilityId),
+    generateExpiringContractAlerts(facility.id),
+    generateTierThresholdAlerts(facility.id),
+    generateOffContractAlerts(facility.id),
+    generateRebateDueAlerts(facility.id),
   ])
 
   const allAlerts = [...expiring, ...tier, ...offContract, ...rebate]

@@ -13,11 +13,11 @@ export interface VendorContractReport {
   status: string
 }
 
-export async function getVendorReportData(vendorId: string): Promise<VendorContractReport[]> {
-  await requireVendor()
+export async function getVendorReportData(_vendorId?: string): Promise<VendorContractReport[]> {
+  const { vendor } = await requireVendor()
 
   const contracts = await prisma.contract.findMany({
-    where: { vendorId },
+    where: { vendorId: vendor.id },
     include: {
       facility: { select: { name: true } },
       periods: { orderBy: { periodStart: "desc" }, take: 1 },

@@ -80,6 +80,7 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
       ...userData,
       emailVerified: true,
     },
+    select: { id: true, name: true, email: true, role: true, createdAt: true },
   })
   return serialize(user)
 }
@@ -89,7 +90,11 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
 export async function adminUpdateUser(id: string, input: AdminUpdateUserInput) {
   await requireAdmin()
 
-  const user = await prisma.user.update({ where: { id }, data: input })
+  const user = await prisma.user.update({
+    where: { id },
+    data: input,
+    select: { id: true, name: true, email: true, role: true, createdAt: true },
+  })
   return serialize(user)
 }
 

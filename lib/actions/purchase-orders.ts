@@ -14,10 +14,10 @@ import { serialize } from "@/lib/serialize"
 // ─── List Purchase Orders ───────────────────────────────────────
 
 export async function getPurchaseOrders(input: POFilters) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const filters = poFiltersSchema.parse(input)
 
-  const conditions: Prisma.PurchaseOrderWhereInput[] = [{ facilityId: filters.facilityId }]
+  const conditions: Prisma.PurchaseOrderWhereInput[] = [{ facilityId: facility.id }]
 
   if (filters.vendorId) conditions.push({ vendorId: filters.vendorId })
   if (filters.status) conditions.push({ status: filters.status })
@@ -46,10 +46,10 @@ export async function getPurchaseOrders(input: POFilters) {
 
 // ─── PO Stats ──────────────────────────────────────────────────
 
-export async function getPOStats(facilityId: string) {
-  await requireFacility()
+export async function getPOStats(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
-  const facilityWhere: Prisma.PurchaseOrderWhereInput = { facilityId }
+  const facilityWhere: Prisma.PurchaseOrderWhereInput = { facilityId: facility.id }
 
   const [totalCount, pendingCount, totalValueAgg, totalItemsAgg] =
     await Promise.all([
@@ -77,12 +77,12 @@ export async function getPOStats(facilityId: string) {
 
 // ─── Facility Vendors (for filter dropdown) ────────────────────
 
-export async function getFacilityVendors(facilityId: string) {
-  await requireFacility()
+export async function getFacilityVendors(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
   const vendors = await prisma.vendor.findMany({
     where: {
-      contracts: { some: { facilityId } },
+      contracts: { some: { facilityId: facility.id } },
     },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
@@ -94,10 +94,10 @@ export async function getFacilityVendors(facilityId: string) {
 // ─── Get Single PO ──────────────────────────────────────────────
 
 export async function getPurchaseOrder(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const po = await prisma.purchaseOrder.findUniqueOrThrow({
-    where: { id },
+    where: { id, facilityId: facility.id },
     include: {
       vendor: { select: { id: true, name: true } },
       contract: { select: { id: true, name: true } },
@@ -110,7 +110,7 @@ export async function getPurchaseOrder(id: string) {
 // ─── Create PO ──────────────────────────────────────────────────
 
 export async function createPurchaseOrder(input: CreatePOInput) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const data = createPOSchema.parse(input)
 
   const totalCost = data.lineItems.reduce(
@@ -119,14 +119,14 @@ export async function createPurchaseOrder(input: CreatePOInput) {
   )
 
   const count = await prisma.purchaseOrder.count({
-    where: { facilityId: data.facilityId },
+    where: { facilityId: facility.id },
   })
   const poNumber = `PO-${String(count + 1).padStart(5, "0")}`
 
   const po = await prisma.purchaseOrder.create({
     data: {
       poNumber,
-      facilityId: data.facilityId,
+      facilityId: facility.id,
       vendorId: data.vendorId,
       contractId: data.contractId,
       orderDate: new Date(data.orderDate),
@@ -155,10 +155,10 @@ export async function createPurchaseOrder(input: CreatePOInput) {
 // ─── Update PO Status ───────────────────────────────────────────
 
 export async function updatePOStatus(id: string, status: POStatus) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   await prisma.purchaseOrder.update({
-    where: { id },
+    where: { id, facilityId: facility.id },
     data: { status },
   })
 }
@@ -166,12 +166,13 @@ export async function updatePOStatus(id: string, status: POStatus) {
 // ─── Search Products ────────────────────────────────────────────
 
 export async function searchProducts(input: {
-  facilityId: string
+  facilityId?: string
   query: string
   vendorId?: string
 }) {
-  await requireFacility()
-  const { facilityId, query, vendorId } = input
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
+  const { query, vendorId } = input
 
   if (!query || query.length < 2) return []
 

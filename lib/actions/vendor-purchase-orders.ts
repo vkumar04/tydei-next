@@ -14,11 +14,11 @@ export interface VendorPORow {
   status: string
 }
 
-export async function getVendorPurchaseOrders(vendorId: string): Promise<VendorPORow[]> {
-  await requireVendor()
+export async function getVendorPurchaseOrders(_vendorId?: string): Promise<VendorPORow[]> {
+  const { vendor } = await requireVendor()
 
   const pos = await prisma.purchaseOrder.findMany({
-    where: { vendorId },
+    where: { vendorId: vendor.id },
     include: { facility: { select: { name: true } } },
     orderBy: { orderDate: "desc" },
     take: 50,
@@ -43,11 +43,11 @@ export interface VendorFacilityRow {
   contractName: string | null
 }
 
-export async function getVendorFacilities(vendorId: string): Promise<VendorFacilityRow[]> {
-  await requireVendor()
+export async function getVendorFacilities(_vendorId?: string): Promise<VendorFacilityRow[]> {
+  const { vendor } = await requireVendor()
 
   const contracts = await prisma.contract.findMany({
-    where: { vendorId, status: "active" },
+    where: { vendorId: vendor.id, status: "active" },
     include: { facility: { select: { id: true, name: true } } },
     orderBy: { facility: { name: "asc" } },
   })
@@ -81,12 +81,13 @@ export interface VendorProductRow {
 }
 
 export async function searchVendorProducts(input: {
-  vendorId: string
+  vendorId?: string
   facilityId?: string
   query: string
 }): Promise<VendorProductRow[]> {
-  await requireVendor()
-  const { vendorId, facilityId, query } = input
+  const { vendor } = await requireVendor()
+  const vendorId = vendor.id
+  const { facilityId, query } = input
 
   if (!query || query.length < 2) return []
 
@@ -123,11 +124,12 @@ export async function searchVendorProducts(input: {
 // ─── Get Facility Products (load all for a facility+vendor) ────────
 
 export async function getVendorFacilityProducts(input: {
-  vendorId: string
+  vendorId?: string
   facilityId: string
 }): Promise<VendorProductRow[]> {
-  await requireVendor()
-  const { vendorId, facilityId } = input
+  const { vendor } = await requireVendor()
+  const vendorId = vendor.id
+  const { facilityId } = input
 
   const results = await prisma.pricingFile.findMany({
     where: { vendorId, facilityId },
@@ -168,7 +170,7 @@ export interface CreateVendorPOInput {
 }
 
 export async function createVendorPurchaseOrder(input: CreateVendorPOInput) {
-  await requireVendor()
+  const { vendor } = await requireVendor()
 
   const totalCost = input.lineItems.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
@@ -176,7 +178,7 @@ export async function createVendorPurchaseOrder(input: CreateVendorPOInput) {
   )
 
   const count = await prisma.purchaseOrder.count({
-    where: { vendorId: input.vendorId },
+    where: { vendorId: vendor.id },
   })
   const poNumber = `PO-${String(count + 1).padStart(5, "0")}`
 
@@ -184,7 +186,7 @@ export async function createVendorPurchaseOrder(input: CreateVendorPOInput) {
     data: {
       poNumber,
       facilityId: input.facilityId,
-      vendorId: input.vendorId,
+      vendorId: vendor.id,
       contractId: input.contractId ?? null,
       orderDate: new Date(input.orderDate),
       totalCost,

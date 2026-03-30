@@ -97,7 +97,7 @@ export interface CaseCostingReport {
 // ─── Get Cases ──────────────────────────────────────────────────
 
 export async function getCases(input: {
-  facilityId: string
+  facilityId?: string
   surgeonName?: string
   dateFrom?: string
   dateTo?: string
@@ -105,13 +105,13 @@ export async function getCases(input: {
   page?: number
   pageSize?: number
 }): Promise<{ cases: CaseWithRelations[]; total: number }> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const page = input.page ?? 1
   const pageSize = input.pageSize ?? 20
 
   const where = {
-    facilityId: input.facilityId,
+    facilityId: facility.id,
     ...(input.surgeonName && { surgeonName: { contains: input.surgeonName, mode: "insensitive" as const } }),
     ...(input.cptCode && { primaryCptCode: input.cptCode }),
     ...(input.dateFrom || input.dateTo
@@ -201,10 +201,10 @@ export async function getCase(id: string): Promise<CaseDetail> {
 // ─── Import Cases ───────────────────────────────────────────────
 
 export async function importCases(input: {
-  facilityId: string
+  facilityId?: string
   cases: CaseInput[]
 }): Promise<{ imported: number; errors: number }> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   let imported = 0
   let errors = 0
@@ -217,7 +217,7 @@ export async function importCases(input: {
       await prisma.case.create({
         data: {
           caseNumber: caseData.caseNumber,
-          facilityId: input.facilityId,
+          facilityId: facility.id,
           surgeonName: caseData.surgeonName,
           surgeonId: caseData.surgeonId,
           dateOfSurgery: new Date(caseData.dateOfSurgery),
@@ -273,12 +273,12 @@ export async function importCaseSupplies(input: {
 // ─── Surgeon Scorecards ─────────────────────────────────────────
 
 export async function getSurgeonScorecards(
-  facilityId: string
+  _facilityId?: string
 ): Promise<SurgeonScorecard[]> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const cases = await prisma.case.findMany({
-    where: { facilityId, surgeonName: { not: null } },
+    where: { facilityId: facility.id, surgeonName: { not: null } },
     include: {
       procedures: { select: { cptCode: true } },
       supplies: { select: { isOnContract: true, extendedCost: true } },
@@ -365,12 +365,12 @@ export async function getSurgeonScorecards(
 // ─── CPT Analysis ───────────────────────────────────────────────
 
 export async function getCPTAnalysis(
-  facilityId: string
+  _facilityId?: string
 ): Promise<CPTCodeAnalysis[]> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const cases = await prisma.case.findMany({
-    where: { facilityId, primaryCptCode: { not: null } },
+    where: { facilityId: facility.id, primaryCptCode: { not: null } },
     select: {
       primaryCptCode: true,
       surgeonName: true,
@@ -422,13 +422,13 @@ export async function getCPTAnalysis(
 // ─── Compare Surgeons ───────────────────────────────────────────
 
 export async function compareSurgeons(input: {
-  facilityId: string
+  facilityId?: string
   surgeonNames: string[]
   cptCode?: string
 }): Promise<SurgeonComparison> {
   await requireFacility()
 
-  const scorecards = await getSurgeonScorecards(input.facilityId)
+  const scorecards = await getSurgeonScorecards()
   const selected = scorecards.filter((s) =>
     input.surgeonNames.includes(s.surgeonName)
   )
@@ -500,16 +500,16 @@ export async function compareSurgeons(input: {
 // ─── Case Costing Report ────────────────────────────────────────
 
 export async function getCaseCostingReportData(input: {
-  facilityId: string
+  facilityId?: string
   surgeonName?: string
   contractId?: string
   dateFrom?: string
   dateTo?: string
 }): Promise<CaseCostingReport> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const where = {
-    facilityId: input.facilityId,
+    facilityId: facility.id,
     ...(input.surgeonName && { surgeonName: input.surgeonName }),
     ...(input.dateFrom || input.dateTo
       ? {

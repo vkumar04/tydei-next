@@ -6,12 +6,12 @@ import { serialize } from "@/lib/serialize"
 
 // ─── Contracts List (for report selector) ───────────────────────
 
-export async function getContracts(facilityId: string) {
-  await requireFacility()
+export async function getContracts(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
   const contracts = await prisma.contract.findMany({
     where: {
-      facilityId,
+      facilityId: facility.id,
       status: { in: ["active", "expiring"] },
     },
     include: {
@@ -35,13 +35,14 @@ export async function getContracts(facilityId: string) {
 // ─── Report Data ─────────────────────────────────────────────────
 
 export async function getReportData(input: {
-  facilityId: string
+  facilityId?: string
   reportType: "usage" | "service" | "tie_in" | "capital" | "grouped"
   dateFrom: string
   dateTo: string
 }) {
-  await requireFacility()
-  const { facilityId, reportType, dateFrom, dateTo } = input
+  const { facility } = await requireFacility()
+  const facilityId = facility.id
+  const { reportType, dateFrom, dateTo } = input
 
   const contracts = await prisma.contract.findMany({
     where: {
@@ -125,14 +126,16 @@ export async function getContractPeriodData(input: {
 // ─── Export CSV ──────────────────────────────────────────────────
 
 export async function exportReportCSV(input: {
-  facilityId: string
+  facilityId?: string
   reportType: string
   dateFrom: string
   dateTo: string
 }) {
+  // getReportData already calls requireFacility() and scopes to session facility
   const report = await getReportData({
-    ...input,
     reportType: input.reportType as "usage" | "service" | "tie_in" | "capital" | "grouped",
+    dateFrom: input.dateFrom,
+    dateTo: input.dateTo,
   })
 
   const headers = [
@@ -156,12 +159,12 @@ export async function exportReportCSV(input: {
 
 // ─── Price Discrepancies ─────────────────────────────────────────
 
-export async function getPriceDiscrepancies(facilityId: string) {
-  await requireFacility()
+export async function getPriceDiscrepancies(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
   const lineItems = await prisma.invoiceLineItem.findMany({
     where: {
-      invoice: { facilityId },
+      invoice: { facilityId: facility.id },
       isFlagged: false,
       variancePercent: { not: null },
     },

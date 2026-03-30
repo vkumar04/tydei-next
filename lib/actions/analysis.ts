@@ -42,16 +42,16 @@ export async function calculateDepreciation(input: {
 // ─── Price Projections ──────────────────────────────────────────
 
 export async function getPriceProjections(input: {
-  facilityId: string
+  facilityId?: string
   vendorId?: string
   categoryId?: string
   periods: number
 }): Promise<PriceProjection[]> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   // Get recent COG records to compute a historical trend
   const where = {
-    facilityId: input.facilityId,
+    facilityId: facility.id,
     ...(input.vendorId && { vendorId: input.vendorId }),
   }
 
@@ -101,15 +101,15 @@ function getMonthLabel(offsetMonths: number): string {
 // ─── Vendor Spend Trends ────────────────────────────────────────
 
 export async function getVendorSpendTrends(input: {
-  facilityId: string
+  facilityId?: string
   dateFrom: string
   dateTo: string
 }): Promise<VendorSpendTrend[]> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const records = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: input.facilityId,
+      facilityId: facility.id,
       transactionDate: {
         gte: new Date(input.dateFrom),
         lte: new Date(input.dateTo),
@@ -139,15 +139,15 @@ export async function getVendorSpendTrends(input: {
 // ─── Category Spend Trends ──────────────────────────────────────
 
 export async function getCategorySpendTrends(input: {
-  facilityId: string
+  facilityId?: string
   dateFrom: string
   dateTo: string
 }): Promise<CategorySpendTrend[]> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const records = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: input.facilityId,
+      facilityId: facility.id,
       transactionDate: {
         gte: new Date(input.dateFrom),
         lte: new Date(input.dateTo),

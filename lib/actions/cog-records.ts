@@ -159,24 +159,24 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
 // ─── Delete COG Record ──────────────────────────────────────────
 
 export async function deleteCOGRecord(id: string) {
-  await requireFacility()
-  await prisma.cOGRecord.delete({ where: { id } })
+  const { facility } = await requireFacility()
+  await prisma.cOGRecord.delete({ where: { id, facilityId: facility.id } })
 }
 
 // ─── Bulk Delete ────────────────────────────────────────────────
 
 export async function bulkDeleteCOGRecords(ids: string[]) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const result = await prisma.cOGRecord.deleteMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, facilityId: facility.id },
   })
   return { deleted: result.count }
 }
 
 // ─── Import History (aggregate by date) ─────────────────────────
 
-export async function getCOGImportHistory(facilityId: string) {
-  await requireFacility()
+export async function getCOGImportHistory(_facilityId?: string) {
+  const { facility } = await requireFacility()
 
   // Group records by calendar date (truncate timestamp to date) so bulk
   // imports that share the same day collapse into a single history entry.
@@ -185,7 +185,7 @@ export async function getCOGImportHistory(facilityId: string) {
   >`
     SELECT DATE("createdAt") AS date, COUNT(*)::bigint AS record_count
     FROM cog_record
-    WHERE "facilityId" = ${facilityId}
+    WHERE "facilityId" = ${facility.id}
     GROUP BY DATE("createdAt")
     ORDER BY date DESC
     LIMIT 50

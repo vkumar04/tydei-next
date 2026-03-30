@@ -64,11 +64,11 @@ export interface VendorProposal {
 // ─── Facility: Analyze Proposal ─────────────────────────────────
 
 export async function analyzeProposal(input: {
-  facilityId: string
+  facilityId?: string
   proposedPricing: ProposedPricingItem[]
   vendorId?: string
 }): Promise<ProposalAnalysis> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const itemComparisons: ItemComparison[] = []
 
@@ -79,7 +79,7 @@ export async function analyzeProposal(input: {
     if (!currentPrice && item.vendorItemNo) {
       const cogRecord = await prisma.cOGRecord.findFirst({
         where: {
-          facilityId: input.facilityId,
+          facilityId: facility.id,
           vendorItemNo: item.vendorItemNo,
         },
         orderBy: { transactionDate: "desc" },
@@ -272,13 +272,13 @@ export async function createProposal(input: {
 // ─── Vendor: Get Proposals ──────────────────────────────────────
 
 export async function getVendorProposals(
-  vendorId: string
+  _vendorId?: string
 ): Promise<VendorProposal[]> {
-  await requireVendor()
+  const { vendor } = await requireVendor()
 
   const alerts = await prisma.alert.findMany({
     where: {
-      vendorId,
+      vendorId: vendor.id,
       alertType: "compliance",
     },
     orderBy: { createdAt: "desc" },
@@ -293,7 +293,7 @@ export async function getVendorProposals(
       const meta = a.metadata as Record<string, unknown>
       return {
         id: a.id,
-        vendorId,
+        vendorId: vendor.id,
         facilityIds: (meta.facilityIds as string[]) ?? [],
         status: "submitted" as const,
         itemCount: ((meta.pricingItems as unknown[]) ?? []).length,

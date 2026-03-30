@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireAuth } from "@/lib/actions/auth"
+import { requireAuth, requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -41,13 +41,14 @@ export interface ProductBenchmark {
 // ─── Market Share ───────────────────────────────────────────────
 
 export async function getVendorMarketShare(input: {
-  vendorId: string
+  vendorId?: string
   facilityId?: string
   dateFrom?: string
   dateTo?: string
 }): Promise<MarketShareData> {
-  await requireAuth()
-  const { vendorId, facilityId, dateFrom, dateTo } = input
+  const { vendor } = await requireVendor()
+  const vendorId = vendor.id
+  const { facilityId, dateFrom, dateTo } = input
 
   const cogWhere: Record<string, unknown> = { vendorId }
   if (facilityId) cogWhere.facilityId = facilityId
@@ -111,8 +112,9 @@ export async function getVendorMarketShare(input: {
 
 // ─── Performance KPIs ───────────────────────────────────────────
 
-export async function getVendorPerformance(vendorId: string): Promise<VendorPerformanceData> {
-  await requireAuth()
+export async function getVendorPerformance(_vendorId?: string): Promise<VendorPerformanceData> {
+  const { vendor: sessionVendor } = await requireVendor()
+  const vendorId = sessionVendor.id
 
   const [contractCount, periods, activeFacilities] = await Promise.all([
     prisma.contract.count({ where: { vendorId, status: "active" } }),
@@ -145,11 +147,12 @@ export async function getVendorPerformance(vendorId: string): Promise<VendorPerf
 // ─── Product Benchmarks ─────────────────────────────────────────
 
 export async function getProductBenchmarks(input: {
-  vendorId: string
+  vendorId?: string
   category?: string
 }): Promise<ProductBenchmark[]> {
-  await requireAuth()
-  const { vendorId, category } = input
+  const { vendor } = await requireVendor()
+  const vendorId = vendor.id
+  const { category } = input
 
   const where: Record<string, unknown> = { vendorId }
   if (category) where.category = category

@@ -63,10 +63,16 @@ export async function getContracts(input: ContractFilters) {
 // ─── Single Contract ─────────────────────────────────────────────
 
 export async function getContract(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const contract = await prisma.contract.findUniqueOrThrow({
-    where: { id },
+    where: {
+      id,
+      OR: [
+        { facilityId: facility.id },
+        { contractFacilities: { some: { facilityId: facility.id } } },
+      ],
+    },
     include: {
       vendor: { select: { id: true, name: true, logoUrl: true, contactName: true, contactEmail: true } },
       productCategory: { select: { id: true, name: true } },
@@ -160,8 +166,20 @@ export async function createContract(input: CreateContractInput) {
 // ─── Update Contract ─────────────────────────────────────────────
 
 export async function updateContract(id: string, input: UpdateContractInput) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const data = updateContractSchema.parse(input)
+
+  // Verify ownership before updating
+  await prisma.contract.findUniqueOrThrow({
+    where: {
+      id,
+      OR: [
+        { facilityId: facility.id },
+        { contractFacilities: { some: { facilityId: facility.id } } },
+      ],
+    },
+    select: { id: true },
+  })
 
   const updateData: Prisma.ContractUpdateInput = {}
 
@@ -205,7 +223,19 @@ export async function updateContract(id: string, input: UpdateContractInput) {
 // ─── Delete Contract ─────────────────────────────────────────────
 
 export async function deleteContract(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
+
+  // Verify ownership before deleting
+  await prisma.contract.findUniqueOrThrow({
+    where: {
+      id,
+      OR: [
+        { facilityId: facility.id },
+        { contractFacilities: { some: { facilityId: facility.id } } },
+      ],
+    },
+    select: { id: true },
+  })
 
   await prisma.contract.delete({ where: { id } })
 }
