@@ -25,15 +25,17 @@ Guidelines:
 
 export const suggestedQuestions = {
   facility: [
-    "What's my total rebate earned this quarter?",
-    "Which contracts are close to reaching the next tier?",
-    "Show me off-contract spend by vendor",
-    "What's my compliance rate across all contracts?",
+    { label: "Contract Performance", question: "How are our top contracts performing this quarter?" },
+    { label: "Rebate Analysis", question: "What is our total earned rebate this year and how close are we to hitting the next tier?" },
+    { label: "Alerts Summary", question: "What are the critical alerts I should address today?" },
+    { label: "Cost Savings", question: "Where are our biggest opportunities to save money on contracts?" },
+    { label: "Market Share", question: "What does our market share look like across product categories?" },
+    { label: "Surgeon Metrics", question: "Which surgeons have the best spend efficiency scores?" },
   ],
   vendor: [
-    "What's my market share at each facility?",
-    "Which contracts are expiring soon?",
-    "How does my pricing compare to benchmarks?",
-    "What spend targets should I focus on?",
+    { label: "Market Share", question: "What's my market share at each facility?" },
+    { label: "Expiring Contracts", question: "Which contracts are expiring soon?" },
+    { label: "Pricing Benchmarks", question: "How does my pricing compare to benchmarks?" },
+    { label: "Spend Targets", question: "What spend targets should I focus on?" },
   ],
 } as const

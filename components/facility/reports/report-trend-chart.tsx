@@ -10,20 +10,12 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
-import { ChartCard } from "@/components/shared/charts/chart-card"
-import { chartTooltipStyle } from "@/lib/chart-config"
 import type { ContractPeriodRow } from "./report-columns"
 
 interface ReportTrendChartProps {
   data: ContractPeriodRow[]
   metric: "totalSpend" | "rebateEarned" | "totalVolume"
   reportType?: string
-}
-
-const metricLabels: Record<string, string> = {
-  totalSpend: "Spend",
-  rebateEarned: "Rebate Earned",
-  totalVolume: "Volume",
 }
 
 export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartProps) {
@@ -42,15 +34,9 @@ export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartP
   const isService = reportType === "service" || reportType === "capital"
   const isTieIn = reportType === "tie_in"
 
-  const barTitle = isService
-    ? "Expected vs Actual Payments"
-    : isTieIn
-    ? "Spend vs Rebate Earned"
-    : `${metricLabels[metric]} by Period`
-
   return (
-    <ChartCard title={barTitle} description="Over selected period">
-      <ResponsiveContainer width="100%" height={300}>
+    <div className="h-[300px]">
+      <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
@@ -61,12 +47,15 @@ export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartP
             height={80}
           />
           <YAxis
-            tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+            tickFormatter={(value: number) => `${(value / 1000).toFixed(0)}k`}
             tick={{ fill: "hsl(var(--muted-foreground))" }}
           />
           <Tooltip
             formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
-            contentStyle={chartTooltipStyle}
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+            }}
           />
           <Legend />
           {isService ? (
@@ -80,7 +69,22 @@ export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartP
               <Bar
                 dataKey="paymentActual"
                 name="Payments Made"
-                fill="#10b981"
+                fill="#22c55e"
+                radius={[4, 4, 0, 0]}
+              />
+            </>
+          ) : isTieIn ? (
+            <>
+              <Bar
+                dataKey="spend"
+                name="Monthly Spend"
+                fill="#3b82f6"
+                radius={[4, 4, 0, 0]}
+              />
+              <Bar
+                dataKey="rebateEarned"
+                name="Target Spend"
+                fill="#22c55e"
                 radius={[4, 4, 0, 0]}
               />
             </>
@@ -88,20 +92,20 @@ export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartP
             <>
               <Bar
                 dataKey="spend"
-                name="Spend"
+                name="Monthly Spend"
                 fill="#3b82f6"
                 radius={[4, 4, 0, 0]}
               />
               <Bar
                 dataKey="rebateEarned"
                 name="Rebate Earned"
-                fill="#10b981"
+                fill="#22c55e"
                 radius={[4, 4, 0, 0]}
               />
             </>
           )}
         </BarChart>
       </ResponsiveContainer>
-    </ChartCard>
+    </div>
   )
 }

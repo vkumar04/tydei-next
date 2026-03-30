@@ -72,16 +72,16 @@ export function ChatInterface({ portalType }: ChatInterfaceProps) {
 
       <ScrollArea className="flex-1 p-4" ref={scrollRef}>
         {isEmpty ? (
-          <div className="flex h-full flex-col items-center justify-center gap-6 py-16">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <div className="flex flex-col items-center justify-center h-full py-8">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mb-4">
               <Sparkles className="h-8 w-8 text-primary" />
             </div>
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-xl font-semibold mb-2">
               How can I help you today?
             </h2>
-            <p className="max-w-md text-center text-sm text-muted-foreground">
-              I can analyze your contracts, calculate rebates, review
-              performance, and help identify cost-saving opportunities.
+            <p className="text-muted-foreground text-center max-w-md mb-8">
+              I can analyze your contracts, calculate rebates, review surgeon performance,
+              and help identify cost-saving opportunities.
             </p>
             <SuggestedQuestions
               questions={[...questions]}
@@ -123,21 +123,11 @@ export function ChatInterface({ portalType }: ChatInterfaceProps) {
             )}
           </Button>
         </form>
-        <p className="mt-2 text-center text-xs text-muted-foreground">
-          AI responses are based on your contract data and may require
-          verification
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          AI responses are based on your contract data and may require verification
         </p>
       </div>
 
-      {/* Capability badges */}
-      {isEmpty && (
-        <div className="flex flex-wrap gap-2 border-t px-4 py-3">
-          <Badge variant="secondary">Contract Analysis</Badge>
-          <Badge variant="secondary">Rebate Calculations</Badge>
-          <Badge variant="secondary">Market Share</Badge>
-          <Badge variant="secondary">Cost Optimization</Badge>
-        </div>
-      )}
     </Card>
   )
 }

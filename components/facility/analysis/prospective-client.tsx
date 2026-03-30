@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { PageHeader } from "@/components/shared/page-header"
 import { ProposalUpload } from "./proposal-upload"
 import { ProposalComparisonTable } from "./proposal-comparison-table"
 import { DealScoreRadar } from "./deal-score-radar"
@@ -41,8 +40,7 @@ import {
   ChevronRight,
   BarChart3,
   Download,
-  Sparkles,
-  SlidersHorizontal,
+  FileSpreadsheet,
 } from "lucide-react"
 
 const RECOMMENDATION_LABELS: Record<
@@ -179,25 +177,105 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     }).format(value)
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Prospective Analysis"
-        description="Upload vendor proposals and compare pricing against current COG data"
-        action={
-          analysis ? (
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Export Analysis
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Evaluate Vendor Proposals</h1>
+          <p className="text-muted-foreground">
+            Analyze vendor contracts from the facility perspective - score deals
+            on savings, attainability, and risk
+          </p>
+        </div>
+        {analysis && (
+          <Button variant="outline" size="sm">
+            <Download className="mr-2 h-4 w-4" />
+            Export Analysis
+          </Button>
+        )}
+      </div>
 
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Proposals Analyzed
+                </p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  {analysis ? 1 : 0}
+                </p>
+              </div>
+              <FileText className="h-8 w-8 text-muted-foreground/30" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-blue-500">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Avg Deal Score
+                </p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {analysis?.dealScore ? analysis.dealScore.overall.toFixed(1) : "-"}
+                </p>
+              </div>
+              <Target className="h-8 w-8 text-muted-foreground/30" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Total Value (COG-Based)
+                </p>
+                <p className="text-2xl font-bold text-amber-600">
+                  {analysis
+                    ? formatCurrency(analysis.totalProposedCost)
+                    : "$0"}
+                </p>
+              </div>
+              <DollarSign className="h-8 w-8 text-muted-foreground/30" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-500">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Est. Rebates</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {analysis
+                    ? formatCurrency(
+                        Math.abs(analysis.totalSavings) * 0.03
+                      )
+                    : "$0"}
+                </p>
+              </div>
+              <Percent className="h-8 w-8 text-muted-foreground/30" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="upload" className="gap-2">
             <Upload className="h-4 w-4" />
             Upload Proposal
+          </TabsTrigger>
+          <TabsTrigger value="pricing" className="gap-2">
+            <FileSpreadsheet className="h-4 w-4" />
+            Pricing Analysis
           </TabsTrigger>
           <TabsTrigger
             value="analysis"
@@ -213,15 +291,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
             disabled={!analysis}
           >
             <FileText className="h-4 w-4" />
-            Comparison
-          </TabsTrigger>
-          <TabsTrigger
-            value="scenario"
-            className="gap-2"
-            disabled={!analysis}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            What-If
+            All Proposals ({analysis ? 1 : 0})
           </TabsTrigger>
         </TabsList>
 
@@ -248,6 +318,21 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Pricing Analysis Tab */}
+        <TabsContent value="pricing" className="space-y-6">
+          <Card>
+            <CardContent className="py-8">
+              <div className="text-center text-muted-foreground">
+                <FileSpreadsheet className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">Upload a pricing file to compare</p>
+                <p className="text-sm mt-1">
+                  Compare vendor pricing against your current COG data
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Analysis Tab */}
@@ -429,7 +514,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
           )}
         </TabsContent>
 
-        {/* Comparison Tab */}
+        {/* Comparison / All Proposals Tab */}
         <TabsContent value="comparison" className="space-y-6">
           {analysis && (
             <>
@@ -493,243 +578,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                   <ProposalComparisonTable
                     comparisons={analysis.itemComparisons}
                   />
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </TabsContent>
-
-        {/* What-If Scenario Tab */}
-        <TabsContent value="scenario" className="space-y-6">
-          {analysis && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5" />
-                    What-If Scenario Analysis
-                  </CardTitle>
-                  <CardDescription>
-                    Adjust parameters to model different negotiation outcomes
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid gap-6 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>
-                        Additional Discount on Proposed Pricing (%)
-                      </Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={50}
-                        value={scenarioDiscount}
-                        onChange={(e) =>
-                          setScenarioDiscount(Number(e.target.value))
-                        }
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        What if you negotiate an additional{" "}
-                        {scenarioDiscount}% off the proposed pricing?
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>
-                        Volume Increase on Current Spend (%)
-                      </Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={scenarioVolumeIncrease}
-                        onChange={(e) =>
-                          setScenarioVolumeIncrease(Number(e.target.value))
-                        }
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        What if your volume increases {scenarioVolumeIncrease}%
-                        over the contract term?
-                      </p>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {scenarioAnalysis && (
-                    <div className="space-y-4">
-                      <h4 className="font-medium">Scenario Results</h4>
-                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <div className="rounded-lg bg-muted/50 p-4 text-center">
-                          <p className="text-sm text-muted-foreground">
-                            Adjusted Current Cost
-                          </p>
-                          <p className="text-xl font-bold">
-                            {formatCurrency(scenarioAnalysis.totalCurrentCost)}
-                          </p>
-                        </div>
-                        <div className="rounded-lg bg-muted/50 p-4 text-center">
-                          <p className="text-sm text-muted-foreground">
-                            Adjusted Proposed Cost
-                          </p>
-                          <p className="text-xl font-bold">
-                            {formatCurrency(
-                              scenarioAnalysis.totalProposedCost
-                            )}
-                          </p>
-                        </div>
-                        <div
-                          className={`rounded-lg p-4 text-center border ${
-                            scenarioAnalysis.totalSavings >= 0
-                              ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900"
-                              : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900"
-                          }`}
-                        >
-                          <p className="text-sm text-muted-foreground">
-                            Scenario Savings
-                          </p>
-                          <p
-                            className={`text-xl font-bold ${scenarioAnalysis.totalSavings >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                          >
-                            {formatCurrency(scenarioAnalysis.totalSavings)}
-                          </p>
-                        </div>
-                        <div className="rounded-lg bg-muted/50 p-4 text-center">
-                          <p className="text-sm text-muted-foreground">
-                            Savings %
-                          </p>
-                          <p
-                            className={`text-xl font-bold ${scenarioAnalysis.totalSavingsPercent >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                          >
-                            {scenarioAnalysis.totalSavingsPercent.toFixed(1)}%
-                          </p>
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      {/* Comparison: original vs scenario */}
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead>Metric</TableHead>
-                            <TableHead className="text-right">
-                              Original Analysis
-                            </TableHead>
-                            <TableHead className="text-right">
-                              What-If Scenario
-                            </TableHead>
-                            <TableHead className="text-right">
-                              Improvement
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <TableRow>
-                            <TableCell className="font-medium">
-                              Total Savings
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(analysis.totalSavings)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(scenarioAnalysis.totalSavings)}
-                            </TableCell>
-                            <TableCell
-                              className={`text-right font-medium ${
-                                scenarioAnalysis.totalSavings >
-                                analysis.totalSavings
-                                  ? "text-emerald-600"
-                                  : "text-red-600"
-                              }`}
-                            >
-                              {formatCurrency(
-                                scenarioAnalysis.totalSavings -
-                                  analysis.totalSavings
-                              )}
-                            </TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell className="font-medium">
-                              Savings %
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {analysis.totalSavingsPercent.toFixed(1)}%
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {scenarioAnalysis.totalSavingsPercent.toFixed(1)}%
-                            </TableCell>
-                            <TableCell
-                              className={`text-right font-medium ${
-                                scenarioAnalysis.totalSavingsPercent >
-                                analysis.totalSavingsPercent
-                                  ? "text-emerald-600"
-                                  : "text-red-600"
-                              }`}
-                            >
-                              {(
-                                scenarioAnalysis.totalSavingsPercent -
-                                analysis.totalSavingsPercent
-                              ).toFixed(1)}
-                              pp
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-
-                      {/* Negotiation Hints */}
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base flex items-center gap-2">
-                            <ChevronRight className="h-4 w-4" />
-                            Negotiation Insights
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ul className="space-y-2 text-sm">
-                            {scenarioDiscount > 0 && (
-                              <li className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-                                <ChevronRight className="h-4 w-4 mt-0.5 text-blue-600 shrink-0" />
-                                <span>
-                                  Negotiating an additional {scenarioDiscount}%
-                                  discount would save an extra{" "}
-                                  {formatCurrency(
-                                    scenarioAnalysis.totalSavings -
-                                      analysis.totalSavings
-                                  )}
-                                </span>
-                              </li>
-                            )}
-                            {scenarioVolumeIncrease > 0 && (
-                              <li className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-                                <ChevronRight className="h-4 w-4 mt-0.5 text-blue-600 shrink-0" />
-                                <span>
-                                  If volume increases by{" "}
-                                  {scenarioVolumeIncrease}%, your total
-                                  addressable spend increases to{" "}
-                                  {formatCurrency(
-                                    scenarioAnalysis.totalCurrentCost
-                                  )}
-                                  , making the proposed pricing more impactful
-                                </span>
-                              </li>
-                            )}
-                            {analysis.totalSavingsPercent < 5 && (
-                              <li className="flex items-start gap-2 p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
-                                <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
-                                <span>
-                                  Current savings of{" "}
-                                  {analysis.totalSavingsPercent.toFixed(1)}% are
-                                  below typical negotiation targets of 5-10%.
-                                  Push for better pricing.
-                                </span>
-                              </li>
-                            )}
-                          </ul>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </>

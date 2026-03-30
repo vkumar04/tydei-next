@@ -10,9 +10,23 @@ import {
   Package,
   Plus,
   ShoppingCart,
+  ScanLine,
+  Download,
+  Search,
+  Filter,
+  Building2,
+  CheckCircle2,
+  MoreHorizontal,
+  Eye,
+  Send,
+  XCircle,
+  Copy,
+  Calendar,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -20,16 +34,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DataTable } from "@/components/shared/tables/data-table"
-import { getPOColumns } from "./po-columns"
 import {
   usePurchaseOrders,
   usePOStats,
   useUpdatePOStatus,
   useFacilityVendors,
 } from "@/hooks/use-purchase-orders"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatDate } from "@/lib/formatting"
+import { poStatusConfig } from "@/lib/constants"
+import { StatusBadge } from "@/components/shared/badges/status-badge"
+import { toast } from "sonner"
 import type { POStatus } from "@prisma/client"
 
 interface POListProps {
@@ -37,7 +67,7 @@ interface POListProps {
 }
 
 const STATUS_OPTIONS: { label: string; value: POStatus | "all" }[] = [
-  { label: "All Statuses", value: "all" },
+  { label: "All Status", value: "all" },
   { label: "Draft", value: "draft" },
   { label: "Pending", value: "pending" },
   { label: "Approved", value: "approved" },
@@ -50,6 +80,7 @@ export function POList({ facilityId }: POListProps) {
   const router = useRouter()
   const [status, setStatus] = useState<POStatus | "all">("all")
   const [vendorId, setVendorId] = useState<string>("all")
+  const [searchQuery, setSearchQuery] = useState("")
 
   const { data, isLoading } = usePurchaseOrders(facilityId, {
     status: status === "all" ? undefined : status,
@@ -59,47 +90,128 @@ export function POList({ facilityId }: POListProps) {
   const { data: vendors } = useFacilityVendors(facilityId)
   const updateStatus = useUpdatePOStatus()
 
-  const columns = getPOColumns(
-    (id) => router.push(`/dashboard/purchase-orders/${id}`),
-    {
-      onUpdateStatus: (id, newStatus) =>
-        updateStatus.mutate({ id, status: newStatus as POStatus }),
-      onDuplicate: (id) => router.push(`/dashboard/purchase-orders/new?from=${id}`),
-    }
-  )
+  const orders = (data?.orders ?? []) as Array<{
+    id: string
+    poNumber: string
+    vendor: { name: string }
+    contract: { name: string } | null
+    orderDate: Date | string
+    totalCost: unknown
+    status: string
+    _count: { lineItems: number }
+  }>
 
-  const orders = (data?.orders ?? []) as never[]
-  const isEmpty = !isLoading && orders.length === 0 && status === "all" && vendorId === "all"
+  const filteredOrders = orders.filter((po) => {
+    const q = searchQuery.toLowerCase()
+    return (
+      po.poNumber.toLowerCase().includes(q) ||
+      po.vendor.name.toLowerCase().includes(q)
+    )
+  })
+
+  const isEmpty =
+    !isLoading && orders.length === 0 && status === "all" && vendorId === "all"
 
   return (
     <div className="space-y-6">
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total POs"
-          value={stats?.totalPOs}
-          icon={<FileText className="size-4 text-muted-foreground" />}
-          loading={statsLoading}
-        />
-        <StatCard
-          title="Pending Approval"
-          value={stats?.pendingApproval}
-          icon={<Clock className="size-4 text-muted-foreground" />}
-          loading={statsLoading}
-          valueClassName="text-yellow-600"
-        />
-        <StatCard
-          title="Total Value"
-          value={stats ? formatCurrency(stats.totalValue) : undefined}
-          icon={<DollarSign className="size-4 text-muted-foreground" />}
-          loading={statsLoading}
-        />
-        <StatCard
-          title="Total Items"
-          value={stats?.totalItems}
-          icon={<Package className="size-4 text-muted-foreground" />}
-          loading={statsLoading}
-        />
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Bill Only Purchase Orders</h1>
+          <p className="text-muted-foreground">
+            Create and track Bill Only POs for products used in procedures
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => toast.info("Scan feature coming soon")}
+          >
+            <ScanLine className="mr-2 h-4 w-4" />
+            Scan PO
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => toast.info("Export coming soon")}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/purchase-orders/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Bill Only PO
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total PO Value
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Skeleton className="h-7 w-20" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {formatCurrency(stats?.totalValue ?? 0)}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Sent to Vendors
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Skeleton className="h-7 w-20" />
+            ) : (
+              <div className="text-2xl font-bold text-blue-600">
+                {stats?.totalPOs ?? 0}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Completed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Skeleton className="h-7 w-20" />
+            ) : (
+              <div className="text-2xl font-bold text-green-600">
+                {stats?.totalItems ?? 0}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Drafts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Skeleton className="h-7 w-20" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {stats?.pendingApproval ?? 0}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Empty State */}
@@ -109,7 +221,9 @@ export function POList({ facilityId }: POListProps) {
             <div className="rounded-full bg-muted p-4 mb-4">
               <ShoppingCart className="size-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold mb-1">No purchase orders yet</h3>
+            <h3 className="text-lg font-semibold mb-1">
+              No purchase orders yet
+            </h3>
             <p className="text-sm text-muted-foreground mb-6">
               Create your first purchase order to get started.
             </p>
@@ -121,86 +235,199 @@ export function POList({ facilityId }: POListProps) {
           </CardContent>
         </Card>
       ) : (
-        <DataTable
-          columns={columns}
-          data={orders}
-          searchKey="poNumber"
-          searchPlaceholder="Search by PO number..."
-          isLoading={isLoading}
-          filterComponent={
-            <div className="flex items-center gap-2">
-              <Select
-                value={status}
-                onValueChange={(v) => setStatus(v as POStatus | "all")}
-              >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <>
+          {/* Filters */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by PO ID or vendor..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select
+                  value={status}
+                  onValueChange={(v) => setStatus(v as POStatus | "all")}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <Filter className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
 
-              <Select
-                value={vendorId}
-                onValueChange={(v) => setVendorId(v)}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Vendors" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Vendors</SelectItem>
-                  {(vendors ?? []).map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
+          {/* Orders Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                Purchase Orders ({filteredOrders.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-          }
-        />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>PO ID</TableHead>
+                      <TableHead>Vendor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Items</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="w-[80px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredOrders.map((po) => (
+                      <TableRow key={po.id}>
+                        <TableCell className="font-medium">
+                          {po.poNumber}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            {po.vendor.name}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            status={po.status}
+                            config={poStatusConfig}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            {formatDate(po.orderDate)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Package className="h-4 w-4 text-muted-foreground" />
+                            {po._count.lineItems} items
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(Number(po.totalCost ?? 0))}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/dashboard/purchase-orders/${po.id}`
+                                  )
+                                }
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+                              {po.status === "draft" && (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      router.push(
+                                        `/dashboard/purchase-orders/${po.id}`
+                                      )
+                                    }
+                                  >
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Edit Draft
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      updateStatus.mutate({
+                                        id: po.id,
+                                        status: "sent" as POStatus,
+                                      })
+                                    }
+                                  >
+                                    <Send className="mr-2 h-4 w-4" />
+                                    Send to Vendor
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {(po.status === "sent" ||
+                                po.status === "approved") && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    updateStatus.mutate({
+                                      id: po.id,
+                                      status: "completed" as POStatus,
+                                    })
+                                  }
+                                >
+                                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                                  Mark Completed
+                                </DropdownMenuItem>
+                              )}
+                              {po.status !== "completed" &&
+                                po.status !== "cancelled" && (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      updateStatus.mutate({
+                                        id: po.id,
+                                        status: "cancelled" as POStatus,
+                                      })
+                                    }
+                                    className="text-destructive"
+                                  >
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                    Cancel PO
+                                  </DropdownMenuItem>
+                                )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/dashboard/purchase-orders/new?from=${po.id}`
+                                  )
+                                }
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Duplicate
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Download className="mr-2 h-4 w-4" />
+                                Download PDF
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
-  )
-}
-
-/* ─── Stat Card ─────────────────────────────────────────────────── */
-
-function StatCard({
-  title,
-  value,
-  icon,
-  loading,
-  valueClassName,
-}: {
-  title: string
-  value: string | number | undefined
-  icon: React.ReactNode
-  loading: boolean
-  valueClassName?: string
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-7 w-20" />
-        ) : (
-          <div className={`text-2xl font-bold ${valueClassName ?? ""}`}>
-            {value ?? 0}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }

@@ -5,23 +5,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import Link from "next/link"
 import {
   Upload,
   Stethoscope,
   DollarSign,
   TrendingUp,
-  Users,
+  User,
   BarChart3,
-  FileText,
+  CheckCircle2,
 } from "lucide-react"
-import { PageHeader } from "@/components/shared/page-header"
 import { CaseTable } from "./case-table"
 import { SurgeonScorecardsGrid } from "./surgeon-scorecards-grid"
-import { CPTAnalysisTable } from "./cpt-analysis-table"
 import { CaseImportDialog } from "./case-import-dialog"
 import {
   useSurgeonScorecards,
-  useCPTAnalysis,
   useCaseCostingReport,
 } from "@/hooks/use-case-costing"
 
@@ -31,146 +29,168 @@ interface CaseCostingClientProps {
 
 export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
   const [importOpen, setImportOpen] = useState(false)
+  const [activeMainTab, setActiveMainTab] = useState("cases")
   const { data: scorecards, isLoading: scLoading } =
     useSurgeonScorecards(facilityId)
-  const { data: cptData, isLoading: cptLoading } = useCPTAnalysis(facilityId)
   const { data: report, isLoading: reportLoading } =
     useCaseCostingReport(facilityId)
 
   const totalCases = report?.totalCases ?? 0
   const avgCostPerCase = report?.avgCostPerCase ?? 0
   const totalSpend = report?.totalSpend ?? 0
+  const totalMargin = report?.avgMargin
+    ? report.avgMargin * totalCases
+    : 0
+  const avgMarginPercent =
+    report?.totalReimbursement && report.totalReimbursement > 0
+      ? ((report.totalReimbursement - totalSpend) / report.totalReimbursement) *
+        100
+      : 0
+  const complianceRate = report?.complianceRate ?? 0
+  const totalReimbursement = report?.totalReimbursement ?? 0
   const surgeonCount = scorecards?.length ?? 0
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Case Costing"
-        description="Analyze surgical case costs, surgeon performance, and procedure trends"
-        action={
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Case Costing &amp; Surgeon Performance
+          </h1>
+          <p className="text-muted-foreground">
+            Track case margins, surgeon performance metrics, and rebate
+            contributions
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link href={`/f/${facilityId}/case-costing/reports`}>
+            <Button variant="outline">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Reports
+            </Button>
+          </Link>
           <Button onClick={() => setImportOpen(true)}>
-            <Upload className="size-4" /> Import Cases
+            <Upload className="mr-2 h-4 w-4" />
+            Upload Data
           </Button>
-        }
-      />
-
-      {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Cases</CardTitle>
-            <Stethoscope className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {reportLoading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">
-                  {totalCases.toLocaleString()}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Surgical cases on record
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Avg Cost / Case
-            </CardTitle>
-            <TrendingUp className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {reportLoading ? (
-              <Skeleton className="h-8 w-24" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">
-                  ${Math.round(avgCostPerCase).toLocaleString()}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Average spend per case
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Supplies Cost
-            </CardTitle>
-            <DollarSign className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {reportLoading ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">
-                  ${Math.round(totalSpend).toLocaleString()}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Total supply expenditure
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Surgeon Count</CardTitle>
-            <Users className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {scLoading ? (
-              <Skeleton className="h-8 w-12" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{surgeonCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Active surgeons
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="cases">
+      {/* Main Tabs */}
+      <Tabs value={activeMainTab} onValueChange={setActiveMainTab}>
         <TabsList>
-          <TabsTrigger value="cases" className="gap-1.5">
-            <Stethoscope className="size-4" />
+          <TabsTrigger value="cases" className="gap-2">
+            <Stethoscope className="h-4 w-4" />
             Cases
           </TabsTrigger>
-          <TabsTrigger value="surgeons" className="gap-1.5">
-            <Users className="size-4" />
-            Surgeons
-          </TabsTrigger>
-          <TabsTrigger value="cpt" className="gap-1.5">
-            <BarChart3 className="size-4" />
-            CPT Analysis
-          </TabsTrigger>
-          <TabsTrigger value="reports" className="gap-1.5">
-            <FileText className="size-4" />
-            Reports
+          <TabsTrigger value="surgeons" className="gap-2">
+            <User className="h-4 w-4" />
+            Surgeon Scorecard
           </TabsTrigger>
         </TabsList>
 
         {/* Cases Tab */}
-        <TabsContent value="cases" className="mt-4">
+        <TabsContent value="cases" className="space-y-6 mt-6">
+          {/* Summary Cards */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Cases
+                </CardTitle>
+                <Stethoscope className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {reportLoading ? (
+                  <Skeleton className="h-8 w-20" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {totalCases.toLocaleString()}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Avg spend: $
+                      {Math.round(avgCostPerCase).toLocaleString()}/case
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Margin
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {reportLoading ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-green-600">
+                      ${Math.round(totalMargin).toLocaleString()}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {avgMarginPercent.toFixed(1)}% margin rate
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Contract Compliance
+                </CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {reportLoading ? (
+                  <Skeleton className="h-8 w-20" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {complianceRate.toFixed(1)}%
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      On-contract cases
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Spend
+                </CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {reportLoading ? (
+                  <Skeleton className="h-8 w-28" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      ${Math.round(totalSpend).toLocaleString()}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Reimb: ${Math.round(totalReimbursement).toLocaleString()}
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Cases Table */}
           <CaseTable facilityId={facilityId} />
         </TabsContent>
 
-        {/* Surgeons Tab */}
-        <TabsContent value="surgeons" className="mt-4">
+        {/* Surgeon Scorecard Tab */}
+        <TabsContent value="surgeons" className="space-y-6 mt-6">
           {scLoading ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -184,20 +204,6 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
             />
           )}
         </TabsContent>
-
-        {/* CPT Analysis Tab */}
-        <TabsContent value="cpt" className="mt-4">
-          {cptLoading ? (
-            <Skeleton className="h-[400px] rounded-md" />
-          ) : (
-            <CPTAnalysisTable analyses={cptData ?? []} />
-          )}
-        </TabsContent>
-
-        {/* Reports Tab */}
-        <TabsContent value="reports" className="mt-4">
-          <ReportsSummary report={report} isLoading={reportLoading} />
-        </TabsContent>
       </Tabs>
 
       <CaseImportDialog
@@ -210,148 +216,3 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
   )
 }
 
-/* ── Reports Summary ─────────────────────────────────── */
-
-import type { CaseCostingReport } from "@/lib/actions/cases"
-
-function ReportsSummary({
-  report,
-  isLoading,
-}: {
-  report: CaseCostingReport | undefined
-  isLoading: boolean
-}) {
-  if (isLoading) {
-    return (
-      <div className="grid gap-4 md:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-[160px] rounded-xl" />
-        ))}
-      </div>
-    )
-  }
-
-  if (!report || report.totalCases === 0) {
-    return (
-      <Card>
-        <CardContent className="flex h-40 items-center justify-center text-muted-foreground">
-          No report data available. Import cases to generate reports.
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Key metrics row */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Average Margin</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-2xl font-bold ${report.avgMargin >= 0 ? "text-emerald-600" : "text-red-600"}`}
-            >
-              ${Math.round(report.avgMargin).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Per case</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Reimbursement
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${Math.round(report.totalReimbursement).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">All cases</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Compliance Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {Math.round(report.complianceRate)}%
-            </div>
-            <p className="text-xs text-muted-foreground">On-contract cases</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Top Surgeons */}
-      {report.topSurgeons.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Top Surgeons by Spend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {report.topSurgeons.slice(0, 5).map((s) => (
-                <div
-                  key={s.name}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <div>
-                    <span className="font-medium">{s.name}</span>
-                    <span className="ml-2 text-muted-foreground">
-                      {s.cases} cases
-                    </span>
-                  </div>
-                  <span className="font-medium">
-                    ${Math.round(s.spend).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Monthly Trend */}
-      {report.monthlyCosts.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Monthly Cost Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {report.monthlyCosts.map((m) => {
-                const margin = m.reimbursement - m.spend
-                return (
-                  <div
-                    key={m.month}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span className="text-muted-foreground">{m.month}</span>
-                    <div className="flex gap-4">
-                      <span>
-                        Spend: ${Math.round(m.spend).toLocaleString()}
-                      </span>
-                      <span
-                        className={
-                          margin >= 0 ? "text-emerald-600" : "text-red-600"
-                        }
-                      >
-                        Margin: ${Math.round(margin).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
-}

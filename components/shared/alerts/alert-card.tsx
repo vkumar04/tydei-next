@@ -3,21 +3,11 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { alertTypeIconConfig, alertSeverityBadgeConfig } from "./alert-config"
+import { alertTypeIconConfig, alertSeverityBadgeConfig, alertColorBg } from "./alert-config"
 import { formatDistanceToNow } from "date-fns"
 import { CheckCircle, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import type { Alert } from "@prisma/client"
-
-const alertColorBg: Record<string, string> = {
-  off_contract: "text-red-500 bg-red-50 dark:bg-red-950",
-  expiring_contract: "text-amber-500 bg-amber-50 dark:bg-amber-950",
-  tier_threshold: "text-blue-500 bg-blue-50 dark:bg-blue-950",
-  rebate_due: "text-emerald-500 bg-emerald-50 dark:bg-emerald-950",
-  payment_due: "text-purple-500 bg-purple-50 dark:bg-purple-950",
-  pricing_error: "text-red-500 bg-red-50 dark:bg-red-950",
-  compliance: "text-amber-500 bg-amber-50 dark:bg-amber-950",
-}
 
 interface AlertCardProps {
   alert: Alert & {
@@ -54,21 +44,20 @@ export function AlertCard({
         <Checkbox
           checked={selected}
           onCheckedChange={onSelect}
-          className="mt-1"
         />
       )}
-      <div className={`p-2 rounded-lg shrink-0 ${colorClasses}`}>
+      <div className={`p-2 rounded-lg ${colorClasses}`}>
         {Icon && <Icon className="h-5 w-5" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className={`font-medium leading-tight ${isNew ? "" : "text-muted-foreground"}`}>
+          <div className="flex items-center gap-2">
+            <p className={`font-medium ${isNew ? "" : "text-muted-foreground"}`}>
               {alert.title}
             </p>
-            {severityConfig && (
-              <Badge variant={severityConfig.variant} className={severityConfig.className}>
-                {severityConfig.label}
+            {isNew && severityConfig && (
+              <Badge className={severityConfig.className}>
+                {severityConfig.label.toLowerCase()}
               </Badge>
             )}
           </div>

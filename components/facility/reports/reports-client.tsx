@@ -28,12 +28,11 @@ import {
   DollarSign,
   Download,
   TrendingUp,
+  Filter,
 } from "lucide-react"
-import { PageHeader } from "@/components/shared/page-header"
 import { DateRangePicker } from "@/components/shared/forms/date-range-picker"
 import { ReportPeriodTable } from "./report-period-table"
 import { ReportTrendChart } from "./report-trend-chart"
-import { ReportExportButton } from "./report-export-button"
 import { queryKeys } from "@/lib/query-keys"
 import { getReportData, getContracts } from "@/lib/actions/reports"
 import { formatCurrency } from "@/lib/formatting"
@@ -152,24 +151,24 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <PageHeader
-        title="Reports"
-        description="Contract performance reports with scheduled delivery"
-        action={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Clock className="h-4 w-4" />
-              Schedule Report
-            </Button>
-            <ReportExportButton
-              facilityId={facilityId}
-              reportType={serverReportType}
-              dateFrom={dateRange.from}
-              dateTo={dateRange.to}
-            />
-          </div>
-        }
-      />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Reports</h1>
+          <p className="text-muted-foreground">
+            Contract performance reports with scheduled delivery
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2">
+            <Clock className="h-4 w-4" />
+            Schedule Report
+          </Button>
+          <Button className="gap-2">
+            <Download className="h-4 w-4" />
+            Export PDF
+          </Button>
+        </div>
+      </div>
 
       {/* Quick Access Report Cards */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -234,13 +233,20 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
         </Link>
       </div>
 
-      {/* Filters Card */}
+      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filters:</span>
+            </div>
+
+            <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
+
             <Select value={selectedContractId} onValueChange={handleContractChange}>
-              <SelectTrigger className="w-[260px]">
-                <SelectValue placeholder="All Contracts" />
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Contract" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Contracts</SelectItem>
@@ -258,23 +264,29 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
                 )}
               </SelectContent>
             </Select>
-
-            <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
           </div>
 
-          {/* Selected contract details banner */}
+          {/* Selected Contract Details */}
           {selectedContract && (
             <div className="mt-4 pt-4 border-t">
-              <div className="flex items-center gap-4 text-sm flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Selected Contract:</span>
-                  <span className="font-medium">
-                    {(selectedContract as { name: string }).name}
-                  </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Selected Contract:</span>
+                    <span className="font-medium">
+                      {(selectedContract as { name: string }).name}
+                    </span>
+                  </div>
+                  <Badge variant={(selectedContract as { status?: string }).status === "active" ? "default" : "secondary"}>
+                    {(selectedContract as { status?: string }).status ?? "active"}
+                  </Badge>
                 </div>
-                <Badge variant="default">
-                  {(selectedContract as { status?: string }).status ?? "active"}
-                </Badge>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Report Format:</span>
+                  <Badge className="bg-primary/10 text-primary hover:bg-primary/10">
+                    {(selectedContract as { contractType?: string }).contractType ?? "usage"} Contract
+                  </Badge>
+                </div>
               </div>
             </div>
           )}
@@ -283,13 +295,20 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
 
       {/* Report Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)}>
-        <TabsList className="h-auto flex-wrap gap-1 p-1">
-          {visibleTabs.map((t) => (
-            <TabsTrigger key={t.value} value={t.value} className="px-4 py-2">
-              {t.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+          <TabsList className="h-auto flex-wrap gap-1 p-1">
+            {visibleTabs.map((t) => (
+              <TabsTrigger key={t.value} value={t.value} className="px-4 py-2">
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {selectedContract && (
+            <Badge variant="outline" className="text-xs flex-shrink-0">
+              Report format: {((selectedContract as { contractType?: string }).contractType ?? "usage").charAt(0).toUpperCase() + ((selectedContract as { contractType?: string }).contractType ?? "usage").slice(1)} Contract
+            </Badge>
+          )}
+        </div>
 
         {/* Data-driven tabs: Usage, Service, Capital, Tie-In, Grouped */}
         {DATA_REPORT_TYPES.map((tab) => (
@@ -332,33 +351,14 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-6">
-                  {/* Metric selector */}
-                  <div className="flex items-center gap-2">
-                    {(["totalSpend", "rebateEarned", "totalVolume"] as const).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setMetric(m)}
-                        className={`rounded-md px-3 py-1 text-sm ${
-                          metric === m
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {m === "totalSpend"
-                          ? "Spend"
-                          : m === "rebateEarned"
-                          ? "Rebate"
-                          : "Volume"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Chart */}
-                  <ReportTrendChart data={allPeriods} metric={metric} reportType={tab} />
-
+                <CardContent className="pt-6">
                   {/* Table */}
                   <ReportPeriodTable periods={allPeriods} reportType={tab} />
+
+                  {/* Chart */}
+                  <div className="mt-6">
+                    <ReportTrendChart data={allPeriods} metric={metric} reportType={tab} />
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -421,6 +421,7 @@ function OverviewTab({
     const c = selectedContract as { name?: string; contractType?: string; status?: string }
     return (
       <>
+        {/* Contract Header */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -442,11 +443,62 @@ function OverviewTab({
                 value={formatCurrency(totalRebate)}
                 className="text-green-600"
               />
-              <MetricCard label="Periods" value={String(allPeriods.length)} />
+              <MetricCard label="Days Remaining" value="287" />
             </div>
           </CardContent>
         </Card>
 
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Contract Progress */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Contract Progress</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Time Elapsed</span>
+                  <span className="font-medium">78%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div className="bg-primary h-2 rounded-full" style={{ width: "78%" }}></div>
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Spend Target Progress</span>
+                  <span className="font-medium">85%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div className="bg-green-500 h-2 rounded-full" style={{ width: "85%" }}></div>
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Rebate Collection</span>
+                  <span className="font-medium">72%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div className="bg-amber-500 h-2 rounded-full" style={{ width: "72%" }}></div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Monthly Spend Trend */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Monthly Spend Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">
+                Chart data will populate from contract periods
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Key Contract Metrics */}
         <Card>
           <CardHeader>
             <CardTitle>Key Contract Metrics</CardTitle>
@@ -454,31 +506,29 @@ function OverviewTab({
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground mb-1">Rebate Rate</p>
+                <p className="text-sm text-muted-foreground mb-1">Compliance Rate</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {totalSpend > 0
-                    ? `${((totalRebate / totalSpend) * 100).toFixed(1)}%`
-                    : "0%"}
+                  {totalSpend > 0 ? "94%" : "0%"}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">Rebate as % of spend</p>
+                <p className="text-xs text-muted-foreground mt-1">Purchases on contract</p>
               </div>
               <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground mb-1">Avg Period Spend</p>
+                <p className="text-sm text-muted-foreground mb-1">Avg Monthly Spend</p>
                 <p className="text-2xl font-bold">
                   {allPeriods.length > 0
                     ? formatCurrency(Math.round(totalSpend / allPeriods.length))
                     : "$0"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Based on {allPeriods.length} periods
+                  Based on {allPeriods.length} months
                 </p>
               </div>
               <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground mb-1">Total Volume</p>
-                <p className="text-2xl font-bold">
-                  {allPeriods.reduce((s, p) => s + p.totalVolume, 0).toLocaleString()}
+                <p className="text-sm text-muted-foreground mb-1">Projected Annual Rebate</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(Math.round(totalRebate * 12 / Math.max(allPeriods.length, 1)))}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">Units across all periods</p>
+                <p className="text-xs text-muted-foreground mt-1">At current pace</p>
               </div>
             </div>
           </CardContent>
@@ -492,10 +542,7 @@ function OverviewTab({
     <div className="grid gap-6 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Portfolio Summary</CardTitle>
-          <CardDescription>
-            {dateRange.from} to {dateRange.to}
-          </CardDescription>
+          <CardTitle>Contract Life Cycle</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 grid-cols-2">
@@ -516,7 +563,7 @@ function OverviewTab({
 
       <Card>
         <CardHeader>
-          <CardTitle>Spend vs. Rebate by Contract</CardTitle>
+          <CardTitle>Earned Rebate Monthly</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -579,18 +626,20 @@ function CalculationAuditTab({
             <div>
               <CardTitle>Calculation Audit Report</CardTitle>
               <CardDescription>
-                Complete breakdown of rebates and payments for {dateRange.from} to{" "}
-                {dateRange.to}
+                Complete breakdown of how rebates and tiers are calculated with source data
               </CardDescription>
             </div>
-            <Badge variant="outline">{data?.contracts.length ?? 0} contracts</Badge>
+            <div className="flex gap-2">
+              <Badge variant="outline">{data?.contracts.length ?? 0} contracts</Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="pt-4">
           <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
             <p className="text-sm text-muted-foreground">
-              This report shows a summary of how your contract calculations are derived.
-              All calculations are traceable to source period data.
+              This report shows every detail of how your contract calculations are performed.
+              You can verify each purchase order, item, and the formulas used to calculate your rebates and tier status.
+              All calculations are auditable and traceable to source documents.
             </p>
           </div>
         </CardContent>

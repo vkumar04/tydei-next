@@ -13,9 +13,9 @@ export function getPricingColumns(): ColumnDef<PricingFileWithVendor>[] {
   return [
     {
       accessorKey: "vendorItemNo",
-      header: "Item #",
+      header: "Vendor Item #",
       cell: ({ row }) => (
-        <span className="font-mono text-xs">{row.original.vendorItemNo}</span>
+        <span className="font-mono text-sm">{row.original.vendorItemNo}</span>
       ),
     },
     {
@@ -23,7 +23,7 @@ export function getPricingColumns(): ColumnDef<PricingFileWithVendor>[] {
       header: "Description",
       cell: ({ row }) => (
         <span
-          className="max-w-[200px] truncate block font-medium"
+          className="max-w-[200px] truncate block"
           title={row.original.productDescription}
         >
           {row.original.productDescription}
@@ -49,9 +49,9 @@ export function getPricingColumns(): ColumnDef<PricingFileWithVendor>[] {
       accessorKey: "listPrice",
       header: "List Price",
       cell: ({ row }) => (
-        <span className="text-right">
+        <span className="text-right text-muted-foreground">
           {row.original.listPrice
-            ? formatCurrency(Number(row.original.listPrice), true)
+            ? formatCurrency(Number(row.original.listPrice))
             : "\u2014"}
         </span>
       ),
@@ -62,9 +62,33 @@ export function getPricingColumns(): ColumnDef<PricingFileWithVendor>[] {
       cell: ({ row }) => (
         <span className="text-right font-medium">
           {row.original.contractPrice
-            ? formatCurrency(Number(row.original.contractPrice), true)
+            ? formatCurrency(Number(row.original.contractPrice))
             : "\u2014"}
         </span>
+      ),
+    },
+    {
+      id: "savings",
+      header: "Savings",
+      cell: ({ row }) => {
+        const list = Number(row.original.listPrice ?? 0)
+        const contract = Number(row.original.contractPrice ?? 0)
+        const savings = list - contract
+        const pct = list > 0 ? ((savings / list) * 100).toFixed(0) : "0"
+        return (
+          <span className="text-right text-green-600">
+            {formatCurrency(savings)} ({pct}%)
+          </span>
+        )
+      },
+    },
+    {
+      id: "source",
+      header: "Source",
+      cell: () => (
+        <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs">
+          File
+        </div>
       ),
     },
   ]

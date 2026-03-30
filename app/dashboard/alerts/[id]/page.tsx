@@ -3,9 +3,12 @@
 import { useParams, useRouter } from "next/navigation"
 import { AlertDetailCard } from "@/components/shared/alerts/alert-detail-card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAlert, useResolveAlert, useDismissAlert, useMarkAlertRead } from "@/hooks/use-alerts"
-import { ArrowLeft, CheckCircle, XCircle } from "lucide-react"
+import { alertTypeIconConfig, alertSeverityBadgeConfig, alertColorBg, statusColors } from "@/components/shared/alerts/alert-config"
+import { ArrowLeft, AlertTriangle } from "lucide-react"
+import { formatDistanceToNow } from "date-fns"
 import { useEffect } from "react"
 import Link from "next/link"
 
@@ -36,6 +39,7 @@ export default function AlertDetailPage() {
   if (!alert) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <AlertTriangle className="h-12 w-12 text-muted-foreground" />
         <h2 className="text-xl font-semibold">Alert Not Found</h2>
         <p className="text-muted-foreground">The alert you are looking for does not exist.</p>
         <Button asChild>
@@ -48,54 +52,61 @@ export default function AlertDetailPage() {
     )
   }
 
+  const typeConfig = alertTypeIconConfig[alert.alertType]
+  const severityConfig = alertSeverityBadgeConfig[alert.severity]
+  const Icon = typeConfig?.icon ?? AlertTriangle
+  const colorClasses = alertColorBg[alert.alertType] ?? "text-muted-foreground bg-muted"
+
+  const handleMarkResolved = () => {
+    resolve.mutate(alert.id)
+    router.push("/dashboard/alerts")
+  }
+
+  const handleDismiss = () => {
+    dismiss.mutate(alert.id)
+    router.push("/dashboard/alerts")
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Back button + action buttons header */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" asChild>
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" asChild>
           <Link href="/dashboard/alerts">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Alerts
+            <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${colorClasses}`}>
+              <Icon className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{alert.title}</h1>
+              <p className="text-muted-foreground">
+                {formatDistanceToNow(new Date(alert.createdAt), { addSuffix: true })}
+              </p>
+            </div>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
-          {alert.status !== "resolved" && (
-            <Button
-              size="sm"
-              onClick={() => {
-                resolve.mutate(alert.id)
-                router.push("/dashboard/alerts")
-              }}
-            >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Resolve
-            </Button>
+          {severityConfig && (
+            <Badge className={severityConfig.className}>
+              {severityConfig.label.toLowerCase()} priority
+            </Badge>
           )}
-          {alert.status !== "dismissed" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                dismiss.mutate(alert.id)
-                router.push("/dashboard/alerts")
-              }}
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Dismiss
-            </Button>
-          )}
+          <Badge className={statusColors[alert.status] ?? ""}>
+            {alert.status.replace("_", " ")}
+          </Badge>
         </div>
       </div>
 
-      {/* Alert detail card with all metadata */}
-      <AlertDetailCard alert={alert} />
-
-      {/* Related entity link */}
-      {alert.actionLink && (
-        <Button variant="outline" onClick={() => router.push(alert.actionLink!)}>
-          View Related Entity
-        </Button>
-      )}
+      {/* Alert Details */}
+      <AlertDetailCard
+        alert={alert}
+        onResolve={handleMarkResolved}
+        onDismiss={handleDismiss}
+      />
     </div>
   )
 }

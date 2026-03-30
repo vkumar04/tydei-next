@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
@@ -72,28 +73,35 @@ export function InvoiceValidationTable({ facilityId, vendors }: InvoiceValidatio
   )
 
   return (
-    <div className="space-y-4">
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          {TABS.map((t) => (
-            <TabsTrigger key={t.value} value={t.value}>
-              {t.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-      <DataTable
-        columns={columns}
-        data={filteredInvoices as never[]}
-        searchKey="invoiceNumber"
-        searchPlaceholder="Search invoices..."
-        filterComponent={filterComponent}
-        isLoading={isLoading}
-        onRowClick={(row) => {
-          const r = row as InvoiceRow
-          router.push(`/dashboard/invoice-validation/${r.id}`)
-        }}
-      />
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Invoice Discrepancies</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList>
+              {TABS.map((t) => (
+                <TabsTrigger key={t.value} value={t.value}>
+                  {t.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <DataTable
+            columns={columns}
+            data={filteredInvoices as never[]}
+            searchKey="invoiceNumber"
+            searchPlaceholder="Search invoices..."
+            filterComponent={filterComponent}
+            isLoading={isLoading}
+            onRowClick={(row) => {
+              const r = row as InvoiceRow
+              router.push(`/dashboard/invoice-validation/${r.id}`)
+            }}
+          />
+        </div>
+      </CardContent>
+    </Card>
   )
 }

@@ -21,6 +21,7 @@ interface AlertsListProps {
   onSelect: (id: string, checked: boolean) => void
   onSelectAll: (checked: boolean) => void
   isLoading: boolean
+  emptyMessage?: string
 }
 
 export function AlertsList({
@@ -32,6 +33,7 @@ export function AlertsList({
   onSelect,
   onSelectAll,
   isLoading,
+  emptyMessage,
 }: AlertsListProps) {
   if (isLoading) {
     return (
@@ -48,7 +50,9 @@ export function AlertsList({
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <BellOff className="h-12 w-12 text-muted-foreground/50 mb-4" />
         <h3 className="font-semibold">No alerts</h3>
-        <p className="text-sm text-muted-foreground">You&apos;re all caught up!</p>
+        <p className="text-sm text-muted-foreground">
+          {emptyMessage ?? "You\u2019re all caught up!"}
+        </p>
       </div>
     )
   }
@@ -64,13 +68,11 @@ export function AlertsList({
           onCheckedChange={(checked) => onSelectAll(checked as boolean)}
         />
         <span className="text-sm text-muted-foreground">
-          {selectedIds.size > 0
-            ? `${selectedIds.size} selected`
-            : `Select all (${alerts.length})`}
+          Select all ({alerts.length})
         </span>
       </div>
 
-      {/* Scrollable alert items */}
+      {/* Alert items */}
       <ScrollArea className="h-[500px]">
         {alerts.map((alert) => (
           <AlertCard

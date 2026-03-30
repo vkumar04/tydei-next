@@ -1,9 +1,10 @@
 "use client"
 
-import { History, FileSpreadsheet } from "lucide-react"
+import { History, FileSpreadsheet, Upload, FileText } from "lucide-react"
 import { useCOGImportHistory } from "@/hooks/use-cog"
-import { formatDate } from "@/lib/formatting"
+import { formatDate, formatCurrency } from "@/lib/formatting"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -18,9 +19,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 interface COGUploadHistoryProps {
   facilityId: string
+  variant?: "cog" | "pricing"
 }
 
-export function COGUploadHistory({ facilityId }: COGUploadHistoryProps) {
+export function COGUploadHistory({ facilityId, variant = "cog" }: COGUploadHistoryProps) {
   const { data, isLoading } = useCOGImportHistory(facilityId)
 
   if (isLoading) {
@@ -37,60 +39,191 @@ export function COGUploadHistory({ facilityId }: COGUploadHistoryProps) {
     return (
       <EmptyState
         icon={History}
-        title="No Uploaded Files"
-        description="Import COG data to see upload history here"
+        title={variant === "pricing" ? "No Pricing Files" : "No Uploaded Files"}
+        description={
+          variant === "pricing"
+            ? "Upload vendor pricing files to see them here"
+            : 'No files uploaded yet. Click "Import Data" to upload COG files.'
+        }
       />
     )
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileSpreadsheet className="h-5 w-5" />
-          Uploaded COG Files
-        </CardTitle>
-        <CardDescription>
-          Purchase order and invoice files imported into the system
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>File Name</TableHead>
-              <TableHead>Upload Date</TableHead>
-              <TableHead className="text-right">Records</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.map((entry, i) => (
-              <TableRow key={i}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">
-                      COG Import - {formatDate(entry.date)}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(entry.date)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {entry.recordCount.toLocaleString()}
-                </TableCell>
-                <TableCell>
-                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
-                    Processed
-                  </Badge>
-                </TableCell>
+  if (variant === "pricing") {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Uploaded Pricing Files</CardTitle>
+            <CardDescription>
+              Vendor pricing files used to match COG data
+            </CardDescription>
+          </div>
+          <Button>
+            <Upload className="mr-2 h-4 w-4" />
+            Import Data
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vendor</TableHead>
+                <TableHead>File Name</TableHead>
+                <TableHead>Linked Contract</TableHead>
+                <TableHead>Upload Date</TableHead>
+                <TableHead>Effective Date</TableHead>
+                <TableHead className="text-right">Items</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+            </TableHeader>
+            <TableBody>
+              {data.map((entry, i) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">Vendor</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      Pricing Import - {formatDate(entry.date)}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="secondary"
+                      className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                    >
+                      Not Linked
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(entry.date)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(entry.date)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {entry.recordCount.toLocaleString()}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                      Active
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5" />
+              Uploaded COG Files
+            </CardTitle>
+            <CardDescription>
+              Purchase order and invoice files imported into the system
+            </CardDescription>
+          </div>
+          <Button>
+            <Upload className="mr-2 h-4 w-4" />
+            Import Data
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>File Name</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Upload Date</TableHead>
+                <TableHead>Date Range</TableHead>
+                <TableHead className="text-right">Records</TableHead>
+                <TableHead className="text-right">Total Spend</TableHead>
+                <TableHead className="text-right">Matched</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.map((entry, i) => (
+                <TableRow key={i}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">
+                        COG Import - {formatDate(entry.date)}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">CSV</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(entry.date)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {formatDate(entry.date)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {entry.recordCount.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {formatCurrency(0)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="text-sm">
+                      <span className="text-green-600">{entry.recordCount.toLocaleString()}</span>
+                      <span className="text-muted-foreground"> / </span>
+                      <span className="text-amber-600">0</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                      Processed
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Summary Stats for COG Files */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">Total Files</p>
+            <p className="text-2xl font-bold">{data.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">Total Records</p>
+            <p className="text-2xl font-bold">
+              {data.reduce((sum, f) => sum + f.recordCount, 0).toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">Total Spend Imported</p>
+            <p className="text-2xl font-bold">{formatCurrency(0)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">Contract Match Rate</p>
+            <p className="text-2xl font-bold text-green-600">0%</p>
+          </CardContent>
+        </Card>
+      </div>
+    </>
   )
 }

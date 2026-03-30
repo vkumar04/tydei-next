@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Download } from "lucide-react"
 import { useCOGRecords, useDeleteCOGRecord } from "@/hooks/use-cog"
 import { useVendorList } from "@/hooks/use-vendor-crud"
 import { getCOGColumns } from "@/components/facility/cog/cog-columns"
@@ -23,6 +23,7 @@ interface COGRecordsTableProps {
 
 export function COGRecordsTable({ facilityId }: COGRecordsTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
+  const [contractFilter, setContractFilter] = useState<string>("all")
   const [manualOpen, setManualOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string
@@ -43,11 +44,20 @@ export function COGRecordsTable({ facilityId }: COGRecordsTableProps) {
     []
   )
 
+  // Filter by contract status client-side
+  const filteredRecords = useMemo(() => {
+    const records = data?.records ?? []
+    if (contractFilter === "all") return records
+    if (contractFilter === "on") return records.filter((r) => r.category && r.category !== "")
+    if (contractFilter === "off") return records.filter((r) => !r.category || r.category === "")
+    return records
+  }, [data, contractFilter])
+
   return (
     <div className="space-y-4">
       <DataTable
         columns={columns}
-        data={data?.records ?? []}
+        data={filteredRecords}
         searchKey="inventoryDescription"
         searchPlaceholder="Search by description, vendor item, or inventory number..."
         isLoading={isLoading}
@@ -66,12 +76,25 @@ export function COGRecordsTable({ facilityId }: COGRecordsTableProps) {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={contractFilter} onValueChange={setContractFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Items</SelectItem>
+                <SelectItem value="on">On Contract</SelectItem>
+                <SelectItem value="off">Off Contract</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               size="sm"
               variant="outline"
               onClick={() => setManualOpen(true)}
             >
               <Plus className="mr-1 h-4 w-4" /> Add Record
+            </Button>
+            <Button variant="outline" size="icon">
+              <Download className="h-4 w-4" />
             </Button>
           </>
         }
