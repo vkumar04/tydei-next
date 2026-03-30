@@ -11,17 +11,12 @@ export async function POST(request: Request) {
       return Response.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Convert file to base64 data URL for the AI SDK
+    // Convert file to Uint8Array for the AI SDK
     const arrayBuffer = await file.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
-    const binaryString = Array.from(uint8Array, (byte) =>
-      String.fromCharCode(byte)
-    ).join("")
-    const base64Data = btoa(binaryString)
+    const fileData = new Uint8Array(arrayBuffer)
 
     const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
     const mediaType = isPDF ? "application/pdf" : "text/plain"
-    const dataUrl = `data:${mediaType};base64,${base64Data}`
 
     const result = await generateText({
       model: geminiModel,
@@ -39,7 +34,7 @@ Extract all terms and tier structures you can find.`,
             },
             {
               type: "file",
-              data: dataUrl,
+              data: fileData,
               mediaType,
             },
           ],
