@@ -56,6 +56,8 @@ export function PortalShell({
   alertCount,
   children,
 }: PortalShellProps) {
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -111,7 +113,7 @@ export function PortalShell({
           {/* Header actions */}
           <div className="flex items-center gap-1">
             {/* Import button with dialog */}
-            <Dialog>
+            <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="hidden md:flex">
                   <Upload className="mr-2 h-4 w-4" />
@@ -127,7 +129,10 @@ export function PortalShell({
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-3 py-4">
-                  <Link href="/dashboard/cog-data">
+                  <Link
+                    href="/dashboard/cog-data"
+                    onClick={() => setImportDialogOpen(false)}
+                  >
                     <Button
                       variant="outline"
                       className="w-full justify-between"
@@ -139,7 +144,10 @@ export function PortalShell({
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
-                  <Link href="/dashboard/contracts/new">
+                  <Link
+                    href="/dashboard/contracts/new"
+                    onClick={() => setImportDialogOpen(false)}
+                  >
                     <Button
                       variant="outline"
                       className="w-full justify-between"
