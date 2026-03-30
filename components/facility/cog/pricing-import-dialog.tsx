@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Loader2 } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Loader2, Sparkles } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -19,10 +19,11 @@ import {
 } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { FileDropzone } from "@/components/facility/cog/file-dropzone"
+import { COGColumnMapper } from "@/components/facility/cog/cog-column-mapper"
 import { useFileParser } from "@/hooks/use-file-parser"
+import { usePricingImport } from "@/hooks/use-pricing-import"
 import { useImportPricingFiles } from "@/hooks/use-pricing-files"
 import { useVendorList } from "@/hooks/use-vendor-crud"
-import type { PricingFileInput } from "@/lib/validators/pricing-files"
 
 interface PricingImportDialogProps {
   facilityId: string
@@ -38,37 +39,41 @@ export function PricingImportDialog({
   onComplete,
 }: PricingImportDialogProps) {
   const [vendorId, setVendorId] = useState("")
-  const [result, setResult] = useState<{ imported: number; errors: number } | null>(null)
+  const [result, setResult] = useState<{
+    imported: number
+    errors: number
+  } | null>(null)
   const parser = useFileParser()
+  const importState = usePricingImport()
   const importMutation = useImportPricingFiles()
   const { data: vendorData } = useVendorList()
+  const forwarded = useRef(false)
 
   const handleFile = async (file: File) => {
+    forwarded.current = false
     await parser.parseFile(file)
   }
 
-  const buildRecords = (): PricingFileInput[] => {
-    if (!parser.data) return []
-    return parser.data.rows.map((row) => ({
-      vendorItemNo: row["vendorItemNo"] ?? row["Vendor Item No"] ?? row["Item No"] ?? "",
-      productDescription: row["productDescription"] ?? row["Description"] ?? "",
-      listPrice: parseFloat((row["listPrice"] ?? row["List Price"] ?? "0").replace(/[^0-9.-]/g, "")) || undefined,
-      contractPrice: parseFloat((row["contractPrice"] ?? row["Contract Price"] ?? "0").replace(/[^0-9.-]/g, "")) || undefined,
-      effectiveDate: row["effectiveDate"] ?? row["Effective Date"] ?? new Date().toISOString().slice(0, 10),
-      expirationDate: row["expirationDate"] ?? row["Expiration Date"] ?? undefined,
-      category: row["category"] ?? row["Category"] ?? undefined,
-      uom: row["uom"] ?? row["UOM"] ?? "EA",
-    })).filter((r) => r.vendorItemNo && r.productDescription)
-  }
+  // Forward parsed data to import state for AI mapping
+  useEffect(() => {
+    if (parser.data && importState.step === "upload" && !forwarded.current) {
+      forwarded.current = true
+      importState.setParsedData(parser.data.headers, parser.data.rows)
+    }
+  }, [parser.data, importState])
 
   const handleImport = async () => {
-    const records = buildRecords()
-    const res = await importMutation.mutateAsync({
-      vendorId,
-      facilityId,
-      records,
-    })
-    setResult(res)
+    importState.setStep("import")
+    try {
+      const res = await importMutation.mutateAsync({
+        vendorId,
+        facilityId,
+        records: importState.mappedRecords,
+      })
+      setResult(res)
+    } catch {
+      importState.setStep("preview")
+    }
   }
 
   const handleClose = (nextOpen: boolean) => {
@@ -76,6 +81,8 @@ export function PricingImportDialog({
       setVendorId("")
       setResult(null)
       parser.reset()
+      importState.reset()
+      forwarded.current = false
       if (result) onComplete()
     }
     onOpenChange(nextOpen)
@@ -83,29 +90,33 @@ export function PricingImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import Pricing File</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Vendor</Label>
-            <Select value={vendorId} onValueChange={setVendorId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select vendor..." />
-              </SelectTrigger>
-              <SelectContent>
-                {vendorData?.vendors.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    {v.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Step 1: Vendor selection */}
+          {!vendorId && (
+            <div className="space-y-2">
+              <Label>Vendor</Label>
+              <Select value={vendorId} onValueChange={setVendorId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select vendor..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {vendorData?.vendors.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
-          {vendorId && !parser.data && !result && (
+          {/* Step 2: File upload */}
+          {vendorId && importState.step === "upload" && !result && (
             <FileDropzone
               accept={[".csv", ".xlsx", ".xls"]}
               onFile={handleFile}
@@ -113,40 +124,136 @@ export function PricingImportDialog({
             />
           )}
 
-          {parser.data && !result && (
-            <div className="space-y-3">
+          {/* Step 3: AI mapping in progress */}
+          {importState.step === "mapping" && (
+            <div className="space-y-3 py-4 text-center">
+              <Sparkles className="mx-auto h-8 w-8 animate-pulse text-primary" />
               <p className="text-sm text-muted-foreground">
-                {buildRecords().length} pricing entries found
+                AI is mapping your columns...
               </p>
+              <Progress value={50} />
+            </div>
+          )}
+
+          {/* Step 4: Column mapping review */}
+          {importState.step === "map" && (
+            <div className="space-y-4">
+              <COGColumnMapper
+                sourceColumns={importState.headers}
+                targetFields={importState.targetFields}
+                mapping={importState.mapping}
+                onChange={importState.setMapping}
+              />
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => parser.reset()}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    forwarded.current = false
+                    parser.reset()
+                    importState.setStep("upload")
+                  }}
+                >
+                  Back
+                </Button>
+                <Button onClick={importState.goToPreview}>Preview</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Preview */}
+          {importState.step === "preview" && (
+            <div className="space-y-4">
+              <div className="rounded-md border p-4">
+                <p className="text-sm font-medium">
+                  {importState.mappedRecords.length} pricing entries ready to
+                  import
+                </p>
+                {importState.mappedRecords.length > 0 && (
+                  <div className="mt-3 max-h-48 overflow-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b text-left text-muted-foreground">
+                          <th className="pb-1 pr-3">Item No</th>
+                          <th className="pb-1 pr-3">Description</th>
+                          <th className="pb-1 pr-3">Contract Price</th>
+                          <th className="pb-1">UOM</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importState.mappedRecords.slice(0, 10).map((r, i) => (
+                          <tr key={i} className="border-b last:border-0">
+                            <td className="py-1 pr-3 font-mono">
+                              {r.vendorItemNo}
+                            </td>
+                            <td className="py-1 pr-3 max-w-[200px] truncate">
+                              {r.productDescription}
+                            </td>
+                            <td className="py-1 pr-3">
+                              {r.contractPrice != null
+                                ? `$${r.contractPrice.toFixed(2)}`
+                                : "—"}
+                            </td>
+                            <td className="py-1">{r.uom}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {importState.mappedRecords.length > 10 && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        ...and {importState.mappedRecords.length - 10} more
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => importState.setStep("map")}
+                >
                   Back
                 </Button>
                 <Button
                   onClick={handleImport}
-                  disabled={importMutation.isPending || buildRecords().length === 0}
+                  disabled={
+                    importMutation.isPending ||
+                    importState.mappedRecords.length === 0
+                  }
                 >
-                  {importMutation.isPending && <Loader2 className="animate-spin" />}
-                  Import
+                  {importMutation.isPending && (
+                    <Loader2 className="animate-spin" />
+                  )}
+                  Import {importState.mappedRecords.length} Entries
                 </Button>
               </div>
             </div>
           )}
 
-          {importMutation.isPending && !result && (
-            <Progress value={50} />
+          {/* Step 6: Importing */}
+          {importState.step === "import" && !result && (
+            <div className="space-y-3 py-4">
+              <p className="text-sm text-muted-foreground">
+                Importing records...
+              </p>
+              <Progress value={50} />
+            </div>
           )}
 
+          {/* Step 7: Result */}
           {result && (
             <div className="space-y-3 py-2">
               <p className="font-medium">Import Complete</p>
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div>
-                  <p className="text-2xl font-bold text-emerald-600">{result.imported}</p>
+                  <p className="text-2xl font-bold text-emerald-600">
+                    {result.imported}
+                  </p>
                   <p className="text-xs text-muted-foreground">Imported</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">{result.errors}</p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                    {result.errors}
+                  </p>
                   <p className="text-xs text-muted-foreground">Errors</p>
                 </div>
               </div>

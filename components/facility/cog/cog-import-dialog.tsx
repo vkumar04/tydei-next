@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, Sparkles } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -100,6 +100,16 @@ export function COGImportDialog({
             accept={[".csv", ".xlsx", ".xls"]}
             onFile={handleFile}
           />
+        )}
+
+        {importState.step === "mapping" && (
+          <div className="space-y-3 py-4 text-center">
+            <Sparkles className="mx-auto h-8 w-8 animate-pulse text-primary" />
+            <p className="text-sm text-muted-foreground">
+              AI is mapping your columns...
+            </p>
+            <Progress value={50} />
+          </div>
         )}
 
         {importState.step === "map" && (

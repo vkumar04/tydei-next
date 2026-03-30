@@ -2,8 +2,9 @@
 
 import { useState, useCallback } from "react"
 import type { COGRecordInput } from "@/lib/validators/cog-records"
+import { mapColumns } from "@/lib/map-columns"
 
-type ImportStep = "upload" | "map" | "preview" | "import"
+type ImportStep = "upload" | "mapping" | "map" | "preview" | "import"
 
 interface ImportState {
   step: ImportStep
@@ -44,46 +45,30 @@ export function useCOGImport() {
   }, [])
 
   const setParsedData = useCallback(
-    (headers: string[], rows: Record<string, string>[]) => {
-      // Normalise a string for matching: lowercase, strip non-alphanumeric
-      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
-
-      // Common CSV/Excel aliases for each target field
-      const ALIASES: Record<string, string[]> = {
-        inventoryNumber: ["inventorynumber", "inventoryno", "invno", "invnumber", "itemno", "itemnumber", "sku"],
-        inventoryDescription: ["inventorydescription", "description", "desc", "itemdescription", "itemdesc", "productdescription"],
-        vendorName: ["vendorname", "vendor", "suppliername", "supplier"],
-        vendorItemNo: ["vendoritemno", "vendoritemnumber", "vendoritem", "supplieritemno"],
-        manufacturerNo: ["manufacturerno", "manufacturernumber", "mfgno", "mfgnumber", "manufacturer"],
-        unitCost: ["unitcost", "unitprice", "cost", "price", "eachprice"],
-        extendedPrice: ["extendedprice", "extprice", "extendedcost", "totalcost", "totalprice", "lineamount", "linetotal", "amount"],
-        quantity: ["quantity", "qty", "units", "count"],
-        transactionDate: ["transactiondate", "date", "invoicedate", "orderdate", "txndate", "purchasedate"],
-        category: ["category", "cat", "productcategory", "itemcategory", "department", "dept"],
-      }
-
-      const autoMapping: Record<string, string> = {}
-      for (const field of TARGET_FIELDS) {
-        // Try exact normalised match first
-        let match = headers.find((h) => norm(h) === norm(field.key))
-        // Then try aliases
-        if (!match) {
-          const aliases = ALIASES[field.key] ?? []
-          match = headers.find((h) => aliases.includes(norm(h)))
-        }
-        // Then try label match (e.g. "Unit Cost" matches field.label "Unit Cost")
-        if (!match) {
-          match = headers.find((h) => norm(h) === norm(field.label))
-        }
-        if (match) autoMapping[field.key] = match
-      }
+    async (headers: string[], rows: Record<string, string>[]) => {
+      // Show loading state while Gemini maps columns
       setState((prev) => ({
         ...prev,
         headers,
         rows,
-        mapping: autoMapping,
-        step: "map",
+        step: "mapping",
       }))
+
+      try {
+        const mapping = await mapColumns(headers, [...TARGET_FIELDS], rows)
+        setState((prev) => ({
+          ...prev,
+          mapping,
+          step: "map",
+        }))
+      } catch {
+        // If AI fails, proceed to manual mapping with empty mapping
+        setState((prev) => ({
+          ...prev,
+          mapping: {},
+          step: "map",
+        }))
+      }
     },
     []
   )

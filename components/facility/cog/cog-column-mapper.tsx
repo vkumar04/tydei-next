@@ -9,11 +9,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { TargetField } from "@/hooks/use-cog-import"
+interface ColumnField {
+  key: string
+  label: string
+  required: boolean
+}
 
 interface COGColumnMapperProps {
   sourceColumns: string[]
-  targetFields: TargetField[]
+  targetFields: ColumnField[]
   mapping: Record<string, string>
   onChange: (mapping: Record<string, string>) => void
 }
