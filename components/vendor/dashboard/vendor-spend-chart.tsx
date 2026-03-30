@@ -9,7 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { TrendingUp } from "lucide-react"
+import { DollarSign } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -35,17 +35,14 @@ export function VendorSpendChart({ data }: VendorSpendChartProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-muted-foreground" />
-          <div>
-            <CardTitle>Aggregate Spend Trend</CardTitle>
-            <CardDescription>Monthly spend on your contracts</CardDescription>
-          </div>
-        </div>
+        <CardTitle>Aggregate Spend Trend</CardTitle>
+        <CardDescription>
+          Total on-contract spend across all facilities
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {hasData ? (
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={280}>
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="month" className="text-xs" />
@@ -58,17 +55,19 @@ export function VendorSpendChart({ data }: VendorSpendChartProps) {
               <Line
                 type="monotone"
                 dataKey="spend"
-                stroke="#10b981"
+                stroke="hsl(var(--primary))"
                 strokeWidth={2}
-                dot={{ fill: "#10b981" }}
+                dot={{ fill: "hsl(var(--primary))" }}
               />
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
-            <TrendingUp className="h-12 w-12 mb-4 opacity-50" />
+          <div className="flex flex-col items-center justify-center h-[280px] text-muted-foreground">
+            <DollarSign className="h-12 w-12 mb-4 opacity-50" />
             <p className="text-lg font-medium">No spend data available</p>
-            <p className="text-sm">Data will appear as facilities upload COG records</p>
+            <p className="text-sm">
+              Spend trends will appear once COG data is loaded
+            </p>
           </div>
         )}
       </CardContent>

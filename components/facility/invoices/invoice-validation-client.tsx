@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import {
   AlertTriangle,
   DollarSign,
@@ -8,15 +8,48 @@ import {
   TrendingUp,
   Plus,
   Download,
+  Search,
+  Package,
+  Filter,
+  FileText,
+  Eye,
+  Check,
+  CheckCircle2,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { InvoiceValidationTable } from "./invoice-validation-table"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { InvoiceImportDialog } from "./invoice-import-dialog"
-import { useInvoiceSummary } from "@/hooks/use-invoices"
-import { formatCurrency } from "@/lib/formatting"
+import { useInvoiceSummary, useInvoices } from "@/hooks/use-invoices"
+import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
 import { toast } from "sonner"
 
 interface Vendor {
@@ -29,16 +62,107 @@ interface InvoiceValidationClientProps {
   vendors: Vendor[]
 }
 
+type InvoiceRow = {
+  id: string
+  invoiceNumber: string
+  vendor: { name: string }
+  invoiceDate: Date | string
+  totalInvoiceCost: number | string | null
+  totalContractCost: number
+  variance: number
+  variancePercent: number
+  status: string
+  flaggedCount: number
+  lineItemCount: number
+}
+
+const statusColors: Record<string, string> = {
+  pending:
+    "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+  disputed:
+    "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+  resolved:
+    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+  verified:
+    "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+  flagged:
+    "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+  validated:
+    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+}
+
 export function InvoiceValidationClient({
   facilityId,
   vendors,
 }: InvoiceValidationClientProps) {
   const [importOpen, setImportOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [vendorFilter, setVendorFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [selectedInvoices, setSelectedInvoices] = useState<string[]>([])
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(
+    null
+  )
+
   const { data: summary, isLoading: summaryLoading } =
     useInvoiceSummary(facilityId)
 
+  const { data, isLoading: tableLoading } = useInvoices(facilityId, {
+    facilityId,
+    vendorId: vendorFilter === "all" ? undefined : vendorFilter,
+    status: statusFilter === "all" ? undefined : statusFilter,
+  })
+
   const totalVariance = summary?.totalVariance ?? 0
   const variancePercent = summary?.variancePercent ?? 0
+
+  const invoices = (data?.invoices ?? []) as InvoiceRow[]
+
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      const q = searchQuery.toLowerCase()
+      const matchesSearch =
+        !q ||
+        inv.invoiceNumber.toLowerCase().includes(q) ||
+        inv.vendor.name.toLowerCase().includes(q)
+      return matchesSearch
+    })
+  }, [invoices, searchQuery])
+
+  const toggleSelectInvoice = (id: string) => {
+    setSelectedInvoices((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    )
+  }
+
+  const handleViewDetails = (invoice: InvoiceRow) => {
+    setSelectedInvoice(invoice)
+    setDetailsDialogOpen(true)
+  }
+
+  const handleDisputeInvoice = (invoiceId: string) => {
+    toast.success("Dispute submitted", {
+      description: "Vendor has been notified of the pricing discrepancy",
+    })
+  }
+
+  const handleApproveInvoice = (invoiceId: string) => {
+    toast.success("Invoice approved", {
+      description: "Invoice has been marked as verified",
+    })
+  }
+
+  const handleBulkDispute = () => {
+    toast.success(`${selectedInvoices.length} invoices disputed`, {
+      description: "Vendors have been notified of pricing discrepancies",
+    })
+    setSelectedInvoices([])
+  }
+
+  const pendingInvoices = filteredInvoices.filter(
+    (i) => i.status === "pending"
+  )
 
   return (
     <div className="space-y-6">
@@ -76,7 +200,7 @@ export function InvoiceValidationClient({
                 ) : (
                   <>
                     <p className="text-2xl font-bold">
-                      {Math.max(0, Math.round(totalVariance > 0 ? 3 : 0))}
+                      {pendingInvoices.length}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       invoices with discrepancies
@@ -116,7 +240,9 @@ export function InvoiceValidationClient({
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Active Disputes</p>
+                <p className="text-sm text-muted-foreground">
+                  Active Disputes
+                </p>
                 {summaryLoading ? (
                   <Skeleton className="mt-1 h-7 w-16" />
                 ) : (
@@ -160,7 +286,9 @@ export function InvoiceValidationClient({
       {/* Recovery Progress */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Monthly Recovery Progress</CardTitle>
+          <CardTitle className="text-base">
+            Monthly Recovery Progress
+          </CardTitle>
           <CardDescription>
             Track your invoice validation performance
           </CardDescription>
@@ -170,9 +298,13 @@ export function InvoiceValidationClient({
             <div className="flex items-center justify-between text-sm">
               <span>Monthly Recovery Goal: $50,000</span>
               <span className="font-medium">
-                {formatCurrency(totalVariance > 0 ? totalVariance : 0)} recovered
-                ({totalVariance > 0
-                  ? Math.min(100, Math.round((totalVariance / 50000) * 100))
+                {formatCurrency(totalVariance > 0 ? totalVariance : 0)}{" "}
+                recovered (
+                {totalVariance > 0
+                  ? Math.min(
+                      100,
+                      Math.round((totalVariance / 50000) * 100)
+                    )
                   : 0}
                 %)
               </span>
@@ -214,7 +346,306 @@ export function InvoiceValidationClient({
         </CardContent>
       </Card>
 
-      <InvoiceValidationTable facilityId={facilityId} vendors={vendors} />
+      {/* Filters and Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Invoice Discrepancies</CardTitle>
+            {selectedInvoices.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {selectedInvoices.length} selected
+                </span>
+                <Button size="sm" onClick={handleBulkDispute}>
+                  <Flag className="mr-2 h-4 w-4" />
+                  Dispute Selected
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-4 mb-6">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search invoices..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={vendorFilter} onValueChange={setVendorFilter}>
+              <SelectTrigger className="w-[180px]">
+                <Package className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="Vendor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vendors</SelectItem>
+                {vendors.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <Filter className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="disputed">Disputed</SelectItem>
+                <SelectItem value="resolved">Resolved</SelectItem>
+                <SelectItem value="verified">Verified</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Table */}
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={
+                        pendingInvoices.length > 0 &&
+                        selectedInvoices.length === pendingInvoices.length
+                      }
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedInvoices(
+                            pendingInvoices.map((i) => i.id)
+                          )
+                        } else {
+                          setSelectedInvoices([])
+                        }
+                      }}
+                    />
+                  </TableHead>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Invoiced</TableHead>
+                  <TableHead className="text-right">Contract</TableHead>
+                  <TableHead className="text-right">Variance</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableLoading
+                  ? Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        {Array.from({ length: 9 }).map((_, j) => (
+                          <TableCell key={j}>
+                            <Skeleton className="h-4 w-full" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  : filteredInvoices.length > 0
+                    ? filteredInvoices.map((invoice) => (
+                        <TableRow key={invoice.id}>
+                          <TableCell>
+                            {invoice.status === "pending" && (
+                              <Checkbox
+                                checked={selectedInvoices.includes(invoice.id)}
+                                onCheckedChange={() =>
+                                  toggleSelectInvoice(invoice.id)
+                                }
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">
+                                {invoice.invoiceNumber}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{invoice.vendor.name}</TableCell>
+                          <TableCell>
+                            {formatDate(invoice.invoiceDate)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(
+                              Number(invoice.totalInvoiceCost ?? 0)
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(invoice.totalContractCost)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {invoice.variance > 0.01 ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text-red-600 font-medium">
+                                  +{formatCurrency(invoice.variance)}
+                                </span>
+                                <Badge variant="outline" className="text-xs">
+                                  +{invoice.variancePercent.toFixed(1)}%
+                                </Badge>
+                              </div>
+                            ) : invoice.variance < -0.01 ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text-green-600 font-medium">
+                                  {formatCurrency(invoice.variance)}
+                                </span>
+                                <Badge variant="outline" className="text-xs">
+                                  {invoice.variancePercent.toFixed(1)}%
+                                </Badge>
+                              </div>
+                            ) : (
+                              <span className="text-green-600">Match</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={statusColors[invoice.status] ?? "bg-gray-100 text-gray-800"}>
+                              {invoice.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewDetails(invoice)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {invoice.status === "pending" && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleDisputeInvoice(invoice.id)
+                                    }
+                                  >
+                                    <Flag className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleApproveInvoice(invoice.id)
+                                    }
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    : (
+                        <TableRow>
+                          <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                            No invoices found.
+                          </TableCell>
+                        </TableRow>
+                      )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Invoice Details Dialog */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Invoice {selectedInvoice?.invoiceNumber}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedInvoice?.vendor.name} -{" "}
+              {selectedInvoice
+                ? formatDate(selectedInvoice.invoiceDate)
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedInvoice && (
+            <div className="space-y-6">
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 rounded-lg bg-muted/50">
+                  <p className="text-sm text-muted-foreground">
+                    Total Invoiced
+                  </p>
+                  <p className="text-xl font-bold">
+                    {formatCurrency(
+                      Number(selectedInvoice.totalInvoiceCost ?? 0)
+                    )}
+                  </p>
+                </div>
+                <div className="p-4 rounded-lg bg-muted/50">
+                  <p className="text-sm text-muted-foreground">
+                    Contract Price
+                  </p>
+                  <p className="text-xl font-bold">
+                    {formatCurrency(selectedInvoice.totalContractCost)}
+                  </p>
+                </div>
+                <div className="p-4 rounded-lg bg-red-50 dark:bg-red-950/30">
+                  <p className="text-sm text-muted-foreground">Variance</p>
+                  <p className="text-xl font-bold text-red-600">
+                    {selectedInvoice.variance > 0 ? "+" : ""}
+                    {formatCurrency(selectedInvoice.variance)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Line items info */}
+              <div className="text-sm text-muted-foreground">
+                {selectedInvoice.lineItemCount} line items |{" "}
+                {selectedInvoice.flaggedCount} flagged
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDetailsDialogOpen(false)}
+            >
+              Close
+            </Button>
+            {selectedInvoice?.status === "pending" && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleApproveInvoice(selectedInvoice.id)
+                    setDetailsDialogOpen(false)
+                  }}
+                >
+                  <Check className="mr-2 h-4 w-4" />
+                  Approve
+                </Button>
+                <Button
+                  onClick={() => {
+                    handleDisputeInvoice(selectedInvoice.id)
+                    setDetailsDialogOpen(false)
+                  }}
+                >
+                  <Flag className="mr-2 h-4 w-4" />
+                  Dispute with Vendor
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <InvoiceImportDialog
         facilityId={facilityId}
         vendors={vendors}

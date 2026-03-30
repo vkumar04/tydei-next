@@ -4,5 +4,10 @@ import { VendorDashboardClient } from "@/components/vendor/dashboard/vendor-dash
 export default async function VendorDashboard() {
   const { vendor } = await requireVendor()
 
-  return <VendorDashboardClient vendorId={vendor.id} />
+  return (
+    <VendorDashboardClient
+      vendorId={vendor.id}
+      vendorName={vendor.name}
+    />
+  )
 }

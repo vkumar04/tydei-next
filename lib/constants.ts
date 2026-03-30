@@ -4,16 +4,16 @@ import type { NavItem, StatusConfig } from "@/lib/types"
 
 export const facilityNav: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
-  { label: "Contracts", href: "/dashboard/contracts", icon: "FileText" },
-  { label: "COG Data", href: "/dashboard/cog-data", icon: "Database" },
-  { label: "Alerts", href: "/dashboard/alerts", icon: "Bell", badgeKey: "alertCount" },
-  { label: "Reports", href: "/dashboard/reports", icon: "BarChart3" },
+  { label: "Contracts", href: "/dashboard/contracts", icon: "FileSignature" },
+  { label: "Renewals", href: "/dashboard/renewals", icon: "RefreshCw" },
+  { label: "Rebate Optimizer", href: "/dashboard/rebate-optimizer", icon: "Target" },
+  { label: "Analysis", href: "/dashboard/analysis", icon: "TrendingUp" },
+  { label: "COG Data", href: "/dashboard/cog-data", icon: "DollarSign" },
+  { label: "Case Costing", href: "/dashboard/case-costing", icon: "Stethoscope" },
   { label: "Purchase Orders", href: "/dashboard/purchase-orders", icon: "ShoppingCart" },
   { label: "Invoice Validation", href: "/dashboard/invoice-validation", icon: "FileCheck" },
-  { label: "Renewals", href: "/dashboard/renewals", icon: "RefreshCw" },
-  { label: "Rebate Optimizer", href: "/dashboard/rebate-optimizer", icon: "TrendingUp" },
-  { label: "Case Costing", href: "/dashboard/case-costing", icon: "Stethoscope" },
-  { label: "Analysis", href: "/dashboard/analysis", icon: "LineChart" },
+  { label: "Reports", href: "/dashboard/reports", icon: "BarChart3" },
+  { label: "Alerts", href: "/dashboard/alerts", icon: "AlertTriangle", badgeKey: "alertCount" },
   { label: "AI Agent", href: "/dashboard/ai-agent", icon: "Bot" },
   { label: "Settings", href: "/dashboard/settings", icon: "Settings" },
 ]
@@ -22,16 +22,16 @@ export const facilityNav: NavItem[] = [
 
 export const vendorNav: NavItem[] = [
   { label: "Dashboard", href: "/vendor/dashboard", icon: "LayoutDashboard" },
-  { label: "Contracts", href: "/vendor/contracts", icon: "FileText" },
-  { label: "Alerts", href: "/vendor/alerts", icon: "Bell", badgeKey: "alertCount" },
-  { label: "Invoices", href: "/vendor/invoices", icon: "Receipt" },
-  { label: "Market Share", href: "/vendor/market-share", icon: "PieChart" },
-  { label: "Performance", href: "/vendor/performance", icon: "Activity" },
-  { label: "Prospective", href: "/vendor/prospective", icon: "Target" },
-  { label: "Purchase Orders", href: "/vendor/purchase-orders", icon: "ShoppingCart" },
+  { label: "My Contracts", href: "/vendor/contracts", icon: "FileText" },
   { label: "Renewals", href: "/vendor/renewals", icon: "RefreshCw" },
+  { label: "Prospective", href: "/vendor/prospective", icon: "Target" },
+  { label: "Market Share", href: "/vendor/market-share", icon: "PieChart" },
+  { label: "Performance", href: "/vendor/performance", icon: "TrendingUp" },
+  { label: "Purchase Orders", href: "/vendor/purchase-orders", icon: "ShoppingCart" },
+  { label: "Invoices", href: "/vendor/invoices", icon: "Receipt" },
+  { label: "Alerts", href: "/vendor/alerts", icon: "AlertTriangle", badgeKey: "alertCount" },
   { label: "Reports", href: "/vendor/reports", icon: "BarChart3" },
-  { label: "AI Agent", href: "/vendor/ai-agent", icon: "Bot" },
+  { label: "AI Assistant", href: "/vendor/ai-agent", icon: "Bot" },
   { label: "Settings", href: "/vendor/settings", icon: "Settings" },
 ]
 
@@ -40,10 +40,12 @@ export const vendorNav: NavItem[] = [
 export const adminNav: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: "LayoutDashboard" },
   { label: "Facilities", href: "/admin/facilities", icon: "Building2" },
+  { label: "Payor Contracts", href: "/admin/payor-contracts", icon: "CreditCard" },
   { label: "Vendors", href: "/admin/vendors", icon: "Truck" },
   { label: "Users", href: "/admin/users", icon: "Users" },
   { label: "Billing", href: "/admin/billing", icon: "CreditCard" },
-  { label: "Payor Contracts", href: "/admin/payor-contracts", icon: "Shield" },
+  { label: "Analytics", href: "/admin/analytics", icon: "BarChart3" },
+  { label: "Settings", href: "/admin/settings", icon: "Settings" },
 ]
 
 // ─── Status Badge Configs ─────────────────────────────────────────

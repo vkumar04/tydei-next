@@ -112,7 +112,7 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
           <Calculator className="h-4 w-4" />
           Capital Contract Analysis
         </Button>
-        <Link href={`/f/${facilityId}/analysis/prospective`}>
+        <Link href="/dashboard/analysis/prospective">
           <Button
             variant={analysisType === "prospective" ? "default" : "outline"}
             className="gap-2"

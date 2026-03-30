@@ -16,7 +16,7 @@ export default async function VendorContractsPage() {
         action={
           <Button asChild>
             <Link href="/vendor/contracts/new">
-              <Plus className="size-4" /> Submit Contract
+              <Plus className="size-4" /> New Contract
             </Link>
           </Button>
         }

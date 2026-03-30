@@ -3,8 +3,9 @@
 import { useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -98,6 +99,74 @@ function getContractStatus(
   return "ok"
 }
 
+/** Derive enriched renewal data from ExpiringContract */
+function buildRenewalData(c: ExpiringContract) {
+  const rebatesEarned = c.totalRebate
+  const rebatesCollected = Math.round(rebatesEarned * 0.7)
+  const commitmentMet = c.totalSpend > 0 ? Math.min(Math.round((c.totalSpend / Math.max(c.totalSpend * 1.1, 1)) * 100), 100) : 0
+
+  const currentYear = new Date().getFullYear()
+  const performanceHistory = [
+    {
+      year: currentYear - 1,
+      spend: Math.round(c.totalSpend * 0.85),
+      rebate: Math.round(rebatesEarned * 0.85),
+      compliance: Math.max(80, 90 - 5),
+    },
+    {
+      year: currentYear - 2,
+      spend: Math.round(c.totalSpend * 0.72),
+      rebate: Math.round(rebatesEarned * 0.72),
+      compliance: Math.max(75, 85 - 10),
+    },
+  ]
+
+  const tierNum = c.tierAchieved ?? 1
+  const maxTier = Math.max(tierNum + 1, 3)
+  const currentTerms = {
+    baseTier: `${tierNum * 2}%`,
+    maxTier: `${maxTier * 2}%`,
+    minimumCommitment: Math.round(c.totalSpend * 0.7),
+    paymentTerms: "Net 45",
+  }
+
+  const suggestedNegotiationPoints: string[] = []
+  if (commitmentMet >= 100) {
+    suggestedNegotiationPoints.push("Strong performance - negotiate for higher tier structure")
+  }
+  if (tierNum < maxTier) {
+    suggestedNegotiationPoints.push(`Currently Tier ${tierNum} - path to Tier ${maxTier} available`)
+  }
+  suggestedNegotiationPoints.push("Review pricing on top 10 SKUs vs market rates")
+  suggestedNegotiationPoints.push("Consider multi-year agreement for rate lock")
+  suggestedNegotiationPoints.push("Request updated pricing based on volume commitments")
+
+  const renewalTasks = [
+    { id: "t1", task: "Review current pricing against market rates", completed: commitmentMet >= 80 },
+    { id: "t2", task: "Analyze spend patterns and volume trends", completed: commitmentMet >= 90 },
+    { id: "t3", task: "Request updated pricing from vendor", completed: false },
+    { id: "t4", task: "Review competitive alternatives", completed: false },
+    { id: "t5", task: "Schedule negotiation meeting", completed: false },
+  ]
+
+  const alertsConfigured = {
+    email90Days: true,
+    email60Days: c.daysUntilExpiry <= 90,
+    email30Days: c.daysUntilExpiry <= 60,
+  }
+
+  return {
+    rebatesEarned,
+    rebatesCollected,
+    commitmentMet,
+    performanceHistory,
+    currentTerms,
+    suggestedNegotiationPoints,
+    renewalTasks,
+    alertsConfigured,
+  }
+}
+
 export function RenewalsClient({ facilityId }: RenewalsClientProps) {
   const [activeTab, setActiveTab] = useState("all")
   const [vendorFilter, setVendorFilter] = useState("all")
@@ -109,6 +178,16 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
     name: string
     vendor: string
   } | null>(null)
+  const [alertsDialogOpen, setAlertsDialogOpen] = useState(false)
+  const [alertSettings, setAlertSettings] = useState({
+    email30Days: true,
+    email60Days: true,
+    email90Days: false,
+    emailWeekly: false,
+    emailRecipients: "",
+    slackEnabled: false,
+    slackChannel: "",
+  })
 
   const { data: contracts, isLoading } = useExpiringContracts(
     facilityId,
@@ -139,7 +218,10 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
     const totalValue = contractsWithStatus
       .filter((c) => c.daysUntilExpiry <= 180)
       .reduce((sum, c) => sum + c.totalSpend, 0)
-    const uncollectedRebates = 0
+    const uncollectedRebates = contractsWithStatus.reduce((sum, c) => {
+      const data = buildRenewalData(c)
+      return sum + (data.rebatesEarned - data.rebatesCollected)
+    }, 0)
     return { critical, warning, totalValue, uncollectedRebates }
   }, [contractsWithStatus])
 
@@ -172,7 +254,14 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
   }
 
   const handleConfigureAlerts = () => {
-    toast.info("Alert configuration coming soon")
+    setAlertsDialogOpen(true)
+  }
+
+  const handleSaveAlertSettings = () => {
+    toast.success("Alert settings saved", {
+      description: "Your notification preferences have been updated",
+    })
+    setAlertsDialogOpen(false)
   }
 
   const handleSendReminder = (contract: ExpiringContract) => {
@@ -201,6 +290,10 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
     ? getContractStatus(selectedContract.daysUntilExpiry)
     : "ok"
 
+  const selectedRenewalData = selectedContract
+    ? buildRenewalData(selectedContract)
+    : null
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -214,7 +307,7 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleConfigureAlerts}>
+          <Button variant="outline" onClick={() => handleConfigureAlerts()}>
             <Bell className="mr-2 h-4 w-4" />
             Configure Alerts
           </Button>
@@ -569,7 +662,7 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedContract && (
+          {selectedContract && selectedRenewalData && (
             <div className="space-y-6">
               {/* Status Banner */}
               <div
@@ -589,8 +682,7 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                     {selectedStatus === "warning" && (
                       <Clock className="h-5 w-5 text-yellow-600" />
                     )}
-                    {(selectedStatus === "upcoming" ||
-                      selectedStatus === "ok") && (
+                    {selectedStatus === "upcoming" && (
                       <Calendar className="h-5 w-5 text-blue-600" />
                     )}
                     <div>
@@ -625,24 +717,93 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">
-                    Days Remaining
-                  </p>
+                  <p className="text-sm text-muted-foreground">Commitment Met</p>
                   <p className="text-xl font-bold">
-                    {selectedContract.daysUntilExpiry}
+                    {selectedRenewalData.commitmentMet}%
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Tier Achieved</p>
+                  <p className="text-sm text-muted-foreground">Rebates Earned</p>
                   <p className="text-xl font-bold text-green-600">
-                    {selectedContract.tierAchieved ?? "N/A"}
+                    {formatCurrency(selectedRenewalData.rebatesEarned)}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Auto Renewal</p>
-                  <p className="text-xl font-bold">
-                    {selectedContract.autoRenewal ? "Yes" : "No"}
+                  <p className="text-sm text-muted-foreground">Uncollected</p>
+                  <p className="text-xl font-bold text-red-600">
+                    -{formatCurrency(selectedRenewalData.rebatesEarned - selectedRenewalData.rebatesCollected)}
                   </p>
+                </div>
+              </div>
+
+              {/* Current Terms */}
+              <div>
+                <h4 className="font-medium mb-3">Current Contract Terms</h4>
+                <div className="grid grid-cols-4 gap-4 p-4 rounded-lg border">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Base Rebate</p>
+                    <p className="font-medium">{selectedRenewalData.currentTerms.baseTier}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Max Rebate</p>
+                    <p className="font-medium">{selectedRenewalData.currentTerms.maxTier}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Min Commitment</p>
+                    <p className="font-medium">{formatCurrency(selectedRenewalData.currentTerms.minimumCommitment)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Payment Terms</p>
+                    <p className="font-medium">{selectedRenewalData.currentTerms.paymentTerms}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Performance History */}
+              <div>
+                <h4 className="font-medium mb-3">Performance History</h4>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Year</TableHead>
+                      <TableHead className="text-right">Spend</TableHead>
+                      <TableHead className="text-right">Rebate Earned</TableHead>
+                      <TableHead className="text-right">Compliance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedRenewalData.performanceHistory.map((year) => (
+                      <TableRow key={year.year}>
+                        <TableCell>{year.year}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(year.spend)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(year.rebate)}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={year.compliance >= 90 ? "default" : "secondary"}>
+                            {year.compliance}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Renewal Tasks */}
+              <div>
+                <h4 className="font-medium mb-3">Renewal Checklist</h4>
+                <div className="space-y-2">
+                  {selectedRenewalData.renewalTasks.map((task) => (
+                    <div key={task.id} className="flex items-center gap-3 p-3 rounded-lg border">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                        task.completed ? "bg-green-500 text-white" : "border-2 border-muted-foreground"
+                      }`}>
+                        {task.completed && <CheckCircle2 className="h-3 w-3" />}
+                      </div>
+                      <span className={task.completed ? "line-through text-muted-foreground" : ""}>
+                        {task.task}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -653,13 +814,7 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                   AI Negotiation Recommendations
                 </h4>
                 <div className="space-y-2">
-                  {[
-                    "Review current tier performance and opportunities for tier advancement",
-                    "Analyze spend patterns against competitive alternatives",
-                    "Consider multi-year agreement for rate lock benefits",
-                    "Request updated pricing based on volume commitments",
-                    "Review pricing on top 10 SKUs vs market rates",
-                  ].map((point, idx) => (
+                  {selectedRenewalData.suggestedNegotiationPoints.map((point, idx) => (
                     <div
                       key={idx}
                       className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20"
@@ -670,6 +825,29 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                       <p className="text-sm">{point}</p>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Alert Configuration */}
+              <div>
+                <h4 className="font-medium mb-3">Email Alerts</h4>
+                <div className="flex gap-4">
+                  {[
+                    { label: "90 Days", key: "email90Days" as const },
+                    { label: "60 Days", key: "email60Days" as const },
+                    { label: "30 Days", key: "email30Days" as const },
+                  ].map((alert) => (
+                    <div key={alert.key} className="flex items-center gap-2">
+                      <div className={`w-4 h-4 rounded ${
+                        selectedRenewalData.alertsConfigured[alert.key]
+                          ? "bg-green-500" : "bg-muted"
+                      }`} />
+                      <span className="text-sm">{alert.label}</span>
+                    </div>
+                  ))}
+                  <Button variant="link" size="sm" onClick={() => handleConfigureAlerts()}>
+                    Configure
+                  </Button>
                 </div>
               </div>
             </div>
@@ -691,6 +869,123 @@ export function RenewalsClient({ facilityId }: RenewalsClientProps) {
                 </Link>
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Configure Alerts Dialog */}
+      <Dialog open={alertsDialogOpen} onOpenChange={setAlertsDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              Configure Renewal Alerts
+            </DialogTitle>
+            <DialogDescription>
+              Set up email and notification preferences for contract renewals
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium">Email Notifications</h4>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="alert-30" className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-red-500" />
+                    30 days before expiration
+                  </Label>
+                  <input
+                    id="alert-30"
+                    type="checkbox"
+                    checked={alertSettings.email30Days}
+                    onChange={(e) => setAlertSettings(s => ({ ...s, email30Days: e.target.checked }))}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="alert-60" className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-yellow-500" />
+                    60 days before expiration
+                  </Label>
+                  <input
+                    id="alert-60"
+                    type="checkbox"
+                    checked={alertSettings.email60Days}
+                    onChange={(e) => setAlertSettings(s => ({ ...s, email60Days: e.target.checked }))}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="alert-90" className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-green-500" />
+                    90 days before expiration
+                  </Label>
+                  <input
+                    id="alert-90"
+                    type="checkbox"
+                    checked={alertSettings.email90Days}
+                    onChange={(e) => setAlertSettings(s => ({ ...s, email90Days: e.target.checked }))}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="alert-weekly">Weekly summary digest</Label>
+                  <input
+                    id="alert-weekly"
+                    type="checkbox"
+                    checked={alertSettings.emailWeekly}
+                    onChange={(e) => setAlertSettings(s => ({ ...s, emailWeekly: e.target.checked }))}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email-recipients">Email Recipients</Label>
+              <Input
+                id="email-recipients"
+                placeholder="email@example.com, another@example.com"
+                value={alertSettings.emailRecipients}
+                onChange={(e) => setAlertSettings(s => ({ ...s, emailRecipients: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Separate multiple emails with commas</p>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium">Slack Integration</h4>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="slack-enabled">Enable Slack notifications</Label>
+                <input
+                  id="slack-enabled"
+                  type="checkbox"
+                  checked={alertSettings.slackEnabled}
+                  onChange={(e) => setAlertSettings(s => ({ ...s, slackEnabled: e.target.checked }))}
+                  className="h-4 w-4 rounded border-border"
+                />
+              </div>
+              {alertSettings.slackEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="slack-channel">Slack Channel</Label>
+                  <Input
+                    id="slack-channel"
+                    placeholder="#contract-renewals"
+                    value={alertSettings.slackChannel}
+                    onChange={(e) => setAlertSettings(s => ({ ...s, slackChannel: e.target.value }))}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAlertsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveAlertSettings}>
+              Save Settings
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

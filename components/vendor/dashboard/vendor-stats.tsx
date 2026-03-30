@@ -12,10 +12,12 @@ import { staggerContainer } from "@/lib/animations"
 
 interface VendorStatsProps {
   stats: {
+    activeContracts: number
     totalContracts: number
     totalSpend: number
     totalRebates: number
     activeFacilities: number
+    marketSharePercent: number
   }
 }
 
@@ -35,9 +37,9 @@ export function VendorStats({ stats }: VendorStatsProps) {
     >
       <MetricCard
         title="Active Contracts"
-        value={stats.totalContracts.toString()}
+        value={stats.activeContracts.toString()}
         icon={FileSignature}
-        description="across all facilities"
+        description={`of ${stats.totalContracts} total contracts`}
       />
       <MetricCard
         title="Total Spend on Contract"
@@ -47,19 +49,15 @@ export function VendorStats({ stats }: VendorStatsProps) {
       />
       <MetricCard
         title="Market Share"
-        value={
-          stats.totalSpend > 0
-            ? `${((stats.totalRebates / stats.totalSpend) * 100).toFixed(1)}%`
-            : "0%"
-        }
+        value={`${stats.marketSharePercent.toFixed(1)}%`}
         icon={PieChart}
-        description="across facilities"
+        description="of total facility spend"
       />
       <MetricCard
         title="Rebates Paid"
         value={formatCurrencyShort(stats.totalRebates)}
         icon={TrendingUp}
-        description="total rebates"
+        description={`across ${stats.activeFacilities} facilities`}
       />
     </motion.div>
   )

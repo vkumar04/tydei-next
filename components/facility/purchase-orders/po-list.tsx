@@ -59,6 +59,7 @@ import {
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { poStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
+import { POCreateDialog } from "./po-create-form"
 import { toast } from "sonner"
 import type { POStatus } from "@prisma/client"
 
@@ -81,6 +82,7 @@ export function POList({ facilityId }: POListProps) {
   const [status, setStatus] = useState<POStatus | "all">("all")
   const [vendorId, setVendorId] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [newPOOpen, setNewPOOpen] = useState(false)
 
   const { data, isLoading } = usePurchaseOrders(facilityId, {
     status: status === "all" ? undefined : status,
@@ -112,6 +114,12 @@ export function POList({ facilityId }: POListProps) {
   const isEmpty =
     !isLoading && orders.length === 0 && status === "all" && vendorId === "all"
 
+  // Map vendors to the format POCreateDialog expects
+  const vendorList = (vendors ?? []).map((v: { id: string; name: string }) => ({
+    id: v.id,
+    name: v.name,
+  }))
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -137,11 +145,9 @@ export function POList({ facilityId }: POListProps) {
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button asChild>
-            <Link href="/dashboard/purchase-orders/new">
-              <Plus className="mr-2 h-4 w-4" />
-              New Bill Only PO
-            </Link>
+          <Button onClick={() => setNewPOOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Bill Only PO
           </Button>
         </div>
       </div>
@@ -227,10 +233,8 @@ export function POList({ facilityId }: POListProps) {
             <p className="text-sm text-muted-foreground mb-6">
               Create your first purchase order to get started.
             </p>
-            <Button asChild>
-              <Link href="/dashboard/purchase-orders/new">
-                <Plus className="size-4" /> Create PO
-              </Link>
+            <Button onClick={() => setNewPOOpen(true)}>
+              <Plus className="size-4" /> Create PO
             </Button>
           </CardContent>
         </Card>
@@ -428,6 +432,14 @@ export function POList({ facilityId }: POListProps) {
           </Card>
         </>
       )}
+
+      {/* Create PO Dialog */}
+      <POCreateDialog
+        facilityId={facilityId}
+        vendors={vendorList}
+        open={newPOOpen}
+        onOpenChange={setNewPOOpen}
+      />
     </div>
   )
 }

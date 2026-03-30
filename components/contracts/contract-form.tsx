@@ -15,7 +15,13 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
@@ -44,12 +50,36 @@ interface ContractFormProps {
 }
 
 const contractTypes = [
-  { value: "usage", label: "Usage-Based", description: "Rebates on spend" },
-  { value: "capital", label: "Capital Equipment", description: "Equipment + service" },
-  { value: "service", label: "Service", description: "Service agreements" },
-  { value: "tie_in", label: "Tie-In", description: "Bundled products" },
-  { value: "grouped", label: "GPO/Group", description: "Collective buying" },
-  { value: "pricing_only", label: "Pricing Only", description: "Discounted prices" },
+  {
+    value: "usage",
+    label: "Usage-Based",
+    description: "Rebates on spend",
+  },
+  {
+    value: "pricing_only",
+    label: "Pricing Only",
+    description: "Discounted prices",
+  },
+  {
+    value: "capital",
+    label: "Capital Equipment",
+    description: "Equipment + service",
+  },
+  {
+    value: "grouped",
+    label: "GPO/Group",
+    description: "Collective buying",
+  },
+  {
+    value: "tie_in",
+    label: "Tie-In",
+    description: "Bundled products",
+  },
+  {
+    value: "service",
+    label: "Service",
+    description: "Service agreements",
+  },
 ] as const
 
 const performancePeriods = [
@@ -91,27 +121,43 @@ export function ContractFormBasicInfo({
   const expirationDate = parseDateString(expirationDateStr)
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="space-y-6">
       {/* Basic Information */}
-      <Card className="lg:col-span-2">
+      <Card>
         <CardHeader>
           <CardTitle>Basic Information</CardTitle>
           <CardDescription>Enter the contract details</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Contract Name" error={errors.name?.message} required>
-              <Input {...register("name")} placeholder="e.g., Medtronic Spine Implants" />
+            <Field
+              label="Contract Name"
+              error={errors.name?.message}
+              required
+            >
+              <Input
+                {...register("name")}
+                placeholder="e.g., Medtronic Spine Implants"
+              />
             </Field>
 
-            <Field label="Contract Number" error={errors.contractNumber?.message}>
-              <Input {...register("contractNumber")} placeholder="e.g., CTR-2025-001" />
+            <Field
+              label="Contract Number"
+              error={errors.contractNumber?.message}
+            >
+              <Input
+                {...register("contractNumber")}
+                placeholder="e.g., CTR-2025-001"
+              />
             </Field>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Vendor" error={errors.vendorId?.message} required>
-              <Select value={watch("vendorId")} onValueChange={(v) => setValue("vendorId", v)}>
+              <Select
+                value={watch("vendorId")}
+                onValueChange={(v) => setValue("vendorId", v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
@@ -125,8 +171,20 @@ export function ContractFormBasicInfo({
               </Select>
             </Field>
 
-            <Field label="Contract Type" error={errors.contractType?.message} required>
-              <Select value={watch("contractType")} onValueChange={(v) => setValue("contractType", v as CreateContractInput["contractType"])}>
+            <Field
+              label="Contract Type"
+              error={errors.contractType?.message}
+              required
+            >
+              <Select
+                value={watch("contractType")}
+                onValueChange={(v) =>
+                  setValue(
+                    "contractType",
+                    v as CreateContractInput["contractType"]
+                  )
+                }
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
@@ -135,7 +193,9 @@ export function ContractFormBasicInfo({
                     <SelectItem key={t.value} value={t.value}>
                       <div className="flex items-center justify-between w-full gap-2">
                         <span>{t.label}</span>
-                        <span className="text-xs text-muted-foreground">{t.description}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {t.description}
+                        </span>
                       </div>
                     </SelectItem>
                   ))}
@@ -145,10 +205,15 @@ export function ContractFormBasicInfo({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Category" error={errors.productCategoryId?.message}>
+            <Field
+              label="Category"
+              error={errors.productCategoryId?.message}
+            >
               <Select
                 value={watch("productCategoryId") ?? ""}
-                onValueChange={(v) => setValue("productCategoryId", v || undefined)}
+                onValueChange={(v) =>
+                  setValue("productCategoryId", v || undefined)
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
@@ -163,8 +228,14 @@ export function ContractFormBasicInfo({
               </Select>
             </Field>
 
-            <Field label="GPO Affiliation" error={errors.gpoAffiliation?.message}>
-              <Input {...register("gpoAffiliation")} placeholder="e.g., Vizient, Premier" />
+            <Field
+              label="GPO Affiliation"
+              error={errors.gpoAffiliation?.message}
+            >
+              <Input
+                {...register("gpoAffiliation")}
+                placeholder="e.g., Vizient, Premier"
+              />
             </Field>
           </div>
 
@@ -186,7 +257,11 @@ export function ContractFormBasicInfo({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Effective Date" error={errors.effectiveDate?.message} required>
+            <Field
+              label="Effective Date"
+              error={errors.effectiveDate?.message}
+              required
+            >
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -206,7 +281,9 @@ export function ContractFormBasicInfo({
                   <Calendar
                     mode="single"
                     selected={effectiveDate}
-                    onSelect={(date) => setValue("effectiveDate", toDateString(date))}
+                    onSelect={(date) =>
+                      setValue("effectiveDate", toDateString(date))
+                    }
                     captionLayout="dropdown"
                     fromYear={2020}
                     toYear={2035}
@@ -215,7 +292,11 @@ export function ContractFormBasicInfo({
               </Popover>
             </Field>
 
-            <Field label="Expiration Date" error={errors.expirationDate?.message} required>
+            <Field
+              label="Expiration Date"
+              error={errors.expirationDate?.message}
+              required
+            >
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -235,11 +316,15 @@ export function ContractFormBasicInfo({
                   <Calendar
                     mode="single"
                     selected={expirationDate}
-                    onSelect={(date) => setValue("expirationDate", toDateString(date))}
+                    onSelect={(date) =>
+                      setValue("expirationDate", toDateString(date))
+                    }
                     captionLayout="dropdown"
                     fromYear={2020}
                     toYear={2035}
-                    disabled={(date) => (effectiveDate ? date < effectiveDate : false)}
+                    disabled={(date) =>
+                      effectiveDate ? date < effectiveDate : false
+                    }
                   />
                 </PopoverContent>
               </Popover>
@@ -250,7 +335,12 @@ export function ContractFormBasicInfo({
             <Field label="Performance Period">
               <Select
                 value={watch("performancePeriod") ?? "monthly"}
-                onValueChange={(v) => setValue("performancePeriod", v as CreateContractInput["performancePeriod"])}
+                onValueChange={(v) =>
+                  setValue(
+                    "performancePeriod",
+                    v as CreateContractInput["performancePeriod"]
+                  )
+                }
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -268,7 +358,12 @@ export function ContractFormBasicInfo({
             <Field label="Rebate Pay Period">
               <Select
                 value={watch("rebatePayPeriod") ?? "quarterly"}
-                onValueChange={(v) => setValue("rebatePayPeriod", v as CreateContractInput["rebatePayPeriod"])}
+                onValueChange={(v) =>
+                  setValue(
+                    "rebatePayPeriod",
+                    v as CreateContractInput["rebatePayPeriod"]
+                  )
+                }
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -296,7 +391,9 @@ export function ContractFormBasicInfo({
             <Field label="Termination Notice (days)">
               <Input
                 type="number"
-                {...register("terminationNoticeDays", { valueAsNumber: true })}
+                {...register("terminationNoticeDays", {
+                  valueAsNumber: true,
+                })}
                 placeholder="90"
               />
             </Field>
@@ -311,31 +408,43 @@ export function ContractFormBasicInfo({
           <CardDescription>Contract value and projections</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Field label="Total Value ($)" error={errors.totalValue?.message}>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-              <Input
-                type="number"
-                step="0.01"
-                {...register("totalValue", { valueAsNumber: true })}
-                className="pl-7"
-                placeholder="0"
-              />
-            </div>
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Total Value ($)"
+              error={errors.totalValue?.message}
+            >
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  $
+                </span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  {...register("totalValue", { valueAsNumber: true })}
+                  className="pl-7"
+                  placeholder="0"
+                />
+              </div>
+            </Field>
 
-          <Field label="Annual Value ($)" error={errors.annualValue?.message}>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-              <Input
-                type="number"
-                step="0.01"
-                {...register("annualValue", { valueAsNumber: true })}
-                className="pl-7"
-                placeholder="0"
-              />
-            </div>
-          </Field>
+            <Field
+              label="Annual Value ($)"
+              error={errors.annualValue?.message}
+            >
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  $
+                </span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  {...register("annualValue", { valueAsNumber: true })}
+                  className="pl-7"
+                  placeholder="0"
+                />
+              </div>
+            </Field>
+          </div>
         </CardContent>
       </Card>
     </div>

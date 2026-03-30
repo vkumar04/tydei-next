@@ -178,16 +178,54 @@ export async function bulkDeleteCOGRecords(ids: string[]) {
 export async function getCOGImportHistory(facilityId: string) {
   await requireFacility()
 
-  const records = await prisma.cOGRecord.groupBy({
-    by: ["createdAt"],
-    where: { facilityId },
-    _count: { id: true },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  })
+  // Group records by calendar date (truncate timestamp to date) so bulk
+  // imports that share the same day collapse into a single history entry.
+  const rows = await prisma.$queryRaw<
+    { date: Date; record_count: bigint }[]
+  >`
+    SELECT DATE("createdAt") AS date, COUNT(*)::bigint AS record_count
+    FROM cog_record
+    WHERE "facilityId" = ${facilityId}
+    GROUP BY DATE("createdAt")
+    ORDER BY date DESC
+    LIMIT 50
+  `
 
-  return serialize(records.map((r) => ({
-    date: r.createdAt,
-    recordCount: r._count.id,
-  })))
+  return rows.map((r) => ({
+    date: r.date instanceof Date ? r.date.toISOString() : String(r.date),
+    recordCount: Number(r.record_count),
+  }))
+}
+
+// ─── COG Stats (aggregated server-side) ─────────────────────────
+
+export async function getCOGStats(facilityId: string) {
+  const { facility } = await requireFacility()
+
+  const [totalItems, totalSpendResult, onContractCount] = await Promise.all([
+    prisma.cOGRecord.count({
+      where: { facilityId: facility.id },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: { facilityId: facility.id },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.cOGRecord.count({
+      where: {
+        facilityId: facility.id,
+        category: { not: null },
+        NOT: { category: "" },
+      },
+    }),
+  ])
+
+  const totalSpend = Number(totalSpendResult._sum.extendedPrice ?? 0)
+  const offContractCount = totalItems - onContractCount
+
+  return {
+    totalItems,
+    totalSpend,
+    onContractCount,
+    offContractCount,
+  }
 }

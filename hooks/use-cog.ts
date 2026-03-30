@@ -9,6 +9,7 @@ import {
   deleteCOGRecord,
   bulkDeleteCOGRecords,
   getCOGImportHistory,
+  getCOGStats,
 } from "@/lib/actions/cog-records"
 import type { COGFilters } from "@/lib/validators/cog-records"
 import { toast } from "sonner"
@@ -27,6 +28,13 @@ export function useCOGImportHistory(facilityId: string) {
   return useQuery({
     queryKey: queryKeys.cogRecords.importHistory(facilityId),
     queryFn: () => getCOGImportHistory(facilityId),
+  })
+}
+
+export function useCOGStats(facilityId: string) {
+  return useQuery({
+    queryKey: queryKeys.cogRecords.stats(facilityId),
+    queryFn: () => getCOGStats(facilityId),
   })
 }
 

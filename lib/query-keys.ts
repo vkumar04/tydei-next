@@ -29,6 +29,8 @@ export const queryKeys = {
       ["cogRecords", "list", facilityId, filters] as const,
     importHistory: (facilityId: string) =>
       ["cogRecords", "importHistory", facilityId] as const,
+    stats: (facilityId: string) =>
+      ["cogRecords", "stats", facilityId] as const,
   },
   pricingFiles: {
     all: ["pricingFiles"] as const,
@@ -90,6 +92,12 @@ export const queryKeys = {
     stats: (vendorId: string) => ["vendorDashboard", "stats", vendorId] as const,
     spendTrend: (vendorId: string, dateRange?: DateRange) =>
       ["vendorDashboard", "spendTrend", vendorId, dateRange] as const,
+    marketShareByCategory: (vendorId: string) =>
+      ["vendorDashboard", "marketShareByCategory", vendorId] as const,
+    contractStatus: (vendorId: string) =>
+      ["vendorDashboard", "contractStatus", vendorId] as const,
+    recentContracts: (vendorId: string) =>
+      ["vendorDashboard", "recentContracts", vendorId] as const,
   },
   purchaseOrders: {
     all: ["purchaseOrders"] as const,
