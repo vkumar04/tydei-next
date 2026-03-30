@@ -1,4 +1,4 @@
-import { generateText, generateObject } from "ai"
+import { generateText, Output } from "ai"
 import { geminiModel } from "@/lib/ai/config"
 import { extractedContractSchema } from "@/lib/ai/schemas"
 import { uploadFile } from "@/lib/storage"
@@ -60,16 +60,16 @@ Return all the information you find as detailed text.`,
     }
 
     // Step 2: Parse the extracted text into structured data
-    const result = await generateObject({
+    const result = await generateText({
       model: geminiModel,
-      schema: extractedContractSchema,
+      output: Output.object({ schema: extractedContractSchema }),
       prompt: `Parse this contract information into structured data. If a field is not clearly present, make your best inference from context. For dates use YYYY-MM-DD format. For contract type choose from: usage, capital, service, tie_in, grouped, pricing_only.
 
 Contract information:
 ${extractedText}`,
     })
 
-    const extracted = result.object
+    const extracted = result.output
     if (!extracted) {
       return Response.json({ error: "No data extracted" }, { status: 422 })
     }
