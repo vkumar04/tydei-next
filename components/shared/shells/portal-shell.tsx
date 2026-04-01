@@ -6,11 +6,12 @@ import Link from "next/link"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
 import {
   FileText,
-  Bell,
   Upload,
   FileSignature,
   DollarSign,
-  ArrowRight,
+  FileSpreadsheet,
+  Layers,
+  Sparkles,
 } from "lucide-react"
 import {
   SidebarProvider,
@@ -30,7 +31,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarNav } from "@/components/shared/shells/sidebar-nav"
 import { UserMenu } from "@/components/shared/shells/user-menu"
@@ -118,45 +119,148 @@ export function PortalShell({
                   Import Data
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Import Data</DialogTitle>
-                  <DialogDescription>
-                    Choose a data type to import. You will be taken to the
-                    appropriate page to upload your files.
-                  </DialogDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <DialogTitle className="text-xl">Import Data</DialogTitle>
+                      <DialogDescription>
+                        Upload your file and we will automatically detect the data type
+                      </DialogDescription>
+                    </div>
+                  </div>
                 </DialogHeader>
-                <div className="grid gap-3 py-4">
-                  <Link
-                    href="/dashboard/cog-data"
-                    onClick={() => setImportDialogOpen(false)}
-                  >
-                    <Button
-                      variant="outline"
-                      className="w-full justify-between"
+
+                {/* File dropzone */}
+                <Card className="border-2">
+                  <CardContent className="pt-6">
+                    <div
+                      className="border-2 border-dashed rounded-lg p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() =>
+                        document.getElementById("import-file-global")?.click()
+                      }
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        e.currentTarget.classList.add(
+                          "border-primary",
+                          "bg-primary/5"
+                        )
+                      }}
+                      onDragLeave={(e) => {
+                        e.currentTarget.classList.remove(
+                          "border-primary",
+                          "bg-primary/5"
+                        )
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        e.currentTarget.classList.remove(
+                          "border-primary",
+                          "bg-primary/5"
+                        )
+                        const file = e.dataTransfer.files[0]
+                        if (file) {
+                          setImportDialogOpen(false)
+                          const ext = file.name.split(".").pop()?.toLowerCase()
+                          if (ext === "pdf") {
+                            window.location.href = "/dashboard/contracts/new"
+                          } else {
+                            window.location.href = "/dashboard/cog-data"
+                          }
+                        }
+                      }}
                     >
-                      <span className="flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" />
-                        Import COG Data
-                      </span>
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                  <Link
-                    href="/dashboard/contracts/new"
-                    onClick={() => setImportDialogOpen(false)}
-                  >
-                    <Button
-                      variant="outline"
-                      className="w-full justify-between"
+                      <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                      <p className="text-lg font-medium mb-1">
+                        Drop your file here or click to browse
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Supported formats: CSV, Excel (.xlsx, .xls), PDF
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      id="import-file-global"
+                      accept=".csv,.xlsx,.xls,.pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setImportDialogOpen(false)
+                          const ext = file.name.split(".").pop()?.toLowerCase()
+                          if (ext === "pdf") {
+                            window.location.href = "/dashboard/contracts/new"
+                          } else {
+                            window.location.href = "/dashboard/cog-data"
+                          }
+                        }
+                      }}
+                    />
+                    <p className="text-sm text-muted-foreground text-center mt-3">
+                      <Sparkles className="inline h-3.5 w-3.5 mr-1 text-primary" />
+                      The system will automatically detect if this is COG usage
+                      data or a pricing file
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Manual data type selection */}
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Or select the data type manually:
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Link
+                      href="/dashboard/cog-data"
+                      onClick={() => setImportDialogOpen(false)}
                     >
-                      <span className="flex items-center gap-2">
-                        <FileSignature className="h-4 w-4" />
-                        Import Contract
-                      </span>
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
+                      <Card className="cursor-pointer hover:border-primary/50 transition-colors h-full">
+                        <CardContent className="flex items-start gap-3 pt-4 pb-4">
+                          <DollarSign className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-sm">COG Usage Data</p>
+                            <p className="text-xs text-muted-foreground">
+                              POs, invoices, transactions
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                    <Link
+                      href="/dashboard/cog-data?tab=pricing"
+                      onClick={() => setImportDialogOpen(false)}
+                    >
+                      <Card className="cursor-pointer hover:border-primary/50 transition-colors h-full">
+                        <CardContent className="flex items-start gap-3 pt-4 pb-4">
+                          <FileSpreadsheet className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-sm">Pricing File</p>
+                            <p className="text-xs text-muted-foreground">
+                              Price lists, catalogs
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                    <Link
+                      href="/dashboard/contracts/new"
+                      onClick={() => setImportDialogOpen(false)}
+                    >
+                      <Card className="cursor-pointer hover:border-primary/50 transition-colors h-full">
+                        <CardContent className="flex items-start gap-3 pt-4 pb-4">
+                          <Layers className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-sm">
+                              Contract / Mass Upload
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Upload multiple files at once
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>

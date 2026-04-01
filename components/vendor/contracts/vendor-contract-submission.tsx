@@ -99,6 +99,9 @@ export function VendorContractSubmission({
   const [description, setDescription] = useState("")
   const [isMultiFacility, setIsMultiFacility] = useState(false)
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>([])
+  const [division, setDivision] = useState("")
+  const [capitalTieIn, setCapitalTieIn] = useState(false)
+  const [tieInRef, setTieInRef] = useState("")
   const [contractTerms, setContractTerms] = useState<TermFormValues[]>([])
 
   // PDF upload state
@@ -106,6 +109,14 @@ export function VendorContractSubmission({
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionComplete, setExtractionComplete] = useState(false)
+
+  // Pricing file state
+  const [pricingFile, setPricingFile] = useState<File | null>(null)
+  const [pricingFileData, setPricingFileData] = useState<{
+    total: number
+    categories: string[]
+    itemCount: number
+  } | null>(null)
 
   // Document uploads via server
   const [uploadedDocs, setUploadedDocs] = useState<
@@ -191,6 +202,76 @@ export function VendorContractSubmission({
     toast.success(`Contract data extracted: "${extractedName}"`)
   }
 
+  // ─── Pricing file processing ────────────────────────────────
+  async function processPricingFile(file: File) {
+    setPricingFile(file)
+    try {
+      let headers: string[] = []
+      let rows: string[][] = []
+
+      if (file.name.match(/\.csv$/i)) {
+        const text = await file.text()
+        const lines = text.split("\n").filter((l) => l.trim())
+        headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""))
+        rows = lines.slice(1).map((l) =>
+          l.split(",").map((c) => c.trim().replace(/^"|"$/g, ""))
+        )
+      } else {
+        const formData = new FormData()
+        formData.append("file", file)
+        const res = await fetch("/api/parse-file", { method: "POST", body: formData })
+        if (!res.ok) throw new Error("Failed to parse file")
+        const parsed = await res.json()
+        headers = parsed.headers
+        rows = parsed.rows
+      }
+
+      // Find price column
+      const priceKeywords = ["price", "cost", "amount", "unit", "extended", "total"]
+      let priceIdx = headers.findIndex((h) =>
+        priceKeywords.some((k) => h.toLowerCase().includes(k))
+      )
+      if (priceIdx === -1) priceIdx = headers.length - 1
+
+      // Find category column
+      const catKeywords = ["category", "cat", "type", "class", "group"]
+      const catIdx = headers.findIndex((h) =>
+        catKeywords.some((k) => h.toLowerCase().includes(k))
+      )
+
+      let total = 0
+      const categories = new Set<string>()
+      let itemCount = 0
+
+      for (const row of rows) {
+        if (row.length <= priceIdx) continue
+        const val = parseFloat(row[priceIdx].replace(/[$,]/g, ""))
+        if (!isNaN(val)) {
+          total += val
+          itemCount++
+        }
+        if (catIdx >= 0 && row[catIdx]?.trim()) {
+          categories.add(row[catIdx].trim())
+        }
+      }
+
+      const cats = Array.from(categories).slice(0, 10)
+      setPricingFileData({ total, categories: cats, itemCount })
+
+      if (total > 0 && !contractTotal) {
+        setContractTotal(total.toFixed(2))
+      }
+
+      toast.success(
+        `Pricing file processed: ${itemCount} items, $${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} total${cats.length > 0 ? `, ${cats.length} categories` : ""}`
+      )
+    } catch (err) {
+      setPricingFile(null)
+      setPricingFileData(null)
+      toast.error("Failed to process pricing file")
+    }
+  }
+
   // ─── Submit ──────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -226,6 +307,17 @@ export function VendorContractSubmission({
       terms: contractTerms.length > 0 ? contractTerms : undefined,
       documents: uploadedDocs.length > 0 ? uploadedDocs : undefined,
       notes: description || undefined,
+      division: division || undefined,
+      tieInContractId: tieInRef || undefined,
+      pricingData: pricingFile
+        ? {
+            fileName: pricingFile.name,
+            itemCount: pricingFileData?.itemCount ?? 0,
+            totalValue: pricingFileData?.total ?? 0,
+            categories: pricingFileData?.categories ?? [],
+            uploadedAt: new Date().toISOString(),
+          }
+        : undefined,
     }
 
     try {
@@ -411,6 +503,31 @@ export function VendorContractSubmission({
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="division">Division</Label>
+                    <Select value={division} onValueChange={setDivision}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select division" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[
+                          "Orthopedic Implants",
+                          "Spine",
+                          "Trauma",
+                          "Sports Medicine",
+                          "Biologics",
+                          "Robotics & Navigation",
+                          "Instruments",
+                          "General",
+                          "Other",
+                        ].map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {d}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {/* Facility Selection */}
@@ -516,6 +633,42 @@ export function VendorContractSubmission({
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Capital Tie-In */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                    <Checkbox
+                      id="capitalTieIn"
+                      checked={capitalTieIn}
+                      onCheckedChange={(checked) => {
+                        setCapitalTieIn(checked === true)
+                        if (!checked) setTieInRef("")
+                      }}
+                    />
+                    <div className="grid gap-0.5">
+                      <label
+                        htmlFor="capitalTieIn"
+                        className="flex items-center gap-2 cursor-pointer font-medium"
+                      >
+                        Capital Tie-In
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        Link this contract to a capital equipment agreement
+                      </p>
+                    </div>
+                  </div>
+                  {capitalTieIn && (
+                    <div className="space-y-2">
+                      <Label htmlFor="tieInRef">Capital Contract Reference</Label>
+                      <Input
+                        id="tieInRef"
+                        value={tieInRef}
+                        onChange={(e) => setTieInRef(e.target.value)}
+                        placeholder="e.g., CAP-2024-001"
+                      />
                     </div>
                   )}
                 </div>
@@ -726,7 +879,7 @@ export function VendorContractSubmission({
             </Card>
 
             {/* Attached Documents */}
-            {(contractFile || uploadedDocs.length > 0) && (
+            {(contractFile || pricingFile || uploadedDocs.length > 0) && (
               <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400 text-base">
@@ -745,6 +898,19 @@ export function VendorContractSubmission({
                           </p>
                           <p className="text-xs text-muted-foreground">
                             Contract PDF
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {pricingFile && (
+                      <div className="flex items-center gap-2 p-2 rounded bg-white/50 dark:bg-black/20">
+                        <Layers className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {pricingFile.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Pricing File
                           </p>
                         </div>
                       </div>
@@ -769,6 +935,102 @@ export function VendorContractSubmission({
                 </CardContent>
               </Card>
             )}
+
+            {/* Pricing File Upload */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  Pricing File
+                  <Badge variant="outline" className="text-xs font-normal">Optional</Badge>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Upload a pricing schedule (CSV or Excel)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {pricingFile ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
+                      <FileText className="h-4 w-4 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{pricingFile.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(pricingFile.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPricingFile(null)
+                          setPricingFileData(null)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    {pricingFileData && (
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Items</span>
+                          <span className="font-medium">{pricingFileData.itemCount}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total Value</span>
+                          <span className="font-medium text-green-600 dark:text-green-400">
+                            ${pricingFileData.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        {pricingFileData.categories.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-muted-foreground text-xs">Categories</span>
+                            <div className="flex flex-wrap gap-1">
+                              {pricingFileData.categories.slice(0, 5).map((cat) => (
+                                <Badge key={cat} variant="secondary" className="text-xs">
+                                  {cat}
+                                </Badge>
+                              ))}
+                              {pricingFileData.categories.length > 5 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{pricingFileData.categories.length - 5} more
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div
+                      className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => document.getElementById("pricing-file")?.click()}
+                    >
+                      <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
+                      <p className="text-xs text-muted-foreground">
+                        Drop pricing file or click to browse
+                      </p>
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">
+                        CSV, Excel (.xlsx, .xls)
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      id="pricing-file"
+                      accept=".csv,.xlsx,.xls"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) processPricingFile(file)
+                      }}
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Document Upload */}
             <Card>

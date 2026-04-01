@@ -12,6 +12,7 @@ export const pricingFileInputSchema = z.object({
   expirationDate: z.string().optional(),
   category: z.string().optional(),
   uom: z.string().default("EA"),
+  carveOut: z.boolean().optional(),
 })
 
 export type PricingFileInput = z.infer<typeof pricingFileInputSchema>

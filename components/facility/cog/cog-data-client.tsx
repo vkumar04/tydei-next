@@ -7,8 +7,11 @@ import {
   CheckCircle,
   AlertTriangle,
   Plus,
+  X,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { COGRecordsTable } from "@/components/facility/cog/cog-records-table"
@@ -28,6 +31,8 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   const [cogImportOpen, setCogImportOpen] = useState(false)
   const [pricingImportOpen, setPricingImportOpen] = useState(false)
   const [manualEntryOpen, setManualEntryOpen] = useState(false)
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
 
   // Fetch aggregated stats from server (not from paginated records)
   const { data: stats, refetch: refetchStats } = useCOGStats(facilityId)
@@ -129,6 +134,40 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         </Card>
       </div>
 
+      {/* Date range filter bar */}
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="grid gap-1.5">
+          <Label htmlFor="dateFrom" className="text-sm">From</Label>
+          <Input
+            id="dateFrom"
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-[160px]"
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="dateTo" className="text-sm">To</Label>
+          <Input
+            id="dateTo"
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-[160px]"
+          />
+        </div>
+        {(dateFrom || dateTo) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setDateFrom(""); setDateTo("") }}
+          >
+            <X className="mr-1 h-4 w-4" />
+            Clear dates
+          </Button>
+        )}
+      </div>
+
       {/* Tabs */}
       <Tabs defaultValue="cog" className="space-y-4">
         <TabsList>
@@ -139,7 +178,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         </TabsList>
 
         <TabsContent value="cog" className="space-y-4">
-          <COGRecordsTable facilityId={facilityId} />
+          <COGRecordsTable facilityId={facilityId} dateFrom={dateFrom || undefined} dateTo={dateTo || undefined} />
         </TabsContent>
 
         <TabsContent value="cogFiles" className="space-y-4">

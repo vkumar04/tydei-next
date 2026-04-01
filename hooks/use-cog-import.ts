@@ -4,7 +4,7 @@ import { useState, useCallback } from "react"
 import type { COGRecordInput } from "@/lib/validators/cog-records"
 import { mapColumns } from "@/lib/map-columns"
 
-type ImportStep = "upload" | "mapping" | "map" | "preview" | "import"
+type ImportStep = "upload" | "mapping" | "map" | "vendor_match" | "duplicate_check" | "preview" | "import"
 
 interface ImportState {
   step: ImportStep
@@ -13,6 +13,7 @@ interface ImportState {
   mapping: Record<string, string>
   duplicateStrategy: "skip" | "overwrite" | "keep_both"
   mappedRecords: COGRecordInput[]
+  vendorMappings: Record<string, string>
 }
 
 const TARGET_FIELDS = [
@@ -38,6 +39,7 @@ export function useCOGImport() {
     mapping: {},
     duplicateStrategy: "skip",
     mappedRecords: [],
+    vendorMappings: {},
   })
 
   const setStep = useCallback((step: ImportStep) => {
@@ -138,10 +140,45 @@ export function useCOGImport() {
       )
   }, [state])
 
-  const goToPreview = useCallback(() => {
+  const setVendorMappings = useCallback(
+    (vendorMappings: Record<string, string>) => {
+      setState((prev) => ({ ...prev, vendorMappings }))
+    },
+    []
+  )
+
+  /** After column mapping, go to vendor match (if vendor names exist) or duplicate check */
+  const goToVendorMatch = useCallback(() => {
     const records = buildRecords()
-    setState((prev) => ({ ...prev, mappedRecords: records, step: "preview" }))
+    const hasVendorNames = records.some((r) => r.vendorName)
+    setState((prev) => ({
+      ...prev,
+      mappedRecords: records,
+      step: hasVendorNames ? "vendor_match" : "duplicate_check",
+    }))
   }, [buildRecords])
+
+  /** After vendor matching, proceed to duplicate check */
+  const goToDuplicateCheck = useCallback(() => {
+    setState((prev) => {
+      // Apply vendor IDs from vendorMappings to mappedRecords
+      const updated = prev.mappedRecords.map((r) => {
+        if (r.vendorName && prev.vendorMappings[r.vendorName]) {
+          return { ...r, vendorId: prev.vendorMappings[r.vendorName] }
+        }
+        return r
+      })
+      return { ...prev, mappedRecords: updated, step: "duplicate_check" }
+    })
+  }, [])
+
+  const setMappedRecords = useCallback((records: COGRecordInput[]) => {
+    setState((prev) => ({ ...prev, mappedRecords: records }))
+  }, [])
+
+  const goToPreview = useCallback(() => {
+    setState((prev) => ({ ...prev, step: "preview" }))
+  }, [])
 
   const reset = useCallback(() => {
     setState({
@@ -151,6 +188,7 @@ export function useCOGImport() {
       mapping: {},
       duplicateStrategy: "skip",
       mappedRecords: [],
+      vendorMappings: {},
     })
   }, [])
 
@@ -161,6 +199,10 @@ export function useCOGImport() {
     setParsedData,
     setMapping,
     setDuplicateStrategy,
+    setVendorMappings,
+    setMappedRecords,
+    goToVendorMatch,
+    goToDuplicateCheck,
     goToPreview,
     reset,
   }

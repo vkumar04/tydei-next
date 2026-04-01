@@ -19,9 +19,11 @@ import {
 
 interface COGRecordsTableProps {
   facilityId: string
+  dateFrom?: string
+  dateTo?: string
 }
 
-export function COGRecordsTable({ facilityId }: COGRecordsTableProps) {
+export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
   const [contractFilter, setContractFilter] = useState<string>("all")
   const [manualOpen, setManualOpen] = useState(false)
@@ -30,7 +32,11 @@ export function COGRecordsTable({ facilityId }: COGRecordsTableProps) {
     desc: string
   } | null>(null)
 
-  const filters = { ...(vendorFilter && { vendorId: vendorFilter }) }
+  const filters = {
+    ...(vendorFilter && { vendorId: vendorFilter }),
+    ...(dateFrom && { dateFrom }),
+    ...(dateTo && { dateTo }),
+  }
   const { data, isLoading, refetch } = useCOGRecords(facilityId, filters)
   const { data: vendorData } = useVendorList()
   const deleteMutation = useDeleteCOGRecord()

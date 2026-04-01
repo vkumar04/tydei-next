@@ -34,6 +34,8 @@ export const cogFiltersSchema = z.object({
   vendorId: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
+  sortBy: z.string().optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
   page: z.number().int().min(1).optional(),
   pageSize: z.number().int().min(1).max(100).optional(),
 })

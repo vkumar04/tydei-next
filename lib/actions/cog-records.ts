@@ -45,11 +45,15 @@ export async function getCOGRecords(input: COGFilters) {
   const page = filters.page ?? 1
   const pageSize = filters.pageSize ?? 20
 
+  const orderBy = filters.sortBy
+    ? { [filters.sortBy]: filters.sortOrder ?? "desc" }
+    : { transactionDate: "desc" as const }
+
   const [records, total] = await Promise.all([
     prisma.cOGRecord.findMany({
       where,
       include: { vendor: { select: { id: true, name: true } } },
-      orderBy: { transactionDate: "desc" },
+      orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
@@ -230,10 +234,10 @@ export async function getCOGStats(facilityId: string) {
   const totalSpend = Number(totalSpendResult._sum.extendedPrice ?? 0)
   const offContractCount = totalItems - onContractCount
 
-  return {
+  return serialize({
     totalItems,
     totalSpend,
     onContractCount,
     offContractCount,
-  }
+  })
 }

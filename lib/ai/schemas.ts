@@ -70,3 +70,41 @@ export const supplyMatchSchema = z.object({
 })
 
 export type SupplyMatchResult = z.infer<typeof supplyMatchSchema>
+
+// ─── Payor Contract Extraction Schema ───────────────────────────
+
+export const extractedPayorContractSchema = z.object({
+  payorName: z.string().describe("The insurance payor/carrier name"),
+  facilityName: z.string().nullable().describe("The healthcare facility name if mentioned"),
+  contractNumber: z.string().nullable().describe("Contract or agreement number"),
+  effectiveDate: z.string().nullable().describe("Effective date in YYYY-MM-DD format"),
+  expirationDate: z.string().nullable().describe("Expiration/termination date in YYYY-MM-DD format"),
+  cptRates: z.array(
+    z.object({
+      cptCode: z.string().describe("5-digit CPT code"),
+      description: z.string().nullable().describe("Procedure description"),
+      rate: z.number().describe("Reimbursement rate in dollars"),
+      modifier: z.string().nullable().describe("CPT modifier if applicable"),
+    })
+  ).describe("All CPT code reimbursement rates found"),
+  grouperRates: z.array(
+    z.object({
+      groupNumber: z.number().describe("Grouper number"),
+      description: z.string().nullable().describe("Grouper description"),
+      rate: z.number().describe("Grouper rate in dollars"),
+    })
+  ).describe("Case rate / grouper rates if present"),
+  implantPolicy: z.object({
+    passthrough: z.boolean().describe("Whether implants are passed through at cost"),
+    discountPercent: z.number().nullable().describe("Discount percentage if not passthrough"),
+    maxAmount: z.number().nullable().describe("Maximum implant reimbursement amount"),
+  }).nullable().describe("Implant reimbursement policy"),
+  multiProcedureRules: z.object({
+    primaryPercent: z.number().describe("Primary procedure reimbursement percentage (usually 100)"),
+    secondaryPercent: z.number().describe("Secondary procedure percentage (usually 50)"),
+    additionalPercent: z.number().nullable().describe("Additional procedures percentage"),
+  }).nullable().describe("Multi-procedure payment reduction rules"),
+  otherTerms: z.array(z.string()).describe("Other notable contract terms as text"),
+})
+
+export type ExtractedPayorContractData = z.infer<typeof extractedPayorContractSchema>

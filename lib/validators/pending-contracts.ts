@@ -15,6 +15,8 @@ export const createPendingContractSchema = z.object({
   documents: z.any().optional(),
   pricingData: z.any().optional(),
   notes: z.string().optional(),
+  division: z.string().optional(),
+  tieInContractId: z.string().optional(),
 })
 
 export type CreatePendingContractInput = z.infer<typeof createPendingContractSchema>

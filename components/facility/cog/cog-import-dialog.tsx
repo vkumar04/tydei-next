@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Loader2, Sparkles } from "lucide-react"
+import { useState, useEffect, useRef, useMemo } from "react"
+import { Loader2, Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
 import {
   Dialog,
   DialogContent,
@@ -18,12 +19,24 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
+import { Badge } from "@/components/ui/badge"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { FileDropzone } from "@/components/facility/cog/file-dropzone"
 import { COGColumnMapper } from "@/components/facility/cog/cog-column-mapper"
 import { COGImportPreview } from "@/components/facility/cog/cog-import-preview"
 import { useCOGImport } from "@/hooks/use-cog-import"
 import { useFileParser } from "@/hooks/use-file-parser"
 import { useImportCOGRecords } from "@/hooks/use-cog"
+import { getVendors } from "@/lib/actions/vendors"
+import { checkCOGDuplicates, type DuplicateMatch } from "@/lib/actions/cog-duplicate-check"
+import { queryKeys } from "@/lib/query-keys"
 
 interface COGImportDialogProps {
   facilityId: string
@@ -49,6 +62,29 @@ export function COGImportDialog({
   // Track whether we already forwarded the current parser.data to importState
   const forwarded = useRef(false)
 
+  // Vendor list for the vendor matching step
+  const { data: vendors } = useQuery({
+    queryKey: queryKeys.vendors.all,
+    queryFn: () => getVendors(),
+    enabled: open,
+  })
+
+  // Duplicate check results
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([])
+  const [duplicateChecking, setDuplicateChecking] = useState(false)
+  // Track which duplicate records the user has chosen to exclude
+  const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set())
+
+  // Extract unique vendor names from mapped records for the vendor matching step
+  const uniqueVendorNames = useMemo(() => {
+    if (importState.step !== "vendor_match") return []
+    const names = new Set<string>()
+    for (const r of importState.mappedRecords) {
+      if (r.vendorName) names.add(r.vendorName)
+    }
+    return Array.from(names).sort()
+  }, [importState.step, importState.mappedRecords])
+
   const handleFile = async (file: File) => {
     forwarded.current = false
     await parser.parseFile(file)
@@ -61,6 +97,42 @@ export function COGImportDialog({
       importState.setParsedData(parser.data.headers, parser.data.rows)
     }
   }, [parser.data, importState])
+
+  // Run duplicate check when entering the duplicate_check step
+  useEffect(() => {
+    if (importState.step !== "duplicate_check") return
+    if (importState.mappedRecords.length === 0) return
+
+    let cancelled = false
+    setDuplicateChecking(true)
+    setDuplicates([])
+    setExcludedIndices(new Set())
+
+    const keys = importState.mappedRecords.map((r) => ({
+      inventoryNumber: r.inventoryNumber,
+      vendorItemNo: r.vendorItemNo ?? undefined,
+      transactionDate: r.transactionDate,
+    }))
+
+    checkCOGDuplicates({ facilityId, keys })
+      .then((matches) => {
+        if (!cancelled) {
+          setDuplicates(matches)
+        }
+      })
+      .catch(() => {
+        // If check fails, proceed without blocking — no duplicates marked
+        if (!cancelled) setDuplicates([])
+      })
+      .finally(() => {
+        if (!cancelled) setDuplicateChecking(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importState.step, facilityId])
 
   const handleImport = async () => {
     importState.setStep("import")
@@ -83,6 +155,9 @@ export function COGImportDialog({
       parser.reset()
       forwarded.current = false
       setResult(null)
+      setDuplicates([])
+      setDuplicateChecking(false)
+      setExcludedIndices(new Set())
       if (result) onComplete()
     }
     onOpenChange(nextOpen)
@@ -90,7 +165,7 @@ export function COGImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import COG Data</DialogTitle>
         </DialogHeader>
@@ -131,8 +206,209 @@ export function COGImportDialog({
               >
                 Back
               </Button>
-              <Button onClick={importState.goToPreview}>Preview</Button>
+              <Button onClick={importState.goToVendorMatch}>Next</Button>
             </div>
+          </div>
+        )}
+
+        {importState.step === "vendor_match" && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-medium">Match Vendor Names</h3>
+              <p className="text-sm text-muted-foreground">
+                Map vendor names from your import file to existing vendors in the
+                system. Unmatched names will be imported as-is.
+              </p>
+            </div>
+            <div className="max-h-[400px] overflow-y-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Import Vendor Name</TableHead>
+                    <TableHead>Match To</TableHead>
+                    <TableHead className="w-[80px]">Records</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {uniqueVendorNames.map((name) => {
+                    const count = importState.mappedRecords.filter(
+                      (r) => r.vendorName === name
+                    ).length
+                    return (
+                      <TableRow key={name}>
+                        <TableCell className="font-medium">{name}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={importState.vendorMappings[name] ?? "__none__"}
+                            onValueChange={(v) =>
+                              importState.setVendorMappings({
+                                ...importState.vendorMappings,
+                                [name]: v === "__none__" ? "" : v,
+                              })
+                            }
+                          >
+                            <SelectTrigger className="w-[220px]">
+                              <SelectValue placeholder="Select vendor..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">
+                                — Keep as text —
+                              </SelectItem>
+                              {vendors?.map((v) => (
+                                <SelectItem key={v.id} value={v.id}>
+                                  {v.displayName || v.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{count}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => importState.setStep("map")}
+              >
+                Back
+              </Button>
+              <Button onClick={importState.goToDuplicateCheck}>
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {importState.step === "duplicate_check" && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-medium">Duplicate Check</h3>
+              <p className="text-sm text-muted-foreground">
+                Checking your records against existing data for potential
+                duplicates.
+              </p>
+            </div>
+
+            {duplicateChecking && (
+              <div className="space-y-3 py-4 text-center">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">
+                  Checking for duplicates...
+                </p>
+                <Progress value={50} />
+              </div>
+            )}
+
+            {!duplicateChecking && duplicates.length === 0 && (
+              <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                  No duplicates found. All {importState.mappedRecords.length}{" "}
+                  records are new.
+                </p>
+              </div>
+            )}
+
+            {!duplicateChecking && duplicates.length > 0 && (
+              <>
+                <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Found {duplicates.length} potential duplicate(s). Select
+                    records to exclude or proceed with all.
+                  </p>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[40px]">Exclude</TableHead>
+                        <TableHead>Inventory #</TableHead>
+                        <TableHead>Vendor</TableHead>
+                        <TableHead>Existing Description</TableHead>
+                        <TableHead>Existing Cost</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {duplicates.map((dup, idx) => (
+                        <TableRow key={`${dup.existingId}-${idx}`}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={excludedIndices.has(idx)}
+                              onChange={(e) => {
+                                setExcludedIndices((prev) => {
+                                  const next = new Set(prev)
+                                  if (e.target.checked) {
+                                    next.add(idx)
+                                  } else {
+                                    next.delete(idx)
+                                  }
+                                  return next
+                                })
+                              }}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {dup.inventoryNumber}
+                          </TableCell>
+                          <TableCell>{dup.existingVendor ?? "—"}</TableCell>
+                          <TableCell>{dup.existingDescription ?? "—"}</TableCell>
+                          <TableCell>
+                            ${dup.existingUnitCost.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+
+            {!duplicateChecking && (
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDuplicates([])
+                    setExcludedIndices(new Set())
+                    const hasVendorNames = importState.mappedRecords.some(
+                      (r) => r.vendorName
+                    )
+                    importState.setStep(hasVendorNames ? "vendor_match" : "map")
+                  }}
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={() => {
+                    // If user excluded some duplicate records, filter them out
+                    if (excludedIndices.size > 0) {
+                      const excludedInventoryNumbers = new Set(
+                        Array.from(excludedIndices).map(
+                          (i) => duplicates[i]?.inventoryNumber
+                        )
+                      )
+                      const filtered = importState.mappedRecords.filter(
+                        (r) => !excludedInventoryNumbers.has(r.inventoryNumber)
+                      )
+                      importState.setMappedRecords(filtered)
+                    }
+                    importState.goToPreview()
+                  }}
+                >
+                  Continue to Preview ({importState.mappedRecords.length - excludedIndices.size}{" "}
+                  records)
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -166,7 +442,10 @@ export function COGImportDialog({
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => importState.setStep("map")}
+                onClick={() => {
+                  setExcludedIndices(new Set())
+                  importState.setStep("duplicate_check")
+                }}
               >
                 Back
               </Button>

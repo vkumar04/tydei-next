@@ -82,6 +82,11 @@ const ALIASES: Record<string, string[]> = {
     "transactiondate", "date", "invoicedate", "orderdate",
     "txndate", "purchasedate",
   ],
+  // Carve-out field
+  carveOut: [
+    "carveout", "carve_out", "excluded", "exempt", "carved_out",
+    "exclusion", "is_excluded", "carve",
+  ],
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")

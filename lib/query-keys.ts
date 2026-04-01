@@ -131,6 +131,10 @@ export const queryKeys = {
       ["cases", "comparison", facilityId, surgeons] as const,
     reportData: (facilityId: string, filters?: Record<string, unknown>) =>
       ["cases", "reportData", facilityId, filters] as const,
+    payorContracts: (facilityId?: string) =>
+      ["cases", "payorContracts", facilityId] as const,
+    payorMargins: (contractId: string) =>
+      ["cases", "payorMargins", contractId] as const,
   },
   renewals: {
     expiring: (entityId: string, windowDays: number) =>

@@ -5,6 +5,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import Link from "next/link"
 import {
   Upload,
@@ -14,14 +21,19 @@ import {
   User,
   BarChart3,
   CheckCircle2,
+  FileHeart,
 } from "lucide-react"
 import { CaseTable } from "./case-table"
 import { SurgeonScorecardsGrid } from "./surgeon-scorecards-grid"
 import { CaseImportDialog } from "./case-import-dialog"
+import { PayorContractsManager } from "./payor-contracts-manager"
 import {
   useSurgeonScorecards,
   useCaseCostingReport,
+  usePayorContracts,
+  usePayorMargins,
 } from "@/hooks/use-case-costing"
+import { cn } from "@/lib/utils"
 
 interface CaseCostingClientProps {
   facilityId: string
@@ -30,10 +42,13 @@ interface CaseCostingClientProps {
 export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
   const [importOpen, setImportOpen] = useState(false)
   const [activeMainTab, setActiveMainTab] = useState("cases")
+  const [selectedPayorId, setSelectedPayorId] = useState<string | null>(null)
   const { data: scorecards, isLoading: scLoading } =
     useSurgeonScorecards(facilityId)
   const { data: report, isLoading: reportLoading } =
     useCaseCostingReport(facilityId)
+  const { data: payorContracts } = usePayorContracts()
+  const { data: payorMargins } = usePayorMargins(selectedPayorId)
 
   const totalCases = report?.totalCases ?? 0
   const avgCostPerCase = report?.avgCostPerCase ?? 0
@@ -64,7 +79,7 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href={`/f/${facilityId}/case-costing/reports`}>
+          <Link href="/dashboard/case-costing/reports">
             <Button variant="outline">
               <BarChart3 className="mr-2 h-4 w-4" />
               Reports
@@ -87,6 +102,10 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
           <TabsTrigger value="surgeons" className="gap-2">
             <User className="h-4 w-4" />
             Surgeon Scorecard
+          </TabsTrigger>
+          <TabsTrigger value="payor-contracts" className="gap-2">
+            <FileHeart className="h-4 w-4" />
+            Payor Contracts
           </TabsTrigger>
         </TabsList>
 
@@ -185,6 +204,84 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
             </Card>
           </div>
 
+          {/* Payor Contract Margin Analysis */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileHeart className="h-4 w-4" />
+                  Payor Contract Margin
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Select a payor contract to calculate expected margins based on CPT rates
+                </p>
+              </div>
+              <Select
+                value={selectedPayorId ?? ""}
+                onValueChange={(v) => setSelectedPayorId(v || null)}
+              >
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Select payor contract" />
+                </SelectTrigger>
+                <SelectContent>
+                  {payorContracts?.map((pc) => (
+                    <SelectItem key={pc.id} value={pc.id}>
+                      {pc.payorName}
+                    </SelectItem>
+                  ))}
+                  {(!payorContracts || payorContracts.length === 0) && (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      No payor contracts found
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            {payorMargins && (
+              <CardContent>
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">Est. Reimbursement</p>
+                    <p className="text-lg font-bold">
+                      ${Math.round(payorMargins.totalEstimatedReimbursement).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">Est. Total Margin</p>
+                    <p className={cn(
+                      "text-lg font-bold",
+                      payorMargins.totalMargin >= 0
+                        ? "text-green-600 dark:text-green-400"
+                        : "text-red-600 dark:text-red-400"
+                    )}>
+                      ${Math.round(payorMargins.totalMargin).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">Avg Margin %</p>
+                    <p className={cn(
+                      "text-lg font-bold",
+                      payorMargins.avgMarginPercent >= 0
+                        ? "text-green-600 dark:text-green-400"
+                        : "text-red-600 dark:text-red-400"
+                    )}>
+                      {payorMargins.avgMarginPercent.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">CPT Matched</p>
+                    <p className="text-lg font-bold">
+                      {payorMargins.matchedCases}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        /{payorMargins.totalCases}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
           {/* Cases Table */}
           <CaseTable facilityId={facilityId} />
         </TabsContent>
@@ -203,6 +300,11 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
               avgCostPerCase={avgCostPerCase}
             />
           )}
+        </TabsContent>
+
+        {/* Payor Contracts Tab */}
+        <TabsContent value="payor-contracts" className="space-y-6 mt-6">
+          <PayorContractsManager facilityId={facilityId} />
         </TabsContent>
       </Tabs>
 

@@ -155,12 +155,70 @@ export function PricingImportDialog({
                 >
                   Back
                 </Button>
-                <Button onClick={importState.goToPreview}>Preview</Button>
+                <Button onClick={importState.goToDuplicateCheck}>Preview</Button>
               </div>
             </div>
           )}
 
-          {/* Step 5: Preview */}
+          {/* Step 5: Duplicate check */}
+          {importState.step === "duplicate_check" && (
+            <div className="space-y-4">
+              <div className="rounded-md border p-4">
+                {importState.duplicates.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No duplicate vendor item numbers found in the import file.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                      {importState.duplicates.length} duplicate vendor item
+                      {importState.duplicates.length === 1 ? " number" : " numbers"}{" "}
+                      found ({importState.duplicates.reduce((sum, d) => sum + d.count, 0)}{" "}
+                      total rows)
+                    </p>
+                    <div className="mt-3 max-h-40 overflow-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b text-left text-muted-foreground">
+                            <th className="pb-1 pr-3">Vendor Item No</th>
+                            <th className="pb-1">Occurrences</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importState.duplicates.slice(0, 20).map((d) => (
+                            <tr key={d.vendorItemNo} className="border-b last:border-0">
+                              <td className="py-1 pr-3 font-mono">{d.vendorItemNo}</td>
+                              <td className="py-1">{d.count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {importState.duplicates.length > 20 && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          ...and {importState.duplicates.length - 20} more
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => importState.setStep("map")}
+                >
+                  Back
+                </Button>
+                <Button onClick={importState.goToPreview}>
+                  {importState.duplicates.length > 0
+                    ? "Proceed Anyway"
+                    : "Continue"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 6: Preview */}
           {importState.step === "preview" && (
             <div className="space-y-4">
               <div className="rounded-md border p-4">
@@ -209,7 +267,7 @@ export function PricingImportDialog({
               <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => importState.setStep("map")}
+                  onClick={() => importState.setStep("duplicate_check")}
                 >
                   Back
                 </Button>
@@ -229,7 +287,7 @@ export function PricingImportDialog({
             </div>
           )}
 
-          {/* Step 6: Importing */}
+          {/* Step 7: Importing */}
           {importState.step === "import" && !result && (
             <div className="space-y-3 py-4">
               <p className="text-sm text-muted-foreground">
@@ -239,7 +297,7 @@ export function PricingImportDialog({
             </div>
           )}
 
-          {/* Step 7: Result */}
+          {/* Step 8: Result */}
           {result && (
             <div className="space-y-3 py-2">
               <p className="font-medium">Import Complete</p>

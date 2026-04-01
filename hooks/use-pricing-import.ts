@@ -4,7 +4,13 @@ import { useState, useCallback } from "react"
 import type { PricingFileInput } from "@/lib/validators/pricing-files"
 import { mapColumns } from "@/lib/map-columns"
 
-type ImportStep = "upload" | "mapping" | "map" | "preview" | "import"
+type ImportStep = "upload" | "mapping" | "map" | "duplicate_check" | "preview" | "import"
+
+interface DuplicateGroup {
+  vendorItemNo: string
+  count: number
+  indices: number[]
+}
 
 interface ImportState {
   step: ImportStep
@@ -12,6 +18,7 @@ interface ImportState {
   rows: Record<string, string>[]
   mapping: Record<string, string>
   mappedRecords: PricingFileInput[]
+  duplicates: DuplicateGroup[]
 }
 
 const TARGET_FIELDS = [
@@ -24,6 +31,7 @@ const TARGET_FIELDS = [
   { key: "expirationDate", label: "Expiration Date", required: false },
   { key: "category", label: "Category", required: false },
   { key: "uom", label: "UOM", required: false },
+  { key: "carveOut", label: "Carve-Out", required: false },
 ] as const
 
 export type PricingTargetField = (typeof TARGET_FIELDS)[number]
@@ -35,6 +43,7 @@ export function usePricingImport() {
     rows: [],
     mapping: {},
     mappedRecords: [],
+    duplicates: [],
   })
 
   const setStep = useCallback((step: ImportStep) => {
@@ -118,6 +127,14 @@ export function usePricingImport() {
           }
         }
 
+        let carveOut: boolean | undefined
+        if (mapping.carveOut) {
+          const raw = (row[mapping.carveOut] ?? "").trim().toLowerCase()
+          if (raw) {
+            carveOut = ["true", "yes", "1", "y", "x"].includes(raw)
+          }
+        }
+
         return {
           vendorItemNo: (row[mapping.vendorItemNo ?? ""] ?? "").trim(),
           productDescription: (
@@ -130,15 +147,53 @@ export function usePricingImport() {
           expirationDate,
           category: row[mapping.category ?? ""] || undefined,
           uom: row[mapping.uom ?? ""] || "EA",
+          carveOut,
         }
       })
       .filter((r) => r.vendorItemNo && r.productDescription)
   }, [state])
 
+  const detectDuplicates = useCallback(
+    (records: PricingFileInput[]): DuplicateGroup[] => {
+      const seen = new Map<string, number[]>()
+      records.forEach((r, i) => {
+        const key = r.vendorItemNo
+        if (!key) return
+        const indices = seen.get(key) ?? []
+        indices.push(i)
+        seen.set(key, indices)
+      })
+      const dupes: DuplicateGroup[] = []
+      for (const [vendorItemNo, indices] of seen) {
+        if (indices.length > 1) {
+          dupes.push({ vendorItemNo, count: indices.length, indices })
+        }
+      }
+      return dupes
+    },
+    []
+  )
+
+  const goToDuplicateCheck = useCallback(() => {
+    const records = buildRecords()
+    const dupes = detectDuplicates(records)
+    setState((prev) => ({
+      ...prev,
+      mappedRecords: records,
+      duplicates: dupes,
+      step: "duplicate_check",
+    }))
+  }, [buildRecords, detectDuplicates])
+
   const goToPreview = useCallback(() => {
+    // If coming from duplicate_check, records are already built
+    if (state.step === "duplicate_check") {
+      setState((prev) => ({ ...prev, step: "preview" }))
+      return
+    }
     const records = buildRecords()
     setState((prev) => ({ ...prev, mappedRecords: records, step: "preview" }))
-  }, [buildRecords])
+  }, [buildRecords, state.step])
 
   const reset = useCallback(() => {
     setState({
@@ -147,6 +202,7 @@ export function usePricingImport() {
       rows: [],
       mapping: {},
       mappedRecords: [],
+      duplicates: [],
     })
   }, [])
 
@@ -156,6 +212,7 @@ export function usePricingImport() {
     setStep,
     setParsedData,
     setMapping,
+    goToDuplicateCheck,
     goToPreview,
     reset,
   }

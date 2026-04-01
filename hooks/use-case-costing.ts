@@ -12,6 +12,10 @@ import {
   compareSurgeons,
   getCaseCostingReportData,
 } from "@/lib/actions/cases"
+import {
+  getFacilityPayorContracts,
+  calculatePayorMargins,
+} from "@/lib/actions/payor-contracts"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { toast } from "sonner"
 
@@ -93,5 +97,20 @@ export function useCaseCostingReport(
   return useQuery({
     queryKey: queryKeys.cases.reportData(facilityId, filters),
     queryFn: () => getCaseCostingReportData({ facilityId, ...filters }),
+  })
+}
+
+export function usePayorContracts() {
+  return useQuery({
+    queryKey: queryKeys.cases.payorContracts(),
+    queryFn: () => getFacilityPayorContracts(),
+  })
+}
+
+export function usePayorMargins(payorContractId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.cases.payorMargins(payorContractId ?? ""),
+    queryFn: () => calculatePayorMargins({ payorContractId: payorContractId! }),
+    enabled: !!payorContractId,
   })
 }
