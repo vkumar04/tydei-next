@@ -66,6 +66,7 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
       },
       documents: { orderBy: { uploadDate: "desc" } },
       periods: { orderBy: { periodEnd: "desc" }, take: 4 },
+      changeProposals: { orderBy: { submittedAt: "desc" } },
     },
   })
   return serialize(contract)
