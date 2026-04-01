@@ -23,6 +23,17 @@ import {
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
   AlertTriangle,
   ArrowRight,
   Clock,
@@ -32,6 +43,9 @@ import {
   Filter,
   Mail,
   FileText,
+  Plus,
+  Trash2,
+  CalendarClock,
 } from "lucide-react"
 import {
   PieChart,
@@ -51,8 +65,15 @@ import { ReportPeriodTable } from "./report-period-table"
 import { ReportTrendChart } from "./report-trend-chart"
 import { queryKeys } from "@/lib/query-keys"
 import { getReportData, getContracts } from "@/lib/actions/reports"
+import {
+  getReportSchedules,
+  createReportSchedule,
+  toggleReportSchedule,
+  deleteReportSchedule,
+} from "@/lib/actions/report-scheduling"
 import { formatCurrency } from "@/lib/formatting"
 import { useExportPDF } from "@/hooks/use-export-pdf"
+import { toast } from "sonner"
 import type { ContractPeriodRow } from "./report-columns"
 
 /* ─── Constants ───────────────────────────────────────────────── */
@@ -92,6 +113,15 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
   const [metric, setMetric] = useState<"totalSpend" | "rebateEarned" | "totalVolume">("totalSpend")
   const [selectedContractId, setSelectedContractId] = useState("all")
   const { exportPDF, isExporting } = useExportPDF()
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
+  const [newSchedule, setNewSchedule] = useState({
+    reportType: "rebate_summary" as "contract_performance" | "rebate_summary" | "spend_analysis" | "market_share" | "case_costing",
+    frequency: "weekly" as "daily" | "weekly" | "monthly",
+    recipients: [] as string[],
+    recipientInput: "",
+    includeCharts: true,
+    includeLineItems: false,
+  })
 
   /* ── Queries ─────────────────────────────────────────────────── */
 
@@ -117,6 +147,12 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
         dateFrom: dateRange.from,
         dateTo: dateRange.to,
       }),
+  })
+
+  // Report schedules
+  const { data: schedules, refetch: refetchSchedules } = useQuery({
+    queryKey: ["report-schedules", facilityId],
+    queryFn: () => getReportSchedules(facilityId),
   })
 
   /* ── Derived State ───────────────────────────────────────────── */
@@ -166,6 +202,72 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
     }
   }
 
+  const handleAddRecipient = () => {
+    const email = newSchedule.recipientInput.trim()
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !newSchedule.recipients.includes(email)) {
+      setNewSchedule((prev) => ({
+        ...prev,
+        recipients: [...prev.recipients, email],
+        recipientInput: "",
+      }))
+    }
+  }
+
+  const handleRemoveRecipient = (email: string) => {
+    setNewSchedule((prev) => ({
+      ...prev,
+      recipients: prev.recipients.filter((r) => r !== email),
+    }))
+  }
+
+  const handleCreateSchedule = async () => {
+    if (newSchedule.recipients.length === 0) {
+      toast.error("Please add at least one recipient")
+      return
+    }
+    try {
+      await createReportSchedule({
+        facilityId,
+        reportType: newSchedule.reportType,
+        frequency: newSchedule.frequency,
+        emailRecipients: newSchedule.recipients,
+        isActive: true,
+      })
+      toast.success("Report schedule created")
+      setScheduleDialogOpen(false)
+      setNewSchedule({
+        reportType: "rebate_summary",
+        frequency: "weekly",
+        recipients: [],
+        recipientInput: "",
+        includeCharts: true,
+        includeLineItems: false,
+      })
+      refetchSchedules()
+    } catch {
+      toast.error("Failed to create schedule")
+    }
+  }
+
+  const handleToggleSchedule = async (id: string) => {
+    try {
+      await toggleReportSchedule(id)
+      refetchSchedules()
+    } catch {
+      toast.error("Failed to toggle schedule")
+    }
+  }
+
+  const handleDeleteSchedule = async (id: string) => {
+    try {
+      await deleteReportSchedule(id)
+      toast.success("Schedule deleted")
+      refetchSchedules()
+    } catch {
+      toast.error("Failed to delete schedule")
+    }
+  }
+
   /* ── Render ──────────────────────────────────────────────────── */
 
   return (
@@ -179,7 +281,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setScheduleDialogOpen(true)}>
             <Clock className="h-4 w-4" />
             Schedule Report
           </Button>
@@ -443,65 +545,286 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
                 Automated report delivery to facility contacts
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setScheduleDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
               Add Schedule
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[
-              {
-                id: "1",
-                name: "Weekly Rebate Summary",
-                frequency: "weekly",
-                nextRun: "Mar 31, 2026",
-                recipients: 3,
-              },
-              {
-                id: "2",
-                name: "Monthly Usage Report",
-                frequency: "monthly",
-                nextRun: "Apr 01, 2026",
-                recipients: 5,
-              },
-              {
-                id: "3",
-                name: "Quarterly Calculation Audit",
-                frequency: "quarterly",
-                nextRun: "Apr 01, 2026",
-                recipients: 2,
-              },
-            ].map((schedule) => (
-              <div
-                key={schedule.id}
-                className="flex items-center justify-between rounded-lg border p-4"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <FileText className="h-5 w-5 text-primary" />
+            {schedules && schedules.length > 0 ? (
+              schedules.map((schedule: {
+                id: string
+                reportType: string
+                frequency: string
+                emailRecipients: string[]
+                isActive: boolean
+                lastSentAt: string | null
+                createdAt: string
+              }) => {
+                const reportTypeLabels: Record<string, string> = {
+                  contract_performance: "Contract Performance",
+                  rebate_summary: "Rebate Summary",
+                  spend_analysis: "Spend Analysis",
+                  market_share: "Market Share",
+                  case_costing: "Case Costing",
+                }
+                return (
+                  <div
+                    key={schedule.id}
+                    className="flex items-center justify-between rounded-lg border p-4"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                        <FileText className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {reportTypeLabels[schedule.reportType] ?? schedule.reportType}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {schedule.frequency.charAt(0).toUpperCase() +
+                            schedule.frequency.slice(1)}{" "}
+                          &bull; {schedule.emailRecipients.length} recipient
+                          {schedule.emailRecipients.length !== 1 ? "s" : ""}
+                          {schedule.lastSentAt && (
+                            <>
+                              {" "}
+                              &bull; Last sent:{" "}
+                              {new Date(schedule.lastSentAt).toLocaleDateString()}
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Switch
+                        checked={schedule.isActive}
+                        onCheckedChange={() => handleToggleSchedule(schedule.id)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDeleteSchedule(schedule.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">{schedule.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {schedule.frequency.charAt(0).toUpperCase() +
-                        schedule.frequency.slice(1)}{" "}
-                      &bull; Next run: {schedule.nextRun} &bull;{" "}
-                      {schedule.recipients} recipients
-                    </p>
+                )
+              })
+            ) : (
+              <>
+                {/* Fallback static schedules when no DB schedules exist */}
+                {[
+                  {
+                    id: "demo-1",
+                    name: "Weekly Rebate Summary",
+                    frequency: "weekly",
+                    nextRun: "Mar 31, 2026",
+                    recipients: 3,
+                  },
+                  {
+                    id: "demo-2",
+                    name: "Monthly Usage Report",
+                    frequency: "monthly",
+                    nextRun: "Apr 01, 2026",
+                    recipients: 5,
+                  },
+                  {
+                    id: "demo-3",
+                    name: "Quarterly Calculation Audit",
+                    frequency: "quarterly",
+                    nextRun: "Apr 01, 2026",
+                    recipients: 2,
+                  },
+                ].map((schedule) => (
+                  <div
+                    key={schedule.id}
+                    className="flex items-center justify-between rounded-lg border p-4"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                        <FileText className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{schedule.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {schedule.frequency.charAt(0).toUpperCase() +
+                            schedule.frequency.slice(1)}{" "}
+                          &bull; Next run: {schedule.nextRun} &bull;{" "}
+                          {schedule.recipients} recipients
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Switch defaultChecked />
+                      <Button variant="ghost" size="sm">
+                        Edit
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <Switch defaultChecked />
-                  <Button variant="ghost" size="sm">
-                    Edit
-                  </Button>
-                </div>
-              </div>
-            ))}
+                ))}
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Schedule Report Dialog */}
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarClock className="h-5 w-5" />
+              Schedule Report
+            </DialogTitle>
+            <DialogDescription>
+              Set up automated report delivery to your team
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* Report Type */}
+            <div className="space-y-2">
+              <Label>Report Type</Label>
+              <Select
+                value={newSchedule.reportType}
+                onValueChange={(v) =>
+                  setNewSchedule((prev) => ({
+                    ...prev,
+                    reportType: v as typeof prev.reportType,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select report type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="contract_performance">Contract Performance</SelectItem>
+                  <SelectItem value="rebate_summary">Rebate Summary</SelectItem>
+                  <SelectItem value="spend_analysis">Spend Analysis</SelectItem>
+                  <SelectItem value="market_share">Market Share</SelectItem>
+                  <SelectItem value="case_costing">Case Costing</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Frequency */}
+            <div className="space-y-2">
+              <Label>Frequency</Label>
+              <Select
+                value={newSchedule.frequency}
+                onValueChange={(v) =>
+                  setNewSchedule((prev) => ({
+                    ...prev,
+                    frequency: v as typeof prev.frequency,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select frequency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Recipients */}
+            <div className="space-y-2">
+              <Label>Recipients</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="email@example.com"
+                  value={newSchedule.recipientInput}
+                  onChange={(e) =>
+                    setNewSchedule((prev) => ({
+                      ...prev,
+                      recipientInput: e.target.value,
+                    }))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      handleAddRecipient()
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={handleAddRecipient}>
+                  Add
+                </Button>
+              </div>
+              {newSchedule.recipients.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {newSchedule.recipients.map((email) => (
+                    <Badge key={email} variant="secondary" className="gap-1 pr-1">
+                      {email}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRecipient(email)}
+                        className="ml-1 rounded-full hover:bg-muted p-0.5"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Options */}
+            <div className="space-y-3">
+              <Label>Options</Label>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="includeCharts"
+                  checked={newSchedule.includeCharts}
+                  onCheckedChange={(checked) =>
+                    setNewSchedule((prev) => ({
+                      ...prev,
+                      includeCharts: !!checked,
+                    }))
+                  }
+                />
+                <Label htmlFor="includeCharts" className="text-sm font-normal cursor-pointer">
+                  Include charts and visualizations
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="includeLineItems"
+                  checked={newSchedule.includeLineItems}
+                  onCheckedChange={(checked) =>
+                    setNewSchedule((prev) => ({
+                      ...prev,
+                      includeLineItems: !!checked,
+                    }))
+                  }
+                />
+                <Label htmlFor="includeLineItems" className="text-sm font-normal cursor-pointer">
+                  Include detailed line items
+                </Label>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateSchedule}>
+              <CalendarClock className="mr-2 h-4 w-4" />
+              Create Schedule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

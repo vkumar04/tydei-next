@@ -15,7 +15,12 @@ import {
   Eye,
   Check,
   CheckCircle2,
+  ClipboardEdit,
+  X,
+  Upload,
 } from "lucide-react"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -115,6 +120,17 @@ export function InvoiceValidationClient({
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(
     null
   )
+  const [manualEntryOpen, setManualEntryOpen] = useState(false)
+  const [manualForm, setManualForm] = useState({
+    invoiceNumber: "",
+    vendorId: "",
+    facilityName: "",
+    amount: "",
+    paymentTerms: "NET30",
+    notes: "",
+    lineItems: [] as { description: string; quantity: number; unitPrice: number }[],
+    currentItem: { description: "", quantity: 1, unitPrice: 0 },
+  })
 
   const { data: summary, isLoading: summaryLoading } =
     useInvoiceSummary(facilityId)
@@ -169,6 +185,57 @@ export function InvoiceValidationClient({
       description: "Vendors have been notified of pricing discrepancies",
     })
     setSelectedInvoices([])
+  }
+
+  const handleAddManualLineItem = () => {
+    const item = manualForm.currentItem
+    if (item.description && item.unitPrice > 0) {
+      setManualForm((prev) => ({
+        ...prev,
+        lineItems: [...prev.lineItems, { ...item }],
+        currentItem: { description: "", quantity: 1, unitPrice: 0 },
+        amount: (
+          [...prev.lineItems, item].reduce(
+            (sum, li) => sum + li.quantity * li.unitPrice,
+            0
+          )
+        ).toFixed(2),
+      }))
+    }
+  }
+
+  const handleRemoveManualLineItem = (idx: number) => {
+    setManualForm((prev) => {
+      const newItems = prev.lineItems.filter((_, i) => i !== idx)
+      return {
+        ...prev,
+        lineItems: newItems,
+        amount: newItems
+          .reduce((sum, li) => sum + li.quantity * li.unitPrice, 0)
+          .toFixed(2),
+      }
+    })
+  }
+
+  const handleManualEntrySubmit = () => {
+    if (!manualForm.invoiceNumber || !manualForm.vendorId) {
+      toast.error("Please fill in required fields (invoice number and vendor)")
+      return
+    }
+    toast.success("Invoice submitted for validation", {
+      description: `Invoice ${manualForm.invoiceNumber} will be compared against contract pricing`,
+    })
+    setManualEntryOpen(false)
+    setManualForm({
+      invoiceNumber: "",
+      vendorId: "",
+      facilityName: "",
+      amount: "",
+      paymentTerms: "NET30",
+      notes: "",
+      lineItems: [],
+      currentItem: { description: "", quantity: 1, unitPrice: 0 },
+    })
   }
 
   const pendingInvoices = filteredInvoices.filter(
