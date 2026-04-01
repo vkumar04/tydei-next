@@ -203,10 +203,12 @@ export async function getCOGImportHistory(_facilityId?: string) {
     LIMIT 50
   `
 
-  return rows.map((r) => ({
-    date: r.date instanceof Date ? r.date.toISOString() : String(r.date),
-    recordCount: Number(r.record_count),
-  }))
+  return serialize(
+    rows.map((r) => ({
+      date: r.date instanceof Date ? r.date.toISOString() : String(r.date),
+      recordCount: Number(r.record_count),
+    }))
+  )
 }
 
 // ─── COG Stats (aggregated server-side) ─────────────────────────
