@@ -216,30 +216,48 @@ export async function getCOGImportHistory(_facilityId?: string) {
 export async function getCOGStats(facilityId: string) {
   const { facility } = await requireFacility()
 
-  const [totalItems, totalSpendResult, onContractCount] = await Promise.all([
-    prisma.cOGRecord.count({
-      where: { facilityId: facility.id },
-    }),
-    prisma.cOGRecord.aggregate({
-      where: { facilityId: facility.id },
-      _sum: { extendedPrice: true },
-    }),
-    prisma.cOGRecord.count({
-      where: {
-        facilityId: facility.id,
-        category: { not: null },
-        NOT: { category: "" },
-      },
-    }),
-  ])
+  const [totalItems, totalSpendResult, onContractCount, vendorGroups] =
+    await Promise.all([
+      prisma.cOGRecord.count({
+        where: { facilityId: facility.id },
+      }),
+      prisma.cOGRecord.aggregate({
+        where: { facilityId: facility.id },
+        _sum: { extendedPrice: true },
+      }),
+      prisma.cOGRecord.count({
+        where: {
+          facilityId: facility.id,
+          category: { not: null },
+          NOT: { category: "" },
+        },
+      }),
+      prisma.cOGRecord.groupBy({
+        by: ["vendorName"],
+        where: {
+          facilityId: facility.id,
+          vendorName: { not: null },
+          NOT: { vendorName: "" },
+        },
+        _count: { id: true },
+        orderBy: { _count: { id: "desc" } },
+      }),
+    ])
 
   const totalSpend = Number(totalSpendResult._sum.extendedPrice ?? 0)
   const offContractCount = totalItems - onContractCount
+  const uniqueVendors = vendorGroups.length
+  const topVendors = vendorGroups.slice(0, 5).map((g) => ({
+    name: g.vendorName ?? "Unknown",
+    count: g._count.id,
+  }))
 
   return serialize({
     totalItems,
     totalSpend,
     onContractCount,
     offContractCount,
+    uniqueVendors,
+    topVendors,
   })
 }
