@@ -89,7 +89,8 @@ export async function getUnreadAlertCount(input: {
   if (input.facilityId) where.facilityId = input.facilityId
   if (input.vendorId) where.vendorId = input.vendorId
 
-  return prisma.alert.count({ where })
+  const count = await prisma.alert.count({ where })
+  return count
 }
 
 // ─── Mark Read ───────────────────────────────────────────────────
