@@ -161,6 +161,7 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
       )
 
       const newRecords: (typeof batch) = []
+      const toOverwrite: { id: string; record: (typeof batch)[number] }[] = []
 
       for (const record of batch) {
         const key = existingKey(
@@ -174,10 +175,20 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
           if (data.duplicateStrategy === "skip") {
             skipped++
           } else {
-            // overwrite
-            try {
-              await prisma.cOGRecord.update({
-                where: { id: existingId },
+            toOverwrite.push({ id: existingId, record })
+          }
+        } else {
+          newRecords.push(record)
+        }
+      }
+
+      // Batch-overwrite existing records via transaction
+      if (toOverwrite.length > 0) {
+        try {
+          await prisma.$transaction(
+            toOverwrite.map(({ id, record }) =>
+              prisma.cOGRecord.update({
+                where: { id },
                 data: {
                   vendorId: record.vendorId,
                   vendorName: record.vendorName,
@@ -188,14 +199,12 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
                   quantity: record.quantity,
                   category: record.category,
                 },
-              })
-              imported++
-            } catch {
-              errors++
-            }
-          }
-        } else {
-          newRecords.push(record)
+              }),
+            ),
+          )
+          imported += toOverwrite.length
+        } catch {
+          errors += toOverwrite.length
         }
       }
 

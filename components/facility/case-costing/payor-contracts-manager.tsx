@@ -139,18 +139,26 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
     return rates
   }
 
+  const [extractionStep, setExtractionStep] = useState("")
+
   // Handle AI extraction
   async function handleExtract() {
     if (!selectedFile) return
     setIsExtracting(true)
-    setExtractionProgress(10)
+    setExtractionProgress(5)
+    setExtractionStep("Uploading document...")
 
     try {
       const formData = new FormData()
       formData.append("file", selectedFile)
 
+      setExtractionStep("Reading contract PDF...")
       const interval = setInterval(() => {
-        setExtractionProgress((p) => Math.min(p + 15, 85))
+        setExtractionProgress((p) => {
+          if (p >= 85) return p
+          const remaining = 85 - p
+          return p + Math.max(0.3, remaining * 0.04)
+        })
       }, 500)
 
       const res = await fetch("/api/ai/extract-payor-contract", {
@@ -159,7 +167,8 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
       })
 
       clearInterval(interval)
-      setExtractionProgress(100)
+      setExtractionStep("Processing results...")
+      setExtractionProgress(95)
 
       if (!res.ok) {
         const err = await res.json()
@@ -462,9 +471,10 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
                         <div className="space-y-2">
                           <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            AI is extracting rates...
+                            {extractionStep}
                           </div>
                           <Progress value={extractionProgress} className="h-2 max-w-xs mx-auto" />
+                          <p className="text-xs text-muted-foreground">This may take 1-3 minutes</p>
                         </div>
                       )}
                       {extractionDone && (
