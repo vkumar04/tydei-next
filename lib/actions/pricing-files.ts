@@ -10,6 +10,7 @@ import {
 } from "@/lib/validators/pricing-files"
 import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
+import { logAudit } from "@/lib/audit"
 
 // ─── List Pricing Files ─────────────────────────────────────────
 
@@ -43,17 +44,20 @@ export async function getPricingFiles(input: PricingFilters) {
 
 // ─── Bulk Import Pricing File Entries ───────────────────────────
 
+const PRICING_BATCH_SIZE = 500
+
 export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
-  const { facility } = await requireFacility()
+  const { facility, user } = await requireFacility()
   const data = bulkImportPricingSchema.parse(input)
 
   let imported = 0
   let errors = 0
 
-  for (const record of data.records) {
+  for (let i = 0; i < data.records.length; i += PRICING_BATCH_SIZE) {
+    const batch = data.records.slice(i, i + PRICING_BATCH_SIZE)
     try {
-      await prisma.pricingFile.create({
-        data: {
+      const result = await prisma.pricingFile.createMany({
+        data: batch.map((record) => ({
           vendorId: data.vendorId,
           facilityId: facility.id,
           vendorItemNo: record.vendorItemNo,
@@ -67,13 +71,20 @@ export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
             : null,
           category: record.category,
           uom: record.uom,
-        },
+        })),
       })
-      imported++
+      imported += result.count
     } catch {
-      errors++
+      errors += batch.length
     }
   }
+
+  await logAudit({
+    userId: user.id,
+    action: "pricing.imported",
+    entityType: "pricingFile",
+    metadata: { vendorId: data.vendorId, imported, errors, totalRecords: data.records.length },
+  })
 
   return { imported, errors }
 }

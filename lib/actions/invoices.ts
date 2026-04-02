@@ -10,6 +10,7 @@ import {
 } from "@/lib/validators/invoices"
 import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
+import { logAudit } from "@/lib/audit"
 
 // ─── List Invoices ──────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ export async function getInvoice(id: string) {
 // ─── Import Invoice ─────────────────────────────────────────────
 
 export async function importInvoice(input: ImportInvoiceInput) {
-  await requireFacility()
+  const { facility, user } = await requireFacility()
   const data = importInvoiceSchema.parse(input)
 
   const totalCost = data.lineItems.reduce(
@@ -169,6 +170,15 @@ export async function importInvoice(input: ImportInvoiceInput) {
     },
     include: { lineItems: true },
   })
+
+  await logAudit({
+    userId: user.id,
+    action: "invoice.imported",
+    entityType: "invoice",
+    entityId: invoice.id,
+    metadata: { invoiceNumber: data.invoiceNumber, lineItemCount: data.lineItems.length, totalCost },
+  })
+
   return serialize(invoice)
 }
 

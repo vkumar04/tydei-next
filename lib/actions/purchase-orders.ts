@@ -10,6 +10,7 @@ import {
 } from "@/lib/validators/purchase-orders"
 import type { POStatus, Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
+import { logAudit } from "@/lib/audit"
 
 // ─── List Purchase Orders ───────────────────────────────────────
 
@@ -149,6 +150,15 @@ export async function createPurchaseOrder(input: CreatePOInput) {
     },
     include: { lineItems: true },
   })
+
+  await logAudit({
+    userId: facility.id,
+    action: "purchaseOrder.created",
+    entityType: "purchaseOrder",
+    entityId: po.id,
+    metadata: { poNumber, lineItemCount: data.lineItems.length, totalCost },
+  })
+
   return serialize(po)
 }
 
@@ -160,6 +170,13 @@ export async function updatePOStatus(id: string, status: POStatus) {
   await prisma.purchaseOrder.update({
     where: { id, facilityId: facility.id },
     data: { status },
+  })
+
+  await logAudit({
+    userId: facility.id,
+    action: `purchaseOrder.${status}`,
+    entityType: "purchaseOrder",
+    entityId: id,
   })
 }
 

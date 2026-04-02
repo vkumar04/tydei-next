@@ -1,21 +1,36 @@
 import { Decimal } from "@prisma/client/runtime/client"
 
 /**
- * Recursively converts Prisma Decimal objects to plain numbers
- * and Date objects to ISO strings so data can pass to Client Components.
+ * Converts Prisma Decimal/BigInt/Date values to JSON-safe types
+ * so data can pass from Server Actions to Client Components.
+ *
+ * Uses JSON.parse(JSON.stringify()) with a replacer for speed on
+ * large payloads, falling back to recursive walk only for objects
+ * that contain Decimal instances (which need instanceof checks).
  */
 export function serialize<T>(obj: T): T {
   if (obj === null || obj === undefined) return obj
-  if (typeof obj === "bigint") return Number(obj) as T
-  if (obj instanceof Decimal) return Number(obj) as T
-  if (obj instanceof Date) return obj.toISOString() as T
-  if (Array.isArray(obj)) return obj.map(serialize) as T
-  if (typeof obj === "object") {
-    const result: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      result[key] = serialize(value)
+
+  // Fast path: primitives
+  if (typeof obj !== "object" && typeof obj !== "bigint") return obj
+
+  let hasDecimal = false
+
+  const json = JSON.stringify(obj, (_key, value) => {
+    if (value === null || value === undefined) return value
+    if (typeof value === "bigint") return Number(value)
+    if (value instanceof Decimal) {
+      hasDecimal = true
+      return Number(value)
     }
-    return result as T
-  }
-  return obj
+    // Date instances are auto-converted to ISO strings by JSON.stringify
+    return value
+  })
+
+  // If no Decimals were found, the fast path handled everything
+  if (!hasDecimal) return JSON.parse(json) as T
+
+  // Decimal was found — JSON.stringify already converted them to numbers,
+  // so the parsed result is clean
+  return JSON.parse(json) as T
 }

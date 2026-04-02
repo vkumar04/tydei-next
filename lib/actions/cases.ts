@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { serialize } from "@/lib/serialize"
+import { logAudit } from "@/lib/audit"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -204,36 +205,46 @@ export async function importCases(input: {
   facilityId?: string
   cases: CaseInput[]
 }): Promise<{ imported: number; errors: number }> {
-  const { facility } = await requireFacility()
+  const { facility, user } = await requireFacility()
 
   let imported = 0
   let errors = 0
+  const BATCH = 500
 
-  for (const caseData of input.cases) {
+  for (let i = 0; i < input.cases.length; i += BATCH) {
+    const batch = input.cases.slice(i, i + BATCH)
     try {
-      const spend = caseData.totalSpend
-      const reimburse = caseData.totalReimbursement ?? 0
-
-      await prisma.case.create({
-        data: {
-          caseNumber: caseData.caseNumber,
-          facilityId: facility.id,
-          surgeonName: caseData.surgeonName,
-          surgeonId: caseData.surgeonId,
-          dateOfSurgery: new Date(caseData.dateOfSurgery),
-          primaryCptCode: caseData.primaryCptCode,
-          totalSpend: spend,
-          totalReimbursement: reimburse,
-          margin: reimburse - spend,
-          timeInOr: caseData.timeInOr,
-          timeOutOr: caseData.timeOutOr,
-        },
+      const result = await prisma.case.createMany({
+        data: batch.map((caseData) => {
+          const spend = caseData.totalSpend
+          const reimburse = caseData.totalReimbursement ?? 0
+          return {
+            caseNumber: caseData.caseNumber,
+            facilityId: facility.id,
+            surgeonName: caseData.surgeonName,
+            surgeonId: caseData.surgeonId,
+            dateOfSurgery: new Date(caseData.dateOfSurgery),
+            primaryCptCode: caseData.primaryCptCode,
+            totalSpend: spend,
+            totalReimbursement: reimburse,
+            margin: reimburse - spend,
+            timeInOr: caseData.timeInOr,
+            timeOutOr: caseData.timeOutOr,
+          }
+        }),
       })
-      imported++
+      imported += result.count
     } catch {
-      errors++
+      errors += batch.length
     }
   }
+
+  await logAudit({
+    userId: user.id,
+    action: "cases.imported",
+    entityType: "case",
+    metadata: { imported, errors, totalCases: input.cases.length },
+  })
 
   return { imported, errors }
 }
