@@ -1,74 +1,22 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { format } from "date-fns"
-import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
-import { Calendar } from "@/components/ui/calendar"
-import { Progress } from "@/components/ui/progress"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
-import { FileUpload } from "@/components/shared/file-upload"
 import { getUploadUrl } from "@/lib/actions/uploads"
 import { useCreatePendingContract } from "@/hooks/use-pending-contracts"
 import type { CreatePendingContractInput } from "@/lib/validators/pending-contracts"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
 import { toast } from "sonner"
+
 import {
-  CalendarIcon,
-  Save,
-  FileText,
-  Upload,
-  Sparkles,
-  CheckCircle2,
-  Trash2,
-  Users,
-  Loader2,
-  Building2,
-  Layers,
-  X,
-} from "lucide-react"
-
-// ─── Contract type options matching v0 ─────────────────────────
-const CONTRACT_TYPE_OPTIONS = [
-  { value: "usage", label: "Usage-Based", hint: "Rebates on spend" },
-  { value: "pricing_only", label: "Pricing Only", hint: "Discounted prices" },
-  { value: "capital", label: "Capital Equipment", hint: "Equipment + service" },
-  { value: "grouped", label: "GPO/Group", hint: "Collective buying" },
-  { value: "tie_in", label: "Tie-In", hint: "Bundled products" },
-  { value: "service", label: "Service", hint: "Service agreements" },
-] as const
-
-// ─── Helpers ───────────────────────────────────────────────────
-interface FacilityOption {
-  id: string
-  name: string
-}
+  EntryModeTabs,
+  BasicInformationCard,
+  ContractDatesCard,
+  FinancialDetailsCard,
+  ContractTermsCard,
+  SubmissionSidebar,
+} from "./submission"
+import type { FacilityOption, PricingFileData, UploadedDoc } from "./submission"
 
 interface VendorContractSubmissionProps {
   vendorId: string
@@ -84,10 +32,7 @@ export function VendorContractSubmission({
   const router = useRouter()
   const create = useCreatePendingContract()
 
-  // Entry mode
   const [entryMode, setEntryMode] = useState<"pdf" | "manual">("manual")
-
-  // ─── Form state ──────────────────────────────────────────────
   const [contractName, setContractName] = useState("")
   const [contractType, setContractType] = useState<string>("")
   const [facilityId, setFacilityId] = useState("")
@@ -104,29 +49,18 @@ export function VendorContractSubmission({
   const [tieInRef, setTieInRef] = useState("")
   const [contractTerms, setContractTerms] = useState<TermFormValues[]>([])
 
-  // PDF upload state
   const [contractFile, setContractFile] = useState<File | null>(null)
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionComplete, setExtractionComplete] = useState(false)
 
-  // Pricing file state
   const [pricingFile, setPricingFile] = useState<File | null>(null)
-  const [pricingFileData, setPricingFileData] = useState<{
-    total: number
-    categories: string[]
-    itemCount: number
-  } | null>(null)
+  const [pricingFileData, setPricingFileData] = useState<PricingFileData | null>(null)
 
-  // Document uploads via server
-  const [uploadedDocs, setUploadedDocs] = useState<
-    Array<{ name: string; url: string }>
-  >([])
-
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // ─── Document upload handler ─────────────────────────────────
-  async function handleDocUpload(file: File) {
+  const handleDocUpload = useCallback(async (file: File) => {
     const { uploadUrl, key } = await getUploadUrl({
       fileName: file.name,
       contentType: file.type,
@@ -139,140 +73,180 @@ export function VendorContractSubmission({
     })
     setUploadedDocs((prev) => [...prev, { name: file.name, url: key }])
     return key
-  }
+  }, [])
 
-  // ─── PDF upload handler (AI extraction simulation) ───────────
-  async function handlePDFUpload(file: File) {
-    setContractFile(file)
-    setIsExtracting(true)
+  const handlePDFUpload = useCallback(
+    async (file: File) => {
+      setContractFile(file)
+      setIsExtracting(true)
+      setExtractionProgress(0)
+
+      const filename = (file.name || "").replace(/\.[^/.]+$/, "")
+
+      // Try to parse dates from filename
+      let extractedEffective: Date | undefined
+      let extractedExpiration: Date | undefined
+      const dateMatch = filename.match(/(\d{2})[-/]?(\d{2})[-/]?(\d{4})/)
+      if (dateMatch) {
+        const month = parseInt(dateMatch[1]) - 1
+        const day = parseInt(dateMatch[2])
+        const year = parseInt(dateMatch[3])
+        extractedEffective = new Date(year, month, day)
+        extractedExpiration = new Date(year + 1, month, day)
+      }
+
+      // Clean up contract name
+      let extractedName = filename
+        .replace(/[-_]/g, " ")
+        .replace(/\d{6,8}/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+      if (extractedName.length < 5) {
+        extractedName = `${vendorName} Contract ${new Date().getFullYear()}`
+      }
+
+      // Detect contract type from filename
+      const lower = filename.toLowerCase()
+      let extractedType = "usage"
+      if (lower.includes("pricing") || lower.includes("price"))
+        extractedType = "pricing_only"
+      else if (lower.includes("capital") || lower.includes("equipment"))
+        extractedType = "capital"
+      else if (lower.includes("gpo") || lower.includes("group"))
+        extractedType = "grouped"
+
+      // Simulate extraction progress
+      const interval = setInterval(() => {
+        setExtractionProgress((prev) => Math.min(prev + 10, 90))
+      }, 200)
+      await new Promise((r) => setTimeout(r, 2000))
+      clearInterval(interval)
+      setExtractionProgress(100)
+      setExtractionComplete(true)
+      setIsExtracting(false)
+
+      // Auto-fill form
+      setContractName(extractedName)
+      setContractType(extractedType)
+      if (extractedEffective) setEffectiveDate(extractedEffective)
+      if (extractedExpiration) setExpirationDate(extractedExpiration)
+
+      // Auto-select first facility if none selected
+      if (!facilityId && facilities.length > 0) {
+        setFacilityId(facilities[0].id)
+      }
+
+      toast.success(`Contract data extracted: "${extractedName}"`)
+    },
+    [vendorName, facilityId, facilities]
+  )
+
+  const handleClearPDF = useCallback(() => {
+    setContractFile(null)
+    setExtractionComplete(false)
     setExtractionProgress(0)
+  }, [])
 
-    const filename = (file.name || "").replace(/\.[^/.]+$/, "")
+  const handleMultiFacilityChange = useCallback((checked: boolean) => {
+    setIsMultiFacility(checked)
+    if (!checked) setSelectedFacilities([])
+  }, [])
 
-    // Try to parse dates from filename
-    let extractedEffective: Date | undefined
-    let extractedExpiration: Date | undefined
-    const dateMatch = filename.match(/(\d{2})[-/]?(\d{2})[-/]?(\d{4})/)
-    if (dateMatch) {
-      const month = parseInt(dateMatch[1]) - 1
-      const day = parseInt(dateMatch[2])
-      const year = parseInt(dateMatch[3])
-      extractedEffective = new Date(year, month, day)
-      extractedExpiration = new Date(year + 1, month, day)
-    }
+  const handleCapitalTieInChange = useCallback((checked: boolean) => {
+    setCapitalTieIn(checked)
+    if (!checked) setTieInRef("")
+  }, [])
 
-    // Clean up contract name
-    let extractedName = filename
-      .replace(/[-_]/g, " ")
-      .replace(/\d{6,8}/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-    if (extractedName.length < 5) {
-      extractedName = `${vendorName} Contract ${new Date().getFullYear()}`
-    }
+  const processPricingFile = useCallback(
+    async (file: File) => {
+      setPricingFile(file)
+      try {
+        let headers: string[] = []
+        let rows: string[][] = []
 
-    // Detect contract type from filename
-    const lower = filename.toLowerCase()
-    let extractedType = "usage"
-    if (lower.includes("pricing") || lower.includes("price")) extractedType = "pricing_only"
-    else if (lower.includes("capital") || lower.includes("equipment")) extractedType = "capital"
-    else if (lower.includes("gpo") || lower.includes("group")) extractedType = "grouped"
+        if (file.name.match(/\.csv$/i)) {
+          const text = await file.text()
+          const lines = text.split("\n").filter((l) => l.trim())
+          headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""))
+          rows = lines.slice(1).map((l) =>
+            l.split(",").map((c) => c.trim().replace(/^"|"$/g, ""))
+          )
+        } else {
+          const formData = new FormData()
+          formData.append("file", file)
+          const res = await fetch("/api/parse-file", {
+            method: "POST",
+            body: formData,
+          })
+          if (!res.ok) throw new Error("Failed to parse file")
+          const parsed = await res.json()
+          headers = parsed.headers
+          rows = parsed.rows
+        }
 
-    // Simulate extraction progress
-    const interval = setInterval(() => {
-      setExtractionProgress((prev) => Math.min(prev + 10, 90))
-    }, 200)
-    await new Promise((r) => setTimeout(r, 2000))
-    clearInterval(interval)
-    setExtractionProgress(100)
-    setExtractionComplete(true)
-    setIsExtracting(false)
-
-    // Auto-fill form
-    setContractName(extractedName)
-    setContractType(extractedType)
-    if (extractedEffective) setEffectiveDate(extractedEffective)
-    if (extractedExpiration) setExpirationDate(extractedExpiration)
-
-    // Auto-select first facility if none selected
-    if (!facilityId && facilities.length > 0) {
-      setFacilityId(facilities[0].id)
-    }
-
-    toast.success(`Contract data extracted: "${extractedName}"`)
-  }
-
-  // ─── Pricing file processing ────────────────────────────────
-  async function processPricingFile(file: File) {
-    setPricingFile(file)
-    try {
-      let headers: string[] = []
-      let rows: string[][] = []
-
-      if (file.name.match(/\.csv$/i)) {
-        const text = await file.text()
-        const lines = text.split("\n").filter((l) => l.trim())
-        headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""))
-        rows = lines.slice(1).map((l) =>
-          l.split(",").map((c) => c.trim().replace(/^"|"$/g, ""))
+        // Find price column
+        const priceKeywords = [
+          "price",
+          "cost",
+          "amount",
+          "unit",
+          "extended",
+          "total",
+        ]
+        let priceIdx = headers.findIndex((h) =>
+          priceKeywords.some((k) => h.toLowerCase().includes(k))
         )
-      } else {
-        const formData = new FormData()
-        formData.append("file", file)
-        const res = await fetch("/api/parse-file", { method: "POST", body: formData })
-        if (!res.ok) throw new Error("Failed to parse file")
-        const parsed = await res.json()
-        headers = parsed.headers
-        rows = parsed.rows
-      }
+        if (priceIdx === -1) priceIdx = headers.length - 1
 
-      // Find price column
-      const priceKeywords = ["price", "cost", "amount", "unit", "extended", "total"]
-      let priceIdx = headers.findIndex((h) =>
-        priceKeywords.some((k) => h.toLowerCase().includes(k))
-      )
-      if (priceIdx === -1) priceIdx = headers.length - 1
+        // Find category column
+        const catKeywords = ["category", "cat", "type", "class", "group"]
+        const catIdx = headers.findIndex((h) =>
+          catKeywords.some((k) => h.toLowerCase().includes(k))
+        )
 
-      // Find category column
-      const catKeywords = ["category", "cat", "type", "class", "group"]
-      const catIdx = headers.findIndex((h) =>
-        catKeywords.some((k) => h.toLowerCase().includes(k))
-      )
+        let total = 0
+        const categories = new Set<string>()
+        let itemCount = 0
 
-      let total = 0
-      const categories = new Set<string>()
-      let itemCount = 0
-
-      for (const row of rows) {
-        if (row.length <= priceIdx) continue
-        const val = parseFloat(row[priceIdx].replace(/[$,]/g, ""))
-        if (!isNaN(val)) {
-          total += val
-          itemCount++
+        for (const row of rows) {
+          if (row.length <= priceIdx) continue
+          const val = parseFloat(row[priceIdx].replace(/[$,]/g, ""))
+          if (!isNaN(val)) {
+            total += val
+            itemCount++
+          }
+          if (catIdx >= 0 && row[catIdx]?.trim()) {
+            categories.add(row[catIdx].trim())
+          }
         }
-        if (catIdx >= 0 && row[catIdx]?.trim()) {
-          categories.add(row[catIdx].trim())
+
+        const cats = Array.from(categories).slice(0, 10)
+        setPricingFileData({ total, categories: cats, itemCount })
+
+        if (total > 0 && !contractTotal) {
+          setContractTotal(total.toFixed(2))
         }
+
+        toast.success(
+          `Pricing file processed: ${itemCount} items, $${total.toLocaleString(
+            undefined,
+            { minimumFractionDigits: 2 }
+          )} total${cats.length > 0 ? `, ${cats.length} categories` : ""}`
+        )
+      } catch {
+        setPricingFile(null)
+        setPricingFileData(null)
+        toast.error("Failed to process pricing file")
       }
+    },
+    [contractTotal]
+  )
 
-      const cats = Array.from(categories).slice(0, 10)
-      setPricingFileData({ total, categories: cats, itemCount })
+  const handleClearPricingFile = useCallback(() => {
+    setPricingFile(null)
+    setPricingFileData(null)
+  }, [])
 
-      if (total > 0 && !contractTotal) {
-        setContractTotal(total.toFixed(2))
-      }
-
-      toast.success(
-        `Pricing file processed: ${itemCount} items, $${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} total${cats.length > 0 ? `, ${cats.length} categories` : ""}`
-      )
-    } catch (err) {
-      setPricingFile(null)
-      setPricingFileData(null)
-      toast.error("Failed to process pricing file")
-    }
-  }
-
-  // ─── Submit ──────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setIsSubmitting(true)
@@ -332,751 +306,77 @@ export function VendorContractSubmission({
 
   return (
     <div className="space-y-6">
-      {/* Entry Mode Tabs */}
-      <Tabs
-        value={entryMode}
-        onValueChange={(v) => setEntryMode(v as "pdf" | "manual")}
-      >
-        <TabsList className="grid w-full max-w-lg grid-cols-2">
-          <TabsTrigger value="pdf" className="flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            Upload PDF
-          </TabsTrigger>
-          <TabsTrigger value="manual" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Manual Entry
-          </TabsTrigger>
-        </TabsList>
+      <EntryModeTabs
+        entryMode={entryMode}
+        onEntryModeChange={setEntryMode}
+        contractFile={contractFile}
+        isExtracting={isExtracting}
+        extractionProgress={extractionProgress}
+        extractionComplete={extractionComplete}
+        onPDFUpload={handlePDFUpload}
+        onClearPDF={handleClearPDF}
+      />
 
-        {/* PDF Upload Tab */}
-        <TabsContent value="pdf" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                Upload Contract PDF
-              </CardTitle>
-              <CardDescription>
-                Upload your contract PDF and our AI will extract the key details
-                automatically
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div
-                className={cn(
-                  "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
-                  contractFile
-                    ? extractionComplete
-                      ? "border-green-500 bg-green-50 dark:bg-green-950/30"
-                      : "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
-                    : "hover:border-primary/50"
-                )}
-              >
-                {contractFile ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-center gap-3">
-                      <FileText
-                        className={cn(
-                          "h-8 w-8",
-                          extractionComplete
-                            ? "text-green-600 dark:text-green-400"
-                            : "text-blue-600 dark:text-blue-400"
-                        )}
-                      />
-                      <div className="text-left">
-                        <p className="font-medium">{contractFile.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {(contractFile.size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setContractFile(null)
-                          setExtractionComplete(false)
-                          setExtractionProgress(0)
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {isExtracting && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Extracting contract data...
-                        </div>
-                        <Progress
-                          value={extractionProgress}
-                          className="h-2 max-w-xs mx-auto"
-                        />
-                      </div>
-                    )}
-                    {extractionComplete && (
-                      <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
-                        <CheckCircle2 className="h-5 w-5" />
-                        <span>Data extracted successfully</span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <Sparkles className="h-10 w-10 mx-auto text-primary mb-3" />
-                    <p className="text-lg font-medium mb-1">
-                      Drop your contract PDF here
-                    </p>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      or click to browse files
-                    </p>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      className="hidden"
-                      id="contract-pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) handlePDFUpload(file)
-                      }}
-                    />
-                    <Button asChild>
-                      <label htmlFor="contract-pdf" className="cursor-pointer">
-                        <Upload className="mr-2 h-4 w-4" />
-                        Select PDF
-                      </label>
-                    </Button>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Manual Entry Tab */}
-        <TabsContent value="manual" className="mt-4">
-          <p className="text-sm text-muted-foreground mb-4">
-            Fill in the contract details manually using the form below.
-          </p>
-        </TabsContent>
-      </Tabs>
-
-      {/* Main Form */}
       <form onSubmit={handleSubmit}>
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* ── Main form (left 2/3) ──────────────────────────── */}
+          {/* Main form (left 2/3) */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Basic Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Basic Information</CardTitle>
-                <CardDescription>Enter the contract details</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="contractName">Contract Name *</Label>
-                    <Input
-                      id="contractName"
-                      value={contractName}
-                      onChange={(e) => setContractName(e.target.value)}
-                      placeholder="e.g., Biologics Supply Agreement 2024"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="contractType">Contract Type *</Label>
-                    <Select value={contractType} onValueChange={setContractType}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONTRACT_TYPE_OPTIONS.map((t) => (
-                          <SelectItem key={t.value} value={t.value}>
-                            <div className="flex items-center justify-between w-full gap-2">
-                              <span>{t.label}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {t.hint}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="division">Division</Label>
-                    <Select value={division} onValueChange={setDivision}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select division" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[
-                          "Orthopedic Implants",
-                          "Spine",
-                          "Trauma",
-                          "Sports Medicine",
-                          "Biologics",
-                          "Robotics & Navigation",
-                          "Instruments",
-                          "General",
-                          "Other",
-                        ].map((d) => (
-                          <SelectItem key={d} value={d}>
-                            {d}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+            <BasicInformationCard
+              contractName={contractName}
+              onContractNameChange={setContractName}
+              contractType={contractType}
+              onContractTypeChange={setContractType}
+              division={division}
+              onDivisionChange={setDivision}
+              facilityId={facilityId}
+              onFacilityIdChange={setFacilityId}
+              facilities={facilities}
+              isMultiFacility={isMultiFacility}
+              onIsMultiFacilityChange={handleMultiFacilityChange}
+              selectedFacilities={selectedFacilities}
+              onSelectedFacilitiesChange={setSelectedFacilities}
+              capitalTieIn={capitalTieIn}
+              onCapitalTieInChange={handleCapitalTieInChange}
+              tieInRef={tieInRef}
+              onTieInRefChange={setTieInRef}
+              description={description}
+              onDescriptionChange={setDescription}
+            />
 
-                {/* Facility Selection */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-                    <Checkbox
-                      id="multiFacility"
-                      checked={isMultiFacility}
-                      onCheckedChange={(checked) => {
-                        setIsMultiFacility(checked === true)
-                        if (!checked) setSelectedFacilities([])
-                      }}
-                    />
-                    <div className="grid gap-0.5">
-                      <label
-                        htmlFor="multiFacility"
-                        className="flex items-center gap-2 cursor-pointer font-medium"
-                      >
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        Multi-Facility Contract
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        Apply this contract to multiple facilities
-                      </p>
-                    </div>
-                  </div>
+            <ContractDatesCard
+              effectiveDate={effectiveDate}
+              onEffectiveDateChange={setEffectiveDate}
+              expirationDate={expirationDate}
+              onExpirationDateChange={setExpirationDate}
+              performancePeriod={performancePeriod}
+              onPerformancePeriodChange={setPerformancePeriod}
+              rebatePayPeriod={rebatePayPeriod}
+              onRebatePayPeriodChange={setRebatePayPeriod}
+            />
 
-                  {isMultiFacility ? (
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4" />
-                        Select Participating Facilities *
-                      </Label>
-                      {selectedFacilities.length > 0 && (
-                        <div className="flex flex-wrap gap-2 p-2 rounded-md border bg-muted/30">
-                          {selectedFacilities.map((fId) => {
-                            const fac = facilities.find((f) => f.id === fId)
-                            return fac ? (
-                              <Badge
-                                key={fId}
-                                variant="secondary"
-                                className="flex items-center gap-1"
-                              >
-                                {fac.name}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSelectedFacilities((prev) =>
-                                      prev.filter((id) => id !== fId)
-                                    )
-                                  }
-                                  className="ml-1 hover:text-destructive"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ) : null
-                          })}
-                        </div>
-                      )}
-                      <Select
-                        value=""
-                        onValueChange={(value) => {
-                          if (value && !selectedFacilities.includes(value)) {
-                            setSelectedFacilities((prev) => [...prev, value])
-                          }
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              selectedFacilities.length > 0
-                                ? "Add another facility..."
-                                : "Select facilities"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {facilities
-                            .filter(
-                              (f) => !selectedFacilities.includes(f.id)
-                            )
-                            .map((f) => (
-                              <SelectItem key={f.id} value={f.id}>
-                                {f.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Label htmlFor="facility">Target Facility *</Label>
-                      <Select value={facilityId} onValueChange={setFacilityId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select facility" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {facilities.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>
-                              {f.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
+            <FinancialDetailsCard
+              contractTotal={contractTotal}
+              onContractTotalChange={setContractTotal}
+            />
 
-                {/* Capital Tie-In */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-                    <Checkbox
-                      id="capitalTieIn"
-                      checked={capitalTieIn}
-                      onCheckedChange={(checked) => {
-                        setCapitalTieIn(checked === true)
-                        if (!checked) setTieInRef("")
-                      }}
-                    />
-                    <div className="grid gap-0.5">
-                      <label
-                        htmlFor="capitalTieIn"
-                        className="flex items-center gap-2 cursor-pointer font-medium"
-                      >
-                        Capital Tie-In
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        Link this contract to a capital equipment agreement
-                      </p>
-                    </div>
-                  </div>
-                  {capitalTieIn && (
-                    <div className="space-y-2">
-                      <Label htmlFor="tieInRef">Capital Contract Reference</Label>
-                      <Input
-                        id="tieInRef"
-                        value={tieInRef}
-                        onChange={(e) => setTieInRef(e.target.value)}
-                        placeholder="e.g., CAP-2024-001"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Description / Special Terms */}
-                <div className="space-y-2">
-                  <Label htmlFor="description">
-                    Description / Special Terms
-                  </Label>
-                  <Textarea
-                    id="description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Additional contract notes, special conditions, etc."
-                    rows={3}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Contract Dates */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Contract Dates</CardTitle>
-                <CardDescription>
-                  Set the contract timeline and evaluation periods
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Effective Date *</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !effectiveDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {effectiveDate
-                            ? format(effectiveDate, "PPP")
-                            : "Select date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={effectiveDate}
-                          onSelect={setEffectiveDate}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Expiration Date *</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !expirationDate && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {expirationDate
-                            ? format(expirationDate, "PPP")
-                            : "Select date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={expirationDate}
-                          onSelect={setExpirationDate}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Performance Period</Label>
-                    <Select
-                      value={performancePeriod}
-                      onValueChange={setPerformancePeriod}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="monthly">
-                          Monthly - Evaluated every month
-                        </SelectItem>
-                        <SelectItem value="quarterly">
-                          Quarterly - Evaluated every 3 months
-                        </SelectItem>
-                        <SelectItem value="semi_annual">
-                          Semi-Annual - Evaluated every 6 months
-                        </SelectItem>
-                        <SelectItem value="annual">
-                          Annual - Evaluated yearly
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Rebate Pay Period</Label>
-                    <Select
-                      value={rebatePayPeriod}
-                      onValueChange={setRebatePayPeriod}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="monthly">
-                          Monthly - Paid every month
-                        </SelectItem>
-                        <SelectItem value="quarterly">
-                          Quarterly - Paid every 3 months
-                        </SelectItem>
-                        <SelectItem value="semi_annual">
-                          Semi-Annual - Paid every 6 months
-                        </SelectItem>
-                        <SelectItem value="annual">
-                          Annual - Paid yearly
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Financial Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Financial Details</CardTitle>
-                <CardDescription>Expected contract value</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <Label htmlFor="contractTotal">
-                    Expected Contract Total
-                  </Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                      $
-                    </span>
-                    <Input
-                      id="contractTotal"
-                      type="number"
-                      value={contractTotal}
-                      onChange={(e) => setContractTotal(e.target.value)}
-                      className="pl-7"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Contract Terms */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Contract Terms</CardTitle>
-                <CardDescription>
-                  Define rebate tiers, pricing terms, market share commitments,
-                  and other contract conditions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ContractTermsEntry
-                  terms={contractTerms}
-                  onChange={setContractTerms}
-                />
-              </CardContent>
-            </Card>
+            <ContractTermsCard
+              contractTerms={contractTerms}
+              onContractTermsChange={setContractTerms}
+            />
           </div>
 
-          {/* ── Sidebar (right 1/3) ───────────────────────────── */}
-          <div className="space-y-6">
-            {/* Vendor Info */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Submitting As</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Building2 className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{vendorName}</p>
-                    <p className="text-sm text-muted-foreground">Vendor</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Attached Documents */}
-            {(contractFile || pricingFile || uploadedDocs.length > 0) && (
-              <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400 text-base">
-                    <FileText className="h-4 w-4" />
-                    Attached Documents
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {contractFile && (
-                      <div className="flex items-center gap-2 p-2 rounded bg-white/50 dark:bg-black/20">
-                        <FileText className="h-4 w-4 text-blue-600" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {contractFile.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Contract PDF
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    {pricingFile && (
-                      <div className="flex items-center gap-2 p-2 rounded bg-white/50 dark:bg-black/20">
-                        <Layers className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {pricingFile.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Pricing File
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    {uploadedDocs.map((doc) => (
-                      <div
-                        key={doc.url}
-                        className="flex items-center gap-2 p-2 rounded bg-white/50 dark:bg-black/20"
-                      >
-                        <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {doc.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Uploaded
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Pricing File Upload */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Layers className="h-4 w-4" />
-                  Pricing File
-                  <Badge variant="outline" className="text-xs font-normal">Optional</Badge>
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Upload a pricing schedule (CSV or Excel)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {pricingFile ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
-                      <FileText className="h-4 w-4 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{pricingFile.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(pricingFile.size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setPricingFile(null)
-                          setPricingFileData(null)
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                    {pricingFileData && (
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Items</span>
-                          <span className="font-medium">{pricingFileData.itemCount}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Total Value</span>
-                          <span className="font-medium text-green-600 dark:text-green-400">
-                            ${pricingFileData.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                        {pricingFileData.categories.length > 0 && (
-                          <div className="space-y-1">
-                            <span className="text-muted-foreground text-xs">Categories</span>
-                            <div className="flex flex-wrap gap-1">
-                              {pricingFileData.categories.slice(0, 5).map((cat) => (
-                                <Badge key={cat} variant="secondary" className="text-xs">
-                                  {cat}
-                                </Badge>
-                              ))}
-                              {pricingFileData.categories.length > 5 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{pricingFileData.categories.length - 5} more
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div
-                      className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                      onClick={() => document.getElementById("pricing-file")?.click()}
-                    >
-                      <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-                      <p className="text-xs text-muted-foreground">
-                        Drop pricing file or click to browse
-                      </p>
-                      <p className="text-xs text-muted-foreground/60 mt-0.5">
-                        CSV, Excel (.xlsx, .xls)
-                      </p>
-                    </div>
-                    <input
-                      type="file"
-                      id="pricing-file"
-                      accept=".csv,.xlsx,.xls"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) processPricingFile(file)
-                      }}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Document Upload */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  Documents (Optional)
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Upload supporting documents
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FileUpload
-                  onUpload={handleDocUpload}
-                  accept=".pdf,.doc,.docx,.xls,.xlsx"
-                  label="Upload document"
-                />
-              </CardContent>
-            </Card>
-
-            {/* Submit Button */}
-            <Card>
-              <CardContent className="pt-6">
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Submit for Review
-                    </>
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  The facility will review and approve your contract
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Sidebar (right 1/3) */}
+          <SubmissionSidebar
+            vendorName={vendorName}
+            contractFile={contractFile}
+            pricingFile={pricingFile}
+            pricingFileData={pricingFileData}
+            uploadedDocs={uploadedDocs}
+            submitting={submitting}
+            onClearPricingFile={handleClearPricingFile}
+            onPricingFileSelect={processPricingFile}
+            onDocUpload={handleDocUpload}
+          />
         </div>
       </form>
     </div>

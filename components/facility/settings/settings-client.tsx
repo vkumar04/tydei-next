@@ -1,77 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ProfileForm } from "@/components/facility/settings/profile-form"
-import { NotificationSettings } from "@/components/facility/settings/notification-settings"
-import { TeamTable } from "@/components/shared/settings/team-table"
-import { InviteMemberDialog } from "@/components/shared/settings/invite-member-dialog"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Progress } from "@/components/ui/progress"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   User,
-  Mail,
-  Shield,
-  Building2,
   Bell,
   CreditCard,
   Users,
-  ToggleLeft,
-  UserPlus,
   Settings,
-  Truck,
-  Plus,
-  MoreHorizontal,
-  Pencil,
-  Key,
-  Eye,
-  EyeOff,
-  ShoppingCart,
-  Bot,
-  Sparkles,
-  Stethoscope,
-  UserCog,
-  Crown,
-  AlertTriangle,
-  TrendingUp,
+  Building2,
   Link2,
-  Send,
-  Clock,
-  X,
-  Check,
-  CheckCircle2,
-  FileText,
+  ToggleLeft,
+  Sparkles,
   Puzzle,
-  BarChart3,
-  Cpu,
-  Zap,
 } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   useFacilityProfile,
   useUpdateFacilityProfile,
@@ -92,33 +34,23 @@ import {
   useRemoveConnection,
 } from "@/hooks/use-connections"
 import { useCredits, useUsageHistory } from "@/hooks/use-ai-credits"
-import { AI_CREDIT_COSTS, type AIAction } from "@/lib/ai/config"
 import type { FeatureFlagData } from "@/lib/actions/settings"
 import { toast } from "sonner"
+
+import { ProfileTab } from "@/components/facility/settings/tabs/profile-tab"
+import { NotificationsTab } from "@/components/facility/settings/tabs/notifications-tab"
+import { BillingTab } from "@/components/facility/settings/tabs/billing-tab"
+import { MembersTab } from "@/components/facility/settings/tabs/members-tab"
+import { AccountTab } from "@/components/facility/settings/tabs/account-tab"
+import { FacilitiesTab } from "@/components/facility/settings/tabs/facilities-tab"
+import { ConnectionsTab } from "@/components/facility/settings/tabs/connections-tab"
+import { FeaturesTab } from "@/components/facility/settings/tabs/features-tab"
+import { AICreditsTab } from "@/components/facility/settings/tabs/ai-credits-tab"
+import { AddonsTab } from "@/components/facility/settings/tabs/addons-tab"
 
 interface SettingsClientProps {
   facilityId: string
   organizationId: string
-}
-
-const TEAM_ROLES = [
-  { value: "admin", label: "Admin" },
-  { value: "member", label: "Member" },
-  { value: "viewer", label: "Viewer" },
-]
-
-const AI_ACTION_LABELS: Record<string, string> = {
-  document_extraction_per_page: "Document Extraction",
-  contract_classification: "Contract Classification",
-  full_contract_analysis: "Full Contract Analysis",
-  ai_chat_question: "AI Chat Question",
-  ai_contract_description: "Contract Description",
-  ai_recommendation: "AI Recommendation",
-  rebate_calculation: "Rebate Calculation",
-  contract_comparison: "Contract Comparison",
-  market_share_analysis: "Market Share Analysis",
-  report_generation: "Report Generation",
-  supply_matching: "Supply Matching",
 }
 
 export function SettingsClient({ facilityId, organizationId }: SettingsClientProps) {
@@ -154,9 +86,114 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
 
   const facilityName = profile.data?.name ?? "Facility"
 
+  const handleTogglePassword = useCallback(() => {
+    setShowPassword((prev) => !prev)
+  }, [])
+
+  const handleSaveProfile = useCallback(
+    (data: Parameters<typeof updateProfile.mutate>[0]) => {
+      updateProfile.mutate(data)
+    },
+    [updateProfile]
+  )
+
+  const handleSavePrefs = useCallback(
+    (p: Parameters<typeof updatePrefs.mutate>[0]) => {
+      updatePrefs.mutate(p)
+    },
+    [updatePrefs]
+  )
+
+  const handleRemoveMember = useCallback(
+    (id: string) => {
+      removeMember.mutate(id)
+    },
+    [removeMember]
+  )
+
+  const handleRoleChange = useCallback(
+    (id: string, role: string) => {
+      updateRole.mutate({ memberId: id, role })
+    },
+    [updateRole]
+  )
+
+  const handleInviteMember = useCallback(
+    (email: string, role: string) => {
+      inviteMember.mutate({ email, role })
+    },
+    [inviteMember]
+  )
+
+  const handleUpdateAccountFlags = useCallback(
+    (flagData: Partial<FeatureFlagData>) => {
+      updateFlags.mutate(flagData as Partial<FeatureFlagData>)
+    },
+    [updateFlags]
+  )
+
+  const handleUpdateFeatureFlags = useCallback(
+    (flagData: Partial<FeatureFlagData>, message: string) => {
+      updateFlags.mutate(flagData as Partial<FeatureFlagData>)
+      toast.success(message)
+    },
+    [updateFlags]
+  )
+
+  const handleSendConnectionInvite = useCallback(() => {
+    if (newInviteVendorName.trim()) {
+      sendInvite.mutate({
+        fromType: "facility",
+        fromId: facilityId,
+        fromName: facilityName,
+        toEmail: `contact@${newInviteVendorName.trim().toLowerCase().replace(/\s/g, "")}.com`,
+        toName: newInviteVendorName.trim(),
+        message: newInviteMessage || undefined,
+      })
+      const name = newInviteVendorName
+      setNewInviteVendorName("")
+      setNewInviteMessage("")
+      setInviteVendorDialogOpen(false)
+      toast.success(`Connection invite sent to ${name}`)
+    }
+  }, [newInviteVendorName, newInviteMessage, facilityId, facilityName, sendInvite])
+
+  const handleAcceptConnection = useCallback(
+    (id: string) => {
+      acceptConn.mutate(id)
+    },
+    [acceptConn]
+  )
+
+  const handleRejectConnection = useCallback(
+    (id: string) => {
+      rejectConn.mutate(id)
+    },
+    [rejectConn]
+  )
+
+  const handleRemoveConnection = useCallback(
+    (id: string) => {
+      removeConn.mutate(id)
+    },
+    [removeConn]
+  )
+
+  const handleToggleAddon = useCallback(
+    (key: string) => {
+      const wasActive = addonsState[key]
+      setAddonsState((prev) => ({
+        ...prev,
+        [key]: !prev[key],
+      }))
+      const label = key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      toast.success(wasActive ? `${label} disabled` : `${label} enabled`)
+    },
+    [addonsState]
+  )
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
@@ -208,1396 +245,90 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
           </TabsTrigger>
         </TabsList>
 
-        {/* ─── Profile Tab ───────────────────────────────────────── */}
         <TabsContent value="profile" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Account</CardTitle>
-              <CardDescription>Manage your account information</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Profile Section */}
-              {profile.isLoading ? (
-                <Skeleton className="h-20 w-full rounded-xl" />
-              ) : profile.data ? (
-                <div>
-                  <h3 className="text-lg font-medium mb-4">Profile</h3>
-                  <div className="flex items-start gap-6">
-                    <Avatar className="h-20 w-20">
-                      <AvatarImage src="" />
-                      <AvatarFallback className="text-lg bg-primary/10 text-primary">
-                        {profile.data.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .slice(0, 2)
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold">{profile.data.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {profile.data.type
-                          ? profile.data.type.charAt(0).toUpperCase() + profile.data.type.slice(1)
-                          : "Facility"}
-                        {profile.data.city && profile.data.state
-                          ? ` -- ${profile.data.city}, ${profile.data.state}`
-                          : ""}
-                      </p>
-                      {profile.data.healthSystemName && (
-                        <Badge variant="secondary" className="mt-2 text-xs">
-                          {profile.data.healthSystemName}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              <Separator />
-
-              {/* Email Addresses */}
-              <div>
-                <h3 className="text-lg font-medium mb-4">Email addresses</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span>{profile.data?.name ? `${profile.data.name.toLowerCase().replace(/\s/g, ".")}@facility.org` : "user@facility.org"}</span>
-                      <Badge variant="secondary" className="text-xs">Primary</Badge>
-                    </div>
-                    <Button variant="ghost" size="sm">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <Button variant="link" className="text-primary p-0 h-auto">
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add an email address
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Security */}
-              <div>
-                <h3 className="text-lg font-medium mb-4">Security</h3>
-                <p className="text-sm text-muted-foreground mb-4">Manage your security preferences</p>
-
-                <div className="space-y-4">
-                  <div>
-                    <Label className="mb-2 block">Password</Label>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 p-3 rounded-lg border flex-1">
-                        <Key className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-mono">{showPassword ? "MySecurePass123!" : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                    <Button variant="link" className="text-primary p-0 h-auto mt-2">
-                      <Pencil className="h-4 w-4 mr-1" />
-                      Change password
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg border">
-                    <div>
-                      <p className="font-medium">Two-factor authentication</p>
-                      <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
-                    </div>
-                    <Button variant="outline">Enable</Button>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Facility form */}
-              {profile.isLoading ? (
-                <Skeleton className="h-[300px] rounded-xl" />
-              ) : profile.data ? (
-                <ProfileForm
-                  facility={profile.data}
-                  onSave={async (data) => {
-                    updateProfile.mutate(data)
-                  }}
-                  isPending={updateProfile.isPending}
-                />
-              ) : null}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── Notifications Tab ─────────────────────────────────── */}
-        <TabsContent value="notifications" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>Choose how and when you want to be notified</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {prefs.isLoading ? (
-                <Skeleton className="h-[400px] rounded-xl" />
-              ) : prefs.data ? (
-                <NotificationSettings
-                  preferences={prefs.data}
-                  onSave={async (p) => {
-                    updatePrefs.mutate(p)
-                  }}
-                />
-              ) : (
-                <div className="space-y-4">
-                  <h3 className="font-medium">Email Notifications</h3>
-
-                  <div className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="font-medium">Contract Expiration Alerts</p>
-                      <p className="text-sm text-muted-foreground">Get notified when contracts are expiring</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <Separator />
-
-                  <div className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="font-medium">Price Discrepancy Alerts</p>
-                      <p className="text-sm text-muted-foreground">When invoiced prices differ from contract prices</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <Separator />
-
-                  <div className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="font-medium">Off-Contract Purchase Alerts</p>
-                      <p className="text-sm text-muted-foreground">When purchases are made outside contracts</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <Separator />
-
-                  <div className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="font-medium">Weekly Summary Reports</p>
-                      <p className="text-sm text-muted-foreground">Receive weekly performance summaries</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── Billing Tab ──────────────────────────────────────── */}
-        <TabsContent value="billing" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Billing &amp; Membership</CardTitle>
-              <CardDescription>Manage your subscription and payment methods</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Current Plan */}
-              <div className="p-6 rounded-lg border-2 border-primary/20 bg-primary/5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Crown className="h-5 w-5 text-primary" />
-                      <h3 className="text-lg font-semibold">Enterprise Plan</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Unlimited users, advanced analytics, and priority support
-                    </p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-bold">$2,499</span>
-                      <span className="text-muted-foreground">/month</span>
-                    </div>
-                  </div>
-                  <Badge className="bg-primary/10 text-primary hover:bg-primary/10">Active</Badge>
-                </div>
-                <Separator className="my-4" />
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Next billing date: February 1, 2024</span>
-                  <Button variant="outline" size="sm">Manage Plan</Button>
-                </div>
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <h3 className="font-medium mb-4">Payment Method</h3>
-                <div className="flex items-center justify-between p-4 rounded-lg border">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-16 rounded bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center">
-                      <span className="text-white text-xs font-bold">VISA</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">Visa ending in 4242</p>
-                      <p className="text-sm text-muted-foreground">Expires 12/2025</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm">Update</Button>
-                </div>
-              </div>
-
-              {/* Add-ons */}
-              <div>
-                <h3 className="font-medium mb-4">Available Add-ons</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-4 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-                        <TrendingUp className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Predictive Forecasting</p>
-                        <p className="text-sm text-muted-foreground">
-                          AI-powered spend and rebate predictions on all charts and reports
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <p className="font-semibold">+$200/mo</p>
-                      </div>
-                      <Button variant="outline" size="sm">Add</Button>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-lg border bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center">
-                        <Bot className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-medium">AI Contract Analysis</p>
-                        <p className="text-sm text-muted-foreground">
-                          Automated PDF parsing and contract recommendations
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">Included</Badge>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ─── Members Tab ──────────────────────────────────────── */}
-        <TabsContent value="members" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Team Members</CardTitle>
-                  <CardDescription>
-                    Manage users and their access levels
-                  </CardDescription>
-                </div>
-                <Button onClick={() => setInviteOpen(true)}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Invite Member
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* Role Legend */}
-              <div className="flex flex-wrap gap-4 mb-6 p-4 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-purple-500" />
-                  <span className="text-sm"><strong>Super Admin:</strong> Full system access</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm"><strong>Admin:</strong> Manage users &amp; settings</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-green-500" />
-                  <span className="text-sm"><strong>User:</strong> Standard access</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm"><strong>Viewer:</strong> Read-only</span>
-                </div>
-              </div>
-
-              {team.isLoading ? (
-                <Skeleton className="h-[300px] rounded-xl" />
-              ) : team.data ? (
-                <TeamTable
-                  members={team.data}
-                  onRemove={(id) => removeMember.mutate(id)}
-                  onRoleChange={(id, role) =>
-                    updateRole.mutate({ memberId: id, role })
-                  }
-                  isAdmin
-                  roles={TEAM_ROLES}
-                />
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <InviteMemberDialog
-            open={inviteOpen}
-            onOpenChange={setInviteOpen}
-            onInvite={async (email, role) => {
-              inviteMember.mutate({ email, role })
-            }}
-            roles={TEAM_ROLES}
+          <ProfileTab
+            profileData={profile.data}
+            profileIsLoading={profile.isLoading}
+            showPassword={showPassword}
+            onTogglePassword={handleTogglePassword}
+            onSaveProfile={handleSaveProfile}
+            isSavingProfile={updateProfile.isPending}
           />
         </TabsContent>
 
-        {/* ─── Account Tab ──────────────────────────────────────── */}
+        <TabsContent value="notifications" className="space-y-6">
+          <NotificationsTab
+            prefsData={prefs.data}
+            prefsIsLoading={prefs.isLoading}
+            onSavePrefs={handleSavePrefs}
+          />
+        </TabsContent>
+
+        <TabsContent value="billing" className="space-y-6">
+          <BillingTab />
+        </TabsContent>
+
+        <TabsContent value="members" className="space-y-6">
+          <MembersTab
+            teamData={team.data}
+            teamIsLoading={team.isLoading}
+            inviteOpen={inviteOpen}
+            onSetInviteOpen={setInviteOpen}
+            onRemoveMember={handleRemoveMember}
+            onRoleChange={handleRoleChange}
+            onInviteMember={handleInviteMember}
+          />
+        </TabsContent>
+
         <TabsContent value="account" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organization Settings</CardTitle>
-              <CardDescription>Manage your organization details</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="orgName">Organization Name</Label>
-                  <Input id="orgName" defaultValue={profile.data?.healthSystemName || "Organization"} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="orgType">Organization Type</Label>
-                  <Input id="orgType" defaultValue={profile.data?.type || "Health System"} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input id="address" defaultValue={profile.data?.address || ""} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city">City, State, ZIP</Label>
-                  <Input id="city" defaultValue={profile.data?.city && profile.data?.state ? `${profile.data.city}, ${profile.data.state}` : ""} />
-                </div>
-              </div>
-              <Button>Save Organization Settings</Button>
-            </CardContent>
-          </Card>
-
-          {/* Feature Modules */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Feature Modules</CardTitle>
-              <CardDescription>Enable or disable optional features</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {flags.data && (
-                <>
-                  <div className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="font-medium">Purchase Order Module</p>
-                      <p className="text-sm text-muted-foreground">Enable digital PO creation and tracking</p>
-                    </div>
-                    <Switch
-                      checked={flags.data.purchaseOrdersEnabled}
-                      onCheckedChange={(checked) => {
-                        updateFlags.mutate({ purchaseOrdersEnabled: checked } as Partial<FeatureFlagData>)
-                      }}
-                    />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="font-medium">AI Contract Parsing</p>
-                      <p className="text-sm text-muted-foreground">Use AI to extract contract terms from PDFs</p>
-                    </div>
-                    <Switch
-                      checked={flags.data.aiAgentEnabled}
-                      onCheckedChange={(checked) => {
-                        updateFlags.mutate({ aiAgentEnabled: checked } as Partial<FeatureFlagData>)
-                      }}
-                    />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="font-medium">Surgeon Scorecard</p>
-                      <p className="text-sm text-muted-foreground">Track surgeon performance and margins</p>
-                    </div>
-                    <Switch
-                      checked={flags.data.caseCostingEnabled}
-                      onCheckedChange={(checked) => {
-                        updateFlags.mutate({ caseCostingEnabled: checked } as Partial<FeatureFlagData>)
-                      }}
-                    />
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Danger Zone */}
-          <Card className="border-destructive/50">
-            <CardHeader>
-              <CardTitle className="text-destructive">Danger Zone</CardTitle>
-              <CardDescription>Irreversible actions for your account</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg border border-destructive/20">
-                <div>
-                  <p className="font-medium">Export All Data</p>
-                  <p className="text-sm text-muted-foreground">Download all your organization data</p>
-                </div>
-                <Button variant="outline">Export</Button>
-              </div>
-              <div className="flex items-center justify-between p-4 rounded-lg border border-destructive/20">
-                <div>
-                  <p className="font-medium text-destructive">Delete Organization</p>
-                  <p className="text-sm text-muted-foreground">Permanently delete all data</p>
-                </div>
-                <Button variant="destructive">Delete</Button>
-              </div>
-            </CardContent>
-          </Card>
+          <AccountTab
+            profileData={profile.data}
+            flagsData={flags.data}
+            onUpdateFlags={handleUpdateAccountFlags}
+          />
         </TabsContent>
 
-        {/* ─── Facilities Tab ───────────────────────────────────── */}
         <TabsContent value="facilities" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Facilities</CardTitle>
-                  <CardDescription>Manage your healthcare facilities and locations</CardDescription>
-                </div>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Facility
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Facility Stats */}
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-lg border p-4">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-5 w-5 text-primary" />
-                    <span className="font-medium">Total Facilities</span>
-                  </div>
-                  <p className="mt-2 text-2xl font-bold">1</p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">Active</span>
-                  </div>
-                  <p className="mt-2 text-2xl font-bold text-green-600 dark:text-green-400">1</p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">Inactive</span>
-                  </div>
-                  <p className="mt-2 text-2xl font-bold text-muted-foreground">0</p>
-                </div>
-              </div>
-
-              {/* Facility List */}
-              {profile.data && (
-                <div className="flex items-center justify-between p-4 rounded-lg border">
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Building2 className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-medium">{profile.data.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {profile.data.type
-                          ? profile.data.type.charAt(0).toUpperCase() + profile.data.type.slice(1)
-                          : "Hospital"}
-                        {profile.data.city && ` -- ${profile.data.city}, ${profile.data.state}`}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">Active</Badge>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <FacilitiesTab profileData={profile.data} />
         </TabsContent>
 
-        {/* ─── Connections Tab ──────────────────────────────────── */}
         <TabsContent value="connections" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Vendor Connections</CardTitle>
-                  <CardDescription>Manage connections with vendor partners</CardDescription>
-                </div>
-                <Dialog open={inviteVendorDialogOpen} onOpenChange={setInviteVendorDialogOpen}>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Invite Vendor to Connect</DialogTitle>
-                      <DialogDescription>
-                        Send a connection invite to a vendor. They will be able to share pricing and manage contracts with your facility.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="vendor-name">Vendor Name</Label>
-                        <Input
-                          id="vendor-name"
-                          placeholder="e.g., Stryker, Arthrex, Medtronic"
-                          value={newInviteVendorName}
-                          onChange={(e) => setNewInviteVendorName(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="invite-message">Message (Optional)</Label>
-                        <Textarea
-                          id="invite-message"
-                          placeholder="Add a personal message to the invite..."
-                          value={newInviteMessage}
-                          onChange={(e) => setNewInviteMessage(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setInviteVendorDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          if (newInviteVendorName.trim()) {
-                            sendInvite.mutate({
-                              fromType: "facility",
-                              fromId: facilityId,
-                              fromName: facilityName,
-                              toEmail: `contact@${newInviteVendorName.trim().toLowerCase().replace(/\s/g, "")}.com`,
-                              toName: newInviteVendorName.trim(),
-                              message: newInviteMessage || undefined,
-                            })
-                            setNewInviteVendorName("")
-                            setNewInviteMessage("")
-                            setInviteVendorDialogOpen(false)
-                            toast.success(`Connection invite sent to ${newInviteVendorName}`)
-                          }
-                        }}
-                        disabled={!newInviteVendorName.trim()}
-                      >
-                        <Send className="mr-2 h-4 w-4" />
-                        Send Invite
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-                <Button onClick={() => setInviteVendorDialogOpen(true)}>
-                  <Send className="mr-2 h-4 w-4" />
-                  Invite Vendor
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {connectionData.isLoading ? (
-                <Skeleton className="h-[300px] rounded-xl" />
-              ) : (
-                <>
-                  {/* Connection Stats */}
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="rounded-lg border p-4">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        <span className="font-medium">Active</span>
-                      </div>
-                      <p className="mt-2 text-2xl font-bold">
-                        {connectionData.data?.filter(c => c.status === "accepted").length ?? 0}
-                      </p>
-                      <p className="text-sm text-muted-foreground">Connected vendors</p>
-                    </div>
-                    <div className="rounded-lg border p-4">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-amber-500" />
-                        <span className="font-medium">Pending</span>
-                      </div>
-                      <p className="mt-2 text-2xl font-bold">
-                        {connectionData.data?.filter(c => c.status === "pending" && c.inviteType === "vendor_to_facility").length ?? 0}
-                      </p>
-                      <p className="text-sm text-muted-foreground">Awaiting your response</p>
-                    </div>
-                    <div className="rounded-lg border p-4">
-                      <div className="flex items-center gap-2">
-                        <Send className="h-5 w-5 text-blue-500" />
-                        <span className="font-medium">Sent</span>
-                      </div>
-                      <p className="mt-2 text-2xl font-bold">
-                        {connectionData.data?.filter(c => c.status === "pending" && c.inviteType === "facility_to_vendor").length ?? 0}
-                      </p>
-                      <p className="text-sm text-muted-foreground">Awaiting vendor response</p>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Pending Invites Received */}
-                  {(connectionData.data?.filter(c => c.status === "pending" && c.inviteType === "vendor_to_facility").length ?? 0) > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="font-semibold flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-amber-500" />
-                        Pending Connection Requests
-                      </h3>
-                      <div className="space-y-3">
-                        {connectionData.data
-                          ?.filter(c => c.status === "pending" && c.inviteType === "vendor_to_facility")
-                          .map(connection => (
-                            <div key={connection.id} className="flex items-center justify-between rounded-lg border p-4 bg-amber-50 dark:bg-amber-900/10">
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-10 w-10">
-                                  <AvatarFallback className="bg-amber-100 text-amber-700">
-                                    {connection.vendorName.slice(0, 2).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="font-medium">{connection.vendorName}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    Invited by {connection.invitedByEmail} &bull; {new Date(connection.invitedAt).toLocaleDateString()}
-                                  </p>
-                                  {connection.message && (
-                                    <p className="text-sm mt-1 italic">&quot;{connection.message}&quot;</p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => rejectConn.mutate(connection.id)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => acceptConn.mutate(connection.id)}
-                                >
-                                  <Check className="mr-1 h-4 w-4" />
-                                  Accept
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Active Connections */}
-                  <div className="space-y-4">
-                    <h3 className="font-semibold flex items-center gap-2">
-                      <Link2 className="h-4 w-4 text-green-500" />
-                      Active Connections
-                    </h3>
-                    {(connectionData.data?.filter(c => c.status === "accepted").length ?? 0) === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No active vendor connections</p>
-                        <p className="text-sm">Invite vendors to connect and share pricing data</p>
-                      </div>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Vendor</TableHead>
-                            <TableHead>Connected Since</TableHead>
-                            <TableHead>Initiated By</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {connectionData.data
-                            ?.filter(c => c.status === "accepted")
-                            .map(connection => (
-                              <TableRow key={connection.id}>
-                                <TableCell>
-                                  <div className="flex items-center gap-3">
-                                    <Avatar className="h-8 w-8">
-                                      <AvatarFallback className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-                                        {connection.vendorName.slice(0, 2).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <span className="font-medium">{connection.vendorName}</span>
-                                  </div>
-                                </TableCell>
-                                <TableCell>{new Date(connection.respondedAt || connection.invitedAt).toLocaleDateString()}</TableCell>
-                                <TableCell>
-                                  <Badge variant="outline">
-                                    {connection.inviteType === "facility_to_vendor" ? "You" : connection.vendorName}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                    onClick={() => removeConn.mutate(connection.id)}
-                                  >
-                                    Disconnect
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </div>
-
-                  {/* Sent Invites */}
-                  {(connectionData.data?.filter(c => c.status === "pending" && c.inviteType === "facility_to_vendor").length ?? 0) > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="font-semibold flex items-center gap-2">
-                        <Send className="h-4 w-4 text-blue-500" />
-                        Sent Invites (Awaiting Response)
-                      </h3>
-                      <div className="space-y-2">
-                        {connectionData.data
-                          ?.filter(c => c.status === "pending" && c.inviteType === "facility_to_vendor")
-                          .map(connection => (
-                            <div key={connection.id} className="flex items-center justify-between rounded-lg border p-3">
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarFallback className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                                    {connection.vendorName.slice(0, 2).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="font-medium">{connection.vendorName}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    Sent {new Date(connection.invitedAt).toLocaleDateString()}
-                                  </p>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeConn.mutate(connection.id)}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
+          <ConnectionsTab
+            connectionData={connectionData.data}
+            connectionIsLoading={connectionData.isLoading}
+            inviteVendorDialogOpen={inviteVendorDialogOpen}
+            onSetInviteVendorDialogOpen={setInviteVendorDialogOpen}
+            newInviteVendorName={newInviteVendorName}
+            onSetNewInviteVendorName={setNewInviteVendorName}
+            newInviteMessage={newInviteMessage}
+            onSetNewInviteMessage={setNewInviteMessage}
+            onSendInvite={handleSendConnectionInvite}
+            onAcceptConnection={handleAcceptConnection}
+            onRejectConnection={handleRejectConnection}
+            onRemoveConnection={handleRemoveConnection}
+          />
         </TabsContent>
 
-        {/* ─── Features Tab ──────────────────────────────────────── */}
         <TabsContent value="features" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Feature Settings</CardTitle>
-              <CardDescription>
-                Enable or disable optional features in the application
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {flags.isLoading ? (
-                <Skeleton className="h-[300px] rounded-xl" />
-              ) : flags.data ? (
-                <>
-                  {/* Purchase Orders */}
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                        <ShoppingCart className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-base font-medium">
-                          Purchase Orders
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Enable PO matching and tracking functionality. When
-                          enabled, Purchase Orders will appear in the navigation
-                          menu.
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={flags.data.purchaseOrdersEnabled}
-                      onCheckedChange={(checked) => {
-                        updateFlags.mutate({
-                          purchaseOrdersEnabled: checked,
-                        } as Partial<FeatureFlagData>)
-                        toast.success(
-                          checked
-                            ? "Purchase Orders enabled"
-                            : "Purchase Orders disabled"
-                        )
-                      }}
-                    />
-                  </div>
-
-                  {/* AI Agent */}
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                        <Bot className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-base font-medium">
-                          AI Agent
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Enable the AI-powered assistant for contract analysis,
-                          recommendations, and insights.
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={flags.data.aiAgentEnabled}
-                      onCheckedChange={(checked) => {
-                        updateFlags.mutate({
-                          aiAgentEnabled: checked,
-                        } as Partial<FeatureFlagData>)
-                        toast.success(
-                          checked ? "AI Agent enabled" : "AI Agent disabled"
-                        )
-                      }}
-                    />
-                  </div>
-
-                  {/* Advanced Reports */}
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                        <Sparkles className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-base font-medium">
-                          Advanced Reports
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Enable advanced reporting features including custom
-                          report builder and scheduled reports.
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={flags.data.advancedReportsEnabled}
-                      onCheckedChange={(checked) => {
-                        updateFlags.mutate({
-                          advancedReportsEnabled: checked,
-                        } as Partial<FeatureFlagData>)
-                        toast.success(
-                          checked
-                            ? "Advanced Reports enabled"
-                            : "Advanced Reports disabled"
-                        )
-                      }}
-                    />
-                  </div>
-
-                  {/* Vendor Portal */}
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30">
-                        <Truck className="h-5 w-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-base font-medium">
-                          Vendor Portal
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Allow vendors to access their dedicated portal for
-                          contract submissions and performance tracking.
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={flags.data.vendorPortalEnabled}
-                      onCheckedChange={(checked) => {
-                        updateFlags.mutate({
-                          vendorPortalEnabled: checked,
-                        } as Partial<FeatureFlagData>)
-                        toast.success(
-                          checked
-                            ? "Vendor Portal enabled"
-                            : "Vendor Portal disabled"
-                        )
-                      }}
-                    />
-                  </div>
-
-                  {/* Premium add-ons section */}
-                  <div className="pt-4 border-t">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Badge
-                        variant="secondary"
-                        className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700"
-                      >
-                        Premium Add-Ons
-                      </Badge>
-                      <p className="text-sm text-muted-foreground">
-                        Additional modules available for purchase
-                      </p>
-                    </div>
-
-                    {/* Case Costing */}
-                    <div className="flex items-center justify-between rounded-lg border p-4 mb-4 bg-gradient-to-r from-teal-50/50 to-cyan-50/50 dark:from-teal-950/20 dark:to-cyan-950/20 border-teal-200 dark:border-teal-800">
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/30">
-                          <Stethoscope className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Label className="text-base font-medium">
-                              Case Costing
-                            </Label>
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
-                            >
-                              Paid Add-On
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Track procedure-level costs, link purchasing data to
-                            clinical cases, and analyze margin performance.
-                          </p>
-                        </div>
-                      </div>
-                      <Switch
-                        checked={flags.data.caseCostingEnabled}
-                        onCheckedChange={(checked) => {
-                          updateFlags.mutate({
-                            caseCostingEnabled: checked,
-                          } as Partial<FeatureFlagData>)
-                          toast.success(
-                            checked
-                              ? "Case Costing enabled"
-                              : "Case Costing disabled"
-                          )
-                        }}
-                      />
-                    </div>
-
-                    {/* Surgeon Scorecard */}
-                    <div className="flex items-center justify-between rounded-lg border p-4 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800">
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                          <UserCog className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Label className="text-base font-medium">
-                              Surgeon Scorecard
-                            </Label>
-                            <Badge
-                              variant="outline"
-                              className="text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
-                            >
-                              Paid Add-On
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Compare surgeon performance, supply utilization, and
-                            cost efficiency with detailed scorecards.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Note</AlertTitle>
-            <AlertDescription>
-              Changes to feature settings take effect immediately. Disabled
-              features will be hidden from the navigation menu but data will be
-              preserved.
-            </AlertDescription>
-          </Alert>
+          <FeaturesTab
+            flagsData={flags.data}
+            flagsIsLoading={flags.isLoading}
+            onUpdateFlags={handleUpdateFeatureFlags}
+          />
         </TabsContent>
 
-        {/* ─── AI Credits Tab ──────────────────────────────────── */}
         <TabsContent value="ai-credits" className="space-y-6">
-          {/* Credit Overview */}
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Credits Used</CardDescription>
-                <CardTitle className="text-3xl">
-                  {creditsQuery.data ? creditsQuery.data.usedCredits.toLocaleString() : "0"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {creditsQuery.data && (
-                  <div className="space-y-2">
-                    <Progress
-                      value={creditsQuery.data.monthlyCredits > 0
-                        ? Math.round((creditsQuery.data.usedCredits / (creditsQuery.data.monthlyCredits + creditsQuery.data.rolloverCredits)) * 100)
-                        : 0}
-                      className="h-2"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {creditsQuery.data.monthlyCredits > 0
-                        ? `${Math.round((creditsQuery.data.usedCredits / (creditsQuery.data.monthlyCredits + creditsQuery.data.rolloverCredits)) * 100)}% of ${(creditsQuery.data.monthlyCredits + creditsQuery.data.rolloverCredits).toLocaleString()} total credits`
-                        : "No credit limit configured"}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Remaining Credits</CardDescription>
-                <CardTitle className="text-3xl text-green-600 dark:text-green-400">
-                  {creditsQuery.data ? creditsQuery.data.remaining.toLocaleString() : "Unlimited"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  {creditsQuery.data?.rolloverCredits
-                    ? `Includes ${creditsQuery.data.rolloverCredits.toLocaleString()} rollover credits`
-                    : "Resets at end of billing period"}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Current Plan</CardDescription>
-                <CardTitle className="text-xl flex items-center gap-2">
-                  Enterprise
-                  <Badge variant="secondary">Unlimited/mo</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" size="sm" className="w-full">
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Upgrade Plan
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Usage Breakdown */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bot className="h-5 w-5" />
-                Usage by Feature
-              </CardTitle>
-              <CardDescription>See which AI features are consuming the most credits</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Feature</TableHead>
-                    <TableHead className="text-center">Credits/Use</TableHead>
-                    <TableHead className="text-right">Total Credits</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {Object.entries(AI_CREDIT_COSTS).map(([action, cost]) => (
-                    <TableRow key={action}>
-                      <TableCell className="font-medium">{AI_ACTION_LABELS[action] ?? action}</TableCell>
-                      <TableCell className="text-center text-muted-foreground">{cost}</TableCell>
-                      <TableCell className="text-right">-</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          {/* Recent Activity */}
-          {usageQuery.data && usageQuery.data.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Recent AI Activity
-                </CardTitle>
-                <CardDescription>Last 10 AI actions in your organization</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {usageQuery.data.slice(0, 10).map((record) => (
-                    <div key={record.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                          <Sparkles className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{record.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {record.userName} - {new Date(record.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="outline">{record.creditsUsed} credits</Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Credit Costs Reference */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Credit Costs Reference</CardTitle>
-              <CardDescription>How many credits each AI feature uses</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {Object.entries(AI_CREDIT_COSTS).map(([action, cost]) => (
-                  <div key={action} className="flex items-center justify-between p-3 rounded-lg border">
-                    <span className="text-sm">{AI_ACTION_LABELS[action] ?? action}</span>
-                    <Badge variant="secondary">{cost} credits</Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <AICreditsTab
+            creditsData={creditsQuery.data}
+            usageData={usageQuery.data}
+          />
         </TabsContent>
 
-        {/* ─── Add-ons Marketplace Tab ──────────────────────────── */}
         <TabsContent value="addons" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Puzzle className="h-5 w-5" />
-                    Add-ons Marketplace
-                  </CardTitle>
-                  <CardDescription>
-                    Extend your platform with powerful add-on modules
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {Object.values(addonsState).filter(Boolean).length} of{" "}
-                  {Object.keys(addonsState).length} active
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Predictive Forecasting */}
-              <div
-                className={`flex items-center justify-between rounded-lg border p-5 transition-colors ${
-                  addonsState.predictive_forecasting
-                    ? "bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800"
-                    : ""
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 shadow-sm">
-                    <BarChart3 className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-base">Predictive Forecasting</p>
-                      {addonsState.predictive_forecasting && (
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
-                          Active
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      AI-powered spend and rebate predictions on all charts and reports.
-                      Forecast future contract performance and identify optimization opportunities.
-                    </p>
-                    <p className="text-sm font-semibold text-violet-700 dark:text-violet-400 mt-1">
-                      $200/mo
-                    </p>
-                  </div>
-                </div>
-                <div className="flex-shrink-0 ml-4">
-                  <Button
-                    variant={addonsState.predictive_forecasting ? "outline" : "default"}
-                    size="sm"
-                    onClick={() => {
-                      setAddonsState((prev) => ({
-                        ...prev,
-                        predictive_forecasting: !prev.predictive_forecasting,
-                      }))
-                      toast.success(
-                        addonsState.predictive_forecasting
-                          ? "Predictive Forecasting disabled"
-                          : "Predictive Forecasting enabled"
-                      )
-                    }}
-                  >
-                    {addonsState.predictive_forecasting ? "Disable" : "Enable"}
-                  </Button>
-                </div>
-              </div>
-
-              {/* AI Contract Analysis */}
-              <div
-                className={`flex items-center justify-between rounded-lg border p-5 transition-colors ${
-                  addonsState.ai_contract_analysis
-                    ? "bg-teal-50/50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800"
-                    : ""
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 shadow-sm">
-                    <Bot className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-base">AI Contract Analysis</p>
-                      {addonsState.ai_contract_analysis && (
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
-                          Active
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Automated PDF parsing, clause extraction, and contract recommendations.
-                      Compare terms across vendors and identify risks automatically.
-                    </p>
-                    <p className="text-sm font-semibold text-teal-700 dark:text-teal-400 mt-1">
-                      $200/mo
-                    </p>
-                  </div>
-                </div>
-                <div className="flex-shrink-0 ml-4">
-                  <Button
-                    variant={addonsState.ai_contract_analysis ? "outline" : "default"}
-                    size="sm"
-                    onClick={() => {
-                      setAddonsState((prev) => ({
-                        ...prev,
-                        ai_contract_analysis: !prev.ai_contract_analysis,
-                      }))
-                      toast.success(
-                        addonsState.ai_contract_analysis
-                          ? "AI Contract Analysis disabled"
-                          : "AI Contract Analysis enabled"
-                      )
-                    }}
-                  >
-                    {addonsState.ai_contract_analysis ? "Disable" : "Enable"}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Cost Modeling */}
-              <div
-                className={`flex items-center justify-between rounded-lg border p-5 transition-colors ${
-                  addonsState.cost_modeling
-                    ? "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
-                    : ""
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 shadow-sm">
-                    <Cpu className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-base">Cost Modeling</p>
-                      {addonsState.cost_modeling && (
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
-                          Active
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Build what-if cost models for contract negotiations.
-                      Simulate pricing scenarios, volume commitments, and tier structures.
-                    </p>
-                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 mt-1">
-                      $200/mo
-                    </p>
-                  </div>
-                </div>
-                <div className="flex-shrink-0 ml-4">
-                  <Button
-                    variant={addonsState.cost_modeling ? "outline" : "default"}
-                    size="sm"
-                    onClick={() => {
-                      setAddonsState((prev) => ({
-                        ...prev,
-                        cost_modeling: !prev.cost_modeling,
-                      }))
-                      toast.success(
-                        addonsState.cost_modeling
-                          ? "Cost Modeling disabled"
-                          : "Cost Modeling enabled"
-                      )
-                    }}
-                  >
-                    {addonsState.cost_modeling ? "Disable" : "Enable"}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Add-on Billing Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Add-on Billing Summary</CardTitle>
-              <CardDescription>Monthly costs for active add-ons</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {addonsState.predictive_forecasting && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Predictive Forecasting</span>
-                    <span className="font-medium">$200.00/mo</span>
-                  </div>
-                )}
-                {addonsState.ai_contract_analysis && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span>AI Contract Analysis</span>
-                    <span className="font-medium">$200.00/mo</span>
-                  </div>
-                )}
-                {addonsState.cost_modeling && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Cost Modeling</span>
-                    <span className="font-medium">$200.00/mo</span>
-                  </div>
-                )}
-                {!addonsState.predictive_forecasting &&
-                  !addonsState.ai_contract_analysis &&
-                  !addonsState.cost_modeling && (
-                    <p className="text-sm text-muted-foreground">No active add-ons</p>
-                  )}
-                <Separator />
-                <div className="flex items-center justify-between font-semibold">
-                  <span>Total Add-on Cost</span>
-                  <span>
-                    $
-                    {(
-                      (addonsState.predictive_forecasting ? 200 : 0) +
-                      (addonsState.ai_contract_analysis ? 200 : 0) +
-                      (addonsState.cost_modeling ? 200 : 0)
-                    ).toFixed(2)}
-                    /mo
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Alert>
-            <Zap className="h-4 w-4" />
-            <AlertTitle>Add-on Management</AlertTitle>
-            <AlertDescription>
-              Add-ons are billed monthly and can be enabled or disabled at any
-              time. Changes take effect immediately and billing is prorated.
-            </AlertDescription>
-          </Alert>
+          <AddonsTab
+            addonsState={addonsState}
+            onToggleAddon={handleToggleAddon}
+          />
         </TabsContent>
       </Tabs>
     </div>

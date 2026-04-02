@@ -2,67 +2,9 @@
 
 import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import Link from "next/link"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Switch } from "@/components/ui/switch"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-  AlertTriangle,
-  ArrowRight,
-  Clock,
-  DollarSign,
-  Download,
-  TrendingUp,
-  Filter,
-  Mail,
-  FileText,
-  Plus,
-  Trash2,
-  CalendarClock,
-} from "lucide-react"
-import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts"
-import { DateRangePicker } from "@/components/shared/forms/date-range-picker"
-import { ReportPeriodTable } from "./report-period-table"
-import { ReportTrendChart } from "./report-trend-chart"
 import { queryKeys } from "@/lib/query-keys"
 import { getReportData, getContracts } from "@/lib/actions/reports"
 import {
@@ -71,10 +13,20 @@ import {
   toggleReportSchedule,
   deleteReportSchedule,
 } from "@/lib/actions/report-scheduling"
-import { formatCurrency } from "@/lib/formatting"
 import { useExportPDF } from "@/hooks/use-export-pdf"
 import { toast } from "sonner"
 import type { ContractPeriodRow } from "./report-columns"
+import {
+  ReportsHeader,
+  QuickAccessCards,
+  ReportFilters,
+  DataReportTabContent,
+  OverviewTab,
+  CalculationAuditTab,
+  ScheduledReportsCard,
+  ScheduleReportDialog,
+} from "./sections"
+import type { ReportTab, NewScheduleState } from "./sections"
 
 /* ─── Constants ───────────────────────────────────────────────── */
 
@@ -88,8 +40,6 @@ const ALL_REPORT_TABS = [
   { label: "Overview", value: "overview" },
   { label: "Calculation Audit", value: "calculations" },
 ] as const
-
-type ReportTab = (typeof ALL_REPORT_TABS)[number]["value"]
 
 const DATA_REPORT_TYPES = ["usage", "service", "capital", "tie_in", "grouped", "pricing_only"] as const
 
@@ -110,14 +60,14 @@ interface ReportsClientProps {
 export function ReportsClient({ facilityId }: ReportsClientProps) {
   const [activeTab, setActiveTab] = useState<ReportTab>("usage")
   const [dateRange, setDateRange] = useState(getDefaultRange)
-  const [metric, setMetric] = useState<"totalSpend" | "rebateEarned" | "totalVolume">("totalSpend")
+  const [metric] = useState<"totalSpend" | "rebateEarned" | "totalVolume">("totalSpend")
   const [selectedContractId, setSelectedContractId] = useState("all")
   const { exportPDF, isExporting } = useExportPDF()
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
-  const [newSchedule, setNewSchedule] = useState({
-    reportType: "rebate_summary" as "contract_performance" | "rebate_summary" | "spend_analysis" | "market_share" | "case_costing",
-    frequency: "weekly" as "daily" | "weekly" | "monthly",
-    recipients: [] as string[],
+  const [newSchedule, setNewSchedule] = useState<NewScheduleState>({
+    reportType: "rebate_summary",
+    frequency: "weekly",
+    recipients: [],
     recipientInput: "",
     includeCharts: true,
     includeLineItems: false,
@@ -125,19 +75,16 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
 
   /* ── Queries ─────────────────────────────────────────────────── */
 
-  // Contract list for the selector dropdown
   const { data: contractsList } = useQuery({
     queryKey: queryKeys.contracts.list(facilityId, { reportSelector: true }),
     queryFn: () => getContracts(facilityId),
   })
 
-  // Determine the server-side report type (overview/calculations reuse "usage" data)
   const serverReportType = useMemo(() => {
     if (activeTab === "overview" || activeTab === "calculations" || activeTab === "pricing_only") return "usage"
     return activeTab
   }, [activeTab])
 
-  // Fetch report data
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.reports.data(facilityId, serverReportType, dateRange),
     queryFn: () =>
@@ -149,7 +96,6 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
       }),
   })
 
-  // Report schedules
   const { data: schedules, refetch: refetchSchedules } = useQuery({
     queryKey: ["report-schedules", facilityId],
     queryFn: () => getReportSchedules(facilityId),
@@ -157,7 +103,6 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
 
   /* ── Derived State ───────────────────────────────────────────── */
 
-  // Filter periods by selected contract
   const allPeriods: ContractPeriodRow[] = useMemo(() => {
     if (!data?.contracts) return []
     if (selectedContractId === "all") return data.contracts.flatMap((c) => c.periods)
@@ -165,13 +110,11 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
     return match?.periods ?? []
   }, [data, selectedContractId])
 
-  // Selected contract details
   const selectedContract = useMemo(() => {
     if (selectedContractId === "all" || !contractsList) return null
     return contractsList.find((c: { id: string }) => c.id === selectedContractId) ?? null
   }, [contractsList, selectedContractId])
 
-  // Which tabs to show
   const visibleTabs = useMemo(() => {
     if (selectedContractId === "all" || !selectedContract) return ALL_REPORT_TABS
     const ct = (selectedContract as { contractType?: string }).contractType ?? "usage"
@@ -199,6 +142,23 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
         const mapped = typeMap[(contract as { contractType: string }).contractType]
         if (mapped) setActiveTab(mapped)
       }
+    }
+  }
+
+  const handleExportClick = () => {
+    if (selectedContractId !== "all") {
+      exportPDF({
+        type: "contract",
+        id: selectedContractId,
+        facilityId,
+        dateRange,
+      })
+    } else {
+      exportPDF({
+        type: "rebate",
+        facilityId,
+        dateRange,
+      })
     }
   }
 
@@ -272,167 +232,22 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Reports</h1>
-          <p className="text-muted-foreground">
-            Contract performance reports with scheduled delivery
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setScheduleDialogOpen(true)}>
-            <Clock className="h-4 w-4" />
-            Schedule Report
-          </Button>
-          <Button
-            className="gap-2"
-            disabled={isExporting}
-            onClick={() => {
-              if (selectedContractId !== "all") {
-                exportPDF({
-                  type: "contract",
-                  id: selectedContractId,
-                  facilityId,
-                  dateRange,
-                })
-              } else {
-                exportPDF({
-                  type: "rebate",
-                  facilityId,
-                  dateRange,
-                })
-              }
-            }}
-          >
-            <Download className="h-4 w-4" />
-            {isExporting ? "Exporting..." : "Export PDF"}
-          </Button>
-        </div>
-      </div>
+      <ReportsHeader
+        isExporting={isExporting}
+        onScheduleClick={() => setScheduleDialogOpen(true)}
+        onExportClick={handleExportClick}
+      />
 
-      {/* Quick Access Report Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Link href="/dashboard/reports/price-discrepancy">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50 border-red-200 dark:border-red-900">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <AlertTriangle className="h-5 w-5 text-red-500" />
-                <Badge className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30">
-                  Action Required
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <h3 className="font-semibold">Price Discrepancy Report</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Identify pricing variances between contracts and actual purchases
-              </p>
-              <div className="flex items-center gap-1 mt-3 text-sm text-red-600 dark:text-red-400 font-medium">
-                View Report <ArrowRight className="h-4 w-4" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/dashboard/analysis">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                <Badge variant="outline">Analysis</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <h3 className="font-semibold">Contract Analysis</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                NPV, IRR, and prospective contract evaluation
-              </p>
-              <div className="flex items-center gap-1 mt-3 text-sm text-primary font-medium">
-                View Analysis <ArrowRight className="h-4 w-4" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/dashboard/case-costing">
-          <Card className="cursor-pointer transition-colors hover:bg-accent/50">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <DollarSign className="h-5 w-5 text-primary" />
-                <Badge variant="outline">Performance</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <h3 className="font-semibold">Surgeon Scorecard</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Performance metrics and margin analysis by surgeon
-              </p>
-              <div className="flex items-center gap-1 mt-3 text-sm text-primary font-medium">
-                View Scorecard <ArrowRight className="h-4 w-4" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
+      <QuickAccessCards />
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Filters:</span>
-            </div>
-
-            <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
-
-            <Select value={selectedContractId} onValueChange={handleContractChange}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Contract" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Contracts</SelectItem>
-                {contractsList?.map(
-                  (c: { id: string; name: string; contractType: string }) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      <div className="flex items-center gap-2">
-                        <span>{c.name}</span>
-                        <Badge variant="outline" className="text-[10px] px-1 py-0">
-                          {c.contractType}
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Selected Contract Details */}
-          {selectedContract && (
-            <div className="mt-4 pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Selected Contract:</span>
-                    <span className="font-medium">
-                      {(selectedContract as { name: string }).name}
-                    </span>
-                  </div>
-                  <Badge variant={(selectedContract as { status?: string }).status === "active" ? "default" : "secondary"}>
-                    {(selectedContract as { status?: string }).status ?? "active"}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Report Format:</span>
-                  <Badge className="bg-primary/10 text-primary hover:bg-primary/10">
-                    {(selectedContract as { contractType?: string }).contractType ?? "usage"} Contract
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ReportFilters
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        selectedContractId={selectedContractId}
+        onContractChange={handleContractChange}
+        contractsList={contractsList}
+        selectedContract={selectedContract}
+      />
 
       {/* Report Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)}>
@@ -451,60 +266,16 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
           )}
         </div>
 
-        {/* Data-driven tabs: Usage, Service, Capital, Tie-In, Grouped */}
+        {/* Data-driven tabs */}
         {DATA_REPORT_TYPES.map((tab) => (
           <TabsContent key={tab} value={tab} className="space-y-6">
-            {isLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-[300px] rounded-xl" />
-                <Skeleton className="h-[400px] rounded-xl" />
-              </div>
-            ) : (
-              <Card>
-                <CardHeader className="bg-muted/50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>
-                        {tab === "usage" && "Contract Performance Details"}
-                        {tab === "service" && "Service Contract Performance"}
-                        {tab === "capital" && "Capital Contract Performance"}
-                        {tab === "tie_in" && "Tie-In Contract Performance"}
-                        {tab === "grouped" && "Grouped Contract Report"}
-                        {tab === "pricing_only" && "Pricing Only Contract"}
-                      </CardTitle>
-                      <CardDescription>
-                        From {dateRange.from} To {dateRange.to}
-                      </CardDescription>
-                    </div>
-                    <Badge
-                      variant={
-                        tab === "usage"
-                          ? "default"
-                          : tab === "service"
-                          ? "secondary"
-                          : "outline"
-                      }
-                    >
-                      {tab === "usage" && "Usage Contract"}
-                      {tab === "service" && "Service Contract"}
-                      {tab === "capital" && "Capital Contract"}
-                      {tab === "tie_in" && "Tie-In Contract"}
-                      {tab === "grouped" && "Grouped Contract"}
-                      {tab === "pricing_only" && "Pricing Only"}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  {/* Table */}
-                  <ReportPeriodTable periods={allPeriods} reportType={tab} />
-
-                  {/* Chart */}
-                  <div className="mt-6">
-                    <ReportTrendChart data={allPeriods} metric={metric} reportType={tab} />
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            <DataReportTabContent
+              tab={tab}
+              isLoading={isLoading}
+              allPeriods={allPeriods}
+              metric={metric}
+              dateRange={dateRange}
+            />
           </TabsContent>
         ))}
 
@@ -532,791 +303,22 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
         </TabsContent>
       </Tabs>
 
-      {/* Scheduled Reports */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5" />
-                Scheduled Reports
-              </CardTitle>
-              <CardDescription>
-                Automated report delivery to facility contacts
-              </CardDescription>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setScheduleDialogOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Schedule
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {schedules && schedules.length > 0 ? (
-              schedules.map((schedule: {
-                id: string
-                reportType: string
-                frequency: string
-                emailRecipients: string[]
-                isActive: boolean
-                lastSentAt: string | null
-                createdAt: string
-              }) => {
-                const reportTypeLabels: Record<string, string> = {
-                  contract_performance: "Contract Performance",
-                  rebate_summary: "Rebate Summary",
-                  spend_analysis: "Spend Analysis",
-                  market_share: "Market Share",
-                  case_costing: "Case Costing",
-                }
-                return (
-                  <div
-                    key={schedule.id}
-                    className="flex items-center justify-between rounded-lg border p-4"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                        <FileText className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium">
-                          {reportTypeLabels[schedule.reportType] ?? schedule.reportType}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {schedule.frequency.charAt(0).toUpperCase() +
-                            schedule.frequency.slice(1)}{" "}
-                          &bull; {schedule.emailRecipients.length} recipient
-                          {schedule.emailRecipients.length !== 1 ? "s" : ""}
-                          {schedule.lastSentAt && (
-                            <>
-                              {" "}
-                              &bull; Last sent:{" "}
-                              {new Date(schedule.lastSentAt).toLocaleDateString()}
-                            </>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <Switch
-                        checked={schedule.isActive}
-                        onCheckedChange={() => handleToggleSchedule(schedule.id)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleDeleteSchedule(schedule.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              <>
-                {/* Fallback static schedules when no DB schedules exist */}
-                {[
-                  {
-                    id: "demo-1",
-                    name: "Weekly Rebate Summary",
-                    frequency: "weekly",
-                    nextRun: "Mar 31, 2026",
-                    recipients: 3,
-                  },
-                  {
-                    id: "demo-2",
-                    name: "Monthly Usage Report",
-                    frequency: "monthly",
-                    nextRun: "Apr 01, 2026",
-                    recipients: 5,
-                  },
-                  {
-                    id: "demo-3",
-                    name: "Quarterly Calculation Audit",
-                    frequency: "quarterly",
-                    nextRun: "Apr 01, 2026",
-                    recipients: 2,
-                  },
-                ].map((schedule) => (
-                  <div
-                    key={schedule.id}
-                    className="flex items-center justify-between rounded-lg border p-4"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                        <FileText className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{schedule.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {schedule.frequency.charAt(0).toUpperCase() +
-                            schedule.frequency.slice(1)}{" "}
-                          &bull; Next run: {schedule.nextRun} &bull;{" "}
-                          {schedule.recipients} recipients
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <Switch defaultChecked />
-                      <Button variant="ghost" size="sm">
-                        Edit
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <ScheduledReportsCard
+        schedules={schedules}
+        onAddClick={() => setScheduleDialogOpen(true)}
+        onToggle={handleToggleSchedule}
+        onDelete={handleDeleteSchedule}
+      />
 
-      {/* Schedule Report Dialog */}
-      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CalendarClock className="h-5 w-5" />
-              Schedule Report
-            </DialogTitle>
-            <DialogDescription>
-              Set up automated report delivery to your team
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-5 py-2">
-            {/* Report Type */}
-            <div className="space-y-2">
-              <Label>Report Type</Label>
-              <Select
-                value={newSchedule.reportType}
-                onValueChange={(v) =>
-                  setNewSchedule((prev) => ({
-                    ...prev,
-                    reportType: v as typeof prev.reportType,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select report type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="contract_performance">Contract Performance</SelectItem>
-                  <SelectItem value="rebate_summary">Rebate Summary</SelectItem>
-                  <SelectItem value="spend_analysis">Spend Analysis</SelectItem>
-                  <SelectItem value="market_share">Market Share</SelectItem>
-                  <SelectItem value="case_costing">Case Costing</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Frequency */}
-            <div className="space-y-2">
-              <Label>Frequency</Label>
-              <Select
-                value={newSchedule.frequency}
-                onValueChange={(v) =>
-                  setNewSchedule((prev) => ({
-                    ...prev,
-                    frequency: v as typeof prev.frequency,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select frequency" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Recipients */}
-            <div className="space-y-2">
-              <Label>Recipients</Label>
-              <div className="flex gap-2">
-                <Input
-                  type="email"
-                  placeholder="email@example.com"
-                  value={newSchedule.recipientInput}
-                  onChange={(e) =>
-                    setNewSchedule((prev) => ({
-                      ...prev,
-                      recipientInput: e.target.value,
-                    }))
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      handleAddRecipient()
-                    }
-                  }}
-                />
-                <Button type="button" variant="outline" onClick={handleAddRecipient}>
-                  Add
-                </Button>
-              </div>
-              {newSchedule.recipients.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {newSchedule.recipients.map((email) => (
-                    <Badge key={email} variant="secondary" className="gap-1 pr-1">
-                      {email}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRecipient(email)}
-                        className="ml-1 rounded-full hover:bg-muted p-0.5"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Options */}
-            <div className="space-y-3">
-              <Label>Options</Label>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="includeCharts"
-                  checked={newSchedule.includeCharts}
-                  onCheckedChange={(checked) =>
-                    setNewSchedule((prev) => ({
-                      ...prev,
-                      includeCharts: !!checked,
-                    }))
-                  }
-                />
-                <Label htmlFor="includeCharts" className="text-sm font-normal cursor-pointer">
-                  Include charts and visualizations
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="includeLineItems"
-                  checked={newSchedule.includeLineItems}
-                  onCheckedChange={(checked) =>
-                    setNewSchedule((prev) => ({
-                      ...prev,
-                      includeLineItems: !!checked,
-                    }))
-                  }
-                />
-                <Label htmlFor="includeLineItems" className="text-sm font-normal cursor-pointer">
-                  Include detailed line items
-                </Label>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateSchedule}>
-              <CalendarClock className="mr-2 h-4 w-4" />
-              Create Schedule
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
-
-/* ─── Overview Sub-Component ──────────────────────────────────── */
-
-interface ContractSummary {
-  id: string
-  name: string
-  vendor: string
-  contractType: string
-  periods: ContractPeriodRow[]
-}
-
-function OverviewTab({
-  data,
-  allPeriods,
-  selectedContract,
-  dateRange,
-}: {
-  data: { contracts: ContractSummary[] } | undefined
-  allPeriods: ContractPeriodRow[]
-  selectedContract: unknown
-  dateRange: { from: string; to: string }
-}) {
-  const totalSpend = allPeriods.reduce((s, p) => s + p.totalSpend, 0)
-  const totalRebate = allPeriods.reduce((s, p) => s + p.rebateEarned, 0)
-  const contractCount = data?.contracts.length ?? 0
-
-  if (selectedContract) {
-    const c = selectedContract as { name?: string; contractType?: string; status?: string }
-    return (
-      <>
-        {/* Contract Header */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>{c.name} Overview</CardTitle>
-                <CardDescription>{c.contractType} Contract</CardDescription>
-              </div>
-              <Badge variant={c.status === "active" ? "default" : "secondary"}>
-                {c.status}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-4">
-              <MetricCard label="Contract Type" value={c.contractType ?? "-"} />
-              <MetricCard label="Total Spend (YTD)" value={formatCurrency(totalSpend)} />
-              <MetricCard
-                label="Rebate Earned"
-                value={formatCurrency(totalRebate)}
-                className="text-green-600 dark:text-green-400"
-              />
-              <MetricCard label="Days Remaining" value="287" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Contract Progress */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Contract Progress</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-muted-foreground">Time Elapsed</span>
-                  <span className="font-medium">78%</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div className="bg-primary h-2 rounded-full" style={{ width: "78%" }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-muted-foreground">Spend Target Progress</span>
-                  <span className="font-medium">85%</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div className="bg-green-500 h-2 rounded-full" style={{ width: "85%" }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-muted-foreground">Rebate Collection</span>
-                  <span className="font-medium">72%</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div className="bg-amber-500 h-2 rounded-full" style={{ width: "72%" }}></div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Monthly Spend Trend */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Monthly Spend Trend</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">
-                Chart data will populate from contract periods
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Key Contract Metrics */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Key Contract Metrics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground mb-1">Compliance Rate</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {totalSpend > 0 ? "94%" : "0%"}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">Purchases on contract</p>
-              </div>
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground mb-1">Avg Monthly Spend</p>
-                <p className="text-2xl font-bold">
-                  {allPeriods.length > 0
-                    ? formatCurrency(Math.round(totalSpend / allPeriods.length))
-                    : "$0"}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Based on {allPeriods.length} months
-                </p>
-              </div>
-              <div className="p-4 rounded-lg border">
-                <p className="text-sm text-muted-foreground mb-1">Projected Annual Rebate</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {formatCurrency(Math.round(totalRebate * 12 / Math.max(allPeriods.length, 1)))}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">At current pace</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </>
-    )
-  }
-
-  // Build pie chart data from contracts
-  const lifecycleData = useMemo(() => {
-    if (!data?.contracts) return []
-    const active = data.contracts.length
-    // Placeholder expired/expiring counts -- real data would come from contract status
-    return [
-      { name: "Active", value: active, color: "#22c55e" },
-      { name: "Expired", value: 0, color: "#ef4444" },
-      { name: "Expiring", value: 0, color: "#eab308" },
-    ].filter((d) => d.value > 0)
-  }, [data])
-
-  // Build monthly bar chart data from periods
-  const monthlyChartData = useMemo(() => {
-    const monthMap = new Map<string, { spend: number; rebate: number }>()
-    for (const p of allPeriods) {
-      const d = new Date(p.periodStart)
-      const key = d.toLocaleString("default", { month: "short" })
-      const existing = monthMap.get(key) ?? { spend: 0, rebate: 0 }
-      existing.spend += p.totalSpend
-      existing.rebate += p.rebateEarned
-      monthMap.set(key, existing)
-    }
-    return Array.from(monthMap.entries()).map(([month, vals]) => ({
-      month,
-      spend: vals.spend,
-      rebate: vals.rebate,
-    }))
-  }, [allPeriods])
-
-  // All-contracts overview
-  return (
-    <div className="grid gap-6 md:grid-cols-2">
-      {/* Contract Lifecycle PieChart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Contract Life Cycle</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {lifecycleData.length > 0 ? (
-            <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={lifecycleData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
-                    dataKey="value"
-                    label={({ name, value }: { name?: string; value?: number }) =>
-                      `${name ?? ""}: ${value ?? 0}`
-                    }
-                  >
-                    {lifecycleData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="grid gap-4 grid-cols-2">
-              <MetricCard label="Active Contracts" value={String(contractCount)} />
-              <MetricCard label="Combined Spend" value={formatCurrency(totalSpend)} />
-              <MetricCard
-                label="Total Rebates"
-                value={formatCurrency(totalRebate)}
-                className="text-green-600 dark:text-green-400"
-              />
-              <MetricCard
-                label="Total Volume"
-                value={allPeriods
-                  .reduce((s, p) => s + p.totalVolume, 0)
-                  .toLocaleString()}
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Earned Rebate Monthly BarChart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Earned Rebate Monthly</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {monthlyChartData.length > 0 ? (
-            <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyChartData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                  />
-                  <YAxis
-                    tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                  />
-                  <RechartsTooltip
-                    formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="spend" name="Spend" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="rebate" name="Rebate" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {data?.contracts.map((c) => {
-                const spend = c.periods.reduce((s, p) => s + p.totalSpend, 0)
-                const rebate = c.periods.reduce((s, p) => s + p.rebateEarned, 0)
-                return (
-                  <div
-                    key={c.id}
-                    className="flex items-center justify-between text-sm border-b pb-2 last:border-0"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{c.name}</span>
-                      <Badge variant="outline" className="text-[10px]">
-                        {c.contractType}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span>{formatCurrency(spend)}</span>
-                      <span className="text-green-600 dark:text-green-400">{formatCurrency(rebate)}</span>
-                    </div>
-                  </div>
-                )
-              })}
-              {(!data?.contracts || data.contracts.length === 0) && (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  No contract data for the selected period.
-                </p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-/* ─── Calculation Audit Sub-Component ─────────────────────────── */
-
-function CalculationAuditTab({
-  data,
-  allPeriods,
-  dateRange,
-}: {
-  data: { contracts: ContractSummary[] } | undefined
-  allPeriods: ContractPeriodRow[]
-  dateRange: { from: string; to: string }
-}) {
-  const totalSpend = allPeriods.reduce((s, p) => s + p.totalSpend, 0)
-  const totalRebateEarned = allPeriods.reduce((s, p) => s + p.rebateEarned, 0)
-  const totalRebateCollected = allPeriods.reduce((s, p) => s + p.rebateCollected, 0)
-  const totalPaymentExpected = allPeriods.reduce((s, p) => s + p.paymentExpected, 0)
-  const totalPaymentActual = allPeriods.reduce((s, p) => s + p.paymentActual, 0)
-
-  return (
-    <>
-      {/* Audit header */}
-      <Card>
-        <CardHeader className="bg-muted/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Calculation Audit Report</CardTitle>
-              <CardDescription>
-                Complete breakdown of how rebates and tiers are calculated with source data
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Badge variant="outline">{data?.contracts.length ?? 0} contracts</Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-4">
-          <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
-            <p className="text-sm text-muted-foreground">
-              This report shows every detail of how your contract calculations are performed.
-              You can verify each purchase order, item, and the formulas used to calculate your rebates and tier status.
-              All calculations are auditable and traceable to source documents.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Summary metrics */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <MetricCard label="Total Eligible Spend" value={formatCurrency(totalSpend)} />
-        <MetricCard
-          label="Rebate Earned"
-          value={formatCurrency(totalRebateEarned)}
-          className="text-green-600 dark:text-green-400"
-        />
-        <MetricCard
-          label="Rebate Collected"
-          value={formatCurrency(totalRebateCollected)}
-          className="text-blue-600"
-        />
-        <MetricCard label="Payment Expected" value={formatCurrency(totalPaymentExpected)} />
-        <MetricCard label="Payment Actual" value={formatCurrency(totalPaymentActual)} />
-      </div>
-
-      {/* Per-contract breakdown */}
-      {data?.contracts.map((c) => {
-        const cSpend = c.periods.reduce((s, p) => s + p.totalSpend, 0)
-        const cRebEarned = c.periods.reduce((s, p) => s + p.rebateEarned, 0)
-        const cRebCollected = c.periods.reduce((s, p) => s + p.rebateCollected, 0)
-        return (
-          <Card key={c.id}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg">{c.name}</CardTitle>
-                  <CardDescription>
-                    {c.vendor} &mdash; {c.contractType}
-                  </CardDescription>
-                </div>
-                <Badge variant="outline">{c.periods.length} periods</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3 mb-4">
-                <div className="p-3 rounded-lg bg-muted/50 text-sm">
-                  <span className="text-muted-foreground">Total Spend</span>
-                  <p className="font-bold text-lg">{formatCurrency(cSpend)}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 text-sm">
-                  <span className="text-muted-foreground">Rebate Earned</span>
-                  <p className="font-bold text-lg text-green-600 dark:text-green-400">
-                    {formatCurrency(cRebEarned)}
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950 text-sm">
-                  <span className="text-muted-foreground">Rebate Collected</span>
-                  <p className="font-bold text-lg text-blue-600">
-                    {formatCurrency(cRebCollected)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Period rows */}
-              <div className="rounded-lg border overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-medium">#</th>
-                      <th className="px-4 py-3 text-left font-medium">Period</th>
-                      <th className="px-4 py-3 text-right font-medium">Spend</th>
-                      <th className="px-4 py-3 text-right font-medium">Rebate Earned</th>
-                      <th className="px-4 py-3 text-right font-medium">Rebate Collected</th>
-                      <th className="px-4 py-3 text-right font-medium">Payment Exp.</th>
-                      <th className="px-4 py-3 text-right font-medium">Payment Act.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {c.periods.map((p, i) => (
-                      <tr key={p.id} className="border-t">
-                        <td className="px-4 py-3">{i + 1}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {p.periodStart.split("T")[0]} &ndash;{" "}
-                          {p.periodEnd.split("T")[0]}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatCurrency(p.totalSpend)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatCurrency(p.rebateEarned)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatCurrency(p.rebateCollected)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatCurrency(p.paymentExpected)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatCurrency(p.paymentActual)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-primary text-primary-foreground">
-                    <tr>
-                      <td colSpan={2} className="px-4 py-3 font-medium">
-                        Total
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium">
-                        {formatCurrency(cSpend)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium">
-                        {formatCurrency(cRebEarned)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium">
-                        {formatCurrency(cRebCollected)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium">
-                        {formatCurrency(
-                          c.periods.reduce((s, p) => s + p.paymentExpected, 0)
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium">
-                        {formatCurrency(
-                          c.periods.reduce((s, p) => s + p.paymentActual, 0)
-                        )}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })}
-    </>
-  )
-}
-
-/* ─── Shared Metric Card ──────────────────────────────────────── */
-
-function MetricCard({
-  label,
-  value,
-  className,
-}: {
-  label: string
-  value: string
-  className?: string
-}) {
-  return (
-    <div className="p-4 rounded-lg border bg-muted/50">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className={`text-xl font-bold ${className ?? ""}`}>{value}</p>
+      <ScheduleReportDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        newSchedule={newSchedule}
+        onScheduleChange={setNewSchedule}
+        onAddRecipient={handleAddRecipient}
+        onRemoveRecipient={handleRemoveRecipient}
+        onCreateSchedule={handleCreateSchedule}
+      />
     </div>
   )
 }

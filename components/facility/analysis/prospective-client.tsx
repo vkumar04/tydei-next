@@ -5,79 +5,26 @@ import { toast } from "sonner"
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Slider } from "@/components/ui/slider"
-import { ProposalComparisonTable } from "./proposal-comparison-table"
 import { useAnalyzeProposal } from "@/hooks/use-prospective"
 import { useCOGStats } from "@/hooks/use-cog"
-import type {
-  ProposalAnalysis,
-  DealScore,
-  ItemComparison,
-} from "@/lib/actions/prospective"
+import type { ProposalAnalysis } from "@/lib/actions/prospective"
 import {
-  ResponsiveContainer,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
-  Tooltip as RechartsTooltip,
-} from "recharts"
-import { chartTooltipStyle } from "@/lib/chart-config"
-import {
-  Target,
   Upload,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
   FileText,
   DollarSign,
   Percent,
-  ChevronRight,
   BarChart3,
   Download,
   FileSpreadsheet,
-  Send,
-  Trash2,
-  Sparkles,
-  X,
-  FileUp,
-  Pencil,
-  Calculator,
   Gauge,
-  Loader2,
-  Clock,
-  Shield,
-  Database,
-  Lock,
 } from "lucide-react"
-
-// ─── Recommendation display config ────────────────────────────
+import { ProposalUploadTab } from "./prospective/proposal-upload-tab"
+import { PricingComparisonTab } from "./prospective/pricing-comparison-tab"
+import { AnalysisOverviewTab } from "./prospective/analysis-overview-tab"
+import { ProposalListTab } from "./prospective/proposal-list-tab"
 
 const RECOMMENDATION_LABELS: Record<
   string,
@@ -109,13 +56,9 @@ const RECOMMENDATION_LABELS: Record<
   },
 }
 
-// ─── Types ─────────────────────────────────────────────────────
-
 interface ProspectiveClientProps {
   facilityId: string
 }
-
-// ─── Component ─────────────────────────────────────────────────
 
 export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
   const [analysis, setAnalysis] = useState<ProposalAnalysis | null>(null)
@@ -123,10 +66,8 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
   const analyzeMutation = useAnalyzeProposal()
   const { data: cogStats } = useCOGStats(facilityId)
 
-  // File upload state
   const [isDragging, setIsDragging] = useState(false)
 
-  // Manual entry state
   const [manualEntry, setManualEntry] = useState({
     vendorName: "",
     productCategory: "Orthopedics",
@@ -138,7 +79,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     marketShare: 0,
   })
 
-  // What-if scenario state
   const [scenarioDiscount, setScenarioDiscount] = useState(5)
   const [scenarioVolumeIncrease, setScenarioVolumeIncrease] = useState(10)
 
@@ -147,7 +87,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
       RECOMMENDATION_LABELS.negotiate!
     : null
 
-  // Radar chart data -- 6 dimensions to match v0 prototype
   const radarData = useMemo(() => {
     if (!analysis?.dealScore) return []
     const s = analysis.dealScore
@@ -168,7 +107,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     ]
   }, [analysis])
 
-  // What-if scenario calculations
   const scenarioAnalysis = useMemo(() => {
     if (!analysis) return null
     const discountFactor = 1 - scenarioDiscount / 100
@@ -186,7 +124,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     }
   }, [analysis, scenarioDiscount, scenarioVolumeIncrease])
 
-  // Build a comparison of current vs proposed terms for table
   const comparisonRows = useMemo(() => {
     if (!analysis) return []
     return [
@@ -230,7 +167,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     ]
   }, [analysis])
 
-  // Negotiation points derived from analysis
   const negotiationPoints = useMemo(() => {
     if (!analysis?.dealScore) return []
     const s = analysis.dealScore
@@ -273,7 +209,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     return points
   }, [analysis])
 
-  // Risk analysis derived from scores
   const risks = useMemo(() => {
     if (!analysis?.dealScore) return []
     const s = analysis.dealScore
@@ -299,16 +234,14 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     return r
   }, [analysis])
 
-  // Quick analysis insights derived from analysis data
   const quickInsights = useMemo(() => {
     if (!analysis) return null
     const contractLength = manualEntry.contractLength || 3
     const contractTotal = analysis.totalProposedCost * contractLength
-    const rebateRate = 0.03 // estimated rebate rate from deal score
+    const rebateRate = 0.03
     const yearlyRebate = analysis.totalProposedCost * rebateRate
     const totalRebate = yearlyRebate * contractLength
 
-    // Payback period in months
     const paybackMonths =
       yearlyRebate > 0
         ? Math.round((contractTotal / (yearlyRebate * 12)) * 12)
@@ -326,7 +259,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
           ? "text-amber-700 dark:text-amber-300"
           : "text-red-700 dark:text-red-300"
 
-    // Total rebate potential
     const rebatePercentOfTotal =
       contractTotal > 0 ? (totalRebate / contractTotal) * 100 : 0
     const rebateGood = rebatePercentOfTotal > 5
@@ -337,7 +269,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
       ? "text-emerald-700 dark:text-emerald-300"
       : "text-amber-700 dark:text-amber-300"
 
-    // Capital risk assessment
     const effectiveRebateRate = rebateRate * 100
     const capitalRisk =
       effectiveRebateRate >= 3
@@ -373,14 +304,13 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     }
   }, [analysis, manualEntry.contractLength])
 
-  // Year-by-year financial projections
   const financialProjections = useMemo(() => {
     if (!analysis) return null
     const years = manualEntry.contractLength || 3
     const baseline = analysis.totalCurrentCost
     const proposed = analysis.totalProposedCost
-    const inflationRate = 0.03 // 3% annual inflation on COG baseline
-    const proposedIncreaseRate = 0.02 // 2% annual increase on proposed
+    const inflationRate = 0.03
+    const proposedIncreaseRate = 0.02
     const rebateRate = 0.03
 
     const rows = []
@@ -425,7 +355,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     }
   }, [analysis, manualEntry.contractLength])
 
-  // Handle file upload and analysis
   const handleFileUpload = useCallback(
     async (file: File) => {
       const ext = file.name.split(".").pop()?.toLowerCase()
@@ -440,7 +369,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
 
       const text = await file.text()
       const lines = text.split("\n").filter((l) => l.trim())
-      // Normalise headers: lowercase and strip all non-alphanumeric chars
       const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
       const rawHeaders =
         lines[0]?.split(",").map((h) => h.trim()) ?? []
@@ -503,6 +431,24 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     [handleFileUpload]
   )
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  const handleClearAnalysis = useCallback(() => {
+    setAnalysis(null)
+    setActiveTab("upload")
+  }, [])
+
+  const handleSelectProposal = useCallback(() => {
+    setActiveTab("analysis")
+  }, [])
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -511,7 +457,6 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
       maximumFractionDigits: 0,
     }).format(value)
 
-  // Variance color coding helper (red=bad, yellow=neutral, green=good)
   const getVarianceColor = (savingsPercent: number) => {
     if (savingsPercent > 5) return "text-emerald-600 dark:text-emerald-400"
     if (savingsPercent > 0) return "text-emerald-500 dark:text-emerald-400"
@@ -645,1348 +590,62 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
           </TabsTrigger>
         </TabsList>
 
-        {/* ─── Upload Tab ─────────────────────────────────────── */}
         <TabsContent value="upload" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* File Upload */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileUp className="h-5 w-5" />
-                  Upload Contract Document
-                </CardTitle>
-                <CardDescription>
-                  Upload a vendor proposal or contract PDF for AI-powered
-                  analysis
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                    isDragging
-                      ? "border-primary bg-primary/5"
-                      : "border-muted-foreground/25 hover:border-primary/50"
-                  }`}
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    setIsDragging(true)
-                  }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={handleDrop}
-                  onClick={() => {
-                    const input = document.createElement("input")
-                    input.type = "file"
-                    input.accept = ".csv"
-                    input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0]
-                      if (file) handleFileUpload(file)
-                    }
-                    input.click()
-                  }}
-                >
-                  {analyzeMutation.isPending ? (
-                    <div className="space-y-4">
-                      <Loader2 className="h-12 w-12 mx-auto text-primary animate-spin" />
-                      <p className="text-muted-foreground">
-                        Analyzing contract terms...
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="font-medium">
-                        Drag &amp; drop a contract PDF
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        or click to browse files
-                      </p>
-                    </>
-                  )}
-                </div>
-
-                <div className="mt-4 p-4 bg-muted/50 rounded-lg">
-                  <p className="text-sm font-medium mb-2">AI will extract:</p>
-                  <ul className="text-sm text-muted-foreground space-y-1">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                      Rebate tier structures and percentages
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                      Pricing terms and discounts
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                      Commitment requirements
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                      Contract duration and key dates
-                    </li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Manual Entry */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Pencil className="h-5 w-5" />
-                  Manual Entry
-                </CardTitle>
-                <CardDescription>
-                  Enter contract details manually to analyze
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Vendor Name</Label>
-                    <Input
-                      value={manualEntry.vendorName}
-                      onChange={(e) =>
-                        setManualEntry((prev) => ({
-                          ...prev,
-                          vendorName: e.target.value,
-                        }))
-                      }
-                      placeholder="e.g., Arthrex"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Product Category</Label>
-                    <Select
-                      value={manualEntry.productCategory}
-                      onValueChange={(v) =>
-                        setManualEntry((prev) => ({
-                          ...prev,
-                          productCategory: v,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Orthopedics">
-                          Orthopedics
-                        </SelectItem>
-                        <SelectItem value="Cardiovascular">
-                          Cardiovascular
-                        </SelectItem>
-                        <SelectItem value="General Surgery">
-                          General Surgery
-                        </SelectItem>
-                        <SelectItem value="Spine">Spine</SelectItem>
-                        <SelectItem value="Trauma">Trauma</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Total Contract Value</Label>
-                    <Input
-                      type="number"
-                      value={manualEntry.totalValue}
-                      onChange={(e) =>
-                        setManualEntry((prev) => ({
-                          ...prev,
-                          totalValue: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Contract Length (years)</Label>
-                    <Input
-                      type="number"
-                      value={manualEntry.contractLength}
-                      onChange={(e) =>
-                        setManualEntry((prev) => ({
-                          ...prev,
-                          contractLength: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Base Discount (%)</Label>
-                    <Input
-                      type="number"
-                      value={manualEntry.baseDiscount}
-                      onChange={(e) =>
-                        setManualEntry((prev) => ({
-                          ...prev,
-                          baseDiscount: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Rebate (%)</Label>
-                    <Input
-                      type="number"
-                      value={manualEntry.rebatePercent}
-                      onChange={(e) =>
-                        setManualEntry((prev) => ({
-                          ...prev,
-                          rebatePercent: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Minimum Spend Commitment</Label>
-                    <Input
-                      type="number"
-                      value={manualEntry.minimumSpend}
-                      onChange={(e) =>
-                        setManualEntry((prev) => ({
-                          ...prev,
-                          minimumSpend: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Market Share Commitment (%)</Label>
-                    <Input
-                      type="number"
-                      value={manualEntry.marketShare}
-                      onChange={(e) =>
-                        setManualEntry((prev) => ({
-                          ...prev,
-                          marketShare: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <Button className="w-full">
-                  <Calculator className="h-4 w-4 mr-2" />
-                  Analyze Proposal
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+          <ProposalUploadTab
+            onFileUpload={handleFileUpload}
+            isDragging={isDragging}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            isAnalyzing={analyzeMutation.isPending}
+            manualEntry={manualEntry}
+            onManualEntryChange={setManualEntry}
+          />
         </TabsContent>
 
-        {/* ─── Pricing Analysis Tab ───────────────────────────── */}
         <TabsContent value="pricing" className="space-y-6">
-          {analysis ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileSpreadsheet className="h-5 w-5" />
-                  Line Item Pricing Comparison
-                </CardTitle>
-                <CardDescription>
-                  {analysis.itemComparisons.length} items compared against
-                  current COG pricing
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-4 bg-muted/50 rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Items Analyzed
-                    </p>
-                    <p className="text-2xl font-bold">
-                      {analysis.itemComparisons.length}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-muted/50 rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Avg Price Variance
-                    </p>
-                    <p
-                      className={`text-2xl font-bold ${
-                        analysis.totalSavingsPercent >= 0
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-red-600 dark:text-red-400"
-                      }`}
-                    >
-                      {analysis.totalSavingsPercent >= 0 ? "-" : "+"}
-                      {Math.abs(analysis.totalSavingsPercent).toFixed(1)}%
-                    </p>
-                  </div>
-                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg text-center border border-emerald-200 dark:border-emerald-900">
-                    <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                      Items Below COG
-                    </p>
-                    <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                      {
-                        analysis.itemComparisons.filter((i) => i.savings > 0)
-                          .length
-                      }
-                    </p>
-                  </div>
-                  <div className="p-4 bg-red-50 dark:bg-red-950/20 rounded-lg text-center border border-red-200 dark:border-red-900">
-                    <p className="text-sm text-red-700 dark:text-red-300">
-                      Items Above COG
-                    </p>
-                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                      {
-                        analysis.itemComparisons.filter((i) => i.savings < 0)
-                          .length
-                      }
-                    </p>
-                  </div>
-                </div>
-
-                {/* Potential Savings Banner */}
-                {analysis.totalSavings > 0 && (
-                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-200 dark:border-emerald-900">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                          Potential Annual Savings
-                        </p>
-                        <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                          {formatCurrency(analysis.totalSavings)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                          Based on items priced below current COG
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Line Item Table with Variance Heatmap */}
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead>Item #</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead className="text-right">
-                          Current Price
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Proposed Price
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Variance %
-                        </TableHead>
-                        <TableHead className="text-right">Savings</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {analysis.itemComparisons.slice(0, 20).map((item, i) => (
-                        <TableRow
-                          key={i}
-                          className={getVarianceBg(item.savingsPercent)}
-                        >
-                          <TableCell className="font-mono text-sm">
-                            {item.vendorItemNo}
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate">
-                            {item.description}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            ${item.currentPrice.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${item.proposedPrice.toFixed(2)}
-                          </TableCell>
-                          <TableCell
-                            className={`text-right font-medium ${getVarianceColor(item.savingsPercent)}`}
-                          >
-                            {item.savingsPercent >= 0 ? "-" : "+"}
-                            {Math.abs(item.savingsPercent).toFixed(1)}%
-                          </TableCell>
-                          <TableCell
-                            className={`text-right font-medium ${item.savings >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
-                          >
-                            {item.savings >= 0 ? "" : "-"}$
-                            {Math.abs(item.savings).toFixed(2)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {analysis.itemComparisons.length > 20 && (
-                    <div className="p-3 text-center text-sm text-muted-foreground bg-muted/30">
-                      Showing 20 of {analysis.itemComparisons.length} items
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="py-8">
-                <div className="text-center text-muted-foreground">
-                  <FileSpreadsheet className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="font-medium">
-                    Upload a pricing file to compare
-                  </p>
-                  <p className="text-sm mt-1">
-                    Compare vendor pricing against your current COG data
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="mt-4"
-                    onClick={() => {
-                      const input = document.createElement("input")
-                      input.type = "file"
-                      input.accept = ".csv"
-                      input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0]
-                        if (file) handleFileUpload(file)
-                      }
-                      input.click()
-                    }}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload CSV
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* COG Data Status */}
-          {cogStats && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  COG Data Status
-                </CardTitle>
-                <CardDescription>
-                  Your current cost-of-goods data used for pricing comparisons
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="p-4 bg-muted/50 rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Total COG Records
-                    </p>
-                    <p className="text-2xl font-bold">
-                      {cogStats.totalItems.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-muted/50 rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Unique Vendors
-                    </p>
-                    <p className="text-2xl font-bold">
-                      {cogStats.uniqueVendors}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-muted/50 rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Total COG Spend
-                    </p>
-                    <p className="text-2xl font-bold">
-                      {formatCurrency(cogStats.totalSpend)}
-                    </p>
-                  </div>
-                </div>
-                {cogStats.topVendors && cogStats.topVendors.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Top Vendors
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {cogStats.topVendors.map(
-                        (vendor: { name: string; count: number }) => (
-                          <Badge
-                            key={vendor.name}
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            {vendor.name}{" "}
-                            <span className="ml-1 text-muted-foreground">
-                              ({vendor.count})
-                            </span>
-                          </Badge>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          <PricingComparisonTab
+            analysis={analysis}
+            cogStats={cogStats}
+            formatCurrency={formatCurrency}
+            getVarianceColor={getVarianceColor}
+            getVarianceBg={getVarianceBg}
+            onFileUpload={handleFileUpload}
+          />
         </TabsContent>
 
-        {/* ─── Analysis Tab ───────────────────────────────────── */}
         <TabsContent value="analysis" className="space-y-6">
           {analysis && (
-            <>
-              {/* Recommendation Banner */}
-              {rec && (
-                <Card
-                  className={`border-l-4 ${rec.borderColor} ${rec.bgColor}`}
-                >
-                  <CardContent className="py-4">
-                    <div className="flex items-center gap-4">
-                      {analysis.dealScore.recommendation === "reject" ? (
-                        <X className="h-8 w-8 text-red-600 dark:text-red-400" />
-                      ) : analysis.dealScore.recommendation ===
-                        "negotiate" ? (
-                        <AlertTriangle className="h-8 w-8 text-amber-600 dark:text-amber-400" />
-                      ) : (
-                        <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-                      )}
-                      <div className="flex-1">
-                        <h3 className={`font-semibold text-lg ${rec.color}`}>
-                          {rec.label}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Overall Score: {analysis.dealScore.overall}/100 |{" "}
-                          {analysis.itemComparisons.length} items analyzed
-                        </p>
-                      </div>
-                      <Badge
-                        variant={
-                          analysis.dealScore.overall >= 65
-                            ? "default"
-                            : analysis.dealScore.overall >= 40
-                              ? "secondary"
-                              : "destructive"
-                        }
-                        className="text-sm px-3 py-1"
-                      >
-                        {analysis.dealScore.overall}/100
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Summary Stats */}
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Card className="border-l-4 border-l-blue-500">
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Current Cost
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {formatCurrency(analysis.totalCurrentCost)}
-                        </p>
-                      </div>
-                      <DollarSign className="h-8 w-8 text-muted-foreground/30" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-l-4 border-l-amber-500">
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Proposed Cost
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {formatCurrency(analysis.totalProposedCost)}
-                        </p>
-                      </div>
-                      <TrendingUp className="h-8 w-8 text-muted-foreground/30" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card
-                  className={`border-l-4 ${analysis.totalSavings >= 0 ? "border-l-emerald-500" : "border-l-red-500"}`}
-                >
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Savings
-                        </p>
-                        <p
-                          className={`text-2xl font-bold ${analysis.totalSavings >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
-                        >
-                          {formatCurrency(analysis.totalSavings)}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {analysis.totalSavingsPercent >= 0 ? "" : "+"}
-                          {Math.abs(analysis.totalSavingsPercent).toFixed(1)}%{" "}
-                          {analysis.totalSavingsPercent >= 0
-                            ? "savings"
-                            : "increase"}
-                        </p>
-                      </div>
-                      <Percent className="h-8 w-8 text-muted-foreground/30" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Quick Analysis Insights */}
-              {quickInsights && (
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {/* Payback Period */}
-                  <Card
-                    className={`border-l-4 ${quickInsights.paybackColor}`}
-                  >
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-3">
-                        <Clock className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            Payback Period
-                          </p>
-                          <p
-                            className={`text-2xl font-bold ${quickInsights.paybackTextColor}`}
-                          >
-                            {quickInsights.paybackMonths === Infinity
-                              ? "N/A"
-                              : `${quickInsights.paybackMonths} mo`}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {quickInsights.paybackMonths < 24
-                              ? "Excellent - fast ROI"
-                              : quickInsights.paybackMonths <= 48
-                                ? "Moderate payback timeline"
-                                : "Extended payback period"}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Total Rebate Potential */}
-                  <Card
-                    className={`border-l-4 ${quickInsights.rebateColor}`}
-                  >
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-3">
-                        <DollarSign className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            Total Rebate Potential
-                          </p>
-                          <p
-                            className={`text-2xl font-bold ${quickInsights.rebateTextColor}`}
-                          >
-                            {formatCurrency(quickInsights.totalRebate)}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {quickInsights.rebatePercentOfTotal.toFixed(1)}% of
-                            total contract value over{" "}
-                            {quickInsights.contractLength} yr
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Capital Risk Assessment */}
-                  <Card
-                    className={`border-l-4 ${quickInsights.capitalRiskColor}`}
-                  >
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-3">
-                        <Shield className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            Capital Risk Assessment
-                          </p>
-                          <p
-                            className={`text-2xl font-bold ${quickInsights.capitalRiskTextColor}`}
-                          >
-                            {quickInsights.capitalRisk}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Rebate rate vs 3% benchmark
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Radar Chart + Score Breakdown */}
-              <div className="grid gap-6 lg:grid-cols-2">
-                {/* Deal Score Radar Chart - 6 dimensions */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Target className="h-5 w-5" />
-                      Deal Score
-                    </CardTitle>
-                    <CardDescription>
-                      Overall: {analysis.dealScore.overall}/100 —{" "}
-                      {rec?.label ?? "Needs Negotiation"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RadarChart data={radarData}>
-                          <PolarGrid className="stroke-muted" />
-                          <PolarAngleAxis
-                            dataKey="dimension"
-                            tick={{ fontSize: 10 }}
-                            className="fill-muted-foreground"
-                          />
-                          <PolarRadiusAxis
-                            angle={30}
-                            domain={[0, 100]}
-                            tick={{ fontSize: 10 }}
-                          />
-                          <Radar
-                            name="Score"
-                            dataKey="value"
-                            stroke="#10b981"
-                            fill="#10b981"
-                            fillOpacity={0.3}
-                            strokeWidth={2}
-                          />
-                          <RechartsTooltip contentStyle={chartTooltipStyle} />
-                        </RadarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Score Breakdown with Progress Bars */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <BarChart3 className="h-5 w-5" />
-                      Score Breakdown
-                    </CardTitle>
-                    <CardDescription>
-                      Weighted evaluation across scoring dimensions
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {[
-                      {
-                        label: "Financial Value",
-                        value: analysis.dealScore.financialValue,
-                        color: "bg-blue-500",
-                        desc: "Overall financial benefit of the deal",
-                      },
-                      {
-                        label: "Rebate Efficiency",
-                        value: analysis.dealScore.rebateEfficiency,
-                        color: "bg-purple-500",
-                        desc: "Likelihood and ease of earning rebates",
-                      },
-                      {
-                        label: "Pricing Competitiveness",
-                        value: analysis.dealScore.pricingCompetitiveness,
-                        color: "bg-emerald-500",
-                        desc: "Pricing compared to market benchmarks",
-                      },
-                      {
-                        label: "Market Share Alignment",
-                        value: analysis.dealScore.marketShareAlignment,
-                        color: "bg-amber-500",
-                        desc: "Compatibility with current vendor mix",
-                      },
-                      {
-                        label: "Compliance Likelihood",
-                        value: analysis.dealScore.complianceLikelihood,
-                        color: "bg-teal-500",
-                        desc: "Ability to meet contract requirements",
-                      },
-                    ].map((score) => (
-                      <div key={score.label} className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span className="font-medium">{score.label}</span>
-                          <span className="text-muted-foreground">
-                            {score.value}/100
-                          </span>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${score.color} transition-all`}
-                            style={{ width: `${score.value}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {score.desc}
-                        </p>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Risk Analysis & Negotiation Points */}
-              <div className="grid gap-6 lg:grid-cols-2">
-                {/* Risk Analysis */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <AlertTriangle className="h-5 w-5" />
-                      Risk Analysis
-                    </CardTitle>
-                    <CardDescription>
-                      Identified concerns for your facility
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {risks.length > 0 ? (
-                      <ul className="space-y-3">
-                        {risks.map((risk, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-900"
-                          >
-                            <AlertTriangle className="h-4 w-4 mt-0.5 text-red-600 dark:text-red-400 shrink-0" />
-                            <span className="text-sm text-red-800 dark:text-red-200">
-                              {risk}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="text-center py-6 text-muted-foreground">
-                        <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
-                        <p className="text-sm">No major risks identified</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Negotiation Recommendations */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5" />
-                      Negotiation Recommendations
-                    </CardTitle>
-                    <CardDescription>
-                      AI-generated suggestions based on contract analysis
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {negotiationPoints.length > 0 ? (
-                      <ul className="space-y-2">
-                        {negotiationPoints.map((point, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg"
-                          >
-                            <ChevronRight className="h-4 w-4 mt-0.5 text-blue-600 shrink-0" />
-                            <span className="text-sm">{point}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="text-center py-6 text-muted-foreground">
-                        <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
-                        <p className="text-sm">
-                          No negotiation points needed - terms are favorable
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Year-by-Year Financial Projections */}
-              {financialProjections && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5" />
-                      Year-by-Year Financial Projections
-                    </CardTitle>
-                    <CardDescription>
-                      Projected costs with 3% COG inflation and 2% proposed
-                      price increases over {financialProjections.rows.length}{" "}
-                      year{financialProjections.rows.length !== 1 ? "s" : ""}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead>Year</TableHead>
-                            <TableHead className="text-right">
-                              COG Baseline (3% infl.)
-                            </TableHead>
-                            <TableHead className="text-right">
-                              Proposed Spend (2% incr.)
-                            </TableHead>
-                            <TableHead className="text-right">
-                              Rebate
-                            </TableHead>
-                            <TableHead className="text-right">
-                              Net Cost
-                            </TableHead>
-                            <TableHead className="text-right">
-                              Savings vs COG
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {financialProjections.rows.map((row) => (
-                            <TableRow key={row.year}>
-                              <TableCell className="font-medium">
-                                Year {row.year}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground">
-                                {formatCurrency(row.cogBaseline)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(row.proposedSpend)}
-                              </TableCell>
-                              <TableCell className="text-right text-purple-600 dark:text-purple-400">
-                                {formatCurrency(row.rebate)}
-                              </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {formatCurrency(row.netCost)}
-                              </TableCell>
-                              <TableCell
-                                className={`text-right font-medium ${
-                                  row.savingsVsCOG >= 0
-                                    ? "text-emerald-600 dark:text-emerald-400"
-                                    : "text-red-600 dark:text-red-400"
-                                }`}
-                              >
-                                {formatCurrency(row.savingsVsCOG)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                          {/* Totals Row */}
-                          <TableRow className="bg-muted/50 font-bold border-t-2">
-                            <TableCell>Total</TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(
-                                financialProjections.totals.cogBaseline
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(
-                                financialProjections.totals.proposedSpend
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right text-purple-600 dark:text-purple-400">
-                              {formatCurrency(
-                                financialProjections.totals.rebate
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(
-                                financialProjections.totals.netCost
-                              )}
-                            </TableCell>
-                            <TableCell
-                              className={`text-right ${
-                                financialProjections.totals.savingsVsCOG >= 0
-                                  ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-red-600 dark:text-red-400"
-                              }`}
-                            >
-                              {formatCurrency(
-                                financialProjections.totals.savingsVsCOG
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Commitment Requirements */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Lock className="h-5 w-5" />
-                    Commitment Requirements
-                  </CardTitle>
-                  <CardDescription>
-                    Key obligations required under this proposal
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="p-4 bg-muted/50 rounded-lg">
-                      <p className="text-sm text-muted-foreground mb-1">
-                        Minimum Spend
-                      </p>
-                      <p className="text-xl font-bold">
-                        {manualEntry.minimumSpend > 0
-                          ? formatCurrency(manualEntry.minimumSpend)
-                          : "Not specified"}
-                      </p>
-                      {manualEntry.minimumSpend > 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Annual commitment required
-                        </p>
-                      )}
-                    </div>
-                    <div className="p-4 bg-muted/50 rounded-lg">
-                      <p className="text-sm text-muted-foreground mb-1">
-                        Market Share
-                      </p>
-                      <p className="text-xl font-bold">
-                        {manualEntry.marketShare > 0
-                          ? `${manualEntry.marketShare}%`
-                          : "Not specified"}
-                      </p>
-                      {manualEntry.marketShare > 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Of category spend to vendor
-                        </p>
-                      )}
-                    </div>
-                    <div className="p-4 bg-muted/50 rounded-lg">
-                      <p className="text-sm text-muted-foreground mb-1">
-                        Exclusivity
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-xl font-bold">
-                          {manualEntry.marketShare >= 90 ? "Yes" : "No"}
-                        </p>
-                        {manualEntry.marketShare >= 90 && (
-                          <Badge variant="destructive" className="text-xs">
-                            Exclusive
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {manualEntry.marketShare >= 90
-                          ? "Sole-source commitment required"
-                          : "Non-exclusive arrangement"}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Current vs Proposed Terms Table */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Current vs Proposed Terms
-                  </CardTitle>
-                  <CardDescription>
-                    Side-by-side comparison of current and proposed costs
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead>Term</TableHead>
-                        <TableHead className="text-right">Current</TableHead>
-                        <TableHead className="text-right">Proposed</TableHead>
-                        <TableHead className="text-right">
-                          Difference
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {comparisonRows.map((row) => (
-                        <TableRow key={row.term}>
-                          <TableCell className="font-medium">
-                            {row.term}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {row.current}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {row.proposed}
-                          </TableCell>
-                          <TableCell
-                            className={`text-right font-medium ${row.favorable ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
-                          >
-                            {row.delta}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {/* What-If Scenario Section */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    What-If Scenario Analysis
-                  </CardTitle>
-                  <CardDescription>
-                    Adjust volume and discount to see projected impact
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid gap-6 sm:grid-cols-2">
-                    {/* Additional Discount Slider */}
-                    <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <Label>Additional Discount</Label>
-                        <span className="text-sm font-medium text-primary">
-                          {scenarioDiscount}%
-                        </span>
-                      </div>
-                      <Slider
-                        value={[scenarioDiscount]}
-                        onValueChange={(v) => setScenarioDiscount(v[0])}
-                        min={0}
-                        max={25}
-                        step={1}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Negotiate an additional discount on proposed pricing
-                      </p>
-                    </div>
-
-                    {/* Volume Increase Slider */}
-                    <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <Label>Volume Increase</Label>
-                        <span className="text-sm font-medium text-primary">
-                          {scenarioVolumeIncrease}%
-                        </span>
-                      </div>
-                      <Slider
-                        value={[scenarioVolumeIncrease]}
-                        onValueChange={(v) =>
-                          setScenarioVolumeIncrease(v[0])
-                        }
-                        min={0}
-                        max={50}
-                        step={5}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Projected volume increase from current baseline
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Scenario Results */}
-                  {scenarioAnalysis && (
-                    <div className="grid gap-4 sm:grid-cols-4">
-                      <div className="p-4 bg-muted/50 rounded-lg text-center">
-                        <p className="text-sm text-muted-foreground">
-                          Adj. Proposed Cost
-                        </p>
-                        <p className="text-xl font-bold">
-                          {formatCurrency(scenarioAnalysis.totalProposedCost)}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-muted/50 rounded-lg text-center">
-                        <p className="text-sm text-muted-foreground">
-                          Adj. Current Cost
-                        </p>
-                        <p className="text-xl font-bold">
-                          {formatCurrency(scenarioAnalysis.totalCurrentCost)}
-                        </p>
-                      </div>
-                      <div
-                        className={`p-4 rounded-lg text-center border ${
-                          scenarioAnalysis.totalSavings >= 0
-                            ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900"
-                            : "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900"
-                        }`}
-                      >
-                        <p className="text-sm text-muted-foreground">
-                          Projected Savings
-                        </p>
-                        <p
-                          className={`text-xl font-bold ${
-                            scenarioAnalysis.totalSavings >= 0
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-red-600 dark:text-red-400"
-                          }`}
-                        >
-                          {formatCurrency(scenarioAnalysis.totalSavings)}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-muted/50 rounded-lg text-center">
-                        <p className="text-sm text-muted-foreground">
-                          Savings %
-                        </p>
-                        <p
-                          className={`text-xl font-bold ${
-                            scenarioAnalysis.totalSavingsPercent >= 0
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-red-600 dark:text-red-400"
-                          }`}
-                        >
-                          {scenarioAnalysis.totalSavingsPercent.toFixed(1)}%
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Item-Level Comparison */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Item-Level Comparison</CardTitle>
-                  <CardDescription>
-                    {analysis.itemComparisons.length} items compared against
-                    current COG pricing
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ProposalComparisonTable
-                    comparisons={analysis.itemComparisons}
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Action Buttons */}
-              <Card>
-                <CardContent className="py-4">
-                  <div className="flex flex-wrap gap-3">
-                    <Button className="gap-2">
-                      <FileText className="h-4 w-4" />
-                      Generate Report
-                    </Button>
-                    <Button variant="outline" className="gap-2">
-                      <Download className="h-4 w-4" />
-                      Export Analysis
-                    </Button>
-                    <Button variant="outline" className="gap-2">
-                      <Send className="h-4 w-4" />
-                      Share with Team
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="gap-2 ml-auto text-muted-foreground"
-                      onClick={() => {
-                        setAnalysis(null)
-                        setActiveTab("upload")
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Clear Analysis
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
+            <AnalysisOverviewTab
+              analysis={analysis}
+              rec={rec}
+              quickInsights={quickInsights}
+              radarData={radarData}
+              risks={risks}
+              negotiationPoints={negotiationPoints}
+              financialProjections={financialProjections}
+              comparisonRows={comparisonRows}
+              scenarioDiscount={scenarioDiscount}
+              scenarioVolumeIncrease={scenarioVolumeIncrease}
+              onScenarioDiscountChange={setScenarioDiscount}
+              onScenarioVolumeChange={setScenarioVolumeIncrease}
+              scenarioAnalysis={scenarioAnalysis}
+              formatCurrency={formatCurrency}
+              manualEntryMinimumSpend={manualEntry.minimumSpend}
+              manualEntryMarketShare={manualEntry.marketShare}
+              onClearAnalysis={handleClearAnalysis}
+            />
           )}
         </TabsContent>
 
-        {/* ─── History / All Proposals Tab ─────────────────────── */}
         <TabsContent value="history" className="space-y-4">
           {analysis && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Analyzed Proposals</CardTitle>
-                <CardDescription>
-                  All proposals you&apos;ve uploaded or entered for analysis
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Items</TableHead>
-                      <TableHead>Current Cost</TableHead>
-                      <TableHead>Proposed Cost</TableHead>
-                      <TableHead>Score</TableHead>
-                      <TableHead>Recommendation</TableHead>
-                      <TableHead>Savings</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow
-                      className="cursor-pointer"
-                      onClick={() => setActiveTab("analysis")}
-                    >
-                      <TableCell className="font-medium">
-                        {analysis.itemComparisons.length} items
-                      </TableCell>
-                      <TableCell>
-                        {formatCurrency(analysis.totalCurrentCost)}
-                      </TableCell>
-                      <TableCell>
-                        {formatCurrency(analysis.totalProposedCost)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            analysis.dealScore.overall >= 65
-                              ? "default"
-                              : analysis.dealScore.overall >= 40
-                                ? "secondary"
-                                : "destructive"
-                          }
-                        >
-                          {analysis.dealScore.overall}/100
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            analysis.dealScore.recommendation ===
-                              "strong_accept" ||
-                            analysis.dealScore.recommendation === "accept"
-                              ? "default"
-                              : analysis.dealScore.recommendation === "reject"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                        >
-                          {analysis.dealScore.recommendation === "strong_accept"
-                            ? "Favorable"
-                            : analysis.dealScore.recommendation === "accept"
-                              ? "Favorable"
-                              : analysis.dealScore.recommendation === "reject"
-                                ? "Not Recommended"
-                                : "Needs Negotiation"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell
-                        className={
-                          analysis.totalSavings >= 0
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-red-600 dark:text-red-400"
-                        }
-                      >
-                        {formatCurrency(analysis.totalSavings)} (
-                        {analysis.totalSavingsPercent.toFixed(1)}%)
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setAnalysis(null)
-                            setActiveTab("upload")
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <ProposalListTab
+              analysis={analysis}
+              formatCurrency={formatCurrency}
+              onSelectProposal={handleSelectProposal}
+              onDeleteProposal={handleClearAnalysis}
+            />
           )}
         </TabsContent>
       </Tabs>
