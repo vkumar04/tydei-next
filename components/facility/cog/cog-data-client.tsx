@@ -22,6 +22,7 @@ import { PricingImportDialog } from "@/components/facility/cog/pricing-import-di
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { useCOGStats } from "@/hooks/use-cog"
 import { formatCurrency } from "@/lib/formatting"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface COGDataClientProps {
   facilityId: string
@@ -35,7 +36,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   const [dateTo, setDateTo] = useState("")
 
   // Fetch aggregated stats from server (not from paginated records)
-  const { data: stats, refetch: refetchStats } = useCOGStats(facilityId)
+  const { data: stats, isPending: statsLoading, refetch: refetchStats } = useCOGStats(facilityId)
 
   const totalSpend = stats?.totalSpend ?? 0
   const totalItems = stats?.totalItems ?? 0
@@ -73,7 +74,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Total Spend</p>
                 <p className="text-2xl font-bold">
-                  {formatCurrency(totalSpend)}
+                  {statsLoading ? <Skeleton className="h-8 w-24" /> : formatCurrency(totalSpend)}
                 </p>
               </div>
               <FileText className="h-8 w-8 text-muted-foreground/50" />
@@ -86,7 +87,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Total Items</p>
                 <p className="text-2xl font-bold">
-                  {totalItems.toLocaleString()}
+                  {statsLoading ? <Skeleton className="h-8 w-24" /> : totalItems.toLocaleString()}
                 </p>
               </div>
               <FileText className="h-8 w-8 text-muted-foreground/50" />
@@ -99,7 +100,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
               <div>
                 <p className="text-sm text-muted-foreground">On Contract</p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {onContractCount}
+                  {statsLoading ? <Skeleton className="h-8 w-24" /> : onContractCount}
                 </p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500/50" />
@@ -112,7 +113,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Off Contract</p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                  {offContractCount}
+                  {statsLoading ? <Skeleton className="h-8 w-24" /> : offContractCount}
                 </p>
               </div>
               <AlertTriangle className="h-8 w-8 text-red-500/50" />
@@ -125,7 +126,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Total Savings</p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {formatCurrency(totalSavings)}
+                  {statsLoading ? <Skeleton className="h-8 w-24" /> : formatCurrency(totalSavings)}
                 </p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500/50" />

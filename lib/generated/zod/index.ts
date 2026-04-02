@@ -10900,11 +10900,21 @@ export const PayorContractOrderByWithRelationInputSchema: z.ZodType<Prisma.Payor
   facility: z.lazy(() => FacilityOrderByWithRelationInputSchema).optional(),
 });
 
-export const PayorContractWhereUniqueInputSchema: z.ZodType<Prisma.PayorContractWhereUniqueInput> = z.object({
-  id: z.cuid(),
-})
+export const PayorContractWhereUniqueInputSchema: z.ZodType<Prisma.PayorContractWhereUniqueInput> = z.union([
+  z.object({
+    id: z.cuid(),
+    facilityId_payorName_contractNumber: z.lazy(() => PayorContractFacilityIdPayorNameContractNumberCompoundUniqueInputSchema),
+  }),
+  z.object({
+    id: z.cuid(),
+  }),
+  z.object({
+    facilityId_payorName_contractNumber: z.lazy(() => PayorContractFacilityIdPayorNameContractNumberCompoundUniqueInputSchema),
+  }),
+])
 .and(z.strictObject({
   id: z.cuid().optional(),
+  facilityId_payorName_contractNumber: z.lazy(() => PayorContractFacilityIdPayorNameContractNumberCompoundUniqueInputSchema).optional(),
   AND: z.union([ z.lazy(() => PayorContractWhereInputSchema), z.lazy(() => PayorContractWhereInputSchema).array() ]).optional(),
   OR: z.lazy(() => PayorContractWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => PayorContractWhereInputSchema), z.lazy(() => PayorContractWhereInputSchema).array() ]).optional(),
@@ -19486,6 +19496,12 @@ export const EnumPayorTypeFilterSchema: z.ZodType<Prisma.EnumPayorTypeFilter> = 
   in: z.lazy(() => PayorTypeSchema).array().optional(),
   notIn: z.lazy(() => PayorTypeSchema).array().optional(),
   not: z.union([ z.lazy(() => PayorTypeSchema), z.lazy(() => NestedEnumPayorTypeFilterSchema) ]).optional(),
+});
+
+export const PayorContractFacilityIdPayorNameContractNumberCompoundUniqueInputSchema: z.ZodType<Prisma.PayorContractFacilityIdPayorNameContractNumberCompoundUniqueInput> = z.strictObject({
+  facilityId: z.string(),
+  payorName: z.string(),
+  contractNumber: z.string(),
 });
 
 export const PayorContractCountOrderByAggregateInputSchema: z.ZodType<Prisma.PayorContractCountOrderByAggregateInput> = z.strictObject({

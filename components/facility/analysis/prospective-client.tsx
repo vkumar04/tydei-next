@@ -359,22 +359,17 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     async (file: File) => {
       const ext = file.name.split(".").pop()?.toLowerCase()
       if (ext === "pdf") {
-        toast.error("PDF files are not supported for proposal upload. Please export your pricing data as a CSV file.")
+        toast.error("PDF files are not supported for proposal upload. Please export your pricing data as a CSV or Excel file.")
         return
       }
-      if (ext !== "csv") {
-        toast.error("Please upload a CSV file (.csv)")
+      if (ext !== "csv" && ext !== "xlsx" && ext !== "xls") {
+        toast.error("Please upload a CSV or Excel file (.csv, .xlsx, .xls)")
         return
       }
 
-      const text = await file.text()
-      const lines = text.split("\n").filter((l) => l.trim())
       const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
-      const rawHeaders =
-        lines[0]?.split(",").map((h) => h.trim()) ?? []
-      const normHeaders = rawHeaders.map(norm)
 
-      const find = (...aliases: string[]) => {
+      const findIndex = (normHeaders: string[], ...aliases: string[]) => {
         const idx = aliases.map(norm).reduce<number>(
           (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
           -1,
@@ -382,15 +377,51 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
         return idx
       }
 
-      const idxItem = find("item_no", "itemno", "vendor_item_no", "vendoritemno", "sku", "item_number", "itemnumber", "product_ref_number", "productrefnumber")
-      const idxDesc = find("description", "desc", "item_description", "product_name", "productname")
-      const idxProposed = find("proposed_price", "proposedprice", "price", "unit_price", "unitprice", "new_price", "newprice")
-      const idxCurrent = find("current_price", "currentprice", "unit_cost", "unitcost", "cost")
-      const idxQty = find("quantity", "qty", "quantity_ordered", "quantityordered")
+      let rawHeaders: string[]
+      let dataRows: Record<string, string>[]
 
-      const items = lines.slice(1).map((line) => {
-        const vals = line.split(",").map((v) => v.trim())
-        const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
+      if (ext === "csv") {
+        const text = await file.text()
+        const lines = text.split("\n").filter((l) => l.trim())
+        rawHeaders = lines[0]?.split(",").map((h) => h.trim()) ?? []
+        dataRows = lines.slice(1).map((line) => {
+          const vals = line.split(",").map((v) => v.trim())
+          const row: Record<string, string> = {}
+          rawHeaders.forEach((h, i) => {
+            row[h] = vals[i] ?? ""
+          })
+          return row
+        })
+      } else {
+        // Excel file — send to server for parsing
+        const formData = new FormData()
+        formData.append("file", file)
+        let res: Response
+        try {
+          res = await fetch("/api/parse-file", { method: "POST", body: formData })
+        } catch {
+          toast.error("Failed to upload file for parsing.")
+          return
+        }
+        if (!res.ok) {
+          toast.error("Failed to parse Excel file.")
+          return
+        }
+        const parsed: { headers: string[]; rows: Record<string, string>[] } = await res.json()
+        rawHeaders = parsed.headers
+        dataRows = parsed.rows
+      }
+
+      const normHeaders = rawHeaders.map(norm)
+
+      const idxItem = findIndex(normHeaders, "item_no", "itemno", "vendor_item_no", "vendoritemno", "sku", "item_number", "itemnumber", "product_ref_number", "productrefnumber")
+      const idxDesc = findIndex(normHeaders, "description", "desc", "item_description", "product_name", "productname")
+      const idxProposed = findIndex(normHeaders, "proposed_price", "proposedprice", "price", "unit_price", "unitprice", "new_price", "newprice")
+      const idxCurrent = findIndex(normHeaders, "current_price", "currentprice", "unit_cost", "unitcost", "cost")
+      const idxQty = findIndex(normHeaders, "quantity", "qty", "quantity_ordered", "quantityordered")
+
+      const items = dataRows.map((row) => {
+        const g = (idx: number) => (idx >= 0 ? row[rawHeaders[idx]!] ?? "" : "")
         return {
           vendorItemNo: g(idxItem),
           description: g(idxDesc) || undefined,
@@ -403,7 +434,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
       }).filter((i) => i.vendorItemNo)
 
       if (items.length === 0) {
-        toast.error("No valid items found in CSV. Check that the file has an item number column (e.g. item_no, sku, vendor_item_no).")
+        toast.error("No valid items found. Check that the file has an item number column (e.g. item_no, sku, vendor_item_no).")
         return
       }
 

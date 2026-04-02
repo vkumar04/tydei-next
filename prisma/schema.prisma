@@ -685,7 +685,7 @@ model PendingContract {
   reviewedBy     String?
   reviewNotes    String?
 
-  vendor   Vendor    @relation(fields: [vendorId], references: [id])
+  vendor   Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   facility Facility? @relation(fields: [facilityId], references: [id])
 
   @@index([vendorId])
@@ -1123,6 +1123,7 @@ model PayorContract {
   facility Facility @relation(fields: [facilityId], references: [id])
 
   @@index([facilityId])
+  @@unique([facilityId, payorName, contractNumber])
   @@map("payor_contract")
 }
 

@@ -146,3 +146,33 @@ export async function importContractPricing(input: {
 
   return { imported }
 }
+
+// ─── Update a single ContractPricing record ────────────────────
+
+export async function updateContractPricing(id: string, data: {
+  unitPrice?: number
+  listPrice?: number
+  description?: string
+  category?: string
+  uom?: string
+}) {
+  await requireFacility()
+  const record = await prisma.contractPricing.update({
+    where: { id },
+    data: {
+      ...(data.unitPrice !== undefined && { unitPrice: data.unitPrice }),
+      ...(data.listPrice !== undefined && { listPrice: data.listPrice }),
+      ...(data.description !== undefined && { description: data.description }),
+      ...(data.category !== undefined && { category: data.category }),
+      ...(data.uom !== undefined && { uom: data.uom }),
+    },
+  })
+  return serialize(record)
+}
+
+// ─── Delete a single ContractPricing record ────────────────────
+
+export async function deleteContractPricing(id: string) {
+  await requireFacility()
+  await prisma.contractPricing.delete({ where: { id } })
+}
