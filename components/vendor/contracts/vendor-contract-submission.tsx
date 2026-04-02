@@ -6,11 +6,13 @@ import { getUploadUrl } from "@/lib/actions/uploads"
 import { useCreatePendingContract } from "@/hooks/use-pending-contracts"
 import type { CreatePendingContractInput } from "@/lib/validators/pending-contracts"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
+import type { ContractPricingItem } from "@/lib/actions/pricing-files"
 import { toast } from "sonner"
 
 import {
   EntryModeTabs,
   BasicInformationCard,
+  GroupContractSettingsCard,
   ContractDatesCard,
   FinancialDetailsCard,
   ContractTermsCard,
@@ -44,18 +46,21 @@ export function VendorContractSubmission({
   const [description, setDescription] = useState("")
   const [isMultiFacility, setIsMultiFacility] = useState(false)
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>([])
+  const [gpoAffiliation, setGpoAffiliation] = useState("")
   const [division, setDivision] = useState("")
   const [capitalTieIn, setCapitalTieIn] = useState(false)
   const [tieInRef, setTieInRef] = useState("")
   const [contractTerms, setContractTerms] = useState<TermFormValues[]>([])
 
   const [contractFile, setContractFile] = useState<File | null>(null)
+  const [contractS3Key, setContractS3Key] = useState<string | null>(null)
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionComplete, setExtractionComplete] = useState(false)
 
   const [pricingFile, setPricingFile] = useState<File | null>(null)
   const [pricingFileData, setPricingFileData] = useState<PricingFileData | null>(null)
+  const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
 
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -80,6 +85,25 @@ export function VendorContractSubmission({
       setContractFile(file)
       setIsExtracting(true)
       setExtractionProgress(0)
+
+      // Upload the PDF to S3 for document storage
+      let s3Key: string | undefined
+      try {
+        const { uploadUrl, key } = await getUploadUrl({
+          fileName: file.name,
+          contentType: file.type,
+          folder: "contracts",
+        })
+        await fetch(uploadUrl, {
+          method: "PUT",
+          body: file,
+          headers: { "Content-Type": file.type },
+        })
+        s3Key = key
+        setContractS3Key(key)
+      } catch {
+        // S3 upload failed — continue with extraction but without storage
+      }
 
       const filename = (file.name || "").replace(/\.[^/.]+$/, "")
 
@@ -136,16 +160,30 @@ export function VendorContractSubmission({
         setFacilityId(facilities[0].id)
       }
 
+      // Store as uploaded doc if S3 upload succeeded
+      if (s3Key) {
+        setUploadedDocs((prev) => {
+          // Avoid duplicates
+          if (prev.some((d) => d.url === s3Key)) return prev
+          return [...prev, { name: file.name, url: s3Key }]
+        })
+      }
+
       toast.success(`Contract data extracted: "${extractedName}"`)
     },
     [vendorName, facilityId, facilities]
   )
 
   const handleClearPDF = useCallback(() => {
+    // Remove the contract PDF from uploaded docs if it was stored
+    if (contractS3Key) {
+      setUploadedDocs((prev) => prev.filter((d) => d.url !== contractS3Key))
+    }
     setContractFile(null)
+    setContractS3Key(null)
     setExtractionComplete(false)
     setExtractionProgress(0)
-  }, [])
+  }, [contractS3Key])
 
   const handleMultiFacilityChange = useCallback((checked: boolean) => {
     setIsMultiFacility(checked)
@@ -157,87 +195,132 @@ export function VendorContractSubmission({
     if (!checked) setTieInRef("")
   }, [])
 
+  /** Pricing file upload with broad header alias matching (same as facility side) */
   const processPricingFile = useCallback(
     async (file: File) => {
-      setPricingFile(file)
-      try {
-        let headers: string[] = []
-        let rows: string[][] = []
+      const ext = file.name.split(".").pop()?.toLowerCase()
+      if (!["csv", "xlsx", "xls"].includes(ext ?? "")) {
+        toast.error("Please upload a CSV or Excel (.xlsx/.xls) pricing file")
+        return
+      }
 
-        if (file.name.match(/\.csv$/i)) {
-          const text = await file.text()
-          const lines = text.split("\n").filter((l) => l.trim())
-          headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""))
-          rows = lines.slice(1).map((l) =>
-            l.split(",").map((c) => c.trim().replace(/^"|"$/g, ""))
-          )
-        } else {
+      setPricingFile(file)
+
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+
+      let rawHeaders: string[] = []
+      let dataRows: string[][] = []
+
+      try {
+        if (ext === "xlsx" || ext === "xls") {
           const formData = new FormData()
           formData.append("file", file)
           const res = await fetch("/api/parse-file", {
             method: "POST",
             body: formData,
           })
-          if (!res.ok) throw new Error("Failed to parse file")
-          const parsed = await res.json()
-          headers = parsed.headers
-          rows = parsed.rows
-        }
-
-        // Find price column
-        const priceKeywords = [
-          "price",
-          "cost",
-          "amount",
-          "unit",
-          "extended",
-          "total",
-        ]
-        let priceIdx = headers.findIndex((h) =>
-          priceKeywords.some((k) => h.toLowerCase().includes(k))
-        )
-        if (priceIdx === -1) priceIdx = headers.length - 1
-
-        // Find category column
-        const catKeywords = ["category", "cat", "type", "class", "group"]
-        const catIdx = headers.findIndex((h) =>
-          catKeywords.some((k) => h.toLowerCase().includes(k))
-        )
-
-        let total = 0
-        const categories = new Set<string>()
-        let itemCount = 0
-
-        for (const row of rows) {
-          if (row.length <= priceIdx) continue
-          const val = parseFloat(row[priceIdx].replace(/[$,]/g, ""))
-          if (!isNaN(val)) {
-            total += val
-            itemCount++
+          if (!res.ok) {
+            const body = await res.json().catch(() => null)
+            toast.error((body as { error?: string } | null)?.error ?? "Failed to parse Excel file")
+            setPricingFile(null)
+            return
           }
-          if (catIdx >= 0 && row[catIdx]?.trim()) {
-            categories.add(row[catIdx].trim())
-          }
+          const parsed = (await res.json()) as { headers: string[]; rows: Record<string, string>[] }
+          rawHeaders = parsed.headers
+          dataRows = parsed.rows.map((row) => rawHeaders.map((h) => row[h] ?? ""))
+        } else {
+          const text = await file.text()
+          const lines = text.split(/\r?\n/).filter((l) => l.trim())
+          rawHeaders = lines[0]?.split(",").map((h) => h.trim().replace(/^"|"$/g, "")) ?? []
+          dataRows = lines.slice(1).map((line) =>
+            line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""))
+          )
         }
-
-        const cats = Array.from(categories).slice(0, 10)
-        setPricingFileData({ total, categories: cats, itemCount })
-
-        if (total > 0 && !contractTotal) {
-          setContractTotal(total.toFixed(2))
-        }
-
-        toast.success(
-          `Pricing file processed: ${itemCount} items, $${total.toLocaleString(
-            undefined,
-            { minimumFractionDigits: 2 }
-          )} total${cats.length > 0 ? `, ${cats.length} categories` : ""}`
-        )
       } catch {
         setPricingFile(null)
         setPricingFileData(null)
-        toast.error("Failed to process pricing file")
+        toast.error("Failed to read the file. Please check the format.")
+        return
       }
+
+      const normHeaders = rawHeaders.map(norm)
+
+      const find = (...aliases: string[]) =>
+        aliases.map(norm).reduce<number>(
+          (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
+          -1,
+        )
+
+      const idxItem = find(
+        "vendor_item_no", "vendoritemno", "item_no", "itemno", "sku",
+        "part_no", "partnumber", "catalog_no",
+        "itemnumber", "item", "itemid", "itemcode",
+        "stockno", "stocknumber", "materialid", "materialnumber",
+        "productid", "productcode", "vendorpart", "vendorcatalog",
+        "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
+        "vendor_item_number", "vendoritemnumber", "item_number",
+      )
+      const idxDesc = find(
+        "description", "desc", "product_description", "productdescription", "item_description",
+        "productdesc", "itemname", "materialname", "materialdesc",
+        "fulldescription",
+      )
+      const idxPrice = find(
+        "contract_price", "contractprice", "unit_price", "unitprice", "price", "cost",
+        "netprice", "yourprice", "discountprice", "discountedprice",
+        "negotiatedprice", "agreementprice", "contractcost", "netcost",
+        "sellprice", "sellingprice", "customerprice",
+      )
+      const idxList = find(
+        "list_price", "listprice", "msrp", "retail_price",
+        "catalogprice", "regularprice", "standardprice",
+        "fullprice", "originalprice",
+      )
+      const idxCat = find(
+        "category", "product_category", "department",
+        "productcategory", "productline", "productgroup", "producttype",
+        "segment", "classification", "dept", "division",
+      )
+      const idxUom = find(
+        "uom", "unit_of_measure", "unit",
+        "unitofmeasure", "packsize", "packaging", "pkg", "measure",
+      )
+
+      const items: ContractPricingItem[] = dataRows.map((vals) => {
+        const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
+        return {
+          vendorItemNo: g(idxItem),
+          description: g(idxDesc) || undefined,
+          unitPrice: parseFloat(g(idxPrice).replace(/[^0-9.-]/g, "") || "0"),
+          listPrice: parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
+          category: g(idxCat) || undefined,
+          uom: g(idxUom) || "EA",
+        }
+      }).filter((i) => i.vendorItemNo)
+
+      if (items.length === 0) {
+        toast.error("No valid pricing items found. Check your file has columns like vendor_item_no and contract_price.")
+        setPricingFile(null)
+        setPricingFileData(null)
+        return
+      }
+
+      // Extract unique categories
+      const cats = Array.from(
+        new Set(items.map((i) => i.category).filter((c): c is string => !!c))
+      )
+
+      // Calculate total
+      const total = items.reduce((sum, i) => sum + i.unitPrice, 0)
+
+      setPricingItems(items)
+      setPricingFileData({ total, categories: cats, itemCount: items.length })
+
+      if (total > 0 && !contractTotal) {
+        setContractTotal(total.toFixed(2))
+      }
+
+      toast.success(`Loaded ${items.length} pricing items from ${file.name}`)
     },
     [contractTotal]
   )
@@ -245,6 +328,7 @@ export function VendorContractSubmission({
   const handleClearPricingFile = useCallback(() => {
     setPricingFile(null)
     setPricingFileData(null)
+    setPricingItems([])
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -283,12 +367,13 @@ export function VendorContractSubmission({
       notes: description || undefined,
       division: division || undefined,
       tieInContractId: tieInRef || undefined,
-      pricingData: pricingFile
+      pricingData: pricingItems.length > 0
         ? {
-            fileName: pricingFile.name,
-            itemCount: pricingFileData?.itemCount ?? 0,
+            fileName: pricingFile?.name ?? "pricing",
+            itemCount: pricingItems.length,
             totalValue: pricingFileData?.total ?? 0,
             categories: pricingFileData?.categories ?? [],
+            items: pricingItems,
             uploadedAt: new Date().toISOString(),
           }
         : undefined,
@@ -342,6 +427,15 @@ export function VendorContractSubmission({
               description={description}
               onDescriptionChange={setDescription}
             />
+
+            {contractType === "grouped" && (
+              <GroupContractSettingsCard
+                gpoAffiliation={gpoAffiliation}
+                onGpoAffiliationChange={setGpoAffiliation}
+                isMultiFacility={isMultiFacility}
+                onIsMultiFacilityChange={handleMultiFacilityChange}
+              />
+            )}
 
             <ContractDatesCard
               effectiveDate={effectiveDate}
