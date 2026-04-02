@@ -238,6 +238,25 @@ export async function updateContract(id: string, input: UpdateContractInput) {
   return serialize(contract)
 }
 
+// ─── Create Contract Document ───────────────────────────────────
+
+export async function createContractDocument(input: {
+  contractId: string
+  name: string
+  type?: string
+  url?: string
+}) {
+  await requireFacility()
+  return prisma.contractDocument.create({
+    data: {
+      contractId: input.contractId,
+      name: input.name,
+      type: (input.type as any) ?? "main",
+      url: input.url,
+    },
+  })
+}
+
 // ─── Delete Contract ─────────────────────────────────────────────
 
 export async function deleteContract(id: string) {

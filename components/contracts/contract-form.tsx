@@ -392,6 +392,36 @@ export function ContractFormBasicInfo({
         </CardContent>
       </Card>
 
+      {/* Group Contract Settings */}
+      {watch("contractType") === "grouped" && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="text-sm">Group Contract Settings</CardTitle>
+            <CardDescription>Configure multi-facility participation</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Field label="GPO Affiliation">
+              <Input
+                {...register("gpoAffiliation")}
+                placeholder="e.g., Vizient, Premier, HealthTrust"
+              />
+            </Field>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={watch("isMultiFacility")}
+                onCheckedChange={(v) => setValue("isMultiFacility", v)}
+              />
+              <Label>Multi-facility contract</Label>
+            </div>
+            {watch("isMultiFacility") && (
+              <p className="text-sm text-muted-foreground">
+                Facility selection will be available after contract creation.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Financial Details */}
       <Card>
         <CardHeader>

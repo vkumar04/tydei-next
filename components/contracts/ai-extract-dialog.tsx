@@ -17,7 +17,7 @@ import type { ExtractedContractData } from "@/lib/ai/schemas"
 interface AIExtractDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onExtracted: (data: ExtractedContractData) => void
+  onExtracted: (data: ExtractedContractData, s3Key?: string, fileName?: string) => void
 }
 
 type Stage = "upload" | "extracting" | "review" | "error"
@@ -37,6 +37,7 @@ export function AIExtractDialog({
   const [progress, setProgress] = useState(0)
   const [stepIndex, setStepIndex] = useState(0)
   const [extracted, setExtracted] = useState<ExtractedContractData | null>(null)
+  const [s3Key, setS3Key] = useState<string | null>(null)
   const [confidence, setConfidence] = useState(0)
   const [error, setError] = useState("")
   const [fileName, setFileName] = useState("")
@@ -103,6 +104,7 @@ export function AIExtractDialog({
       const data = await res.json()
       setProgress(100)
       setExtracted(data.extracted)
+      setS3Key(data.s3Key ?? null)
       setConfidence(data.confidence)
       setStage("review")
     } catch (err) {
@@ -112,10 +114,11 @@ export function AIExtractDialog({
   }
 
   function handleAccept(data: ExtractedContractData) {
-    onExtracted(data)
+    onExtracted(data, s3Key ?? undefined, fileName || undefined)
     onOpenChange(false)
     setStage("upload")
     setExtracted(null)
+    setS3Key(null)
   }
 
   return (

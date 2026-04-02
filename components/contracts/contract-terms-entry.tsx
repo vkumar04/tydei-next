@@ -1,8 +1,20 @@
 "use client"
 
-import { Plus, Trash2 } from "lucide-react"
+import {
+  Plus,
+  Trash2,
+  DollarSign,
+  TrendingUp,
+  Percent,
+  PieChart,
+  BarChart3,
+  Shield,
+  Lock,
+  Coins,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Select,
@@ -27,14 +39,17 @@ interface ContractTermsEntryProps {
 }
 
 const termTypes = [
-  { value: "spend_rebate", label: "Spend Rebate" },
-  { value: "volume_rebate", label: "Volume Rebate" },
-  { value: "price_reduction", label: "Price Reduction" },
-  { value: "market_share", label: "Market Share" },
-  { value: "growth_rebate", label: "Growth Rebate" },
-  { value: "compliance_rebate", label: "Compliance Rebate" },
-  { value: "fixed_fee", label: "Fixed Fee" },
-  { value: "locked_pricing", label: "Locked Pricing" },
+  { value: "spend_rebate", label: "Spend Rebate", icon: DollarSign, description: "Rebate based on spend thresholds" },
+  { value: "volume_rebate", label: "Volume Rebate", icon: TrendingUp, description: "Rebate based on usage count. Baseline is in $ amounts" },
+  { value: "price_reduction", label: "Price Reduction", icon: Percent, description: "Once spend/volume threshold is met, future purchases receive discounted prices" },
+  { value: "market_share", label: "Market Share", icon: PieChart, description: "Rebate based on market share percentage" },
+  { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Once market share target is met, future purchases receive discounted prices" },
+  { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Once procedure spend threshold is met, future procedures receive discounted prices" },
+  { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Procedure-based ceiling price with rebate" },
+  { value: "growth_rebate", label: "Growth Rebate", icon: TrendingUp, description: "Rebate based on spend growth over baseline" },
+  { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Rebate for meeting compliance requirements" },
+  { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate amount" },
+  { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price locked for contract duration" },
 ] as const
 
 const baselineTypes = [
@@ -120,12 +135,21 @@ export function ContractTermsEntry({
           <AccordionItem key={termIdx} value={`term-${termIdx}`}>
             <AccordionTrigger>
               <span className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
                 <span className="font-medium">
-                  {term.termName || `Term ${termIdx + 1}`}
+                  {term.termName || `Unnamed Term`}
                 </span>
-                <span className="text-xs text-muted-foreground capitalize">
-                  {term.termType.replace("_", " ")}
+                <Badge variant="outline" className="text-xs">
+                  {term.termType.replace(/_/g, " ")}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {term.tiers.length} tier(s)
                 </span>
+                {term.evaluationPeriod && (
+                  <Badge variant="secondary" className="ml-auto text-xs">
+                    {term.evaluationPeriod.replace(/_/g, " ")}
+                  </Badge>
+                )}
               </span>
             </AccordionTrigger>
             <AccordionContent>
@@ -169,7 +193,15 @@ export function ContractTermsEntry({
                         <SelectContent>
                           {termTypes.map((tt) => (
                             <SelectItem key={tt.value} value={tt.value}>
-                              {tt.label}
+                              <div className="flex items-center gap-2">
+                                <tt.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <div>
+                                  <div>{tt.label}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {tt.description}
+                                  </div>
+                                </div>
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -215,6 +247,63 @@ export function ContractTermsEntry({
                       />
                     </Field>
                   </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Evaluation Period">
+                      <Select
+                        value={term.evaluationPeriod}
+                        onValueChange={(v) =>
+                          updateTerm(termIdx, { evaluationPeriod: v })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="quarterly">Quarterly</SelectItem>
+                          <SelectItem value="semi_annual">Semi-Annual</SelectItem>
+                          <SelectItem value="annual">Annual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Payment Timing">
+                      <Select
+                        value={term.paymentTiming}
+                        onValueChange={(v) =>
+                          updateTerm(termIdx, { paymentTiming: v })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="quarterly">Quarterly</SelectItem>
+                          <SelectItem value="semi_annual">Semi-Annual</SelectItem>
+                          <SelectItem value="annual">Annual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+
+                  <Field label="Product Scope">
+                    <Select
+                      value={term.appliesTo}
+                      onValueChange={(v) =>
+                        updateTerm(termIdx, { appliesTo: v })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all_products">All Products</SelectItem>
+                        <SelectItem value="specific_category">Specific Category</SelectItem>
+                        <SelectItem value="specific_items">Specific Items</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="Effective Start" required>

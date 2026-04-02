@@ -17,6 +17,7 @@ import {
 import { useContractForm } from "@/hooks/use-contract-form"
 import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractTerm } from "@/lib/actions/contract-terms"
+import { createContractDocument } from "@/lib/actions/contracts"
 import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
@@ -43,6 +44,9 @@ export function NewContractClient({
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
   const [pricingFileName, setPricingFileName] = useState<string | null>(null)
+  const [pricingCategories, setPricingCategories] = useState<string[]>([])
+  const [contractS3Key, setContractS3Key] = useState<string | null>(null)
+  const [contractFileName, setContractFileName] = useState<string | null>(null)
   const {
     form,
     terms,
@@ -50,59 +54,130 @@ export function NewContractClient({
   } = useContractForm()
   const createMutation = useCreateContract()
 
-  const handlePricingUpload = useCallback((file: File) => {
+  const handlePricingUpload = useCallback(async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase()
-    if (ext !== "csv") {
-      toast.error("Please upload a CSV pricing file")
+    if (!["csv", "xlsx", "xls"].includes(ext ?? "")) {
+      toast.error("Please upload a CSV or Excel (.xlsx/.xls) pricing file")
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const text = reader.result as string
-      const lines = text.split("\n").filter((l) => l.trim())
-      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
-      const rawHeaders = lines[0]?.split(",").map((h) => h.trim()) ?? []
-      const normHeaders = rawHeaders.map(norm)
 
-      const find = (...aliases: string[]) =>
-        aliases.map(norm).reduce<number>(
-          (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
-          -1,
-        )
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
 
-      const idxItem = find("vendor_item_no", "vendoritemno", "item_no", "itemno", "sku", "part_no", "partnumber", "catalog_no")
-      const idxDesc = find("description", "desc", "product_description", "productdescription", "item_description")
-      const idxPrice = find("contract_price", "contractprice", "unit_price", "unitprice", "price", "cost")
-      const idxList = find("list_price", "listprice", "msrp", "retail_price")
-      const idxCat = find("category", "product_category", "department")
-      const idxUom = find("uom", "unit_of_measure", "unit")
+    let rawHeaders: string[] = []
+    let dataRows: string[][] = []
 
-      const items: ContractPricingItem[] = lines.slice(1).map((line) => {
-        const vals = line.split(",").map((v) => v.trim())
-        const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
-        return {
-          vendorItemNo: g(idxItem),
-          description: g(idxDesc) || undefined,
-          unitPrice: parseFloat(g(idxPrice).replace(/[^0-9.-]/g, "") || "0"),
-          listPrice: parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
-          category: g(idxCat) || undefined,
-          uom: g(idxUom) || "EA",
+    try {
+      if (ext === "xlsx" || ext === "xls") {
+        // Send Excel files to server-side parser
+        const formData = new FormData()
+        formData.append("file", file)
+        const res = await fetch("/api/parse-file", {
+          method: "POST",
+          body: formData,
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => null)
+          toast.error((body as { error?: string } | null)?.error ?? "Failed to parse Excel file")
+          return
         }
-      }).filter((i) => i.vendorItemNo && i.unitPrice > 0)
-
-      if (items.length === 0) {
-        toast.error("No valid pricing items found. Check your CSV has columns like vendor_item_no and contract_price.")
-        return
+        const parsed = (await res.json()) as { headers: string[]; rows: Record<string, string>[] }
+        rawHeaders = parsed.headers
+        dataRows = parsed.rows.map((row) => rawHeaders.map((h) => row[h] ?? ""))
+      } else {
+        // CSV: parse client-side
+        const text = await file.text()
+        const lines = text.split(/\r?\n/).filter((l) => l.trim())
+        rawHeaders = lines[0]?.split(",").map((h) => h.trim().replace(/^"|"$/g, "")) ?? []
+        dataRows = lines.slice(1).map((line) =>
+          line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""))
+        )
       }
-
-      setPricingItems(items)
-      setPricingFileName(file.name)
-      toast.success(`Loaded ${items.length} pricing items from ${file.name}`)
+    } catch {
+      toast.error("Failed to read the file. Please check the format.")
+      return
     }
-    reader.readAsText(file)
-  }, [])
 
-  function handleAIExtract(data: ExtractedContractData) {
+    const normHeaders = rawHeaders.map(norm)
+
+    const find = (...aliases: string[]) =>
+      aliases.map(norm).reduce<number>(
+        (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
+        -1,
+      )
+
+    const idxItem = find(
+      "vendor_item_no", "vendoritemno", "item_no", "itemno", "sku",
+      "part_no", "partnumber", "catalog_no",
+      "itemnumber", "item", "itemid", "itemcode",
+      "stockno", "stocknumber", "materialid", "materialnumber",
+      "productid", "productcode", "vendorpart", "vendorcatalog",
+      "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
+      "vendor_item_number", "vendoritemnumber", "item_number",
+    )
+    const idxDesc = find(
+      "description", "desc", "product_description", "productdescription", "item_description",
+      "productdesc", "itemname", "materialname", "materialdesc",
+      "fulldescription",
+    )
+    const idxPrice = find(
+      "contract_price", "contractprice", "unit_price", "unitprice", "price", "cost",
+      "netprice", "yourprice", "discountprice", "discountedprice",
+      "negotiatedprice", "agreementprice", "contractcost", "netcost",
+      "sellprice", "sellingprice", "customerprice",
+    )
+    const idxList = find(
+      "list_price", "listprice", "msrp", "retail_price",
+      "catalogprice", "regularprice", "standardprice",
+      "fullprice", "originalprice",
+    )
+    const idxCat = find(
+      "category", "product_category", "department",
+      "productcategory", "productline", "productgroup", "producttype",
+      "segment", "classification", "dept", "division",
+    )
+    const idxUom = find(
+      "uom", "unit_of_measure", "unit",
+      "unitofmeasure", "packsize", "packaging", "pkg", "measure",
+    )
+
+    const items: ContractPricingItem[] = dataRows.map((vals) => {
+      const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
+      return {
+        vendorItemNo: g(idxItem),
+        description: g(idxDesc) || undefined,
+        unitPrice: parseFloat(g(idxPrice).replace(/[^0-9.-]/g, "") || "0"),
+        listPrice: parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
+        category: g(idxCat) || undefined,
+        uom: g(idxUom) || "EA",
+      }
+    }).filter((i) => i.vendorItemNo)
+
+    if (items.length === 0) {
+      toast.error("No valid pricing items found. Check your file has columns like vendor_item_no and contract_price.")
+      return
+    }
+
+    // Extract unique categories
+    const cats = Array.from(
+      new Set(items.map((i) => i.category).filter((c): c is string => !!c))
+    )
+    setPricingCategories(cats)
+
+    // Auto-compute total value if the form's totalValue is 0
+    const totalFromPricing = items.reduce((sum, i) => sum + i.unitPrice, 0)
+    if (form.getValues("totalValue") === 0 && totalFromPricing > 0) {
+      form.setValue("totalValue", totalFromPricing)
+    }
+
+    setPricingItems(items)
+    setPricingFileName(file.name)
+    toast.success(`Loaded ${items.length} pricing items from ${file.name}`)
+  }, [form])
+
+  function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string) {
+    if (s3Key) setContractS3Key(s3Key)
+    if (fileName) setContractFileName(fileName)
+
     form.setValue("name", data.contractName)
     form.setValue("contractType", data.contractType)
     form.setValue("effectiveDate", data.effectiveDate)
@@ -170,6 +245,16 @@ export function NewContractClient({
       await importContractPricing({ contractId: contract.id, items: pricingItems })
     }
 
+    // Save uploaded contract PDF as a document
+    if (contractS3Key) {
+      await createContractDocument({
+        contractId: contract.id,
+        name: contractFileName ?? "Contract PDF",
+        type: "main",
+        url: contractS3Key,
+      })
+    }
+
     router.push(`/dashboard/contracts/${contract.id}`)
   }
 
@@ -197,6 +282,16 @@ export function NewContractClient({
     // Import pricing file if provided
     if (pricingItems.length > 0) {
       await importContractPricing({ contractId: contract.id, items: pricingItems })
+    }
+
+    // Save uploaded contract PDF as a document
+    if (contractS3Key) {
+      await createContractDocument({
+        contractId: contract.id,
+        name: contractFileName ?? "Contract PDF",
+        type: "main",
+        url: contractS3Key,
+      })
     }
 
     router.push(`/dashboard/contracts/${contract.id}`)
@@ -299,7 +394,7 @@ export function NewContractClient({
                 Upload Pricing File
               </CardTitle>
               <CardDescription>
-                Upload a CSV with vendor item numbers and pricing to link to this contract
+                Upload a CSV or Excel file with vendor item numbers and pricing to link to this contract
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -332,14 +427,14 @@ export function NewContractClient({
               ) : (
                 <div className="flex flex-col items-center gap-4 py-6">
                   <p className="text-sm text-muted-foreground text-center">
-                    Upload a CSV with columns like vendor_item_no, description, contract_price
+                    Upload a CSV or Excel file with columns like vendor_item_no, description, contract_price
                   </p>
                   <Button
                     variant="outline"
                     onClick={() => {
                       const input = document.createElement("input")
                       input.type = "file"
-                      input.accept = ".csv"
+                      input.accept = ".csv,.xlsx,.xls"
                       input.onchange = (e) => {
                         const file = (e.target as HTMLInputElement).files?.[0]
                         if (file) handlePricingUpload(file)
@@ -348,7 +443,7 @@ export function NewContractClient({
                     }}
                   >
                     <Upload className="mr-2 h-4 w-4" />
-                    Upload Pricing CSV
+                    Upload Pricing File
                   </Button>
                 </div>
               )}
@@ -461,7 +556,7 @@ export function NewContractClient({
                       onClick={() => {
                         const input = document.createElement("input")
                         input.type = "file"
-                        input.accept = ".csv"
+                        input.accept = ".csv,.xlsx,.xls"
                         input.onchange = (e) => {
                           const file = (e.target as HTMLInputElement).files?.[0]
                           if (file) handlePricingUpload(file)
@@ -470,7 +565,7 @@ export function NewContractClient({
                       }}
                     >
                       <Upload className="mr-2 h-3 w-3" />
-                      Upload Pricing CSV
+                      Upload Pricing File
                     </Button>
                   )}
                 </CardContent>
