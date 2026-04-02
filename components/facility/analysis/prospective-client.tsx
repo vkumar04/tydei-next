@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback } from "react"
+import { toast } from "sonner"
 import {
   Card,
   CardContent,
@@ -427,27 +428,56 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
   // Handle file upload and analysis
   const handleFileUpload = useCallback(
     async (file: File) => {
+      const ext = file.name.split(".").pop()?.toLowerCase()
+      if (ext === "pdf") {
+        toast.error("PDF files are not supported for proposal upload. Please export your pricing data as a CSV file.")
+        return
+      }
+      if (ext !== "csv") {
+        toast.error("Please upload a CSV file (.csv)")
+        return
+      }
+
       const text = await file.text()
       const lines = text.split("\n").filter((l) => l.trim())
-      const headers =
-        lines[0]?.split(",").map((h) => h.trim().toLowerCase()) ?? []
+      // Normalise headers: lowercase and strip all non-alphanumeric chars
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+      const rawHeaders =
+        lines[0]?.split(",").map((h) => h.trim()) ?? []
+      const normHeaders = rawHeaders.map(norm)
+
+      const find = (...aliases: string[]) => {
+        const idx = aliases.map(norm).reduce<number>(
+          (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
+          -1,
+        )
+        return idx
+      }
+
+      const idxItem = find("item_no", "itemno", "vendor_item_no", "vendoritemno", "sku", "item_number", "itemnumber", "product_ref_number", "productrefnumber")
+      const idxDesc = find("description", "desc", "item_description", "product_name", "productname")
+      const idxProposed = find("proposed_price", "proposedprice", "price", "unit_price", "unitprice", "new_price", "newprice")
+      const idxCurrent = find("current_price", "currentprice", "unit_cost", "unitcost", "cost")
+      const idxQty = find("quantity", "qty", "quantity_ordered", "quantityordered")
 
       const items = lines.slice(1).map((line) => {
         const vals = line.split(",").map((v) => v.trim())
-        const get = (key: string) => vals[headers.indexOf(key)] ?? ""
+        const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
         return {
-          vendorItemNo:
-            get("item_no") || get("vendor_item_no") || get("sku"),
-          description: get("description") || get("desc") || undefined,
-          proposedPrice: parseFloat(
-            get("proposed_price") || get("price") || "0"
-          ),
+          vendorItemNo: g(idxItem),
+          description: g(idxDesc) || undefined,
+          proposedPrice: parseFloat(g(idxProposed).replace(/[^0-9.-]/g, "") || "0"),
           currentPrice:
-            parseFloat(get("current_price") || "0") || undefined,
+            parseFloat(g(idxCurrent).replace(/[^0-9.-]/g, "") || "0") || undefined,
           quantity:
-            parseInt(get("quantity") || get("qty") || "1") || undefined,
+            parseInt(g(idxQty) || "1") || undefined,
         }
-      })
+      }).filter((i) => i.vendorItemNo)
+
+      if (items.length === 0) {
+        toast.error("No valid items found in CSV. Check that the file has an item number column (e.g. item_no, sku, vendor_item_no).")
+        return
+      }
 
       try {
         const result = await analyzeMutation.mutateAsync({
@@ -646,7 +676,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                   onClick={() => {
                     const input = document.createElement("input")
                     input.type = "file"
-                    input.accept = ".csv,.pdf,.xlsx,.xls"
+                    input.accept = ".csv"
                     input.onchange = (e) => {
                       const file = (e.target as HTMLInputElement).files?.[0]
                       if (file) handleFileUpload(file)
@@ -1008,6 +1038,23 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
                   <p className="text-sm mt-1">
                     Compare vendor pricing against your current COG data
                   </p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => {
+                      const input = document.createElement("input")
+                      input.type = "file"
+                      input.accept = ".csv"
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0]
+                        if (file) handleFileUpload(file)
+                      }
+                      input.click()
+                    }}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload CSV
+                  </Button>
                 </div>
               </CardContent>
             </Card>

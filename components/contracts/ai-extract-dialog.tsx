@@ -5,6 +5,7 @@ import { Upload, Loader2, Sparkles } from "lucide-react"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -74,6 +75,9 @@ export function AIExtractDialog({
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-5" /> AI Contract Extraction
           </DialogTitle>
+          <DialogDescription>
+            Upload a PDF document to auto-fill the contract fields.
+          </DialogDescription>
         </DialogHeader>
 
         <input

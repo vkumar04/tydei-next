@@ -90,3 +90,48 @@ export async function deletePricingFilesByVendor(
     where: { vendorId, facilityId },
   })
 }
+
+// ─── Import Contract Pricing (linked to a specific contract) ───
+
+export interface ContractPricingItem {
+  vendorItemNo: string
+  description?: string
+  category?: string
+  unitPrice: number
+  listPrice?: number
+  uom?: string
+  effectiveDate?: string
+  expirationDate?: string
+}
+
+export async function importContractPricing(input: {
+  contractId: string
+  items: ContractPricingItem[]
+}) {
+  await requireFacility()
+
+  if (input.items.length === 0) return { imported: 0 }
+
+  const BATCH = 500
+  let imported = 0
+
+  for (let i = 0; i < input.items.length; i += BATCH) {
+    const batch = input.items.slice(i, i + BATCH)
+    const result = await prisma.contractPricing.createMany({
+      data: batch.map((item) => ({
+        contractId: input.contractId,
+        vendorItemNo: item.vendorItemNo,
+        description: item.description,
+        category: item.category,
+        unitPrice: item.unitPrice,
+        listPrice: item.listPrice,
+        uom: item.uom ?? "EA",
+        effectiveDate: item.effectiveDate ? new Date(item.effectiveDate) : null,
+        expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
+      })),
+    })
+    imported += result.count
+  }
+
+  return { imported }
+}

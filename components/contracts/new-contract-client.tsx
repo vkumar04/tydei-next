@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -10,15 +10,20 @@ import {
   Save,
   FileText,
   Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  X,
 } from "lucide-react"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractTerm } from "@/lib/actions/contract-terms"
+import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
@@ -36,12 +41,66 @@ export function NewContractClient({
   const router = useRouter()
   const [entryMode, setEntryMode] = useState<"ai" | "manual" | "pdf">("manual")
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
+  const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
+  const [pricingFileName, setPricingFileName] = useState<string | null>(null)
   const {
     form,
     terms,
     setTerms,
   } = useContractForm()
   const createMutation = useCreateContract()
+
+  const handlePricingUpload = useCallback((file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase()
+    if (ext !== "csv") {
+      toast.error("Please upload a CSV pricing file")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = reader.result as string
+      const lines = text.split("\n").filter((l) => l.trim())
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+      const rawHeaders = lines[0]?.split(",").map((h) => h.trim()) ?? []
+      const normHeaders = rawHeaders.map(norm)
+
+      const find = (...aliases: string[]) =>
+        aliases.map(norm).reduce<number>(
+          (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
+          -1,
+        )
+
+      const idxItem = find("vendor_item_no", "vendoritemno", "item_no", "itemno", "sku", "part_no", "partnumber", "catalog_no")
+      const idxDesc = find("description", "desc", "product_description", "productdescription", "item_description")
+      const idxPrice = find("contract_price", "contractprice", "unit_price", "unitprice", "price", "cost")
+      const idxList = find("list_price", "listprice", "msrp", "retail_price")
+      const idxCat = find("category", "product_category", "department")
+      const idxUom = find("uom", "unit_of_measure", "unit")
+
+      const items: ContractPricingItem[] = lines.slice(1).map((line) => {
+        const vals = line.split(",").map((v) => v.trim())
+        const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
+        return {
+          vendorItemNo: g(idxItem),
+          description: g(idxDesc) || undefined,
+          unitPrice: parseFloat(g(idxPrice).replace(/[^0-9.-]/g, "") || "0"),
+          listPrice: parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
+          category: g(idxCat) || undefined,
+          uom: g(idxUom) || "EA",
+        }
+      }).filter((i) => i.vendorItemNo && i.unitPrice > 0)
+
+      if (items.length === 0) {
+        toast.error("No valid pricing items found. Check your CSV has columns like vendor_item_no and contract_price.")
+        return
+      }
+
+      setPricingItems(items)
+      setPricingFileName(file.name)
+      toast.success(`Loaded ${items.length} pricing items from ${file.name}`)
+    }
+    reader.readAsText(file)
+  }, [])
 
   function handleAIExtract(data: ExtractedContractData) {
     form.setValue("name", data.contractName)
@@ -106,6 +165,11 @@ export function NewContractClient({
       })
     }
 
+    // Import pricing file if provided
+    if (pricingItems.length > 0) {
+      await importContractPricing({ contractId: contract.id, items: pricingItems })
+    }
+
     router.push(`/dashboard/contracts/${contract.id}`)
   }
 
@@ -128,6 +192,11 @@ export function NewContractClient({
         ...term,
         contractId: contract.id,
       })
+    }
+
+    // Import pricing file if provided
+    if (pricingItems.length > 0) {
+      await importContractPricing({ contractId: contract.id, items: pricingItems })
     }
 
     router.push(`/dashboard/contracts/${contract.id}`)
@@ -204,7 +273,7 @@ export function NewContractClient({
         </TabsContent>
 
         {/* Upload PDF Tab */}
-        <TabsContent value="pdf" className="mt-4">
+        <TabsContent value="pdf" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -212,18 +281,77 @@ export function NewContractClient({
                 Upload Contract PDF
               </CardTitle>
               <CardDescription>
-                Upload a PDF document to auto-fill the contract form
+                Upload a PDF document to auto-fill the contract form via AI extraction
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col items-center gap-4 py-8">
-              <p className="text-sm text-muted-foreground">
-                Upload a contract PDF to extract and populate all contract
-                fields.
-              </p>
+            <CardContent className="flex flex-col items-center gap-4 py-6">
               <Button onClick={() => setAiExtractOpen(true)}>
-                <Upload className="mr-2 h-4 w-4" />
-                Upload Contract PDF
+                <Sparkles className="mr-2 h-4 w-4" />
+                Upload & Extract with AI
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5" />
+                Upload Pricing File
+              </CardTitle>
+              <CardDescription>
+                Upload a CSV with vendor item numbers and pricing to link to this contract
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pricingItems.length > 0 ? (
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    <div>
+                      <p className="text-sm font-medium">{pricingFileName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {pricingItems.length} pricing items loaded
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{pricingItems.length} items</Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => {
+                        setPricingItems([])
+                        setPricingFileName(null)
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-4 py-6">
+                  <p className="text-sm text-muted-foreground text-center">
+                    Upload a CSV with columns like vendor_item_no, description, contract_price
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const input = document.createElement("input")
+                      input.type = "file"
+                      input.accept = ".csv"
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0]
+                        if (file) handlePricingUpload(file)
+                      }
+                      input.click()
+                    }}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Pricing CSV
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -302,6 +430,51 @@ export function NewContractClient({
                 vendors={vendors}
                 categories={categories}
               />
+
+              {/* Pricing File */}
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Pricing File
+                  </h4>
+                  {pricingItems.length > 0 ? (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium truncate max-w-[160px]">{pricingFileName}</p>
+                        <p className="text-xs text-muted-foreground">{pricingItems.length} items</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => { setPricingItems([]); setPricingFileName(null) }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        const input = document.createElement("input")
+                        input.type = "file"
+                        input.accept = ".csv"
+                        input.onchange = (e) => {
+                          const file = (e.target as HTMLInputElement).files?.[0]
+                          if (file) handlePricingUpload(file)
+                        }
+                        input.click()
+                      }}
+                    >
+                      <Upload className="mr-2 h-3 w-3" />
+                      Upload Pricing CSV
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Help */}
               <Card className="bg-muted/50">

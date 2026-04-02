@@ -2,7 +2,7 @@ import { generateText, Output } from "ai"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { geminiModel } from "@/lib/ai/config"
-import { extractedContractSchema } from "@/lib/ai/schemas"
+import { extractedContractSchema, type ExtractedContractData } from "@/lib/ai/schemas"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -82,11 +82,34 @@ Return all the information you find as detailed text.`,
       output: Output.object({ schema: extractedContractSchema }),
       prompt: `Parse this contract information into structured data. If a field is not clearly present, make your best inference from context. For dates use YYYY-MM-DD format. For contract type choose from: usage, capital, service, tie_in, grouped, pricing_only.
 
+Return valid JSON only — no markdown fences.
+
 Contract information:
 ${extractedText}`,
     })
 
-    const extracted = result.output
+    // Output.object getter throws when the model response doesn't match the
+    // Zod schema.  Catch and fall back to the raw text so we still return
+    // a useful error rather than a generic 500.
+    let extracted: ExtractedContractData | undefined
+    try {
+      extracted = result.output
+    } catch {
+      // Schema validation failed — try manual parse from result text
+      try {
+        const cleaned = (result.text ?? "")
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim()
+        extracted = extractedContractSchema.parse(JSON.parse(cleaned))
+      } catch {
+        return Response.json(
+          { error: "Could not parse extracted data — the AI response did not match the expected format." },
+          { status: 422 },
+        )
+      }
+    }
+
     if (!extracted) {
       return Response.json({ error: "No data extracted" }, { status: 422 })
     }

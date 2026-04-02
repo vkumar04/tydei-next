@@ -2,7 +2,7 @@ import { generateText, Output } from "ai"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { geminiModel } from "@/lib/ai/config"
-import { extractedPayorContractSchema } from "@/lib/ai/schemas"
+import { extractedPayorContractSchema, type ExtractedPayorContractData } from "@/lib/ai/schemas"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -84,11 +84,30 @@ Be thorough - extract EVERY CPT code and rate you can find. Return all informati
       output: Output.object({ schema: extractedPayorContractSchema }),
       prompt: `Parse this payor contract information into structured data. Extract ALL CPT codes and their reimbursement rates. For dates use YYYY-MM-DD format. If a field is not clearly present, use null.
 
+Return valid JSON only — no markdown fences.
+
 Contract information:
 ${extractedText}`,
     })
 
-    const extracted = result.output
+    let extracted: ExtractedPayorContractData | undefined
+    try {
+      extracted = result.output
+    } catch {
+      try {
+        const cleaned = (result.text ?? "")
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim()
+        extracted = extractedPayorContractSchema.parse(JSON.parse(cleaned))
+      } catch {
+        return Response.json(
+          { error: "Could not parse extracted data — the AI response did not match the expected format." },
+          { status: 422 },
+        )
+      }
+    }
+
     if (!extracted) {
       return Response.json({ error: "No data extracted" }, { status: 422 })
     }
