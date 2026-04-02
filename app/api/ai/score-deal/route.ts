@@ -1,9 +1,16 @@
 import { generateText, Output } from "ai"
+import { z } from "zod"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { geminiModel } from "@/lib/ai/config"
 import { dealScoreSchema } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
+
+const scoreBodySchema = z.object({
+  contractData: z.record(z.string(), z.unknown()),
+  cogData: z.record(z.string(), z.unknown()),
+  benchmarkData: z.record(z.string(), z.unknown()).optional(),
+})
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +27,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const { contractData, cogData, benchmarkData } = await request.json()
+    const parsed = scoreBodySchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return Response.json({ error: "Invalid request body" }, { status: 400 })
+    }
+    const { contractData, cogData, benchmarkData } = parsed.data
 
     const result = await generateText({
       model: geminiModel,

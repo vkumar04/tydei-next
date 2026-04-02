@@ -53,11 +53,11 @@ export async function createPendingContract(input: CreatePendingContractInput) {
 // ─── Vendor: Update ─────────────────────────────────────────────
 
 export async function updatePendingContract(id: string, input: UpdatePendingContractInput) {
-  await requireVendor()
+  const { vendor } = await requireVendor()
   const data = updatePendingContractSchema.parse(input)
 
   const contract = await prisma.pendingContract.update({
-    where: { id },
+    where: { id, vendorId: vendor.id },
     data: {
       ...(data.contractName !== undefined && { contractName: data.contractName }),
       ...(data.contractType !== undefined && { contractType: data.contractType }),
@@ -76,10 +76,10 @@ export async function updatePendingContract(id: string, input: UpdatePendingCont
 // ─── Vendor: Withdraw ───────────────────────────────────────────
 
 export async function withdrawPendingContract(id: string) {
-  await requireVendor()
+  const { vendor } = await requireVendor()
 
   await prisma.pendingContract.update({
-    where: { id },
+    where: { id, vendorId: vendor.id },
     data: { status: "withdrawn" },
   })
 }
@@ -102,13 +102,15 @@ export async function getFacilityPendingContracts(_facilityId?: string) {
 export async function approvePendingContract(id: string, reviewedBy: string) {
   const { facility } = await requireFacility()
 
-  const pending = await prisma.pendingContract.findUniqueOrThrow({ where: { id } })
+  const pending = await prisma.pendingContract.findUniqueOrThrow({
+    where: { id, facilityId: facility.id },
+  })
 
   const contract = await prisma.contract.create({
     data: {
       name: pending.contractName,
       vendorId: pending.vendorId,
-      facilityId: pending.facilityId ?? facility.id,
+      facilityId: facility.id,
       contractType: pending.contractType,
       status: "active",
       effectiveDate: pending.effectiveDate ?? new Date(),
@@ -128,10 +130,10 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
 // ─── Facility: Reject ───────────────────────────────────────────
 
 export async function rejectPendingContract(id: string, reviewedBy: string, notes: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   await prisma.pendingContract.update({
-    where: { id },
+    where: { id, facilityId: facility.id },
     data: {
       status: "rejected",
       reviewedAt: new Date(),
@@ -144,10 +146,10 @@ export async function rejectPendingContract(id: string, reviewedBy: string, note
 // ─── Facility: Request Revision ─────────────────────────────────
 
 export async function requestRevision(id: string, reviewedBy: string, notes: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   await prisma.pendingContract.update({
-    where: { id },
+    where: { id, facilityId: facility.id },
     data: {
       status: "revision_requested",
       reviewedAt: new Date(),

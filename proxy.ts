@@ -1,5 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "X-DNS-Prefetch-Control": "on",
+  "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+}
+
 export function proxy(request: NextRequest) {
   const sessionToken =
     request.cookies.get("__Secure-better-auth.session_token")?.value ||
@@ -14,7 +23,14 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+
+  // Apply security headers to every protected route response
+  for (const [key, value] of Object.entries(securityHeaders)) {
+    response.headers.set(key, value)
+  }
+
+  return response
 }
 
 export const config = {

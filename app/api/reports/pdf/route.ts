@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
+import { prisma } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
 import {
   generateContractReport,
   generateRebateReport,
@@ -13,6 +15,21 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const { success, retryAfterMs } = rateLimit(`pdf:${session.user.id}`, 10, 60_000)
+    if (!success) {
+      return NextResponse.json(
+        { error: "Too many requests", retryAfter: Math.ceil(retryAfterMs / 1000) },
+        { status: 429 },
+      )
+    }
+
+    // Resolve user's facility for ownership verification
+    const member = await prisma.member.findFirst({
+      where: { userId: session.user.id },
+      include: { organization: { include: { facility: true } } },
+    })
+    const userFacilityId = member?.organization?.facility?.id
 
     const body = await request.json()
     const { type, id, dateRange, facilityId, surgeonName } = body as {
@@ -34,6 +51,16 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
+        // Verify contract belongs to user's facility
+        if (userFacilityId) {
+          const contract = await prisma.contract.findFirst({
+            where: { id, facilityId: userFacilityId },
+            select: { id: true },
+          })
+          if (!contract) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+          }
+        }
         pdfBytes = await generateContractReport(id)
         filename = `contract-report-${id}.pdf`
         break
@@ -44,6 +71,9 @@ export async function POST(request: NextRequest) {
             { error: "Facility ID is required" },
             { status: 400 }
           )
+        }
+        if (userFacilityId && facilityId !== userFacilityId) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 })
         }
         const range = dateRange ?? getDefaultDateRange()
         pdfBytes = await generateRebateReport(facilityId, range)
@@ -56,6 +86,9 @@ export async function POST(request: NextRequest) {
             { error: "Facility ID is required" },
             { status: 400 }
           )
+        }
+        if (userFacilityId && facilityId !== userFacilityId) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 })
         }
         pdfBytes = await generateSurgeonScorecard(facilityId, surgeonName)
         filename = surgeonName

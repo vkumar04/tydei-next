@@ -9,12 +9,25 @@ import { serialize } from "@/lib/serialize"
 // ─── Get Single Proposal ────────────────────────────────────────
 
 export async function getChangeProposal(id: string) {
-  await requireAuth()
+  const session = await requireAuth()
 
-  const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
-    where: { id },
+  // Scope to user's facility or vendor
+  const member = await prisma.member.findFirst({
+    where: { userId: session.user.id },
+    include: { organization: { include: { facility: true, vendor: true } } },
+  })
+  const facilityId = member?.organization?.facility?.id
+  const vendorId = member?.organization?.vendor?.id
+
+  const proposal = await prisma.contractChangeProposal.findFirst({
+    where: {
+      id,
+      ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
+    },
     include: { contract: { select: { name: true, vendorName: true } } },
   })
+
+  if (!proposal) throw new Error("Not found")
 
   return serialize({
     ...proposal,
@@ -27,10 +40,20 @@ export async function getChangeProposal(id: string) {
 // ─── Get Proposals by Contract ──────────────────────────────────
 
 export async function getChangeProposals(contractId: string) {
-  await requireAuth()
+  const session = await requireAuth()
+
+  const member = await prisma.member.findFirst({
+    where: { userId: session.user.id },
+    include: { organization: { include: { facility: true, vendor: true } } },
+  })
+  const facilityId = member?.organization?.facility?.id
+  const vendorId = member?.organization?.vendor?.id
 
   const proposals = await prisma.contractChangeProposal.findMany({
-    where: { contractId },
+    where: {
+      contractId,
+      ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
+    },
     orderBy: { submittedAt: "desc" },
   })
 
@@ -109,7 +132,7 @@ export async function reviewChangeProposal(
   id: string,
   input: ReviewChangeProposalInput
 ) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const data = reviewChangeProposalSchema.parse(input)
 
   const statusMap = {
@@ -119,7 +142,7 @@ export async function reviewChangeProposal(
   } as const
 
   const proposal = await prisma.contractChangeProposal.update({
-    where: { id },
+    where: { id, facilityId: facility.id },
     data: {
       status: statusMap[data.action],
       reviewedBy: data.reviewedBy,

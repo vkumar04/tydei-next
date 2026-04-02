@@ -82,6 +82,10 @@ export async function getUnreadAlertCount(input: {
   vendorId?: string
   portalType: "facility" | "vendor"
 }) {
+  // Caller passes IDs from an already-authenticated session (layout.tsx),
+  // but guard against tampering by requiring at least one scope filter.
+  if (!input.facilityId && !input.vendorId) return 0
+
   const where: Prisma.AlertWhereInput = {
     portalType: input.portalType,
     status: "new_alert",

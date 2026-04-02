@@ -159,10 +159,10 @@ export async function getCases(input: {
 // ─── Get Single Case ────────────────────────────────────────────
 
 export async function getCase(id: string): Promise<CaseDetail> {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const c = await prisma.case.findUniqueOrThrow({
-    where: { id },
+    where: { id, facilityId: facility.id },
     include: {
       procedures: true,
       supplies: true,
@@ -244,7 +244,13 @@ export async function importCaseSupplies(input: {
   caseId: string
   supplies: CaseSupplyInput[]
 }): Promise<{ imported: number; matched: number }> {
-  await requireFacility()
+  const { facility } = await requireFacility()
+
+  // Verify case belongs to this facility
+  await prisma.case.findUniqueOrThrow({
+    where: { id: input.caseId, facilityId: facility.id },
+    select: { id: true },
+  })
 
   let imported = 0
   let matched = 0

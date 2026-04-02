@@ -233,6 +233,7 @@ model User {
   credits          Credit[]
   auditLogs        AuditLog[]
 
+  @@index([role])
   @@map("user")
 }
 
@@ -384,6 +385,7 @@ model Facility {
   contractFacilities ContractFacility[]
   payorContracts     PayorContract[]
 
+  @@index([status])
   @@map("facility")
 }
 
@@ -1187,6 +1189,9 @@ model AICredit {
   vendor       Vendor?         @relation("VendorAICredits", fields: [vendorId], references: [id])
   usageRecords AIUsageRecord[]
 
+  @@index([facilityId])
+  @@index([vendorId])
+  @@index([billingPeriodStart])
   @@map("ai_credit")
 }
 

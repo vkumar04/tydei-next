@@ -1,9 +1,20 @@
 import { generateText, Output } from "ai"
+import { z } from "zod"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { geminiModel } from "@/lib/ai/config"
 import { supplyMatchSchema } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
+
+const matchBodySchema = z.object({
+  supplyName: z.string().min(1).max(500),
+  vendorItemNo: z.string().max(100).optional(),
+  contractPricing: z.array(z.object({
+    vendorItemNo: z.string(),
+    description: z.string().optional(),
+    unitPrice: z.number(),
+  }).passthrough()).max(200),
+})
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +31,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const { supplyName, vendorItemNo, contractPricing } = await request.json()
+    const parsed = matchBodySchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return Response.json({ error: "Invalid request body" }, { status: 400 })
+    }
+    const { supplyName, vendorItemNo, contractPricing } = parsed.data
 
     const pricingContext = contractPricing
       .slice(0, 50)

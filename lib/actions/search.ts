@@ -21,18 +21,27 @@ export interface GroupedSearchResults {
 }
 
 export async function globalSearch(query: string): Promise<GroupedSearchResults> {
-  await requireAuth()
+  const session = await requireAuth()
 
   const trimmed = query.trim()
   if (!trimmed || trimmed.length < 2) {
     return { contracts: [], vendors: [], alerts: [], purchaseOrders: [], invoices: [] }
   }
 
+  // Scope results to user's facility or vendor
+  const member = await prisma.member.findFirst({
+    where: { userId: session.user.id },
+    include: { organization: { include: { facility: true, vendor: true } } },
+  })
+  const facilityId = member?.organization?.facility?.id
+  const vendorId = member?.organization?.vendor?.id
+
   const search = { contains: trimmed, mode: "insensitive" as const }
 
   const [contracts, vendors, alerts, purchaseOrders, invoices] = await Promise.all([
     prisma.contract.findMany({
       where: {
+        ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
         OR: [
           { name: search },
           { contractNumber: search },
@@ -65,6 +74,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
     prisma.alert.findMany({
       where: {
+        ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
         OR: [
           { title: search },
           { description: search },
@@ -77,6 +87,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
     prisma.purchaseOrder.findMany({
       where: {
+        ...(facilityId ? { facilityId } : {}),
         OR: [
           { poNumber: search },
         ],
@@ -94,6 +105,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
     prisma.invoice.findMany({
       where: {
+        ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
         OR: [
           { invoiceNumber: search },
         ],

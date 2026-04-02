@@ -175,10 +175,10 @@ export async function importInvoice(input: ImportInvoiceInput) {
 // ─── Validate Invoice ───────────────────────────────────────────
 
 export async function validateInvoice(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const invoice = await prisma.invoice.findUniqueOrThrow({
-    where: { id },
+    where: { id, facilityId: facility.id },
     include: { lineItems: true },
   })
 
@@ -252,10 +252,11 @@ export async function validateInvoice(id: string) {
 // ─── Flag Line Item ─────────────────────────────────────────────
 
 export async function flagInvoiceLineItem(lineItemId: string, notes?: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
+  // Verify line item belongs to this facility's invoice
   await prisma.invoiceLineItem.update({
-    where: { id: lineItemId },
+    where: { id: lineItemId, invoice: { facilityId: facility.id } },
     data: { isFlagged: true },
   })
 }
@@ -263,10 +264,10 @@ export async function flagInvoiceLineItem(lineItemId: string, notes?: string) {
 // ─── Resolve Flagged Item ───────────────────────────────────────
 
 export async function resolveInvoiceLineItem(lineItemId: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   await prisma.invoiceLineItem.update({
-    where: { id: lineItemId },
+    where: { id: lineItemId, invoice: { facilityId: facility.id } },
     data: { isFlagged: false },
   })
 }
