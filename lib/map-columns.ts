@@ -60,10 +60,13 @@ const ALIASES: Record<string, string[]> = {
   inventoryNumber: [
     "inventorynumber", "inventoryno", "invno", "invnumber",
     "itemno", "itemnumber", "sku",
+    "productrefnumber", "productref", "refnumber", "refno",
+    "productnumber", "productno",
   ],
   inventoryDescription: [
     "inventorydescription", "description", "desc",
     "itemdescription", "itemdesc", "productdescription",
+    "productname", "productdesc",
   ],
   vendorName: [
     "vendorname", "vendor", "suppliername", "supplier",
@@ -77,10 +80,12 @@ const ALIASES: Record<string, string[]> = {
   ],
   quantity: [
     "quantity", "qty", "units", "count",
+    "quantityordered", "qtyordered", "orderedquantity",
   ],
   transactionDate: [
     "transactiondate", "date", "invoicedate", "orderdate",
     "txndate", "purchasedate",
+    "dateordered", "ordereddate",
   ],
   // Carve-out field
   carveOut: [

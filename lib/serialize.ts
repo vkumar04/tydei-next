@@ -6,6 +6,7 @@ import { Decimal } from "@prisma/client/runtime/client"
  */
 export function serialize<T>(obj: T): T {
   if (obj === null || obj === undefined) return obj
+  if (typeof obj === "bigint") return Number(obj) as T
   if (obj instanceof Decimal) return Number(obj) as T
   if (obj instanceof Date) return obj.toISOString() as T
   if (Array.isArray(obj)) return obj.map(serialize) as T

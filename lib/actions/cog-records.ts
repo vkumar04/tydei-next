@@ -91,6 +91,8 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
 
 // ─── Bulk Import COG Records ────────────────────────────────────
 
+const BATCH_SIZE = 500
+
 export async function bulkImportCOGRecords(input: BulkImportInput) {
   const session = await requireFacility()
   const data = bulkImportSchema.parse(input)
@@ -99,62 +101,113 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
   let skipped = 0
   let errors = 0
 
-  for (const record of data.records) {
-    try {
-      if (data.duplicateStrategy !== "keep_both") {
-        const existing = await prisma.cOGRecord.findFirst({
-          where: {
-            facilityId: session.facility.id,
-            inventoryNumber: record.inventoryNumber,
-            transactionDate: new Date(record.transactionDate),
-            vendorItemNo: record.vendorItemNo ?? undefined,
-          },
-        })
+  const toCreateData = (record: (typeof data.records)[number]) => ({
+    facilityId: session.facility.id,
+    vendorId: record.vendorId,
+    vendorName: record.vendorName,
+    inventoryNumber: record.inventoryNumber,
+    inventoryDescription: record.inventoryDescription,
+    vendorItemNo: record.vendorItemNo,
+    manufacturerNo: record.manufacturerNo,
+    unitCost: record.unitCost,
+    extendedPrice: record.extendedPrice,
+    quantity: record.quantity,
+    transactionDate: new Date(record.transactionDate),
+    category: record.category,
+    createdBy: session.user.id,
+  })
 
-        if (existing) {
+  for (let i = 0; i < data.records.length; i += BATCH_SIZE) {
+    const batch = data.records.slice(i, i + BATCH_SIZE)
+
+    try {
+      if (data.duplicateStrategy === "keep_both") {
+        const result = await prisma.cOGRecord.createMany({
+          data: batch.map(toCreateData),
+        })
+        imported += result.count
+        continue
+      }
+
+      // skip / overwrite — batch-lookup existing records first
+      const existing = await prisma.cOGRecord.findMany({
+        where: {
+          facilityId: session.facility.id,
+          OR: batch.map((r) => ({
+            inventoryNumber: r.inventoryNumber,
+            transactionDate: new Date(r.transactionDate),
+            ...(r.vendorItemNo ? { vendorItemNo: r.vendorItemNo } : {}),
+          })),
+        },
+        select: {
+          id: true,
+          inventoryNumber: true,
+          transactionDate: true,
+          vendorItemNo: true,
+        },
+      })
+
+      const existingKey = (inv: string, date: string, vItem: string | null) =>
+        `${inv}|${date}|${vItem ?? ""}`
+      const existingMap = new Map(
+        existing.map((e) => [
+          existingKey(
+            e.inventoryNumber,
+            e.transactionDate.toISOString().slice(0, 10),
+            e.vendorItemNo,
+          ),
+          e.id,
+        ]),
+      )
+
+      const newRecords: (typeof batch) = []
+
+      for (const record of batch) {
+        const key = existingKey(
+          record.inventoryNumber,
+          record.transactionDate,
+          record.vendorItemNo ?? null,
+        )
+        const existingId = existingMap.get(key)
+
+        if (existingId) {
           if (data.duplicateStrategy === "skip") {
             skipped++
-            continue
+          } else {
+            // overwrite
+            try {
+              await prisma.cOGRecord.update({
+                where: { id: existingId },
+                data: {
+                  vendorId: record.vendorId,
+                  vendorName: record.vendorName,
+                  inventoryDescription: record.inventoryDescription,
+                  manufacturerNo: record.manufacturerNo,
+                  unitCost: record.unitCost,
+                  extendedPrice: record.extendedPrice,
+                  quantity: record.quantity,
+                  category: record.category,
+                },
+              })
+              imported++
+            } catch {
+              errors++
+            }
           }
-          // overwrite
-          await prisma.cOGRecord.update({
-            where: { id: existing.id },
-            data: {
-              vendorId: record.vendorId,
-              vendorName: record.vendorName,
-              inventoryDescription: record.inventoryDescription,
-              manufacturerNo: record.manufacturerNo,
-              unitCost: record.unitCost,
-              extendedPrice: record.extendedPrice,
-              quantity: record.quantity,
-              category: record.category,
-            },
-          })
-          imported++
-          continue
+        } else {
+          newRecords.push(record)
         }
       }
 
-      await prisma.cOGRecord.create({
-        data: {
-          facilityId: session.facility.id,
-          vendorId: record.vendorId,
-          vendorName: record.vendorName,
-          inventoryNumber: record.inventoryNumber,
-          inventoryDescription: record.inventoryDescription,
-          vendorItemNo: record.vendorItemNo,
-          manufacturerNo: record.manufacturerNo,
-          unitCost: record.unitCost,
-          extendedPrice: record.extendedPrice,
-          quantity: record.quantity,
-          transactionDate: new Date(record.transactionDate),
-          category: record.category,
-          createdBy: session.user.id,
-        },
-      })
-      imported++
+      // Batch-create all new records at once
+      if (newRecords.length > 0) {
+        const result = await prisma.cOGRecord.createMany({
+          data: newRecords.map(toCreateData),
+        })
+        imported += result.count
+      }
     } catch {
-      errors++
+      errors += batch.length
     }
   }
 

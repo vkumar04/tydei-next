@@ -4,7 +4,7 @@ const config: NextConfig = {
   serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "pg"],
   experimental: {
     serverActions: {
-      bodySizeLimit: "5mb",
+      bodySizeLimit: "10mb",
     },
   },
 }

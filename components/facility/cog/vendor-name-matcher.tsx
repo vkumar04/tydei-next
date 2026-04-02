@@ -144,7 +144,7 @@ export function VendorNameMatcher({
 
   return (
     <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Match Vendor Names</DialogTitle>
           <DialogDescription>
