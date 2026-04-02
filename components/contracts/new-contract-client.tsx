@@ -106,13 +106,15 @@ export function NewContractClient({
       )
 
     const idxItem = find(
-      "vendor_item_no", "vendoritemno", "item_no", "itemno", "sku",
-      "part_no", "partnumber", "catalog_no",
+      "vendor_item_no", "vendoritemno", "vendoritem",
+      "item_no", "itemno", "sku",
+      "part_no", "partnumber", "partno", "catalog_no",
       "itemnumber", "item", "itemid", "itemcode",
       "stockno", "stocknumber", "materialid", "materialnumber",
       "productid", "productcode", "vendorpart", "vendorcatalog",
       "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
       "vendor_item_number", "vendoritemnumber", "item_number",
+      "productno", "productnumber", "productref", "productrefnumber",
     )
     const idxDesc = find(
       "description", "desc", "product_description", "productdescription", "item_description",
