@@ -4,6 +4,7 @@ import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 
 type ContractDetail = Awaited<ReturnType<typeof getContract>>
 
@@ -11,7 +12,7 @@ interface ContractDetailOverviewProps {
   contract: ContractDetail
 }
 
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+function InfoRow({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
   return (
     <div className="flex justify-between py-1.5">
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -63,12 +64,16 @@ export function ContractDetailOverview({
           value={formatDate(contract.expirationDate)}
         />
         <InfoRow
-          label="Auto-Renewal"
+          label={
+            <DefinitionTooltip term="auto_renewal">Auto-Renewal</DefinitionTooltip>
+          }
           value={contract.autoRenewal ? "Yes" : "No"}
         />
         {contract.autoRenewal && (
           <InfoRow
-            label="Termination Notice"
+            label={
+              <DefinitionTooltip term="termination_notice">Termination Notice</DefinitionTooltip>
+            }
             value={`${contract.terminationNoticeDays} days`}
           />
         )}
@@ -76,15 +81,21 @@ export function ContractDetailOverview({
         <Separator className="my-2" />
 
         <InfoRow
-          label="Total Value"
+          label={
+            <DefinitionTooltip term="total_value">Total Value</DefinitionTooltip>
+          }
           value={formatCurrency(Number(contract.totalValue))}
         />
         <InfoRow
-          label="Annual Value"
+          label={
+            <DefinitionTooltip term="annual_value">Annual Value</DefinitionTooltip>
+          }
           value={formatCurrency(Number(contract.annualValue))}
         />
         <InfoRow
-          label="Performance Period"
+          label={
+            <DefinitionTooltip term="performance_period">Performance Period</DefinitionTooltip>
+          }
           value={
             <span className="capitalize">
               {contract.performancePeriod.replace("_", " ")}

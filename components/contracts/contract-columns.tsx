@@ -7,6 +7,7 @@ import { MoreHorizontal, Eye, Pencil, Trash2 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
+import { ScoreBadge } from "@/components/shared/badges/score-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -51,7 +52,19 @@ export function getContractColumns(
           className="block hover:underline"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="font-semibold">{row.original.name}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold">{row.original.name}</span>
+            <ScoreBadge
+              score={
+                "aiScore" in row.original
+                  ? (row.original as Record<string, unknown>).aiScore as
+                      | number
+                      | null
+                  : null
+              }
+              size="sm"
+            />
+          </div>
           <div className="text-xs text-muted-foreground">
             {row.original.contractNumber || row.original.id}
           </div>

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 
 type ContractTermWithTiers = ContractTerm & { tiers: ContractTier[] }
 
@@ -72,9 +73,11 @@ export function ContractTermsDisplay({ terms }: ContractTermsDisplayProps) {
               <AccordionTrigger>
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{term.termName}</span>
-                  <Badge variant="secondary" className="capitalize">
-                    {term.termType.replace(/_/g, " ")}
-                  </Badge>
+                  <DefinitionTooltip term={term.termType}>
+                    <Badge variant="secondary" className="capitalize">
+                      {term.termType.replace(/_/g, " ")}
+                    </Badge>
+                  </DefinitionTooltip>
                   <span className="text-xs text-muted-foreground">
                     {formatDate(term.effectiveStart)} -{" "}
                     {formatDate(term.effectiveEnd)}
@@ -85,7 +88,10 @@ export function ContractTermsDisplay({ terms }: ContractTermsDisplayProps) {
                 <div className="space-y-3 pt-2">
                   <div className="grid gap-2 text-sm sm:grid-cols-3">
                     <div>
-                      <span className="text-muted-foreground">Baseline: </span>
+                      <DefinitionTooltip term="baseline_type">
+                        <span className="text-muted-foreground">Baseline</span>
+                      </DefinitionTooltip>
+                      <span className="text-muted-foreground">: </span>
                       <span className="capitalize">
                         {term.baselineType.replace("_", " ")}
                       </span>
@@ -99,9 +105,10 @@ export function ContractTermsDisplay({ terms }: ContractTermsDisplayProps) {
                       </div>
                     )}
                     <div>
-                      <span className="text-muted-foreground">
-                        Evaluation:{" "}
-                      </span>
+                      <DefinitionTooltip term="evaluation_period">
+                        <span className="text-muted-foreground">Evaluation</span>
+                      </DefinitionTooltip>
+                      <span className="text-muted-foreground">: </span>
                       <span className="capitalize">
                         {term.evaluationPeriod}
                       </span>

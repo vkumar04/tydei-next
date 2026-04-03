@@ -7,10 +7,15 @@ import {
   usePriceProjections,
   useVendorSpendTrends,
   useCategorySpendTrends,
+  useSpendForecast,
+  useRebateForecast,
 } from "@/hooks/use-analysis"
 import type { DepreciationSchedule } from "@/lib/analysis/depreciation"
 import Link from "next/link"
-import { Calculator, Target, Upload, Download } from "lucide-react"
+import { Calculator, Target, Upload, Download, TrendingUp } from "lucide-react"
+import { ForecastTable } from "./forecast-table"
+import { ForecastChart } from "./forecast-chart"
+import { Skeleton } from "@/components/ui/skeleton"
 
 import { UploadTab } from "./capital/upload-tab"
 import { ContractInputsTab } from "./capital/contract-inputs-tab"
@@ -59,6 +64,11 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
     facilityId,
     dateRange
   )
+
+  const { data: spendForecast, isLoading: spendForecastLoading } =
+    useSpendForecast(facilityId, { periods: 6 })
+  const { data: rebateForecast, isLoading: rebateForecastLoading } =
+    useRebateForecast(facilityId, { periods: 6 })
 
   const totalCapitalValue = useMemo(() => {
     if (!schedule) return 0
@@ -247,6 +257,10 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
               <TabsTrigger value="projections">Yearly Projections</TabsTrigger>
               <TabsTrigger value="analysis">Financial Analysis</TabsTrigger>
               <TabsTrigger value="report">Summary Report</TabsTrigger>
+              <TabsTrigger value="forecasts" className="gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Forecasts
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="upload" className="space-y-6">
@@ -326,6 +340,44 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
                 vendorTrends={vendorTrends}
                 formatCurrency={formatCurrency}
               />
+            </TabsContent>
+
+            <TabsContent value="forecasts" className="space-y-6">
+              {spendForecastLoading || rebateForecastLoading ? (
+                <div className="space-y-6">
+                  <Skeleton className="h-[400px] w-full rounded-lg" />
+                  <Skeleton className="h-[300px] w-full rounded-lg" />
+                </div>
+              ) : (
+                <>
+                  {spendForecast && (
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      <ForecastChart
+                        result={spendForecast}
+                        title="Spend Forecast"
+                        description="Historical spend with projected trend and confidence interval"
+                      />
+                      <ForecastTable
+                        result={spendForecast}
+                        label="Spend"
+                      />
+                    </div>
+                  )}
+                  {rebateForecast && (
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      <ForecastChart
+                        result={rebateForecast}
+                        title="Rebate Forecast"
+                        description="Historical rebates with projected trend and confidence interval"
+                      />
+                      <ForecastTable
+                        result={rebateForecast}
+                        label="Rebate"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
             </TabsContent>
           </Tabs>
         </>

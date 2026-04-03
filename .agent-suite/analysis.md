@@ -1,808 +1,801 @@
 # App Analysis: TYDEi Platform
 
 ## Overview
-TYDEi Platform is a comprehensive healthcare contract management SaaS application designed for facilities (hospitals, ASCs, surgery centers) and medical device/supply vendors. It provides dual portals where facilities track vendor contracts, rebate tiers, cost-of-goods data, case costing, and invoice validation, while vendors manage their own contracts, submit proposals, track performance, and maintain market share compliance. The platform also includes an operator/admin portal for managing tenants (facilities and vendors), users, and billing.
+TYDEi Platform is a comprehensive healthcare contract management SaaS application designed for facilities (hospitals, ASCs, surgery centers) and medical device/supply vendors. It provides a dual-portal architecture where facilities track vendor contracts, rebate tiers, cost-of-goods data, case costing, and invoice validation, while vendors manage their own contracts, submit proposals, track performance, and maintain market share compliance. The platform also includes an operator/admin portal for managing tenants (facilities and vendors), users, and billing. An AI agent (chat) is embedded in both facility and vendor portals for natural-language contract queries.
 
 ## Source
-- **Platform:** v0.dev
-- **Analyzed on:** 2026-03-28
-- **Tool:** Vinci (Analyzer Agent) -- local file analysis
+- **Platform:** v0.dev (downloaded project)
+- **Location:** `/Users/vickkumar/Downloads/b_FtKM0pV2dZE-1775131904894/`
+- **Analyzed on:** 2026-04-01
+- **Tool:** Vinci (Analyzer Agent) -- local file analysis of v0 source code
 
 ## Target Users
 - **Primary:** Healthcare facility supply chain managers and materials management staff who need to track vendor contracts, calculate rebates, validate invoices, and analyze cost of goods
 - **Secondary:** Medical device/supply vendor sales representatives and account managers who need to submit contracts, track performance, and manage proposals across multiple facilities
 - **Tertiary:** Platform operators/admins managing multi-tenant facility and vendor onboarding, billing, and user administration
 
-## Pages & Routes
-
-### Landing Page
-- **Route:** `/`
-- **Layout:** Standalone (no sidebar)
-- **Description:** Marketing/landing page with hero section, value proposition cards, feature grid, capabilities section, and CTA. Includes stats bar and footer. Links to Facility Portal and Vendor Portal.
-- **Key Components:** ThemeToggle, Card, Badge, Button
-- **Data Sources:** Static content
-- **User Actions:** Navigate to login, sign-up, facility portal, vendor portal
-
-### Login
-- **Route:** `/auth/login`
-- **Layout:** Centered card (no sidebar)
-- **Description:** Email/password login form with demo mode buttons for Facility and Vendor portals. Sets `demo_session` cookie for bypass. Links to admin portal.
-- **Key Components:** Input, Button, Card
-- **Data Sources:** Supabase Auth (with demo fallback)
-- **User Actions:** Login with credentials, demo login as facility or vendor, navigate to sign-up or admin
-
-### Sign Up
-- **Route:** `/auth/sign-up`
-- **Layout:** Centered card (no sidebar)
-- **Description:** Registration form with full name, email, account type (facility/vendor), password, and confirm password. Uses Supabase Auth sign-up with email confirmation redirect.
-- **Key Components:** Input, Select, Button, Card
-- **Data Sources:** Supabase Auth
-- **User Actions:** Create account (facility or vendor role)
-
-### Sign Up Success
-- **Route:** `/auth/sign-up-success`
-- **Layout:** Centered card
-- **Description:** Post-registration confirmation prompting user to check email for verification link.
-- **Key Components:** Card, Button
-- **Data Sources:** None
-- **User Actions:** Navigate back to login
-
-### Auth Error
-- **Route:** `/auth/error`
-- **Layout:** Centered card
-- **Description:** Generic authentication error page with retry link.
-- **Key Components:** Card, Button
-- **Data Sources:** None
-- **User Actions:** Retry login
-
 ---
 
-### Facility Dashboard
+## Pages & Routes
+
+### Landing Page (Marketing)
+- **Route:** `/`
+- **Layout:** Standalone (no sidebar), public
+- **Description:** Marketing landing page with hero section, value props ("Make Your Vendors Manage Your Contracts"), feature grid, capabilities section, CTA, and footer
+- **Components:** ThemeToggle, hero stats, feature cards (6 features), capabilities section, contract performance preview card
+- **Actions:** Links to `/auth/login`, `/auth/sign-up`, `/dashboard` (Facility Portal), `/vendor` (Vendor Portal)
+
+### Auth Pages
+- **Route:** `/auth/login` -- Login form with email/password, demo credentials (demo@tydei.com / vendor@tydei.com), Supabase auth
+- **Route:** `/auth/sign-up` -- Sign-up form with email, password, full name, role selector (facility/vendor), Supabase auth
+- **Route:** `/auth/sign-up-success` -- Success confirmation page
+- **Route:** `/auth/error` -- Auth error page
+- **Layout:** Standalone, public
+- **Data:** Demo credentials bypass Supabase; sets cookie `demo_session=true`
+
+### Facility Dashboard Layout
+- **Route:** `/dashboard/*`
+- **Layout:** `DashboardShell` -- collapsible sidebar with nav, top bar with user menu, theme toggle, mass upload dialog, facility identity selector, alert bell with count
+- **Auth:** Supabase auth check; redirects vendors to `/vendor`; demo mode fallback
+- **Nav Items:**
+  1. Dashboard (`/dashboard`)
+  2. Contracts (`/dashboard/contracts`)
+  3. Renewals (`/dashboard/contract-renewals`)
+  4. Rebate Optimizer (`/dashboard/rebate-optimizer`)
+  5. Analysis (`/dashboard/analysis`)
+  6. COG Data (`/dashboard/cog-data`)
+  7. Case Costing (`/dashboard/case-costing`) -- feature flag: caseCostingEnabled
+  8. Purchase Orders (`/dashboard/purchase-orders`) -- feature flag: purchaseOrdersEnabled
+  9. Invoice Validation (`/dashboard/invoice-validation`)
+  10. Reports (`/dashboard/reports`)
+  11. Alerts (`/dashboard/alerts`)
+  12. AI Agent (`/dashboard/ai-agent`) -- feature flag: aiAgentEnabled
+  13. Settings (`/dashboard/settings`)
+
+### Facility Dashboard Page
 - **Route:** `/dashboard`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Overview page with date-range filters, 4 metric cards (contract value, rebates, alerts, compliance), charts (earned rebate by month, spend by vendor, contract lifecycle), recent contracts table, and recent alerts list.
-- **Key Components:** DashboardMetrics, DashboardCharts, DashboardFilters, RecentContracts, RecentAlerts
-- **Data Sources:** contract-data-store, cog-data-store, alert-store
-- **User Actions:** Filter by date range, navigate to contracts/alerts
+- **Description:** Main dashboard with metrics cards, charts (spend trends, rebate overview), date range filter, recent contracts table, recent alerts list
+- **Components:** DashboardMetrics, DashboardCharts, DashboardFilters, RecentContracts, RecentAlerts
+- **Data:** Contract data store, COG data store, alert store
 
 ### Contracts List
 - **Route:** `/dashboard/contracts`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Tabbed view with "All Contracts" table and "Compare" mode. Summary cards for total contracts, total value, total rebates. Filters by search, status (active/pending/expired/draft), type (usage/pricing_only/capital/GPO), and facility. Table shows contract name, vendor, type, status, effective/expiration dates, value, rebate, and score badge. Actions: view, edit, delete, compare.
-- **Key Components:** Table, Tabs, ContractScoreBadge, Dialog
-- **Data Sources:** contract-data-store, cog-data-store, pending-contracts-store
-- **User Actions:** Create new contract, search/filter, view details, edit, delete, compare contracts
+- **Description:** Filterable/searchable table of all contracts with status badges, vendor, type, dates, spend, rebates. Tabs for active/pending/expired. Includes pending vendor submissions.
+- **Components:** Table with sort/filter, search, status badges, dropdown actions (view, edit, score)
+- **Actions:** Add new contract, view detail, edit, filter by status/vendor/type
 
 ### New Contract
 - **Route:** `/dashboard/contracts/new`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Multi-step contract creation with three entry modes: AI (PDF upload with auto-extraction), Manual form, or PDF upload. Form fields include contract name, ID, type (usage/capital/tie-in/grouped/pricing_only), vendor selection, product categories, dates, performance/rebate pay periods, contract total/margin, multi-facility toggle, facility selection, and contract terms entry with tier structures. Supports linking pricing files and uploading contract documents.
-- **Key Components:** ContractPDFUpload, ContractTermsEntry, AIContractDescription, Tabs, Calendar, Select
-- **Data Sources:** vendor-store, category-store, cog-data-store, contract-data-store
-- **User Actions:** Upload PDF for AI extraction, manually enter contract, add terms/tiers, link pricing file, submit
+- **Description:** Multi-step contract creation form with three entry modes: AI (PDF extract), Manual, PDF Upload
+- **Form Fields:** contractName, contractId, contractType (usage/capital/service/tie_in/grouped/pricing_only), vendorId, productCategory, effectiveDate, expirationDate, performancePeriod, rebatePayPeriod, description, isMultiFacility, selectedFacilities
+- **Components:** ContractPDFUpload, ContractTermsEntry, AIContractDescription, vendor selector with inline add, category selector, facility selector
+- **Actions:** Save draft, submit, AI extract from PDF
 
 ### Contract Detail
 - **Route:** `/dashboard/contracts/[id]`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Placeholder page showing contract ID. Minimal implementation.
-- **Key Components:** Card
-- **Data Sources:** contract-data-store
-- **User Actions:** View contract details
-
-### Contract Edit
-- **Route:** `/dashboard/contracts/[id]/edit`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Edit form for existing contracts with tabs for basic info, terms, and documents. Pre-fills from contract-data-store. Supports adding/editing terms and tiers.
-- **Key Components:** ContractTermsEntry, Tabs, Dialog, Input, Select
-- **Data Sources:** contract-data-store, cog-data-store
-- **User Actions:** Edit contract fields, update terms, save changes
-
-### Contract Score
-- **Route:** `/dashboard/contracts/[id]/score`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Comprehensive contract scoring page with radar chart, bar charts, and line charts. Scores contracts across dimensions: financial value, rebate efficiency, compliance, market share, pricing competitiveness. Includes industry benchmark comparison and projected value analysis.
-- **Key Components:** RadarChart, BarChart, LineChart (Recharts), Progress, Tabs
-- **Data Sources:** contract-data-store, cog-data-store, vendor-benchmark-store
-- **User Actions:** View score breakdown, compare against benchmarks
-
-### Contract Terms
-- **Route:** `/dashboard/contracts/[id]/terms`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Manage contract terms and tier structures. Table of terms with type (spend-based, volume-based, fixed, market-share) and tiers. CRUD operations for terms. Progress indicators for tier achievement.
-- **Key Components:** Table, Dialog, Input, Select
-- **Data Sources:** contract-data-store
-- **User Actions:** Add/edit/delete terms, view tier progress
+- **Description:** Placeholder page for contract detail view
+- **Route:** `/dashboard/contracts/[id]/edit` -- Edit contract page
+- **Route:** `/dashboard/contracts/[id]/terms` -- Contract terms entry/management with tier structures
+- **Route:** `/dashboard/contracts/[id]/score` -- AI-powered contract scoring with radar chart, compliance metrics, tier analysis
 
 ### COG Data
 - **Route:** `/dashboard/cog-data`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Central hub for Cost of Goods data management. Tabs for COG records, pricing files, and uploaded files. Supports CSV/Excel import with column mapping, duplicate detection, vendor name matching, manual record entry, date filtering, search, and bulk operations. Linked to contract pricing.
-- **Key Components:** COGCSVUpload (importer), PricingFileUpload, MassUpload, Table, Dialog, Tabs
-- **Data Sources:** cog-data-store (IndexedDB), contract-data-store
-- **User Actions:** Upload COG CSV/Excel, upload pricing files, mass upload, edit/delete records, search, filter by date/vendor
-
-### Alerts
-- **Route:** `/dashboard/alerts`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Alert management with tabs for all alerts, off-contract, expiring, tier threshold, and rebate due. Shows alert cards with type badges (off_contract, expiring_contract, tier_threshold, rebate_due, payment_due), priority indicators, timestamps, and action links. Bulk resolve/dismiss.
-- **Key Components:** Tabs, Badge, Checkbox, ScrollArea
-- **Data Sources:** alert-store
-- **User Actions:** Read, resolve, dismiss alerts; navigate to related contracts
-
-### Alert Detail
-- **Route:** `/dashboard/alerts/[id]`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Detailed alert view with metadata table (PO ID, vendor, facility, item count, amount), related items, and action buttons.
-- **Key Components:** Table, Badge, Button
-- **Data Sources:** alert-store (mock data)
-- **User Actions:** View details, resolve, navigate to related entity
-
-### Financial Analysis
-- **Route:** `/dashboard/analysis`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Capital contract financial analysis with MACRS depreciation, price decrease projections, vendor spend trends, category spend trends. Uses COG data for calculations. Includes file upload for analysis data.
-- **Key Components:** BarChart, LineChart, ComposedChart (Recharts), Accordion, Tabs
-- **Data Sources:** cog-data-store, contract-data-store
-- **User Actions:** Upload analysis data, configure assumptions, view projections
-
-### Prospective Analysis
-- **Route:** `/dashboard/analysis/prospective`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Facility-side proposal analysis. Upload vendor contracts/proposals, compare pricing against COG data, deal scoring with radar chart, term comparison, financial projections. Supports pricing file upload to compare proposed vs. current prices.
-- **Key Components:** RadarChart, BarChart (Recharts), Table, Slider, Dialog
-- **Data Sources:** cog-data-store
-- **User Actions:** Upload proposal, analyze pricing, score deal, compare terms
+- **Description:** Cost of Goods data management. Upload CSV files, view/edit/delete records, pricing file management, vendor name matching, duplicate detection.
+- **Components:** COG table with search/filter/sort, CSV upload dialog, vendor name matcher, pricing file viewer, edit dialog, delete confirmation, duplicate validator
+- **Data:** COGRecord (poNumber, poDate, inventoryNumber, inventoryDescription, vendorItemNo, vendor, uom, quantity, unitCost, extendedPrice, hasContractPricing, contractPrice, savings, surgeonId, surgeonName, caseNumber)
+- **Storage:** IndexedDB for large datasets (overcomes localStorage 5MB limit)
+- **Actions:** Upload CSV, manual entry, edit record, delete record, bulk delete, sync pricing data, refresh
 
 ### Case Costing
 - **Route:** `/dashboard/case-costing`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Surgical case cost analysis with surgeon scorecards. Upload case data, view per-case costs, surgeon performance metrics (payor mix, BMI, age, spend, time scores), CPT code analysis. Charts for cost distribution and surgeon comparison.
-- **Key Components:** BarChart, RadarChart (Recharts), Table, Tabs, Progress
-- **Data Sources:** case-data-store, contract-data-store
-- **User Actions:** Upload case data, view surgeon metrics, filter by procedure/surgeon
-
-### Compare Surgeons
-- **Route:** `/dashboard/case-costing/compare`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Side-by-side surgeon comparison for specific procedures. Bar charts comparing costs, volumes, and outcomes across surgeons.
-- **Key Components:** BarChart (Recharts), Select, Table
-- **Data Sources:** case-data-store
-- **User Actions:** Select procedure, select surgeons, compare metrics
-
-### Case Costing Reports
-- **Route:** `/dashboard/case-costing/reports`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Detailed case costing reports showing surgeon-level contract contribution, rebate attribution, and margin analysis.
-- **Key Components:** BarChart, LineChart, PieChart (Recharts), Table
-- **Data Sources:** case-data-store, contract-data-store
-- **User Actions:** View reports, filter by surgeon/contract, download
-
-### Rebate Optimizer
-- **Route:** `/dashboard/rebate-optimizer`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Identifies rebate maximization opportunities across contracts. Analyzes current spend vs. tier thresholds, projects rebate earnings with bar charts, recommends spend redistribution to achieve higher tiers.
-- **Key Components:** BarChart (Recharts), Table, Progress, Dialog
-- **Data Sources:** contract-data-store, cog-data-store
-- **User Actions:** View optimization suggestions, set spend targets
-
-### Invoice Validation
-- **Route:** `/dashboard/invoice-validation`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Compare invoiced prices against contract prices. Upload invoices, auto-match line items to contracts, flag discrepancies. Product search for manual matching. Tabs for pending, resolved, and flagged items.
-- **Key Components:** Table, Dialog, Tabs, Progress
-- **Data Sources:** cog-data-store, contract-data-store (mock discrepancy data)
-- **User Actions:** Upload invoices, review discrepancies, approve/flag items, search products
-
-### Reports
-- **Route:** `/dashboard/reports`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Report generation hub with tabs for usage, service, tie-in, capital, and grouped report types. Shows period data in tables with spend, volume, rebate earned/collected, payment expected/actual. Charts for trends. Report scheduling (daily/weekly/monthly via email).
-- **Key Components:** BarChart, LineChart, PieChart (Recharts), Table, Accordion, Dialog
-- **Data Sources:** Mock report data, contract-data-store
-- **User Actions:** View reports by type, download, schedule email delivery
-
-### Price Discrepancy Report
-- **Route:** `/dashboard/reports/price-discrepancy`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Detailed report on pricing discrepancies between invoiced and contracted prices. Table with variance percentages, flagging capability, vendor dispute dialogs.
-- **Key Components:** Table, Dialog, Badge
-- **Data Sources:** Mock discrepancy data
-- **User Actions:** View discrepancies, flag items, send dispute to vendor
+- **Description:** Surgical case cost analysis. Import case data from clinical systems, link supplies to purchasing data via Vendor Item No, calculate margins with payor reimbursement rates.
+- **Sub-routes:**
+  - `/dashboard/case-costing/compare` -- Surgeon/procedure comparison
+  - `/dashboard/case-costing/reports` -- Case costing reports by CPT code, surgeon, facility
+- **Components:** Case table with search/sort, surgeon scorecards (radar chart), CPT analysis table, cost distribution chart, payor contracts manager, AI supply matcher
+- **Data:** CaseRecord, CaseSupply, CasePurchase, PayorMix; national reimbursement rates by CPT code; payor contract rates (Anthem sample)
+- **Key Feature:** Links clinical system data (supply usage) with purchasing system data (PO/invoices) via Vendor Item No for true margin calculation
 
 ### Purchase Orders
 - **Route:** `/dashboard/purchase-orders`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** PO management with create/view/track workflow. Product search from COG data, line item builder with price lookup, auto-calculation of extended prices. Status tracking (draft/pending/approved/sent/completed/cancelled).
-- **Key Components:** Table, Dialog, Select, Input
-- **Data Sources:** cog-data-store, contract-data-store
-- **User Actions:** Create PO, add line items, search products, submit, track status
+- **Description:** Purchase order management. Search products from COG data, create POs, track status. Links to contract pricing for on-contract detection.
+- **Components:** PO table, product search, PO create dialog, line item builder
+- **Data:** ProductSearchResult from COG and contract data
+
+### Invoice Validation
+- **Route:** `/dashboard/invoice-validation`
+- **Description:** Compare invoice prices against contract prices. Detect discrepancies, flag overpayments, dispute management.
+- **Components:** Invoice table, discrepancy flags, dispute dialog, approval workflow
+- **Data:** Links invoices to contracts via vendor item numbers
 
 ### Contract Renewals
 - **Route:** `/dashboard/contract-renewals`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Track expiring and renewable contracts. Timeline view with days until expiry, renewal window indicators, spend and rebate summary. Automated notification scheduling.
-- **Key Components:** Table, Progress, Dialog, ScrollArea
-- **Data Sources:** contract-data-store, cog-data-store
-- **User Actions:** View renewal timeline, set reminders, initiate renewal
+- **Description:** Track expiring contracts, initiate renewal workflows, set reminders, compare current vs. proposed terms
+- **Components:** Renewal pipeline, timeline, dialog for initiating renewal, email notifications
 
-### AI Agent (Facility)
+### Rebate Optimizer
+- **Route:** `/dashboard/rebate-optimizer`
+- **Description:** Identify opportunities to increase rebates. Analyze spend vs. tier thresholds, suggest purchasing adjustments.
+- **Components:** Opportunity cards, spend target dialog, optimizer chart
+
+### Analysis (Financial)
+- **Route:** `/dashboard/analysis`
+- **Description:** Financial analysis for capital contracts. MACRS depreciation schedules, NPV/IRR calculations, price projections with annual decrease assumptions.
+- **Sub-routes:**
+  - `/dashboard/analysis/prospective` -- Upload vendor proposals, AI deal scoring, pricing comparison against COG data, term analysis
+- **Components:** Contract inputs tab, financial analysis tab (depreciation, NPV), projections tab, summary report
+- **Data:** Uses COG data for spend trends, contract data for current terms
+
+### Prospective Analysis (Facility Side)
+- **Route:** `/dashboard/analysis/prospective`
+- **Description:** Facility-side tool to evaluate vendor proposals. Upload pricing files, compare against current COG prices, AI deal scoring, manual entry for what-if analysis.
+- **Components:** Proposal upload, pricing comparison table, deal score panel (radar chart), analysis overview
+
+### Reports
+- **Route:** `/dashboard/reports`
+- **Description:** Contract performance reports by type (Usage, Service, Tie-In). Period-level data for spend, volume, rebates, payments, balances. Includes report scheduling (daily/weekly/monthly email delivery).
+- **Sub-routes:**
+  - `/dashboard/reports/price-discrepancy` -- Price discrepancy analysis comparing invoice vs. contract prices
+- **Components:** Report type tabs, period data tables, trend charts, schedule dialog, export button
+- **Data:** Usage report (spend, volume, rebateEarned, rebateCollected), Service report (paymentExpected/Actual, balanceExpected/Actual), Tie-In report (spendTarget/Actual, volumeTarget/Actual)
+
+### Alerts
+- **Route:** `/dashboard/alerts`
+- **Route:** `/dashboard/alerts/[id]` -- Alert detail
+- **Description:** Alert management with tabs for active/resolved. Alert types: off_contract, expiring_contract, tier_threshold, rebate_due, pricing_error.
+- **Components:** Alert cards with priority badges, resolve/dismiss actions, bulk operations, filter by type
+- **Data:** Alert store with localStorage persistence, cross-tab sync
+
+### AI Agent
 - **Route:** `/dashboard/ai-agent`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** AI chat assistant for facility users using Vercel AI SDK (`useChat`). Suggested questions for contract performance, market share, rebate projections, and spend analysis. Supports document upload for AI analysis. Uses tool-calling for structured data retrieval.
-- **Key Components:** ScrollArea, Avatar, Input, Tabs, Dialog
-- **Data Sources:** API route `/api/ai-agent`
-- **User Actions:** Ask questions, upload documents, view AI-generated insights
+- **Description:** AI chat assistant for contract queries. Uses Vercel AI SDK with tool calling for contract analysis, market share, rebate calculations.
+- **Components:** Chat interface, suggested questions, credit indicator
+- **API:** `/api/ai-agent` -- streamText with tools: analyzeContractPerformance, getMarketShareAnalysis
 
-### Settings (Facility)
+### Settings
 - **Route:** `/dashboard/settings`
-- **Layout:** Sidebar (DashboardShell)
-- **Description:** Facility settings with tabs for profile, notifications, vendors, team, feature flags, AI credits, and integrations. Profile editing, notification preferences, vendor management CRUD, team member invites with role assignment, feature toggles (purchase orders, AI agent, case costing), AI credit usage tracking.
-- **Key Components:** Tabs, Switch, Avatar, Table, Dialog, Select
-- **Data Sources:** feature-flags-store, credit-store
-- **User Actions:** Edit profile, configure notifications, manage vendors, invite team members, toggle features
+- **Description:** User profile, notification preferences, facility management, team members, billing, feature flags, AI credits, connections (vendor invites).
+- **Components:** Tabs for profile, notifications, facilities, members, billing, features, AI credits, connections
 
 ---
+
+### Vendor Portal Layout
+- **Route:** `/vendor/*`
+- **Layout:** `VendorShell` -- sidebar with nav, vendor identity selector, role-based nav filtering (admin/manager/rep permissions)
+- **Auth:** Supabase auth; redirects non-vendors to `/dashboard`; demo mode fallback
+- **Nav Items:**
+  1. Dashboard (`/vendor`)
+  2. My Contracts (`/vendor/contracts`)
+  3. Renewals (`/vendor/renewals`)
+  4. Prospective (`/vendor/prospective`)
+  5. Market Share (`/vendor/market-share`)
+  6. Performance (`/vendor/performance`)
+  7. Purchase Orders (`/vendor/purchase-orders`)
+  8. Invoices (`/vendor/invoices`)
+  9. Alerts (`/vendor/alerts`)
+  10. Reports (`/vendor/reports`)
+  11. AI Assistant (`/vendor/ai-agent`)
+  12. Settings (`/vendor/settings`)
 
 ### Vendor Dashboard
 - **Route:** `/vendor`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Vendor overview showing their contracts, spend metrics, and performance across facilities. Metric cards for total contracts, total spend, total rebates, and active facilities. Bar and line charts for spend trends.
-- **Key Components:** BarChart, LineChart (Recharts), Card
-- **Data Sources:** contract-data-store, cog-data-store, vendor-context
-- **User Actions:** View metrics, navigate to contracts/performance
+- **Description:** Vendor overview showing aggregate metrics (active contracts, total spend, market share, rebates paid), spend trend chart, market share by category chart, contract status breakdown, recent contracts list
+- **Components:** Metric cards, LineChart (spend trend), BarChart (market share by category), contract status card, recent contracts
+- **Data:** Filters COG data and contracts by vendor identity
 
 ### Vendor Contracts
 - **Route:** `/vendor/contracts`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Vendor's contract list with tabs for active contracts, pending submissions, and expired. Supports contract creation with term entry, pricing file upload, and multi-facility selection. Collapsible term details.
-- **Key Components:** Table, Tabs, Dialog, ContractTermsEntry, Progress
-- **Data Sources:** pending-contracts-store, contract-data-store
-- **User Actions:** View contracts, create new, upload pricing, manage pending submissions
-
-### Vendor New Contract
-- **Route:** `/vendor/contracts/new`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Vendor contract submission form with contract type, facility selection (ScalableFacilitySelector), date pickers, term entry with tier structures, AI contract description generation, pricing file upload, and document upload.
-- **Key Components:** ContractTermsEntry, AIContractDescription, ScalableFacilitySelector, Tabs, Calendar
-- **Data Sources:** pending-contracts-store, vendor-identity-store, cog-data-store
-- **User Actions:** Create contract, select facilities, add terms, upload documents, submit for approval
-
-### Vendor Contract Detail
-- **Route:** `/vendor/contracts/[id]`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Contract detail view with spend tracking, tier progress, rebate calculations, document management (amendment upload with AI extraction), and transaction history.
-- **Key Components:** Tabs, Table, ContractTransactions, AmendmentExtractor, Dialog
-- **Data Sources:** pending-contracts-store
-- **User Actions:** View details, upload amendments, track transactions
-
-### Vendor Contract Edit
-- **Route:** `/vendor/contracts/[id]/edit`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Edit existing vendor contract. Supports term change proposals with before/after comparison, vendor messaging, and AI-generated term suggestions.
-- **Key Components:** ContractTermsEntry, Alert, Dialog
-- **Data Sources:** contract-change-proposals-store, vendor-identity-store
-- **User Actions:** Propose term changes, edit contract, submit changes
-
-### Vendor Pending Contract Edit
-- **Route:** `/vendor/contracts/pending/[id]/edit`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Edit a pending/draft contract submission before approval. Same form fields as new contract.
-- **Key Components:** ContractTermsEntry, Calendar, Alert
-- **Data Sources:** pending-contracts-store, vendor-identity-store
-- **User Actions:** Edit draft contract, resubmit
-
-### Vendor Alerts
-- **Route:** `/vendor/alerts`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Vendor-specific alerts for contract expiry, compliance issues, rebate tier thresholds, and renewal windows. Filterable by type and severity.
-- **Key Components:** Card, Badge, Tabs
-- **Data Sources:** alert-store
-- **User Actions:** View, acknowledge, dismiss alerts
-
-### Vendor Invoices
-- **Route:** `/vendor/invoices`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Invoice management for vendors. Upload invoices, track status, view line items, submit for validation.
-- **Key Components:** Table, Dialog, Tabs, Badge
-- **Data Sources:** Mock invoice data
-- **User Actions:** Upload invoices, view status, track payments
-
-### Vendor Market Share
-- **Route:** `/vendor/market-share`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Market share analytics with AI-detected category normalization (merging similar category names). Bar charts, line charts, and pie charts for market share by facility, category, and trend. Facility-specific breakdowns with pending contract integration.
-- **Key Components:** BarChart, LineChart, PieChart (Recharts), Progress, Dialog
-- **Data Sources:** cog-data-store, pending-contracts-store
-- **User Actions:** View market share, normalize categories, filter by facility
-
-### Vendor Performance
-- **Route:** `/vendor/performance`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Performance tracking across facilities with KPIs (compliance rate, on-time delivery, quality scores). Radar chart for multi-dimension scoring. Historical trend analysis.
-- **Key Components:** RadarChart, BarChart, AreaChart (Recharts), Table, Select
-- **Data Sources:** Mock performance data
-- **User Actions:** View performance metrics, filter by facility/period
+- **Description:** All contracts for this vendor across facilities. Tabs for active, pending (submitted for review), expired. Includes submission tracking.
+- **Route:** `/vendor/contracts/new` -- Submit new contract proposal with facility selection, terms entry, pricing file upload
+- **Route:** `/vendor/contracts/[id]` -- Contract detail view
+- **Route:** `/vendor/contracts/[id]/edit` -- Edit submitted contract
+- **Route:** `/vendor/contracts/pending/[id]/edit` -- Edit pending contract revision
+- **Components:** Contract table, submission form (ContractTermsEntry, AIContractDescription, ScalableFacilitySelector), pricing file upload, status tracking
 
 ### Vendor Prospective
 - **Route:** `/vendor/prospective`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Vendor-side proposal builder with multi-facility support, pricing file upload, usage history analysis, deal scoring, AI-powered negotiation advice, and competitive strategy. Grouped proposals across divisions.
-- **Key Components:** Table, Dialog, Slider, Tabs, Collapsible
-- **Data Sources:** cog-data-store, vendor-benchmark-store
-- **User Actions:** Create proposals, upload pricing, analyze deal, get AI advice
+- **Description:** Vendor-side proposal management. Build proposals with pricing files, usage history, deal analysis. Multi-facility support, grouped proposals. AI-powered pricing analysis.
+- **Components:** Proposal builder, pricing file parser, usage history viewer, deal score, facility selector
 
-### Vendor Purchase Orders
-- **Route:** `/vendor/purchase-orders`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** View and manage purchase orders from facilities. Track PO status, view line items, manage fulfillment.
-- **Key Components:** Table, Dialog, Tabs, Select
-- **Data Sources:** Mock PO data
-- **User Actions:** View POs, update status, view line items
+### Vendor Market Share
+- **Route:** `/vendor/market-share`
+- **Description:** Market share analysis by category and facility. AI-detected similar categories for merging. Trend charts, pie charts, facility breakdown.
+- **Components:** Market share charts (bar, line, pie), category merge suggestions, facility filter
+
+### Vendor Performance
+- **Route:** `/vendor/performance`
+- **Description:** Vendor performance dashboard with radar chart, KPI metrics (delivery, quality, pricing, compliance), trend analysis.
+- **Components:** Radar chart, performance metrics table, trend charts (area, line)
 
 ### Vendor Renewals
 - **Route:** `/vendor/renewals`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Track contract renewals with timeline, spend performance review, renewal strategy planning. Dialog for initiating renewal discussions.
-- **Key Components:** Table, Progress, Dialog, Tabs
-- **Data Sources:** contract-data-store
-- **User Actions:** View renewal pipeline, initiate renewal, set strategy
+- **Description:** Track upcoming contract renewals, initiate renewal discussions, view renewal pipeline
+- **Components:** Renewal pipeline, timeline, initiate dialog
+
+### Vendor Purchase Orders
+- **Route:** `/vendor/purchase-orders`
+- **Description:** View purchase orders related to this vendor across facilities
+- **Components:** PO table, filter by facility/status
+
+### Vendor Invoices
+- **Route:** `/vendor/invoices`
+- **Description:** Invoice management for vendor. Create, submit, track payment status.
+- **Components:** Invoice table, create dialog, status tracking, payment progress
+
+### Vendor Alerts
+- **Route:** `/vendor/alerts`
+- **Description:** Vendor-specific alerts: contract expiry, compliance warnings, rebate thresholds
+- **Components:** Alert cards with severity badges, action links
 
 ### Vendor Reports
 - **Route:** `/vendor/reports`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Vendor-specific reports for spend analysis, rebate tracking, market share, and compliance. Report generation and download.
-- **Key Components:** Table, Dialog, Select, Progress
-- **Data Sources:** Mock report data
-- **User Actions:** Generate reports, download, schedule delivery
+- **Description:** Vendor reporting on contract performance, spend tracking, rebate summaries
+- **Components:** Report table, export dialog
 
 ### Vendor AI Agent
 - **Route:** `/vendor/ai-agent`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** AI chat assistant for vendor users. Suggested questions for market share analysis, contract strategy, pricing optimization. Uses same AI SDK infrastructure as facility agent.
-- **Key Components:** ScrollArea, Avatar, Input, Tabs
-- **Data Sources:** API route `/api/ai-agent`
-- **User Actions:** Ask questions, get AI-generated market insights
+- **Description:** AI chat for vendor queries about contracts, performance, pricing
+- **Components:** Same chat interface as facility, vendor-contextualized
 
 ### Vendor Settings
 - **Route:** `/vendor/settings`
-- **Layout:** Sidebar (VendorShell)
-- **Description:** Vendor settings with profile management, notification preferences, team management, AI credit usage (credit tiers: Starter/Professional/Enterprise), and facility connections (invite/accept/reject system).
-- **Key Components:** Tabs, Switch, Avatar, Table, Dialog, Progress
-- **Data Sources:** credit-store, connection-store, vendor-identity-store
-- **User Actions:** Edit profile, manage team, buy credits, manage facility connections
+- **Description:** Vendor profile, team management, notification preferences
+- **Components:** Profile form, team table, notification toggles
 
 ---
+
+### Admin Portal Layout
+- **Route:** `/admin/*`
+- **Layout:** Sidebar with admin nav (Dashboard, Facilities, Payor Contracts, Vendors, Users, Billing, Analytics, Settings)
+- **Auth:** Client-side only (no server auth check in v0)
+- **Nav Items:**
+  1. Dashboard (`/admin`)
+  2. Facilities (`/admin/facilities`)
+  3. Payor Contracts (`/admin/payor-contracts`)
+  4. Vendors (`/admin/vendors`)
+  5. Users (`/admin/users`)
+  6. Billing (`/admin/billing`)
+  7. Analytics (`/admin/analytics`) -- defined in nav but no page file
+  8. Settings (`/admin/settings`) -- defined in nav but no page file
 
 ### Admin Dashboard
 - **Route:** `/admin`
-- **Layout:** Sidebar (admin-specific)
-- **Description:** Operator dashboard showing platform-wide stats: total facilities/vendors/users, MRR, active contracts. Recent activity feed and pending actions (new facility setup, trial expiration, failed payments).
-- **Key Components:** Card, Badge, Button
-- **Data Sources:** Mock admin data
-- **User Actions:** View stats, navigate to manage facilities/vendors
+- **Description:** Platform-wide stats (facilities, vendors, users, MRR), pending actions, quick actions, recent activity feed, platform performance metrics
 
 ### Admin Facilities
 - **Route:** `/admin/facilities`
-- **Layout:** Sidebar
-- **Description:** CRUD table for managing facility tenants. Shows name, location, status, user count, contract count. Create/edit/delete with dialogs.
-- **Key Components:** Table, Dialog, Input, DropdownMenu
-- **Data Sources:** Mock facility data
-- **User Actions:** Add, edit, delete, search facilities
-
-### Admin Vendors
-- **Route:** `/admin/vendors`
-- **Layout:** Sidebar
-- **Description:** CRUD table for managing vendor tenants. Shows name, category, status, rep count, contract count.
-- **Key Components:** Table, Dialog, Input, DropdownMenu
-- **Data Sources:** Mock vendor data
-- **User Actions:** Add, edit, delete, search vendors
-
-### Admin Users
-- **Route:** `/admin/users`
-- **Layout:** Sidebar
-- **Description:** User management with tabs and role-based filtering. CRUD for users with role assignment (facility, vendor, admin). Bulk operations.
-- **Key Components:** Table, Tabs, Dialog, Checkbox, Avatar, DropdownMenu
-- **Data Sources:** Mock user data
-- **User Actions:** Add, edit, delete users, assign roles, bulk actions
-
-### Admin Billing
-- **Route:** `/admin/billing`
-- **Layout:** Sidebar
-- **Description:** Platform billing dashboard with invoice history, subscription management, MRR tracking. Shows paid/pending/overdue invoices.
-- **Key Components:** Table, Card, Badge
-- **Data Sources:** Mock billing data
-- **User Actions:** View invoices, download receipts
+- **Description:** Manage facilities. CRUD operations, status management.
+- **Components:** Table, add/edit dialog
 
 ### Admin Payor Contracts
 - **Route:** `/admin/payor-contracts`
-- **Layout:** Sidebar
-- **Description:** Manage payor (insurance) contracts with CPT code rate schedules, grouper rates, multi-procedure rules, and implant passthrough settings. Upload payor contract PDFs for extraction.
-- **Key Components:** Table, Tabs, Dialog, Select
-- **Data Sources:** payor-contract-store, facility-identity-store
-- **User Actions:** Upload payor contracts, manage rates, assign to facilities
+- **Description:** Manage payor contracts (Anthem, BCBS, etc.) with CPT code rates, grouper rates, multi-procedure rules, implant passthrough settings
+
+### Admin Vendors
+- **Route:** `/admin/vendors`
+- **Description:** Manage vendors. CRUD operations, activation/deactivation.
+
+### Admin Users
+- **Route:** `/admin/users`
+- **Description:** User management with role assignment, facility/vendor association, bulk operations
+
+### Admin Billing
+- **Route:** `/admin/billing`
+- **Description:** Subscription management, invoice history, MRR tracking
 
 ---
 
+### API Routes
+- `/api/ai-agent` -- AI chat with tool calling (contract analysis, market share)
+- `/api/parse-contract-pdf` -- AI extraction of contract terms from PDF
+- `/api/parse-cog-csv` -- Parse COG CSV files
+- `/api/match-supplies` -- AI supply matching for case costing
+- `/api/analyze-deal` -- AI deal analysis for proposals
+- `/api/extract-payor-contract` -- Extract payor contract rates from PDF
+- `/api/cog-parser` -- COG data parsing
+- `/api/import/contract-pdf` -- Import contract from PDF
+- `/api/import/cog-csv` -- Import COG from CSV
+
 ### Utility Pages
-- **Route:** `/clear-cog` -- Clears all COG data from IndexedDB and localStorage
-- **Route:** `/force-clear` -- Force clears all application data
+- `/force-clear` -- Force clear localStorage/IndexedDB
+- `/clear-cog` -- Clear COG data from IndexedDB
+
+---
 
 ## Data Models
 
-### Profile
-- **Fields:** id (string), email (string), full_name (string|null), role (UserRole), facility_id (string|null), vendor_id (string|null), created_at (string), updated_at (string)
-- **Relationships:** belongs to Facility or Vendor
-- **Enums:** role: facility | vendor | admin
-
-### Facility
-- **Fields:** id (UUID), name (string), type (string: hospital/asc/clinic/surgery_center), address/city/state/zip (string|null), health_system_id (UUID|null), status (string: active/inactive), source (string), beds (number|null), created_at (timestamp), updated_at (timestamp)
-- **Relationships:** belongs to HealthSystem, has many Contracts, has many Users
-
-### HealthSystem
-- **Fields:** id (UUID), name (string), code (string), headquarters (string), logo_url (string|null), primary_contact_email (string|null), phone (string|null), website (string|null), created_at (timestamp)
-- **Relationships:** has many Facilities
-
-### Vendor
-- **Fields:** id (UUID), name (string), code (string|null), display_name (string|null), division (string|null), parent_vendor_id (string|null), source (string: manual/contract/pricing_file/cog), contact_name/email/phone (string|null), website (string|null), address (string|null), status (string: active/inactive), tier (string: standard/premium), is_active (boolean), created_at (timestamp), updated_at (timestamp)
-- **Relationships:** has many Contracts, has many VendorDivisions
-- **Notes:** Vendor name normalization with alias matching
-
-### VendorCompany (identity store)
-- **Fields:** id (string), name (string), logo (string|null), divisions (VendorDivision[])
-- **Relationships:** has many VendorDivisions
-
-### VendorDivision
-- **Fields:** id (string), name (string), code (string), categories (string[])
-- **Relationships:** belongs to VendorCompany
-
 ### Contract
-- **Fields:** id (UUID), contract_number (string|null), name (string), vendor_id (UUID), vendor_name (string), facility_id (UUID|null), contract_type (string), status (string), effective_date (date), expiration_date (date), auto_renewal (boolean), termination_notice_days (integer), total_value (decimal), annual_value (decimal), description (string|null), notes (string|null), gpo_affiliation (string|null), performance_period (string), rebate_pay_period (string), is_grouped (boolean), is_multi_facility (boolean), tie_in_capital_contract_id (string|null), created_at (timestamp), updated_at (timestamp)
-- **Relationships:** belongs to Vendor, belongs to Facility, has many ContractTerms, has many ContractPricingItems, has many ContractDocuments
-- **Enums:** contract_type: usage | capital | service | tie_in | grouped | pricing_only; status: active | expired | expiring | draft | pending; performance_period: monthly | quarterly | semi_annual | annual
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Unique identifier |
+| name | string | yes | Contract display name |
+| contractId | string | yes | External contract ID |
+| vendor | string | yes | Vendor name |
+| vendorId | string | yes | Vendor reference |
+| type | 'usage' \| 'pricing_only' \| 'capital' \| 'tie_in' \| 'grouped' | yes | Contract type |
+| status | 'active' \| 'expiring' \| 'expired' \| 'pending' | yes | Current status |
+| effectiveDate | string (date) | yes | Start date |
+| expirationDate | string (date) | yes | End date |
+| totalValue | number | yes | Total contract value |
+| rebateEarned | number | yes | Rebates earned to date |
+| currentSpend | number | yes | Current period spend |
+| rebatesCollected | number | yes | Rebates collected |
+| currentTier | number | yes | Current rebate tier |
+| maxTier | number | yes | Max available tier |
+| marketShareCommitment | number | yes | Market share % target |
+| currentMarketShare | number | yes | Current market share % |
+| complianceRate | number | yes | Compliance rate % |
+| productCategory | string | yes | Product category name |
+| commitmentThreshold | number | yes | Min spend for eligibility |
+| pricingData | PricingItem[] | no | Line-item pricing |
+| rebateTiers | RebateTier[] | no | Tier structure |
+| terms | ContractTerm[] | no | Contract terms |
+| documents | ContractDocument[] | no | Uploaded documents |
+| facilities | string[] | no | Associated facilities |
 
-### ContractTerm
-- **Fields:** id (UUID), contract_id (UUID), term_name (string), term_type (string), baseline_type (string), evaluation_period (string), payment_timing (string), applies_to (string), effective_start (string), effective_end (string), volume_type (string|null), spend_baseline (number|null), volume_baseline (number|null), growth_baseline_percent (number|null), desired_market_share (number|null), created_at (timestamp), updated_at (timestamp)
-- **Relationships:** belongs to Contract, has many ContractTiers, has many ContractTermProducts, has many ContractTermProcedures
-- **Enums:** term_type: spend_rebate | volume_rebate | price_reduction | market_share | market_share_price_reduction | capitated_price_reduction | capitated_pricing_rebate | po_rebate | carve_out | payment_rebate | growth_rebate | compliance_rebate | fixed_fee | locked_pricing
+### COGRecord
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Unique identifier |
+| poNumber | string | yes | Purchase order number |
+| poDate | string (date) | yes | PO date |
+| inventoryNumber | string | yes | Facility inventory number |
+| inventoryDescription | string | yes | Product description |
+| vendorItemNo | string | yes | Vendor catalog number (key linking field) |
+| vendor | string | yes | Vendor name |
+| uom | string | yes | Unit of measure |
+| quantity | number | yes | Quantity ordered |
+| unitCost | number | yes | Per-unit cost |
+| extendedPrice | number | yes | Total line cost |
+| hasContractPricing | boolean | yes | Whether contract price found |
+| contractPrice | number | no | Contract price if matched |
+| savings | number | yes | Savings vs. contract price |
+| surgeonId | string | no | Linked surgeon |
+| surgeonName | string | no | Surgeon name |
+| caseNumber | string | no | Case number link |
+| contractId | string | no | Matched contract |
+| category | string | no | Product category |
+| facility | string | no | Facility name |
 
-### ContractTier
-- **Fields:** id (UUID), term_id (UUID), tier_number (integer), spend_min (decimal), spend_max (decimal|null), volume_min (integer|null), volume_max (integer|null), market_share_min (decimal|null), market_share_max (decimal|null), rebate_type (string), rebate_value (decimal), created_at (timestamp)
-- **Relationships:** belongs to ContractTerm
-- **Enums:** rebate_type: percent_of_spend | fixed_rebate | fixed_rebate_per_unit | per_procedure_rebate
-
-### ContractPricing (pricing items)
-- **Fields:** id (UUID), contract_id (UUID), vendor_item_no (string), description (string|null), category (string|null), unit_price (decimal), uom (string), list_price (decimal|null), discount_percentage (decimal|null), effective_date (date|null), expiration_date (date|null), created_at (timestamp)
-- **Relationships:** belongs to Contract
-
-### ContractDocument
-- **Fields:** id (string), name (string), type (string: main/amendment/addendum/exhibit/pricing), upload_date (string), effective_date (string|null), size (number|null), url (string|null)
-- **Relationships:** belongs to Contract
-
-### PendingContract (vendor submissions)
-- **Fields:** id (string), vendor_name (string), vendor_id (string), facility_name (string), facility_id (string), contract_name (string), contract_type (string), start_date (string), end_date (string), terms (string), status (string), submitted_at (string), reviewed_at (string|null), reviewed_by (string|null), review_notes (string|null), documents (array), pricing_data (object|null), rebate_terms (object|null)
-- **Enums:** status: draft | pending | approved | rejected | revision_requested | withdrawn; contract_type: Usage | Tie-In | Capital | Service | Pricing
-
-### ContractChangeProposal
-- **Fields:** id (string), contract_id (string), contract_name (string), vendor_name/id (string), facility_name/id (string), proposal_type (string), status (string), submitted_at (string), reviewed_at (string|null), reviewed_by (string|null), review_notes (string|null), vendor_message (string|null), changes (TermChange[])
-- **Enums:** proposal_type: term_change | new_term | remove_term | contract_edit; status: pending | approved | rejected | revision_requested
-
-### COGData (Cost of Goods)
-- **Fields:** id (string), facility_id (string), vendor_id (string|null), vendor (string), inventory_number (string), inventory_description (string), vendor_item_no (string|null), manufacturer_no (string|null), unit_cost (number), extended_price (number), quantity (number), transaction_date (string), category (string|null), effective_date (string), created_by (string|null), created_at (string), updated_at (string)
-- **Relationships:** belongs to Facility, belongs to Vendor
-- **Storage:** IndexedDB for large datasets (localStorage has 5MB limit)
-
-### PricingFile
-- **Fields:** id (string), vendor_id (string), facility_id (string), vendor_item_no (string), manufacturer_no (string|null), product_description (string), list_price (number|null), contract_price (number|null), effective_date (string), expiration_date (string|null), category (string|null), uom (string), created_at (string), updated_at (string)
-- **Relationships:** belongs to Vendor, belongs to Facility
-
-### PurchaseOrder
-- **Fields:** id (string), po_id (string), facility_id (string), vendor_id (string), order_date (string), total_po_cost (number|null), status (string), is_off_contract (boolean), line_items (POLineItem[]), created_at (string)
-- **Enums:** status: draft | pending | approved | sent | completed | cancelled
-
-### POLineItem
-- **Fields:** id (string), purchase_order_id (string), sku (string), description (string), vendor_item_no (string|null), quantity (number), unit_price (number), extended_price (number), uom (string), is_off_contract (boolean), contract_id (string|null), created_at (string)
-
-### Invoice
-- **Fields:** id (string), invoice_number (string), facility_id (string), vendor_id (string), purchase_order_id (string|null), invoice_date (string), total_invoice_cost (number|null), line_items (InvoiceLineItem[]), created_at (string)
-
-### InvoiceLineItem
-- **Fields:** id (string), invoice_id (string), inventory_description (string), vendor_item_no (string|null), invoice_price (number), invoice_quantity (number), total_line_cost (number), created_at (string)
-
-### Alert
-- **Fields:** id (string), type (AlertType), title (string), message (string), description (string|null), status (AlertStatus), priority (AlertPriority), created_at (Date), metadata (Record|null), action_link (string|null)
-- **Enums:** type: off_contract | expiring_contract | tier_threshold | rebate_due | pricing_error | contract_expiry | compliance; status: new | read | resolved | dismissed; priority: high | medium | low
-
-### Case (surgical)
-- **Fields:** id (string), case_id (string), facility_id (string), surgeon_name (string|null), surgeon_id (string), patient_dob (string|null), date_of_surgery (string), time_in_or (string|null), time_out_or (string|null), procedure_code (string), total_spend (number), total_reimbursement (number), created_at (string)
-- **Relationships:** has many CaseProcedures, has many CaseSupplies
-
-### CaseProcedure
-- **Fields:** id (string), case_id (string), cpt_code (string), procedure_description (string|null), created_at (string)
-
-### CaseSupply
-- **Fields:** id (string), case_id (string), material_name (string), vendor_item_no (string|null), used_cost (number), quantity (number), created_at (string)
+### CaseRecord
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Unique identifier |
+| caseId | string | yes | Primary key linking all data |
+| caseDate | string (date) | yes | Date of surgery |
+| surgeonId | string | yes | Surgeon identifier |
+| surgeonName | string | yes | Surgeon name |
+| procedureCode | string | yes | CPT code |
+| procedureDescription | string | yes | Procedure description |
+| patientType | 'Inpatient' \| 'Outpatient' \| 'Observation' | yes | Patient type |
+| facilityId | string | yes | Facility identifier |
+| facilityName | string | yes | Facility name |
+| supplies | CaseSupply[] | yes | Clinical supplies used |
+| totalSupplyCost | number | yes | Total supply cost (clinical) |
+| purchaseData | CasePurchase[] | yes | Purchasing system data |
+| totalPurchaseCost | number | yes | Total purchase cost (affects rebates) |
+| onContractSpend | number | yes | On-contract portion |
+| offContractSpend | number | yes | Off-contract portion |
+| rebateContribution | number | yes | Rebate from purchasing only |
+| payorMix | PayorMix[] | yes | Payor breakdown |
+| totalReimbursement | number | yes | Total reimbursement |
+| margin | number | yes | Reimbursement - purchase cost |
+| marginPercent | number | yes | Margin percentage |
 
 ### PayorContract
-- **Fields:** id (string), payor_name (string), payor_type (string), facility_id (string), facility_name (string), contract_number (string), effective_date (string), expiration_date (string), status (string), cpt_rates (PayorContractRate[]), grouper_rates (PayorContractGrouper[]), multi_procedure_rule (object), implant_passthrough (boolean), implant_markup (number), uploaded_at (string), uploaded_by (string), file_name (string), notes (string)
-- **Enums:** payor_type: commercial | medicare_advantage | medicaid_managed | workers_comp
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Unique identifier |
+| payorName | string | yes | Insurance company name |
+| payorType | 'commercial' \| 'medicare_advantage' \| 'medicaid_managed' \| 'workers_comp' | yes | Payor classification |
+| facilityId | string | yes | Facility reference |
+| contractNumber | string | yes | Contract number |
+| effectiveDate / expirationDate | string (date) | yes | Contract period |
+| cptRates | PayorContractRate[] | yes | CPT-specific reimbursement rates |
+| grouperRates | PayorContractGrouper[] | yes | Grouper-based rates |
+| multiProcedureRule | { primary: number, secondary: number } | yes | Multi-procedure discount rules |
+| implantPassthrough | boolean | yes | Whether implants pass through at cost |
+| implantMarkup | number | yes | Markup on implant cost |
 
-### Connection (facility-vendor)
-- **Fields:** id (string), facility_id (string), facility_name (string), vendor_id (string), vendor_name (string), status (ConnectionStatus), invite_type (string), invited_by (string), invited_by_email (string), invited_at (string), responded_at (string|null), expires_at (string), message (string|null)
-- **Enums:** status: pending | accepted | rejected | expired; invite_type: facility_to_vendor | vendor_to_facility
+### PendingContract (Vendor Submission)
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Unique identifier |
+| vendorName | string | yes | Vendor company name |
+| vendorId | string | yes | Vendor reference |
+| facilityName | string | yes | Target facility |
+| facilityId | string | yes | Facility reference |
+| contractName | string | yes | Proposed contract name |
+| contractType | 'Usage' \| 'Tie-In' \| 'Capital' \| 'Service' \| 'Pricing' | yes | Contract type |
+| startDate / endDate | string (date) | yes | Proposed period |
+| terms | string | yes | Term description |
+| status | 'draft' \| 'pending' \| 'approved' \| 'rejected' \| 'revision_requested' \| 'withdrawn' | yes | Submission status |
+| documents | Document[] | yes | Uploaded files |
+| pricingData | PricingData | no | Pricing file data |
+| rebateTerms | RebateTerms | no | Proposed rebate structure |
 
-### ProductBenchmark (vendor)
-- **Fields:** id (string), product_code (string), product_name (string), category (string), national_asp (number), hard_floor (number), target_rate_guide (number|null), target_margin (number), cost_basis (number), gpo_admin_fee (number), market_share_pricing (MarketShareTier[]), volume_pricing (VolumeTier[]), last_updated (string)
+### Vendor
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Unique identifier |
+| name | string | yes | Company name |
+| displayName | string | no | Display name |
+| division | string | no | Division name |
+| parentVendorId | string | no | Parent company link |
+| source | 'manual' \| 'contract' \| 'pricing_file' \| 'cog' | yes | How vendor was added |
+| contactName/Email/Phone | string | no | Contact info |
+| isActive | boolean | yes | Active status |
 
-### ReportSchedule
-- **Fields:** id (string), facility_id (string), report_type (ReportType), frequency (string), day_of_week (number|null), day_of_month (number|null), email_recipients (string[]), is_active (boolean), last_sent_at (string|null), created_at (string), updated_at (string)
-- **Enums:** report_type: contract_performance | rebate_summary | spend_analysis | market_share | case_costing; frequency: daily | weekly | monthly
+### Alert
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Unique identifier |
+| type | AlertType | yes | off_contract, expiring_contract, tier_threshold, rebate_due, pricing_error, contract_expiry, compliance, rebate |
+| title | string | yes | Alert title |
+| message | string | yes | Detail message |
+| status | 'new' \| 'read' \| 'resolved' \| 'dismissed' | yes | Current status |
+| priority | 'high' \| 'medium' \| 'low' | yes | Priority level |
+| createdAt | Date | yes | When created |
+| metadata | Record | no | Extra context data |
+| actionLink | string | no | Link to relevant page |
 
-### FeatureFlags
-- **Fields:** purchase_orders_enabled (boolean), ai_agent_enabled (boolean), vendor_portal_enabled (boolean), advanced_reports_enabled (boolean), case_costing_enabled (boolean)
-- **Storage:** localStorage
+### ContractChangeProposal
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Unique identifier |
+| contractId | string | yes | Target contract |
+| proposalType | 'term_change' \| 'new_term' \| 'remove_term' \| 'contract_edit' | yes | Change type |
+| status | 'pending' \| 'approved' \| 'rejected' \| 'revision_requested' | yes | Review status |
+| changes | TermChange[] | yes | Proposed changes |
+| vendorMessage | string | no | Vendor explanation |
 
-### CreditAccount
-- **Fields:** tier_id (string), monthly_credits (number), used_credits (number), overage_rate (number), rollover_limit (number)
-- **Tiers:** Starter ($99/mo, 500 credits), Professional ($299/mo, 2000 credits), Enterprise ($799/mo, 10000 credits)
+### Additional Entities
+- **Facility** (id, name, type, address, status, source, npi, taxId)
+- **Category** (id, name, parentId, source, vendorId)
+- **Connection** (facility-vendor link with invite workflow)
+- **VendorIdentity** (company, division, user context for vendor portal)
+- **VendorRoleConfig** (admin/manager/rep permissions)
+- **ProductBenchmark** (vendor pricing floors, target margins, GPO fees, market share tiers)
+- **FeatureFlags** (purchaseOrders, aiAgent, vendorPortal, advancedReports, caseCosting)
+- **CreditTier** (AI credit consumption system with tier pricing)
+
+---
+
+## Enums & Type Unions
+
+| Type | Values |
+|------|--------|
+| ContractType | usage, pricing_only, capital, tie_in, grouped |
+| ContractStatus | active, expiring, expired, pending, draft |
+| TermType | spend_rebate, volume_rebate, price_reduction, market_share, market_share_price_reduction, capitated_price_reduction, capitated_pricing_rebate, po_rebate, carve_out, payment_rebate |
+| VolumeType | product_category, catalog_cap_based, procedure_code |
+| RebateType | percent_of_spend, fixed_rebate, fixed_rebate_per_unit, per_procedure_rebate |
+| BaselineType | spend_based, volume_based, growth_based |
+| AlertType | off_contract, expiring_contract, tier_threshold, rebate_due, pricing_error, contract_expiry, compliance, rebate |
+| AlertStatus | new, read, resolved, dismissed |
+| PerformancePeriod | monthly, quarterly, semi_annual, annual |
+| UserRole | facility, vendor, admin |
+| VendorRole | admin, manager, rep |
+| PayorType | commercial, medicare_advantage, medicaid_managed, workers_comp |
+| ReportType | contract_performance, rebate_summary, spend_analysis, market_share, case_costing |
+| ConnectionStatus | pending, accepted, rejected, expired |
+
+---
 
 ## User Flows
 
-### Facility Contract Creation (AI-assisted)
-1. Facility user navigates to Contracts > New Contract
-2. Selects "AI" entry mode
-3. Uploads contract PDF
-4. AI extracts contract name, vendor, type, dates, terms, tier structures
-5. User reviews and edits extracted data
-6. User selects facility assignment (single or multi-facility)
-7. User links pricing file from COG data
-8. User submits contract
-9. Contract appears in contracts list as active
+### 1. Contract Creation (Facility)
+1. Navigate to `/dashboard/contracts/new`
+2. Choose entry mode: AI (PDF extract), Manual, or PDF Upload
+3. For AI mode: upload contract PDF, AI extracts terms via `/api/parse-contract-pdf`
+4. Fill/review: contract name, type, vendor, category, dates, performance period
+5. Enter contract terms (tier structures, rebate types, baselines)
+6. Optionally upload pricing file
+7. Save as draft or submit
 
-### Vendor Contract Submission
-1. Vendor logs in to Vendor Portal
-2. Navigates to Contracts > New Contract
-3. Selects facility/facilities to submit to
-4. Enters contract type, dates, terms with tier structures
-5. Optionally uploads pricing file and contract documents
-6. Submits contract for facility review
-7. Contract appears in vendor's "Pending" tab
-8. Facility reviews, approves/rejects/requests revision
-9. On approval, contract becomes active in both portals
+### 2. Contract Submission (Vendor)
+1. Navigate to `/vendor/contracts/new`
+2. Select target facility/facilities (ScalableFacilitySelector)
+3. Enter contract details: name, type, dates, terms
+4. Upload pricing file with line items
+5. Define rebate tiers
+6. Submit for facility review (status: pending)
+7. Facility approves/rejects/requests revision at `/dashboard/contracts`
 
-### COG Data Import
-1. Facility user navigates to COG Data
-2. Uploads CSV or Excel file
-3. System parses columns, user maps to target fields
-4. Duplicate detection runs, user resolves conflicts
-5. Vendor names are matched/normalized against known vendors
-6. Records are imported to IndexedDB
-7. Contract spend calculations update automatically
+### 3. COG Data Import
+1. Navigate to `/dashboard/cog-data`
+2. Click Upload CSV
+3. System parses CSV, maps columns, detects vendors
+4. Vendor name matcher resolves vendor aliases
+5. Duplicate validator checks for existing records
+6. Records saved to IndexedDB
+7. Pricing data from contracts auto-matched to COG records
 
-### Invoice Validation
-1. Facility user navigates to Invoice Validation
-2. Uploads vendor invoice or enters manually
-3. System matches line items against contract pricing
-4. Discrepancies flagged with variance percentages
-5. User reviews, approves matching items, flags discrepancies
-6. Flagged items can be disputed with vendor
+### 4. Case Costing Analysis
+1. Import clinical data files (case procedures, supply fields, patient fields)
+2. System links clinical supplies to purchasing data via Vendor Item No
+3. Payor contract rates applied for reimbursement calculation
+4. Surgeon scorecards generated (radar chart: payor mix, cost, time, compliance)
+5. Margin analysis: reimbursement - purchase cost
+6. Compare surgeons/procedures at `/dashboard/case-costing/compare`
+7. Generate reports at `/dashboard/case-costing/reports`
 
-### Vendor Prospective Proposal
-1. Vendor navigates to Prospective page
-2. Selects target facility/facilities
-3. Uploads pricing file with proposed prices
-4. System compares proposed prices against COG data (current pricing)
-5. Deal scoring generates radar chart and recommendations
-6. AI analyzes deal and provides negotiation advice
-7. Vendor adjusts pricing and submits proposal
+### 5. Vendor Prospective Proposal
+1. Vendor navigates to `/vendor/prospective`
+2. Build proposal: select facilities, upload pricing file, define terms
+3. System provides deal score analysis
+4. Submit proposal to facility
+5. Facility evaluates at `/dashboard/analysis/prospective`
+6. Facility compares proposed pricing against current COG data
 
-### Rebate Optimization
-1. Facility user navigates to Rebate Optimizer
-2. System loads all contracts with rebate tiers
-3. Current spend is compared against tier thresholds
-4. Optimizer identifies contracts close to next tier
-5. Shows projected additional rebate if threshold is met
-6. User can set spend targets and track progress
+### 6. Invoice Validation
+1. Navigate to `/dashboard/invoice-validation`
+2. Import or create invoices
+3. System compares invoice prices against contract prices
+4. Discrepancies flagged with severity
+5. Dispute workflow for resolution
+
+### 7. Rebate Optimization
+1. Navigate to `/dashboard/rebate-optimizer`
+2. System analyzes current spend vs. tier thresholds
+3. Identifies contracts where small spend increases unlock higher tiers
+4. Prioritizes opportunities by ROI
+5. Tracks progress toward targets
+
+### 8. Alert Management
+1. System generates alerts (off-contract purchases, expiring contracts, tier thresholds)
+2. Alerts appear in bell icon count and alerts page
+3. User can resolve, dismiss, or take action
+4. State persists via localStorage with cross-tab sync
+
+---
 
 ## Feature List
 
-### MVP
-| Feature | Priority | Description |
-|---------|----------|-------------|
-| Dual Portal System | P0 | Separate facility and vendor portals with role-based access |
-| Contract CRUD | P0 | Create, read, update, delete contracts with full term/tier structures |
-| Contract Types | P0 | Usage, Capital, Service, Tie-In, Grouped, Pricing Only |
-| Rebate Tier Management | P0 | Multi-tier rebate structures with spend/volume/market-share baselines |
-| COG Data Import | P0 | CSV/Excel upload with column mapping and vendor name matching |
-| Dashboard Analytics | P0 | Metric cards, charts for spend/rebate/compliance |
-| Alert System | P0 | Off-contract, expiring, tier threshold, rebate due alerts |
-| Authentication | P0 | Auth with email/password, role-based routing |
-| Vendor Contract Submission | P1 | Vendors submit contracts for facility approval workflow |
-| Invoice Validation | P1 | Compare invoiced vs. contracted prices, flag discrepancies |
-| Reports | P1 | Usage, service, tie-in, capital reports with export |
-| Purchase Orders | P1 | PO creation with product search and contract price lookup |
-| Contract Renewals | P1 | Track expiring contracts, renewal windows, notifications |
-| Settings and Team Management | P1 | Profile, notifications, feature flags, team invites |
-| Pricing File Management | P1 | Upload and link pricing files to contracts |
+### MVP Features (Core)
+1. **Contract Management** -- CRUD for contracts with types (usage, capital, service, tie-in, grouped, pricing)
+2. **Contract Term Entry** -- Multi-tier rebate structures with baselines, spend ranges, market share
+3. **COG Data Management** -- CSV import, IndexedDB storage, vendor matching, pricing file linking
+4. **Dashboard Analytics** -- Metrics cards, spend/rebate charts, contract lifecycle overview
+5. **Alert System** -- Off-contract, expiring, tier threshold, rebate due alerts
+6. **Vendor Portal** -- Separate portal for vendors with filtered data access
+7. **Vendor Contract Submission** -- Vendors submit contracts for facility review
+8. **Dual Portal Auth** -- Role-based access (facility vs. vendor) with Supabase
+9. **Reports** -- Usage, Service, Tie-In reports with period data and scheduling
+10. **Settings** -- User profile, notifications, facility management, feature flags
 
-### Future Phases
-| Feature | Priority | Description |
-|---------|----------|-------------|
-| AI Contract PDF Extraction | P2 | AI-powered PDF parsing to auto-extract contract terms |
-| AI Chat Agent | P2 | Conversational AI for contract analysis |
-| AI Deal Analysis | P2 | AI-powered negotiation advice for vendor proposals |
-| AI Supply Matching | P2 | Match surgical supplies to contract pricing via AI |
-| Case Costing | P2 | Surgical case cost analysis with surgeon scorecards |
-| Prospective Analysis | P2 | Capital contract financial analysis with MACRS depreciation |
-| Rebate Optimizer | P2 | AI-assisted spend redistribution to maximize rebates |
-| Contract Scoring | P2 | Multi-dimension contract scoring with radar charts |
-| Market Share Analytics | P2 | Vendor market share tracking with AI category normalization |
-| Vendor Performance Tracking | P2 | Multi-dimension vendor performance metrics |
-| Payor Contract Management | P3 | Insurance/payor contract rates with CPT code schedules |
-| Admin/Operator Portal | P3 | Multi-tenant management, billing, user administration |
-| Credit System | P3 | AI feature credit consumption with tiered pricing |
-| Facility-Vendor Connections | P3 | Invitation system for facility-vendor relationships |
-| Vendor Benchmarking | P3 | Industry benchmark data for pricing negotiation |
-| Report Scheduling | P3 | Automated email delivery of reports |
-| Forecasting | P3 | Linear regression and seasonal decomposition for spend/rebate predictions |
-| Contract Change Proposals | P3 | Vendor proposes term changes, facility approves/rejects |
+### MVP Features (Advanced)
+11. **Case Costing** -- Surgical case analysis with CPT codes, payor rates, margin calculation
+12. **AI PDF Extract** -- Extract contract terms from uploaded PDFs
+13. **AI Chat Agent** -- Natural language contract queries with tool calling
+14. **Prospective Analysis** -- Evaluate vendor proposals with deal scoring
+15. **Invoice Validation** -- Compare invoice vs. contract prices
+16. **Purchase Orders** -- PO creation with product search from COG data
+17. **Rebate Optimizer** -- Identify tier upgrade opportunities
+18. **Contract Renewals** -- Track and manage expiring contracts
+19. **Price Discrepancy Reports** -- Flag and track pricing inconsistencies
+
+### Future Features
+20. **Admin Portal** -- Multi-tenant management (facilities, vendors, users, billing)
+21. **Payor Contract Management** -- CPT rate management for reimbursement analysis
+22. **Vendor Benchmarks** -- Pricing floors, target margins, GPO fee tracking
+23. **Market Share Analysis** -- Category-level market share with AI category merging
+24. **Vendor Performance** -- Radar chart KPIs (delivery, quality, pricing, compliance)
+25. **Connection System** -- Facility-vendor invite and linking
+26. **AI Credits** -- Consumption-based AI feature billing
+27. **Mass Upload** -- Bulk document import with queue processing
+28. **Contract Change Proposals** -- Vendor-initiated term change requests with review workflow
+
+---
 
 ## Authentication & Authorization
 
 ### Auth Provider
-- **Supabase Auth** in v0 prototype (production target: Better Auth with Prisma adapter)
-- Demo mode with cookie-based session bypass (`demo_session=true`)
+- **Supabase Auth** with email/password
+- Demo mode bypass with cookie-based session (`demo_session=true`)
+- Demo credentials: `demo@tydei.com` / `demo123` (facility), `vendor@tydei.com` / `vendor123` (vendor)
 
-### Roles
-1. **facility** -- Access to `/dashboard/*` routes. Full COG data, all contracts, case costing, invoice validation
-2. **vendor** -- Access to `/vendor/*` routes. Filtered view of their own contracts, market share data (no access to full COG)
-3. **admin** -- Access to `/admin/*` routes. Platform-wide management
+### Role System
+| Role | Portal | Access |
+|------|--------|--------|
+| facility | `/dashboard/*` | Full COG, pricing, contracts, case costing, reports |
+| vendor | `/vendor/*` | Own contracts, filtered market share, no competitor pricing |
+| admin | `/admin/*` | All facilities, vendors, users, billing, platform config |
 
-### Vendor Sub-Roles (within vendor portal)
-1. **admin** -- Full access including AI assistant and team management
-2. **manager** -- Most access except AI assistant
-3. **rep** -- Limited to viewing assigned contracts and basic dashboards
+### Vendor Sub-Roles
+| Role | Permissions |
+|------|-------------|
+| admin | All vendor features + team management |
+| manager | View/submit contracts, POs, market share, performance, reports, AI |
+| rep | View dashboard, contracts, POs, alerts only |
 
-### Data Isolation
-- Facility users see all vendor data for their facility
-- Vendor users only see their own data filtered by vendor identity
-- Admin users see platform-wide aggregated data
-- Multi-facility users can switch active facility context
+### Middleware
+- Supabase session refresh middleware on all routes
+- Dashboard layout: server-side auth check, redirect to login if unauthenticated
+- Vendor layout: redirect non-vendors to dashboard
 
-### Authorization Pattern
-- Middleware for session validation on all routes except static assets
-- Layout-level role checks with redirects (vendor to vendor portal, facility to dashboard)
-- VendorRoleGuard component for vendor sub-role permission checks
-- Feature flags for gating optional features per tenant
+---
 
 ## Integrations
 
-### AI / LLM
-- **Vercel AI SDK** (`ai` package, `@ai-sdk/react`) for streaming chat in v0 prototype
-- **OpenAI GPT-4o-mini** via `openai/gpt-4o-mini` model identifier
-- Uses `streamText`, `generateText`, `tool` from AI SDK
-- Structured output via `Output.object` with Zod schemas
-- Tools for: contract performance analysis, market share analysis, prospective rebate calculation, spend optimization
-- AI contract PDF extraction with structured Zod schema for terms, tiers, facilities
-- AI deal analysis for vendor proposals
-- AI supply matching for case costing
+| Integration | Purpose | Status |
+|-------------|---------|--------|
+| Supabase | Auth, database (v0 uses localStorage) | Configured but optional |
+| Vercel AI SDK | AI chat, tool calling | Active |
+| OpenAI (via AI SDK) | PDF extraction, deal analysis, contract descriptions | Active |
+| Vercel Analytics | Page view tracking | Active |
+| IndexedDB | Large dataset storage (COG records) | Active |
+| localStorage | State persistence for stores | Active |
+| Recharts | Charts (bar, line, pie, radar, area, composed) | Active |
+| react-dropzone | File upload drag-and-drop | Active |
+| date-fns | Date formatting and calculations | Active |
+| sonner | Toast notifications | Active |
+| zustand | State management (payor contracts, facilities) | Active |
 
-### File Processing
-- **xlsx** library for Excel/CSV parsing (server-side in API routes)
-- Client-side CSV parsing for COG data import
-- PDF processing via AI extraction (no raw PDF parsing library)
-- File upload via drag-and-drop (react-dropzone)
-
-### Data Storage (v0 prototype)
-- **Supabase** (Postgres) for auth and planned backend (SQL schemas exist but mostly unused)
-- **localStorage** for most state (contracts, vendors, facilities, settings, alerts)
-- **IndexedDB** for COG data (large datasets exceeding localStorage 5MB limit)
-- **Zustand** for payor-contract-store and facility-identity-store (with persist middleware)
-- Custom event-based reactivity (`window.dispatchEvent`) for cross-component state sync
-
-### Charts
-- **Recharts** for all data visualization (BarChart, LineChart, PieChart, RadarChart, AreaChart, ComposedChart)
-
-### Forecasting
-- Custom linear regression and seasonal decomposition utility (`lib/forecasting.ts`)
+---
 
 ## Theme & Design Preferences
 
-### Vibe
-Professional healthcare SaaS with a modern, Vercel-inspired dark mode. Clean surfaces with subtle gradients and glass morphism effects. Data-dense but well-organized with card-based layouts and comprehensive use of Recharts for visualization.
+### Color System (oklch)
+- **Primary (Light):** Deep teal `oklch(0.45 0.12 195)` -- trustworthy healthcare feel
+- **Primary (Dark):** Bright teal `oklch(0.72 0.16 175)`
+- **Accent (Light):** Vibrant blue `oklch(0.58 0.18 255)`
+- **Accent (Dark):** Electric blue `oklch(0.68 0.18 250)`
+- **Background (Light):** Near white `oklch(0.99 0.002 250)`
+- **Background (Dark):** Deep navy `oklch(0.12 0.01 250)`
+- **Sidebar:** Slate dark `oklch(0.16 0.015 250)` with teal accents
+- **Semantic:** success (green), warning (amber), info (blue), destructive (red)
+- **Chart palette:** 8 distinct colors for data visualization
 
-### Colors
-- **Primary:** Deep teal (light: oklch 0.45 0.12 195, dark: oklch 0.72 0.16 175) -- trustworthy healthcare feel
-- **Accent:** Vibrant blue (light: oklch 0.58 0.18 255, dark: oklch 0.68 0.18 250)
-- **Background:** Near-white (light) / very dark blue-gray (dark: oklch 0.12 0.01 250)
-- **Card:** White (light) / slightly elevated dark (dark: oklch 0.155 0.012 250)
-- **Sidebar:** Slate dark (oklch 0.16 0.015 250) in light mode, even darker (oklch 0.1 0.01 250) in dark
-- **Destructive:** Red-orange (oklch 0.55-0.58 0.22 25)
-- **Semantic:** Success green, warning amber, info blue
-- **Charts:** 8-color palette (teal, blue, amber, orange, purple, cyan, yellow, indigo)
+### Design Tokens
+- **Border radius:** `0.625rem` (10px)
+- **Font:** Inter (variable, sans-serif)
+- **Dark mode:** System preference with manual toggle
+- **Sidebar:** Always dark (independent of page theme)
 
-### Patterns
-- Gradient text utility (`.gradient-text` with primary-to-accent gradient)
-- Glass morphism cards in dark mode (`.glass-card`)
-- Primary glow effect in dark mode (`.glow-primary`)
-- Animated gradient borders (`.gradient-border`)
-- Custom dark mode scrollbars
-- Theme transition animations (0.2s ease)
-- `--radius: 0.625rem` (10px) base border radius
+### Component Library
+- **shadcn/ui** components throughout
+- Custom Field/FieldGroup/FieldLabel components
+- Custom Empty state component
+- Sonner for toasts (top-right, rich colors)
 
-### Typography
-- **Font:** Inter (sans-serif), Geist Mono (monospace)
-- Font feature settings: `rlig` and `calt` ligatures
-
-### Component Style
-- shadcn/ui "new-york" style
-- Lucide icons throughout
-- Sonner toast notifications (top-right, rich colors)
-- next-themes for light/dark/system toggle
+---
 
 ## Navigation Structure
 
-### Facility Sidebar (DashboardShell)
-1. Dashboard
-2. Contracts
-3. Renewals
-4. Rebate Optimizer
-5. Analysis
-6. COG Data
-7. Case Costing (feature flag: caseCostingEnabled)
-8. Purchase Orders (feature flag: purchaseOrdersEnabled)
-9. Invoice Validation
-10. Reports
-11. Alerts (with unread count badge)
-12. AI Agent (feature flag: aiAgentEnabled)
-13. Settings
+```
+/                           -- Landing page (public)
+/auth/login                 -- Login (public)
+/auth/sign-up               -- Sign up (public)
+/auth/sign-up-success       -- Success (public)
+/auth/error                 -- Error (public)
 
-### Vendor Sidebar (VendorShell)
-1. Dashboard
-2. My Contracts
-3. Renewals
-4. Prospective
-5. Market Share
-6. Performance
-7. Purchase Orders (permission: viewPurchaseOrders)
-8. Invoices (permission: viewPurchaseOrders)
-9. Alerts (with unread count badge)
-10. Reports
-11. AI Assistant (permission: useAiAssistant)
-12. Settings (permission: manageTeam)
+/dashboard                  -- Facility dashboard (authenticated, facility role)
+  /contracts                -- Contract list
+    /new                    -- New contract
+    /[id]                   -- Contract detail
+    /[id]/edit              -- Edit contract
+    /[id]/terms             -- Terms management
+    /[id]/score             -- AI scoring
+  /contract-renewals        -- Renewal management
+  /rebate-optimizer         -- Rebate optimization
+  /analysis                 -- Financial analysis
+    /prospective            -- Proposal evaluation
+  /cog-data                 -- COG data management
+  /case-costing             -- Case cost analysis
+    /compare                -- Surgeon comparison
+    /reports                -- Case costing reports
+  /purchase-orders          -- PO management
+  /invoice-validation       -- Invoice vs. contract
+  /reports                  -- Contract reports
+    /price-discrepancy      -- Price discrepancy
+  /alerts                   -- Alert management
+    /[id]                   -- Alert detail
+  /ai-agent                 -- AI assistant
+  /settings                 -- Settings
 
-### Admin Sidebar
-1. Dashboard
-2. Facilities
-3. Payor Contracts
-4. Vendors
-5. Users
-6. Billing
-7. Analytics (no page implemented)
-8. Settings (no page implemented)
+/vendor                     -- Vendor dashboard (authenticated, vendor role)
+  /contracts                -- Vendor contracts
+    /new                    -- Submit contract
+    /[id]                   -- Contract detail
+    /[id]/edit              -- Edit contract
+    /pending/[id]/edit      -- Edit pending revision
+  /renewals                 -- Vendor renewals
+  /prospective              -- Proposal builder
+  /market-share             -- Market share analysis
+  /performance              -- Performance dashboard
+  /purchase-orders          -- Vendor POs
+  /invoices                 -- Vendor invoices
+  /alerts                   -- Vendor alerts
+  /reports                  -- Vendor reports
+  /ai-agent                 -- Vendor AI assistant
+  /settings                 -- Vendor settings
 
-### Header
-- Both portals: Logo, theme toggle, user avatar dropdown (profile, settings, sign out)
-- Vendor portal: Division/company selector, role indicator badge
-- Facility portal: Health system/facility selector, mass upload button, global search
+/admin                      -- Admin dashboard
+  /facilities               -- Facility management
+  /payor-contracts          -- Payor contract management
+  /vendors                  -- Vendor management
+  /users                    -- User management
+  /billing                  -- Billing management
+```
 
-## Open Questions
+---
 
-1. **Database Backend:** The prototype uses localStorage/IndexedDB for all data. The Supabase SQL schemas exist but are largely disconnected from the UI. The real build uses TanStack Start with Prisma (per CLAUDE.md), which is already partially built.
+## Production Gap Analysis
 
-2. **Multi-Tenancy Model:** The admin portal suggests SaaS multi-tenancy, but the data isolation model between facilities, health systems, and vendors needs formal specification. How are vendor users scoped to specific facilities? How does a health-system-level user see aggregated data?
+Comparing v0 prototype at `/Users/vickkumar/Downloads/b_FtKM0pV2dZE-1775131904894/` against production at `/Users/vickkumar/code/tydei-next/`.
 
-3. **Vendor Portal Access Control:** How do vendors get invited/onboarded? The connection-store has an invitation system, but the actual vendor sign-up flow and approval process is unclear.
+| Feature | v0 Status | Production Status | Gap | Priority |
+|---------|-----------|-------------------|-----|----------|
+| **Landing Page (Marketing)** | COMPLETE | COMPLETE | None -- production has componentized version (hero, features, value-props, capabilities, CTA, footer) | -- |
+| **Auth (Login/SignUp)** | COMPLETE | COMPLETE | Production adds forgot-password, reset-password, componentized forms, auth-card wrapper | -- |
+| **Dashboard Layout (Shell)** | COMPLETE | COMPLETE | Production has PortalShell (shared), SidebarNav, AlertBell, CommandSearch, EntitySelector, UserMenu as separate components | -- |
+| **Dashboard Home** | COMPLETE | COMPLETE | Production componentized: DashboardClient, DashboardStats, DashboardFilters, spend charts (vendor, category, total), RecentAlerts, RecentContracts | -- |
+| **Contracts List** | COMPLETE | COMPLETE | Production has ContractColumns, ContractFilters, ContractsListClient, PendingContractsTab, ProposalReviewList | -- |
+| **New Contract** | COMPLETE | COMPLETE | Production has ContractForm, ContractFormReview, NewContractClient, AI extract (AiExtractDialog, AiExtractReview), PricingColumnMapper, DocumentUpload | -- |
+| **Contract Detail** | PARTIAL (placeholder) | COMPLETE | Production has ContractDetailClient, ContractDetailOverview, ContractDocumentsList, ContractTermsDisplay | P1 |
+| **Contract Edit** | COMPLETE | COMPLETE | Production has EditContractClient | -- |
+| **Contract Score** | COMPLETE | COMPLETE | Production has AiScorePage, ContractScoreClient | -- |
+| **Contract Terms Entry** | COMPLETE | COMPLETE | Production has ContractTermsEntry, ContractTierRow | -- |
+| **COG Data** | COMPLETE | COMPLETE | Production has CogDataClient, CogImportDialog, CogColumnMapper, CogImportPreview, CogRecordsTable, CogUploadHistory, DuplicateValidator, VendorNameMatcher, CogManualEntry, PricingFilesTable, PricingImportDialog, FileDropzone | -- |
+| **Case Costing** | COMPLETE | COMPLETE | Production has CaseCostingClient, CaseColumns, CaseTable, CaseDetail, CaseImportDialog, SurgeonScorecard, SurgeonScorecardsGrid, SurgeonComparisonChart, CostDistributionChart, CptAnalysisTable, PayorContractsManager, AiSupplyMatch | -- |
+| **Case Costing Compare** | COMPLETE | COMPLETE | Production page exists | -- |
+| **Case Costing Reports** | COMPLETE | COMPLETE | Production page exists | -- |
+| **Purchase Orders** | COMPLETE | COMPLETE | Production has PO list, detail, create (new/), form components (OrderHeader, LineItemsTable, ProductAddMethods, PatientBillingInfo, OrderTotalAndNotes, DialogFooterActions), PoColumns, PoCreateForm, PoDetail, PoLineItemBuilder | -- |
+| **Invoice Validation** | COMPLETE | COMPLETE | Production has InvoiceValidationClient, InvoiceValidationTable, InvoiceColumns, InvoiceImportDialog, DisputeDialog, detail page `/[id]` | -- |
+| **Contract Renewals** | COMPLETE | COMPLETE | Production at `/dashboard/renewals` (slightly different path), has RenewalsClient, RenewalSummaryCard, RenewalTimeline, RenewalInitiateDialog | -- |
+| **Rebate Optimizer** | COMPLETE | COMPLETE | Production has OptimizerClient, OpportunityCard, OpportunityList, OptimizerChart, SpendTargetDialog | -- |
+| **Analysis (Financial)** | COMPLETE | COMPLETE | Production has AnalysisClient with capital analysis tabs (UploadTab, ContractInputsTab, FinancialAnalysisTab, ProjectionsTab, SummaryReportTab), DepreciationCalculator, DepreciationChart, PriceProjectionChart, SpendTrendChart | -- |
+| **Prospective Analysis (Facility)** | COMPLETE | COMPLETE | Production has ProspectiveClient with sub-components: ProposalUploadTab, ProposalListTab, ManualEntryForm, AnalysisOverviewTab, PricingComparisonTab, DealScorePanel, ProposalComparisonTable | -- |
+| **Reports** | COMPLETE | COMPLETE | Production has ReportsClient with sections (OverviewTab, DataReportTabContent, CalculationAuditTab, ReportsHeader, ReportFilters, QuickAccessCards, MetricCard, ScheduleReportDialog, ScheduledReportsCard), ReportColumns, ReportPeriodTable, ReportTrendChart, ReportExportButton, ScheduleFormDialog, ScheduleTable | -- |
+| **Price Discrepancy Reports** | COMPLETE | COMPLETE | Production has PriceDiscrepancyTable | -- |
+| **Alerts** | COMPLETE | COMPLETE | Production has AlertCard, AlertDetailCard, AlertsList (shared components), both facility and vendor alerts | -- |
+| **Alert Detail** | COMPLETE | COMPLETE | Both have `/alerts/[id]` | -- |
+| **AI Agent (Facility)** | COMPLETE | COMPLETE | Production has AiAgentClient (facility), ChatInterface, ChatMessage, CreditIndicator, CreditUsageCard, SuggestedQuestions (shared components) | -- |
+| **Settings** | COMPLETE | COMPLETE | Production has SettingsClient with tabs: ProfileTab, NotificationsTab, FacilitiesTab, MembersTab, BillingTab, FeaturesTab, AiCreditsTab, ConnectionsTab, AddonsTab. Has ProfileForm, NotificationSettings, FeatureFlagsPanel | -- |
+| **Vendor Dashboard** | COMPLETE | COMPLETE | Production has VendorDashboardClient, VendorStats, VendorSpendChart, VendorMarketShareChart, VendorContractStatus, VendorRecentContracts | -- |
+| **Vendor Contracts** | COMPLETE | COMPLETE | Production has VendorContractList, VendorContractColumns, VendorContractOverview, VendorContractSubmission with sub-components (BasicInformationCard, ContractDatesCard, ContractTermsCard, EntryModeTabs, FinancialDetailsCard, GroupContractSettingsCard, SubmissionSidebar) | -- |
+| **Vendor Contract New** | COMPLETE | COMPLETE | Production has submission form components | -- |
+| **Vendor Contract Detail** | COMPLETE | COMPLETE | Production has VendorContractOverview | -- |
+| **Vendor Prospective** | COMPLETE | COMPLETE | Production has ProposalBuilder with sub-components (ProposalHeader, FacilitySelector, ContractParameters, ContractTerms, ProductsSection, ProposalActions, AiDealNotes), DealScoreView | -- |
+| **Vendor Market Share** | COMPLETE | COMPLETE | Production has MarketShareClient, MarketShareCharts | -- |
+| **Vendor Performance** | COMPLETE | COMPLETE | Production has PerformanceClient, PerformanceDashboard, PerformanceRadar | -- |
+| **Vendor Renewals** | COMPLETE | COMPLETE | Production has VendorRenewalsClient, VendorRenewalPipeline | -- |
+| **Vendor Purchase Orders** | COMPLETE | COMPLETE | Production has PurchaseOrdersClient (vendor), PoCreateDialog, PoFilterBar, PoStatsCards, PoTable, PoViewDialog | -- |
+| **Vendor Invoices** | COMPLETE | COMPLETE | Production has VendorInvoiceList | -- |
+| **Vendor Alerts** | COMPLETE | COMPLETE | Production uses shared AlertsList component | -- |
+| **Vendor Reports** | COMPLETE | COMPLETE | Production has ReportsClient (vendor) | -- |
+| **Vendor AI Agent** | COMPLETE | COMPLETE | Production has AiAgentClient (vendor) | -- |
+| **Vendor Settings** | COMPLETE | COMPLETE | Production has VendorSettingsClient, VendorProfileForm, ConnectionManager | -- |
+| **Admin Dashboard** | COMPLETE | COMPLETE | Production at `/admin/dashboard` (different path), has AdminDashboardClient, AdminStats, PendingActions, ActivityFeed, MrrChart | -- |
+| **Admin Facilities** | COMPLETE | COMPLETE | Production has FacilityTable, FacilityColumns, FacilityFormDialog | -- |
+| **Admin Payor Contracts** | COMPLETE | COMPLETE | Production has PayorContractTable, PayorRateEditor, PayorGrouperEditor | -- |
+| **Admin Vendors** | COMPLETE | COMPLETE | Production has VendorTable, VendorColumns | -- |
+| **Admin Users** | COMPLETE | COMPLETE | Production has UserTable, UserColumns | -- |
+| **Admin Billing** | COMPLETE | COMPLETE | Production has BillingClient, BillingOverview, InvoiceTable | -- |
+| **Vendor Pending Contract Edit** | COMPLETE | MISSING | v0 has `/vendor/contracts/pending/[id]/edit`; production does not have this route | P2 |
+| **Contract Change Proposals** | COMPLETE (store) | COMPLETE (action) | Production has `change-proposals` action and validator; v0 has store-based approach | -- |
+| **Mass Upload** | COMPLETE (component) | MISSING (component) | v0 has MassUpload component in shell; production shell does not appear to have bulk document upload queue | P3 |
+| **Force Clear / Clear COG** | COMPLETE | MISSING | Utility pages for clearing data; not needed in production (debug only) | -- |
+| **Vendor Benchmark Store** | COMPLETE | PARTIAL | v0 has detailed ProductBenchmark with pricing floors, target margins, GPO fees; production has `benchmarks` action but no dedicated page | P3 |
+| **Connection Invite System** | COMPLETE (store) | COMPLETE | Production has `connections` action, ConnectionManager component, ConnectionsTab in settings | -- |
+| **AI Credit System** | COMPLETE (store) | COMPLETE | Production has `ai-credits` action, AiCreditsTab, CreditIndicator, CreditUsageCard | -- |
+| **Feature Flags** | COMPLETE (store) | COMPLETE | Production has FeatureFlagsPanel, FeaturesTab | -- |
+| **Admin Analytics Page** | DEFINED (nav only) | MISSING | v0 defines `/admin/analytics` in nav but no page file; production also missing | P4 |
+| **Admin Settings Page** | DEFINED (nav only) | MISSING | v0 defines `/admin/settings` in nav but no page file; production also missing | P4 |
+| **Data Layer** | localStorage/IndexedDB | Server actions + Prisma/Supabase | Production uses proper server-side data with Zod validators -- this is an architecture improvement, not a gap | -- |
+| **Shared Components** | Inline in pages | Extracted to component library | Production has reusable shared components (DataTable, MetricCard, ChartCard, EmptyState, FileUpload, PageHeader, etc.) -- architecture improvement | -- |
+| **Category Management** | COMPLETE (store) | COMPLETE | Production has `categories` action, CategoryFormDialog, CategoryTree | -- |
+| **Vendor Name Mapping** | COMPLETE (store) | COMPLETE | Production has `vendor-mappings` action, VendorMappingTable | -- |
+| **National Reimbursement Rates** | COMPLETE (in case-data-store) | COMPLETE | Production has dedicated `national-reimbursement-rates.ts` | -- |
+| **Search (Global)** | MISSING | COMPLETE | Production has CommandSearch and `search` action; v0 has no global search | -- |
 
-4. **AI Credit Billing:** The credit-store defines tiers (Starter/Professional/Enterprise) but no actual payment integration exists. Stripe integration is already configured in the real build.
+### Summary
+The production codebase has achieved near-complete parity with the v0 prototype. All major features, pages, and data models from v0 have been implemented in production with proper architecture (server actions, Zod validators, componentized structure). The remaining gaps are:
 
-5. **Contract Approval Workflow:** The pending-contracts-store supports draft/pending/approved/rejected/revision_requested states, but the facility-side approval UI is minimal. A formal approval workflow needs design.
+1. **P1:** Contract detail page was a placeholder in v0 but is fully built in production (no gap)
+2. **P2:** Vendor pending contract edit route (`/vendor/contracts/pending/[id]/edit`) exists in v0 but not production
+3. **P3:** Mass upload queue component and vendor benchmark dedicated page
+4. **P4:** Admin analytics and admin settings pages (defined in nav only in v0, also missing in production)
 
-6. **Payor Contracts Integration:** The payor contract system (insurance reimbursement rates) is only in the admin portal. How does this integrate with case costing margin calculations on the facility side?
-
-7. **Report Generation:** Reports currently use mock data. The scheduled report delivery (email) has no backend implementation.
-
-8. **Off-Contract Detection:** Alert generation logic for off-contract purchases is not fully implemented -- alerts are currently static/mock. How should the system detect off-contract purchases from COG data in real-time?
-
-9. **File Storage:** Contract documents, pricing files, and uploaded CSVs need persistent storage. S3-compatible storage is already configured in the real build.
-
-10. **Forecasting Accuracy:** The forecasting utility uses simple linear regression. Should more sophisticated models be considered, or is this sufficient for MVP?
+Production has additional features not in v0: global search, forgot/reset password, enhanced component architecture, server-side data persistence, Prisma schema generation, email system, rate limiting, S3 storage, Stripe billing, PDF generation, and audit logging.

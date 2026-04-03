@@ -30,6 +30,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Field } from "@/components/shared/forms/field"
+import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 import { ContractTierRow } from "@/components/contracts/contract-tier-row"
 import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
 
@@ -139,9 +140,11 @@ export function ContractTermsEntry({
                 <span className="font-medium">
                   {term.termName || `Unnamed Term`}
                 </span>
-                <Badge variant="outline" className="text-xs">
-                  {term.termType.replace(/_/g, " ")}
-                </Badge>
+                <DefinitionTooltip term={term.termType}>
+                  <Badge variant="outline" className="text-xs">
+                    {term.termType.replace(/_/g, " ")}
+                  </Badge>
+                </DefinitionTooltip>
                 <span className="text-xs text-muted-foreground">
                   {term.tiers.length} tier(s)
                 </span>

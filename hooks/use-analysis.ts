@@ -8,6 +8,10 @@ import {
   getVendorSpendTrends,
   getCategorySpendTrends,
 } from "@/lib/actions/analysis"
+import {
+  getSpendForecast,
+  getRebateForecast,
+} from "@/lib/actions/forecasting"
 import { toast } from "sonner"
 
 export function useDepreciation() {
@@ -62,5 +66,35 @@ export function useCategorySpendTrends(
         dateTo: dateRange?.to ?? "",
       }),
     enabled: !!dateRange?.from && !!dateRange?.to,
+  })
+}
+
+export function useSpendForecast(
+  facilityId: string,
+  options?: { contractId?: string; periods?: number }
+) {
+  return useQuery({
+    queryKey: queryKeys.forecasting.spend(facilityId, options),
+    queryFn: () =>
+      getSpendForecast({
+        facilityId,
+        contractId: options?.contractId,
+        periods: options?.periods ?? 6,
+      }),
+  })
+}
+
+export function useRebateForecast(
+  facilityId: string,
+  options?: { contractId?: string; periods?: number }
+) {
+  return useQuery({
+    queryKey: queryKeys.forecasting.rebate(facilityId, options),
+    queryFn: () =>
+      getRebateForecast({
+        facilityId,
+        contractId: options?.contractId,
+        periods: options?.periods ?? 6,
+      }),
   })
 }
