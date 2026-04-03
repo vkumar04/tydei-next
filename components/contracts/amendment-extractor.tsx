@@ -13,6 +13,9 @@ import {
   Plus,
   Minus,
   RefreshCw,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldQuestion,
 } from "lucide-react"
 import {
   Dialog,
@@ -24,6 +27,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -45,11 +51,58 @@ interface AmendmentExtractorProps {
 
 type Stage = "upload" | "extracting" | "review" | "applying" | "error"
 
+type ConfidenceLevel = "high" | "medium" | "low"
+
 const STEPS = [
   { label: "Uploading amendment", icon: Upload, target: 15 },
   { label: "Reading amendment PDF", icon: FileText, target: 50 },
   { label: "Comparing against contract", icon: Cpu, target: 85 },
 ] as const
+
+function getConfidenceLevel(changeCount: number): ConfidenceLevel {
+  if (changeCount >= 5) return "high"
+  if (changeCount >= 2) return "medium"
+  return "low"
+}
+
+const confidenceConfig: Record<
+  ConfidenceLevel,
+  {
+    label: string
+    description: string
+    icon: typeof ShieldCheck
+    badgeClass: string
+    bgClass: string
+  }
+> = {
+  high: {
+    label: "High Confidence",
+    description:
+      "Multiple changes detected and cross-referenced. Review before applying.",
+    icon: ShieldCheck,
+    badgeClass:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
+    bgClass: "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800",
+  },
+  medium: {
+    label: "Medium Confidence",
+    description:
+      "Some changes detected but manual verification recommended.",
+    icon: ShieldAlert,
+    badgeClass:
+      "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+    bgClass: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
+  },
+  low: {
+    label: "Low Confidence",
+    description:
+      "Few changes detected. Manual review strongly recommended.",
+    icon: ShieldQuestion,
+    badgeClass:
+      "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
+    bgClass: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+  },
+}
 
 export function AmendmentExtractor({
   contractId,
@@ -66,6 +119,11 @@ export function AmendmentExtractor({
   const [fileName, setFileName] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Validation toggles (informational only)
+  const [supersedesOriginal, setSupersedesOriginal] = useState(false)
+  const [updateExpiration, setUpdateExpiration] = useState(false)
+  const [applyToPOs, setApplyToPOs] = useState(false)
 
   const stopTick = useCallback(() => {
     if (tickRef.current) {
@@ -147,13 +205,11 @@ export function AmendmentExtractor({
   async function handleApply() {
     setStage("applying")
     try {
-      // Build the update payload from the extracted changes
       const updatePayload: Record<string, unknown> = {}
 
       for (const change of changes) {
         if (change.type === "removed") continue
 
-        // Map well-known top-level fields
         switch (change.field) {
           case "effectiveDate":
           case "expirationDate":
@@ -179,7 +235,6 @@ export function AmendmentExtractor({
             updatePayload[change.field] = change.newValue
             break
           default:
-            // Term-level changes — logged but not auto-applied to top-level
             break
         }
       }
@@ -206,12 +261,19 @@ export function AmendmentExtractor({
     setEffectiveDate(null)
     setError("")
     setFileName("")
+    setSupersedesOriginal(false)
+    setUpdateExpiration(false)
+    setApplyToPOs(false)
   }
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) resetState()
     onOpenChange(nextOpen)
   }
+
+  const confidence = getConfidenceLevel(changes.length)
+  const confConfig = confidenceConfig[confidence]
+  const ConfIcon = confConfig.icon
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -291,6 +353,20 @@ export function AmendmentExtractor({
         {/* Review Stage */}
         {stage === "review" && (
           <div className="space-y-4">
+            {/* Confidence Badge */}
+            <div className={`flex items-start gap-3 rounded-lg border p-3 ${confConfig.bgClass}`}>
+              <ConfIcon className="size-5 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">{confConfig.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {confConfig.description}
+                </p>
+              </div>
+              <Badge variant="outline" className={`ml-auto shrink-0 ${confConfig.badgeClass}`}>
+                {changes.length} change{changes.length !== 1 ? "s" : ""}
+              </Badge>
+            </div>
+
             {effectiveDate && (
               <div className="flex items-center gap-2 text-sm">
                 <Badge variant="outline">Amendment Effective Date</Badge>
@@ -371,6 +447,61 @@ export function AmendmentExtractor({
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Validation Questions */}
+                <Card className="border-primary/30">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">
+                      Validation Questions
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Review these options before applying the amendment.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <Label
+                        htmlFor="supersedes"
+                        className="text-sm font-normal leading-snug cursor-pointer"
+                      >
+                        Does this amendment supersede the original contract
+                        terms?
+                      </Label>
+                      <Switch
+                        id="supersedes"
+                        checked={supersedesOriginal}
+                        onCheckedChange={setSupersedesOriginal}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <Label
+                        htmlFor="update-exp"
+                        className="text-sm font-normal leading-snug cursor-pointer"
+                      >
+                        Should the effective date update the contract
+                        expiration?
+                      </Label>
+                      <Switch
+                        id="update-exp"
+                        checked={updateExpiration}
+                        onCheckedChange={setUpdateExpiration}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <Label
+                        htmlFor="apply-pos"
+                        className="text-sm font-normal leading-snug cursor-pointer"
+                      >
+                        Apply pricing changes to existing purchase orders?
+                      </Label>
+                      <Switch
+                        id="apply-pos"
+                        checked={applyToPOs}
+                        onCheckedChange={setApplyToPOs}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
 
                 <div className="flex items-center justify-between pt-2">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
