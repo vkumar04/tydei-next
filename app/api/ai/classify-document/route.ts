@@ -37,13 +37,13 @@ function classifyByHeaders(headersRow: string[]): {
   }
 
   // Pricing file
-  if (has("vendor_item_no") || has("vendor item")) {
-    if (has("contract_price") || has("contract price") || has("list_price") || has("list price")) {
+  if (has("vendor_item_no") || has("vendor item") || has("reference") || has("catalog")) {
+    if (has("contract_price") || has("contract price") || has("list_price") || has("list price") || has("price") || has("net cost") || has("unit price")) {
       return { classification: "pricing_file", confidence: 0.92 }
     }
   }
-  if (has("catalog") && has("price")) {
-    return { classification: "pricing_file", confidence: 0.8 }
+  if ((has("price") || has("cost")) && (has("uom") || has("description") || has("item"))) {
+    return { classification: "pricing_file", confidence: 0.78 }
   }
 
   // Invoice
