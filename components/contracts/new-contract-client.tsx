@@ -42,7 +42,7 @@ export function NewContractClient({
   categories,
 }: NewContractClientProps) {
   const router = useRouter()
-  const [entryMode, setEntryMode] = useState<"ai" | "manual" | "pdf">("manual")
+  const [entryMode, setEntryMode] = useState<"ai" | "manual" | "pdf">("ai")
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
   const [pricingFileName, setPricingFileName] = useState<string | null>(null)

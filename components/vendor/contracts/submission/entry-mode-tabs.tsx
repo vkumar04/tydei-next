@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -19,16 +20,20 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react"
+import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
+import { AITextExtract } from "@/components/contracts/ai-text-extract"
+import type { ExtractedContractData } from "@/lib/ai/schemas"
 
 export interface EntryModeTabsProps {
-  entryMode: "pdf" | "manual"
-  onEntryModeChange: (mode: "pdf" | "manual") => void
+  entryMode: "ai" | "pdf" | "manual"
+  onEntryModeChange: (mode: "ai" | "pdf" | "manual") => void
   contractFile: File | null
   isExtracting: boolean
   extractionProgress: number
   extractionComplete: boolean
   onPDFUpload: (file: File) => void
   onClearPDF: () => void
+  onAIExtracted?: (data: ExtractedContractData, s3Key?: string, fileName?: string) => void
 }
 
 export function EntryModeTabs({
@@ -40,13 +45,18 @@ export function EntryModeTabs({
   extractionComplete,
   onPDFUpload,
   onClearPDF,
+  onAIExtracted,
 }: EntryModeTabsProps) {
   return (
     <Tabs
       value={entryMode}
-      onValueChange={(v) => onEntryModeChange(v as "pdf" | "manual")}
+      onValueChange={(v) => onEntryModeChange(v as "ai" | "pdf" | "manual")}
     >
-      <TabsList className="grid w-full max-w-lg grid-cols-2">
+      <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <TabsTrigger value="ai" className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4" />
+          AI Assistant
+        </TabsTrigger>
         <TabsTrigger value="pdf" className="flex items-center gap-2">
           <Upload className="h-4 w-4" />
           Upload PDF
@@ -56,6 +66,11 @@ export function EntryModeTabs({
           Manual Entry
         </TabsTrigger>
       </TabsList>
+
+      {/* AI Assistant Tab */}
+      <TabsContent value="ai" className="mt-4 space-y-4">
+        <AIAssistantTabContent onAIExtracted={onAIExtracted} />
+      </TabsContent>
 
       {/* PDF Upload Tab */}
       <TabsContent value="pdf" className="mt-4">
@@ -164,5 +179,56 @@ export function EntryModeTabs({
         </p>
       </TabsContent>
     </Tabs>
+  )
+}
+
+/** Inner component for the AI tab content to keep the main component clean */
+function AIAssistantTabContent({
+  onAIExtracted,
+}: {
+  onAIExtracted?: (data: ExtractedContractData, s3Key?: string, fileName?: string) => void
+}) {
+  const [aiExtractOpen, setAiExtractOpen] = useState(false)
+
+  return (
+    <>
+      <AIExtractDialog
+        open={aiExtractOpen}
+        onOpenChange={setAiExtractOpen}
+        onExtracted={(data, s3Key, fileName) => {
+          onAIExtracted?.(data, s3Key, fileName)
+          setAiExtractOpen(false)
+        }}
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            AI Contract Extraction
+          </CardTitle>
+          <CardDescription>
+            Upload a contract PDF and AI will extract the key fields
+            automatically
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center gap-4 py-8">
+          <p className="text-sm text-muted-foreground">
+            Upload a contract document and AI will extract all the relevant
+            details.
+          </p>
+          <Button onClick={() => setAiExtractOpen(true)}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Start AI Extraction
+          </Button>
+        </CardContent>
+      </Card>
+
+      <AITextExtract
+        onExtracted={(data) => {
+          onAIExtracted?.(data)
+        }}
+      />
+    </>
   )
 }

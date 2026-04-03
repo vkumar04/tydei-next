@@ -7,6 +7,7 @@ import { useCreatePendingContract } from "@/hooks/use-pending-contracts"
 import type { CreatePendingContractInput } from "@/lib/validators/pending-contracts"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
+import type { ExtractedContractData } from "@/lib/ai/schemas"
 import { toast } from "sonner"
 
 import {
@@ -34,7 +35,7 @@ export function VendorContractSubmission({
   const router = useRouter()
   const create = useCreatePendingContract()
 
-  const [entryMode, setEntryMode] = useState<"pdf" | "manual">("manual")
+  const [entryMode, setEntryMode] = useState<"ai" | "pdf" | "manual">("ai")
   const [contractName, setContractName] = useState("")
   const [contractType, setContractType] = useState<string>("")
   const [facilityId, setFacilityId] = useState("")
@@ -335,6 +336,56 @@ export function VendorContractSubmission({
     setPricingItems([])
   }, [])
 
+  function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string) {
+    if (s3Key) {
+      setContractS3Key(s3Key)
+      if (fileName) {
+        setUploadedDocs((prev) => {
+          if (prev.some((d) => d.url === s3Key)) return prev
+          return [...prev, { name: fileName, url: s3Key }]
+        })
+      }
+    }
+
+    setContractName(data.contractName)
+    setContractType(data.contractType)
+    setEffectiveDate(new Date(data.effectiveDate))
+    setExpirationDate(new Date(data.expirationDate))
+    if (data.totalValue) setContractTotal(String(data.totalValue))
+    if (data.description) setDescription(data.description)
+
+    // Auto-select first facility if none selected
+    if (!facilityId && facilities.length > 0) {
+      setFacilityId(facilities[0].id)
+    }
+
+    // Populate terms if extracted
+    if (data.terms.length > 0) {
+      setContractTerms(
+        data.terms.map((t) => ({
+          termName: t.termName,
+          termType: "spend_rebate" as const,
+          baselineType: "spend_based" as const,
+          evaluationPeriod: "annual",
+          paymentTiming: "quarterly",
+          appliesTo: "all_products",
+          effectiveStart: data.effectiveDate,
+          effectiveEnd: data.expirationDate,
+          tiers: t.tiers.map((tier) => ({
+            tierNumber: tier.tierNumber,
+            spendMin: tier.spendMin ?? 0,
+            spendMax: tier.spendMax,
+            rebateType: "percent_of_spend" as const,
+            rebateValue: tier.rebateValue ?? 0,
+          })),
+        }))
+      )
+    }
+
+    toast.success("Contract data extracted and populated")
+    setEntryMode("manual")
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setIsSubmitting(true)
@@ -404,6 +455,7 @@ export function VendorContractSubmission({
         extractionComplete={extractionComplete}
         onPDFUpload={handlePDFUpload}
         onClearPDF={handleClearPDF}
+        onAIExtracted={handleAIExtract}
       />
 
       <form onSubmit={handleSubmit}>

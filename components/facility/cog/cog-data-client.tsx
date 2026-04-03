@@ -9,18 +9,28 @@ import {
   AlertTriangle,
   Plus,
   X,
+  CalendarIcon,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { format, parseISO } from "date-fns"
+import { cn } from "@/lib/utils"
 import { COGRecordsTable } from "@/components/facility/cog/cog-records-table"
 import { PricingFilesTable } from "@/components/facility/cog/pricing-files-table"
 import { COGUploadHistory } from "@/components/facility/cog/cog-upload-history"
 import { COGImportDialog } from "@/components/facility/cog/cog-import-dialog"
 import { PricingImportDialog } from "@/components/facility/cog/pricing-import-dialog"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
+import { MassUpload } from "@/components/import/mass-upload"
 import { useCOGStats } from "@/hooks/use-cog"
 import { formatCurrency } from "@/lib/formatting"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -41,6 +51,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   }, [searchParams])
   const [pricingImportOpen, setPricingImportOpen] = useState(false)
   const [manualEntryOpen, setManualEntryOpen] = useState(false)
+  const [massUploadOpen, setMassUploadOpen] = useState(false)
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
 
@@ -64,6 +75,10 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setMassUploadOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Mass Upload
+          </Button>
           <Button variant="outline" onClick={() => setCogImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Import Data
@@ -147,24 +162,60 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
       {/* Date range filter bar */}
       <div className="flex flex-wrap items-end gap-4">
         <div className="grid gap-1.5">
-          <Label htmlFor="dateFrom" className="text-sm">From</Label>
-          <Input
-            id="dateFrom"
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="w-[160px]"
-          />
+          <Label className="text-sm">From</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-[180px] justify-start text-left font-normal h-10",
+                  !dateFrom && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                {dateFrom
+                  ? format(parseISO(dateFrom), "MMMM do, yyyy")
+                  : "Select start date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={dateFrom ? parseISO(dateFrom) : undefined}
+                onSelect={(date) =>
+                  setDateFrom(date ? format(date, "yyyy-MM-dd") : "")
+                }
+              />
+            </PopoverContent>
+          </Popover>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="dateTo" className="text-sm">To</Label>
-          <Input
-            id="dateTo"
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="w-[160px]"
-          />
+          <Label className="text-sm">To</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-[180px] justify-start text-left font-normal h-10",
+                  !dateTo && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                {dateTo
+                  ? format(parseISO(dateTo), "MMMM do, yyyy")
+                  : "Select end date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={dateTo ? parseISO(dateTo) : undefined}
+                onSelect={(date) =>
+                  setDateTo(date ? format(date, "yyyy-MM-dd") : "")
+                }
+              />
+            </PopoverContent>
+          </Popover>
         </div>
         {(dateFrom || dateTo) && (
           <Button
@@ -224,6 +275,12 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         open={manualEntryOpen}
         onOpenChange={setManualEntryOpen}
         onComplete={() => refetchStats()}
+      />
+
+      <MassUpload
+        facilityId={facilityId}
+        open={massUploadOpen}
+        onOpenChange={setMassUploadOpen}
       />
     </div>
   )
