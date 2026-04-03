@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Pencil, Trash2, Sparkles } from "lucide-react"
+import { Pencil, Trash2, Sparkles, GitCompareArrows } from "lucide-react"
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
 import { PageHeader } from "@/components/shared/page-header"
 import { ContractDetailOverview } from "@/components/contracts/contract-detail-overview"
@@ -9,6 +9,7 @@ import { ContractTermsDisplay } from "@/components/contracts/contract-terms-disp
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import { ContractTransactions } from "@/components/contracts/contract-transactions"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
+import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useState } from "react"
@@ -24,6 +25,7 @@ export function ContractDetailClient({
   const { data: contract, isLoading } = useContract(contractId)
   const deleteMutation = useDeleteContract()
   const [showDelete, setShowDelete] = useState(false)
+  const [showAmendment, setShowAmendment] = useState(false)
 
   if (isLoading) {
     return (
@@ -51,6 +53,12 @@ export function ContractDetailClient({
               }
             >
               <Sparkles className="size-4" /> AI Score
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowAmendment(true)}
+            >
+              <GitCompareArrows className="size-4" /> Extract Amendment
             </Button>
             <Button
               variant="outline"
@@ -92,6 +100,16 @@ export function ContractDetailClient({
         }}
         isLoading={deleteMutation.isPending}
         variant="destructive"
+      />
+
+      <AmendmentExtractor
+        contractId={contractId}
+        open={showAmendment}
+        onOpenChange={setShowAmendment}
+        onApplied={() => {
+          // Trigger a refetch of the contract data
+          window.location.reload()
+        }}
       />
     </div>
   )
