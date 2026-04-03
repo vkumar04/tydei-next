@@ -259,6 +259,7 @@ export function VendorContractSubmission({
         "stockno", "stocknumber", "materialid", "materialnumber",
         "productid", "productcode", "vendorpart", "vendorcatalog",
         "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
+        "referencenumber", "reference",
         "vendor_item_number", "vendoritemnumber", "item_number",
         "productno", "productnumber", "productref", "productrefnumber",
       )
@@ -280,7 +281,8 @@ export function VendorContractSubmission({
       )
       const idxCat = find(
         "category", "product_category", "department",
-        "productcategory", "productline", "productgroup", "producttype",
+        "productcategory", "productcatgory",
+        "productline", "productgroup", "producttype",
         "segment", "classification", "dept", "division",
       )
       const idxUom = find(
