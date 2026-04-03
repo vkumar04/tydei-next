@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import {
   FileText,
   Upload,
@@ -29,7 +30,15 @@ interface COGDataClientProps {
 }
 
 export function COGDataClient({ facilityId }: COGDataClientProps) {
+  const searchParams = useSearchParams()
   const [cogImportOpen, setCogImportOpen] = useState(false)
+
+  // Auto-open import dialog when navigating from Import Data button
+  useEffect(() => {
+    if (searchParams.get("autoImport") === "true") {
+      setCogImportOpen(true)
+    }
+  }, [searchParams])
   const [pricingImportOpen, setPricingImportOpen] = useState(false)
   const [manualEntryOpen, setManualEntryOpen] = useState(false)
   const [dateFrom, setDateFrom] = useState("")

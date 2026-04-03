@@ -24,6 +24,7 @@ import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
+import { AITextExtract } from "@/components/contracts/ai-text-extract"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -434,7 +435,7 @@ export function NewContractClient({
         </TabsList>
 
         {/* AI Assistant Tab */}
-        <TabsContent value="ai" className="mt-4">
+        <TabsContent value="ai" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -457,6 +458,8 @@ export function NewContractClient({
               </Button>
             </CardContent>
           </Card>
+
+          <AITextExtract onExtracted={(data) => handleAIExtract(data)} />
         </TabsContent>
 
         {/* Upload PDF Tab */}

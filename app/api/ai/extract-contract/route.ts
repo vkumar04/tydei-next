@@ -21,36 +21,51 @@ export async function POST(request: Request) {
       )
     }
 
-    const formData = await request.formData()
-    const file = formData.get("file") as File | null
+    // Determine if this is a text-based request (JSON) or file upload (FormData)
+    const contentType = request.headers.get("content-type") ?? ""
+    let extractedText: string
+    let s3Key: string | undefined
 
-    if (!file) {
-      return Response.json({ error: "No file provided" }, { status: 400 })
-    }
+    if (contentType.includes("application/json")) {
+      // Text-based extraction: user pasted contract description
+      const body = await request.json()
+      const text = body.text as string | undefined
+      if (!text || !text.trim()) {
+        return Response.json({ error: "No text provided" }, { status: 400 })
+      }
+      extractedText = text.trim()
+    } else {
+      // File-based extraction: user uploaded a PDF/document
+      const formData = await request.formData()
+      const file = formData.get("file") as File | null
 
-    const arrayBuffer = await file.arrayBuffer()
-    const fileData = new Uint8Array(arrayBuffer)
+      if (!file) {
+        return Response.json({ error: "No file provided" }, { status: 400 })
+      }
 
-    // Upload original file to S3 for archival
-    const userId = session.user.id
-    const timestamp = Date.now()
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const s3Key = `contracts/${userId}/${timestamp}-${safeName}`
-    await uploadFile(s3Key, fileData, file.type || "application/octet-stream")
+      const arrayBuffer = await file.arrayBuffer()
+      const fileData = new Uint8Array(arrayBuffer)
 
-    const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
-    const mediaType = isPDF ? "application/pdf" : "text/plain"
+      // Upload original file to S3 for archival
+      const userId = session.user.id
+      const timestamp = Date.now()
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+      s3Key = `contracts/${userId}/${timestamp}-${safeName}`
+      await uploadFile(s3Key, fileData, file.type || "application/octet-stream")
 
-    // Step 1: Extract text content from the document
-    const extraction = await generateText({
-      model: geminiModel,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Read this contract document carefully and extract ALL relevant information including:
+      const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
+      const mediaType = isPDF ? "application/pdf" : "text/plain"
+
+      // Step 1: Extract text content from the document
+      const extraction = await generateText({
+        model: geminiModel,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Read this contract document carefully and extract ALL relevant information including:
 - Contract name/title
 - Vendor/manufacturer name
 - Contract type (usage, capital, service, tie_in, grouped, or pricing_only)
@@ -60,20 +75,21 @@ export async function POST(request: Request) {
 - All rebate terms, tier structures, spend thresholds, and rebate percentages
 
 Return all the information you find as detailed text.`,
-            },
-            {
-              type: "file",
-              data: fileData,
-              mediaType,
-            },
-          ],
-        },
-      ],
-    })
+              },
+              {
+                type: "file",
+                data: fileData,
+                mediaType,
+              },
+            ],
+          },
+        ],
+      })
 
-    const extractedText = extraction.text
-    if (!extractedText) {
-      return Response.json({ error: "Could not read document" }, { status: 422 })
+      extractedText = extraction.text
+      if (!extractedText) {
+        return Response.json({ error: "Could not read document" }, { status: 422 })
+      }
     }
 
     // Step 2: Parse the extracted text into structured data

@@ -37,6 +37,7 @@ import { useImportCOGRecords } from "@/hooks/use-cog"
 import { getVendors } from "@/lib/actions/vendors"
 import { checkCOGDuplicates, type DuplicateMatch } from "@/lib/actions/cog-duplicate-check"
 import { queryKeys } from "@/lib/query-keys"
+import { matchVendorByAlias } from "@/lib/vendor-aliases"
 
 interface COGImportDialogProps {
   facilityId: string
@@ -84,6 +85,27 @@ export function COGImportDialog({
     }
     return Array.from(names).sort()
   }, [importState.step, importState.mappedRecords])
+
+  // Auto-match vendor names using known aliases when entering vendor_match step
+  useEffect(() => {
+    if (importState.step !== "vendor_match" || !vendors || vendors.length === 0) return
+    const autoMappings: Record<string, string> = {}
+    for (const name of uniqueVendorNames) {
+      // Skip if already mapped
+      if (importState.vendorMappings[name]) continue
+      const matchedId = matchVendorByAlias(name, vendors)
+      if (matchedId) {
+        autoMappings[name] = matchedId
+      }
+    }
+    if (Object.keys(autoMappings).length > 0) {
+      importState.setVendorMappings({
+        ...importState.vendorMappings,
+        ...autoMappings,
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importState.step, vendors, uniqueVendorNames])
 
   const handleFile = async (file: File) => {
     forwarded.current = false

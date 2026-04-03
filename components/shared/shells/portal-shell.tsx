@@ -3,6 +3,7 @@
 import { useState } from "react"
 import type { ReactNode } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
 import {
   FileText,
@@ -63,6 +64,7 @@ export function PortalShell({
   children,
 }: PortalShellProps) {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const router = useRouter()
 
   return (
     <SidebarProvider>
@@ -163,9 +165,9 @@ export function PortalShell({
                           setImportDialogOpen(false)
                           const ext = file.name.split(".").pop()?.toLowerCase()
                           if (ext === "pdf") {
-                            window.location.href = "/dashboard/contracts/new"
+                            router.push("/dashboard/contracts/new")
                           } else {
-                            window.location.href = "/dashboard/cog-data"
+                            router.push("/dashboard/cog-data?autoImport=true")
                           }
                         }
                       }}
@@ -189,9 +191,9 @@ export function PortalShell({
                           setImportDialogOpen(false)
                           const ext = file.name.split(".").pop()?.toLowerCase()
                           if (ext === "pdf") {
-                            window.location.href = "/dashboard/contracts/new"
+                            router.push("/dashboard/contracts/new")
                           } else {
-                            window.location.href = "/dashboard/cog-data"
+                            router.push("/dashboard/cog-data?autoImport=true")
                           }
                         }
                       }}

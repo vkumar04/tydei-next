@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/page-header"
 import { ContractDetailOverview } from "@/components/contracts/contract-detail-overview"
 import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
+import { ContractTransactions } from "@/components/contracts/contract-transactions"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -73,6 +74,7 @@ export function ContractDetailClient({
         <div className="space-y-6">
           <ContractTermsDisplay terms={contract.terms} />
           <ContractDocumentsList documents={contract.documents} />
+          <ContractTransactions contractId={contractId} />
         </div>
         <div>
           <ContractDetailOverview contract={contract} />

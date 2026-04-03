@@ -23,6 +23,18 @@ export async function getVendorPendingContracts(_vendorId?: string) {
   return serialize(contracts)
 }
 
+// ─── Vendor: Get Single ────────────────────────────────────────
+
+export async function getVendorPendingContract(id: string) {
+  const { vendor } = await requireVendor()
+
+  const contract = await prisma.pendingContract.findUniqueOrThrow({
+    where: { id, vendorId: vendor.id },
+    include: { facility: { select: { id: true, name: true } } },
+  })
+  return serialize(contract)
+}
+
 // ─── Vendor: Create ─────────────────────────────────────────────
 
 export async function createPendingContract(input: CreatePendingContractInput) {
