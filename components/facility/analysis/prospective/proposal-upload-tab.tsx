@@ -68,8 +68,7 @@ export function ProposalUploadTab({
             Upload Contract Document
           </CardTitle>
           <CardDescription>
-            Upload a vendor proposal or contract PDF for AI-powered
-            analysis
+            Upload a vendor pricing file (CSV or Excel) for analysis
           </CardDescription>
         </CardHeader>
         <CardContent>

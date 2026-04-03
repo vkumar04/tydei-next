@@ -57,8 +57,8 @@ export async function getExpiringContracts(input: {
     where: {
       ...(facilityId ? { facilityId } : {}),
       ...(vendorId ? { vendorId } : {}),
-      expirationDate: { gte: now, lte: windowEnd },
-      status: { in: ["active", "expiring"] },
+      expirationDate: { gte: addDays(now, -90), lte: windowEnd },
+      status: { in: ["active", "expiring", "expired"] },
     },
     include: {
       vendor: { select: { id: true, name: true } },

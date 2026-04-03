@@ -20,10 +20,9 @@ import {
 
 function getDefaultRange() {
   const now = new Date()
-  const q = Math.floor(now.getMonth() / 3)
-  const from = new Date(now.getFullYear(), q * 3, 1)
-  const to = new Date(now.getFullYear(), q * 3 + 3, 0)
-  return { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] }
+  // Look back 12 months so historical COG data is visible by default
+  const from = new Date(now.getFullYear() - 1, now.getMonth(), 1)
+  return { from: from.toISOString().split("T")[0], to: now.toISOString().split("T")[0] }
 }
 
 interface DashboardClientProps {
