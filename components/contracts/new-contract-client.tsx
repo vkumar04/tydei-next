@@ -19,6 +19,7 @@ import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractTerm } from "@/lib/actions/contract-terms"
 import { createContractDocument } from "@/lib/actions/contracts"
 import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
+import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
@@ -45,6 +46,11 @@ export function NewContractClient({
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
   const [pricingFileName, setPricingFileName] = useState<string | null>(null)
   const [pricingCategories, setPricingCategories] = useState<string[]>([])
+  const [pricingMapperOpen, setPricingMapperOpen] = useState(false)
+  const [pricingRawHeaders, setPricingRawHeaders] = useState<string[]>([])
+  const [pricingRawRows, setPricingRawRows] = useState<Record<string, string>[]>([])
+  const [pricingAutoMapping, setPricingAutoMapping] = useState<Record<string, string>>({})
+  const [pricingFileRef, setPricingFileRef] = useState<File | null>(null)
   const [contractS3Key, setContractS3Key] = useState<string | null>(null)
   const [contractFileName, setContractFileName] = useState<string | null>(null)
   const {
@@ -144,39 +150,112 @@ export function NewContractClient({
       "unitofmeasure", "packsize", "packaging", "pkg", "measure",
     )
 
-    const items: ContractPricingItem[] = dataRows.map((vals) => {
-      const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
-      return {
-        vendorItemNo: g(idxItem),
-        description: g(idxDesc) || undefined,
-        unitPrice: parseFloat(g(idxPrice).replace(/[^0-9.-]/g, "") || "0"),
-        listPrice: parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
-        category: g(idxCat) || undefined,
-        uom: g(idxUom) || "EA",
-      }
-    }).filter((i) => i.vendorItemNo)
+    // Build auto-mapping from detected indices
+    const autoMap: Record<string, string> = {}
+    if (idxItem >= 0) autoMap.vendorItemNo = rawHeaders[idxItem]
+    if (idxDesc >= 0) autoMap.description = rawHeaders[idxDesc]
+    if (idxPrice >= 0) autoMap.unitPrice = rawHeaders[idxPrice]
+    if (idxList >= 0) autoMap.listPrice = rawHeaders[idxList]
+    if (idxCat >= 0) autoMap.category = rawHeaders[idxCat]
+    if (idxUom >= 0) autoMap.uom = rawHeaders[idxUom]
+
+    // Build record-style rows for the mapper dialog
+    const recordRows = dataRows.map((vals) => {
+      const row: Record<string, string> = {}
+      rawHeaders.forEach((h, i) => { row[h] = vals[i] ?? "" })
+      return row
+    })
+
+    // If auto-mapping is incomplete (missing vendorItemNo OR unitPrice), open mapper
+    if (!autoMap.vendorItemNo || !autoMap.unitPrice) {
+      setPricingRawHeaders(rawHeaders)
+      setPricingRawRows(recordRows)
+      setPricingAutoMapping(autoMap)
+      setPricingFileRef(file)
+      setPricingMapperOpen(true)
+      return
+    }
+
+    // Auto-mapping succeeded — build items directly
+    const items = buildPricingItems(dataRows, rawHeaders, autoMap)
 
     if (items.length === 0) {
       toast.error("No valid pricing items found. Check your file has columns like vendor_item_no and contract_price.")
       return
     }
 
-    // Extract unique categories
+    finalizePricingImport(items, file.name)
+  }, [form])
+
+  /** Build ContractPricingItem[] from raw data rows using a column mapping */
+  function buildPricingItems(
+    dataRows: string[][],
+    rawHeaders: string[],
+    colMapping: Record<string, string>,
+  ): ContractPricingItem[] {
+    const indexOf = (field: string) => {
+      const col = colMapping[field]
+      return col ? rawHeaders.indexOf(col) : -1
+    }
+
+    const idxItem = indexOf("vendorItemNo")
+    const idxDesc = indexOf("description")
+    const idxPrice = indexOf("unitPrice")
+    const idxList = indexOf("listPrice")
+    const idxCat = indexOf("category")
+    const idxUom = indexOf("uom")
+
+    return dataRows
+      .map((vals) => {
+        const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
+        return {
+          vendorItemNo: g(idxItem),
+          description: g(idxDesc) || undefined,
+          unitPrice: parseFloat(g(idxPrice).replace(/[^0-9.-]/g, "") || "0"),
+          listPrice:
+            parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
+          category: g(idxCat) || undefined,
+          uom: g(idxUom) || "EA",
+        }
+      })
+      .filter((i) => i.vendorItemNo)
+  }
+
+  /** Shared finalization: set state, compute totals, show toast */
+  function finalizePricingImport(items: ContractPricingItem[], fileName: string) {
     const cats = Array.from(
       new Set(items.map((i) => i.category).filter((c): c is string => !!c))
     )
     setPricingCategories(cats)
 
-    // Auto-compute total value if the form's totalValue is 0
     const totalFromPricing = items.reduce((sum, i) => sum + i.unitPrice, 0)
     if (form.getValues("totalValue") === 0 && totalFromPricing > 0) {
       form.setValue("totalValue", totalFromPricing)
     }
 
     setPricingItems(items)
-    setPricingFileName(file.name)
-    toast.success(`Loaded ${items.length} pricing items from ${file.name}`)
-  }, [form])
+    setPricingFileName(fileName)
+    toast.success(`Loaded ${items.length} pricing items from ${fileName}`)
+  }
+
+  /** Called when user applies mapping from the column mapper dialog */
+  function handleMappingApply(mapping: Record<string, string>) {
+    setPricingMapperOpen(false)
+
+    // Reconstruct dataRows (string[][]) from the stored record rows
+    const dataRows = pricingRawRows.map((row) =>
+      pricingRawHeaders.map((h) => row[h] ?? "")
+    )
+
+    const items = buildPricingItems(dataRows, pricingRawHeaders, mapping)
+
+    if (items.length === 0) {
+      toast.error("No valid pricing items found with the selected mapping.")
+      return
+    }
+
+    finalizePricingImport(items, pricingFileRef?.name ?? "pricing-file")
+  }
 
   function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string) {
     if (s3Key) setContractS3Key(s3Key)
@@ -322,6 +401,15 @@ export function NewContractClient({
         open={aiExtractOpen}
         onOpenChange={setAiExtractOpen}
         onExtracted={handleAIExtract}
+      />
+
+      <PricingColumnMapper
+        open={pricingMapperOpen}
+        onOpenChange={setPricingMapperOpen}
+        headers={pricingRawHeaders}
+        sampleRows={pricingRawRows}
+        autoMapping={pricingAutoMapping}
+        onApply={handleMappingApply}
       />
 
       {/* Entry Mode Tabs */}

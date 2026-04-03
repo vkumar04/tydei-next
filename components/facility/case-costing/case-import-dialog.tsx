@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react"
 import { useImportCases } from "@/hooks/use-case-costing"
+import { estimateReimbursement } from "@/lib/national-reimbursement-rates"
 import type { CaseInput } from "@/lib/validators/cases"
 
 // ── File type definitions matching v0 prototype ────────────────
@@ -115,29 +116,48 @@ const clinicalFileTypes: FileType[] = [
   },
 ]
 
-// ── CSV parser ─────────────────────────────────────────────────
+// ── CSV parser (handles quoted fields with commas) ────────────
+
+function splitCSVLine(line: string): string[] {
+  const fields: string[] = []
+  let current = ""
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"' || ch === "'") {
+      if (inQuotes && i + 1 < line.length && line[i + 1] === ch) {
+        // Escaped quote
+        current += ch
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+    } else if (ch === "," && !inQuotes) {
+      fields.push(current)
+      current = ""
+    } else {
+      current += ch
+    }
+  }
+  fields.push(current)
+  return fields
+}
 
 async function parseCSVFile(
   file: File
 ): Promise<Record<string, string>[]> {
   const text = await file.text()
-  const lines = text.split("\n").filter((l) => l.trim())
+  const lines = text.split(/\r?\n/).filter((l) => l.trim())
   if (lines.length < 2) return []
 
-  const headers =
-    lines[0]?.split(",").map((h) =>
-      h
-        .trim()
-        .replace(/^["']|["']$/g, "")
-        .toLowerCase()
-    ) ?? []
+  const headers = splitCSVLine(lines[0] ?? "").map((h) =>
+    h.trim().replace(/^["']|["']$/g, "").toLowerCase()
+  )
 
   return lines.slice(1).map((line) => {
-    const vals = line.split(",").map((v) =>
-      v
-        .trim()
-        .replace(/^["']|["']$/g, "")
-        .replace(/^\$\s*/, "")
+    const vals = splitCSVLine(line).map((v) =>
+      v.trim().replace(/^["']|["']$/g, "").replace(/^\$\s*/, "")
     )
     const obj: Record<string, string> = {}
     headers.forEach((h, i) => {
@@ -145,6 +165,32 @@ async function parseCSVFile(
     })
     return obj
   })
+}
+
+/** Parse a date string like "12/5/2023" or "2023-12-05" into YYYY-MM-DD */
+function parseDate(raw: string): string {
+  if (!raw || !raw.trim()) return ""
+  const trimmed = raw.trim()
+
+  // MM/DD/YYYY or M/D/YYYY
+  const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (slashMatch) {
+    const [, m, d, y] = slashMatch
+    return `${y}-${m!.padStart(2, "0")}-${d!.padStart(2, "0")}`
+  }
+
+  // Already ISO YYYY-MM-DD
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch
+    return `${y}-${m!.padStart(2, "0")}-${d!.padStart(2, "0")}`
+  }
+
+  // Fallback: try native Date parsing
+  const d = new Date(trimmed)
+  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0]
+
+  return ""
 }
 
 // ── Column-matching helpers ────────────────────────────────────
@@ -401,20 +447,21 @@ export function CaseImportDialog({
                 "center",
                 "building",
               ]) || "Main Hospital"
-            const date =
-              findValue(r, [
+            const rawDate = findValue(r, [
                 "date of surgery",
                 "surgery date",
                 "surgerydate",
-                "date",
                 "procedure date",
                 "proceduredate",
                 "dos",
                 "service date",
                 "servicedate",
+                "date",
                 "admit date",
                 "discharge date",
-              ]) || new Date().toISOString().split("T")[0]
+              ])
+            const date =
+              parseDate(rawDate) || new Date().toISOString().split("T")[0]
             patientFields.set(caseId, { surgeon, facility, date })
           }
         })
@@ -447,14 +494,19 @@ export function CaseImportDialog({
           0
         )
 
+        const cptCode = proc?.cptCode ?? undefined
+        const estReimbursement = cptCode
+          ? estimateReimbursement(cptCode)
+          : undefined
+
         return {
           caseNumber: caseId,
           surgeonName: patient?.surgeon ?? undefined,
           dateOfSurgery:
             patient?.date || new Date().toISOString().split("T")[0],
-          primaryCptCode: proc?.cptCode ?? undefined,
+          primaryCptCode: cptCode,
           totalSpend,
-          totalReimbursement: undefined,
+          totalReimbursement: estReimbursement,
           timeInOr: undefined,
           timeOutOr: undefined,
         }

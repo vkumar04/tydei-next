@@ -5,6 +5,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
+import { estimateReimbursement } from "@/lib/national-reimbursement-rates"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -199,6 +200,33 @@ export async function getCase(id: string): Promise<CaseDetail> {
   })
 }
 
+// ─── Date Helper ───────────────────────────────────────────────
+
+/** Parse a date string (MM/DD/YYYY or YYYY-MM-DD) into a UTC Date object */
+function parseDateToUTC(raw: string): Date {
+  const trimmed = raw.trim()
+
+  // MM/DD/YYYY or M/D/YYYY
+  const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (slashMatch) {
+    const [, m, d, y] = slashMatch
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)))
+  }
+
+  // YYYY-MM-DD
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)))
+  }
+
+  // Fallback — use native parser but guard against Invalid Date
+  const parsed = new Date(trimmed)
+  if (!isNaN(parsed.getTime())) return parsed
+
+  return new Date() // last resort: today
+}
+
 // ─── Import Cases ───────────────────────────────────────────────
 
 export async function importCases(input: {
@@ -217,13 +245,23 @@ export async function importCases(input: {
       const result = await prisma.case.createMany({
         data: batch.map((caseData) => {
           const spend = caseData.totalSpend
-          const reimburse = caseData.totalReimbursement ?? 0
+
+          // Use provided reimbursement, or estimate from CPT code, or 0
+          const reimburse =
+            caseData.totalReimbursement ??
+            (caseData.primaryCptCode
+              ? estimateReimbursement(caseData.primaryCptCode)
+              : 0)
+
+          // Parse date: handle MM/DD/YYYY, YYYY-MM-DD, and fallback
+          const dateOfSurgery = parseDateToUTC(caseData.dateOfSurgery)
+
           return {
             caseNumber: caseData.caseNumber,
             facilityId: facility.id,
             surgeonName: caseData.surgeonName,
             surgeonId: caseData.surgeonId,
-            dateOfSurgery: new Date(caseData.dateOfSurgery),
+            dateOfSurgery,
             primaryCptCode: caseData.primaryCptCode,
             totalSpend: spend,
             totalReimbursement: reimburse,
