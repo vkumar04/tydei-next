@@ -330,16 +330,17 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
   if (rows.length === 0) {
     return (
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <Calendar className="h-4 w-4" />
             Transaction Ledger
           </CardTitle>
+          <AddTransactionDialog />
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No contract period data available yet. Period transactions will
-            appear here once spend data is tracked against this contract.
+            No contract period data available yet. Use &quot;Add Transaction&quot; to record
+            rebates, credits, or payments manually.
           </p>
         </CardContent>
       </Card>

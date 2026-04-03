@@ -4,10 +4,11 @@ import { z } from "zod"
 
 export const extractedContractSchema = z.object({
   contractName: z.string().describe("The name or title of the contract"),
+  contractNumber: z.string().optional().describe("Contract number, agreement number, or reference ID if present"),
   vendorName: z.string().describe("The vendor/manufacturer name"),
   contractType: z
     .enum(["usage", "capital", "service", "tie_in", "grouped", "pricing_only"])
-    .describe("The type of contract"),
+    .describe("The type of contract. Use 'usage' if the contract has rebate tiers based on spend or volume. Use 'pricing_only' ONLY if the contract is purely a price list with no rebates or performance terms. Use 'capital' for equipment purchases. Use 'grouped' for GPO/multi-vendor agreements. Use 'tie_in' for bundled product deals. Use 'service' for service-level agreements."),
   effectiveDate: z.string().describe("Effective date in YYYY-MM-DD format"),
   expirationDate: z.string().describe("Expiration date in YYYY-MM-DD format"),
   totalValue: z.number().optional().describe("Total contract value in dollars"),

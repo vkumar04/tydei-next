@@ -19,6 +19,7 @@ import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractTerm } from "@/lib/actions/contract-terms"
 import { createContractDocument } from "@/lib/actions/contracts"
 import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
+import { createCategory } from "@/lib/actions/categories"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
@@ -222,12 +223,24 @@ export function NewContractClient({
       .filter((i) => i.vendorItemNo)
   }
 
-  /** Shared finalization: set state, compute totals, show toast */
-  function finalizePricingImport(items: ContractPricingItem[], fileName: string) {
+  /** Shared finalization: set state, compute totals, auto-create categories, show toast */
+  async function finalizePricingImport(items: ContractPricingItem[], fileName: string) {
     const cats = Array.from(
       new Set(items.map((i) => i.category).filter((c): c is string => !!c))
     )
     setPricingCategories(cats)
+
+    // Auto-create categories that don't exist yet
+    const existingNames = new Set(categories.map((c) => c.name.toLowerCase()))
+    for (const cat of cats) {
+      if (!existingNames.has(cat.toLowerCase())) {
+        try {
+          await createCategory({ name: cat })
+        } catch {
+          // Category may already exist — ignore
+        }
+      }
+    }
 
     const totalFromPricing = items.reduce((sum, i) => sum + i.unitPrice, 0)
     if (form.getValues("totalValue") === 0 && totalFromPricing > 0) {
@@ -236,7 +249,7 @@ export function NewContractClient({
 
     setPricingItems(items)
     setPricingFileName(fileName)
-    toast.success(`Loaded ${items.length} pricing items from ${fileName}`)
+    toast.success(`Loaded ${items.length} pricing items from ${fileName}${cats.length > 0 ? ` (${cats.length} categories detected)` : ""}`)
   }
 
   /** Called when user applies mapping from the column mapper dialog */
@@ -263,6 +276,7 @@ export function NewContractClient({
     if (fileName) setContractFileName(fileName)
 
     form.setValue("name", data.contractName)
+    if (data.contractNumber) form.setValue("contractNumber", data.contractNumber)
     form.setValue("contractType", data.contractType)
     form.setValue("effectiveDate", data.effectiveDate)
     form.setValue("expirationDate", data.expirationDate)
@@ -302,8 +316,8 @@ export function NewContractClient({
       )
     }
 
-    toast.success("Contract data extracted and populated")
-    setEntryMode("manual")
+    toast.success("Contract data extracted — upload a pricing file or switch to Manual Entry to review")
+    setEntryMode("pdf")
   }
 
   async function handleSubmit() {
