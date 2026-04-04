@@ -13,6 +13,8 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   X,
+  Plus,
+  Paperclip,
 } from "lucide-react"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { useCreateContract } from "@/hooks/use-contracts"
@@ -33,6 +35,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { toast } from "sonner"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 
@@ -58,6 +67,9 @@ export function NewContractClient({
   const [pricingFileRef, setPricingFileRef] = useState<File | null>(null)
   const [contractS3Key, setContractS3Key] = useState<string | null>(null)
   const [contractFileName, setContractFileName] = useState<string | null>(null)
+  const [additionalDocs, setAdditionalDocs] = useState<
+    { file: File; type: string; name: string }[]
+  >([])
   const {
     form,
     terms,
@@ -431,6 +443,15 @@ export function NewContractClient({
       })
     }
 
+    // Save additional documents
+    for (const doc of additionalDocs) {
+      await createContractDocument({
+        contractId: contract.id,
+        name: doc.name,
+        type: doc.type,
+      })
+    }
+
     router.push(`/dashboard/contracts/${contract.id}`)
   }
 
@@ -467,6 +488,15 @@ export function NewContractClient({
         name: contractFileName ?? "Contract PDF",
         type: "main",
         url: contractS3Key,
+      })
+    }
+
+    // Save additional documents
+    for (const doc of additionalDocs) {
+      await createContractDocument({
+        contractId: contract.id,
+        name: doc.name,
+        type: doc.type,
       })
     }
 
@@ -571,6 +601,113 @@ export function NewContractClient({
                 <Sparkles className="mr-2 h-4 w-4" />
                 Upload & Extract with AI
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Additional Documents */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Paperclip className="h-5 w-5" />
+                Additional Documents
+              </CardTitle>
+              <CardDescription>
+                Upload amendments, addendums, or exhibits related to this contract
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {additionalDocs.length > 0 && (
+                <div className="space-y-2">
+                  {additionalDocs.map((doc, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2 rounded-lg border"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm truncate">{doc.name}</span>
+                        <Badge variant="secondary" className="shrink-0 text-xs">
+                          {doc.type}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        onClick={() =>
+                          setAdditionalDocs((prev) =>
+                            prev.filter((_, i) => i !== idx)
+                          )
+                        }
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const input = document.createElement("input")
+                    input.type = "file"
+                    input.accept = ".pdf,.doc,.docx,.txt"
+                    input.onchange = (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0]
+                      if (file) {
+                        setAdditionalDocs((prev) => [
+                          ...prev,
+                          { file, type: "amendment", name: file.name },
+                        ])
+                      }
+                    }
+                    input.click()
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Document
+                </Button>
+                {additionalDocs.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {additionalDocs.length} document{additionalDocs.length !== 1 ? "s" : ""} attached
+                  </p>
+                )}
+              </div>
+              {additionalDocs.length > 0 && (
+                <div className="space-y-2 pt-2 border-t">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Set document types:
+                  </p>
+                  {additionalDocs.map((doc, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-xs truncate max-w-[180px]">
+                        {doc.name}
+                      </span>
+                      <Select
+                        value={doc.type}
+                        onValueChange={(value) =>
+                          setAdditionalDocs((prev) =>
+                            prev.map((d, i) =>
+                              i === idx ? { ...d, type: value } : d
+                            )
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-7 w-[140px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="amendment">Amendment</SelectItem>
+                          <SelectItem value="addendum">Addendum</SelectItem>
+                          <SelectItem value="exhibit">Exhibit</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 

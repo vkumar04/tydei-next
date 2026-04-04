@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Upload, Loader2, Sparkles, FileText, Cpu } from "lucide-react"
+import { Upload, Loader2, Sparkles, FileText, Cpu, ChevronDown } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,12 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { AIExtractReview } from "@/components/contracts/ai-extract-review"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
@@ -42,8 +48,17 @@ export function AIExtractDialog({
   const [confidence, setConfidence] = useState(0)
   const [error, setError] = useState("")
   const [fileName, setFileName] = useState("")
+  const [userInstructions, setUserInstructions] = useState("")
+  const [instructionsOpen, setInstructionsOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const quickFillExamples = [
+    "This is a usage-based rebate contract",
+    "Extract tier thresholds and rebate percentages",
+    "Focus on product categories and pricing tiers",
+    "This contract has capital equipment commitments",
+  ]
 
   const stopTick = useCallback(() => {
     if (tickRef.current) {
@@ -80,6 +95,9 @@ export function AIExtractDialog({
     try {
       const formData = new FormData()
       formData.append("file", file)
+      if (userInstructions.trim()) {
+        formData.append("userInstructions", userInstructions.trim())
+      }
 
       // Step 1: Upload
       setStepIndex(0)
@@ -153,6 +171,47 @@ export function AIExtractDialog({
             <Button onClick={() => inputRef.current?.click()}>
               <Upload className="size-4" /> Upload Contract PDF
             </Button>
+
+            <Collapsible
+              open={instructionsOpen}
+              onOpenChange={setInstructionsOpen}
+              className="w-full max-w-md"
+            >
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex items-center gap-2 text-muted-foreground mx-auto"
+                >
+                  <ChevronDown
+                    className={`size-4 transition-transform ${instructionsOpen ? "rotate-180" : ""}`}
+                  />
+                  AI Instructions (optional)
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3 space-y-3">
+                <Textarea
+                  placeholder="Add hints to guide the AI extraction..."
+                  value={userInstructions}
+                  onChange={(e) => setUserInstructions(e.target.value)}
+                  rows={3}
+                  className="text-sm"
+                />
+                <div className="flex flex-wrap gap-2">
+                  {quickFillExamples.map((example) => (
+                    <Button
+                      key={example}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={() => setUserInstructions(example)}
+                    >
+                      {example}
+                    </Button>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         )}
 

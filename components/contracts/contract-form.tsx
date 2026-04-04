@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import type { CreateContractInput } from "@/lib/validators/contracts"
 import { getVendorCOGSpend } from "@/lib/actions/cog-records"
+import { getContracts } from "@/lib/actions/contracts"
+import { useQuery } from "@tanstack/react-query"
+import { Link2 } from "lucide-react"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -112,7 +115,16 @@ export function ContractFormBasicInfo({
 
   const vendorId = watch("vendorId")
   const totalValue = watch("totalValue")
+  const contractType = watch("contractType")
   const [cogAutoFilled, setCogAutoFilled] = useState(false)
+  const [linkedContractId, setLinkedContractId] = useState<string>("")
+
+  // Fetch existing contracts for tie-in / capital linking
+  const { data: contractsData } = useQuery({
+    queryKey: ["contracts", "link-options"],
+    queryFn: () => getContracts({ pageSize: 100 }),
+    enabled: contractType === "tie_in" || contractType === "capital",
+  })
 
   // Auto-populate contract total from vendor COG spend when vendor changes
   const lookupCOGSpend = useCallback(
@@ -447,6 +459,50 @@ export function ContractFormBasicInfo({
             {watch("isMultiFacility") && (
               <p className="text-sm text-muted-foreground">
                 Facility selection will be available after contract creation.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Linked Contract (for Tie-In and Capital types) */}
+      {(contractType === "tie_in" || contractType === "capital") && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Link2 className="h-4 w-4" />
+              Linked Contract
+            </CardTitle>
+            <CardDescription>
+              Link this {contractType === "tie_in" ? "tie-in" : "capital equipment"} contract to an existing contract
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field label="Related Contract">
+              <Select
+                value={linkedContractId}
+                onValueChange={setLinkedContractId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a contract to link..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {contractsData?.contracts?.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <span>{c.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {c.vendor?.name}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            {linkedContractId && (
+              <p className="text-xs text-muted-foreground mt-2">
+                This contract will be linked for reference after creation.
               </p>
             )}
           </CardContent>

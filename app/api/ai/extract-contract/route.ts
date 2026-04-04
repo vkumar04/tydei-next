@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       // File-based extraction: user uploaded a PDF/document
       const formData = await request.formData()
       const file = formData.get("file") as File | null
+      const userInstructions = (formData.get("userInstructions") as string | null)?.trim() || ""
 
       if (!file) {
         return Response.json({ error: "No file provided" }, { status: 400 })
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
 - Any description or summary
 - All rebate terms, tier structures, spend thresholds, and rebate percentages
 
-Return all the information you find as detailed text.`,
+Return all the information you find as detailed text.${userInstructions ? `\n\nAdditional user instructions:\n${userInstructions}` : ""}`,
               },
               {
                 type: "file",
