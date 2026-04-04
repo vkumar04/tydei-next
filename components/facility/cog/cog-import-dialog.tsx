@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { Loader2, Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,7 @@ import { COGImportPreview } from "@/components/facility/cog/cog-import-preview"
 import { useCOGImport } from "@/hooks/use-cog-import"
 import { useFileParser } from "@/hooks/use-file-parser"
 import { useImportCOGRecords } from "@/hooks/use-cog"
-import { getVendors } from "@/lib/actions/vendors"
+import { getVendors, createVendor } from "@/lib/actions/vendors"
 import { checkCOGDuplicates, type DuplicateMatch } from "@/lib/actions/cog-duplicate-check"
 import { queryKeys } from "@/lib/query-keys"
 import { matchVendorByAlias } from "@/lib/vendor-aliases"
@@ -85,6 +86,36 @@ export function COGImportDialog({
     }
     return Array.from(names).sort()
   }, [importState.step, importState.mappedRecords])
+
+  const queryClient = useQueryClient()
+  // Track vendor names currently being created
+  const [creatingVendors, setCreatingVendors] = useState<Set<string>>(new Set())
+
+  const handleCreateVendor = useCallback(
+    async (vendorName: string) => {
+      setCreatingVendors((prev) => new Set(prev).add(vendorName))
+      try {
+        const newVendor = await createVendor({ name: vendorName, tier: "standard" })
+        // Refresh the vendor list
+        await queryClient.invalidateQueries({ queryKey: queryKeys.vendors.all })
+        // Auto-select the newly created vendor
+        importState.setVendorMappings({
+          ...importState.vendorMappings,
+          [vendorName]: newVendor.id,
+        })
+        toast.success(`Vendor "${vendorName}" created`)
+      } catch {
+        toast.error(`Failed to create vendor "${vendorName}"`)
+      } finally {
+        setCreatingVendors((prev) => {
+          const next = new Set(prev)
+          next.delete(vendorName)
+          return next
+        })
+      }
+    },
+    [queryClient, importState]
+  )
 
   // Auto-match vendor names using known aliases when entering vendor_match step
   useEffect(() => {
@@ -180,6 +211,7 @@ export function COGImportDialog({
       setDuplicates([])
       setDuplicateChecking(false)
       setExcludedIndices(new Set())
+      setCreatingVendors(new Set())
       if (result) onComplete()
     }
     onOpenChange(nextOpen)
@@ -262,17 +294,24 @@ export function COGImportDialog({
                         <TableCell>
                           <Select
                             value={importState.vendorMappings[name] ?? "__none__"}
-                            onValueChange={(v) =>
+                            onValueChange={(v) => {
+                              if (v === "__create_new__") {
+                                handleCreateVendor(name)
+                                return
+                              }
                               importState.setVendorMappings({
                                 ...importState.vendorMappings,
                                 [name]: v === "__none__" ? "" : v,
                               })
-                            }
+                            }}
                           >
-                            <SelectTrigger className="w-[220px]">
-                              <SelectValue placeholder="Select vendor..." />
+                            <SelectTrigger className="w-[220px]" disabled={creatingVendors.has(name)}>
+                              <SelectValue placeholder={creatingVendors.has(name) ? "Creating..." : "Select vendor..."} />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="__create_new__" className="text-primary font-medium">
+                                + Create as New Vendor
+                              </SelectItem>
                               <SelectItem value="__none__">
                                 — Keep as text —
                               </SelectItem>

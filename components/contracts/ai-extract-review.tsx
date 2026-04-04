@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import {
   Check,
   Pencil,
@@ -8,6 +8,11 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  X,
+  Loader2,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,11 +28,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
+import type { ContractPricingItem } from "@/lib/actions/pricing-files"
+import { parsePricingFile } from "@/lib/utils/parse-pricing-file"
 
 interface AIExtractReviewProps {
   extracted: ExtractedContractData
   confidence: number
-  onAccept: (data: ExtractedContractData) => void
+  onAccept: (data: ExtractedContractData, pricingItems?: ContractPricingItem[], pricingCategories?: string[]) => void
 }
 
 export function AIExtractReview({
@@ -38,6 +45,35 @@ export function AIExtractReview({
   const [data, setData] = useState(extracted)
   const [editField, setEditField] = useState<string | null>(null)
   const [showTerms, setShowTerms] = useState(false)
+  const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
+  const [pricingFileName, setPricingFileName] = useState<string | null>(null)
+  const [pricingCategories, setPricingCategories] = useState<string[]>([])
+  const [pricingLoading, setPricingLoading] = useState(false)
+  const [pricingError, setPricingError] = useState<string | null>(null)
+  const pricingInputRef = useRef<HTMLInputElement>(null)
+
+  async function handlePricingFile(file: File) {
+    setPricingLoading(true)
+    setPricingError(null)
+    try {
+      const result = await parsePricingFile(file)
+      if (result.needsManualMapping) {
+        setPricingError("Could not auto-detect columns. Please upload a file with vendor_item_no and contract_price columns.")
+        return
+      }
+      if (result.items.length === 0) {
+        setPricingError("No valid pricing items found. Check your file format.")
+        return
+      }
+      setPricingItems(result.items)
+      setPricingFileName(file.name)
+      setPricingCategories(result.categories)
+    } catch (err) {
+      setPricingError(err instanceof Error ? err.message : "Failed to parse pricing file")
+    } finally {
+      setPricingLoading(false)
+    }
+  }
 
   const confidenceLabel =
     confidence >= 0.8 ? "High" : confidence >= 0.5 ? "Medium" : "Low"
@@ -323,8 +359,96 @@ export function AIExtractReview({
         </div>
       )}
 
+      {/* Link Pricing File */}
+      <Separator />
+      <div className="space-y-3">
+        <Label className="font-medium flex items-center gap-2">
+          <FileSpreadsheet className="h-4 w-4" />
+          Link Pricing File
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Optionally attach a CSV or Excel pricing file to import with the contract.
+        </p>
+
+        <input
+          ref={pricingInputRef}
+          type="file"
+          accept=".csv,.xlsx,.xls"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) handlePricingFile(file)
+            // Reset so the same file can be re-selected
+            e.target.value = ""
+          }}
+        />
+
+        {pricingItems.length > 0 ? (
+          <div className="flex items-center justify-between p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{pricingFileName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {pricingItems.length} pricing items loaded
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Badge variant="secondary">{pricingItems.length} items</Badge>
+              {pricingCategories.map((cat) => (
+                <Badge key={cat} variant="outline" className="text-xs">
+                  {cat}
+                </Badge>
+              ))}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => {
+                  setPricingItems([])
+                  setPricingFileName(null)
+                  setPricingCategories([])
+                  setPricingError(null)
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pricingLoading}
+            onClick={() => pricingInputRef.current?.click()}
+          >
+            {pricingLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="mr-2 h-4 w-4" />
+            )}
+            {pricingLoading ? "Parsing..." : "Upload Pricing File"}
+          </Button>
+        )}
+
+        {pricingError && (
+          <p className="text-xs text-destructive">{pricingError}</p>
+        )}
+      </div>
+
       {/* Accept button */}
-      <Button className="w-full" size="lg" onClick={() => onAccept(data)}>
+      <Button
+        className="w-full"
+        size="lg"
+        onClick={() =>
+          onAccept(
+            data,
+            pricingItems.length > 0 ? pricingItems : undefined,
+            pricingCategories.length > 0 ? pricingCategories : undefined,
+          )
+        }
+      >
         <Check className="h-4 w-4" /> Accept & Populate Form
       </Button>
     </div>

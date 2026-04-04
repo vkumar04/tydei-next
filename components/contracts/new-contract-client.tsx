@@ -19,6 +19,7 @@ import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractTerm } from "@/lib/actions/contract-terms"
 import { createContractDocument } from "@/lib/actions/contracts"
 import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
+import { parsePricingFile, buildPricingItems as buildPricingItemsShared, detectPricingColumnMapping } from "@/lib/utils/parse-pricing-file"
 import { createCategory } from "@/lib/actions/categories"
 import { createVendor } from "@/lib/actions/vendors"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
@@ -290,7 +291,7 @@ export function NewContractClient({
     finalizePricingImport(items, pricingFileRef?.name ?? "pricing-file")
   }
 
-  async function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string) {
+  async function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string, aiPricingItems?: ContractPricingItem[], aiPricingCategories?: string[]) {
     if (s3Key) setContractS3Key(s3Key)
     if (fileName) setContractFileName(fileName)
 
@@ -386,7 +387,14 @@ export function NewContractClient({
       )
     }
 
-    toast.success("Contract data extracted — upload a pricing file or switch to Manual Entry to review")
+    // If pricing items were provided from the AI review step, finalize them
+    if (aiPricingItems && aiPricingItems.length > 0) {
+      await finalizePricingImport(aiPricingItems, "pricing-file")
+      if (aiPricingCategories) setPricingCategories(aiPricingCategories)
+      toast.success(`Contract data extracted with ${aiPricingItems.length} pricing items`)
+    } else {
+      toast.success("Contract data extracted — upload a pricing file or switch to Manual Entry to review")
+    }
     setEntryMode("pdf")
   }
 

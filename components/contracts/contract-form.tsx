@@ -1,7 +1,9 @@
 "use client"
 
+import { useState, useEffect, useCallback } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import type { CreateContractInput } from "@/lib/validators/contracts"
+import { getVendorCOGSpend } from "@/lib/actions/cog-records"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -107,6 +109,35 @@ export function ContractFormBasicInfo({
     watch,
     formState: { errors },
   } = form
+
+  const vendorId = watch("vendorId")
+  const totalValue = watch("totalValue")
+  const [cogAutoFilled, setCogAutoFilled] = useState(false)
+
+  // Auto-populate contract total from vendor COG spend when vendor changes
+  const lookupCOGSpend = useCallback(
+    async (vid: string) => {
+      try {
+        const spend = await getVendorCOGSpend(vid)
+        // Only auto-fill if totalValue is currently 0/empty
+        const current = form.getValues("totalValue")
+        if ((!current || current === 0) && spend > 0) {
+          setValue("totalValue", spend)
+          setCogAutoFilled(true)
+        }
+      } catch {
+        // Silently ignore — user can still enter manually
+      }
+    },
+    [form, setValue]
+  )
+
+  useEffect(() => {
+    setCogAutoFilled(false)
+    if (vendorId) {
+      lookupCOGSpend(vendorId)
+    }
+  }, [vendorId, lookupCOGSpend])
 
   const effectiveDateStr = watch("effectiveDate")
   const expirationDateStr = watch("expirationDate")
@@ -446,6 +477,11 @@ export function ContractFormBasicInfo({
                   placeholder="0"
                 />
               </div>
+              {cogAutoFilled && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Based on COG spend data
+                </p>
+              )}
             </Field>
 
             <Field

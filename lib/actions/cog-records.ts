@@ -230,6 +230,17 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
   return { imported, skipped, errors }
 }
 
+// ─── Vendor COG Spend (aggregate) ──────────────────────────────
+
+export async function getVendorCOGSpend(vendorId: string): Promise<number> {
+  const { facility } = await requireFacility()
+  const result = await prisma.cOGRecord.aggregate({
+    where: { facilityId: facility.id, vendorId },
+    _sum: { extendedPrice: true },
+  })
+  return Number(result._sum.extendedPrice ?? 0)
+}
+
 // ─── Delete COG Record ──────────────────────────────────────────
 
 export async function deleteCOGRecord(id: string) {

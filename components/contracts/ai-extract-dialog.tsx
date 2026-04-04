@@ -13,11 +13,12 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { AIExtractReview } from "@/components/contracts/ai-extract-review"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
+import type { ContractPricingItem } from "@/lib/actions/pricing-files"
 
 interface AIExtractDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onExtracted: (data: ExtractedContractData, s3Key?: string, fileName?: string) => void
+  onExtracted: (data: ExtractedContractData, s3Key?: string, fileName?: string, pricingItems?: ContractPricingItem[], pricingCategories?: string[]) => void
 }
 
 type Stage = "upload" | "extracting" | "review" | "error"
@@ -113,8 +114,8 @@ export function AIExtractDialog({
     }
   }
 
-  function handleAccept(data: ExtractedContractData) {
-    onExtracted(data, s3Key ?? undefined, fileName || undefined)
+  function handleAccept(data: ExtractedContractData, pricingItems?: ContractPricingItem[], pricingCategories?: string[]) {
+    onExtracted(data, s3Key ?? undefined, fileName || undefined, pricingItems, pricingCategories)
     onOpenChange(false)
     setStage("upload")
     setExtracted(null)
