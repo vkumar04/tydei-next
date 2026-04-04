@@ -13,6 +13,8 @@ import {
   ToggleLeft,
   Sparkles,
   Puzzle,
+  Store,
+  FolderTree,
 } from "lucide-react"
 import {
   useFacilityProfile,
@@ -47,6 +49,8 @@ import { ConnectionsTab } from "@/components/facility/settings/tabs/connections-
 import { FeaturesTab } from "@/components/facility/settings/tabs/features-tab"
 import { AICreditsTab } from "@/components/facility/settings/tabs/ai-credits-tab"
 import { AddonsTab } from "@/components/facility/settings/tabs/addons-tab"
+import { VendorsTab } from "@/components/facility/settings/tabs/vendors-tab"
+import { CategoriesTab } from "@/components/facility/settings/tabs/categories-tab"
 
 interface SettingsClientProps {
   facilityId: string
@@ -239,6 +243,14 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             <Sparkles className="h-4 w-4 hidden sm:inline" />
             AI Credits
           </TabsTrigger>
+          <TabsTrigger value="vendors" className="gap-2">
+            <Store className="h-4 w-4 hidden sm:inline" />
+            Vendors
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="gap-2">
+            <FolderTree className="h-4 w-4 hidden sm:inline" />
+            Categories
+          </TabsTrigger>
           <TabsTrigger value="addons" className="gap-2">
             <Puzzle className="h-4 w-4 hidden sm:inline" />
             Add-ons
@@ -322,6 +334,14 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             creditsData={creditsQuery.data}
             usageData={usageQuery.data}
           />
+        </TabsContent>
+
+        <TabsContent value="vendors" className="space-y-6">
+          <VendorsTab />
+        </TabsContent>
+
+        <TabsContent value="categories" className="space-y-6">
+          <CategoriesTab />
         </TabsContent>
 
         <TabsContent value="addons" className="space-y-6">
