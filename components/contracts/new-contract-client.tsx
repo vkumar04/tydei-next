@@ -249,8 +249,19 @@ export function NewContractClient({
     }
 
     const totalFromPricing = items.reduce((sum, i) => sum + i.unitPrice, 0)
-    if (form.getValues("totalValue") === 0 && totalFromPricing > 0) {
-      form.setValue("totalValue", totalFromPricing)
+    const currentTotal = form.getValues("totalValue")
+    if ((!currentTotal || currentTotal === 0) && totalFromPricing > 0) {
+      form.setValue("totalValue", Math.round(totalFromPricing * 100) / 100)
+
+      // Auto-compute annual value from dates
+      const eff = form.getValues("effectiveDate")
+      const exp = form.getValues("expirationDate")
+      if (eff && exp) {
+        const years = Math.max(1, (new Date(exp).getTime() - new Date(eff).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+        form.setValue("annualValue", Math.round((totalFromPricing / years) * 100) / 100)
+      } else {
+        form.setValue("annualValue", Math.round(totalFromPricing * 100) / 100)
+      }
     }
 
     setPricingItems(items)
@@ -286,7 +297,12 @@ export function NewContractClient({
     form.setValue("contractType", data.contractType)
     form.setValue("effectiveDate", data.effectiveDate)
     form.setValue("expirationDate", data.expirationDate)
-    if (data.totalValue) form.setValue("totalValue", data.totalValue)
+    if (data.totalValue) {
+      form.setValue("totalValue", data.totalValue)
+      // Auto-compute annual value
+      const years = Math.max(1, (new Date(data.expirationDate).getTime() - new Date(data.effectiveDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      form.setValue("annualValue", Math.round((data.totalValue / years) * 100) / 100)
+    }
     if (data.description) form.setValue("description", data.description)
 
     // Try to match vendor by name
