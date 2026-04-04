@@ -232,14 +232,20 @@ export function NewContractClient({
 
     // Auto-create categories that don't exist yet
     const existingNames = new Set(categories.map((c) => c.name.toLowerCase()))
+    let createdCount = 0
     for (const cat of cats) {
       if (!existingNames.has(cat.toLowerCase())) {
         try {
           await createCategory({ name: cat })
+          createdCount++
         } catch {
           // Category may already exist — ignore
         }
       }
+    }
+    // Refresh server data so the Category dropdown picks up new entries
+    if (createdCount > 0) {
+      router.refresh()
     }
 
     const totalFromPricing = items.reduce((sum, i) => sum + i.unitPrice, 0)

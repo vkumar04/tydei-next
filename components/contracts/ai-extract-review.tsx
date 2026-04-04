@@ -15,6 +15,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 
 interface AIExtractReviewProps {
@@ -130,7 +137,27 @@ export function AIExtractReview({
           />
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Contract Type</p>
-            <Badge className="text-sm">{data.contractType}</Badge>
+            <Select
+              value={data.contractType}
+              onValueChange={(v) =>
+                setData((prev) => ({
+                  ...prev,
+                  contractType: v as ExtractedContractData["contractType"],
+                }))
+              }
+            >
+              <SelectTrigger className="h-8 w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="usage">Usage-Based</SelectItem>
+                <SelectItem value="pricing_only">Pricing Only</SelectItem>
+                <SelectItem value="capital">Capital Equipment</SelectItem>
+                <SelectItem value="grouped">GPO/Group</SelectItem>
+                <SelectItem value="tie_in">Tie-In</SelectItem>
+                <SelectItem value="service">Service</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
