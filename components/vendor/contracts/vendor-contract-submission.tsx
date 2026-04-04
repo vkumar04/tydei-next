@@ -59,6 +59,7 @@ export function VendorContractSubmission({
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionComplete, setExtractionComplete] = useState(false)
 
+  const [additionalDocs, setAdditionalDocs] = useState<{ file: File; type: string; name: string }[]>([])
   const [pricingFile, setPricingFile] = useState<File | null>(null)
   const [pricingFileData, setPricingFileData] = useState<PricingFileData | null>(null)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
@@ -456,6 +457,14 @@ export function VendorContractSubmission({
         onPDFUpload={handlePDFUpload}
         onClearPDF={handleClearPDF}
         onAIExtracted={handleAIExtract}
+        additionalDocs={additionalDocs}
+        onAddDoc={(file, type) => setAdditionalDocs((prev) => [...prev, { file, type, name: file.name }])}
+        onRemoveDoc={(i) => setAdditionalDocs((prev) => prev.filter((_, idx) => idx !== i))}
+        onChangeDocType={(i, type) => setAdditionalDocs((prev) => prev.map((d, idx) => idx === i ? { ...d, type } : d))}
+        pricingFileName={pricingFile?.name ?? null}
+        pricingItemCount={pricingItems.length}
+        onPricingUpload={processPricingFile}
+        onClearPricing={handleClearPricingFile}
       />
 
       <form onSubmit={handleSubmit}>

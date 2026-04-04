@@ -721,11 +721,87 @@ const DEMO_BENCHMARKS: BenchmarkRow[] = [
 ]
 
 function BenchmarksSection({ proposals }: { proposals: VendorProposal[] }) {
+  const [importedBenchmarks, setImportedBenchmarks] = useState<BenchmarkRow[]>([])
+
   const benchmarks = useMemo<BenchmarkRow[]>(() => {
-    // If there are proposals with items, we could derive benchmarks from them.
-    // For now, return demo data.
+    if (importedBenchmarks.length > 0) return importedBenchmarks
     return DEMO_BENCHMARKS
-  }, [proposals])
+  }, [importedBenchmarks])
+
+  function handleBenchmarkImport() {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".csv,.xlsx,.xls"
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+
+      try {
+        let headers: string[] = []
+        let rows: Record<string, string>[] = []
+
+        const ext = file.name.split(".").pop()?.toLowerCase()
+        if (ext === "csv") {
+          const text = await file.text()
+          const lines = text.split(/\r?\n/).filter((l) => l.trim())
+          headers = lines[0]?.split(",").map((h) => h.trim()) ?? []
+          rows = lines.slice(1).map((line) => {
+            const vals = line.split(",").map((v) => v.trim())
+            const row: Record<string, string> = {}
+            headers.forEach((h, i) => { row[h] = vals[i] ?? "" })
+            return row
+          })
+        } else {
+          const formData = new FormData()
+          formData.append("file", file)
+          const res = await fetch("/api/parse-file", { method: "POST", body: formData })
+          if (!res.ok) throw new Error("Failed to parse file")
+          const data = await res.json()
+          headers = data.headers
+          rows = data.rows
+        }
+
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+        const nh = headers.map(norm)
+        const find = (...aliases: string[]) => aliases.map(norm).reduce<number>((f, a) => f >= 0 ? f : nh.indexOf(a), -1)
+
+        const iProduct = find("product", "productname", "item", "itemname", "description")
+        const iItemNo = find("itemnumber", "itemno", "sku", "referencenumber", "catalogno", "partno")
+        const iCategory = find("category", "productcategory", "department")
+        const iAsp = find("nationalasp", "asp", "averagesalesprice", "avgprice")
+        const iFloor = find("hardfloor", "floor", "minimumprice", "floorprice")
+        const iCost = find("costbasis", "cost", "unitcost", "cogs")
+        const iMargin = find("targetmargin", "margin", "marginpercent")
+        const iGpo = find("gpofee", "gpo", "adminfee", "fee")
+
+        const parsed: BenchmarkRow[] = rows.map((r, i) => {
+          const g = (idx: number) => idx >= 0 ? r[headers[idx]] ?? "" : ""
+          return {
+            id: `imp-${i}`,
+            productName: g(iProduct) || `Item ${i + 1}`,
+            itemNumber: g(iItemNo) || "",
+            category: g(iCategory) || "Uncategorized",
+            nationalAsp: parseFloat(g(iAsp).replace(/[^0-9.-]/g, "")) || 0,
+            hardFloor: parseFloat(g(iFloor).replace(/[^0-9.-]/g, "")) || 0,
+            costBasis: parseFloat(g(iCost).replace(/[^0-9.-]/g, "")) || 0,
+            targetMargin: parseFloat(g(iMargin).replace(/[^0-9.-]/g, "")) || 0,
+            gpoFee: parseFloat(g(iGpo).replace(/[^0-9.-]/g, "")) || 0,
+          }
+        }).filter((r) => r.productName && (r.nationalAsp > 0 || r.costBasis > 0))
+
+        if (parsed.length === 0) {
+          toast.error("No valid benchmark data found. Check your CSV has columns like Product, National ASP, Hard Floor, Cost Basis.")
+          return
+        }
+
+        setImportedBenchmarks(parsed)
+        toast.success(`Imported ${parsed.length} benchmark items from ${file.name}`)
+      } catch {
+        toast.error("Failed to parse benchmark file")
+      }
+    }
+    input.click()
+  }
 
   return (
     <Card>
@@ -744,7 +820,7 @@ function BenchmarksSection({ proposals }: { proposals: VendorProposal[] }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => toast.info("Import functionality coming soon. Upload a CSV with benchmark data.")}
+              onClick={handleBenchmarkImport}
             >
               <Upload className="h-4 w-4 mr-1" />
               Import
@@ -771,7 +847,7 @@ function BenchmarksSection({ proposals }: { proposals: VendorProposal[] }) {
             <Button
               variant="outline"
               className="mt-4"
-              onClick={() => toast.info("Import functionality coming soon. Upload a CSV with benchmark data.")}
+              onClick={handleBenchmarkImport}
             >
               <Upload className="h-4 w-4 mr-1" />
               Import Benchmarks

@@ -15,11 +15,22 @@ import {
 import {
   Upload,
   FileText,
+  FileSpreadsheet,
   Sparkles,
   CheckCircle2,
   Trash2,
   Loader2,
+  Plus,
+  X,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { AITextExtract } from "@/components/contracts/ai-text-extract"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
@@ -34,6 +45,14 @@ export interface EntryModeTabsProps {
   onPDFUpload: (file: File) => void
   onClearPDF: () => void
   onAIExtracted?: (data: ExtractedContractData, s3Key?: string, fileName?: string) => void
+  additionalDocs?: { file: File; type: string; name: string }[]
+  onAddDoc?: (file: File, type: string) => void
+  onRemoveDoc?: (index: number) => void
+  onChangeDocType?: (index: number, type: string) => void
+  pricingFileName?: string | null
+  pricingItemCount?: number
+  onPricingUpload?: (file: File) => void
+  onClearPricing?: () => void
 }
 
 export function EntryModeTabs({
@@ -46,6 +65,14 @@ export function EntryModeTabs({
   onPDFUpload,
   onClearPDF,
   onAIExtracted,
+  additionalDocs = [],
+  onAddDoc,
+  onRemoveDoc,
+  onChangeDocType,
+  pricingFileName,
+  pricingItemCount,
+  onPricingUpload,
+  onClearPricing,
 }: EntryModeTabsProps) {
   return (
     <Tabs
@@ -170,6 +197,116 @@ export function EntryModeTabs({
             </div>
           </CardContent>
         </Card>
+
+        {/* Additional Documents */}
+        {onAddDoc && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-5 w-5" />
+                Additional Documents
+              </CardTitle>
+              <CardDescription>
+                Upload amendments, addendums, or exhibits
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {additionalDocs.length > 0 && (
+                <div className="space-y-2">
+                  {additionalDocs.map((doc, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 rounded-lg border">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="text-sm truncate">{doc.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Select value={doc.type} onValueChange={(v) => onChangeDocType?.(i, v)}>
+                          <SelectTrigger className="h-7 w-[120px] text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="amendment">Amendment</SelectItem>
+                            <SelectItem value="addendum">Addendum</SelectItem>
+                            <SelectItem value="exhibit">Exhibit</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onRemoveDoc?.(i)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const input = document.createElement("input")
+                  input.type = "file"
+                  input.accept = ".pdf,.doc,.docx,.txt"
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0]
+                    if (file) onAddDoc(file, "amendment")
+                  }
+                  input.click()
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Add Document
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Pricing File */}
+        {onPricingUpload && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileSpreadsheet className="h-5 w-5" />
+                Upload Pricing File
+              </CardTitle>
+              <CardDescription>
+                Upload a CSV or Excel file with vendor item numbers and pricing
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pricingFileName ? (
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    <div>
+                      <p className="text-sm font-medium">{pricingFileName}</p>
+                      <p className="text-xs text-muted-foreground">{pricingItemCount} pricing items loaded</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{pricingItemCount} items</Badge>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClearPricing}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const input = document.createElement("input")
+                    input.type = "file"
+                    input.accept = ".csv,.xlsx,.xls"
+                    input.onchange = (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0]
+                      if (file) onPricingUpload(file)
+                    }
+                    input.click()
+                  }}
+                >
+                  <Upload className="h-4 w-4 mr-2" /> Upload Pricing File
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </TabsContent>
 
       {/* Manual Entry Tab */}
