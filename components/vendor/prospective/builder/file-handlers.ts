@@ -1,5 +1,5 @@
 import { toast } from "sonner"
-import type { NewProposalState, ProposalProduct, FileUploadProgressState } from "./types"
+import type { NewProposalState, ProposalProduct, FileUploadProgressState, AiSuggestionsState } from "./types"
 
 function parseCSVLine(line: string): string[] {
   const result: string[] = []
@@ -551,12 +551,27 @@ export async function generateProductsFromAI(
 export function generateTermsFromNotes(
   newProposal: NewProposalState,
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>,
-) {
+): AiSuggestionsState["data"] {
   const notes = newProposal.aiNotes.toLowerCase()
   const generatedTerms: NewProposalState["terms"] = []
+  const suggestedTerms: { type: string; description: string; rationale: string }[] = []
+  const negotiationAdvice: string[] = []
+  const riskFactors: string[] = []
 
+  // ── Parse context signals from the notes ──────────────────────
   const spendMatch = newProposal.aiNotes.match(/\$?([\d,.]+)\s*(million|m|k|thousand)?\s*(annual\s*)?(spend|revenue)?/i)
+  const shareMatch = newProposal.aiNotes.match(/(\d+)\s*%?\s*(?:market\s*)?share/i)
+  const yearMatch = newProposal.aiNotes.match(/(\d+)\s*-?\s*year/i)
+  const hasCompetitor = notes.includes("compet") || notes.includes("rival") || notes.includes("alternative")
+  const hasExclusivity = notes.includes("exclusive") || notes.includes("primary") || notes.includes("sole source")
+  const hasUrgency = notes.includes("urgent") || notes.includes("deadline") || notes.includes("end of month") || notes.includes("decision needed")
+  const hasGrowth = notes.includes("growth") || notes.includes("increase") || notes.includes("expand")
+  const hasTiered = notes.includes("tier") || notes.includes("volume") || notes.includes("incentive")
+  const hasRelationship = notes.includes("relationship") || notes.includes("years") || notes.includes("loyal") || notes.includes("customer for")
+  const contractYears = yearMatch ? parseInt(yearMatch[1]) : 0
+  const sharePercent = shareMatch ? parseInt(shareMatch[1]) : hasExclusivity ? 70 : 0
 
+  // ── Spend rebate ──────────────────────────────────────────────
   if (spendMatch || notes.includes("spend") || notes.includes("annual")) {
     let targetValue = newProposal.projectedSpend || 500000
     if (spendMatch && spendMatch[1]) {
@@ -570,39 +585,82 @@ export function generateTermsFromNotes(
         targetValue = num
       }
     }
+    const rebatePct = targetValue >= 1000000 ? 3.5 : targetValue >= 500000 ? 3 : 2.5
     generatedTerms.push({
       id: `ai-spend-${Date.now()}`,
       termType: "spend_rebate",
       name: "Annual Spend Rebate",
       targetType: "spend",
       targetValue,
-      rebatePercent: 3,
+      rebatePercent: rebatePct,
       tiers: [],
     })
+    suggestedTerms.push({
+      type: "Annual Spend Rebate",
+      description: `${rebatePct}% rebate on ${targetValue >= 1000000 ? "$" + (targetValue / 1000000).toFixed(1) + "M" : "$" + (targetValue / 1000).toFixed(0) + "K"} annual spend commitment`,
+      rationale: `A spend-based rebate locks in volume commitment. At this spend level, ${rebatePct}% is competitive with market benchmarks while maintaining healthy margins.`,
+    })
+    negotiationAdvice.push(
+      `Push for: A higher spend threshold with a proportionally higher rebate (e.g., ${rebatePct + 0.5}% at 120% of target) to incentivize over-performance.`
+    )
   }
 
-  const shareMatch = newProposal.aiNotes.match(/(\d+)\s*%?\s*(?:market\s*)?share/i)
-  if (shareMatch || notes.includes("market share") || notes.includes("exclusive") || notes.includes("primary") || notes.includes("partnership")) {
-    const sharePercent = shareMatch ? parseInt(shareMatch[1]) : 70
+  // ── Market share commitment ───────────────────────────────────
+  if (shareMatch || hasExclusivity || notes.includes("market share") || notes.includes("partnership")) {
     generatedTerms.push({
       id: `ai-share-${Date.now()}`,
       termType: "market_share_rebate",
       name: "Market Share Commitment",
       targetType: "market_share",
       targetValue: sharePercent,
-      rebatePercent: 2,
+      rebatePercent: sharePercent >= 60 ? 2.5 : 2,
       tiers: [],
     })
     setNewProposal(prev => ({ ...prev, marketShareCommitment: sharePercent }))
+    suggestedTerms.push({
+      type: "Market Share Commitment",
+      description: `${sharePercent}% share commitment with ${sharePercent >= 60 ? "2.5" : "2"}% compliance rebate`,
+      rationale: hasExclusivity
+        ? "Exclusivity requests justify a premium rebate — the vendor gains predictable volume while the facility gets pricing certainty."
+        : `A ${sharePercent}% share target is achievable and demonstrates commitment without locking the facility into an unrealistic compliance burden.`,
+    })
+    if (sharePercent >= 70) {
+      negotiationAdvice.push(
+        "Concede on: Slightly higher rebate percentage for high share commitment — the guaranteed volume more than compensates."
+      )
+      riskFactors.push(`${sharePercent}% share commitment is aggressive. If the facility can't maintain compliance, rebate clawback could damage the relationship.`)
+    }
+    negotiationAdvice.push(
+      "Push for: Quarterly compliance reporting rather than annual, so course-corrections can happen early."
+    )
   }
 
-  const yearMatch = newProposal.aiNotes.match(/(\d+)\s*-?\s*year/i)
+  // ── Contract length ───────────────────────────────────────────
   if (yearMatch) {
     const years = parseInt(yearMatch[1])
     setNewProposal(prev => ({ ...prev, contractLength: years * 12 }))
+    suggestedTerms.push({
+      type: "Contract Duration",
+      description: `${years}-year agreement with annual price escalator cap of 2-3%`,
+      rationale: years >= 3
+        ? "A multi-year deal provides revenue stability. Include a price escalator cap to protect against cost inflation while keeping the facility comfortable with long-term commitment."
+        : "A shorter contract reduces lock-in risk for both parties. Consider including an auto-renewal clause with a 90-day opt-out window.",
+    })
+    if (years >= 3) {
+      negotiationAdvice.push(
+        `Push for: Annual review meetings built into the contract to discuss performance and adjust terms — this keeps the relationship active.`
+      )
+      negotiationAdvice.push(
+        `Concede on: A 90-day termination clause after year 1 — it shows confidence in your value and reduces the facility's perceived risk.`
+      )
+    }
+    if (years >= 5) {
+      riskFactors.push("5+ year contracts carry product obsolescence risk. Consider including technology refresh clauses.")
+    }
   }
 
-  if (notes.includes("growth") || notes.includes("increase") || notes.includes("expand")) {
+  // ── Growth incentive ──────────────────────────────────────────
+  if (hasGrowth) {
     generatedTerms.push({
       id: `ai-growth-${Date.now()}`,
       termType: "volume_rebate",
@@ -612,9 +670,18 @@ export function generateTermsFromNotes(
       rebatePercent: 2,
       tiers: [],
     })
+    suggestedTerms.push({
+      type: "Growth Incentive",
+      description: "2% bonus rebate for 10%+ year-over-year volume growth",
+      rationale: "Growth-based incentives align both parties' interests. The vendor gains market share expansion while the facility is rewarded for consolidating purchases.",
+    })
+    negotiationAdvice.push(
+      "Push for: Growth measured against a rolling baseline rather than a fixed baseline to prevent sandbagging in year 1."
+    )
   }
 
-  if (notes.includes("tier") || notes.includes("volume") || notes.includes("incentive")) {
+  // ── Tiered volume rebate ──────────────────────────────────────
+  if (hasTiered) {
     generatedTerms.push({
       id: `ai-tiered-${Date.now()}`,
       termType: "volume_rebate",
@@ -628,8 +695,65 @@ export function generateTermsFromNotes(
         { threshold: 500, rebatePercent: 3 },
       ],
     })
+    suggestedTerms.push({
+      type: "Tiered Volume Rebate",
+      description: "Progressive rebate: 1% at 100 units, 2% at 250 units, 3% at 500+ units",
+      rationale: "Tiered structures motivate increasing purchases. The facility always benefits from buying more, and each tier is profitable for the vendor at the corresponding volume.",
+    })
+    negotiationAdvice.push(
+      "Concede on: A lower entry tier threshold if the facility has historically low volume — it builds trust and hooks them into the program."
+    )
   }
 
+  // ── Competitive context signals ───────────────────────────────
+  let competitiveStrategy: string | null = null
+  if (hasCompetitor) {
+    competitiveStrategy = "A competitor is in the picture. Focus on total value of partnership (service, reliability, clinical support) rather than matching price point-for-point. If you must match pricing, do it through rebate structures that lock in volume rather than straight price reductions that erode your ASP."
+    negotiationAdvice.push(
+      "Push for: A head-to-head product evaluation or trial period rather than a straight price match — this leverages product quality advantages."
+    )
+    riskFactors.push("Competing offer present. Avoid a race-to-the-bottom on price — differentiate on service and total cost of ownership.")
+  }
+
+  // ── Urgency assessment ────────────────────────────────────────
+  let urgencyAssessment: string | null = null
+  if (hasUrgency) {
+    urgencyAssessment = "The deal has time pressure. This can work in your favor — offer a limited-time signing bonus (e.g., additional 0.5% rebate for signing within 2 weeks) to create urgency while maintaining your standard pricing structure."
+    negotiationAdvice.push(
+      "Push for: Quick close by offering a time-limited signing incentive rather than permanent price concessions."
+    )
+    riskFactors.push("Urgency may be artificial negotiation pressure. Verify the timeline before making concessions.")
+  }
+
+  // ── Relationship context ──────────────────────────────────────
+  if (hasRelationship) {
+    negotiationAdvice.push(
+      "Leverage the existing relationship — propose a loyalty tier or renewal bonus that rewards continued partnership."
+    )
+    suggestedTerms.push({
+      type: "Loyalty Renewal Bonus",
+      description: "0.5% additional rebate applied at contract renewal for continuous partners",
+      rationale: "Rewarding long-term customers reduces churn risk and costs less than acquiring new business. This signals that the vendor values the relationship.",
+    })
+  }
+
+  // ── Determine deal strength ───────────────────────────────────
+  let strengthPoints = 0
+  if (contractYears >= 2) strengthPoints += 2
+  if (sharePercent >= 50) strengthPoints += 2
+  if (hasRelationship) strengthPoints += 1
+  if (hasExclusivity) strengthPoints += 2
+  if (hasCompetitor) strengthPoints -= 1
+  if (hasUrgency) strengthPoints -= 1
+  const dealStrength: "strong" | "moderate" | "weak" =
+    strengthPoints >= 4 ? "strong" : strengthPoints >= 1 ? "moderate" : "weak"
+
+  const recommendedDiscount =
+    dealStrength === "strong" ? "2-4% off list"
+    : dealStrength === "moderate" ? "5-8% off list"
+    : "8-12% off list (competitive situation)"
+
+  // ── Apply terms to proposal ───────────────────────────────────
   if (generatedTerms.length > 0) {
     setNewProposal(prev => {
       const existingTypes = prev.terms.map(t => t.termType)
@@ -639,7 +763,7 @@ export function generateTermsFromNotes(
         terms: [...prev.terms, ...newTerms],
       }
     })
-    toast.success(`AI generated ${generatedTerms.length} deal term(s) from your notes. Review them in the Terms section below.`)
+    toast.success(`AI generated ${generatedTerms.length} deal term(s) with reasoning and negotiation advice. Review below.`)
   } else {
     setNewProposal(prev => ({
       ...prev,
@@ -653,6 +777,33 @@ export function generateTermsFromNotes(
         tiers: [],
       }],
     }))
+    suggestedTerms.push({
+      type: "Standard Spend Rebate",
+      description: "2.5% rebate on projected annual spend",
+      rationale: "A standard spend rebate is a safe starting point. Add more detail to your notes (spend targets, market share goals, contract length) for more specific recommendations.",
+    })
     toast.info("Generated a standard spend rebate term. Add more details to your notes for specific terms.")
+  }
+
+  // ── Always add general advice if none was generated ───────────
+  if (negotiationAdvice.length === 0) {
+    negotiationAdvice.push(
+      "Push for: Multi-year commitment in exchange for better rebate tiers.",
+      "Concede on: Small administrative items (reporting frequency, payment terms) to build goodwill.",
+      "Avoid: Upfront price reductions without volume commitment — use rebates to protect your ASP."
+    )
+  }
+  if (riskFactors.length === 0) {
+    riskFactors.push("No significant risk signals detected in the deal notes. Proceed with standard terms.")
+  }
+
+  return {
+    dealStrength,
+    recommendedDiscount,
+    negotiationAdvice,
+    suggestedTerms,
+    riskFactors,
+    competitiveStrategy,
+    urgencyAssessment: urgencyAssessment ?? undefined,
   }
 }

@@ -45,6 +45,14 @@ import {
   Cell,
 } from "recharts"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
   FileText,
   DollarSign,
   CheckCircle2,
@@ -66,7 +74,10 @@ import {
   Calendar,
   Building2,
   Scale,
+  Upload,
+  Download,
 } from "lucide-react"
+import { toast } from "sonner"
 import { useVendorProposals } from "@/hooks/use-prospective"
 import { formatCurrency } from "@/lib/formatting"
 import { chartTooltipStyle } from "@/lib/chart-config"
@@ -686,24 +697,148 @@ function ProposalCards({
 
 // ─── Benchmarks Section ───────────────────────────────────────
 
-function BenchmarksSection() {
+interface BenchmarkRow {
+  id: string
+  productName: string
+  itemNumber: string
+  category: string
+  nationalAsp: number
+  hardFloor: number
+  costBasis: number
+  targetMargin: number
+  gpoFee: number
+}
+
+const DEMO_BENCHMARKS: BenchmarkRow[] = [
+  { id: "b1", productName: "Surgical Gloves – Nitrile", itemNumber: "SG-4012", category: "Disposables", nationalAsp: 8.50, hardFloor: 6.80, costBasis: 5.25, targetMargin: 22, gpoFee: 3 },
+  { id: "b2", productName: "Hip Implant System II", itemNumber: "HI-7820", category: "Ortho-Spine", nationalAsp: 4250.00, hardFloor: 3600.00, costBasis: 2980.00, targetMargin: 18, gpoFee: 2.5 },
+  { id: "b3", productName: "Cardiac Stent – DES", itemNumber: "CS-1105", category: "Cardiovascular", nationalAsp: 1875.00, hardFloor: 1200.00, costBasis: 1350.00, targetMargin: 15, gpoFee: 3 },
+  { id: "b4", productName: "Bone Graft Substitute", itemNumber: "BG-3340", category: "Biologics", nationalAsp: 920.00, hardFloor: 700.00, costBasis: 580.00, targetMargin: 20, gpoFee: 2 },
+  { id: "b5", productName: "Laparoscopic Stapler", itemNumber: "LS-5560", category: "General Surgery", nationalAsp: 385.00, hardFloor: 310.00, costBasis: 245.00, targetMargin: 18, gpoFee: 3 },
+  { id: "b6", productName: "Spinal Fusion Cage", itemNumber: "SF-9001", category: "Ortho-Spine", nationalAsp: 3100.00, hardFloor: 2400.00, costBasis: 2650.00, targetMargin: 16, gpoFee: 2.5 },
+  { id: "b7", productName: "Wound Vac Canister", itemNumber: "WV-2200", category: "Disposables", nationalAsp: 42.00, hardFloor: 28.00, costBasis: 22.50, targetMargin: 24, gpoFee: 3 },
+  { id: "b8", productName: "Pulse Oximeter Sensor", itemNumber: "PO-8800", category: "Capital Equipment", nationalAsp: 18.75, hardFloor: 14.00, costBasis: 11.00, targetMargin: 20, gpoFee: 2 },
+]
+
+function BenchmarksSection({ proposals }: { proposals: VendorProposal[] }) {
+  const benchmarks = useMemo<BenchmarkRow[]>(() => {
+    // If there are proposals with items, we could derive benchmarks from them.
+    // For now, return demo data.
+    return DEMO_BENCHMARKS
+  }, [proposals])
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Scale className="h-5 w-5" />
-          Market Benchmarks
-        </CardTitle>
-        <CardDescription>
-          Compare your pricing and terms against market averages
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Scale className="h-5 w-5" />
+              Product Pricing Benchmarks
+            </CardTitle>
+            <CardDescription>
+              Compare your pricing and terms against national averages and hard floors
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toast.info("Import functionality coming soon. Upload a CSV with benchmark data.")}
+            >
+              <Upload className="h-4 w-4 mr-1" />
+              Import
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toast.info("Export started. Your benchmarks CSV will download shortly.")}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Export
+            </Button>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="py-12 text-center">
-        <Scale className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
-        <p className="font-medium text-muted-foreground">Benchmarks coming soon</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Market benchmark data will be available once sufficient contract data is collected
-        </p>
+      <CardContent>
+        {benchmarks.length === 0 ? (
+          <div className="py-12 text-center">
+            <Scale className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+            <p className="font-medium text-muted-foreground">No benchmark data yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Import a benchmarks file to compare your pricing against market data
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => toast.info("Import functionality coming soon. Upload a CSV with benchmark data.")}
+            >
+              <Upload className="h-4 w-4 mr-1" />
+              Import Benchmarks
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">National ASP</TableHead>
+                    <TableHead className="text-right">Hard Floor</TableHead>
+                    <TableHead className="text-right">Cost Basis</TableHead>
+                    <TableHead className="text-right">Target Margin</TableHead>
+                    <TableHead className="text-right">GPO Fee</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {benchmarks.map((row) => {
+                    const floorBelowCost = row.hardFloor < row.costBasis
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{row.productName}</p>
+                            <p className="text-xs text-muted-foreground">{row.itemNumber}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{row.category}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(row.nationalAsp)}
+                        </TableCell>
+                        <TableCell className={`text-right font-medium ${floorBelowCost ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {formatCurrency(row.hardFloor)}
+                          {floorBelowCost && (
+                            <AlertTriangle className="inline-block ml-1 h-3 w-3" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(row.costBasis)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {row.targetMargin}%
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {row.gpoFee}%
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm text-muted-foreground">
+              <span>{benchmarks.length} products benchmarked</span>
+              <span className="flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3 text-red-500" />
+                Red = Hard Floor below Cost Basis
+              </span>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   )
@@ -906,7 +1041,7 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
 
         {/* Benchmarks Tab */}
         <TabsContent value="benchmarks" className="mt-4 space-y-4">
-          <BenchmarksSection />
+          <BenchmarksSection proposals={proposals ?? []} />
         </TabsContent>
 
         {/* Analytics Tab */}

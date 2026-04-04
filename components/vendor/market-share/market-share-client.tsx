@@ -38,6 +38,12 @@ import { queryKeys } from "@/lib/query-keys"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
 import { levenshteinSimilarity } from "@/lib/utils/levenshtein"
 import { CHART_COLORS, chartTooltipStyle } from "@/lib/chart-config"
+import { Progress } from "@/components/ui/progress"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
   LayoutGrid,
   PieChart as PieChartIcon,
@@ -48,6 +54,9 @@ import {
   Minus,
   AlertTriangle,
   GitMerge,
+  ChevronDown,
+  Lightbulb,
+  Building2,
 } from "lucide-react"
 import { motion } from "motion/react"
 import { staggerContainer } from "@/lib/animations"
@@ -386,6 +395,157 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
                     </span>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Category Breakdown — collapsible detail cards */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Category Breakdown</CardTitle>
+              <CardDescription>
+                Expand each category to see vendor spend vs total market detail
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {categoryRows.length === 0 ? (
+                <p className="text-center py-8 text-muted-foreground">No category data</p>
+              ) : (
+                categoryRows.map((row) => (
+                  <Collapsible key={row.category}>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left hover:bg-muted/50 transition-colors group">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className="font-medium truncate">{row.category}</span>
+                        <Badge
+                          variant={
+                            row.sharePct >= 40
+                              ? "default"
+                              : row.sharePct >= 20
+                                ? "secondary"
+                                : "outline"
+                          }
+                        >
+                          {formatPercent(row.sharePct)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="w-32 hidden sm:block">
+                          <Progress value={Math.min(row.sharePct, 100)} />
+                        </div>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="ml-4 mt-2 mb-3 grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground text-xs">Vendor Spend</p>
+                          <p className="text-lg font-semibold">{formatCurrency(row.yourSpend)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Total Market</p>
+                          <p className="text-lg font-semibold">{formatCurrency(row.totalMarket)}</p>
+                        </div>
+                        <div className="col-span-2">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                            <span>Share</span>
+                            <span>{formatPercent(row.sharePct)}</span>
+                          </div>
+                          <Progress value={Math.min(row.sharePct, 100)} className="h-3" />
+                        </div>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Growth Opportunities */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Low-Share Categories */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Lightbulb className="h-5 w-5 text-amber-500" />
+                  Low-Share Categories
+                </CardTitle>
+                <CardDescription>
+                  Categories where your market share is below 20% — potential growth areas
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const lowShare = categoryRows.filter((r) => r.sharePct < 20)
+                  if (lowShare.length === 0) {
+                    return (
+                      <p className="text-center py-6 text-sm text-muted-foreground">
+                        No low-share categories found. Great coverage!
+                      </p>
+                    )
+                  }
+                  return (
+                    <div className="space-y-3">
+                      {lowShare.map((row) => (
+                        <div key={row.category} className="flex items-center justify-between rounded-lg border p-3">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{row.category}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Gap: {formatCurrency(row.totalMarket - row.yourSpend)} addressable
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-red-600 dark:text-red-400 border-red-300 dark:border-red-700 shrink-0">
+                            {formatPercent(row.sharePct)}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Facility Opportunities */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Building2 className="h-5 w-5 text-blue-500" />
+                  Facility Opportunities
+                </CardTitle>
+                <CardDescription>
+                  Facilities with below-average vendor share — expand your footprint
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const avgShare = facilityRows.length > 0
+                    ? facilityRows.reduce((s, r) => s + r.sharePct, 0) / facilityRows.length
+                    : 0
+                  const lowFacilities = facilityRows.filter((r) => r.sharePct < avgShare)
+                  if (lowFacilities.length === 0) {
+                    return (
+                      <p className="text-center py-6 text-sm text-muted-foreground">
+                        All facilities are at or above average share.
+                      </p>
+                    )
+                  }
+                  return (
+                    <div className="space-y-3">
+                      {lowFacilities.slice(0, 5).map((row) => (
+                        <div key={row.facility} className="flex items-center justify-between rounded-lg border p-3">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{row.facility}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Current spend: {formatCurrency(row.yourSpend)}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0">
+                            {formatPercent(row.sharePct)}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </div>

@@ -139,7 +139,12 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
   }, [aiProductDescription, newProposal.productCategory])
 
   const handleGenerateTermsFromNotes = useCallback(() => {
-    generateTermsFromNotes(newProposal, setNewProposal)
+    setAiSuggestions({ isLoading: true, data: null })
+    // Small delay to show loading state, then generate
+    setTimeout(() => {
+      const suggestions = generateTermsFromNotes(newProposal, setNewProposal)
+      setAiSuggestions({ isLoading: false, data: suggestions })
+    }, 600)
   }, [newProposal])
 
   const calculateEstimatedRebate = () => {
