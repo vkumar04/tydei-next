@@ -27,6 +27,10 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
   const router = useRouter()
   const [tab, setTab] = useState<ContractStatus | "all">("all")
 
+  // Always fetch the full set for stats
+  const { data: allData } = useVendorContracts(vendorId, { status: undefined })
+  const allContracts = allData?.contracts ?? []
+
   const { data, isLoading } = useVendorContracts(vendorId, {
     status: tab === "all" ? undefined : tab,
   })
@@ -37,10 +41,10 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
     router.push(`/vendor/contracts/${id}`)
   )
 
-  // Compute stats from the full data set
-  const activeCount = contracts.filter((c) => c.status === "active").length
-  const pendingCount = contracts.filter((c) => c.status === "pending").length
-  const totalValue = contracts.reduce(
+  // Compute stats from the full (unfiltered) data set
+  const activeCount = allContracts.filter((c) => c.status === "active").length
+  const pendingCount = allContracts.filter((c) => c.status === "pending").length
+  const totalValue = allContracts.reduce(
     (sum, c) => sum + Number(c.totalValue ?? 0),
     0
   )
@@ -55,7 +59,7 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
             <FileStack className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{contracts.length}</div>
+            <div className="text-2xl font-bold">{allContracts.length}</div>
           </CardContent>
         </Card>
         <Card>

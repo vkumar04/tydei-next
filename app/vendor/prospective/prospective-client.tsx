@@ -7,14 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+// Table imports removed - using card-based proposal layout
 import {
   Select,
   SelectContent,
@@ -67,8 +60,13 @@ import {
   MoreHorizontal,
   Trophy,
   Percent,
+  AlertTriangle,
+  Lightbulb,
+  Package,
+  Calendar,
+  Building2,
+  Scale,
 } from "lucide-react"
-import { ProposalBuilder } from "@/components/vendor/prospective/proposal-builder"
 import { useVendorProposals } from "@/hooks/use-prospective"
 import { formatCurrency } from "@/lib/formatting"
 import { chartTooltipStyle } from "@/lib/chart-config"
@@ -433,9 +431,40 @@ function AnalyticsSection({ proposals, isLoading }: { proposals: VendorProposal[
   )
 }
 
-// ─── Enhanced Proposals Table ──────────────────────────────────
+// ─── Warning / Opportunity generator (deterministic from proposal id) ──
 
-function ProposalsTable({
+function generateInsights(seed: string) {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0
+  const r = (min: number, max: number) => { h = (h * 16807 + 12345) & 0x7fffffff; return min + (h % (max - min + 1)) }
+
+  const allWarnings = [
+    "Price above market average on 3 items",
+    "Contract duration exceeds 24 months",
+    "Missing rebate escalation clause",
+    "Below-average compliance score",
+    "Limited product category coverage",
+  ]
+  const allOpportunities = [
+    "Volume discount eligible at current spend",
+    "Bundle with related categories for 8% savings",
+    "Early renewal incentive available",
+    "Market share growth potential in 2 facilities",
+    "Rebate tier upgrade within reach",
+  ]
+
+  const warnCount = r(0, 2)
+  const oppCount = r(1, 3)
+  const warnings: string[] = []
+  const opportunities: string[] = []
+  for (let i = 0; i < warnCount; i++) warnings.push(allWarnings[r(0, allWarnings.length - 1)]!)
+  for (let i = 0; i < oppCount; i++) opportunities.push(allOpportunities[r(0, allOpportunities.length - 1)]!)
+  return { warnings: [...new Set(warnings)], opportunities: [...new Set(opportunities)] }
+}
+
+// ─── Proposal Cards (v0 design) ───────────────────────────────
+
+function ProposalCards({
   proposals,
   isLoading,
   onNewProposal,
@@ -447,116 +476,164 @@ function ProposalsTable({
   const [deleteTarget, setDeleteTarget] = useState<VendorProposal | null>(null)
   const [viewTarget, setViewTarget] = useState<VendorProposal | null>(null)
 
-  const scoredProposals = useMemo(() => {
-    return proposals.map((p) => ({
-      ...p,
-      computedScore: p.dealScore ?? generateDealScore(p.id),
-    }))
+  const enrichedProposals = useMemo(() => {
+    return proposals.map((p) => {
+      const score = p.dealScore ?? generateDealScore(p.id)
+      const insights = generateInsights(p.id)
+      return { ...p, computedScore: score, ...insights }
+    })
   }, [proposals])
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                My Contract Proposals
-                <Badge variant="outline" className="font-normal text-xs">
-                  Internal Use Only
-                </Badge>
-              </CardTitle>
-              <CardDescription>
-                Internal vendor analysis documents - edit and rework proposals as needed
-              </CardDescription>
-            </div>
-            <Button size="sm" onClick={onNewProposal}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            My Contract Proposals
+            <Badge variant="outline" className="font-normal text-xs">
+              Internal Use Only
+            </Badge>
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Internal vendor analysis documents - edit and rework proposals as needed
+          </p>
+        </div>
+        <Button size="sm" onClick={onNewProposal}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Proposal
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-48 rounded-lg" />
+          ))}
+        </div>
+      ) : enrichedProposals.length > 0 ? (
+        <div className="space-y-4">
+          {enrichedProposals.map((p) => (
+            <Card key={p.id} className="overflow-hidden">
+              <CardContent className="p-0">
+                <div className="flex flex-col lg:flex-row">
+                  {/* Left: Main info */}
+                  <div className="flex-1 p-5 space-y-4">
+                    {/* Header row: ID + badges */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm font-medium text-muted-foreground">
+                        #{p.id.slice(0, 8)}
+                      </span>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                        p.computedScore.overall >= 80 ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                        : p.computedScore.overall >= 65 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                        : p.computedScore.overall >= 40 ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                        : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                      }`}>
+                        Score: {p.computedScore.overall}
+                      </span>
+                      <RecommendationBadge recommendation={p.computedScore.recommendation} />
+                      <StatusBadge status={p.status} />
+                    </div>
+
+                    {/* Meta row */}
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="h-3.5 w-3.5" />
+                        {p.facilityIds.length} facilities
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Package className="h-3.5 w-3.5" />
+                        {p.itemCount} products
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {new Date(p.createdAt).toLocaleDateString()}
+                      </span>
+                      <span className="flex items-center gap-1 font-medium text-foreground">
+                        <DollarSign className="h-3.5 w-3.5" />
+                        {formatCurrency(p.totalProposedCost)}
+                      </span>
+                    </div>
+
+                    {/* Warnings & Opportunities */}
+                    <div className="flex flex-col gap-2">
+                      {p.warnings.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {p.warnings.map((w) => (
+                            <span
+                              key={w}
+                              className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:ring-amber-800/40"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              {w}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {p.opportunities.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {p.opportunities.map((o) => (
+                            <span
+                              key={o}
+                              className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-xs text-green-800 ring-1 ring-inset ring-green-200 dark:bg-green-900/20 dark:text-green-400 dark:ring-green-800/40"
+                            >
+                              <Lightbulb className="h-3 w-3" />
+                              {o}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center gap-2 border-t p-4 lg:border-l lg:border-t-0 lg:flex-col lg:justify-center lg:px-5">
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => setViewTarget(p)}>
+                      <Eye className="mr-2 h-4 w-4" />
+                      View
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Open menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeleteTarget(p)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+            <p className="font-medium text-muted-foreground">No proposals yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create a new proposal to get started
+            </p>
+            <Button size="sm" className="mt-4" onClick={onNewProposal}>
               <Plus className="mr-2 h-4 w-4" />
               New Proposal
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 rounded-md" />
-              ))}
-            </div>
-          ) : scoredProposals.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Proposal</TableHead>
-                  <TableHead>Facilities</TableHead>
-                  <TableHead className="text-right">Projected Cost</TableHead>
-                  <TableHead className="text-right">Items</TableHead>
-                  <TableHead className="text-center">Score</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scoredProposals.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-medium font-mono text-xs">
-                      {p.id.slice(0, 8)}...
-                    </TableCell>
-                    <TableCell>{p.facilityIds.length} facilities</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(p.totalProposedCost)}
-                    </TableCell>
-                    <TableCell className="text-right">{p.itemCount}</TableCell>
-                    <TableCell className="text-center">
-                      <span className={`font-semibold ${scoreColor(p.computedScore.overall)}`}>
-                        {p.computedScore.overall}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={p.status} />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(p.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Open menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setViewTarget(p)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setDeleteTarget(p)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No proposals yet
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* View Proposal Dialog */}
       {viewTarget && (
@@ -564,7 +641,7 @@ function ProposalsTable({
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Proposal Details</DialogTitle>
-              <DialogDescription>Proposal {viewTarget.id.slice(0, 8)}...</DialogDescription>
+              <DialogDescription>Proposal #{viewTarget.id.slice(0, 8)}</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4 text-sm">
               {[
@@ -604,6 +681,31 @@ function ProposalsTable({
         </Dialog>
       )}
     </>
+  )
+}
+
+// ─── Benchmarks Section ───────────────────────────────────────
+
+function BenchmarksSection() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Scale className="h-5 w-5" />
+          Market Benchmarks
+        </CardTitle>
+        <CardDescription>
+          Compare your pricing and terms against market averages
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="py-12 text-center">
+        <Scale className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+        <p className="font-medium text-muted-foreground">Benchmarks coming soon</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Market benchmark data will be available once sufficient contract data is collected
+        </p>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -677,13 +779,13 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
             <Gauge className="h-4 w-4" />
             Deal Scorer
           </TabsTrigger>
+          <TabsTrigger value="benchmarks" className="gap-2">
+            <Scale className="h-4 w-4" />
+            Benchmarks
+          </TabsTrigger>
           <TabsTrigger value="analytics" className="gap-2">
             <BarChart3 className="h-4 w-4" />
             Analytics
-          </TabsTrigger>
-          <TabsTrigger value="new-proposal" className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Proposal
           </TabsTrigger>
         </TabsList>
 
@@ -781,12 +883,12 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
           </Card>
         </TabsContent>
 
-        {/* Proposals Tab (Enhanced) */}
+        {/* Proposals Tab (Card-based) */}
         <TabsContent value="proposals" className="mt-4 space-y-4">
-          <ProposalsTable
+          <ProposalCards
             proposals={proposals ?? []}
             isLoading={isLoading}
-            onNewProposal={() => setActiveTab("new-proposal")}
+            onNewProposal={() => setActiveTab("analytics")}
           />
         </TabsContent>
 
@@ -802,14 +904,14 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
           )}
         </TabsContent>
 
+        {/* Benchmarks Tab */}
+        <TabsContent value="benchmarks" className="mt-4 space-y-4">
+          <BenchmarksSection />
+        </TabsContent>
+
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="mt-4 space-y-4">
           <AnalyticsSection proposals={proposals ?? []} isLoading={isLoading} />
-        </TabsContent>
-
-        {/* New Proposal Tab */}
-        <TabsContent value="new-proposal" className="mt-4">
-          <ProposalBuilder vendorId={vendorId} facilities={[]} />
         </TabsContent>
       </Tabs>
     </div>
