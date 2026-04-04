@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus, Download } from "lucide-react"
+import { Plus, Download, ChevronLeft, ChevronRight } from "lucide-react"
 import { useCOGRecords, useDeleteCOGRecord } from "@/hooks/use-cog"
 import { useVendorList } from "@/hooks/use-vendor-crud"
 import { getCOGColumns } from "@/components/facility/cog/cog-columns"
@@ -26,6 +26,8 @@ interface COGRecordsTableProps {
 export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
   const [contractFilter, setContractFilter] = useState<string>("all")
+  const [page, setPage] = useState(1)
+  const pageSize = 50
   const [manualOpen, setManualOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string
@@ -36,8 +38,12 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
     ...(vendorFilter && { vendorId: vendorFilter }),
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
+    page,
+    pageSize,
   }
   const { data, isLoading, refetch } = useCOGRecords(facilityId, filters)
+  const total = data?.total ?? 0
+  const totalPages = Math.ceil(total / pageSize)
   const { data: vendorData } = useVendorList()
   const deleteMutation = useDeleteCOGRecord()
 
@@ -67,6 +73,7 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
         searchKey="inventoryDescription"
         searchPlaceholder="Search by description, vendor item, or inventory number..."
         isLoading={isLoading}
+        pagination={false}
         filterComponent={
           <>
             <Select value={vendorFilter} onValueChange={setVendorFilter}>
@@ -105,6 +112,35 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
           </>
         }
       />
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()} records
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" /> Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              Next <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <COGManualEntry
         facilityId={facilityId}
