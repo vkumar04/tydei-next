@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Upload, Loader2, Sparkles, FileText, Cpu, ChevronDown } from "lucide-react"
+import { Upload, Loader2, Sparkles, FileText, Cpu, ChevronDown, AlertTriangle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AIExtractReview } from "@/components/contracts/ai-extract-review"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
@@ -50,6 +51,7 @@ export function AIExtractDialog({
   const [fileName, setFileName] = useState("")
   const [userInstructions, setUserInstructions] = useState("")
   const [instructionsOpen, setInstructionsOpen] = useState(false)
+  const [fileSizeWarning, setFileSizeWarning] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -87,6 +89,16 @@ export function AIExtractDialog({
   }, [stage, stepIndex, stopTick])
 
   async function handleFile(file: File) {
+    const MAX_WARN_SIZE = 4 * 1024 * 1024 // 4MB
+    if (file.size > MAX_WARN_SIZE) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+      setFileSizeWarning(
+        `This file is large (${sizeMB} MB). AI extraction may take longer than usual.`
+      )
+    } else {
+      setFileSizeWarning("")
+    }
+
     setStage("extracting")
     setProgress(0)
     setStepIndex(0)
@@ -138,6 +150,7 @@ export function AIExtractDialog({
     setStage("upload")
     setExtracted(null)
     setS3Key(null)
+    setFileSizeWarning("")
   }
 
   return (
@@ -219,6 +232,12 @@ export function AIExtractDialog({
           <div className="flex flex-col items-center gap-6 py-8">
             {fileName && (
               <p className="text-xs text-muted-foreground truncate max-w-xs">{fileName}</p>
+            )}
+            {fileSizeWarning && (
+              <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 max-w-sm">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{fileSizeWarning}</AlertDescription>
+              </Alert>
             )}
             <div className="flex flex-col gap-3 w-72">
               {STEPS.map((step, i) => {

@@ -6,7 +6,7 @@ import type { CreateContractInput } from "@/lib/validators/contracts"
 import { getVendorCOGSpend } from "@/lib/actions/cog-records"
 import { getContracts } from "@/lib/actions/contracts"
 import { useQuery } from "@tanstack/react-query"
-import { Link2 } from "lucide-react"
+import { Link2, X } from "lucide-react"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -27,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
@@ -118,6 +119,8 @@ export function ContractFormBasicInfo({
   const contractType = watch("contractType")
   const [cogAutoFilled, setCogAutoFilled] = useState(false)
   const [linkedContractId, setLinkedContractId] = useState<string>("")
+  const [additionalVendorIds, setAdditionalVendorIds] = useState<string[]>([])
+  const [vendorToAdd, setVendorToAdd] = useState<string>("")
 
   // Fetch existing contracts for tie-in / capital linking
   const { data: contractsData } = useQuery({
@@ -461,6 +464,74 @@ export function ContractFormBasicInfo({
                 Facility selection will be available after contract creation.
               </p>
             )}
+
+            {/* Additional Participating Vendors */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Additional Participating Vendors</Label>
+              <p className="text-xs text-muted-foreground">
+                The primary vendor is set above. Add other vendors participating in this group contract.
+              </p>
+              {additionalVendorIds.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {additionalVendorIds.map((vid) => {
+                    const vendor = vendors.find((v) => v.id === vid)
+                    return (
+                      <Badge key={vid} variant="secondary" className="gap-1 pr-1">
+                        {vendor?.displayName || vendor?.name || vid}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAdditionalVendorIds((prev) =>
+                              prev.filter((id) => id !== vid)
+                            )
+                          }
+                          className="ml-1 rounded-full p-0.5 hover:bg-muted"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Select
+                  value={vendorToAdd}
+                  onValueChange={setVendorToAdd}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select a vendor to add..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vendors
+                      .filter(
+                        (v) =>
+                          v.id !== vendorId &&
+                          !additionalVendorIds.includes(v.id)
+                      )
+                      .map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.displayName || v.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!vendorToAdd}
+                  onClick={() => {
+                    if (vendorToAdd) {
+                      setAdditionalVendorIds((prev) => [...prev, vendorToAdd])
+                      setVendorToAdd("")
+                    }
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

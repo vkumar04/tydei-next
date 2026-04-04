@@ -139,6 +139,12 @@ export function COGImportDialog({
   }, [importState.step, vendors, uniqueVendorNames])
 
   const handleFile = async (file: File) => {
+    if (file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error(
+        "PDF parsing is not yet supported for COG data. Please export your data as CSV or Excel."
+      )
+      return
+    }
     forwarded.current = false
     await parser.parseFile(file)
   }
@@ -226,7 +232,7 @@ export function COGImportDialog({
 
         {importState.step === "upload" && (
           <FileDropzone
-            accept={[".csv", ".xlsx", ".xls"]}
+            accept={[".csv", ".xlsx", ".xls", ".pdf"]}
             onFile={handleFile}
           />
         )}
