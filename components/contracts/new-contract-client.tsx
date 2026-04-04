@@ -20,6 +20,8 @@ import { createContractTerm } from "@/lib/actions/contract-terms"
 import { createContractDocument } from "@/lib/actions/contracts"
 import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
 import { createCategory } from "@/lib/actions/categories"
+import { createVendor } from "@/lib/actions/vendors"
+import type { TermFormValues } from "@/lib/validators/contract-terms"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
@@ -288,7 +290,7 @@ export function NewContractClient({
     finalizePricingImport(items, pricingFileRef?.name ?? "pricing-file")
   }
 
-  function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string) {
+  async function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string) {
     if (s3Key) setContractS3Key(s3Key)
     if (fileName) setContractFileName(fileName)
 
@@ -305,7 +307,7 @@ export function NewContractClient({
     }
     if (data.description) form.setValue("description", data.description)
 
-    // Try to match vendor by name
+    // Try to match vendor by name, auto-create if not found
     const matchedVendor = vendors.find(
       (v) =>
         v.name.toLowerCase().includes(data.vendorName.toLowerCase()) ||
@@ -313,28 +315,74 @@ export function NewContractClient({
           .toLowerCase()
           .includes(data.vendorName.toLowerCase())
     )
-    if (matchedVendor) form.setValue("vendorId", matchedVendor.id)
+    if (matchedVendor) {
+      form.setValue("vendorId", matchedVendor.id)
+    } else if (data.vendorName) {
+      // Auto-create vendor
+      try {
+        const newVendor = await createVendor({ name: data.vendorName, displayName: data.vendorName, tier: "standard" })
+        form.setValue("vendorId", newVendor.id)
+        toast.success(`Vendor "${data.vendorName}" added to vendor list`)
+        router.refresh()
+      } catch {
+        // Vendor creation failed — user can select manually
+      }
+    }
 
-    // Populate terms if extracted
+    // Map term types from AI extraction instead of hardcoding
+    const mapTermType = (t: string): TermFormValues["termType"] => {
+      const typeMap: Record<string, TermFormValues["termType"]> = {
+        spend_rebate: "spend_rebate",
+        volume_rebate: "volume_rebate",
+        price_reduction: "price_reduction",
+        market_share: "market_share",
+        growth_rebate: "growth_rebate",
+        compliance_rebate: "compliance_rebate",
+        fixed_fee: "fixed_fee",
+        locked_pricing: "locked_pricing",
+      }
+      const normalized = t.toLowerCase().replace(/[\s-]/g, "_")
+      return typeMap[normalized] ?? "spend_rebate"
+    }
+
+    const mapBaselineType = (t: string): TermFormValues["baselineType"] => {
+      if (t.toLowerCase().includes("volume") || t.toLowerCase().includes("unit")) return "volume_based"
+      if (t.toLowerCase().includes("growth")) return "growth_based"
+      return "spend_based"
+    }
+
+    // Populate terms if extracted — preserve AI-detected types
     if (data.terms.length > 0) {
       setTerms(
-        data.terms.map((t) => ({
-          termName: t.termName,
-          termType: "spend_rebate" as const,
-          baselineType: "spend_based" as const,
-          evaluationPeriod: "annual",
-          paymentTiming: "quarterly",
-          appliesTo: "all_products",
-          effectiveStart: data.effectiveDate,
-          effectiveEnd: data.expirationDate,
-          tiers: t.tiers.map((tier) => ({
-            tierNumber: tier.tierNumber,
-            spendMin: tier.spendMin ?? 0,
-            spendMax: tier.spendMax,
-            rebateType: "percent_of_spend" as const,
-            rebateValue: tier.rebateValue ?? 0,
-          })),
-        }))
+        data.terms.map((t) => {
+          const termType = mapTermType(t.termType)
+          const baselineType = mapBaselineType(t.termType)
+          // Generate smart term name if generic
+          const minRebate = t.tiers.length > 0 ? Math.min(...t.tiers.map(tr => tr.rebateValue ?? 0)) : 0
+          const maxRebate = t.tiers.length > 0 ? Math.max(...t.tiers.map(tr => tr.rebateValue ?? 0)) : 0
+          const smartName = t.termName || (
+            minRebate !== maxRebate
+              ? `${termType.replace(/_/g, " ")} (${minRebate}%-${maxRebate}%)`
+              : `${termType.replace(/_/g, " ")} (${maxRebate}%)`
+          )
+          return {
+            termName: smartName,
+            termType,
+            baselineType,
+            evaluationPeriod: "annual" as const,
+            paymentTiming: "quarterly" as const,
+            appliesTo: "all_products" as const,
+            effectiveStart: data.effectiveDate,
+            effectiveEnd: data.expirationDate,
+            tiers: t.tiers.map((tier) => ({
+              tierNumber: tier.tierNumber,
+              spendMin: tier.spendMin ?? 0,
+              spendMax: tier.spendMax,
+              rebateType: "percent_of_spend" as const,
+              rebateValue: tier.rebateValue ?? 0,
+            })),
+          }
+        })
       )
     }
 
