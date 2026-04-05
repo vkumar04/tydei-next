@@ -345,7 +345,9 @@ export function NewContractClient({
     if (data.totalValue) {
       form.setValue("totalValue", data.totalValue)
       // Auto-compute annual value
-      const years = Math.max(1, (new Date(data.expirationDate).getTime() - new Date(data.effectiveDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      const effMs = new Date(data.effectiveDate).getTime()
+      const expMs = new Date(data.expirationDate).getTime()
+      const years = (!isNaN(effMs) && !isNaN(expMs)) ? Math.max(1, (expMs - effMs) / (365.25 * 24 * 60 * 60 * 1000)) : 1
       form.setValue("annualValue", Math.round((data.totalValue / years) * 100) / 100)
     }
     if (data.description) form.setValue("description", data.description)

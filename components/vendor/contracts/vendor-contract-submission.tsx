@@ -350,8 +350,10 @@ export function VendorContractSubmission({
 
     setContractName(data.contractName)
     setContractType(data.contractType)
-    setEffectiveDate(new Date(data.effectiveDate))
-    setExpirationDate(new Date(data.expirationDate))
+    const effDate = new Date(data.effectiveDate)
+    const expDate = new Date(data.expirationDate)
+    if (!isNaN(effDate.getTime())) setEffectiveDate(effDate)
+    if (!isNaN(expDate.getTime())) setExpirationDate(expDate)
     if (data.totalValue) setContractTotal(String(data.totalValue))
     if (data.description) setDescription(data.description)
 
