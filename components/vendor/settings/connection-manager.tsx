@@ -116,7 +116,7 @@ export function ConnectionManager({
       </Card>
 
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Invite Facility</DialogTitle>
             <DialogDescription>Send a connection invite to a facility.</DialogDescription>

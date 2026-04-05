@@ -367,7 +367,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
 
       {/* Renewal Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           {selectedRenewal && (
             <>
               <DialogHeader>
@@ -471,7 +471,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
 
       {/* Propose Terms Dialog */}
       <Dialog open={proposeTermsOpen} onOpenChange={setProposeTermsOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Initiate Renewal</DialogTitle>
             <DialogDescription>

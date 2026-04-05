@@ -46,7 +46,7 @@ export function SpendTargetDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Set Spend Target</DialogTitle>
           <DialogDescription>

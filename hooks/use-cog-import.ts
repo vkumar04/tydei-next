@@ -105,7 +105,11 @@ export function useCOGImport() {
           const rawExt = parseFloat(
             (row[mapping.extendedPrice] ?? "0").replace(/[^0-9.-]/g, "")
           )
-          extendedPrice = Number.isFinite(rawExt) ? rawExt : undefined
+          extendedPrice = Number.isFinite(rawExt) && rawExt !== 0 ? rawExt : undefined
+        }
+        // Fallback: calculate extendedPrice from unitCost * quantity when not provided
+        if (extendedPrice === undefined && unitCost > 0) {
+          extendedPrice = unitCost * qty
         }
 
         // Normalise the transaction date to ISO format so the server can parse it

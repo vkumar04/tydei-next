@@ -68,7 +68,7 @@ export function ProposalUploadTab({
             Upload Contract Document
           </CardTitle>
           <CardDescription>
-            Upload a vendor pricing file (CSV or Excel) for analysis
+            Upload a vendor pricing file (CSV, Excel, or PDF) for analysis
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -84,7 +84,7 @@ export function ProposalUploadTab({
             onClick={() => {
               const input = document.createElement("input")
               input.type = "file"
-              input.accept = ".csv,.xlsx,.xls"
+              input.accept = ".csv,.xlsx,.xls,.pdf"
               input.onchange = (e) => {
                 const file = (e.target as HTMLInputElement).files?.[0]
                 if (file) onFileUpload(file)
@@ -106,7 +106,7 @@ export function ProposalUploadTab({
                   Drag &amp; drop a contract PDF
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  or click to browse files
+                  or click to browse files (CSV, Excel, or PDF)
                 </p>
               </>
             )}

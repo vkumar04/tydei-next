@@ -68,7 +68,7 @@ export function ContractImportModal({
   // Default: mode selection dialog (shown when `open` is true but we need to pick)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Import Contract</DialogTitle>
           <DialogDescription>

@@ -107,6 +107,41 @@ export function buildPricingItems(
     .filter((i) => i.vendorItemNo)
 }
 
+// ─── CSV row parser that respects quoted fields ────────────────
+function parseCSVRow(line: string): string[] {
+  const fields: string[] = []
+  let current = ""
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!
+    if (inQuotes) {
+      if (ch === '"') {
+        // Escaped quote ("") inside a quoted field
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"'
+          i++ // skip the second quote
+        } else {
+          inQuotes = false
+        }
+      } else {
+        current += ch
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true
+      } else if (ch === ",") {
+        fields.push(current.trim())
+        current = ""
+      } else {
+        current += ch
+      }
+    }
+  }
+  fields.push(current.trim())
+  return fields
+}
+
 // ─── Parse a raw file (CSV or Excel via /api/parse-file) ─────────
 export interface ParsedPricingFile {
   items: ContractPricingItem[]
@@ -142,12 +177,15 @@ export async function parsePricingFile(file: File): Promise<ParsedPricingFile> {
     rawHeaders = parsed.headers
     dataRows = parsed.rows.map((row) => rawHeaders.map((h) => row[h] ?? ""))
   } else {
-    const text = await file.text()
-    const lines = text.split(/\r?\n/).filter((l) => l.trim())
-    rawHeaders = lines[0]?.split(",").map((h) => h.trim().replace(/^"|"$/g, "")) ?? []
-    dataRows = lines.slice(1).map((line) =>
-      line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""))
-    )
+    let text = await file.text()
+    // Strip BOM character if present
+    if (text.charCodeAt(0) === 0xFEFF) {
+      text = text.slice(1)
+    }
+    // Normalise line endings and filter empty rows
+    const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.trim())
+    rawHeaders = parseCSVRow(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, ""))
+    dataRows = lines.slice(1).map((line) => parseCSVRow(line))
   }
 
   const autoMap = detectPricingColumnMapping(rawHeaders)

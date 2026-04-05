@@ -269,7 +269,7 @@ export function UserTable() {
 
       {/* ─── Add User Dialog (multi-tab) ─────────────────────────── */}
       <Dialog open={addOpen} onOpenChange={(open) => { if (!open) resetAddForm() }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>

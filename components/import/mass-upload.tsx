@@ -221,7 +221,7 @@ export function MassUpload({ facilityId, open, onOpenChange }: MassUploadProps) 
         onOpenChange(val)
       }}
     >
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-xl">Mass Upload</DialogTitle>
           <DialogDescription>

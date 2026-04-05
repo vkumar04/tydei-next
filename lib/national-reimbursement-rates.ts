@@ -39,6 +39,14 @@ export const nationalReimbursementRates: Record<
   "29914": { medicare: 4800, commercialAvg: 8640, description: "Hip Arthroscopy Femoroplasty" },
   "29916": { medicare: 5200, commercialAvg: 9360, description: "Hip Arthroscopy Labral Repair" },
 
+  // Nerve
+  "64721": { medicare: 2200, commercialAvg: 3960, description: "Carpal Tunnel Release (Neuroplasty)" },
+  "64718": { medicare: 2400, commercialAvg: 4320, description: "Ulnar Nerve Transposition" },
+
+  // Hardware Removal
+  "20680": { medicare: 2800, commercialAvg: 5040, description: "Hardware Removal Deep" },
+  "20670": { medicare: 1800, commercialAvg: 3240, description: "Hardware Removal Superficial" },
+
   // Hand/Wrist
   "25000": { medicare: 1800, commercialAvg: 3240, description: "Carpal Tunnel Release" },
   "25111": { medicare: 2200, commercialAvg: 3960, description: "Ganglion Cyst Excision" },
@@ -100,11 +108,50 @@ export const nationalReimbursementRates: Record<
 }
 
 /**
+ * Fallback reimbursement estimates by CPT code range when the exact code
+ * is not in the table.  Based on CMS ASC payment groupings.
+ */
+function estimateByRange(cptCode: string): number {
+  const code = parseInt(cptCode, 10)
+  if (isNaN(code)) return 0
+
+  // Musculoskeletal (20000-29999)
+  if (code >= 20000 && code < 22000) return 3500   // General ortho procedures
+  if (code >= 22000 && code < 23000) return 12000   // Spine
+  if (code >= 23000 && code < 25000) return 5000    // Shoulder/arm
+  if (code >= 25000 && code < 27000) return 3000    // Forearm/hand
+  if (code >= 27000 && code < 28000) return 6000    // Hip/knee/leg
+  if (code >= 28000 && code < 29000) return 4000    // Foot/ankle
+  if (code >= 29000 && code < 30000) return 4500    // Arthroscopy/endoscopy
+
+  // Respiratory (30000-32999)
+  if (code >= 30000 && code < 33000) return 3500
+
+  // Cardiovascular (33000-37999)
+  if (code >= 33000 && code < 38000) return 15000
+
+  // Digestive (40000-49999)
+  if (code >= 40000 && code < 50000) return 4500
+
+  // Urinary (50000-53999)
+  if (code >= 50000 && code < 54000) return 4000
+
+  // Nervous system (61000-64999)
+  if (code >= 61000 && code < 65000) return 5000
+
+  // Eye (65000-68999)
+  if (code >= 65000 && code < 69000) return 2500
+
+  return 0
+}
+
+/**
  * Estimate reimbursement for a CPT code using national average rates.
  * Uses commercial average as default (most common payor type for ASC).
+ * Falls back to range-based estimate when exact code is not in the table.
  */
 export function estimateReimbursement(cptCode: string): number {
   const rates = nationalReimbursementRates[cptCode]
-  if (!rates) return 0
-  return rates.commercialAvg
+  if (rates) return rates.commercialAvg
+  return estimateByRange(cptCode)
 }

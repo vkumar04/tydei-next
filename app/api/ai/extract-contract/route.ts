@@ -112,14 +112,45 @@ ${extractedText}`,
     try {
       extracted = result.output
     } catch {
-      // Schema validation failed — try manual parse from result text
-      try {
-        const cleaned = (result.text ?? "")
-          .replace(/```json\n?/g, "")
-          .replace(/```\n?/g, "")
-          .trim()
-        extracted = extractedContractSchema.parse(JSON.parse(cleaned))
-      } catch {
+      const rawText = result.text ?? ""
+      console.error("[extract-contract] Schema validation failed. Raw AI response:", rawText.slice(0, 2000))
+
+      // Try multiple strategies to extract valid JSON from the response
+      const parseAttempts = [
+        // Strategy 1: Strip markdown fences
+        () => {
+          const cleaned = rawText
+            .replace(/```(?:json)?\s*\n?/g, "")
+            .replace(/```\s*$/g, "")
+            .trim()
+          return JSON.parse(cleaned)
+        },
+        // Strategy 2: Extract JSON object from surrounding text
+        () => {
+          const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+          if (!jsonMatch) throw new Error("No JSON object found")
+          return JSON.parse(jsonMatch[0])
+        },
+        // Strategy 3: Extract JSON from within markdown code block
+        () => {
+          const codeBlockMatch = rawText.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/)
+          if (!codeBlockMatch?.[1]) throw new Error("No code block found")
+          return JSON.parse(codeBlockMatch[1])
+        },
+      ]
+
+      for (const attempt of parseAttempts) {
+        try {
+          const parsed = attempt()
+          extracted = extractedContractSchema.parse(parsed)
+          break
+        } catch {
+          // Try next strategy
+        }
+      }
+
+      if (!extracted) {
+        console.error("[extract-contract] All parse strategies failed for response:", rawText.slice(0, 500))
         return Response.json(
           { error: "Could not parse extracted data — the AI response did not match the expected format." },
           { status: 422 },

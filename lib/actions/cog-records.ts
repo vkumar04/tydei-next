@@ -110,7 +110,8 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
     vendorItemNo: record.vendorItemNo,
     manufacturerNo: record.manufacturerNo,
     unitCost: record.unitCost,
-    extendedPrice: record.extendedPrice,
+    // Calculate extendedPrice from unitCost * quantity when not provided
+    extendedPrice: record.extendedPrice ?? (record.unitCost * (record.quantity ?? 1)),
     quantity: record.quantity,
     transactionDate: new Date(record.transactionDate),
     category: record.category,

@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -22,7 +23,8 @@ import { createContractTerm } from "@/lib/actions/contract-terms"
 import { createContractDocument } from "@/lib/actions/contracts"
 import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
 import { parsePricingFile, buildPricingItems as buildPricingItemsShared, detectPricingColumnMapping } from "@/lib/utils/parse-pricing-file"
-import { createCategory } from "@/lib/actions/categories"
+import { createCategory, getCategories } from "@/lib/actions/categories"
+import { queryKeys } from "@/lib/query-keys"
 import { createVendor } from "@/lib/actions/vendors"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
@@ -55,6 +57,19 @@ export function NewContractClient({
   categories,
 }: NewContractClientProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
+
+  // Dynamically fetch categories so newly-created ones appear without full page refresh
+  const { data: dynamicCategories } = useQuery({
+    queryKey: queryKeys.categories.all,
+    queryFn: () => getCategories(),
+    initialData: categories,
+  })
+  const liveCategories = useMemo(
+    () => dynamicCategories ?? categories,
+    [dynamicCategories, categories],
+  )
+
   const [entryMode, setEntryMode] = useState<"ai" | "manual" | "pdf">("ai")
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
@@ -107,13 +122,10 @@ export function NewContractClient({
         rawHeaders = parsed.headers
         dataRows = parsed.rows.map((row) => rawHeaders.map((h) => row[h] ?? ""))
       } else {
-        // CSV: parse client-side
-        const text = await file.text()
-        const lines = text.split(/\r?\n/).filter((l) => l.trim())
-        rawHeaders = lines[0]?.split(",").map((h) => h.trim().replace(/^"|"$/g, "")) ?? []
-        dataRows = lines.slice(1).map((line) =>
-          line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""))
-        )
+        // CSV: parse client-side using shared parser
+        const result = await parsePricingFile(file)
+        rawHeaders = result.rawHeaders
+        dataRows = result.rawRows.map((row) => rawHeaders.map((h) => row[h] ?? ""))
       }
     } catch {
       toast.error("Failed to read the file. Please check the format.")
@@ -246,7 +258,7 @@ export function NewContractClient({
     setPricingCategories(cats)
 
     // Auto-create categories that don't exist yet
-    const existingNames = new Set(categories.map((c) => c.name.toLowerCase()))
+    const existingNames = new Set(liveCategories.map((c) => c.name.toLowerCase()))
     let createdCount = 0
     for (const cat of cats) {
       if (!existingNames.has(cat.toLowerCase())) {
@@ -258,9 +270,9 @@ export function NewContractClient({
         }
       }
     }
-    // Refresh server data so the Category dropdown picks up new entries
+    // Invalidate React Query cache so the Category dropdown picks up new entries
     if (createdCount > 0) {
-      router.refresh()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
     }
 
     const totalFromPricing = items.reduce((sum, i) => sum + i.unitPrice, 0)
@@ -787,7 +799,7 @@ export function NewContractClient({
               <ContractFormBasicInfo
                 form={form}
                 vendors={vendors}
-                categories={categories}
+                categories={liveCategories}
               />
 
               {/* Contract Terms */}
@@ -847,7 +859,7 @@ export function NewContractClient({
                 values={form.getValues()}
                 terms={terms}
                 vendors={vendors}
-                categories={categories}
+                categories={liveCategories}
               />
 
               {/* Pricing File */}

@@ -345,7 +345,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
 
       {/* View Invoice Detail Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           {selectedInvoice && (
             <>
               <DialogHeader>
@@ -524,7 +524,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
 
       {/* Submit Invoice Dialog */}
       <Dialog open={submitDialogOpen} onOpenChange={setSubmitDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Submit New Invoice</DialogTitle>
             <DialogDescription>

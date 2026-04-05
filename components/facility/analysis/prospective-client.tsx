@@ -358,12 +358,55 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
   const handleFileUpload = useCallback(
     async (file: File) => {
       const ext = file.name.split(".").pop()?.toLowerCase()
-      if (ext === "pdf") {
-        toast.error("PDF files are not supported for proposal upload. Please export your pricing data as a CSV or Excel file.")
+      if (ext !== "csv" && ext !== "xlsx" && ext !== "xls" && ext !== "pdf") {
+        toast.error("Please upload a CSV, Excel, or PDF file")
         return
       }
-      if (ext !== "csv" && ext !== "xlsx" && ext !== "xls") {
-        toast.error("Please upload a CSV or Excel file (.csv, .xlsx, .xls)")
+
+      // Handle PDFs via AI extraction
+      if (ext === "pdf") {
+        try {
+          const formData = new FormData()
+          formData.append("file", file)
+          formData.append("userInstructions", "Extract all pricing information including item numbers, descriptions, proposed prices, current prices, and quantities. Format the output as structured data.")
+          const res = await fetch("/api/ai/extract-contract", {
+            method: "POST",
+            body: formData,
+          })
+          if (!res.ok) {
+            const body = await res.json().catch(() => null)
+            toast.error((body as { error?: string } | null)?.error ?? "Failed to extract data from PDF")
+            return
+          }
+          const { extracted } = await res.json() as { extracted: { pricingItems?: { vendorItemNo: string; description?: string; unitPrice: number }[]; totalValue?: number; vendorName?: string } }
+
+          // Build proposal items from extracted contract data
+          const items: { vendorItemNo: string; description?: string; proposedPrice: number; currentPrice?: number; quantity?: number }[] = []
+          if (extracted.pricingItems && extracted.pricingItems.length > 0) {
+            for (const item of extracted.pricingItems) {
+              items.push({
+                vendorItemNo: item.vendorItemNo,
+                description: item.description,
+                proposedPrice: item.unitPrice,
+              })
+            }
+          }
+
+          if (items.length === 0) {
+            toast.error("No pricing items could be extracted from the PDF. Try uploading a CSV or Excel version instead.")
+            return
+          }
+
+          const result = await analyzeMutation.mutateAsync({
+            facilityId,
+            proposedPricing: items,
+          })
+          setAnalysis(result)
+          setActiveTab("analysis")
+          toast.success(`Extracted ${items.length} items from PDF for analysis`)
+        } catch {
+          toast.error("Failed to extract pricing data from PDF")
+        }
         return
       }
 
@@ -381,11 +424,48 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
       let dataRows: Record<string, string>[]
 
       if (ext === "csv") {
-        const text = await file.text()
-        const lines = text.split("\n").filter((l) => l.trim())
-        rawHeaders = lines[0]?.split(",").map((h) => h.trim()) ?? []
+        let text = await file.text()
+        // Strip BOM character if present
+        if (text.charCodeAt(0) === 0xFEFF) {
+          text = text.slice(1)
+        }
+        // Normalise line endings and filter empty rows
+        const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.trim())
+        // Parse CSV respecting quoted fields
+        const parseRow = (line: string): string[] => {
+          const fields: string[] = []
+          let current = ""
+          let inQuotes = false
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i]!
+            if (inQuotes) {
+              if (ch === '"') {
+                if (i + 1 < line.length && line[i + 1] === '"') {
+                  current += '"'
+                  i++
+                } else {
+                  inQuotes = false
+                }
+              } else {
+                current += ch
+              }
+            } else {
+              if (ch === '"') {
+                inQuotes = true
+              } else if (ch === ",") {
+                fields.push(current.trim())
+                current = ""
+              } else {
+                current += ch
+              }
+            }
+          }
+          fields.push(current.trim())
+          return fields
+        }
+        rawHeaders = parseRow(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, ""))
         dataRows = lines.slice(1).map((line) => {
-          const vals = line.split(",").map((v) => v.trim())
+          const vals = parseRow(line)
           const row: Record<string, string> = {}
           rawHeaders.forEach((h, i) => {
             row[h] = vals[i] ?? ""
