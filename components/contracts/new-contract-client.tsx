@@ -24,6 +24,7 @@ import { createContractDocument } from "@/lib/actions/contracts"
 import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
 import { parsePricingFile, buildPricingItems as buildPricingItemsShared, detectPricingColumnMapping } from "@/lib/utils/parse-pricing-file"
 import { createCategory, getCategories } from "@/lib/actions/categories"
+import { computePricingVsCOG } from "@/lib/actions/cog-records"
 import { queryKeys } from "@/lib/query-keys"
 import { createVendor } from "@/lib/actions/vendors"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
@@ -287,9 +288,26 @@ export function NewContractClient({
       }
     }
 
-    // Do NOT auto-set totalValue from pricing file — a pricing file is a
-    // catalog of available items, not a purchase order. Summing all unit
-    // prices produces wildly inflated numbers (e.g. $57M for 10K items).
+    // Calculate projected total by matching pricing items against COG data.
+    // For each pricing item, find historical COG quantity and multiply by
+    // the proposed price — this gives a realistic projected spend.
+    const vendorId = form.getValues("vendorId")
+    if (vendorId && (!form.getValues("totalValue") || form.getValues("totalValue") === 0)) {
+      try {
+        const cogTotal = await computePricingVsCOG(vendorId, items)
+        if (cogTotal > 0) {
+          form.setValue("totalValue", Math.round(cogTotal * 100) / 100)
+          const eff = form.getValues("effectiveDate")
+          const exp = form.getValues("expirationDate")
+          if (eff && exp) {
+            const years = Math.max(1, (new Date(exp).getTime() - new Date(eff).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            form.setValue("annualValue", Math.round((cogTotal / years) * 100) / 100)
+          }
+        }
+      } catch {
+        // COG lookup failed — leave total empty for manual entry
+      }
+    }
 
     setPricingItems(items)
     setPricingFileName(fileName)

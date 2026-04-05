@@ -242,6 +242,61 @@ export async function getVendorCOGSpend(vendorId: string): Promise<number> {
   return Number(result._sum.extendedPrice ?? 0)
 }
 
+// ─── Compute Pricing vs COG (projected spend) ──────────────────
+
+/**
+ * Match pricing file items against historical COG records to compute
+ * projected annual spend. For each pricing item, finds the COG record
+ * with the same vendorItemNo and uses historical quantity × proposed price.
+ */
+export async function computePricingVsCOG(
+  vendorId: string,
+  pricingItems: { vendorItemNo: string; unitPrice: number }[]
+): Promise<number> {
+  const { facility } = await requireFacility()
+
+  if (pricingItems.length === 0) return 0
+
+  // Get all COG records for this vendor with quantities
+  const cogRecords = await prisma.cOGRecord.findMany({
+    where: {
+      facilityId: facility.id,
+      vendorId,
+      vendorItemNo: { in: pricingItems.map((p) => p.vendorItemNo).filter(Boolean) },
+    },
+    select: { vendorItemNo: true, quantity: true },
+  })
+
+  // Sum quantities by vendorItemNo
+  const cogQtyMap = new Map<string, number>()
+  for (const r of cogRecords) {
+    if (!r.vendorItemNo) continue
+    cogQtyMap.set(r.vendorItemNo, (cogQtyMap.get(r.vendorItemNo) ?? 0) + r.quantity)
+  }
+
+  // For each pricing item, projected spend = historical qty × proposed price
+  let total = 0
+  let matchedItems = 0
+  for (const item of pricingItems) {
+    const historicalQty = cogQtyMap.get(item.vendorItemNo)
+    if (historicalQty && historicalQty > 0) {
+      total += historicalQty * item.unitPrice
+      matchedItems++
+    }
+  }
+
+  // If no COG matches found, fall back to vendor's total COG spend
+  if (matchedItems === 0) {
+    const result = await prisma.cOGRecord.aggregate({
+      where: { facilityId: facility.id, vendorId },
+      _sum: { extendedPrice: true },
+    })
+    return Number(result._sum.extendedPrice ?? 0)
+  }
+
+  return total
+}
+
 // ─── Delete COG Record ──────────────────────────────────────────
 
 export async function deleteCOGRecord(id: string) {
