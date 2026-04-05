@@ -201,7 +201,7 @@ export const ContractStatusSchema = z.enum(['active','expired','expiring','draft
 
 export type ContractStatusType = `${z.infer<typeof ContractStatusSchema>}`
 
-export const TermTypeSchema = z.enum(['spend_rebate','volume_rebate','price_reduction','market_share','market_share_price_reduction','capitated_price_reduction','capitated_pricing_rebate','po_rebate','carve_out','payment_rebate','growth_rebate','compliance_rebate','fixed_fee','locked_pricing']);
+export const TermTypeSchema = z.enum(['spend_rebate','volume_rebate','price_reduction','market_share','market_share_price_reduction','capitated_price_reduction','capitated_pricing_rebate','po_rebate','carve_out','payment_rebate','growth_rebate','compliance_rebate','fixed_fee','locked_pricing','rebate_per_use']);
 
 export type TermTypeType = `${z.infer<typeof TermTypeSchema>}`
 

@@ -98,8 +98,13 @@ function buildForecast(
     const idx = values.length + i - 1
     const baseValue = slope * idx + intercept
     const seasonalFactor = seasonal[idx % seasonal.length] ?? 0
-    const forecast = Math.max(0, baseValue + seasonalFactor)
-    const margin = forecast * 0.1
+    // Multiplicative seasonality: apply seasonal factor as a multiplier
+    // Convert additive factor to multiplicative: 1 + (factor / mean_of_values)
+    const meanValue = values.reduce((a, b) => a + b, 0) / values.length
+    const multiplier = meanValue !== 0 ? 1 + seasonalFactor / meanValue : 1
+    const forecast = Math.max(0, baseValue * multiplier)
+    // Widening confidence intervals: uncertainty grows with forecast horizon
+    const margin = Math.sqrt(1 - r2) * forecast * (1 + i * 0.05)
 
     const forecastDate = new Date(lastDate)
     forecastDate.setMonth(forecastDate.getMonth() + i)

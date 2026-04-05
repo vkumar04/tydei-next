@@ -5,7 +5,7 @@ import { z } from "zod"
 export const UserRoleSchema = z.enum(["facility", "vendor", "admin"])
 export const ContractTypeSchema = z.enum(["usage", "capital", "service", "tie_in", "grouped", "pricing_only"])
 export const ContractStatusSchema = z.enum(["active", "expired", "expiring", "draft", "pending"])
-export const TermTypeSchema = z.enum(["spend_rebate", "volume_rebate", "price_reduction", "market_share", "market_share_price_reduction", "capitated_price_reduction", "capitated_pricing_rebate", "po_rebate", "carve_out", "payment_rebate", "growth_rebate", "compliance_rebate", "fixed_fee", "locked_pricing"])
+export const TermTypeSchema = z.enum(["spend_rebate", "volume_rebate", "price_reduction", "market_share", "market_share_price_reduction", "capitated_price_reduction", "capitated_pricing_rebate", "po_rebate", "carve_out", "payment_rebate", "growth_rebate", "compliance_rebate", "fixed_fee", "locked_pricing", "rebate_per_use"])
 export const VolumeTypeSchema = z.enum(["product_category", "catalog_cap_based", "procedure_code"])
 export const RebateTypeSchema = z.enum(["percent_of_spend", "fixed_rebate", "fixed_rebate_per_unit", "per_procedure_rebate"])
 export const BaselineTypeSchema = z.enum(["spend_based", "volume_based", "growth_based"])

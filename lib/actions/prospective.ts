@@ -114,14 +114,55 @@ export async function analyzeProposal(input: {
   const totalSavingsPercent =
     totalCurrentCost > 0 ? (totalSavings / totalCurrentCost) * 100 : 0
 
-  // Auto-score the deal based on pricing
-  const pricingComp = Math.min(100, Math.max(0, totalSavingsPercent * 10 + 50))
+  // ─── Compute all 5 deal-score dimensions from actual data ─────
+
+  // financialValue: based on total savings percentage (0-100 scale)
+  const financialValue = Math.min(100, Math.max(0, totalSavingsPercent * 10 + 50))
+
+  // pricingCompetitiveness: same basis as financialValue
+  const pricingCompetitiveness = financialValue
+
+  // rebateEfficiency: how attainable are spend tiers given actual COG data?
+  // Look up recent annual spend for this vendor to gauge tier reachability
+  let rebateEfficiency = 50 // default fallback
+  if (input.vendorId) {
+    const oneYearAgo = new Date()
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+    const annualSpend = await prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
+        vendorId: input.vendorId,
+        transactionDate: { gte: oneYearAgo },
+      },
+      _sum: { extendedPrice: true },
+    })
+    const historicalSpend = Number(annualSpend._sum?.extendedPrice ?? 0)
+    if (historicalSpend > 0) {
+      // Compare historical spend to proposed cost — higher ratio = more attainable
+      const spendRatio = historicalSpend / Math.max(totalProposedCost, 1)
+      rebateEfficiency = Math.min(100, Math.max(0, spendRatio * 50))
+    }
+  }
+
+  // marketShareAlignment: % of proposed items that matched COG records vs total proposed items
+  const matchedItems = itemComparisons.filter((ic) => ic.currentPrice > 0).length
+  const totalItems = itemComparisons.length
+  const marketShareAlignment = totalItems > 0
+    ? Math.min(100, Math.round((matchedItems / totalItems) * 100))
+    : 50
+
+  // complianceLikelihood: % of items with price decrease (savings > 0) vs total items
+  const itemsWithDecrease = itemComparisons.filter((ic) => ic.savings > 0).length
+  const complianceLikelihood = totalItems > 0
+    ? Math.min(100, Math.round((itemsWithDecrease / totalItems) * 100))
+    : 50
+
   const dealScore = computeDealScore({
-    financialValue: pricingComp,
-    rebateEfficiency: 50,
-    pricingCompetitiveness: pricingComp,
-    marketShareAlignment: 60,
-    complianceLikelihood: 70,
+    financialValue,
+    rebateEfficiency,
+    pricingCompetitiveness,
+    marketShareAlignment,
+    complianceLikelihood,
   })
 
   return serialize({

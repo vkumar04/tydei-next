@@ -147,11 +147,29 @@ function estimateByRange(cptCode: string): number {
 
 /**
  * Estimate reimbursement for a CPT code using national average rates.
- * Uses commercial average as default (most common payor type for ASC).
+ * Supports payor-specific multipliers:
+ *   - "commercial" or undefined → commercial average (default)
+ *   - "medicare" → base Medicare rate (commercialAvg / 1.8)
+ *   - "medicaid" → Medicare rate × 0.72
+ *   - "self_pay" → commercialAvg × 2.2
+ *
  * Falls back to range-based estimate when exact code is not in the table.
  */
-export function estimateReimbursement(cptCode: string): number {
+export function estimateReimbursement(cptCode: string, payorType?: string): number {
   const rates = nationalReimbursementRates[cptCode]
-  if (rates) return rates.commercialAvg
-  return estimateByRange(cptCode)
+  const commercialAvg = rates ? rates.commercialAvg : estimateByRange(cptCode)
+
+  if (!commercialAvg) return 0
+
+  switch (payorType) {
+    case "medicare":
+      return Math.round((commercialAvg / 1.8) * 100) / 100
+    case "medicaid":
+      return Math.round((commercialAvg / 1.8) * 0.72 * 100) / 100
+    case "self_pay":
+      return Math.round(commercialAvg * 2.2 * 100) / 100
+    case "commercial":
+    default:
+      return commercialAvg
+  }
 }

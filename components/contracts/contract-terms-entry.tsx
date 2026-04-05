@@ -51,6 +51,7 @@ const termTypes = [
   { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Rebate for meeting compliance requirements" },
   { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate amount" },
   { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price locked for contract duration" },
+  { value: "rebate_per_use", label: "Rebate Per Use", icon: Coins, description: "Per-unit rebate tracked by usage count" },
 ] as const
 
 const baselineTypes = [

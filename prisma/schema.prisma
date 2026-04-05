@@ -61,6 +61,7 @@ enum TermType {
   compliance_rebate
   fixed_fee
   locked_pricing
+  rebate_per_use
 }
 
 enum VolumeType {
