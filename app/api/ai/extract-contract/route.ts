@@ -97,7 +97,27 @@ Return all the information you find as detailed text.${userInstructions ? `\n\nA
     const result = await generateText({
       model: geminiModel,
       output: Output.object({ schema: extractedContractSchema }),
-      prompt: `Parse this contract information into structured data. If a field is not clearly present, make your best inference from context. For dates use YYYY-MM-DD format. For contract type choose from: usage, capital, service, tie_in, grouped, pricing_only.
+      prompt: `Parse this contract information into structured data. Be precise with numbers and dates.
+
+CONTRACT TYPE RULES (choose the most specific match):
+- "usage" = contract has rebate tiers based on spend thresholds or volume commitments. This includes "Rebate Agreements", "Supplier-Provider Agreements", "Purchase Commitment Agreements". This is the MOST COMMON type.
+- "capital" = purchase/lease of specific equipment (robots, imaging systems, etc.)
+- "service" = service-level agreements, maintenance, consulting
+- "tie_in" = bundled deals linking equipment purchase to supply commitments
+- "grouped" = GPO/group purchasing organization contracts covering multiple vendors
+- "pricing_only" = ONLY use this if the document is purely a price list with NO rebates, NO tiers, NO commitments — just catalog prices
+
+TERM EXTRACTION RULES:
+- Extract EVERY rebate tier/threshold mentioned in the document
+- termType should match the actual mechanism: "spend_rebate" for spend-based, "volume_rebate" for unit-based, "market_share" for share commitments
+- spendMin/spendMax are the dollar thresholds for each tier
+- rebateValue is the percentage (e.g., 3.0 for 3%)
+- Include the term name as written in the contract (e.g., "Qualified Annual Spend Rebate")
+
+NUMBER RULES:
+- Contract total value should be the total dollar commitment or estimated annual spend
+- Tier thresholds should be exact dollar amounts from the contract
+- Dates in YYYY-MM-DD format
 
 Return valid JSON only — no markdown fences.
 
