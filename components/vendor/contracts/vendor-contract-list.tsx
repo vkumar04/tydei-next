@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { getVendorContractColumns } from "./vendor-contract-columns"
 import { useVendorContracts } from "@/hooks/use-vendor-contracts"
+import { useVendorPendingContracts } from "@/hooks/use-pending-contracts"
 import { formatCurrency } from "@/lib/formatting"
 import { FileStack, CheckCircle2, Clock, DollarSign } from "lucide-react"
 import type { ContractStatus } from "@prisma/client"
@@ -15,35 +16,85 @@ interface VendorContractListProps {
   vendorId: string
 }
 
-const TABS: { label: string; value: ContractStatus | "all" }[] = [
+type TabValue = ContractStatus | "all" | "submitted"
+
+const TABS: { label: string; value: TabValue }[] = [
   { label: "All", value: "all" },
   { label: "Draft", value: "draft" },
-  { label: "Submitted", value: "pending" },
+  { label: "Submitted", value: "submitted" },
   { label: "Active", value: "active" },
   { label: "Expired", value: "expired" },
 ]
 
 export function VendorContractList({ vendorId }: VendorContractListProps) {
   const router = useRouter()
-  const [tab, setTab] = useState<ContractStatus | "all">("all")
+  const [tab, setTab] = useState<TabValue>("all")
 
   // Always fetch the full set for stats
   const { data: allData } = useVendorContracts(vendorId, { status: undefined })
   const allContracts = allData?.contracts ?? []
 
-  const { data, isLoading } = useVendorContracts(vendorId, {
-    status: tab === "all" ? undefined : tab,
-  })
+  // Fetch pending contracts from the PendingContract table
+  const { data: pendingData, isLoading: pendingLoading } = useVendorPendingContracts(vendorId)
+  const pendingContracts = pendingData ?? []
 
-  const contracts = data?.contracts ?? []
-
-  const columns = getVendorContractColumns((id) =>
-    router.push(`/vendor/contracts/${id}`)
+  // Map pending contracts to match the Contract table row shape
+  const mappedPending = useMemo(
+    () =>
+      pendingContracts
+        .filter((pc) => pc.status === "submitted")
+        .map((pc) => ({
+          id: pc.id,
+          name: pc.contractName,
+          contractNumber: null,
+          vendorId: pc.vendorId,
+          facilityId: pc.facilityId ?? null,
+          contractType: pc.contractType,
+          status: "pending" as ContractStatus,
+          effectiveDate: pc.effectiveDate ? new Date(pc.effectiveDate) : new Date(),
+          expirationDate: pc.expirationDate ? new Date(pc.expirationDate) : new Date(),
+          totalValue: pc.totalValue ?? 0,
+          annualValue: null,
+          description: null,
+          createdAt: new Date(pc.submittedAt),
+          updatedAt: new Date(pc.submittedAt),
+          productCategoryId: null,
+          facility: pc.facility
+            ? { id: pc.facility.id, name: pc.facility.name }
+            : null,
+          productCategory: null,
+        })),
+    [pendingContracts],
   )
 
-  // Compute stats from the full (unfiltered) data set
+  const { data, isLoading: contractsLoading } = useVendorContracts(vendorId, {
+    status: tab === "all" || tab === "submitted" ? undefined : tab,
+  })
+
+  const rawContracts = data?.contracts ?? []
+
+  // Merge contracts with pending depending on the active tab
+  const contracts = useMemo(() => {
+    if (tab === "submitted") return mappedPending
+    if (tab === "all") return [...rawContracts, ...mappedPending]
+    return rawContracts
+  }, [tab, rawContracts, mappedPending])
+
+  const isLoading = contractsLoading || pendingLoading
+
+  const columns = getVendorContractColumns((id) => {
+    // Check if this is a pending contract
+    const isPending = mappedPending.some((pc) => pc.id === id)
+    if (isPending) {
+      router.push(`/vendor/contracts/pending/${id}`)
+    } else {
+      router.push(`/vendor/contracts/${id}`)
+    }
+  })
+
+  // Compute stats from the full (unfiltered) data set + pending
   const activeCount = allContracts.filter((c) => c.status === "active").length
-  const pendingCount = allContracts.filter((c) => c.status === "pending").length
+  const pendingCount = mappedPending.length
   const totalValue = allContracts.reduce(
     (sum, c) => sum + Number(c.totalValue ?? 0),
     0
@@ -92,7 +143,7 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
       </div>
 
       {/* Tabs + DataTable */}
-      <Tabs value={tab} onValueChange={(v) => setTab(v as ContractStatus | "all")}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as TabValue)}>
         <TabsList>
           {TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
@@ -108,9 +159,10 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           <DataTable
-            columns={columns}
-            data={contracts}
+            columns={columns as any}
+            data={contracts as any}
             searchKey="name"
             searchPlaceholder="Search contracts..."
             isLoading={isLoading}

@@ -214,7 +214,7 @@ export function NewContractClient({
     }
 
     finalizePricingImport(items, file.name)
-  }, [form])
+  }, [form, liveCategories, queryClient])
 
   /** Build ContractPricingItem[] from raw data rows using a column mapping */
   function buildPricingItems(

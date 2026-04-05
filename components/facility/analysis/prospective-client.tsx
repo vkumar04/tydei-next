@@ -368,7 +368,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
         try {
           const formData = new FormData()
           formData.append("file", file)
-          formData.append("userInstructions", "Extract all pricing information including item numbers, descriptions, proposed prices, current prices, and quantities. Format the output as structured data.")
+          formData.append("userInstructions", "Extract all pricing information including item numbers, descriptions, proposed prices, current prices, quantities, and total contract value. Look for any line-item pricing tables or schedules.")
           const res = await fetch("/api/ai/extract-contract", {
             method: "POST",
             body: formData,
@@ -378,22 +378,64 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
             toast.error((body as { error?: string } | null)?.error ?? "Failed to extract data from PDF")
             return
           }
-          const { extracted } = await res.json() as { extracted: { pricingItems?: { vendorItemNo: string; description?: string; unitPrice: number }[]; totalValue?: number; vendorName?: string } }
-
-          // Build proposal items from extracted contract data
-          const items: { vendorItemNo: string; description?: string; proposedPrice: number; currentPrice?: number; quantity?: number }[] = []
-          if (extracted.pricingItems && extracted.pricingItems.length > 0) {
-            for (const item of extracted.pricingItems) {
-              items.push({
-                vendorItemNo: item.vendorItemNo,
-                description: item.description,
-                proposedPrice: item.unitPrice,
-              })
+          const { extracted } = await res.json() as {
+            extracted: {
+              contractName: string
+              vendorName: string
+              contractType: string
+              effectiveDate: string
+              expirationDate: string
+              totalValue?: number
+              description?: string
+              terms: {
+                termName: string
+                termType: string
+                tiers: {
+                  tierNumber: number
+                  spendMin?: number
+                  spendMax?: number
+                  rebateValue?: number
+                }[]
+              }[]
             }
           }
 
+          // Build proposal items from extracted contract data.
+          // The AI extraction returns contract-level data (terms/tiers),
+          // not line-item pricing. Convert what we have into ProposedPricingItem[].
+          const items: { vendorItemNo: string; description?: string; proposedPrice: number; currentPrice?: number; quantity?: number }[] = []
+
+          // Try to build items from term tiers (each tier becomes an item)
+          if (extracted.terms && extracted.terms.length > 0) {
+            for (const term of extracted.terms) {
+              if (term.tiers.length > 0) {
+                for (const tier of term.tiers) {
+                  const spendValue = tier.spendMin ?? tier.spendMax ?? 0
+                  if (spendValue > 0) {
+                    items.push({
+                      vendorItemNo: `${term.termName}-T${tier.tierNumber}`,
+                      description: `${term.termName} - Tier ${tier.tierNumber}${tier.rebateValue ? ` (${tier.rebateValue}% rebate)` : ""}`,
+                      proposedPrice: spendValue,
+                    })
+                  }
+                }
+              }
+            }
+          }
+
+          // If no line items were derived from terms, create a single summary
+          // item from the total contract value so the analysis can proceed.
+          if (items.length === 0 && extracted.totalValue && extracted.totalValue > 0) {
+            items.push({
+              vendorItemNo: "CONTRACT-TOTAL",
+              description: `${extracted.contractName} — ${extracted.vendorName} (total contract value)`,
+              proposedPrice: extracted.totalValue,
+              quantity: 1,
+            })
+          }
+
           if (items.length === 0) {
-            toast.error("No pricing items could be extracted from the PDF. Try uploading a CSV or Excel version instead.")
+            toast.error("No pricing data could be extracted from the PDF. Try uploading a CSV or Excel version instead.")
             return
           }
 
@@ -403,7 +445,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
           })
           setAnalysis(result)
           setActiveTab("analysis")
-          toast.success(`Extracted ${items.length} items from PDF for analysis`)
+          toast.success(`Extracted ${items.length} item${items.length !== 1 ? "s" : ""} from PDF for analysis`)
         } catch {
           toast.error("Failed to extract pricing data from PDF")
         }
