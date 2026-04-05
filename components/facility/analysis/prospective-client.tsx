@@ -62,6 +62,7 @@ interface ProspectiveClientProps {
 
 export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
   const [analysis, setAnalysis] = useState<ProposalAnalysis | null>(null)
+  const [pdfExtracting, setPdfExtracting] = useState(false)
   const [activeTab, setActiveTab] = useState("upload")
   const analyzeMutation = useAnalyzeProposal()
   const { data: cogStats } = useCOGStats(facilityId)
@@ -365,6 +366,8 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
 
       // Handle PDFs via AI extraction
       if (ext === "pdf") {
+        setPdfExtracting(true)
+        toast.info("Extracting contract data from PDF... This may take 1-2 minutes.")
         try {
           const formData = new FormData()
           formData.append("file", file)
@@ -448,6 +451,8 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
           toast.success(`Extracted ${items.length} item${items.length !== 1 ? "s" : ""} from PDF for analysis`)
         } catch {
           toast.error("Failed to extract pricing data from PDF")
+        } finally {
+          setPdfExtracting(false)
         }
         return
       }
@@ -750,7 +755,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            isAnalyzing={analyzeMutation.isPending}
+            isAnalyzing={analyzeMutation.isPending || pdfExtracting}
             manualEntry={manualEntry}
             onManualEntryChange={setManualEntry}
           />

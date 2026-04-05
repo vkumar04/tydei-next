@@ -275,21 +275,21 @@ export function NewContractClient({
       await queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
     }
 
-    const totalFromPricing = items.reduce((sum, i) => sum + i.unitPrice, 0)
-    const currentTotal = form.getValues("totalValue")
-    if ((!currentTotal || currentTotal === 0) && totalFromPricing > 0) {
-      form.setValue("totalValue", Math.round(totalFromPricing * 100) / 100)
-
-      // Auto-compute annual value from dates
-      const eff = form.getValues("effectiveDate")
-      const exp = form.getValues("expirationDate")
-      if (eff && exp) {
-        const years = Math.max(1, (new Date(exp).getTime() - new Date(eff).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-        form.setValue("annualValue", Math.round((totalFromPricing / years) * 100) / 100)
-      } else {
-        form.setValue("annualValue", Math.round(totalFromPricing * 100) / 100)
+    // Auto-select the first pricing category in the form if none is selected
+    if (cats.length > 0 && !form.getValues("productCategoryId")) {
+      // Find the matching category ID from the live list
+      const refreshedCats = queryClient.getQueryData<{ id: string; name: string }[]>(queryKeys.categories.all)
+      const match = (refreshedCats ?? liveCategories).find(
+        (c) => cats.some((cat) => c.name.toLowerCase() === cat.toLowerCase())
+      )
+      if (match) {
+        form.setValue("productCategoryId", match.id)
       }
     }
+
+    // Do NOT auto-set totalValue from pricing file — a pricing file is a
+    // catalog of available items, not a purchase order. Summing all unit
+    // prices produces wildly inflated numbers (e.g. $57M for 10K items).
 
     setPricingItems(items)
     setPricingFileName(fileName)
