@@ -78,6 +78,7 @@ import {
   Download,
 } from "lucide-react"
 import { toast } from "sonner"
+import { ProposalBuilder } from "@/components/vendor/prospective/proposal-builder"
 import { useVendorProposals } from "@/hooks/use-prospective"
 import { formatCurrency } from "@/lib/formatting"
 import { chartTooltipStyle } from "@/lib/chart-config"
@@ -1099,7 +1100,7 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
           <ProposalCards
             proposals={proposals ?? []}
             isLoading={isLoading}
-            onNewProposal={() => setActiveTab("analytics")}
+            onNewProposal={() => setActiveTab("new-proposal")}
           />
         </TabsContent>
 
@@ -1123,6 +1124,15 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="mt-4 space-y-4">
           <AnalyticsSection proposals={proposals ?? []} isLoading={isLoading} />
+        </TabsContent>
+
+        {/* New Proposal Tab (hidden trigger — activated programmatically) */}
+        <TabsContent value="new-proposal" className="mt-4 space-y-4">
+          <ProposalBuilder
+            vendorId={vendorId}
+            facilities={[]}
+            onClose={() => setActiveTab("proposals")}
+          />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,8 +1,6 @@
 import { requireVendor } from "@/lib/actions/auth"
 import { getVendorContractDetail } from "@/lib/actions/vendor-contracts"
-import { PageHeader } from "@/components/shared/page-header"
-import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
-import { VendorContractOverview } from "@/components/vendor/contracts/vendor-contract-overview"
+import { VendorContractDetailClient } from "./vendor-contract-detail-client"
 
 interface Props {
   params: Promise<{ id: string }>
@@ -13,11 +11,5 @@ export default async function VendorContractDetailPage({ params }: Props) {
   const { id } = await params
   const contract = await getVendorContractDetail(id, vendor.id)
 
-  return (
-    <div className="space-y-6">
-      <PageHeader title={contract.name} description="Contract details" />
-      <VendorContractOverview contract={contract} />
-      <ContractDocumentsList documents={contract.documents} />
-    </div>
-  )
+  return <VendorContractDetailClient contract={contract} />
 }

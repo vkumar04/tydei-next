@@ -55,12 +55,13 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
     queryFn: () => getVendorPerformance(vendorId),
   })
 
-  const { data: contracts, isLoading: contractsLoading } = useVendorContracts(vendorId, {
+  const { data: contractsData, isLoading: contractsLoading } = useVendorContracts(vendorId, {
     status: "active",
   })
 
   // Compute contract performance table rows from live data
   const contractRows = useMemo(() => {
+    const contracts = contractsData?.contracts
     if (!contracts || !Array.isArray(contracts)) return []
     return contracts.map((c: Record<string, unknown>) => {
       const totalValue = Number(c.totalValue ?? c.annualValue ?? 0)
@@ -81,7 +82,7 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
         status,
       }
     })
-  }, [contracts, data])
+  }, [contractsData, data])
 
   const statusConfig = {
     "exceeding": { label: "Exceeding", variant: "default" as const, icon: ArrowUpRight },
