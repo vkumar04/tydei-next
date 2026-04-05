@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   DollarSign,
   TrendingUp,
@@ -111,14 +111,14 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   upcoming: { label: "Upcoming", variant: "outline" },
 }
 
-function AddTransactionDialog() {
+function AddTransactionDialog({ contractId, queryClient }: { contractId: string; queryClient: ReturnType<typeof useQueryClient> }) {
   const [open, setOpen] = useState(false)
   const [type, setType] = useState<TransactionType>("rebate")
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
   const [date, setDate] = useState("")
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!amount || !description || !date) {
       toast.error("Please fill in all required fields")
       return
@@ -128,7 +128,21 @@ function AddTransactionDialog() {
       toast.error("Please enter a valid amount")
       return
     }
-    toast.success("Transaction recorded")
+    try {
+      const { createContractTransaction } = await import("@/lib/actions/contract-periods")
+      await createContractTransaction({
+        contractId,
+        type: type as "rebate" | "credit" | "payment",
+        amount: parsedAmount,
+        description,
+        date,
+      })
+      toast.success("Transaction recorded")
+      // Refetch periods to show the new transaction
+      queryClient.invalidateQueries({ queryKey: ["contractPeriods", contractId] })
+    } catch {
+      toast.error("Failed to save transaction")
+    }
     setType("rebate")
     setAmount("")
     setDescription("")
@@ -291,6 +305,7 @@ function TransactionTable({
 }
 
 export function ContractTransactions({ contractId }: ContractTransactionsProps) {
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<"all" | TransactionType>("all")
 
   const { data: periods, isLoading } = useQuery({
@@ -335,7 +350,7 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
             <Calendar className="h-4 w-4" />
             Transaction Ledger
           </CardTitle>
-          <AddTransactionDialog />
+          <AddTransactionDialog contractId={contractId} queryClient={queryClient} />
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -404,7 +419,7 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
               Rebates, credits, and payments for this contract
             </CardDescription>
           </div>
-          <AddTransactionDialog />
+          <AddTransactionDialog contractId={contractId} queryClient={queryClient} />
         </CardHeader>
         <CardContent>
           <Tabs

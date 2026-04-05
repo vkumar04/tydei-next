@@ -30,3 +30,46 @@ export async function getContractPeriods(contractId: string) {
 
   return serialize(periods)
 }
+
+/**
+ * Create a contract transaction (stored as a ContractPeriod record).
+ */
+export async function createContractTransaction(input: {
+  contractId: string
+  type: "rebate" | "credit" | "payment"
+  amount: number
+  description: string
+  date: string
+}) {
+  const { facility } = await requireFacility()
+
+  // Verify access
+  await prisma.contract.findUniqueOrThrow({
+    where: {
+      id: input.contractId,
+      OR: [
+        { facilityId: facility.id },
+        { contractFacilities: { some: { facilityId: facility.id } } },
+      ],
+    },
+    select: { id: true },
+  })
+
+  const periodDate = new Date(input.date)
+
+  const period = await prisma.contractPeriod.create({
+    data: {
+      contractId: input.contractId,
+      facilityId: facility.id,
+      periodStart: periodDate,
+      periodEnd: periodDate,
+      totalSpend: input.type === "payment" ? input.amount : 0,
+      rebateEarned: input.type === "rebate" ? input.amount : 0,
+      rebateCollected: input.type === "rebate" ? input.amount : 0,
+      paymentExpected: input.type === "credit" ? input.amount : 0,
+      paymentActual: input.type === "credit" ? input.amount : 0,
+    },
+  })
+
+  return serialize(period)
+}
