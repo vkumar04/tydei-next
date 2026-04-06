@@ -3,6 +3,8 @@ import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { prisma } from "@/lib/db"
 
+export const dynamic = "force-dynamic"
+
 export async function POST() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session || session.user.role !== "admin") {
