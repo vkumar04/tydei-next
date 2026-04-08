@@ -58,6 +58,7 @@ export function EditContractClient({
         rebatePayPeriod: contract.rebatePayPeriod,
         isMultiFacility: contract.isMultiFacility,
         facilityIds: contract.contractFacilities.map((cf) => cf.facilityId),
+        categoryIds: contract.contractCategories?.map((cc: { productCategoryId: string }) => cc.productCategoryId) ?? (contract.productCategoryId ? [contract.productCategoryId] : []),
       })
 
       setTerms(

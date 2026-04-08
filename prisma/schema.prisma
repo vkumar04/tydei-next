@@ -454,7 +454,8 @@ model ProductCategory {
   parent   ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children ProductCategory[] @relation("CategoryHierarchy")
 
-  contracts Contract[]
+  contracts          Contract[]
+  contractCategories ContractProductCategory[]
 
   @@map("product_category")
 }
@@ -503,14 +504,27 @@ model Contract {
   alerts             Alert[]
   purchaseOrders     PurchaseOrder[]
   surgeonUsages      SurgeonUsage[]
-  contractFacilities ContractFacility[]
-  changeProposals    ContractChangeProposal[]
+  contractFacilities  ContractFacility[]
+  contractCategories  ContractProductCategory[]
+  changeProposals     ContractChangeProposal[]
 
   @@index([vendorId])
   @@index([facilityId])
   @@index([status])
   @@index([expirationDate])
   @@map("contract")
+}
+
+model ContractProductCategory {
+  id                String @id @default(cuid())
+  contractId        String
+  productCategoryId String
+
+  contract        Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  productCategory ProductCategory @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, productCategoryId])
+  @@map("contract_product_category")
 }
 
 model ContractFacility {

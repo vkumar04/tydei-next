@@ -85,6 +85,9 @@ export async function getContract(id: string) {
       contractFacilities: {
         include: { facility: { select: { id: true, name: true } } },
       },
+      contractCategories: {
+        select: { productCategoryId: true },
+      },
       createdBy: { select: { id: true, name: true } },
     },
   })
@@ -158,6 +161,11 @@ export async function createContract(input: CreateContractInput) {
           create: data.facilityIds.map((fId) => ({ facilityId: fId })),
         },
       }),
+      ...(data.categoryIds.length > 0 && {
+        contractCategories: {
+          create: data.categoryIds.map((cId) => ({ productCategoryId: cId })),
+        },
+      }),
     },
   })
 
@@ -218,6 +226,16 @@ export async function updateContract(id: string, input: UpdateContractInput) {
       updateData.isMultiFacility = true
       await prisma.contractFacility.createMany({
         data: data.facilityIds.map((fId) => ({ contractId: id, facilityId: fId })),
+      })
+    }
+  }
+
+  if (data.categoryIds !== undefined) {
+    await prisma.contractProductCategory.deleteMany({ where: { contractId: id } })
+    if (data.categoryIds.length > 0) {
+      updateData.productCategory = { connect: { id: data.categoryIds[0] } }
+      await prisma.contractProductCategory.createMany({
+        data: data.categoryIds.map((cId) => ({ contractId: id, productCategoryId: cId })),
       })
     }
   }

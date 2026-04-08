@@ -276,15 +276,18 @@ export function NewContractClient({
       await queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
     }
 
-    // Auto-select the first pricing category in the form if none is selected
-    if (cats.length > 0 && !form.getValues("productCategoryId")) {
-      // Find the matching category ID from the live list
+    // Auto-select all pricing categories in the form
+    if (cats.length > 0) {
       const refreshedCats = queryClient.getQueryData<{ id: string; name: string }[]>(queryKeys.categories.all)
-      const match = (refreshedCats ?? liveCategories).find(
-        (c) => cats.some((cat) => c.name.toLowerCase() === cat.toLowerCase())
-      )
-      if (match) {
-        form.setValue("productCategoryId", match.id)
+      const catList = refreshedCats ?? liveCategories
+      const matchedIds = cats
+        .map((cat) => catList.find((c) => c.name.toLowerCase() === cat.toLowerCase())?.id)
+        .filter((id): id is string => !!id)
+      if (matchedIds.length > 0) {
+        const existing = form.getValues("categoryIds") ?? []
+        const merged = Array.from(new Set([...existing, ...matchedIds]))
+        form.setValue("categoryIds", merged)
+        form.setValue("productCategoryId", merged[0])
       }
     }
 

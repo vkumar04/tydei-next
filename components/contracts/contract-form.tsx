@@ -117,6 +117,7 @@ export function ContractFormBasicInfo({
   const vendorId = watch("vendorId")
   const totalValue = watch("totalValue")
   const contractType = watch("contractType")
+  const selectedCategoryIds = watch("categoryIds") ?? []
   const [cogAutoFilled, setCogAutoFilled] = useState(false)
   const [linkedContractId, setLinkedContractId] = useState<string>("")
   const [additionalVendorIds, setAdditionalVendorIds] = useState<string[]>([])
@@ -158,6 +159,19 @@ export function ContractFormBasicInfo({
   const expirationDateStr = watch("expirationDate")
   const effectiveDate = parseDateString(effectiveDateStr)
   const expirationDate = parseDateString(expirationDateStr)
+
+  // Auto-compute annualValue when totalValue and dates are available
+  useEffect(() => {
+    const current = form.getValues("annualValue")
+    if (current && current !== 0) return // don't overwrite manual entry
+    if (!totalValue || totalValue === 0) return
+    if (!effectiveDateStr || !expirationDateStr) return
+    const effMs = new Date(effectiveDateStr).getTime()
+    const expMs = new Date(expirationDateStr).getTime()
+    if (isNaN(effMs) || isNaN(expMs) || expMs <= effMs) return
+    const years = Math.max(1, (expMs - effMs) / (365.25 * 24 * 60 * 60 * 1000))
+    setValue("annualValue", Math.round((totalValue / years) * 100) / 100)
+  }, [totalValue, effectiveDateStr, expirationDateStr, form, setValue])
 
   return (
     <div className="space-y-6">
@@ -245,26 +259,84 @@ export function ContractFormBasicInfo({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
-              label="Category"
-              error={errors.productCategoryId?.message}
+              label="Categories"
+              error={errors.categoryIds?.message}
             >
-              <Select
-                value={watch("productCategoryId") ?? ""}
-                onValueChange={(v) =>
-                  setValue("productCategoryId", v || undefined)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal"
+                  >
+                    {selectedCategoryIds.length > 0
+                      ? `${selectedCategoryIds.length} selected`
+                      : "Select categories"}
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {selectedCategoryIds.length > 0 && selectedCategoryIds.length}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-2" align="start">
+                  <div className="max-h-[200px] overflow-y-auto space-y-1">
+                    {categories.map((c) => {
+                      const checked = selectedCategoryIds.includes(c.id)
+                      return (
+                        <label
+                          key={c.id}
+                          className={cn(
+                            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-accent",
+                            checked && "bg-accent"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={checked}
+                            onChange={() => {
+                              const next = checked
+                                ? selectedCategoryIds.filter((id) => id !== c.id)
+                                : [...selectedCategoryIds, c.id]
+                              setValue("categoryIds", next)
+                              setValue("productCategoryId", next[0] || undefined)
+                            }}
+                          />
+                          <div className={cn(
+                            "h-4 w-4 rounded border flex items-center justify-center",
+                            checked ? "bg-primary border-primary text-primary-foreground" : "border-input"
+                          )}>
+                            {checked && <span className="text-xs">&#10003;</span>}
+                          </div>
+                          {c.name}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              {selectedCategoryIds.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {selectedCategoryIds.map((id) => {
+                    const cat = categories.find((c) => c.id === id)
+                    return cat ? (
+                      <Badge key={id} variant="secondary" className="text-xs gap-1">
+                        {cat.name}
+                        <button
+                          type="button"
+                          className="ml-0.5 hover:text-destructive"
+                          onClick={() => {
+                            const next = selectedCategoryIds.filter((cid) => cid !== id)
+                            setValue("categoryIds", next)
+                            setValue("productCategoryId", next[0] || undefined)
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ) : null
+                  })}
+                </div>
+              )}
             </Field>
 
             <Field

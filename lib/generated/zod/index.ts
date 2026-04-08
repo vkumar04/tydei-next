@@ -103,6 +103,8 @@ export const ProductCategoryScalarFieldEnumSchema = z.enum(['id','name','descrip
 
 export const ContractScalarFieldEnumSchema = z.enum(['id','contractNumber','name','vendorId','facilityId','productCategoryId','contractType','status','effectiveDate','expirationDate','autoRenewal','terminationNoticeDays','totalValue','annualValue','description','notes','gpoAffiliation','performancePeriod','rebatePayPeriod','isGrouped','isMultiFacility','tieInCapitalContractId','createdById','createdAt','updatedAt']);
 
+export const ContractProductCategoryScalarFieldEnumSchema = z.enum(['id','contractId','productCategoryId']);
+
 export const ContractFacilityScalarFieldEnumSchema = z.enum(['id','contractId','facilityId']);
 
 export const ContractTermScalarFieldEnumSchema = z.enum(['id','contractId','termName','termType','baselineType','evaluationPeriod','paymentTiming','appliesTo','effectiveStart','effectiveEnd','volumeType','spendBaseline','volumeBaseline','growthBaselinePercent','desiredMarketShare','createdAt','updatedAt']);
@@ -1607,6 +1609,7 @@ export type ProductCategoryRelations = {
   parent?: ProductCategoryWithRelations | null;
   children: ProductCategoryWithRelations[];
   contracts: ContractWithRelations[];
+  contractCategories: ContractProductCategoryWithRelations[];
 };
 
 export type ProductCategoryWithRelations = z.infer<typeof ProductCategorySchema> & ProductCategoryRelations
@@ -1615,6 +1618,7 @@ export const ProductCategoryWithRelationsSchema: z.ZodType<ProductCategoryWithRe
   parent: z.lazy(() => ProductCategoryWithRelationsSchema).nullable(),
   children: z.lazy(() => ProductCategoryWithRelationsSchema).array(),
   contracts: z.lazy(() => ContractWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryWithRelationsSchema).array(),
 }))
 
 // PRODUCT CATEGORY OPTIONAL DEFAULTS RELATION SCHEMA
@@ -1624,6 +1628,7 @@ export type ProductCategoryOptionalDefaultsRelations = {
   parent?: ProductCategoryOptionalDefaultsWithRelations | null;
   children: ProductCategoryOptionalDefaultsWithRelations[];
   contracts: ContractOptionalDefaultsWithRelations[];
+  contractCategories: ContractProductCategoryOptionalDefaultsWithRelations[];
 };
 
 export type ProductCategoryOptionalDefaultsWithRelations = z.infer<typeof ProductCategoryOptionalDefaultsSchema> & ProductCategoryOptionalDefaultsRelations
@@ -1632,6 +1637,7 @@ export const ProductCategoryOptionalDefaultsWithRelationsSchema: z.ZodType<Produ
   parent: z.lazy(() => ProductCategoryOptionalDefaultsWithRelationsSchema).nullable(),
   children: z.lazy(() => ProductCategoryOptionalDefaultsWithRelationsSchema).array(),
   contracts: z.lazy(() => ContractOptionalDefaultsWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryOptionalDefaultsWithRelationsSchema).array(),
 }))
 
 // PRODUCT CATEGORY PARTIAL RELATION SCHEMA
@@ -1641,6 +1647,7 @@ export type ProductCategoryPartialRelations = {
   parent?: ProductCategoryPartialWithRelations | null;
   children?: ProductCategoryPartialWithRelations[];
   contracts?: ContractPartialWithRelations[];
+  contractCategories?: ContractProductCategoryPartialWithRelations[];
 };
 
 export type ProductCategoryPartialWithRelations = z.infer<typeof ProductCategoryPartialSchema> & ProductCategoryPartialRelations
@@ -1649,6 +1656,7 @@ export const ProductCategoryPartialWithRelationsSchema: z.ZodType<ProductCategor
   parent: z.lazy(() => ProductCategoryPartialWithRelationsSchema).nullable(),
   children: z.lazy(() => ProductCategoryPartialWithRelationsSchema).array(),
   contracts: z.lazy(() => ContractPartialWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryPartialWithRelationsSchema).array(),
 })).partial()
 
 export type ProductCategoryOptionalDefaultsWithPartialRelations = z.infer<typeof ProductCategoryOptionalDefaultsSchema> & ProductCategoryPartialRelations
@@ -1657,6 +1665,7 @@ export const ProductCategoryOptionalDefaultsWithPartialRelationsSchema: z.ZodTyp
   parent: z.lazy(() => ProductCategoryPartialWithRelationsSchema).nullable(),
   children: z.lazy(() => ProductCategoryPartialWithRelationsSchema).array(),
   contracts: z.lazy(() => ContractPartialWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryPartialWithRelationsSchema).array(),
 }).partial())
 
 export type ProductCategoryWithPartialRelations = z.infer<typeof ProductCategorySchema> & ProductCategoryPartialRelations
@@ -1665,6 +1674,7 @@ export const ProductCategoryWithPartialRelationsSchema: z.ZodType<ProductCategor
   parent: z.lazy(() => ProductCategoryPartialWithRelationsSchema).nullable(),
   children: z.lazy(() => ProductCategoryPartialWithRelationsSchema).array(),
   contracts: z.lazy(() => ContractPartialWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryPartialWithRelationsSchema).array(),
 }).partial())
 
 /////////////////////////////////////////
@@ -1749,6 +1759,7 @@ export type ContractRelations = {
   purchaseOrders: PurchaseOrderWithRelations[];
   surgeonUsages: SurgeonUsageWithRelations[];
   contractFacilities: ContractFacilityWithRelations[];
+  contractCategories: ContractProductCategoryWithRelations[];
   changeProposals: ContractChangeProposalWithRelations[];
 };
 
@@ -1770,6 +1781,7 @@ export const ContractWithRelationsSchema: z.ZodType<ContractWithRelations> = Con
   purchaseOrders: z.lazy(() => PurchaseOrderWithRelationsSchema).array(),
   surgeonUsages: z.lazy(() => SurgeonUsageWithRelationsSchema).array(),
   contractFacilities: z.lazy(() => ContractFacilityWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryWithRelationsSchema).array(),
   changeProposals: z.lazy(() => ContractChangeProposalWithRelationsSchema).array(),
 }))
 
@@ -1792,6 +1804,7 @@ export type ContractOptionalDefaultsRelations = {
   purchaseOrders: PurchaseOrderOptionalDefaultsWithRelations[];
   surgeonUsages: SurgeonUsageOptionalDefaultsWithRelations[];
   contractFacilities: ContractFacilityOptionalDefaultsWithRelations[];
+  contractCategories: ContractProductCategoryOptionalDefaultsWithRelations[];
   changeProposals: ContractChangeProposalOptionalDefaultsWithRelations[];
 };
 
@@ -1813,6 +1826,7 @@ export const ContractOptionalDefaultsWithRelationsSchema: z.ZodType<ContractOpti
   purchaseOrders: z.lazy(() => PurchaseOrderOptionalDefaultsWithRelationsSchema).array(),
   surgeonUsages: z.lazy(() => SurgeonUsageOptionalDefaultsWithRelationsSchema).array(),
   contractFacilities: z.lazy(() => ContractFacilityOptionalDefaultsWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryOptionalDefaultsWithRelationsSchema).array(),
   changeProposals: z.lazy(() => ContractChangeProposalOptionalDefaultsWithRelationsSchema).array(),
 }))
 
@@ -1835,6 +1849,7 @@ export type ContractPartialRelations = {
   purchaseOrders?: PurchaseOrderPartialWithRelations[];
   surgeonUsages?: SurgeonUsagePartialWithRelations[];
   contractFacilities?: ContractFacilityPartialWithRelations[];
+  contractCategories?: ContractProductCategoryPartialWithRelations[];
   changeProposals?: ContractChangeProposalPartialWithRelations[];
 };
 
@@ -1856,6 +1871,7 @@ export const ContractPartialWithRelationsSchema: z.ZodType<ContractPartialWithRe
   purchaseOrders: z.lazy(() => PurchaseOrderPartialWithRelationsSchema).array(),
   surgeonUsages: z.lazy(() => SurgeonUsagePartialWithRelationsSchema).array(),
   contractFacilities: z.lazy(() => ContractFacilityPartialWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryPartialWithRelationsSchema).array(),
   changeProposals: z.lazy(() => ContractChangeProposalPartialWithRelationsSchema).array(),
 })).partial()
 
@@ -1877,6 +1893,7 @@ export const ContractOptionalDefaultsWithPartialRelationsSchema: z.ZodType<Contr
   purchaseOrders: z.lazy(() => PurchaseOrderPartialWithRelationsSchema).array(),
   surgeonUsages: z.lazy(() => SurgeonUsagePartialWithRelationsSchema).array(),
   contractFacilities: z.lazy(() => ContractFacilityPartialWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryPartialWithRelationsSchema).array(),
   changeProposals: z.lazy(() => ContractChangeProposalPartialWithRelationsSchema).array(),
 }).partial())
 
@@ -1898,7 +1915,96 @@ export const ContractWithPartialRelationsSchema: z.ZodType<ContractWithPartialRe
   purchaseOrders: z.lazy(() => PurchaseOrderPartialWithRelationsSchema).array(),
   surgeonUsages: z.lazy(() => SurgeonUsagePartialWithRelationsSchema).array(),
   contractFacilities: z.lazy(() => ContractFacilityPartialWithRelationsSchema).array(),
+  contractCategories: z.lazy(() => ContractProductCategoryPartialWithRelationsSchema).array(),
   changeProposals: z.lazy(() => ContractChangeProposalPartialWithRelationsSchema).array(),
+}).partial())
+
+/////////////////////////////////////////
+// CONTRACT PRODUCT CATEGORY SCHEMA
+/////////////////////////////////////////
+
+export const ContractProductCategorySchema = z.object({
+  id: z.cuid(),
+  contractId: z.string(),
+  productCategoryId: z.string(),
+})
+
+export type ContractProductCategory = z.infer<typeof ContractProductCategorySchema>
+
+/////////////////////////////////////////
+// CONTRACT PRODUCT CATEGORY PARTIAL SCHEMA
+/////////////////////////////////////////
+
+export const ContractProductCategoryPartialSchema = ContractProductCategorySchema.partial()
+
+export type ContractProductCategoryPartial = z.infer<typeof ContractProductCategoryPartialSchema>
+
+// CONTRACT PRODUCT CATEGORY OPTIONAL DEFAULTS SCHEMA
+//------------------------------------------------------
+
+export const ContractProductCategoryOptionalDefaultsSchema = ContractProductCategorySchema.merge(z.object({
+  id: z.cuid().optional(),
+}))
+
+export type ContractProductCategoryOptionalDefaults = z.infer<typeof ContractProductCategoryOptionalDefaultsSchema>
+
+// CONTRACT PRODUCT CATEGORY RELATION SCHEMA
+//------------------------------------------------------
+
+export type ContractProductCategoryRelations = {
+  contract: ContractWithRelations;
+  productCategory: ProductCategoryWithRelations;
+};
+
+export type ContractProductCategoryWithRelations = z.infer<typeof ContractProductCategorySchema> & ContractProductCategoryRelations
+
+export const ContractProductCategoryWithRelationsSchema: z.ZodType<ContractProductCategoryWithRelations> = ContractProductCategorySchema.merge(z.object({
+  contract: z.lazy(() => ContractWithRelationsSchema),
+  productCategory: z.lazy(() => ProductCategoryWithRelationsSchema),
+}))
+
+// CONTRACT PRODUCT CATEGORY OPTIONAL DEFAULTS RELATION SCHEMA
+//------------------------------------------------------
+
+export type ContractProductCategoryOptionalDefaultsRelations = {
+  contract: ContractOptionalDefaultsWithRelations;
+  productCategory: ProductCategoryOptionalDefaultsWithRelations;
+};
+
+export type ContractProductCategoryOptionalDefaultsWithRelations = z.infer<typeof ContractProductCategoryOptionalDefaultsSchema> & ContractProductCategoryOptionalDefaultsRelations
+
+export const ContractProductCategoryOptionalDefaultsWithRelationsSchema: z.ZodType<ContractProductCategoryOptionalDefaultsWithRelations> = ContractProductCategoryOptionalDefaultsSchema.merge(z.object({
+  contract: z.lazy(() => ContractOptionalDefaultsWithRelationsSchema),
+  productCategory: z.lazy(() => ProductCategoryOptionalDefaultsWithRelationsSchema),
+}))
+
+// CONTRACT PRODUCT CATEGORY PARTIAL RELATION SCHEMA
+//------------------------------------------------------
+
+export type ContractProductCategoryPartialRelations = {
+  contract?: ContractPartialWithRelations;
+  productCategory?: ProductCategoryPartialWithRelations;
+};
+
+export type ContractProductCategoryPartialWithRelations = z.infer<typeof ContractProductCategoryPartialSchema> & ContractProductCategoryPartialRelations
+
+export const ContractProductCategoryPartialWithRelationsSchema: z.ZodType<ContractProductCategoryPartialWithRelations> = ContractProductCategoryPartialSchema.merge(z.object({
+  contract: z.lazy(() => ContractPartialWithRelationsSchema),
+  productCategory: z.lazy(() => ProductCategoryPartialWithRelationsSchema),
+})).partial()
+
+export type ContractProductCategoryOptionalDefaultsWithPartialRelations = z.infer<typeof ContractProductCategoryOptionalDefaultsSchema> & ContractProductCategoryPartialRelations
+
+export const ContractProductCategoryOptionalDefaultsWithPartialRelationsSchema: z.ZodType<ContractProductCategoryOptionalDefaultsWithPartialRelations> = ContractProductCategoryOptionalDefaultsSchema.merge(z.object({
+  contract: z.lazy(() => ContractPartialWithRelationsSchema),
+  productCategory: z.lazy(() => ProductCategoryPartialWithRelationsSchema),
+}).partial())
+
+export type ContractProductCategoryWithPartialRelations = z.infer<typeof ContractProductCategorySchema> & ContractProductCategoryPartialRelations
+
+export const ContractProductCategoryWithPartialRelationsSchema: z.ZodType<ContractProductCategoryWithPartialRelations> = ContractProductCategorySchema.merge(z.object({
+  contract: z.lazy(() => ContractPartialWithRelationsSchema),
+  productCategory: z.lazy(() => ProductCategoryPartialWithRelationsSchema),
 }).partial())
 
 /////////////////////////////////////////
@@ -5729,6 +5835,7 @@ export const ProductCategoryIncludeSchema: z.ZodType<Prisma.ProductCategoryInclu
   parent: z.union([z.boolean(),z.lazy(() => ProductCategoryArgsSchema)]).optional(),
   children: z.union([z.boolean(),z.lazy(() => ProductCategoryFindManyArgsSchema)]).optional(),
   contracts: z.union([z.boolean(),z.lazy(() => ContractFindManyArgsSchema)]).optional(),
+  contractCategories: z.union([z.boolean(),z.lazy(() => ContractProductCategoryFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => ProductCategoryCountOutputTypeArgsSchema)]).optional(),
 }).strict();
 
@@ -5744,6 +5851,7 @@ export const ProductCategoryCountOutputTypeArgsSchema: z.ZodType<Prisma.ProductC
 export const ProductCategoryCountOutputTypeSelectSchema: z.ZodType<Prisma.ProductCategoryCountOutputTypeSelect> = z.object({
   children: z.boolean().optional(),
   contracts: z.boolean().optional(),
+  contractCategories: z.boolean().optional(),
 }).strict();
 
 export const ProductCategorySelectSchema: z.ZodType<Prisma.ProductCategorySelect> = z.object({
@@ -5757,6 +5865,7 @@ export const ProductCategorySelectSchema: z.ZodType<Prisma.ProductCategorySelect
   parent: z.union([z.boolean(),z.lazy(() => ProductCategoryArgsSchema)]).optional(),
   children: z.union([z.boolean(),z.lazy(() => ProductCategoryFindManyArgsSchema)]).optional(),
   contracts: z.union([z.boolean(),z.lazy(() => ContractFindManyArgsSchema)]).optional(),
+  contractCategories: z.union([z.boolean(),z.lazy(() => ContractProductCategoryFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => ProductCategoryCountOutputTypeArgsSchema)]).optional(),
 }).strict()
 
@@ -5779,6 +5888,7 @@ export const ContractIncludeSchema: z.ZodType<Prisma.ContractInclude> = z.object
   purchaseOrders: z.union([z.boolean(),z.lazy(() => PurchaseOrderFindManyArgsSchema)]).optional(),
   surgeonUsages: z.union([z.boolean(),z.lazy(() => SurgeonUsageFindManyArgsSchema)]).optional(),
   contractFacilities: z.union([z.boolean(),z.lazy(() => ContractFacilityFindManyArgsSchema)]).optional(),
+  contractCategories: z.union([z.boolean(),z.lazy(() => ContractProductCategoryFindManyArgsSchema)]).optional(),
   changeProposals: z.union([z.boolean(),z.lazy(() => ContractChangeProposalFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => ContractCountOutputTypeArgsSchema)]).optional(),
 }).strict();
@@ -5804,6 +5914,7 @@ export const ContractCountOutputTypeSelectSchema: z.ZodType<Prisma.ContractCount
   purchaseOrders: z.boolean().optional(),
   surgeonUsages: z.boolean().optional(),
   contractFacilities: z.boolean().optional(),
+  contractCategories: z.boolean().optional(),
   changeProposals: z.boolean().optional(),
 }).strict();
 
@@ -5848,8 +5959,30 @@ export const ContractSelectSchema: z.ZodType<Prisma.ContractSelect> = z.object({
   purchaseOrders: z.union([z.boolean(),z.lazy(() => PurchaseOrderFindManyArgsSchema)]).optional(),
   surgeonUsages: z.union([z.boolean(),z.lazy(() => SurgeonUsageFindManyArgsSchema)]).optional(),
   contractFacilities: z.union([z.boolean(),z.lazy(() => ContractFacilityFindManyArgsSchema)]).optional(),
+  contractCategories: z.union([z.boolean(),z.lazy(() => ContractProductCategoryFindManyArgsSchema)]).optional(),
   changeProposals: z.union([z.boolean(),z.lazy(() => ContractChangeProposalFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => ContractCountOutputTypeArgsSchema)]).optional(),
+}).strict()
+
+// CONTRACT PRODUCT CATEGORY
+//------------------------------------------------------
+
+export const ContractProductCategoryIncludeSchema: z.ZodType<Prisma.ContractProductCategoryInclude> = z.object({
+  contract: z.union([z.boolean(),z.lazy(() => ContractArgsSchema)]).optional(),
+  productCategory: z.union([z.boolean(),z.lazy(() => ProductCategoryArgsSchema)]).optional(),
+}).strict();
+
+export const ContractProductCategoryArgsSchema: z.ZodType<Prisma.ContractProductCategoryDefaultArgs> = z.object({
+  select: z.lazy(() => ContractProductCategorySelectSchema).optional(),
+  include: z.lazy(() => ContractProductCategoryIncludeSchema).optional(),
+}).strict();
+
+export const ContractProductCategorySelectSchema: z.ZodType<Prisma.ContractProductCategorySelect> = z.object({
+  id: z.boolean().optional(),
+  contractId: z.boolean().optional(),
+  productCategoryId: z.boolean().optional(),
+  contract: z.union([z.boolean(),z.lazy(() => ContractArgsSchema)]).optional(),
+  productCategory: z.union([z.boolean(),z.lazy(() => ProductCategoryArgsSchema)]).optional(),
 }).strict()
 
 // CONTRACT FACILITY
@@ -7962,6 +8095,7 @@ export const ProductCategoryWhereInputSchema: z.ZodType<Prisma.ProductCategoryWh
   parent: z.union([ z.lazy(() => ProductCategoryNullableScalarRelationFilterSchema), z.lazy(() => ProductCategoryWhereInputSchema) ]).optional().nullable(),
   children: z.lazy(() => ProductCategoryListRelationFilterSchema).optional(),
   contracts: z.lazy(() => ContractListRelationFilterSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryListRelationFilterSchema).optional(),
 });
 
 export const ProductCategoryOrderByWithRelationInputSchema: z.ZodType<Prisma.ProductCategoryOrderByWithRelationInput> = z.strictObject({
@@ -7975,6 +8109,7 @@ export const ProductCategoryOrderByWithRelationInputSchema: z.ZodType<Prisma.Pro
   parent: z.lazy(() => ProductCategoryOrderByWithRelationInputSchema).optional(),
   children: z.lazy(() => ProductCategoryOrderByRelationAggregateInputSchema).optional(),
   contracts: z.lazy(() => ContractOrderByRelationAggregateInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryOrderByRelationAggregateInputSchema).optional(),
 });
 
 export const ProductCategoryWhereUniqueInputSchema: z.ZodType<Prisma.ProductCategoryWhereUniqueInput> = z.object({
@@ -7994,6 +8129,7 @@ export const ProductCategoryWhereUniqueInputSchema: z.ZodType<Prisma.ProductCate
   parent: z.union([ z.lazy(() => ProductCategoryNullableScalarRelationFilterSchema), z.lazy(() => ProductCategoryWhereInputSchema) ]).optional().nullable(),
   children: z.lazy(() => ProductCategoryListRelationFilterSchema).optional(),
   contracts: z.lazy(() => ContractListRelationFilterSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryListRelationFilterSchema).optional(),
 }));
 
 export const ProductCategoryOrderByWithAggregationInputSchema: z.ZodType<Prisma.ProductCategoryOrderByWithAggregationInput> = z.strictObject({
@@ -8068,6 +8204,7 @@ export const ContractWhereInputSchema: z.ZodType<Prisma.ContractWhereInput> = z.
   purchaseOrders: z.lazy(() => PurchaseOrderListRelationFilterSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageListRelationFilterSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityListRelationFilterSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryListRelationFilterSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalListRelationFilterSchema).optional(),
 });
 
@@ -8112,6 +8249,7 @@ export const ContractOrderByWithRelationInputSchema: z.ZodType<Prisma.ContractOr
   purchaseOrders: z.lazy(() => PurchaseOrderOrderByRelationAggregateInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageOrderByRelationAggregateInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityOrderByRelationAggregateInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryOrderByRelationAggregateInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalOrderByRelationAggregateInputSchema).optional(),
 });
 
@@ -8162,6 +8300,7 @@ export const ContractWhereUniqueInputSchema: z.ZodType<Prisma.ContractWhereUniqu
   purchaseOrders: z.lazy(() => PurchaseOrderListRelationFilterSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageListRelationFilterSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityListRelationFilterSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryListRelationFilterSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalListRelationFilterSchema).optional(),
 }));
 
@@ -8227,6 +8366,67 @@ export const ContractScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.Cont
   createdById: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
   createdAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
   updatedAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
+});
+
+export const ContractProductCategoryWhereInputSchema: z.ZodType<Prisma.ContractProductCategoryWhereInput> = z.strictObject({
+  AND: z.union([ z.lazy(() => ContractProductCategoryWhereInputSchema), z.lazy(() => ContractProductCategoryWhereInputSchema).array() ]).optional(),
+  OR: z.lazy(() => ContractProductCategoryWhereInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => ContractProductCategoryWhereInputSchema), z.lazy(() => ContractProductCategoryWhereInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  contractId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  productCategoryId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  contract: z.union([ z.lazy(() => ContractScalarRelationFilterSchema), z.lazy(() => ContractWhereInputSchema) ]).optional(),
+  productCategory: z.union([ z.lazy(() => ProductCategoryScalarRelationFilterSchema), z.lazy(() => ProductCategoryWhereInputSchema) ]).optional(),
+});
+
+export const ContractProductCategoryOrderByWithRelationInputSchema: z.ZodType<Prisma.ContractProductCategoryOrderByWithRelationInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  contractId: z.lazy(() => SortOrderSchema).optional(),
+  productCategoryId: z.lazy(() => SortOrderSchema).optional(),
+  contract: z.lazy(() => ContractOrderByWithRelationInputSchema).optional(),
+  productCategory: z.lazy(() => ProductCategoryOrderByWithRelationInputSchema).optional(),
+});
+
+export const ContractProductCategoryWhereUniqueInputSchema: z.ZodType<Prisma.ContractProductCategoryWhereUniqueInput> = z.union([
+  z.object({
+    id: z.cuid(),
+    contractId_productCategoryId: z.lazy(() => ContractProductCategoryContractIdProductCategoryIdCompoundUniqueInputSchema),
+  }),
+  z.object({
+    id: z.cuid(),
+  }),
+  z.object({
+    contractId_productCategoryId: z.lazy(() => ContractProductCategoryContractIdProductCategoryIdCompoundUniqueInputSchema),
+  }),
+])
+.and(z.strictObject({
+  id: z.cuid().optional(),
+  contractId_productCategoryId: z.lazy(() => ContractProductCategoryContractIdProductCategoryIdCompoundUniqueInputSchema).optional(),
+  AND: z.union([ z.lazy(() => ContractProductCategoryWhereInputSchema), z.lazy(() => ContractProductCategoryWhereInputSchema).array() ]).optional(),
+  OR: z.lazy(() => ContractProductCategoryWhereInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => ContractProductCategoryWhereInputSchema), z.lazy(() => ContractProductCategoryWhereInputSchema).array() ]).optional(),
+  contractId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  productCategoryId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  contract: z.union([ z.lazy(() => ContractScalarRelationFilterSchema), z.lazy(() => ContractWhereInputSchema) ]).optional(),
+  productCategory: z.union([ z.lazy(() => ProductCategoryScalarRelationFilterSchema), z.lazy(() => ProductCategoryWhereInputSchema) ]).optional(),
+}));
+
+export const ContractProductCategoryOrderByWithAggregationInputSchema: z.ZodType<Prisma.ContractProductCategoryOrderByWithAggregationInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  contractId: z.lazy(() => SortOrderSchema).optional(),
+  productCategoryId: z.lazy(() => SortOrderSchema).optional(),
+  _count: z.lazy(() => ContractProductCategoryCountOrderByAggregateInputSchema).optional(),
+  _max: z.lazy(() => ContractProductCategoryMaxOrderByAggregateInputSchema).optional(),
+  _min: z.lazy(() => ContractProductCategoryMinOrderByAggregateInputSchema).optional(),
+});
+
+export const ContractProductCategoryScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.ContractProductCategoryScalarWhereWithAggregatesInput> = z.strictObject({
+  AND: z.union([ z.lazy(() => ContractProductCategoryScalarWhereWithAggregatesInputSchema), z.lazy(() => ContractProductCategoryScalarWhereWithAggregatesInputSchema).array() ]).optional(),
+  OR: z.lazy(() => ContractProductCategoryScalarWhereWithAggregatesInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => ContractProductCategoryScalarWhereWithAggregatesInputSchema), z.lazy(() => ContractProductCategoryScalarWhereWithAggregatesInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  contractId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  productCategoryId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
 });
 
 export const ContractFacilityWhereInputSchema: z.ZodType<Prisma.ContractFacilityWhereInput> = z.strictObject({
@@ -12600,6 +12800,7 @@ export const ProductCategoryCreateInputSchema: z.ZodType<Prisma.ProductCategoryC
   parent: z.lazy(() => ProductCategoryCreateNestedOneWithoutChildrenInputSchema).optional(),
   children: z.lazy(() => ProductCategoryCreateNestedManyWithoutParentInputSchema).optional(),
   contracts: z.lazy(() => ContractCreateNestedManyWithoutProductCategoryInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutProductCategoryInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedCreateInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedCreateInput> = z.strictObject({
@@ -12612,6 +12813,7 @@ export const ProductCategoryUncheckedCreateInputSchema: z.ZodType<Prisma.Product
   createdAt: z.coerce.date().optional(),
   children: z.lazy(() => ProductCategoryUncheckedCreateNestedManyWithoutParentInputSchema).optional(),
   contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutProductCategoryInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutProductCategoryInputSchema).optional(),
 });
 
 export const ProductCategoryUpdateInputSchema: z.ZodType<Prisma.ProductCategoryUpdateInput> = z.strictObject({
@@ -12624,6 +12826,7 @@ export const ProductCategoryUpdateInputSchema: z.ZodType<Prisma.ProductCategoryU
   parent: z.lazy(() => ProductCategoryUpdateOneWithoutChildrenNestedInputSchema).optional(),
   children: z.lazy(() => ProductCategoryUpdateManyWithoutParentNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedUpdateInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedUpdateInput> = z.strictObject({
@@ -12636,6 +12839,7 @@ export const ProductCategoryUncheckedUpdateInputSchema: z.ZodType<Prisma.Product
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   children: z.lazy(() => ProductCategoryUncheckedUpdateManyWithoutParentNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const ProductCategoryCreateManyInputSchema: z.ZodType<Prisma.ProductCategoryCreateManyInput> = z.strictObject({
@@ -12704,6 +12908,7 @@ export const ContractCreateInputSchema: z.ZodType<Prisma.ContractCreateInput> = 
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -12744,6 +12949,7 @@ export const ContractUncheckedCreateInputSchema: z.ZodType<Prisma.ContractUnchec
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -12784,6 +12990,7 @@ export const ContractUpdateInputSchema: z.ZodType<Prisma.ContractUpdateInput> = 
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -12824,6 +13031,7 @@ export const ContractUncheckedUpdateInputSchema: z.ZodType<Prisma.ContractUnchec
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -12905,6 +13113,46 @@ export const ContractUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ContractUn
   createdById: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const ContractProductCategoryCreateInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateInput> = z.strictObject({
+  id: z.cuid().optional(),
+  contract: z.lazy(() => ContractCreateNestedOneWithoutContractCategoriesInputSchema),
+  productCategory: z.lazy(() => ProductCategoryCreateNestedOneWithoutContractCategoriesInputSchema),
+});
+
+export const ContractProductCategoryUncheckedCreateInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedCreateInput> = z.strictObject({
+  id: z.cuid().optional(),
+  contractId: z.string(),
+  productCategoryId: z.string(),
+});
+
+export const ContractProductCategoryUpdateInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contract: z.lazy(() => ContractUpdateOneRequiredWithoutContractCategoriesNestedInputSchema).optional(),
+  productCategory: z.lazy(() => ProductCategoryUpdateOneRequiredWithoutContractCategoriesNestedInputSchema).optional(),
+});
+
+export const ContractProductCategoryUncheckedUpdateInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedUpdateInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  productCategoryId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const ContractProductCategoryCreateManyInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateManyInput> = z.strictObject({
+  id: z.cuid().optional(),
+  contractId: z.string(),
+  productCategoryId: z.string(),
+});
+
+export const ContractProductCategoryUpdateManyMutationInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateManyMutationInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const ContractProductCategoryUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedUpdateManyInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  productCategoryId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
 });
 
 export const ContractFacilityCreateInputSchema: z.ZodType<Prisma.ContractFacilityCreateInput> = z.strictObject({
@@ -17329,7 +17577,17 @@ export const ProductCategoryListRelationFilterSchema: z.ZodType<Prisma.ProductCa
   none: z.lazy(() => ProductCategoryWhereInputSchema).optional(),
 });
 
+export const ContractProductCategoryListRelationFilterSchema: z.ZodType<Prisma.ContractProductCategoryListRelationFilter> = z.strictObject({
+  every: z.lazy(() => ContractProductCategoryWhereInputSchema).optional(),
+  some: z.lazy(() => ContractProductCategoryWhereInputSchema).optional(),
+  none: z.lazy(() => ContractProductCategoryWhereInputSchema).optional(),
+});
+
 export const ProductCategoryOrderByRelationAggregateInputSchema: z.ZodType<Prisma.ProductCategoryOrderByRelationAggregateInput> = z.strictObject({
+  _count: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const ContractProductCategoryOrderByRelationAggregateInputSchema: z.ZodType<Prisma.ContractProductCategoryOrderByRelationAggregateInput> = z.strictObject({
   _count: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -17600,6 +17858,34 @@ export const EnumPerformancePeriodWithAggregatesFilterSchema: z.ZodType<Prisma.E
 export const ContractScalarRelationFilterSchema: z.ZodType<Prisma.ContractScalarRelationFilter> = z.strictObject({
   is: z.lazy(() => ContractWhereInputSchema).optional(),
   isNot: z.lazy(() => ContractWhereInputSchema).optional(),
+});
+
+export const ProductCategoryScalarRelationFilterSchema: z.ZodType<Prisma.ProductCategoryScalarRelationFilter> = z.strictObject({
+  is: z.lazy(() => ProductCategoryWhereInputSchema).optional(),
+  isNot: z.lazy(() => ProductCategoryWhereInputSchema).optional(),
+});
+
+export const ContractProductCategoryContractIdProductCategoryIdCompoundUniqueInputSchema: z.ZodType<Prisma.ContractProductCategoryContractIdProductCategoryIdCompoundUniqueInput> = z.strictObject({
+  contractId: z.string(),
+  productCategoryId: z.string(),
+});
+
+export const ContractProductCategoryCountOrderByAggregateInputSchema: z.ZodType<Prisma.ContractProductCategoryCountOrderByAggregateInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  contractId: z.lazy(() => SortOrderSchema).optional(),
+  productCategoryId: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const ContractProductCategoryMaxOrderByAggregateInputSchema: z.ZodType<Prisma.ContractProductCategoryMaxOrderByAggregateInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  contractId: z.lazy(() => SortOrderSchema).optional(),
+  productCategoryId: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const ContractProductCategoryMinOrderByAggregateInputSchema: z.ZodType<Prisma.ContractProductCategoryMinOrderByAggregateInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  contractId: z.lazy(() => SortOrderSchema).optional(),
+  productCategoryId: z.lazy(() => SortOrderSchema).optional(),
 });
 
 export const FacilityScalarRelationFilterSchema: z.ZodType<Prisma.FacilityScalarRelationFilter> = z.strictObject({
@@ -21979,6 +22265,13 @@ export const ContractCreateNestedManyWithoutProductCategoryInputSchema: z.ZodTyp
   connect: z.union([ z.lazy(() => ContractWhereUniqueInputSchema), z.lazy(() => ContractWhereUniqueInputSchema).array() ]).optional(),
 });
 
+export const ContractProductCategoryCreateNestedManyWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateNestedManyWithoutProductCategoryInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema).array(), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => ContractProductCategoryCreateManyProductCategoryInputEnvelopeSchema).optional(),
+  connect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+});
+
 export const ProductCategoryUncheckedCreateNestedManyWithoutParentInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedCreateNestedManyWithoutParentInput> = z.strictObject({
   create: z.union([ z.lazy(() => ProductCategoryCreateWithoutParentInputSchema), z.lazy(() => ProductCategoryCreateWithoutParentInputSchema).array(), z.lazy(() => ProductCategoryUncheckedCreateWithoutParentInputSchema), z.lazy(() => ProductCategoryUncheckedCreateWithoutParentInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => ProductCategoryCreateOrConnectWithoutParentInputSchema), z.lazy(() => ProductCategoryCreateOrConnectWithoutParentInputSchema).array() ]).optional(),
@@ -21991,6 +22284,13 @@ export const ContractUncheckedCreateNestedManyWithoutProductCategoryInputSchema:
   connectOrCreate: z.union([ z.lazy(() => ContractCreateOrConnectWithoutProductCategoryInputSchema), z.lazy(() => ContractCreateOrConnectWithoutProductCategoryInputSchema).array() ]).optional(),
   createMany: z.lazy(() => ContractCreateManyProductCategoryInputEnvelopeSchema).optional(),
   connect: z.union([ z.lazy(() => ContractWhereUniqueInputSchema), z.lazy(() => ContractWhereUniqueInputSchema).array() ]).optional(),
+});
+
+export const ContractProductCategoryUncheckedCreateNestedManyWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedCreateNestedManyWithoutProductCategoryInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema).array(), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => ContractProductCategoryCreateManyProductCategoryInputEnvelopeSchema).optional(),
+  connect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
 });
 
 export const DecimalFieldUpdateOperationsInputSchema: z.ZodType<Prisma.DecimalFieldUpdateOperationsInput> = z.strictObject({
@@ -22047,6 +22347,20 @@ export const ContractUpdateManyWithoutProductCategoryNestedInputSchema: z.ZodTyp
   deleteMany: z.union([ z.lazy(() => ContractScalarWhereInputSchema), z.lazy(() => ContractScalarWhereInputSchema).array() ]).optional(),
 });
 
+export const ContractProductCategoryUpdateManyWithoutProductCategoryNestedInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateManyWithoutProductCategoryNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema).array(), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema).array() ]).optional(),
+  upsert: z.union([ z.lazy(() => ContractProductCategoryUpsertWithWhereUniqueWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUpsertWithWhereUniqueWithoutProductCategoryInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => ContractProductCategoryCreateManyProductCategoryInputEnvelopeSchema).optional(),
+  set: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  disconnect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  delete: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  connect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  update: z.union([ z.lazy(() => ContractProductCategoryUpdateWithWhereUniqueWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUpdateWithWhereUniqueWithoutProductCategoryInputSchema).array() ]).optional(),
+  updateMany: z.union([ z.lazy(() => ContractProductCategoryUpdateManyWithWhereWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUpdateManyWithWhereWithoutProductCategoryInputSchema).array() ]).optional(),
+  deleteMany: z.union([ z.lazy(() => ContractProductCategoryScalarWhereInputSchema), z.lazy(() => ContractProductCategoryScalarWhereInputSchema).array() ]).optional(),
+});
+
 export const ProductCategoryUncheckedUpdateManyWithoutParentNestedInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedUpdateManyWithoutParentNestedInput> = z.strictObject({
   create: z.union([ z.lazy(() => ProductCategoryCreateWithoutParentInputSchema), z.lazy(() => ProductCategoryCreateWithoutParentInputSchema).array(), z.lazy(() => ProductCategoryUncheckedCreateWithoutParentInputSchema), z.lazy(() => ProductCategoryUncheckedCreateWithoutParentInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => ProductCategoryCreateOrConnectWithoutParentInputSchema), z.lazy(() => ProductCategoryCreateOrConnectWithoutParentInputSchema).array() ]).optional(),
@@ -22073,6 +22387,20 @@ export const ContractUncheckedUpdateManyWithoutProductCategoryNestedInputSchema:
   update: z.union([ z.lazy(() => ContractUpdateWithWhereUniqueWithoutProductCategoryInputSchema), z.lazy(() => ContractUpdateWithWhereUniqueWithoutProductCategoryInputSchema).array() ]).optional(),
   updateMany: z.union([ z.lazy(() => ContractUpdateManyWithWhereWithoutProductCategoryInputSchema), z.lazy(() => ContractUpdateManyWithWhereWithoutProductCategoryInputSchema).array() ]).optional(),
   deleteMany: z.union([ z.lazy(() => ContractScalarWhereInputSchema), z.lazy(() => ContractScalarWhereInputSchema).array() ]).optional(),
+});
+
+export const ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryNestedInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema).array(), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema).array() ]).optional(),
+  upsert: z.union([ z.lazy(() => ContractProductCategoryUpsertWithWhereUniqueWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUpsertWithWhereUniqueWithoutProductCategoryInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => ContractProductCategoryCreateManyProductCategoryInputEnvelopeSchema).optional(),
+  set: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  disconnect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  delete: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  connect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  update: z.union([ z.lazy(() => ContractProductCategoryUpdateWithWhereUniqueWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUpdateWithWhereUniqueWithoutProductCategoryInputSchema).array() ]).optional(),
+  updateMany: z.union([ z.lazy(() => ContractProductCategoryUpdateManyWithWhereWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUpdateManyWithWhereWithoutProductCategoryInputSchema).array() ]).optional(),
+  deleteMany: z.union([ z.lazy(() => ContractProductCategoryScalarWhereInputSchema), z.lazy(() => ContractProductCategoryScalarWhereInputSchema).array() ]).optional(),
 });
 
 export const VendorCreateNestedOneWithoutContractsInputSchema: z.ZodType<Prisma.VendorCreateNestedOneWithoutContractsInput> = z.strictObject({
@@ -22176,6 +22504,13 @@ export const ContractFacilityCreateNestedManyWithoutContractInputSchema: z.ZodTy
   connect: z.union([ z.lazy(() => ContractFacilityWhereUniqueInputSchema), z.lazy(() => ContractFacilityWhereUniqueInputSchema).array() ]).optional(),
 });
 
+export const ContractProductCategoryCreateNestedManyWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateNestedManyWithoutContractInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema).array(), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => ContractProductCategoryCreateOrConnectWithoutContractInputSchema), z.lazy(() => ContractProductCategoryCreateOrConnectWithoutContractInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => ContractProductCategoryCreateManyContractInputEnvelopeSchema).optional(),
+  connect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+});
+
 export const ContractChangeProposalCreateNestedManyWithoutContractInputSchema: z.ZodType<Prisma.ContractChangeProposalCreateNestedManyWithoutContractInput> = z.strictObject({
   create: z.union([ z.lazy(() => ContractChangeProposalCreateWithoutContractInputSchema), z.lazy(() => ContractChangeProposalCreateWithoutContractInputSchema).array(), z.lazy(() => ContractChangeProposalUncheckedCreateWithoutContractInputSchema), z.lazy(() => ContractChangeProposalUncheckedCreateWithoutContractInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => ContractChangeProposalCreateOrConnectWithoutContractInputSchema), z.lazy(() => ContractChangeProposalCreateOrConnectWithoutContractInputSchema).array() ]).optional(),
@@ -22258,6 +22593,13 @@ export const ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema
   connectOrCreate: z.union([ z.lazy(() => ContractFacilityCreateOrConnectWithoutContractInputSchema), z.lazy(() => ContractFacilityCreateOrConnectWithoutContractInputSchema).array() ]).optional(),
   createMany: z.lazy(() => ContractFacilityCreateManyContractInputEnvelopeSchema).optional(),
   connect: z.union([ z.lazy(() => ContractFacilityWhereUniqueInputSchema), z.lazy(() => ContractFacilityWhereUniqueInputSchema).array() ]).optional(),
+});
+
+export const ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedCreateNestedManyWithoutContractInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema).array(), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => ContractProductCategoryCreateOrConnectWithoutContractInputSchema), z.lazy(() => ContractProductCategoryCreateOrConnectWithoutContractInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => ContractProductCategoryCreateManyContractInputEnvelopeSchema).optional(),
+  connect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
 });
 
 export const ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema: z.ZodType<Prisma.ContractChangeProposalUncheckedCreateNestedManyWithoutContractInput> = z.strictObject({
@@ -22471,6 +22813,20 @@ export const ContractFacilityUpdateManyWithoutContractNestedInputSchema: z.ZodTy
   deleteMany: z.union([ z.lazy(() => ContractFacilityScalarWhereInputSchema), z.lazy(() => ContractFacilityScalarWhereInputSchema).array() ]).optional(),
 });
 
+export const ContractProductCategoryUpdateManyWithoutContractNestedInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateManyWithoutContractNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema).array(), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => ContractProductCategoryCreateOrConnectWithoutContractInputSchema), z.lazy(() => ContractProductCategoryCreateOrConnectWithoutContractInputSchema).array() ]).optional(),
+  upsert: z.union([ z.lazy(() => ContractProductCategoryUpsertWithWhereUniqueWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUpsertWithWhereUniqueWithoutContractInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => ContractProductCategoryCreateManyContractInputEnvelopeSchema).optional(),
+  set: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  disconnect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  delete: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  connect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  update: z.union([ z.lazy(() => ContractProductCategoryUpdateWithWhereUniqueWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUpdateWithWhereUniqueWithoutContractInputSchema).array() ]).optional(),
+  updateMany: z.union([ z.lazy(() => ContractProductCategoryUpdateManyWithWhereWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUpdateManyWithWhereWithoutContractInputSchema).array() ]).optional(),
+  deleteMany: z.union([ z.lazy(() => ContractProductCategoryScalarWhereInputSchema), z.lazy(() => ContractProductCategoryScalarWhereInputSchema).array() ]).optional(),
+});
+
 export const ContractChangeProposalUpdateManyWithoutContractNestedInputSchema: z.ZodType<Prisma.ContractChangeProposalUpdateManyWithoutContractNestedInput> = z.strictObject({
   create: z.union([ z.lazy(() => ContractChangeProposalCreateWithoutContractInputSchema), z.lazy(() => ContractChangeProposalCreateWithoutContractInputSchema).array(), z.lazy(() => ContractChangeProposalUncheckedCreateWithoutContractInputSchema), z.lazy(() => ContractChangeProposalUncheckedCreateWithoutContractInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => ContractChangeProposalCreateOrConnectWithoutContractInputSchema), z.lazy(() => ContractChangeProposalCreateOrConnectWithoutContractInputSchema).array() ]).optional(),
@@ -22639,6 +22995,20 @@ export const ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema
   deleteMany: z.union([ z.lazy(() => ContractFacilityScalarWhereInputSchema), z.lazy(() => ContractFacilityScalarWhereInputSchema).array() ]).optional(),
 });
 
+export const ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema).array(), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => ContractProductCategoryCreateOrConnectWithoutContractInputSchema), z.lazy(() => ContractProductCategoryCreateOrConnectWithoutContractInputSchema).array() ]).optional(),
+  upsert: z.union([ z.lazy(() => ContractProductCategoryUpsertWithWhereUniqueWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUpsertWithWhereUniqueWithoutContractInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => ContractProductCategoryCreateManyContractInputEnvelopeSchema).optional(),
+  set: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  disconnect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  delete: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  connect: z.union([ z.lazy(() => ContractProductCategoryWhereUniqueInputSchema), z.lazy(() => ContractProductCategoryWhereUniqueInputSchema).array() ]).optional(),
+  update: z.union([ z.lazy(() => ContractProductCategoryUpdateWithWhereUniqueWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUpdateWithWhereUniqueWithoutContractInputSchema).array() ]).optional(),
+  updateMany: z.union([ z.lazy(() => ContractProductCategoryUpdateManyWithWhereWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUpdateManyWithWhereWithoutContractInputSchema).array() ]).optional(),
+  deleteMany: z.union([ z.lazy(() => ContractProductCategoryScalarWhereInputSchema), z.lazy(() => ContractProductCategoryScalarWhereInputSchema).array() ]).optional(),
+});
+
 export const ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema: z.ZodType<Prisma.ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInput> = z.strictObject({
   create: z.union([ z.lazy(() => ContractChangeProposalCreateWithoutContractInputSchema), z.lazy(() => ContractChangeProposalCreateWithoutContractInputSchema).array(), z.lazy(() => ContractChangeProposalUncheckedCreateWithoutContractInputSchema), z.lazy(() => ContractChangeProposalUncheckedCreateWithoutContractInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => ContractChangeProposalCreateOrConnectWithoutContractInputSchema), z.lazy(() => ContractChangeProposalCreateOrConnectWithoutContractInputSchema).array() ]).optional(),
@@ -22651,6 +23021,34 @@ export const ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInput
   update: z.union([ z.lazy(() => ContractChangeProposalUpdateWithWhereUniqueWithoutContractInputSchema), z.lazy(() => ContractChangeProposalUpdateWithWhereUniqueWithoutContractInputSchema).array() ]).optional(),
   updateMany: z.union([ z.lazy(() => ContractChangeProposalUpdateManyWithWhereWithoutContractInputSchema), z.lazy(() => ContractChangeProposalUpdateManyWithWhereWithoutContractInputSchema).array() ]).optional(),
   deleteMany: z.union([ z.lazy(() => ContractChangeProposalScalarWhereInputSchema), z.lazy(() => ContractChangeProposalScalarWhereInputSchema).array() ]).optional(),
+});
+
+export const ContractCreateNestedOneWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ContractCreateNestedOneWithoutContractCategoriesInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractCreateWithoutContractCategoriesInputSchema), z.lazy(() => ContractUncheckedCreateWithoutContractCategoriesInputSchema) ]).optional(),
+  connectOrCreate: z.lazy(() => ContractCreateOrConnectWithoutContractCategoriesInputSchema).optional(),
+  connect: z.lazy(() => ContractWhereUniqueInputSchema).optional(),
+});
+
+export const ProductCategoryCreateNestedOneWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ProductCategoryCreateNestedOneWithoutContractCategoriesInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ProductCategoryCreateWithoutContractCategoriesInputSchema), z.lazy(() => ProductCategoryUncheckedCreateWithoutContractCategoriesInputSchema) ]).optional(),
+  connectOrCreate: z.lazy(() => ProductCategoryCreateOrConnectWithoutContractCategoriesInputSchema).optional(),
+  connect: z.lazy(() => ProductCategoryWhereUniqueInputSchema).optional(),
+});
+
+export const ContractUpdateOneRequiredWithoutContractCategoriesNestedInputSchema: z.ZodType<Prisma.ContractUpdateOneRequiredWithoutContractCategoriesNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ContractCreateWithoutContractCategoriesInputSchema), z.lazy(() => ContractUncheckedCreateWithoutContractCategoriesInputSchema) ]).optional(),
+  connectOrCreate: z.lazy(() => ContractCreateOrConnectWithoutContractCategoriesInputSchema).optional(),
+  upsert: z.lazy(() => ContractUpsertWithoutContractCategoriesInputSchema).optional(),
+  connect: z.lazy(() => ContractWhereUniqueInputSchema).optional(),
+  update: z.union([ z.lazy(() => ContractUpdateToOneWithWhereWithoutContractCategoriesInputSchema), z.lazy(() => ContractUpdateWithoutContractCategoriesInputSchema), z.lazy(() => ContractUncheckedUpdateWithoutContractCategoriesInputSchema) ]).optional(),
+});
+
+export const ProductCategoryUpdateOneRequiredWithoutContractCategoriesNestedInputSchema: z.ZodType<Prisma.ProductCategoryUpdateOneRequiredWithoutContractCategoriesNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => ProductCategoryCreateWithoutContractCategoriesInputSchema), z.lazy(() => ProductCategoryUncheckedCreateWithoutContractCategoriesInputSchema) ]).optional(),
+  connectOrCreate: z.lazy(() => ProductCategoryCreateOrConnectWithoutContractCategoriesInputSchema).optional(),
+  upsert: z.lazy(() => ProductCategoryUpsertWithoutContractCategoriesInputSchema).optional(),
+  connect: z.lazy(() => ProductCategoryWhereUniqueInputSchema).optional(),
+  update: z.union([ z.lazy(() => ProductCategoryUpdateToOneWithWhereWithoutContractCategoriesInputSchema), z.lazy(() => ProductCategoryUpdateWithoutContractCategoriesInputSchema), z.lazy(() => ProductCategoryUncheckedUpdateWithoutContractCategoriesInputSchema) ]).optional(),
 });
 
 export const ContractCreateNestedOneWithoutContractFacilitiesInputSchema: z.ZodType<Prisma.ContractCreateNestedOneWithoutContractFacilitiesInput> = z.strictObject({
@@ -24793,6 +25191,7 @@ export const ContractCreateWithoutCreatedByInputSchema: z.ZodType<Prisma.Contrac
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -24832,6 +25231,7 @@ export const ContractUncheckedCreateWithoutCreatedByInputSchema: z.ZodType<Prism
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -26150,6 +26550,7 @@ export const ContractCreateWithoutFacilityInputSchema: z.ZodType<Prisma.Contract
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -26189,6 +26590,7 @@ export const ContractUncheckedCreateWithoutFacilityInputSchema: z.ZodType<Prisma
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -27794,6 +28196,7 @@ export const ContractCreateWithoutVendorInputSchema: z.ZodType<Prisma.ContractCr
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -27833,6 +28236,7 @@ export const ContractUncheckedCreateWithoutVendorInputSchema: z.ZodType<Prisma.C
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -28824,6 +29228,7 @@ export const ProductCategoryCreateWithoutChildrenInputSchema: z.ZodType<Prisma.P
   createdAt: z.coerce.date().optional(),
   parent: z.lazy(() => ProductCategoryCreateNestedOneWithoutChildrenInputSchema).optional(),
   contracts: z.lazy(() => ContractCreateNestedManyWithoutProductCategoryInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutProductCategoryInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedCreateWithoutChildrenInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedCreateWithoutChildrenInput> = z.strictObject({
@@ -28835,6 +29240,7 @@ export const ProductCategoryUncheckedCreateWithoutChildrenInputSchema: z.ZodType
   itemCount: z.number().optional(),
   createdAt: z.coerce.date().optional(),
   contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutProductCategoryInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutProductCategoryInputSchema).optional(),
 });
 
 export const ProductCategoryCreateOrConnectWithoutChildrenInputSchema: z.ZodType<Prisma.ProductCategoryCreateOrConnectWithoutChildrenInput> = z.strictObject({
@@ -28851,6 +29257,7 @@ export const ProductCategoryCreateWithoutParentInputSchema: z.ZodType<Prisma.Pro
   createdAt: z.coerce.date().optional(),
   children: z.lazy(() => ProductCategoryCreateNestedManyWithoutParentInputSchema).optional(),
   contracts: z.lazy(() => ContractCreateNestedManyWithoutProductCategoryInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutProductCategoryInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedCreateWithoutParentInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedCreateWithoutParentInput> = z.strictObject({
@@ -28862,6 +29269,7 @@ export const ProductCategoryUncheckedCreateWithoutParentInputSchema: z.ZodType<P
   createdAt: z.coerce.date().optional(),
   children: z.lazy(() => ProductCategoryUncheckedCreateNestedManyWithoutParentInputSchema).optional(),
   contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutProductCategoryInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutProductCategoryInputSchema).optional(),
 });
 
 export const ProductCategoryCreateOrConnectWithoutParentInputSchema: z.ZodType<Prisma.ProductCategoryCreateOrConnectWithoutParentInput> = z.strictObject({
@@ -28910,6 +29318,7 @@ export const ContractCreateWithoutProductCategoryInputSchema: z.ZodType<Prisma.C
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -28949,6 +29358,7 @@ export const ContractUncheckedCreateWithoutProductCategoryInputSchema: z.ZodType
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -28959,6 +29369,26 @@ export const ContractCreateOrConnectWithoutProductCategoryInputSchema: z.ZodType
 
 export const ContractCreateManyProductCategoryInputEnvelopeSchema: z.ZodType<Prisma.ContractCreateManyProductCategoryInputEnvelope> = z.strictObject({
   data: z.union([ z.lazy(() => ContractCreateManyProductCategoryInputSchema), z.lazy(() => ContractCreateManyProductCategoryInputSchema).array() ]),
+  skipDuplicates: z.boolean().optional(),
+});
+
+export const ContractProductCategoryCreateWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateWithoutProductCategoryInput> = z.strictObject({
+  id: z.cuid().optional(),
+  contract: z.lazy(() => ContractCreateNestedOneWithoutContractCategoriesInputSchema),
+});
+
+export const ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedCreateWithoutProductCategoryInput> = z.strictObject({
+  id: z.cuid().optional(),
+  contractId: z.string(),
+});
+
+export const ContractProductCategoryCreateOrConnectWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateOrConnectWithoutProductCategoryInput> = z.strictObject({
+  where: z.lazy(() => ContractProductCategoryWhereUniqueInputSchema),
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema) ]),
+});
+
+export const ContractProductCategoryCreateManyProductCategoryInputEnvelopeSchema: z.ZodType<Prisma.ContractProductCategoryCreateManyProductCategoryInputEnvelope> = z.strictObject({
+  data: z.union([ z.lazy(() => ContractProductCategoryCreateManyProductCategoryInputSchema), z.lazy(() => ContractProductCategoryCreateManyProductCategoryInputSchema).array() ]),
   skipDuplicates: z.boolean().optional(),
 });
 
@@ -28982,6 +29412,7 @@ export const ProductCategoryUpdateWithoutChildrenInputSchema: z.ZodType<Prisma.P
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   parent: z.lazy(() => ProductCategoryUpdateOneWithoutChildrenNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedUpdateWithoutChildrenInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedUpdateWithoutChildrenInput> = z.strictObject({
@@ -28993,6 +29424,7 @@ export const ProductCategoryUncheckedUpdateWithoutChildrenInputSchema: z.ZodType
   itemCount: z.union([ z.number(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const ProductCategoryUpsertWithWhereUniqueWithoutParentInputSchema: z.ZodType<Prisma.ProductCategoryUpsertWithWhereUniqueWithoutParentInput> = z.strictObject({
@@ -29038,6 +29470,31 @@ export const ContractUpdateWithWhereUniqueWithoutProductCategoryInputSchema: z.Z
 export const ContractUpdateManyWithWhereWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractUpdateManyWithWhereWithoutProductCategoryInput> = z.strictObject({
   where: z.lazy(() => ContractScalarWhereInputSchema),
   data: z.union([ z.lazy(() => ContractUpdateManyMutationInputSchema), z.lazy(() => ContractUncheckedUpdateManyWithoutProductCategoryInputSchema) ]),
+});
+
+export const ContractProductCategoryUpsertWithWhereUniqueWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryUpsertWithWhereUniqueWithoutProductCategoryInput> = z.strictObject({
+  where: z.lazy(() => ContractProductCategoryWhereUniqueInputSchema),
+  update: z.union([ z.lazy(() => ContractProductCategoryUpdateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUncheckedUpdateWithoutProductCategoryInputSchema) ]),
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutProductCategoryInputSchema) ]),
+});
+
+export const ContractProductCategoryUpdateWithWhereUniqueWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateWithWhereUniqueWithoutProductCategoryInput> = z.strictObject({
+  where: z.lazy(() => ContractProductCategoryWhereUniqueInputSchema),
+  data: z.union([ z.lazy(() => ContractProductCategoryUpdateWithoutProductCategoryInputSchema), z.lazy(() => ContractProductCategoryUncheckedUpdateWithoutProductCategoryInputSchema) ]),
+});
+
+export const ContractProductCategoryUpdateManyWithWhereWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateManyWithWhereWithoutProductCategoryInput> = z.strictObject({
+  where: z.lazy(() => ContractProductCategoryScalarWhereInputSchema),
+  data: z.union([ z.lazy(() => ContractProductCategoryUpdateManyMutationInputSchema), z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryInputSchema) ]),
+});
+
+export const ContractProductCategoryScalarWhereInputSchema: z.ZodType<Prisma.ContractProductCategoryScalarWhereInput> = z.strictObject({
+  AND: z.union([ z.lazy(() => ContractProductCategoryScalarWhereInputSchema), z.lazy(() => ContractProductCategoryScalarWhereInputSchema).array() ]).optional(),
+  OR: z.lazy(() => ContractProductCategoryScalarWhereInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => ContractProductCategoryScalarWhereInputSchema), z.lazy(() => ContractProductCategoryScalarWhereInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  contractId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  productCategoryId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
 });
 
 export const VendorCreateWithoutContractsInputSchema: z.ZodType<Prisma.VendorCreateWithoutContractsInput> = z.strictObject({
@@ -29191,6 +29648,7 @@ export const ProductCategoryCreateWithoutContractsInputSchema: z.ZodType<Prisma.
   createdAt: z.coerce.date().optional(),
   parent: z.lazy(() => ProductCategoryCreateNestedOneWithoutChildrenInputSchema).optional(),
   children: z.lazy(() => ProductCategoryCreateNestedManyWithoutParentInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutProductCategoryInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedCreateWithoutContractsInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedCreateWithoutContractsInput> = z.strictObject({
@@ -29202,6 +29660,7 @@ export const ProductCategoryUncheckedCreateWithoutContractsInputSchema: z.ZodTyp
   itemCount: z.number().optional(),
   createdAt: z.coerce.date().optional(),
   children: z.lazy(() => ProductCategoryUncheckedCreateNestedManyWithoutParentInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutProductCategoryInputSchema).optional(),
 });
 
 export const ProductCategoryCreateOrConnectWithoutContractsInputSchema: z.ZodType<Prisma.ProductCategoryCreateOrConnectWithoutContractsInput> = z.strictObject({
@@ -29666,6 +30125,26 @@ export const ContractFacilityCreateManyContractInputEnvelopeSchema: z.ZodType<Pr
   skipDuplicates: z.boolean().optional(),
 });
 
+export const ContractProductCategoryCreateWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateWithoutContractInput> = z.strictObject({
+  id: z.cuid().optional(),
+  productCategory: z.lazy(() => ProductCategoryCreateNestedOneWithoutContractCategoriesInputSchema),
+});
+
+export const ContractProductCategoryUncheckedCreateWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedCreateWithoutContractInput> = z.strictObject({
+  id: z.cuid().optional(),
+  productCategoryId: z.string(),
+});
+
+export const ContractProductCategoryCreateOrConnectWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateOrConnectWithoutContractInput> = z.strictObject({
+  where: z.lazy(() => ContractProductCategoryWhereUniqueInputSchema),
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema) ]),
+});
+
+export const ContractProductCategoryCreateManyContractInputEnvelopeSchema: z.ZodType<Prisma.ContractProductCategoryCreateManyContractInputEnvelope> = z.strictObject({
+  data: z.union([ z.lazy(() => ContractProductCategoryCreateManyContractInputSchema), z.lazy(() => ContractProductCategoryCreateManyContractInputSchema).array() ]),
+  skipDuplicates: z.boolean().optional(),
+});
+
 export const ContractChangeProposalCreateWithoutContractInputSchema: z.ZodType<Prisma.ContractChangeProposalCreateWithoutContractInput> = z.strictObject({
   id: z.cuid().optional(),
   vendorId: z.string(),
@@ -29884,6 +30363,7 @@ export const ProductCategoryUpdateWithoutContractsInputSchema: z.ZodType<Prisma.
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   parent: z.lazy(() => ProductCategoryUpdateOneWithoutChildrenNestedInputSchema).optional(),
   children: z.lazy(() => ProductCategoryUpdateManyWithoutParentNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedUpdateWithoutContractsInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedUpdateWithoutContractsInput> = z.strictObject({
@@ -29895,6 +30375,7 @@ export const ProductCategoryUncheckedUpdateWithoutContractsInputSchema: z.ZodTyp
   itemCount: z.union([ z.number(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   children: z.lazy(() => ProductCategoryUncheckedUpdateManyWithoutParentNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const UserUpsertWithoutCreatedContractsInputSchema: z.ZodType<Prisma.UserUpsertWithoutCreatedContractsInput> = z.strictObject({
@@ -30174,6 +30655,22 @@ export const ContractFacilityUpdateManyWithWhereWithoutContractInputSchema: z.Zo
   data: z.union([ z.lazy(() => ContractFacilityUpdateManyMutationInputSchema), z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractInputSchema) ]),
 });
 
+export const ContractProductCategoryUpsertWithWhereUniqueWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryUpsertWithWhereUniqueWithoutContractInput> = z.strictObject({
+  where: z.lazy(() => ContractProductCategoryWhereUniqueInputSchema),
+  update: z.union([ z.lazy(() => ContractProductCategoryUpdateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUncheckedUpdateWithoutContractInputSchema) ]),
+  create: z.union([ z.lazy(() => ContractProductCategoryCreateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUncheckedCreateWithoutContractInputSchema) ]),
+});
+
+export const ContractProductCategoryUpdateWithWhereUniqueWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateWithWhereUniqueWithoutContractInput> = z.strictObject({
+  where: z.lazy(() => ContractProductCategoryWhereUniqueInputSchema),
+  data: z.union([ z.lazy(() => ContractProductCategoryUpdateWithoutContractInputSchema), z.lazy(() => ContractProductCategoryUncheckedUpdateWithoutContractInputSchema) ]),
+});
+
+export const ContractProductCategoryUpdateManyWithWhereWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateManyWithWhereWithoutContractInput> = z.strictObject({
+  where: z.lazy(() => ContractProductCategoryScalarWhereInputSchema),
+  data: z.union([ z.lazy(() => ContractProductCategoryUpdateManyMutationInputSchema), z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractInputSchema) ]),
+});
+
 export const ContractChangeProposalUpsertWithWhereUniqueWithoutContractInputSchema: z.ZodType<Prisma.ContractChangeProposalUpsertWithWhereUniqueWithoutContractInput> = z.strictObject({
   where: z.lazy(() => ContractChangeProposalWhereUniqueInputSchema),
   update: z.union([ z.lazy(() => ContractChangeProposalUpdateWithoutContractInputSchema), z.lazy(() => ContractChangeProposalUncheckedUpdateWithoutContractInputSchema) ]),
@@ -30209,6 +30706,246 @@ export const ContractChangeProposalScalarWhereInputSchema: z.ZodType<Prisma.Cont
   reviewedAt: z.union([ z.lazy(() => DateTimeNullableFilterSchema), z.coerce.date() ]).optional().nullable(),
   reviewedBy: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   reviewNotes: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+});
+
+export const ContractCreateWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ContractCreateWithoutContractCategoriesInput> = z.strictObject({
+  id: z.cuid().optional(),
+  contractNumber: z.string().optional().nullable(),
+  name: z.string(),
+  contractType: z.lazy(() => ContractTypeSchema).optional(),
+  status: z.lazy(() => ContractStatusSchema).optional(),
+  effectiveDate: z.coerce.date(),
+  expirationDate: z.coerce.date(),
+  autoRenewal: z.boolean().optional(),
+  terminationNoticeDays: z.number().optional(),
+  totalValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional(),
+  annualValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional(),
+  description: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  gpoAffiliation: z.string().optional().nullable(),
+  performancePeriod: z.lazy(() => PerformancePeriodSchema).optional(),
+  rebatePayPeriod: z.lazy(() => PerformancePeriodSchema).optional(),
+  isGrouped: z.boolean().optional(),
+  isMultiFacility: z.boolean().optional(),
+  tieInCapitalContractId: z.string().optional().nullable(),
+  createdAt: z.coerce.date().optional(),
+  updatedAt: z.coerce.date().optional(),
+  vendor: z.lazy(() => VendorCreateNestedOneWithoutContractsInputSchema),
+  facility: z.lazy(() => FacilityCreateNestedOneWithoutContractsInputSchema).optional(),
+  productCategory: z.lazy(() => ProductCategoryCreateNestedOneWithoutContractsInputSchema).optional(),
+  createdBy: z.lazy(() => UserCreateNestedOneWithoutCreatedContractsInputSchema).optional(),
+  terms: z.lazy(() => ContractTermCreateNestedManyWithoutContractInputSchema).optional(),
+  pricingItems: z.lazy(() => ContractPricingCreateNestedManyWithoutContractInputSchema).optional(),
+  documents: z.lazy(() => ContractDocumentCreateNestedManyWithoutContractInputSchema).optional(),
+  periods: z.lazy(() => ContractPeriodCreateNestedManyWithoutContractInputSchema).optional(),
+  rebates: z.lazy(() => RebateCreateNestedManyWithoutContractInputSchema).optional(),
+  payments: z.lazy(() => PaymentCreateNestedManyWithoutContractInputSchema).optional(),
+  creditEntries: z.lazy(() => CreditCreateNestedManyWithoutContractInputSchema).optional(),
+  alerts: z.lazy(() => AlertCreateNestedManyWithoutContractInputSchema).optional(),
+  purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
+  surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
+  contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
+});
+
+export const ContractUncheckedCreateWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ContractUncheckedCreateWithoutContractCategoriesInput> = z.strictObject({
+  id: z.cuid().optional(),
+  contractNumber: z.string().optional().nullable(),
+  name: z.string(),
+  vendorId: z.string(),
+  facilityId: z.string().optional().nullable(),
+  productCategoryId: z.string().optional().nullable(),
+  contractType: z.lazy(() => ContractTypeSchema).optional(),
+  status: z.lazy(() => ContractStatusSchema).optional(),
+  effectiveDate: z.coerce.date(),
+  expirationDate: z.coerce.date(),
+  autoRenewal: z.boolean().optional(),
+  terminationNoticeDays: z.number().optional(),
+  totalValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional(),
+  annualValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional(),
+  description: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  gpoAffiliation: z.string().optional().nullable(),
+  performancePeriod: z.lazy(() => PerformancePeriodSchema).optional(),
+  rebatePayPeriod: z.lazy(() => PerformancePeriodSchema).optional(),
+  isGrouped: z.boolean().optional(),
+  isMultiFacility: z.boolean().optional(),
+  tieInCapitalContractId: z.string().optional().nullable(),
+  createdById: z.string().optional().nullable(),
+  createdAt: z.coerce.date().optional(),
+  updatedAt: z.coerce.date().optional(),
+  terms: z.lazy(() => ContractTermUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  pricingItems: z.lazy(() => ContractPricingUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  documents: z.lazy(() => ContractDocumentUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  periods: z.lazy(() => ContractPeriodUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  rebates: z.lazy(() => RebateUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  payments: z.lazy(() => PaymentUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  creditEntries: z.lazy(() => CreditUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  alerts: z.lazy(() => AlertUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+});
+
+export const ContractCreateOrConnectWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ContractCreateOrConnectWithoutContractCategoriesInput> = z.strictObject({
+  where: z.lazy(() => ContractWhereUniqueInputSchema),
+  create: z.union([ z.lazy(() => ContractCreateWithoutContractCategoriesInputSchema), z.lazy(() => ContractUncheckedCreateWithoutContractCategoriesInputSchema) ]),
+});
+
+export const ProductCategoryCreateWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ProductCategoryCreateWithoutContractCategoriesInput> = z.strictObject({
+  id: z.cuid().optional(),
+  name: z.string(),
+  description: z.string().optional().nullable(),
+  spendTotal: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional(),
+  itemCount: z.number().optional(),
+  createdAt: z.coerce.date().optional(),
+  parent: z.lazy(() => ProductCategoryCreateNestedOneWithoutChildrenInputSchema).optional(),
+  children: z.lazy(() => ProductCategoryCreateNestedManyWithoutParentInputSchema).optional(),
+  contracts: z.lazy(() => ContractCreateNestedManyWithoutProductCategoryInputSchema).optional(),
+});
+
+export const ProductCategoryUncheckedCreateWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedCreateWithoutContractCategoriesInput> = z.strictObject({
+  id: z.cuid().optional(),
+  name: z.string(),
+  description: z.string().optional().nullable(),
+  parentId: z.string().optional().nullable(),
+  spendTotal: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional(),
+  itemCount: z.number().optional(),
+  createdAt: z.coerce.date().optional(),
+  children: z.lazy(() => ProductCategoryUncheckedCreateNestedManyWithoutParentInputSchema).optional(),
+  contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutProductCategoryInputSchema).optional(),
+});
+
+export const ProductCategoryCreateOrConnectWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ProductCategoryCreateOrConnectWithoutContractCategoriesInput> = z.strictObject({
+  where: z.lazy(() => ProductCategoryWhereUniqueInputSchema),
+  create: z.union([ z.lazy(() => ProductCategoryCreateWithoutContractCategoriesInputSchema), z.lazy(() => ProductCategoryUncheckedCreateWithoutContractCategoriesInputSchema) ]),
+});
+
+export const ContractUpsertWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ContractUpsertWithoutContractCategoriesInput> = z.strictObject({
+  update: z.union([ z.lazy(() => ContractUpdateWithoutContractCategoriesInputSchema), z.lazy(() => ContractUncheckedUpdateWithoutContractCategoriesInputSchema) ]),
+  create: z.union([ z.lazy(() => ContractCreateWithoutContractCategoriesInputSchema), z.lazy(() => ContractUncheckedCreateWithoutContractCategoriesInputSchema) ]),
+  where: z.lazy(() => ContractWhereInputSchema).optional(),
+});
+
+export const ContractUpdateToOneWithWhereWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ContractUpdateToOneWithWhereWithoutContractCategoriesInput> = z.strictObject({
+  where: z.lazy(() => ContractWhereInputSchema).optional(),
+  data: z.union([ z.lazy(() => ContractUpdateWithoutContractCategoriesInputSchema), z.lazy(() => ContractUncheckedUpdateWithoutContractCategoriesInputSchema) ]),
+});
+
+export const ContractUpdateWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ContractUpdateWithoutContractCategoriesInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractNumber: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractType: z.union([ z.lazy(() => ContractTypeSchema), z.lazy(() => EnumContractTypeFieldUpdateOperationsInputSchema) ]).optional(),
+  status: z.union([ z.lazy(() => ContractStatusSchema), z.lazy(() => EnumContractStatusFieldUpdateOperationsInputSchema) ]).optional(),
+  effectiveDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  expirationDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoRenewal: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  terminationNoticeDays: z.union([ z.number(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
+  totalValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => DecimalFieldUpdateOperationsInputSchema) ]).optional(),
+  annualValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => DecimalFieldUpdateOperationsInputSchema) ]).optional(),
+  description: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  gpoAffiliation: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  performancePeriod: z.union([ z.lazy(() => PerformancePeriodSchema), z.lazy(() => EnumPerformancePeriodFieldUpdateOperationsInputSchema) ]).optional(),
+  rebatePayPeriod: z.union([ z.lazy(() => PerformancePeriodSchema), z.lazy(() => EnumPerformancePeriodFieldUpdateOperationsInputSchema) ]).optional(),
+  isGrouped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  isMultiFacility: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  tieInCapitalContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  vendor: z.lazy(() => VendorUpdateOneRequiredWithoutContractsNestedInputSchema).optional(),
+  facility: z.lazy(() => FacilityUpdateOneWithoutContractsNestedInputSchema).optional(),
+  productCategory: z.lazy(() => ProductCategoryUpdateOneWithoutContractsNestedInputSchema).optional(),
+  createdBy: z.lazy(() => UserUpdateOneWithoutCreatedContractsNestedInputSchema).optional(),
+  terms: z.lazy(() => ContractTermUpdateManyWithoutContractNestedInputSchema).optional(),
+  pricingItems: z.lazy(() => ContractPricingUpdateManyWithoutContractNestedInputSchema).optional(),
+  documents: z.lazy(() => ContractDocumentUpdateManyWithoutContractNestedInputSchema).optional(),
+  periods: z.lazy(() => ContractPeriodUpdateManyWithoutContractNestedInputSchema).optional(),
+  rebates: z.lazy(() => RebateUpdateManyWithoutContractNestedInputSchema).optional(),
+  payments: z.lazy(() => PaymentUpdateManyWithoutContractNestedInputSchema).optional(),
+  creditEntries: z.lazy(() => CreditUpdateManyWithoutContractNestedInputSchema).optional(),
+  alerts: z.lazy(() => AlertUpdateManyWithoutContractNestedInputSchema).optional(),
+  purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
+  surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
+});
+
+export const ContractUncheckedUpdateWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ContractUncheckedUpdateWithoutContractCategoriesInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractNumber: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  vendorId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  facilityId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  productCategoryId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  contractType: z.union([ z.lazy(() => ContractTypeSchema), z.lazy(() => EnumContractTypeFieldUpdateOperationsInputSchema) ]).optional(),
+  status: z.union([ z.lazy(() => ContractStatusSchema), z.lazy(() => EnumContractStatusFieldUpdateOperationsInputSchema) ]).optional(),
+  effectiveDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  expirationDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoRenewal: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  terminationNoticeDays: z.union([ z.number(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
+  totalValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => DecimalFieldUpdateOperationsInputSchema) ]).optional(),
+  annualValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => DecimalFieldUpdateOperationsInputSchema) ]).optional(),
+  description: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  gpoAffiliation: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  performancePeriod: z.union([ z.lazy(() => PerformancePeriodSchema), z.lazy(() => EnumPerformancePeriodFieldUpdateOperationsInputSchema) ]).optional(),
+  rebatePayPeriod: z.union([ z.lazy(() => PerformancePeriodSchema), z.lazy(() => EnumPerformancePeriodFieldUpdateOperationsInputSchema) ]).optional(),
+  isGrouped: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  isMultiFacility: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  tieInCapitalContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  createdById: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  terms: z.lazy(() => ContractTermUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  pricingItems: z.lazy(() => ContractPricingUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  documents: z.lazy(() => ContractDocumentUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  periods: z.lazy(() => ContractPeriodUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  rebates: z.lazy(() => RebateUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  payments: z.lazy(() => PaymentUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  creditEntries: z.lazy(() => CreditUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  alerts: z.lazy(() => AlertUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+});
+
+export const ProductCategoryUpsertWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ProductCategoryUpsertWithoutContractCategoriesInput> = z.strictObject({
+  update: z.union([ z.lazy(() => ProductCategoryUpdateWithoutContractCategoriesInputSchema), z.lazy(() => ProductCategoryUncheckedUpdateWithoutContractCategoriesInputSchema) ]),
+  create: z.union([ z.lazy(() => ProductCategoryCreateWithoutContractCategoriesInputSchema), z.lazy(() => ProductCategoryUncheckedCreateWithoutContractCategoriesInputSchema) ]),
+  where: z.lazy(() => ProductCategoryWhereInputSchema).optional(),
+});
+
+export const ProductCategoryUpdateToOneWithWhereWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ProductCategoryUpdateToOneWithWhereWithoutContractCategoriesInput> = z.strictObject({
+  where: z.lazy(() => ProductCategoryWhereInputSchema).optional(),
+  data: z.union([ z.lazy(() => ProductCategoryUpdateWithoutContractCategoriesInputSchema), z.lazy(() => ProductCategoryUncheckedUpdateWithoutContractCategoriesInputSchema) ]),
+});
+
+export const ProductCategoryUpdateWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ProductCategoryUpdateWithoutContractCategoriesInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  description: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  spendTotal: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => DecimalFieldUpdateOperationsInputSchema) ]).optional(),
+  itemCount: z.union([ z.number(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  parent: z.lazy(() => ProductCategoryUpdateOneWithoutChildrenNestedInputSchema).optional(),
+  children: z.lazy(() => ProductCategoryUpdateManyWithoutParentNestedInputSchema).optional(),
+  contracts: z.lazy(() => ContractUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
+});
+
+export const ProductCategoryUncheckedUpdateWithoutContractCategoriesInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedUpdateWithoutContractCategoriesInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  description: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  parentId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  spendTotal: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => DecimalFieldUpdateOperationsInputSchema) ]).optional(),
+  itemCount: z.union([ z.number(),z.lazy(() => IntFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  children: z.lazy(() => ProductCategoryUncheckedUpdateManyWithoutParentNestedInputSchema).optional(),
+  contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const ContractCreateWithoutContractFacilitiesInputSchema: z.ZodType<Prisma.ContractCreateWithoutContractFacilitiesInput> = z.strictObject({
@@ -30247,6 +30984,7 @@ export const ContractCreateWithoutContractFacilitiesInputSchema: z.ZodType<Prism
   alerts: z.lazy(() => AlertCreateNestedManyWithoutContractInputSchema).optional(),
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -30286,6 +31024,7 @@ export const ContractUncheckedCreateWithoutContractFacilitiesInputSchema: z.ZodT
   alerts: z.lazy(() => AlertUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -30414,6 +31153,7 @@ export const ContractUpdateWithoutContractFacilitiesInputSchema: z.ZodType<Prism
   alerts: z.lazy(() => AlertUpdateManyWithoutContractNestedInputSchema).optional(),
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -30453,6 +31193,7 @@ export const ContractUncheckedUpdateWithoutContractFacilitiesInputSchema: z.ZodT
   alerts: z.lazy(() => AlertUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -30571,6 +31312,7 @@ export const ContractCreateWithoutTermsInputSchema: z.ZodType<Prisma.ContractCre
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -30610,6 +31352,7 @@ export const ContractUncheckedCreateWithoutTermsInputSchema: z.ZodType<Prisma.Co
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -30755,6 +31498,7 @@ export const ContractUpdateWithoutTermsInputSchema: z.ZodType<Prisma.ContractUpd
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -30794,6 +31538,7 @@ export const ContractUncheckedUpdateWithoutTermsInputSchema: z.ZodType<Prisma.Co
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -31235,6 +31980,7 @@ export const ContractCreateWithoutPricingItemsInputSchema: z.ZodType<Prisma.Cont
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -31274,6 +32020,7 @@ export const ContractUncheckedCreateWithoutPricingItemsInputSchema: z.ZodType<Pr
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -31329,6 +32076,7 @@ export const ContractUpdateWithoutPricingItemsInputSchema: z.ZodType<Prisma.Cont
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -31368,6 +32116,7 @@ export const ContractUncheckedUpdateWithoutPricingItemsInputSchema: z.ZodType<Pr
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -31407,6 +32156,7 @@ export const ContractCreateWithoutDocumentsInputSchema: z.ZodType<Prisma.Contrac
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -31446,6 +32196,7 @@ export const ContractUncheckedCreateWithoutDocumentsInputSchema: z.ZodType<Prism
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -31501,6 +32252,7 @@ export const ContractUpdateWithoutDocumentsInputSchema: z.ZodType<Prisma.Contrac
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -31540,6 +32292,7 @@ export const ContractUncheckedUpdateWithoutDocumentsInputSchema: z.ZodType<Prism
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -31579,6 +32332,7 @@ export const ContractCreateWithoutPeriodsInputSchema: z.ZodType<Prisma.ContractC
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -31618,6 +32372,7 @@ export const ContractUncheckedCreateWithoutPeriodsInputSchema: z.ZodType<Prisma.
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -31786,6 +32541,7 @@ export const ContractUpdateWithoutPeriodsInputSchema: z.ZodType<Prisma.ContractU
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -31825,6 +32581,7 @@ export const ContractUncheckedUpdateWithoutPeriodsInputSchema: z.ZodType<Prisma.
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -32256,6 +33013,7 @@ export const ContractCreateWithoutChangeProposalsInputSchema: z.ZodType<Prisma.C
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
 export const ContractUncheckedCreateWithoutChangeProposalsInputSchema: z.ZodType<Prisma.ContractUncheckedCreateWithoutChangeProposalsInput> = z.strictObject({
@@ -32295,6 +33053,7 @@ export const ContractUncheckedCreateWithoutChangeProposalsInputSchema: z.ZodType
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
 export const ContractCreateOrConnectWithoutChangeProposalsInputSchema: z.ZodType<Prisma.ContractCreateOrConnectWithoutChangeProposalsInput> = z.strictObject({
@@ -32350,6 +33109,7 @@ export const ContractUpdateWithoutChangeProposalsInputSchema: z.ZodType<Prisma.C
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
 export const ContractUncheckedUpdateWithoutChangeProposalsInputSchema: z.ZodType<Prisma.ContractUncheckedUpdateWithoutChangeProposalsInput> = z.strictObject({
@@ -32389,6 +33149,7 @@ export const ContractUncheckedUpdateWithoutChangeProposalsInputSchema: z.ZodType
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
 export const FacilityCreateWithoutCogRecordsInputSchema: z.ZodType<Prisma.FacilityCreateWithoutCogRecordsInput> = z.strictObject({
@@ -33019,6 +33780,7 @@ export const ContractCreateWithoutAlertsInputSchema: z.ZodType<Prisma.ContractCr
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -33058,6 +33820,7 @@ export const ContractUncheckedCreateWithoutAlertsInputSchema: z.ZodType<Prisma.C
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -33255,6 +34018,7 @@ export const ContractUpdateWithoutAlertsInputSchema: z.ZodType<Prisma.ContractUp
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -33294,6 +34058,7 @@ export const ContractUncheckedUpdateWithoutAlertsInputSchema: z.ZodType<Prisma.C
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -33629,6 +34394,7 @@ export const ContractCreateWithoutPurchaseOrdersInputSchema: z.ZodType<Prisma.Co
   alerts: z.lazy(() => AlertCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -33668,6 +34434,7 @@ export const ContractUncheckedCreateWithoutPurchaseOrdersInputSchema: z.ZodType<
   alerts: z.lazy(() => AlertUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -33951,6 +34718,7 @@ export const ContractUpdateWithoutPurchaseOrdersInputSchema: z.ZodType<Prisma.Co
   alerts: z.lazy(() => AlertUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -33990,6 +34758,7 @@ export const ContractUncheckedUpdateWithoutPurchaseOrdersInputSchema: z.ZodType<
   alerts: z.lazy(() => AlertUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -34661,6 +35430,7 @@ export const ContractCreateWithoutRebatesInputSchema: z.ZodType<Prisma.ContractC
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -34700,6 +35470,7 @@ export const ContractUncheckedCreateWithoutRebatesInputSchema: z.ZodType<Prisma.
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -34871,6 +35642,7 @@ export const ContractUpdateWithoutRebatesInputSchema: z.ZodType<Prisma.ContractU
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -34910,6 +35682,7 @@ export const ContractUncheckedUpdateWithoutRebatesInputSchema: z.ZodType<Prisma.
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -35077,6 +35850,7 @@ export const ContractCreateWithoutPaymentsInputSchema: z.ZodType<Prisma.Contract
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -35116,6 +35890,7 @@ export const ContractUncheckedCreateWithoutPaymentsInputSchema: z.ZodType<Prisma
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -35283,6 +36058,7 @@ export const ContractUpdateWithoutPaymentsInputSchema: z.ZodType<Prisma.Contract
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -35322,6 +36098,7 @@ export const ContractUncheckedUpdateWithoutPaymentsInputSchema: z.ZodType<Prisma
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -35485,6 +36262,7 @@ export const ContractCreateWithoutCreditEntriesInputSchema: z.ZodType<Prisma.Con
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -35524,6 +36302,7 @@ export const ContractUncheckedCreateWithoutCreditEntriesInputSchema: z.ZodType<P
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -35691,6 +36470,7 @@ export const ContractUpdateWithoutCreditEntriesInputSchema: z.ZodType<Prisma.Con
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -35730,6 +36510,7 @@ export const ContractUncheckedUpdateWithoutCreditEntriesInputSchema: z.ZodType<P
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -36642,6 +37423,7 @@ export const ContractCreateWithoutSurgeonUsagesInputSchema: z.ZodType<Prisma.Con
   alerts: z.lazy(() => AlertCreateNestedManyWithoutContractInputSchema).optional(),
   purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -36681,6 +37463,7 @@ export const ContractUncheckedCreateWithoutSurgeonUsagesInputSchema: z.ZodType<P
   alerts: z.lazy(() => AlertUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedCreateNestedManyWithoutContractInputSchema).optional(),
 });
 
@@ -36809,6 +37592,7 @@ export const ContractUpdateWithoutSurgeonUsagesInputSchema: z.ZodType<Prisma.Con
   alerts: z.lazy(() => AlertUpdateManyWithoutContractNestedInputSchema).optional(),
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -36848,6 +37632,7 @@ export const ContractUncheckedUpdateWithoutSurgeonUsagesInputSchema: z.ZodType<P
   alerts: z.lazy(() => AlertUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -38420,6 +39205,7 @@ export const ContractUpdateWithoutCreatedByInputSchema: z.ZodType<Prisma.Contrac
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -38459,6 +39245,7 @@ export const ContractUncheckedUpdateWithoutCreatedByInputSchema: z.ZodType<Prism
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -39068,6 +39855,7 @@ export const ContractUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.Contract
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -39107,6 +39895,7 @@ export const ContractUncheckedUpdateWithoutFacilityInputSchema: z.ZodType<Prisma
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -40250,6 +41039,7 @@ export const ContractUpdateWithoutVendorInputSchema: z.ZodType<Prisma.ContractUp
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -40289,6 +41079,7 @@ export const ContractUncheckedUpdateWithoutVendorInputSchema: z.ZodType<Prisma.C
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -40843,6 +41634,11 @@ export const ContractCreateManyProductCategoryInputSchema: z.ZodType<Prisma.Cont
   updatedAt: z.coerce.date().optional(),
 });
 
+export const ContractProductCategoryCreateManyProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateManyProductCategoryInput> = z.strictObject({
+  id: z.cuid().optional(),
+  contractId: z.string(),
+});
+
 export const ProductCategoryUpdateWithoutParentInputSchema: z.ZodType<Prisma.ProductCategoryUpdateWithoutParentInput> = z.strictObject({
   id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -40852,6 +41648,7 @@ export const ProductCategoryUpdateWithoutParentInputSchema: z.ZodType<Prisma.Pro
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   children: z.lazy(() => ProductCategoryUpdateManyWithoutParentNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedUpdateWithoutParentInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedUpdateWithoutParentInput> = z.strictObject({
@@ -40863,6 +41660,7 @@ export const ProductCategoryUncheckedUpdateWithoutParentInputSchema: z.ZodType<P
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   children: z.lazy(() => ProductCategoryUncheckedUpdateManyWithoutParentNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryNestedInputSchema).optional(),
 });
 
 export const ProductCategoryUncheckedUpdateManyWithoutParentInputSchema: z.ZodType<Prisma.ProductCategoryUncheckedUpdateManyWithoutParentInput> = z.strictObject({
@@ -40910,6 +41708,7 @@ export const ContractUpdateWithoutProductCategoryInputSchema: z.ZodType<Prisma.C
   purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -40949,6 +41748,7 @@ export const ContractUncheckedUpdateWithoutProductCategoryInputSchema: z.ZodType
   purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
+  contractCategories: z.lazy(() => ContractProductCategoryUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
   changeProposals: z.lazy(() => ContractChangeProposalUncheckedUpdateManyWithoutContractNestedInputSchema).optional(),
 });
 
@@ -40977,6 +41777,21 @@ export const ContractUncheckedUpdateManyWithoutProductCategoryInputSchema: z.Zod
   createdById: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const ContractProductCategoryUpdateWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateWithoutProductCategoryInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contract: z.lazy(() => ContractUpdateOneRequiredWithoutContractCategoriesNestedInputSchema).optional(),
+});
+
+export const ContractProductCategoryUncheckedUpdateWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedUpdateWithoutProductCategoryInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedUpdateManyWithoutProductCategoryInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
 });
 
 export const ContractTermCreateManyContractInputSchema: z.ZodType<Prisma.ContractTermCreateManyContractInput> = z.strictObject({
@@ -41125,6 +41940,11 @@ export const SurgeonUsageCreateManyContractInputSchema: z.ZodType<Prisma.Surgeon
 export const ContractFacilityCreateManyContractInputSchema: z.ZodType<Prisma.ContractFacilityCreateManyContractInput> = z.strictObject({
   id: z.cuid().optional(),
   facilityId: z.string(),
+});
+
+export const ContractProductCategoryCreateManyContractInputSchema: z.ZodType<Prisma.ContractProductCategoryCreateManyContractInput> = z.strictObject({
+  id: z.cuid().optional(),
+  productCategoryId: z.string(),
 });
 
 export const ContractChangeProposalCreateManyContractInputSchema: z.ZodType<Prisma.ContractChangeProposalCreateManyContractInput> = z.strictObject({
@@ -41598,6 +42418,21 @@ export const ContractFacilityUncheckedUpdateWithoutContractInputSchema: z.ZodTyp
 export const ContractFacilityUncheckedUpdateManyWithoutContractInputSchema: z.ZodType<Prisma.ContractFacilityUncheckedUpdateManyWithoutContractInput> = z.strictObject({
   id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   facilityId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const ContractProductCategoryUpdateWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryUpdateWithoutContractInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  productCategory: z.lazy(() => ProductCategoryUpdateOneRequiredWithoutContractCategoriesNestedInputSchema).optional(),
+});
+
+export const ContractProductCategoryUncheckedUpdateWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedUpdateWithoutContractInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  productCategoryId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const ContractProductCategoryUncheckedUpdateManyWithoutContractInputSchema: z.ZodType<Prisma.ContractProductCategoryUncheckedUpdateManyWithoutContractInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  productCategoryId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
 });
 
 export const ContractChangeProposalUpdateWithoutContractInputSchema: z.ZodType<Prisma.ContractChangeProposalUpdateWithoutContractInput> = z.strictObject({
@@ -42912,6 +43747,68 @@ export const ContractFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.ContractFindU
   select: ContractSelectSchema.optional(),
   include: ContractIncludeSchema.optional(),
   where: ContractWhereUniqueInputSchema, 
+}).strict();
+
+export const ContractProductCategoryFindFirstArgsSchema: z.ZodType<Prisma.ContractProductCategoryFindFirstArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  where: ContractProductCategoryWhereInputSchema.optional(), 
+  orderBy: z.union([ ContractProductCategoryOrderByWithRelationInputSchema.array(), ContractProductCategoryOrderByWithRelationInputSchema ]).optional(),
+  cursor: ContractProductCategoryWhereUniqueInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: z.union([ ContractProductCategoryScalarFieldEnumSchema, ContractProductCategoryScalarFieldEnumSchema.array() ]).optional(),
+}).strict();
+
+export const ContractProductCategoryFindFirstOrThrowArgsSchema: z.ZodType<Prisma.ContractProductCategoryFindFirstOrThrowArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  where: ContractProductCategoryWhereInputSchema.optional(), 
+  orderBy: z.union([ ContractProductCategoryOrderByWithRelationInputSchema.array(), ContractProductCategoryOrderByWithRelationInputSchema ]).optional(),
+  cursor: ContractProductCategoryWhereUniqueInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: z.union([ ContractProductCategoryScalarFieldEnumSchema, ContractProductCategoryScalarFieldEnumSchema.array() ]).optional(),
+}).strict();
+
+export const ContractProductCategoryFindManyArgsSchema: z.ZodType<Prisma.ContractProductCategoryFindManyArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  where: ContractProductCategoryWhereInputSchema.optional(), 
+  orderBy: z.union([ ContractProductCategoryOrderByWithRelationInputSchema.array(), ContractProductCategoryOrderByWithRelationInputSchema ]).optional(),
+  cursor: ContractProductCategoryWhereUniqueInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: z.union([ ContractProductCategoryScalarFieldEnumSchema, ContractProductCategoryScalarFieldEnumSchema.array() ]).optional(),
+}).strict();
+
+export const ContractProductCategoryAggregateArgsSchema: z.ZodType<Prisma.ContractProductCategoryAggregateArgs> = z.object({
+  where: ContractProductCategoryWhereInputSchema.optional(), 
+  orderBy: z.union([ ContractProductCategoryOrderByWithRelationInputSchema.array(), ContractProductCategoryOrderByWithRelationInputSchema ]).optional(),
+  cursor: ContractProductCategoryWhereUniqueInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+}).strict();
+
+export const ContractProductCategoryGroupByArgsSchema: z.ZodType<Prisma.ContractProductCategoryGroupByArgs> = z.object({
+  where: ContractProductCategoryWhereInputSchema.optional(), 
+  orderBy: z.union([ ContractProductCategoryOrderByWithAggregationInputSchema.array(), ContractProductCategoryOrderByWithAggregationInputSchema ]).optional(),
+  by: ContractProductCategoryScalarFieldEnumSchema.array(), 
+  having: ContractProductCategoryScalarWhereWithAggregatesInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+}).strict();
+
+export const ContractProductCategoryFindUniqueArgsSchema: z.ZodType<Prisma.ContractProductCategoryFindUniqueArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  where: ContractProductCategoryWhereUniqueInputSchema, 
+}).strict();
+
+export const ContractProductCategoryFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.ContractProductCategoryFindUniqueOrThrowArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  where: ContractProductCategoryWhereUniqueInputSchema, 
 }).strict();
 
 export const ContractFacilityFindFirstArgsSchema: z.ZodType<Prisma.ContractFacilityFindFirstArgs> = z.object({
@@ -45769,6 +46666,60 @@ export const ContractUpdateManyAndReturnArgsSchema: z.ZodType<Prisma.ContractUpd
 
 export const ContractDeleteManyArgsSchema: z.ZodType<Prisma.ContractDeleteManyArgs> = z.object({
   where: ContractWhereInputSchema.optional(), 
+  limit: z.number().optional(),
+}).strict();
+
+export const ContractProductCategoryCreateArgsSchema: z.ZodType<Prisma.ContractProductCategoryCreateArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  data: z.union([ ContractProductCategoryCreateInputSchema, ContractProductCategoryUncheckedCreateInputSchema ]),
+}).strict();
+
+export const ContractProductCategoryUpsertArgsSchema: z.ZodType<Prisma.ContractProductCategoryUpsertArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  where: ContractProductCategoryWhereUniqueInputSchema, 
+  create: z.union([ ContractProductCategoryCreateInputSchema, ContractProductCategoryUncheckedCreateInputSchema ]),
+  update: z.union([ ContractProductCategoryUpdateInputSchema, ContractProductCategoryUncheckedUpdateInputSchema ]),
+}).strict();
+
+export const ContractProductCategoryCreateManyArgsSchema: z.ZodType<Prisma.ContractProductCategoryCreateManyArgs> = z.object({
+  data: z.union([ ContractProductCategoryCreateManyInputSchema, ContractProductCategoryCreateManyInputSchema.array() ]),
+  skipDuplicates: z.boolean().optional(),
+}).strict();
+
+export const ContractProductCategoryCreateManyAndReturnArgsSchema: z.ZodType<Prisma.ContractProductCategoryCreateManyAndReturnArgs> = z.object({
+  data: z.union([ ContractProductCategoryCreateManyInputSchema, ContractProductCategoryCreateManyInputSchema.array() ]),
+  skipDuplicates: z.boolean().optional(),
+}).strict();
+
+export const ContractProductCategoryDeleteArgsSchema: z.ZodType<Prisma.ContractProductCategoryDeleteArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  where: ContractProductCategoryWhereUniqueInputSchema, 
+}).strict();
+
+export const ContractProductCategoryUpdateArgsSchema: z.ZodType<Prisma.ContractProductCategoryUpdateArgs> = z.object({
+  select: ContractProductCategorySelectSchema.optional(),
+  include: ContractProductCategoryIncludeSchema.optional(),
+  data: z.union([ ContractProductCategoryUpdateInputSchema, ContractProductCategoryUncheckedUpdateInputSchema ]),
+  where: ContractProductCategoryWhereUniqueInputSchema, 
+}).strict();
+
+export const ContractProductCategoryUpdateManyArgsSchema: z.ZodType<Prisma.ContractProductCategoryUpdateManyArgs> = z.object({
+  data: z.union([ ContractProductCategoryUpdateManyMutationInputSchema, ContractProductCategoryUncheckedUpdateManyInputSchema ]),
+  where: ContractProductCategoryWhereInputSchema.optional(), 
+  limit: z.number().optional(),
+}).strict();
+
+export const ContractProductCategoryUpdateManyAndReturnArgsSchema: z.ZodType<Prisma.ContractProductCategoryUpdateManyAndReturnArgs> = z.object({
+  data: z.union([ ContractProductCategoryUpdateManyMutationInputSchema, ContractProductCategoryUncheckedUpdateManyInputSchema ]),
+  where: ContractProductCategoryWhereInputSchema.optional(), 
+  limit: z.number().optional(),
+}).strict();
+
+export const ContractProductCategoryDeleteManyArgsSchema: z.ZodType<Prisma.ContractProductCategoryDeleteManyArgs> = z.object({
+  where: ContractProductCategoryWhereInputSchema.optional(), 
   limit: z.number().optional(),
 }).strict();
 

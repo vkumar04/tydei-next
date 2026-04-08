@@ -26,6 +26,7 @@ export const createContractSchema = z.object({
   vendorId: z.string().min(1, "Vendor is required"),
   facilityId: z.string().optional(),
   productCategoryId: z.string().optional(),
+  categoryIds: z.array(z.string()),
   contractType: ContractTypeSchema,
   status: ContractStatusSchema,
   effectiveDate: z.string().min(1, "Effective date is required"),

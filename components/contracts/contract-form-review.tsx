@@ -28,9 +28,9 @@ export function ContractFormReview({
   categories,
 }: ContractFormReviewProps) {
   const vendor = vendors.find((v) => v.id === values.vendorId)
-  const category = values.productCategoryId
-    ? categories.find((c) => c.id === values.productCategoryId)
-    : null
+  const selectedCategories = (values.categoryIds ?? [])
+    .map((id) => categories.find((c) => c.id === id))
+    .filter(Boolean)
 
   return (
     <div className="space-y-4">
@@ -44,7 +44,12 @@ export function ContractFormReview({
             <InfoRow label="Number" value={values.contractNumber} />
           )}
           <InfoRow label="Vendor" value={vendor?.displayName || vendor?.name || "—"} />
-          {category && <InfoRow label="Category" value={category.name} />}
+          {selectedCategories.length > 0 && (
+            <InfoRow
+              label={selectedCategories.length === 1 ? "Category" : "Categories"}
+              value={selectedCategories.map((c) => c!.name).join(", ")}
+            />
+          )}
           <InfoRow
             label="Type"
             value={
