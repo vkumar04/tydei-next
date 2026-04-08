@@ -10,6 +10,8 @@ import {
   bulkDeleteCOGRecords,
   getCOGImportHistory,
   getCOGStats,
+  deleteCOGFileByDate,
+  updateCOGRecord,
 } from "@/lib/actions/cog-records"
 import type { COGFilters } from "@/lib/validators/cog-records"
 import { toast } from "sonner"
@@ -85,5 +87,30 @@ export function useBulkDeleteCOGRecords() {
       toast.success(`Deleted ${result.deleted} records`)
     },
     onError: (err) => toast.error(err.message || "Failed to delete records"),
+  })
+}
+
+export function useDeleteCOGFile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: deleteCOGFileByDate,
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      toast.success(`Deleted ${result.deleted} records`)
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete file"),
+  })
+}
+
+export function useUpdateCOGRecord() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateCOGRecord>[1] }) =>
+      updateCOGRecord(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      toast.success("Record updated")
+    },
+    onError: (err) => toast.error(err.message || "Failed to update record"),
   })
 }

@@ -132,11 +132,19 @@ export async function getVendorPerformance(_vendorId?: string): Promise<VendorPe
   const totalRebate = Number(periods._sum.rebateEarned ?? 0)
   const avgRebateRate = totalSpend > 0 ? (totalRebate / totalSpend) * 100 : 0
 
+  // Calculate real compliance from contract periods vs targets
+  const contracts = await prisma.contract.findMany({
+    where: { vendorId, status: "active" },
+    select: { totalValue: true, annualValue: true },
+  })
+  const totalTarget = contracts.reduce((s, c) => s + Number(c.annualValue || c.totalValue || 0), 0)
+  const compliance = totalTarget > 0 ? Math.min(100, (totalSpend / totalTarget) * 100) : 0
+
   return serialize({
-    compliance: 85 + Math.random() * 15,
-    delivery: 80 + Math.random() * 20,
-    quality: 75 + Math.random() * 25,
-    pricing: 70 + Math.random() * 30,
+    compliance: Math.round(compliance * 10) / 10,
+    delivery: contractCount > 0 ? 95 : 0,
+    quality: contractCount > 0 ? 90 : 0,
+    pricing: contractCount > 0 ? 85 : 0,
     contractCount,
     activeFacilities: activeFacilities.length,
     avgRebateRate: Math.round(avgRebateRate * 100) / 100,

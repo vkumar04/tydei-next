@@ -39,8 +39,8 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
   const [taxRate, setTaxRate] = useState(21)
   const [annualGrowthRate, setAnnualGrowthRate] = useState(3)
   const [rebatePercent, setRebatePercent] = useState(3)
-  const [contractTotal, setContractTotal] = useState(500000)
-  const [contractLength, setContractLength] = useState(5)
+  const [contractTotal, setContractTotal] = useState(0)
+  const [contractLength, setContractLength] = useState(0)
 
   const dateRange = useMemo(() => {
     const now = new Date()
@@ -264,7 +264,12 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
             </TabsList>
 
             <TabsContent value="upload" className="space-y-6">
-              <UploadTab />
+              <UploadTab onExtracted={(data) => {
+                if (data.contractTotal) setContractTotal(data.contractTotal)
+                if (data.contractLength) setContractLength(data.contractLength)
+                if (data.rebatePercent) setRebatePercent(data.rebatePercent)
+                setActiveTab("inputs")
+              }} />
             </TabsContent>
 
             <TabsContent value="inputs" className="space-y-6">

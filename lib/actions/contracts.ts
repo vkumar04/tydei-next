@@ -88,6 +88,9 @@ export async function getContract(id: string) {
       contractCategories: {
         select: { productCategoryId: true },
       },
+      rebates: {
+        select: { id: true, rebateEarned: true, rebateCollected: true },
+      },
       createdBy: { select: { id: true, name: true } },
     },
   })

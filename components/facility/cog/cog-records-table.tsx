@@ -2,12 +2,16 @@
 
 import { useState, useMemo } from "react"
 import { Plus, Download, ChevronLeft, ChevronRight } from "lucide-react"
-import { useCOGRecords, useDeleteCOGRecord } from "@/hooks/use-cog"
+import { useForm } from "react-hook-form"
+import { useCOGRecords, useDeleteCOGRecord, useUpdateCOGRecord } from "@/hooks/use-cog"
 import { useVendorList } from "@/hooks/use-vendor-crud"
 import { getCOGColumns } from "@/components/facility/cog/cog-columns"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
+import { FormDialog } from "@/components/shared/forms/form-dialog"
+import { Field } from "@/components/shared/forms/field"
+import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -16,6 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import type { COGRecord } from "@prisma/client"
+
+type COGRecordWithVendor = COGRecord & {
+  vendor: { id: string; name: string } | null
+}
 
 interface COGRecordsTableProps {
   facilityId: string
@@ -29,6 +38,7 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
   const [page, setPage] = useState(1)
   const pageSize = 50
   const [manualOpen, setManualOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<COGRecordWithVendor | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string
     desc: string
@@ -46,14 +56,37 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
   const totalPages = Math.ceil(total / pageSize)
   const { data: vendorData } = useVendorList()
   const deleteMutation = useDeleteCOGRecord()
+  const updateMutation = useUpdateCOGRecord()
+
+  const editForm = useForm({
+    defaultValues: {
+      inventoryNumber: "",
+      inventoryDescription: "",
+      unitCost: 0,
+      quantity: 1,
+      vendorName: "",
+      vendorItemNo: "",
+    },
+  })
 
   const columns = useMemo(
     () =>
       getCOGColumns({
         onDelete: (r) =>
           setDeleteTarget({ id: r.id, desc: r.inventoryDescription }),
+        onEdit: (r) => {
+          setEditTarget(r)
+          editForm.reset({
+            inventoryNumber: r.inventoryNumber,
+            inventoryDescription: r.inventoryDescription,
+            unitCost: Number(r.unitCost),
+            quantity: (r as COGRecordWithVendor & { quantity?: number }).quantity ?? 1,
+            vendorName: r.vendorName ?? "",
+            vendorItemNo: r.vendorItemNo ?? "",
+          })
+        },
       }),
-    []
+    [editForm]
   )
 
   // Filter by contract status client-side
@@ -148,6 +181,45 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
         onOpenChange={setManualOpen}
         onComplete={() => refetch()}
       />
+
+      {/* Edit Dialog */}
+      <FormDialog
+        open={!!editTarget}
+        onOpenChange={(open) => !open && setEditTarget(null)}
+        title="Edit COG Record"
+        description="Update the details of this COG record"
+        onSubmit={editForm.handleSubmit(async (values) => {
+          if (!editTarget) return
+          await updateMutation.mutateAsync({
+            id: editTarget.id,
+            data: values,
+          })
+          setEditTarget(null)
+        })}
+        isSubmitting={updateMutation.isPending}
+        submitLabel="Save"
+      >
+        <Field label="Inventory Number">
+          <Input {...editForm.register("inventoryNumber")} />
+        </Field>
+        <Field label="Description">
+          <Input {...editForm.register("inventoryDescription")} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Unit Cost">
+            <Input type="number" step="0.01" {...editForm.register("unitCost", { valueAsNumber: true })} />
+          </Field>
+          <Field label="Quantity">
+            <Input type="number" {...editForm.register("quantity", { valueAsNumber: true })} />
+          </Field>
+        </div>
+        <Field label="Vendor Name">
+          <Input {...editForm.register("vendorName")} />
+        </Field>
+        <Field label="Vendor Item No">
+          <Input {...editForm.register("vendorItemNo")} />
+        </Field>
+      </FormDialog>
 
       <ConfirmDialog
         open={!!deleteTarget}

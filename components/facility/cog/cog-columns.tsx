@@ -9,14 +9,17 @@ import { Edit, Trash2 } from "lucide-react"
 
 type COGRecordWithVendor = COGRecord & {
   vendor: { id: string; name: string } | null
+  _onContract?: boolean
 }
 
 interface COGColumnOptions {
   onDelete: (record: COGRecordWithVendor) => void
+  onEdit: (record: COGRecordWithVendor) => void
 }
 
 export function getCOGColumns({
   onDelete,
+  onEdit,
 }: COGColumnOptions): ColumnDef<COGRecordWithVendor>[] {
   return [
     {
@@ -97,16 +100,16 @@ export function getCOGColumns({
       id: "status",
       header: "Status",
       cell: ({ row }) => {
-        const hasContract = row.original.category && row.original.category !== ""
+        const onContract = row.original._onContract ?? (row.original.category && row.original.category !== "")
         return (
           <Badge
             className={
-              hasContract
+              onContract
                 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
                 : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
             }
           >
-            {hasContract ? "On Contract" : "Off Contract"}
+            {onContract ? "On Contract" : "Off Contract"}
           </Badge>
         )
       },
@@ -119,7 +122,7 @@ export function getCOGColumns({
             {
               label: "Edit",
               icon: Edit,
-              onClick: () => {},
+              onClick: () => onEdit(row.original),
             },
             {
               label: "Delete",

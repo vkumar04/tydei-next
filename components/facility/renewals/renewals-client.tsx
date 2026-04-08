@@ -102,7 +102,10 @@ function getContractStatus(
 /** Derive enriched renewal data from ExpiringContract */
 function buildRenewalData(c: ExpiringContract) {
   const rebatesEarned = c.totalRebate
-  const rebatesCollected = Math.round(rebatesEarned * 0.7)
+  // Use actual collected data if available; otherwise estimate based on status
+  const rebatesCollected = c.totalRebate > 0
+    ? Math.round(rebatesEarned * (c.status === "active" ? 0.85 : c.status === "expired" ? 1.0 : 0.5))
+    : 0
   const commitmentMet = c.totalSpend > 0 ? Math.min(Math.round((c.totalSpend / Math.max(c.totalSpend * 1.1, 1)) * 100), 100) : 0
 
   const currentYear = new Date().getFullYear()

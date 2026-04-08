@@ -1,7 +1,8 @@
 "use client"
 
-import { History, FileSpreadsheet, Upload, FileText } from "lucide-react"
-import { useCOGImportHistory } from "@/hooks/use-cog"
+import { useState } from "react"
+import { History, FileSpreadsheet, Upload, FileText, Trash2, Loader2 } from "lucide-react"
+import { useCOGImportHistory, useDeleteCOGFile } from "@/hooks/use-cog"
 import { formatDate, formatCurrency } from "@/lib/formatting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,16 @@ import {
 } from "@/components/ui/table"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface COGUploadHistoryProps {
   facilityId: string
@@ -25,6 +36,8 @@ interface COGUploadHistoryProps {
 
 export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGUploadHistoryProps) {
   const { data, isLoading } = useCOGImportHistory(facilityId)
+  const deleteMutation = useDeleteCOGFile()
+  const [deleteDate, setDeleteDate] = useState<string | null>(null)
 
   if (isLoading) {
     return (
@@ -49,6 +62,9 @@ export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGU
       />
     )
   }
+
+  const totalRecords = data.reduce((sum, f) => sum + f.recordCount, 0)
+  const totalSpendImported = data.reduce((sum, f) => sum + (f.totalSpend ?? 0), 0)
 
   if (variant === "pricing") {
     return (
@@ -76,6 +92,7 @@ export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGU
                 <TableHead>Effective Date</TableHead>
                 <TableHead className="text-right">Items</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-[50px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -109,6 +126,16 @@ export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGU
                     <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
                       Active
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => setDeleteDate(entry.date)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -147,8 +174,8 @@ export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGU
                 <TableHead>Date Range</TableHead>
                 <TableHead className="text-right">Records</TableHead>
                 <TableHead className="text-right">Total Spend</TableHead>
-                <TableHead className="text-right">Matched</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-[50px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -175,19 +202,27 @@ export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGU
                     {entry.recordCount.toLocaleString()}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(0)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="text-sm">
-                      <span className="text-green-600 dark:text-green-400">{entry.recordCount.toLocaleString()}</span>
-                      <span className="text-muted-foreground"> / </span>
-                      <span className="text-amber-600 dark:text-amber-400">0</span>
-                    </div>
+                    {formatCurrency(entry.totalSpend ?? 0)}
                   </TableCell>
                   <TableCell>
                     <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
                       Processed
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => setDeleteDate(entry.date)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      {deleteMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -197,7 +232,7 @@ export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGU
       </Card>
 
       {/* Summary Stats for COG Files */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">Total Files</p>
@@ -208,23 +243,45 @@ export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGU
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">Total Records</p>
             <p className="text-2xl font-bold">
-              {data.reduce((sum, f) => sum + f.recordCount, 0).toLocaleString()}
+              {totalRecords.toLocaleString()}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">Total Spend Imported</p>
-            <p className="text-2xl font-bold">{formatCurrency(0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Contract Match Rate</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">0%</p>
+            <p className="text-2xl font-bold">{formatCurrency(totalSpendImported)}</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteDate} onOpenChange={() => setDeleteDate(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete COG File</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all records imported on{" "}
+              {deleteDate ? formatDate(deleteDate) : ""}. This action cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteDate) {
+                  deleteMutation.mutate(deleteDate)
+                  setDeleteDate(null)
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

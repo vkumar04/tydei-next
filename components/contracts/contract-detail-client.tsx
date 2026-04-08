@@ -55,18 +55,34 @@ export function ContractDetailClient({
   const stats = useMemo(() => {
     if (!contract) return null
 
-    const totalSpend = (periods ?? []).reduce(
+    // Sum spend from periods, but also check rebates array for earned/collected
+    const periodSpend = (periods ?? []).reduce(
       (sum, p) => sum + Number(p.totalSpend),
       0,
     )
-    const rebateEarned = (periods ?? []).reduce(
+    const periodRebateEarned = (periods ?? []).reduce(
       (sum, p) => sum + Number(p.rebateEarned),
       0,
     )
-    const rebateCollected = (periods ?? []).reduce(
+    const periodRebateCollected = (periods ?? []).reduce(
       (sum, p) => sum + Number(p.rebateCollected),
       0,
     )
+
+    // Also sum from the Rebate model if available
+    const rebateModelEarned = (contract.rebates ?? []).reduce(
+      (sum: number, r: { rebateEarned?: unknown }) => sum + Number(r.rebateEarned ?? 0),
+      0,
+    )
+    const rebateModelCollected = (contract.rebates ?? []).reduce(
+      (sum: number, r: { rebateCollected?: unknown }) => sum + Number(r.rebateCollected ?? 0),
+      0,
+    )
+
+    // Use whichever source has data
+    const totalSpend = periodSpend
+    const rebateEarned = Math.max(periodRebateEarned, rebateModelEarned)
+    const rebateCollected = Math.max(periodRebateCollected, rebateModelCollected)
 
     const totalValue = Number(contract.totalValue)
     const commitmentPct =

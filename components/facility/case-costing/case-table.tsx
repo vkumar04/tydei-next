@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { getCaseColumns } from "./case-columns"
 import { useCases } from "@/hooks/use-case-costing"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
@@ -23,13 +25,20 @@ export function CaseTable({ facilityId }: CaseTableProps) {
   const [cptCode, setCptCode] = useState("")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  const [page, setPage] = useState(1)
+  const pageSize = 25
 
   const { data, isLoading } = useCases(facilityId, {
     surgeonName: surgeon || undefined,
     cptCode: cptCode || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    page,
+    pageSize,
   })
+
+  const total = data?.total ?? 0
+  const totalPages = Math.ceil(total / pageSize)
 
   const [selected, setSelected] = useState<CaseWithRelations | null>(null)
 
@@ -63,7 +72,10 @@ export function CaseTable({ facilityId }: CaseTableProps) {
           </label>
           <Select
             value={surgeon || "__all__"}
-            onValueChange={(v) => setSurgeon(v === "__all__" ? "" : v)}
+            onValueChange={(v) => {
+              setSurgeon(v === "__all__" ? "" : v)
+              setPage(1)
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="All surgeons" />
@@ -86,7 +98,10 @@ export function CaseTable({ facilityId }: CaseTableProps) {
           </label>
           <Select
             value={cptCode || "__all__"}
-            onValueChange={(v) => setCptCode(v === "__all__" ? "" : v)}
+            onValueChange={(v) => {
+              setCptCode(v === "__all__" ? "" : v)
+              setPage(1)
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="All CPT" />
@@ -110,7 +125,10 @@ export function CaseTable({ facilityId }: CaseTableProps) {
           <Input
             type="date"
             value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={(e) => {
+              setDateFrom(e.target.value)
+              setPage(1)
+            }}
           />
         </div>
         <div className="w-[150px]">
@@ -120,7 +138,10 @@ export function CaseTable({ facilityId }: CaseTableProps) {
           <Input
             type="date"
             value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={(e) => {
+              setDateTo(e.target.value)
+              setPage(1)
+            }}
           />
         </div>
       </div>
@@ -131,7 +152,37 @@ export function CaseTable({ facilityId }: CaseTableProps) {
         isLoading={isLoading}
         searchKey="caseNumber"
         searchPlaceholder="Search cases..."
+        pagination={false}
       />
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()} cases
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" /> Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              Next <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {selected && (
         <div className="rounded-md border p-4 text-sm">

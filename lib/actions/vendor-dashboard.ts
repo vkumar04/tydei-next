@@ -47,10 +47,15 @@ export async function getVendorDashboardStats(_vendorId?: string) {
   const marketSharePercent =
     totalCogSpend > 0 ? (vendorCogSpend / totalCogSpend) * 100 : 0
 
+  // Include pending contracts in the total count
+  const pendingCount = await prisma.pendingContract.count({
+    where: { vendorId, status: "submitted" },
+  }).catch(() => 0)
+
   return serialize({
     activeContracts,
-    totalContracts,
-    totalSpend: Number(contractAgg._sum.totalValue ?? 0),
+    totalContracts: totalContracts + pendingCount,
+    totalSpend: vendorCogSpend > 0 ? vendorCogSpend : Number(contractAgg._sum.totalValue ?? 0),
     totalRebates: Number(rebateAgg._sum.rebateEarned ?? 0),
     activeFacilities: activeFacilities.length,
     marketSharePercent,

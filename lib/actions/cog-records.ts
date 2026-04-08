@@ -135,9 +135,11 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
         where: {
           facilityId: session.facility.id,
           OR: batch.map((r) => ({
-            inventoryNumber: r.inventoryNumber,
-            transactionDate: new Date(r.transactionDate),
-            ...(r.vendorItemNo ? { vendorItemNo: r.vendorItemNo } : {}),
+            AND: [
+              { inventoryNumber: r.inventoryNumber },
+              { transactionDate: new Date(r.transactionDate) },
+              ...(r.vendorItemNo ? [{ vendorItemNo: r.vendorItemNo }] : []),
+            ],
           })),
         },
         select: {
@@ -314,6 +316,54 @@ export async function bulkDeleteCOGRecords(ids: string[]) {
   return { deleted: result.count }
 }
 
+// ─── Delete COG File (all records from a given import date) ────
+
+export async function deleteCOGFileByDate(dateStr: string) {
+  const { facility } = await requireFacility()
+  const date = new Date(dateStr)
+  const nextDay = new Date(date)
+  nextDay.setDate(nextDay.getDate() + 1)
+
+  const result = await prisma.cOGRecord.deleteMany({
+    where: {
+      facilityId: facility.id,
+      createdAt: { gte: date, lt: nextDay },
+    },
+  })
+  return { deleted: result.count }
+}
+
+// ─── Update COG Record ─────────────────────────────────────────
+
+export async function updateCOGRecord(
+  id: string,
+  data: {
+    inventoryNumber?: string
+    inventoryDescription?: string
+    unitCost?: number
+    quantity?: number
+    vendorName?: string
+    vendorItemNo?: string
+    category?: string
+  }
+) {
+  const { facility } = await requireFacility()
+  const extendedPrice =
+    data.unitCost !== undefined && data.quantity !== undefined
+      ? data.unitCost * data.quantity
+      : undefined
+
+  return serialize(
+    await prisma.cOGRecord.update({
+      where: { id, facilityId: facility.id },
+      data: {
+        ...data,
+        ...(extendedPrice !== undefined ? { extendedPrice } : {}),
+      },
+    })
+  )
+}
+
 // ─── Import History (aggregate by date) ─────────────────────────
 
 export async function getCOGImportHistory(_facilityId?: string) {
@@ -322,9 +372,11 @@ export async function getCOGImportHistory(_facilityId?: string) {
   // Group records by calendar date (truncate timestamp to date) so bulk
   // imports that share the same day collapse into a single history entry.
   const rows = await prisma.$queryRaw<
-    { date: Date; record_count: bigint }[]
+    { date: Date; record_count: bigint; total_spend: number | null }[]
   >`
-    SELECT DATE("createdAt") AS date, COUNT(*)::bigint AS record_count
+    SELECT DATE("createdAt") AS date,
+           COUNT(*)::bigint AS record_count,
+           COALESCE(SUM("extendedPrice"), 0) AS total_spend
     FROM cog_record
     WHERE "facilityId" = ${facility.id}
     GROUP BY DATE("createdAt")
@@ -336,6 +388,7 @@ export async function getCOGImportHistory(_facilityId?: string) {
     rows.map((r) => ({
       date: r.date instanceof Date ? r.date.toISOString() : String(r.date),
       recordCount: Number(r.record_count),
+      totalSpend: Number(r.total_spend ?? 0),
     }))
   )
 }
@@ -354,13 +407,17 @@ export async function getCOGStats(facilityId: string) {
         where: { facilityId: facility.id },
         _sum: { extendedPrice: true },
       }),
-      prisma.cOGRecord.count({
-        where: {
-          facilityId: facility.id,
-          category: { not: null },
-          NOT: { category: "" },
-        },
-      }),
+      // Count items where the vendor has an active contract at this facility
+      prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(DISTINCT cr.id)::bigint AS count
+        FROM cog_record cr
+        INNER JOIN contract c ON c."vendorId" = cr."vendorId"
+          AND c.status IN ('active', 'expiring')
+          AND (c."facilityId" = ${facility.id}
+               OR EXISTS (SELECT 1 FROM contract_facility cf WHERE cf."contractId" = c.id AND cf."facilityId" = ${facility.id}))
+        WHERE cr."facilityId" = ${facility.id}
+          AND cr."vendorId" IS NOT NULL
+      `.then((rows) => Number(rows[0]?.count ?? 0)),
       prisma.cOGRecord.groupBy({
         by: ["vendorName"],
         where: {

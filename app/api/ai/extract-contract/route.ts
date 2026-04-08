@@ -191,6 +191,30 @@ ${extractedText}`,
     return Response.json({ extracted, confidence, s3Key })
   } catch (error) {
     console.error("Contract extraction error:", error)
-    return Response.json({ error: "Extraction failed" }, { status: 500 })
+    const message = error instanceof Error ? error.message : "Unknown error"
+
+    if (message.includes("timeout") || message.includes("DEADLINE_EXCEEDED")) {
+      return Response.json(
+        { error: "Document too large or complex. Try a shorter document or paste key sections as text instead." },
+        { status: 422 },
+      )
+    }
+    if (message.includes("SAFETY") || message.includes("blocked")) {
+      return Response.json(
+        { error: "The document could not be processed by the AI model. Try pasting the contract text manually." },
+        { status: 422 },
+      )
+    }
+    if (message.includes("not supported") || message.includes("INVALID_ARGUMENT")) {
+      return Response.json(
+        { error: "This file format is not supported. Please upload a standard PDF document." },
+        { status: 422 },
+      )
+    }
+
+    return Response.json(
+      { error: `Extraction failed: ${message.slice(0, 200)}` },
+      { status: 500 },
+    )
   }
 }
