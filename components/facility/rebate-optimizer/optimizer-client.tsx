@@ -87,7 +87,7 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
         contractCount: 0,
       }
     const totalEarned = opportunities.reduce(
-      (sum, o) => sum + (o.currentSpend * (o.currentTier || 1)) / 100,
+      (sum, o) => sum + (o.currentSpend * (o.currentRebatePercent || 0)) / 100,
       0
     )
     const totalPotential = opportunities.reduce(
@@ -113,7 +113,7 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
     return filtered.map((o) => ({
       name: o.contractName,
       vendor: o.vendorName,
-      earned: (o.currentSpend * (o.currentTier || 1)) / 100,
+      earned: (o.currentSpend * (o.currentRebatePercent || 0)) / 100,
       potential: o.projectedAdditionalRebate,
     }))
   }, [filtered])
@@ -135,11 +135,11 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
         : selectedContract.currentTier
     const newRebatePercent =
       newSpend >= selectedContract.nextTierThreshold
-        ? selectedContract.nextTier
-        : selectedContract.currentTier
+        ? selectedContract.nextRebatePercent
+        : selectedContract.currentRebatePercent
     const newRebate = (newSpend * newRebatePercent) / 100
     const oldRebate =
-      (selectedContract.currentSpend * selectedContract.currentTier) / 100
+      (selectedContract.currentSpend * selectedContract.currentRebatePercent) / 100
     return {
       newSpend,
       newTier,
@@ -400,7 +400,7 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
                             Current Rebate
                           </p>
                           <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                            {contract.currentTier}%
+                            {contract.currentRebatePercent}%
                           </p>
                         </div>
                       </div>

@@ -389,7 +389,7 @@ export function ContractDetailClient({
 
         {/* ── Rebates & Tiers Tab ──────────────────────────────── */}
         <TabsContent value="rebates" className="mt-6">
-          <ContractTermsDisplay terms={contract.terms} />
+          <ContractTermsDisplay terms={contract.terms} currentSpend={stats?.totalSpend} />
         </TabsContent>
 
         {/* ── Documents Tab ────────────────────────────────────── */}

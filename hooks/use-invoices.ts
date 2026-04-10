@@ -10,6 +10,7 @@ import {
   validateInvoice,
   flagInvoiceLineItem,
   resolveInvoiceLineItem,
+  deleteInvoice,
 } from "@/lib/actions/invoices"
 import type { InvoiceFilters, ImportInvoiceInput } from "@/lib/validators/invoices"
 import { toast } from "sonner"
@@ -67,6 +68,18 @@ export function useFlagInvoiceLineItem() {
       toast.success("Item flagged")
     },
     onError: (e) => toast.error(e.message || "Failed to flag item"),
+  })
+}
+
+export function useDeleteInvoice() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: deleteInvoice,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
+      toast.success("Invoice deleted")
+    },
+    onError: (e) => toast.error(e.message || "Failed to delete invoice"),
   })
 }
 

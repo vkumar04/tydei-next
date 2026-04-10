@@ -280,7 +280,7 @@ export function COGImportDialog({
                 system. Unmatched names will be imported as-is.
               </p>
             </div>
-            <div className="max-h-[400px] overflow-y-auto rounded-md border">
+            <div className="max-h-[400px] overflow-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>

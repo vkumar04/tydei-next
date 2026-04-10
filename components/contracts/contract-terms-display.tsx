@@ -17,13 +17,27 @@ type ContractTermWithTiers = ContractTerm & { tiers: ContractTier[] }
 
 interface ContractTermsDisplayProps {
   terms: ContractTermWithTiers[]
+  currentSpend?: number
 }
 
-function TierDisplay({ tier }: { tier: ContractTier }) {
+function TierDisplay({ tier, currentSpend }: { tier: ContractTier; currentSpend?: number }) {
   const rebateLabel =
     tier.rebateType === "percent_of_spend"
       ? formatPercent(Number(tier.rebateValue))
       : formatCurrency(Number(tier.rebateValue), true)
+
+  const spendMin = Number(tier.spendMin)
+  const spendMax = tier.spendMax ? Number(tier.spendMax) : null
+  const spend = currentSpend ?? 0
+
+  let progress = 0
+  if (spend >= spendMin && spendMax && spend < spendMax) {
+    progress = ((spend - spendMin) / (spendMax - spendMin)) * 100
+  } else if (spend >= spendMin && !spendMax) {
+    progress = 100
+  } else if (spendMax && spend >= spendMax) {
+    progress = 100
+  }
 
   return (
     <div className="flex items-center gap-4 rounded-md border p-3">
@@ -38,13 +52,13 @@ function TierDisplay({ tier }: { tier: ContractTier }) {
           </span>
           <span className="font-medium">{rebateLabel}</span>
         </div>
-        <Progress value={30} className="h-1.5" />
+        <Progress value={progress} className="h-1.5" />
       </div>
     </div>
   )
 }
 
-export function ContractTermsDisplay({ terms }: ContractTermsDisplayProps) {
+export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDisplayProps) {
   if (terms.length === 0) {
     return (
       <Card>
@@ -117,7 +131,7 @@ export function ContractTermsDisplay({ terms }: ContractTermsDisplayProps) {
                   {term.tiers.length > 0 && (
                     <div className="space-y-2">
                       {term.tiers.map((tier) => (
-                        <TierDisplay key={tier.id} tier={tier} />
+                        <TierDisplay key={tier.id} tier={tier} currentSpend={currentSpend} />
                       ))}
                     </div>
                   )}

@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/shared/tables/data-table"
-import { useInvoices } from "@/hooks/use-invoices"
+import { useInvoices, useDeleteInvoice } from "@/hooks/use-invoices"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -98,6 +98,8 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     amount: "",
     notes: "",
   })
+
+  const deleteMut = useDeleteInvoice()
 
   const { data, isLoading } = useInvoices(vendorId, {
     vendorId,
@@ -241,7 +243,13 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
                   <Send className="mr-2 h-4 w-4" />
                   Submit
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteMut.mutate(row.original.id)
+                  }}
+                >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                 </DropdownMenuItem>

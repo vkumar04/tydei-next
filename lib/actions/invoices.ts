@@ -271,6 +271,31 @@ export async function flagInvoiceLineItem(lineItemId: string, notes?: string) {
   })
 }
 
+// ─── Delete Invoice ─────────────────────────────────────────────
+
+export async function deleteInvoice(id: string) {
+  const { facility, user } = await requireFacility()
+
+  const invoice = await prisma.invoice.findUniqueOrThrow({
+    where: { id, facilityId: facility.id },
+    select: { id: true, invoiceNumber: true, status: true },
+  })
+
+  if (invoice.status !== "draft") {
+    throw new Error("Only draft invoices can be deleted")
+  }
+
+  await prisma.invoice.delete({ where: { id } })
+
+  await logAudit({
+    userId: user.id,
+    action: "invoice.deleted",
+    entityType: "invoice",
+    entityId: id,
+    metadata: { invoiceNumber: invoice.invoiceNumber },
+  })
+}
+
 // ─── Resolve Flagged Item ───────────────────────────────────────
 
 export async function resolveInvoiceLineItem(lineItemId: string) {
