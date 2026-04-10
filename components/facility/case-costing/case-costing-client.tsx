@@ -22,6 +22,7 @@ import {
   BarChart3,
   CheckCircle2,
   FileHeart,
+  Trash2,
 } from "lucide-react"
 import { CaseTable } from "./case-table"
 import { SurgeonScorecardsGrid } from "./surgeon-scorecards-grid"
@@ -32,7 +33,9 @@ import {
   useCaseCostingReport,
   usePayorContracts,
   usePayorMargins,
+  useDeleteAllCases,
 } from "@/hooks/use-case-costing"
+import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { cn } from "@/lib/utils"
 
 interface CaseCostingClientProps {
@@ -41,6 +44,7 @@ interface CaseCostingClientProps {
 
 export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
   const [importOpen, setImportOpen] = useState(false)
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
   const [activeMainTab, setActiveMainTab] = useState("cases")
   const [selectedPayorId, setSelectedPayorId] = useState<string | null>(null)
   const { data: scorecards, isLoading: scLoading } =
@@ -49,21 +53,26 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
     useCaseCostingReport(facilityId)
   const { data: payorContracts } = usePayorContracts()
   const { data: payorMargins } = usePayorMargins(selectedPayorId)
+  const deleteAllMutation = useDeleteAllCases()
 
   const totalCases = report?.totalCases ?? 0
   const avgCostPerCase = report?.avgCostPerCase ?? 0
   const totalSpend = report?.totalSpend ?? 0
-  const totalMargin = report?.avgMargin
-    ? report.avgMargin * totalCases
+  // Only show reimbursement-derived values when a payor contract is actually
+  // loaded and selected — otherwise we'd be showing numbers derived from
+  // stored reimbursement estimates that have no relation to a real contract.
+  const hasPayorContractLoaded =
+    !!payorMargins &&
+    !!selectedPayorId &&
+    payorMargins.totalEstimatedReimbursement > 0
+  const totalReimbursement = hasPayorContractLoaded
+    ? payorMargins.totalEstimatedReimbursement
     : 0
-  const avgMarginPercent =
-    report?.totalReimbursement && report.totalReimbursement > 0
-      ? ((report.totalReimbursement - totalSpend) / report.totalReimbursement) *
-        100
-      : 0
+  const totalMargin = hasPayorContractLoaded ? payorMargins.totalMargin : 0
+  const avgMarginPercent = hasPayorContractLoaded
+    ? payorMargins.avgMarginPercent
+    : 0
   const complianceRate = report?.complianceRate ?? 0
-  const totalReimbursement = report?.totalReimbursement ?? 0
-  const surgeonCount = scorecards?.length ?? 0
 
   return (
     <div className="space-y-6">
@@ -85,6 +94,16 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
               Reports
             </Button>
           </Link>
+          {totalCases > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => setClearConfirmOpen(true)}
+              disabled={deleteAllMutation.isPending}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Clear Prior Data
+            </Button>
+          )}
           <Button onClick={() => setImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Upload Data
@@ -148,12 +167,25 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
                   <Skeleton className="h-8 w-24" />
                 ) : (
                   <>
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      ${Math.round(totalMargin).toLocaleString()}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {avgMarginPercent.toFixed(1)}% margin rate
-                    </p>
+                    {hasPayorContractLoaded ? (
+                      <>
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          ${Math.round(totalMargin).toLocaleString()}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {avgMarginPercent.toFixed(1)}% margin rate
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold text-muted-foreground">
+                          —
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Load a payor contract
+                        </p>
+                      </>
+                    )}
                   </>
                 )}
               </CardContent>
@@ -196,7 +228,9 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
                       ${Math.round(totalSpend).toLocaleString()}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Reimb: ${Math.round(totalReimbursement).toLocaleString()}
+                      {hasPayorContractLoaded
+                        ? `Reimb: $${Math.round(totalReimbursement).toLocaleString()}`
+                        : `${totalCases.toLocaleString()} cases`}
                     </p>
                   </>
                 )}
@@ -313,6 +347,19 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
         open={importOpen}
         onOpenChange={setImportOpen}
         onComplete={() => {}}
+      />
+
+      <ConfirmDialog
+        open={clearConfirmOpen}
+        onOpenChange={setClearConfirmOpen}
+        title="Clear all prior case data?"
+        description={`This will permanently delete all ${totalCases.toLocaleString()} cases and their supplies for this facility. This cannot be undone.`}
+        variant="destructive"
+        isLoading={deleteAllMutation.isPending}
+        onConfirm={async () => {
+          await deleteAllMutation.mutateAsync()
+          setClearConfirmOpen(false)
+        }}
       />
     </div>
   )

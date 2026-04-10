@@ -44,7 +44,7 @@ export function VendorContractDetailClient({ contract }: VendorContractDetailCli
         }
       />
       <VendorContractOverview contract={contract} />
-      <ContractDocumentsList documents={contract.documents} onUpload={handleDocumentUpload} />
+      <ContractDocumentsList documents={contract.documents} contractId={contract.id} onUpload={handleDocumentUpload} />
 
       <AmendmentExtractor
         contractId={contract.id}

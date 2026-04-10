@@ -278,6 +278,44 @@ export async function createContractDocument(input: {
   })
 }
 
+// ─── Delete Contract Document ───────────────────────────────────
+
+export async function deleteContractDocument(id: string) {
+  const session = await requireFacility()
+  const { facility } = session
+
+  // Verify the document belongs to a contract owned by this facility
+  const doc = await prisma.contractDocument.findUniqueOrThrow({
+    where: { id },
+    select: {
+      id: true,
+      contractId: true,
+      contract: {
+        select: {
+          facilityId: true,
+          contractFacilities: { select: { facilityId: true } },
+        },
+      },
+    },
+  })
+  const owned =
+    doc.contract.facilityId === facility.id ||
+    doc.contract.contractFacilities.some((cf) => cf.facilityId === facility.id)
+  if (!owned) {
+    throw new Error("Not authorized to delete this document")
+  }
+
+  await prisma.contractDocument.delete({ where: { id } })
+
+  await logAudit({
+    userId: session.user.id,
+    action: "contract_document.deleted",
+    entityType: "contractDocument",
+    entityId: id,
+    metadata: { contractId: doc.contractId },
+  })
+}
+
 // ─── Delete Contract ─────────────────────────────────────────────
 
 export async function deleteContract(id: string) {

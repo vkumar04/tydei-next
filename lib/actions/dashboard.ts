@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { ContractStatus } from "@prisma/client"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 
@@ -18,6 +19,25 @@ export async function getDashboardStats(input: {
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
+  // Match the ownership check used elsewhere: direct facilityId OR many-to-many
+  // via ContractFacility. Include all non-expired statuses so the count reflects
+  // contracts the user has actually loaded (draft/pending contracts should still
+  // appear — otherwise a freshly-created contract is invisible on the dashboard).
+  const facilityContractFilter = {
+    OR: [
+      { facilityId },
+      { contractFacilities: { some: { facilityId } } },
+    ],
+    status: {
+      in: [
+        ContractStatus.active,
+        ContractStatus.expiring,
+        ContractStatus.draft,
+        ContractStatus.pending,
+      ],
+    },
+  }
+
   const [
     activeContractCount,
     recentContractsAdded,
@@ -27,13 +47,10 @@ export async function getDashboardStats(input: {
     rebateCollectedAgg,
     alertCount,
   ] = await Promise.all([
-    prisma.contract.count({
-      where: { facilityId, status: { in: ["active", "expiring"] } },
-    }),
+    prisma.contract.count({ where: facilityContractFilter }),
     prisma.contract.count({
       where: {
-        facilityId,
-        status: { in: ["active", "expiring"] },
+        ...facilityContractFilter,
         createdAt: { gte: thirtyDaysAgo },
       },
     }),
@@ -299,7 +316,12 @@ export async function getRecentContracts(_facilityId?: string, limit = 5) {
   const facilityId = facility.id
 
   const contracts = await prisma.contract.findMany({
-    where: { facilityId },
+    where: {
+      OR: [
+        { facilityId },
+        { contractFacilities: { some: { facilityId } } },
+      ],
+    },
     include: { vendor: { select: { id: true, name: true, logoUrl: true } } },
     orderBy: { updatedAt: "desc" },
     take: limit,

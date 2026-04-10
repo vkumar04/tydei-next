@@ -356,11 +356,20 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
     }
   }, [analysis, manualEntry.contractLength])
 
+  const hasCogData = (cogStats?.totalItems ?? 0) > 0
+
   const handleFileUpload = useCallback(
     async (file: File) => {
       const ext = file.name.split(".").pop()?.toLowerCase()
       if (ext !== "csv" && ext !== "xlsx" && ext !== "xls" && ext !== "pdf") {
         toast.error("Please upload a CSV, Excel, or PDF file")
+        return
+      }
+
+      if (!hasCogData) {
+        toast.error(
+          "Load COG data before uploading a proposal — savings are computed against your current COG pricing."
+        )
         return
       }
 
@@ -576,7 +585,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
         // handled by mutation toast
       }
     },
-    [facilityId, analyzeMutation]
+    [facilityId, analyzeMutation, hasCogData]
   )
 
   const handleDrop = useCallback(
@@ -647,6 +656,18 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
           </Button>
         )}
       </div>
+
+      {!hasCogData && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            No COG data loaded
+          </p>
+          <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+            Proposal savings are calculated against your current COG pricing.
+            Upload COG data first to get meaningful savings comparisons.
+          </p>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -726,7 +747,7 @@ export function ProspectiveClient({ facilityId }: ProspectiveClientProps) {
             <Upload className="h-4 w-4" />
             Upload Proposal
           </TabsTrigger>
-          <TabsTrigger value="pricing" className="gap-2">
+          <TabsTrigger value="pricing" className="gap-2" disabled={!analysis}>
             <FileSpreadsheet className="h-4 w-4" />
             Pricing Analysis
           </TabsTrigger>

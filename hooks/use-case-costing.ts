@@ -11,6 +11,7 @@ import {
   getCPTAnalysis,
   compareSurgeons,
   getCaseCostingReportData,
+  deleteAllCases,
 } from "@/lib/actions/cases"
 import {
   getFacilityPayorContracts,
@@ -46,6 +47,18 @@ export function useImportCases() {
       )
     },
     onError: (err) => toast.error(err.message || "Failed to import cases"),
+  })
+}
+
+export function useDeleteAllCases() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => deleteAllCases(),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: queryKeys.cases.all })
+      toast.success(`Cleared ${result.deleted} prior case${result.deleted === 1 ? "" : "s"}`)
+    },
+    onError: (err) => toast.error(err.message || "Failed to clear cases"),
   })
 }
 

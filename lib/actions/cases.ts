@@ -5,7 +5,6 @@ import { requireFacility } from "@/lib/actions/auth"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
-import { estimateReimbursement } from "@/lib/national-reimbursement-rates"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -246,12 +245,11 @@ export async function importCases(input: {
         data: batch.map((caseData) => {
           const spend = caseData.totalSpend
 
-          // Use provided reimbursement, or estimate from CPT code, or 0
-          const reimburse =
-            caseData.totalReimbursement ??
-            (caseData.primaryCptCode
-              ? estimateReimbursement(caseData.primaryCptCode)
-              : 0)
+          // Only use reimbursement when explicitly provided (i.e. calculated
+          // from an actual payor contract). Don't auto-estimate from CPT here
+          // — that makes margins appear on the dashboard even when no payor
+          // contract is loaded.
+          const reimburse = caseData.totalReimbursement ?? 0
 
           // Parse date: handle MM/DD/YYYY, YYYY-MM-DD, and fallback
           const dateOfSurgery = parseDateToUTC(caseData.dateOfSurgery)
@@ -285,6 +283,25 @@ export async function importCases(input: {
   })
 
   return { imported, errors }
+}
+
+// ─── Delete All Cases (clear prior case-costing data) ──────────
+
+export async function deleteAllCases(): Promise<{ deleted: number }> {
+  const { facility, user } = await requireFacility()
+
+  const result = await prisma.case.deleteMany({
+    where: { facilityId: facility.id },
+  })
+
+  await logAudit({
+    userId: user.id,
+    action: "cases.deleted_all",
+    entityType: "case",
+    metadata: { deleted: result.count },
+  })
+
+  return { deleted: result.count }
 }
 
 // ─── Import Case Supplies ───────────────────────────────────────

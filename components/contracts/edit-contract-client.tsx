@@ -200,7 +200,7 @@ export function EditContractClient({
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">
-          <ContractDocumentsList documents={contract.documents} />
+          <ContractDocumentsList documents={contract.documents} contractId={contractId} />
         </TabsContent>
       </Tabs>
     </div>

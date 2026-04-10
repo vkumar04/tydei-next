@@ -18,8 +18,10 @@ import { serialize } from "@/lib/serialize"
 export async function getVendors() {
   await requireFacility()
 
+  // Return all non-inactive vendors so newly-auto-created vendors from COG
+  // imports appear without requiring explicit status activation.
   const vendors = await prisma.vendor.findMany({
-    where: { status: "active" },
+    where: { status: { not: "inactive" } },
     select: { id: true, name: true, displayName: true },
     orderBy: { name: "asc" },
   })

@@ -47,12 +47,19 @@ export async function POST(request: Request) {
       const arrayBuffer = await file.arrayBuffer()
       const fileData = new Uint8Array(arrayBuffer)
 
-      // Upload original file to S3 for archival
+      // Upload original file to S3 for archival. Don't let a missing/
+      // misconfigured S3 bucket block extraction — extraction is the
+      // primary value; archival is a nice-to-have.
       const userId = session.user.id
       const timestamp = Date.now()
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-      s3Key = `contracts/${userId}/${timestamp}-${safeName}`
-      await uploadFile(s3Key, fileData, file.type || "application/octet-stream")
+      const candidateKey = `contracts/${userId}/${timestamp}-${safeName}`
+      try {
+        await uploadFile(candidateKey, fileData, file.type || "application/octet-stream")
+        s3Key = candidateKey
+      } catch (uploadErr) {
+        console.warn("[extract-contract] S3 archival skipped:", uploadErr)
+      }
 
       const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
       const mediaType = isPDF ? "application/pdf" : "text/plain"

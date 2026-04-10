@@ -26,7 +26,6 @@ import {
   X,
 } from "lucide-react"
 import { useImportCases } from "@/hooks/use-case-costing"
-import { estimateReimbursement } from "@/lib/national-reimbursement-rates"
 import type { CaseInput } from "@/lib/validators/cases"
 
 // ── File type definitions matching v0 prototype ────────────────
@@ -495,9 +494,6 @@ export function CaseImportDialog({
         )
 
         const cptCode = proc?.cptCode ?? undefined
-        const estReimbursement = cptCode
-          ? estimateReimbursement(cptCode)
-          : undefined
 
         return {
           caseNumber: caseId,
@@ -506,7 +502,11 @@ export function CaseImportDialog({
             patient?.date || new Date().toISOString().split("T")[0],
           primaryCptCode: cptCode,
           totalSpend,
-          totalReimbursement: estReimbursement,
+          // Reimbursement is only computed when a payor contract is loaded
+          // and applied via calculatePayorMargins. Leaving it undefined here
+          // prevents the dashboard from showing fake reimbursement/margin
+          // numbers based on CPT-rate estimates.
+          totalReimbursement: undefined,
           timeInOr: undefined,
           timeOutOr: undefined,
         }

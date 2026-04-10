@@ -101,9 +101,63 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
   let skipped = 0
   let errors = 0
 
+  // Auto-create Vendor rows for any vendorName that doesn't already match an
+  // existing vendor (case-insensitive). Without this, the Vendors list only
+  // shows vendors the user explicitly created via the vendor-match step, so
+  // imported COG data appears to "lose" its vendors.
+  const unmatchedNames = Array.from(
+    new Set(
+      data.records
+        .filter((r) => !r.vendorId && r.vendorName && r.vendorName.trim())
+        .map((r) => r.vendorName!.trim()),
+    ),
+  )
+  const nameToId = new Map<string, string>()
+  if (unmatchedNames.length > 0) {
+    const existing = await prisma.vendor.findMany({
+      where: {
+        OR: unmatchedNames.map((name) => ({
+          name: { equals: name, mode: "insensitive" as const },
+        })),
+      },
+      select: { id: true, name: true },
+    })
+    for (const v of existing) {
+      nameToId.set(v.name.trim().toLowerCase(), v.id)
+    }
+    const toCreate = unmatchedNames.filter(
+      (name) => !nameToId.has(name.toLowerCase()),
+    )
+    for (const name of toCreate) {
+      try {
+        const created = await prisma.vendor.create({
+          data: { name, displayName: name },
+          select: { id: true, name: true },
+        })
+        nameToId.set(created.name.trim().toLowerCase(), created.id)
+      } catch {
+        // Unique constraint or race — try to look it up instead
+        const found = await prisma.vendor.findFirst({
+          where: { name: { equals: name, mode: "insensitive" } },
+          select: { id: true },
+        })
+        if (found) nameToId.set(name.toLowerCase(), found.id)
+      }
+    }
+  }
+
+  const resolveVendorId = (record: (typeof data.records)[number]) => {
+    if (record.vendorId) return record.vendorId
+    if (record.vendorName) {
+      const id = nameToId.get(record.vendorName.trim().toLowerCase())
+      if (id) return id
+    }
+    return record.vendorId
+  }
+
   const toCreateData = (record: (typeof data.records)[number]) => ({
     facilityId: session.facility.id,
-    vendorId: record.vendorId,
+    vendorId: resolveVendorId(record),
     vendorName: record.vendorName,
     inventoryNumber: record.inventoryNumber,
     inventoryDescription: record.inventoryDescription,
@@ -193,7 +247,7 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
               prisma.cOGRecord.update({
                 where: { id },
                 data: {
-                  vendorId: record.vendorId,
+                  vendorId: resolveVendorId(record),
                   vendorName: record.vendorName,
                   inventoryDescription: record.inventoryDescription,
                   manufacturerNo: record.manufacturerNo,
