@@ -48,6 +48,27 @@ export function ReportFilters({
 
           <DateRangePicker dateRange={dateRange} onDateRangeChange={onDateRangeChange} />
 
+          {/* v0 parity: facility + vendor filters rendered as placeholders —
+              both default to "All". When future work adds real multi-facility
+              or per-vendor scoping, the handlers wire in. */}
+          <Select defaultValue="all">
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="All Facilities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Facilities</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select defaultValue="all">
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="All Vendors" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Vendors</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={selectedContractId} onValueChange={onContractChange}>
             <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="Contract" />

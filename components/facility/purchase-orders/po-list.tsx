@@ -136,7 +136,7 @@ export function POList({ facilityId }: POListProps) {
             onClick={() => toast.info("Scan feature coming soon")}
           >
             <ScanLine className="mr-2 h-4 w-4" />
-            Scan UDI
+            Scan PO
           </Button>
           <Button
             variant="outline"
