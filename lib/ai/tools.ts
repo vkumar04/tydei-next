@@ -161,6 +161,105 @@ export const chatTools = {
     },
   }),
 
+  getSurgeonPerformance: tool({
+    description:
+      "Get surgeon-level performance metrics (case volume, total spend, margin, compliance) for a facility, optionally scoped to a specific surgeon name",
+    inputSchema: z.object({
+      facilityId: z.string().describe("The facility ID"),
+      surgeonName: z
+        .string()
+        .nullable()
+        .describe("Optional surgeon name to scope to one surgeon"),
+    }),
+    execute: async ({ facilityId, surgeonName }) => {
+      const rows = await prisma.surgeonUsage.findMany({
+        where: {
+          facilityId,
+          ...(surgeonName ? { surgeonName: { contains: surgeonName } } : {}),
+        },
+        orderBy: { periodStart: "desc" },
+        take: 50,
+      })
+
+      if (rows.length === 0) {
+        return {
+          surgeonName: surgeonName ?? "All Surgeons",
+          caseVolume: 0,
+          totalSpend: 0,
+          complianceRate: 0,
+          note: "No surgeon usage records found for this facility.",
+        }
+      }
+
+      const totalSpend = rows.reduce(
+        (sum, r) => sum + Number(r.usageAmount),
+        0
+      )
+      const caseVolume = rows.reduce((sum, r) => sum + r.caseCount, 0)
+      const avgCompliance =
+        rows.reduce((sum, r) => sum + Number(r.complianceRate), 0) / rows.length
+
+      return {
+        surgeonName: surgeonName ?? "All Surgeons",
+        caseVolume,
+        totalSpend,
+        complianceRate: Math.round(avgCompliance * 10) / 10,
+        recentPeriods: rows.slice(0, 5).map((r) => ({
+          surgeon: r.surgeonName,
+          start: r.periodStart.toISOString().slice(0, 10),
+          end: r.periodEnd.toISOString().slice(0, 10),
+          cases: r.caseCount,
+          spend: Number(r.usageAmount),
+          compliance: Number(r.complianceRate),
+        })),
+      }
+    },
+  }),
+
+  getAlertsSummary: tool({
+    description:
+      "Get a summary of active alerts for a facility, including a breakdown by type and severity",
+    inputSchema: z.object({
+      facilityId: z.string().describe("The facility ID"),
+    }),
+    execute: async ({ facilityId }) => {
+      const alerts = await prisma.alert.findMany({
+        where: {
+          OR: [{ facilityId }, { contract: { facilityId } }],
+          status: "new_alert",
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: {
+          contract: { select: { name: true } },
+          vendor: { select: { name: true } },
+        },
+      })
+
+      const byType: Record<string, number> = {}
+      const bySeverity: Record<string, number> = {}
+      for (const a of alerts) {
+        byType[a.alertType] = (byType[a.alertType] ?? 0) + 1
+        bySeverity[a.severity] = (bySeverity[a.severity] ?? 0) + 1
+      }
+
+      return {
+        totalActive: alerts.length,
+        byType,
+        bySeverity,
+        topAlerts: alerts.slice(0, 5).map((a) => ({
+          type: a.alertType,
+          severity: a.severity,
+          title: a.title,
+          description: a.description,
+          vendor: a.vendor?.name ?? null,
+          contract: a.contract?.name ?? null,
+          createdAt: a.createdAt.toISOString(),
+        })),
+      }
+    },
+  }),
+
   getOptimizationSuggestions: tool({
     description: "Get rebate optimization suggestions for a facility",
     inputSchema: z.object({
