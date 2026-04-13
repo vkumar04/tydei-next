@@ -443,7 +443,7 @@ export function AIAgentClient({ facilityId, enabled }: AIAgentClientProps) {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">AI Assistant</h1>
             <p className="text-sm text-muted-foreground">
-              Chat with AI, search documents, or generate reports
+              Chat with AI or search your contract documents
             </p>
           </div>
         </div>

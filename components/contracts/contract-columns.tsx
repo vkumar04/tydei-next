@@ -52,19 +52,7 @@ export function getContractColumns(
           className="block hover:underline"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold">{row.original.name}</span>
-            <ScoreBadge
-              score={
-                "aiScore" in row.original
-                  ? (row.original as Record<string, unknown>).aiScore as
-                      | number
-                      | null
-                  : null
-              }
-              size="sm"
-            />
-          </div>
+          <div className="font-semibold">{row.original.name}</div>
           <div className="text-xs text-muted-foreground">
             {row.original.contractNumber || row.original.id}
           </div>
@@ -107,6 +95,22 @@ export function getContractColumns(
         <StatusBadge
           status={row.original.status}
           config={contractStatusConfig}
+        />
+      ),
+    },
+    {
+      id: "score",
+      header: "Score",
+      cell: ({ row }) => (
+        <ScoreBadge
+          score={
+            "aiScore" in row.original
+              ? ((row.original as Record<string, unknown>).aiScore as
+                  | number
+                  | null)
+              : null
+          }
+          size="sm"
         />
       ),
     },

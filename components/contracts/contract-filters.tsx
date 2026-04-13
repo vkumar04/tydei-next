@@ -14,6 +14,9 @@ interface ContractFiltersProps {
   onStatusChange: (status: ContractStatus | "all") => void
   type: ContractType | "all"
   onTypeChange: (type: ContractType | "all") => void
+  facilities?: { id: string; name: string }[]
+  facilityFilter?: string
+  onFacilityChange?: (id: string) => void
 }
 
 const statusOptions: { value: ContractStatus | "all"; label: string }[] = [
@@ -39,6 +42,9 @@ export function ContractFilters({
   onStatusChange,
   type,
   onTypeChange,
+  facilities,
+  facilityFilter = "all",
+  onFacilityChange,
 }: ContractFiltersProps) {
   return (
     <>
@@ -63,6 +69,23 @@ export function ContractFilters({
           {typeOptions.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={facilityFilter}
+        onValueChange={(v) => onFacilityChange?.(v)}
+      >
+        <SelectTrigger className="w-[170px]">
+          <SelectValue placeholder="All Facilities" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Facilities</SelectItem>
+          {facilities?.map((f) => (
+            <SelectItem key={f.id} value={f.id}>
+              {f.name}
             </SelectItem>
           ))}
         </SelectContent>
