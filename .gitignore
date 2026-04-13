@@ -44,3 +44,6 @@ next-env.d.ts
 /generated/
 tests/visual/.auth/
 test-results/
+
+# v0-parity: prod snapshots are regenerated per-run, never committed
+docs/v0-reference/_prod-current/
