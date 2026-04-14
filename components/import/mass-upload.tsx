@@ -8,6 +8,9 @@ import {
   ingestExtractedInvoices,
   ingestCaseDataCSV,
   ingestCaseProceduresCSV,
+  ingestCaseSuppliesCSV,
+  ingestCOGRecordsCSV,
+  ingestPricingFile,
 } from "@/lib/actions/mass-upload"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import {
@@ -66,6 +69,7 @@ export type DocumentType =
   | "cog_data"
   | "case_data"
   | "case_procedures"
+  | "case_supplies"
   | "unknown"
 
 interface DocumentClassification {
@@ -183,6 +187,11 @@ const DOCUMENT_TYPE_INFO: Record<
     icon: <FileTextIcon className="h-4 w-4" />,
     color: "bg-rose-500",
   },
+  case_supplies: {
+    label: "Case Supplies",
+    icon: <FileTextIcon className="h-4 w-4" />,
+    color: "bg-fuchsia-500",
+  },
   unknown: {
     label: "Unknown",
     icon: <FileQuestionIcon className="h-4 w-4" />,
@@ -213,6 +222,8 @@ function normalizeApiType(t: string | null | undefined): DocumentType {
       return "case_data"
     case "case_procedures":
       return "case_procedures"
+    case "case_supplies":
+      return "case_supplies"
     default:
       return "unknown"
   }
@@ -685,6 +696,19 @@ export function MassUpload({
     const caseProcedureDocs = completed.filter(
       (d) => d.classification?.type === "case_procedures"
     )
+    const caseSupplyDocs = completed.filter(
+      (d) => d.classification?.type === "case_supplies"
+    )
+    const cogDocs = completed.filter(
+      (d) =>
+        d.classification?.type === "cog_data" ||
+        d.classification?.type === "cog_report"
+    )
+    const pricingDocs = completed.filter(
+      (d) =>
+        d.classification?.type === "pricing_file" ||
+        d.classification?.type === "pricing_schedule"
+    )
 
     let totalCreated = 0
     let totalFailed = 0
@@ -775,6 +799,109 @@ export function MassUpload({
         totalCreated += r.created
         totalFailed += r.failed
         for (const e of r.errors) errorMessages.push(`${d.file.name}: ${e}`)
+      } catch (err) {
+        totalFailed++
+        errorMessages.push(
+          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
+        )
+      }
+    }
+
+    // ── Case Supplies CSVs (ingest AFTER case data + procedures
+    //     so parent Case rows exist first) ───────────────────────
+    for (const d of caseSupplyDocs) {
+      try {
+        const csvText = await d.file.text()
+        const r = await ingestCaseSuppliesCSV(csvText, d.file.name)
+        totalCreated += r.created
+        totalFailed += r.failed
+        for (const e of r.errors) errorMessages.push(`${d.file.name}: ${e}`)
+      } catch (err) {
+        totalFailed++
+        errorMessages.push(
+          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
+        )
+      }
+    }
+
+    // ── COG Records CSVs — generic Vendor/PO/Date/Cost shape ───
+    for (const d of cogDocs) {
+      try {
+        const csvText = await d.file.text()
+        const r = await ingestCOGRecordsCSV(csvText, d.file.name)
+        totalCreated += r.imported
+        totalFailed += r.errors
+      } catch (err) {
+        totalFailed++
+        errorMessages.push(
+          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
+        )
+      }
+    }
+
+    // ── Pricing Files — CSV goes direct, xlsx via /api/parse-file ──
+    for (const d of pricingDocs) {
+      try {
+        let rows: Record<string, string>[] = []
+        const ext = d.file.name.split(".").pop()?.toLowerCase()
+        if (ext === "xlsx" || ext === "xls") {
+          const form = new FormData()
+          form.append("file", d.file)
+          const res = await fetch("/api/parse-file", { method: "POST", body: form })
+          if (!res.ok) throw new Error(`parse-file ${res.status}`)
+          const parsed = (await res.json()) as {
+            headers: string[]
+            rows: Record<string, string>[]
+          }
+          rows = parsed.rows
+        } else {
+          const csvText = await d.file.text()
+          // Reuse parseCSV shape by passing through ingestPricingFile's
+          // row-based signature — we need headers+rows in the action so
+          // parse client-side here.
+          const stripped = csvText.replace(/^\uFEFF/, "")
+          const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0)
+          if (lines.length > 1) {
+            const splitRow = (line: string): string[] => {
+              const out: string[] = []
+              let cur = ""
+              let inQ = false
+              for (let i = 0; i < line.length; i++) {
+                const ch = line[i]
+                if (ch === '"') {
+                  if (inQ && line[i + 1] === '"') {
+                    cur += '"'
+                    i++
+                  } else {
+                    inQ = !inQ
+                  }
+                } else if (ch === "," && !inQ) {
+                  out.push(cur)
+                  cur = ""
+                } else {
+                  cur += ch
+                }
+              }
+              out.push(cur)
+              return out.map((s) => s.trim())
+            }
+            const headers = splitRow(lines[0])
+            rows = lines.slice(1).map((line) => {
+              const cells = splitRow(line)
+              const row: Record<string, string> = {}
+              for (let j = 0; j < headers.length; j++) {
+                row[headers[j]] = cells[j] ?? ""
+              }
+              return row
+            })
+          }
+        }
+        const r = await ingestPricingFile({
+          rows,
+          fileName: d.file.name,
+        })
+        totalCreated += r.imported
+        totalFailed += r.failed
       } catch (err) {
         totalFailed++
         errorMessages.push(

@@ -16,6 +16,7 @@ type Classification =
   | "purchase_order"
   | "case_data"
   | "case_procedures"
+  | "case_supplies"
   | "unknown"
 
 // v0-style rich classification output
@@ -31,6 +32,7 @@ const richClassificationSchema = z.object({
     "purchase_order",
     "case_data",
     "case_procedures",
+    "case_supplies",
     "unknown",
   ]),
   confidence: z.number().min(0).max(1),
@@ -162,16 +164,15 @@ function classifyByHeaders(headersRow: string[]): {
   }
 
   // Case-level supply usage: MRN + Case ID + Manufacturer + cost columns.
-  // Matches Lighthouse-style per-case supply exports. Route as cog_data
-  // since case-supply is the per-case equivalent of cost of goods and no
-  // dedicated case_supply DocumentType exists. Checked before the generic
-  // pricing heuristic so we don't miscategorize it.
+  // Lighthouse-style per-case supply exports — each row is a supply
+  // consumed in a specific surgical case. Distinct from generic COG
+  // because it's linked to Case records via case_id.
   if (
     (has("case id") || has("mrn")) &&
     has("manufacturer") &&
     (has("unit cost") || has("used cost"))
   ) {
-    return { classification: "cog_data", confidence: 0.88 }
+    return { classification: "case_supplies", confidence: 0.9 }
   }
 
   if (has("vendor_item_no") || has("vendor item") || has("reference") || has("catalog")) {
