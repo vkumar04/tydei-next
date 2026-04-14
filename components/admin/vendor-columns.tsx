@@ -47,10 +47,10 @@ export function getAdminVendorColumns(
       ),
     },
     {
-      accessorKey: "contactName",
-      header: "Sales Reps",
+      accessorKey: "repCount",
+      header: () => <div className="text-right">Reps</div>,
       cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.contactName ?? "\u2014"}</span>
+        <div className="text-right">{row.original.repCount}</div>
       ),
     },
     {

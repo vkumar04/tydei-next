@@ -239,18 +239,10 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
             variants={staggerContainer}
             initial="hidden"
             animate="show"
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
           >
             <MetricCard
-              title="Total Categories"
-              value={stats.totalCategories}
-              icon={LayoutGrid}
-              description="Product categories with activity"
-              change={`${stats.totalCategories} active`}
-              changeType="positive"
-            />
-            <MetricCard
-              title="Market Share %"
+              title="Current Market Share"
               value={`${stats.overallSharePct}%`}
               icon={PieChartIcon}
               description="Overall share of total market spend"
@@ -258,20 +250,20 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
               changeType="positive"
             />
             <MetricCard
-              title="Active Facilities"
-              value={stats.activeContracts}
-              icon={FileText}
-              description="Facilities with your products"
-              secondaryValue={formatCurrency(stats.totalVendorSpend)}
-              secondaryLabel="total vendor spend"
-            />
-            <MetricCard
-              title="Revenue Rank"
-              value={`#${stats.revenueRank}`}
+              title="vs Industry Average"
+              value={`${stats.overallSharePct}%`}
               icon={Trophy}
               description="Your rank among vendor categories"
-              secondaryValue={formatCurrency(stats.totalMarketSpend)}
-              secondaryLabel="total market size"
+              secondaryValue={`#${stats.revenueRank}`}
+              secondaryLabel="revenue rank"
+            />
+            <MetricCard
+              title="Top Category"
+              value={stats.totalCategories}
+              icon={LayoutGrid}
+              description="Active product categories"
+              change={`${stats.totalCategories} active`}
+              changeType="positive"
             />
           </motion.div>
 

@@ -16,6 +16,7 @@ export interface AdminVendorRow {
   status: string
   tier: string
   contractCount: number
+  repCount: number
   createdAt: string
 }
 
@@ -37,7 +38,7 @@ export async function adminGetVendors(input: {
   const [vendors, total] = await Promise.all([
     prisma.vendor.findMany({
       where,
-      include: { _count: { select: { contracts: true } } },
+      include: { _count: { select: { contracts: true, divisions: true } } },
       orderBy: { name: "asc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -55,6 +56,7 @@ export async function adminGetVendors(input: {
       status: v.status,
       tier: v.tier,
       contractCount: v._count.contracts,
+      repCount: v._count.divisions,
       createdAt: v.createdAt.toISOString(),
     })),
     total,

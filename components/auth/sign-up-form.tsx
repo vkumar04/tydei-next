@@ -97,18 +97,6 @@ export function SignUpForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="orgName">Organization Name</Label>
-        <Input
-          id="orgName"
-          placeholder="Acme Health System"
-          {...register("organizationName")}
-        />
-        {errors.organizationName && (
-          <p className="text-xs text-destructive">{errors.organizationName.message}</p>
-        )}
-      </div>
-
-      <div className="space-y-2">
         <Label htmlFor="signup-password">Password</Label>
         <Input
           id="signup-password"

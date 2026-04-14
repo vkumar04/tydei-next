@@ -251,10 +251,6 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             <Sparkles className="h-4 w-4 hidden sm:inline" />
             AI Credits
           </TabsTrigger>
-          <TabsTrigger value="addons" className="gap-2">
-            <Puzzle className="h-4 w-4 hidden sm:inline" />
-            Add-ons
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="space-y-6">
@@ -342,13 +338,6 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
 
         <TabsContent value="categories" className="space-y-6">
           <CategoriesTab />
-        </TabsContent>
-
-        <TabsContent value="addons" className="space-y-6">
-          <AddonsTab
-            addonsState={addonsState}
-            onToggleAddon={handleToggleAddon}
-          />
         </TabsContent>
       </Tabs>
     </div>

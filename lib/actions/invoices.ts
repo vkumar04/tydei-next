@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import {
   importInvoiceSchema,
   invoiceFiltersSchema,
@@ -11,6 +11,70 @@ import {
 import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
+
+// ─── Vendor-scoped: list invoices owned by the authed vendor ────
+
+export async function getInvoicesForVendor(input?: Partial<InvoiceFilters>) {
+  const { vendor } = await requireVendor()
+  const filters = invoiceFiltersSchema.partial().parse(input ?? {})
+
+  const conditions: Prisma.InvoiceWhereInput[] = [{ vendorId: vendor.id }]
+  if (filters.status) conditions.push({ status: filters.status })
+
+  const where: Prisma.InvoiceWhereInput = conditions.length > 0 ? { AND: conditions } : {}
+  const page = filters.page ?? 1
+  const pageSize = filters.pageSize ?? 20
+
+  const [invoices, total] = await Promise.all([
+    prisma.invoice.findMany({
+      where,
+      include: {
+        vendor: { select: { id: true, name: true } },
+        facility: { select: { id: true, name: true } },
+        purchaseOrder: { select: { id: true, poNumber: true } },
+        _count: { select: { lineItems: true } },
+        lineItems: {
+          select: {
+            id: true,
+            isFlagged: true,
+            invoicePrice: true,
+            invoiceQuantity: true,
+            contractPrice: true,
+          },
+        },
+      },
+      orderBy: { invoiceDate: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.invoice.count({ where }),
+  ])
+
+  return serialize({
+    invoices: invoices.map((inv) => {
+      const flaggedCount = inv.lineItems.filter((li) => li.isFlagged).length
+      const lineItemCount = inv._count.lineItems
+      const totalContractCost = inv.lineItems.reduce((sum, li) => {
+        const cp = li.contractPrice !== null ? Number(li.contractPrice) : Number(li.invoicePrice)
+        return sum + cp * li.invoiceQuantity
+      }, 0)
+      const totalInvoiceCostNum = Number(inv.totalInvoiceCost ?? 0)
+      const variance = totalInvoiceCostNum - totalContractCost
+      const variancePercent =
+        totalContractCost > 0 ? (variance / totalContractCost) * 100 : 0
+      return {
+        ...inv,
+        lineItems: undefined,
+        flaggedCount,
+        lineItemCount,
+        totalContractCost,
+        variance,
+        variancePercent,
+      }
+    }),
+    total,
+  })
+}
 
 // ─── List Invoices ──────────────────────────────────────────────
 

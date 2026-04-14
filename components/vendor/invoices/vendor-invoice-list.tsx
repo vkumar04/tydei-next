@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/shared/tables/data-table"
-import { useInvoices, useDeleteInvoice } from "@/hooks/use-invoices"
+import { useVendorInvoices, useDeleteInvoice } from "@/hooks/use-invoices"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -101,9 +101,8 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
 
   const deleteMut = useDeleteInvoice()
 
-  const { data, isLoading } = useInvoices(vendorId, {
-    vendorId,
-    ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+  const { data, isLoading } = useVendorInvoices(vendorId, {
+    ...(statusFilter !== "all" ? { status: statusFilter as never } : {}),
   })
 
   const invoices = (data?.invoices as unknown as InvoiceRow[]) ?? []

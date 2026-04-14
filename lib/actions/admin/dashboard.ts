@@ -9,14 +9,30 @@ import { serialize } from "@/lib/serialize"
 export async function getAdminDashboardStats() {
   await requireAdmin()
 
-  const [totalFacilities, totalVendors, totalUsers, totalContracts, activeSubscriptions] =
-    await Promise.all([
-      prisma.facility.count(),
-      prisma.vendor.count(),
-      prisma.user.count(),
-      prisma.contract.count({ where: { status: "active" } }),
-      prisma.facility.count({ where: { status: "active" } }),
-    ])
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  const [
+    totalFacilities,
+    totalVendors,
+    totalUsers,
+    totalContracts,
+    activeSubscriptions,
+    activeFacilities,
+    activeVendors,
+    activeUsers,
+    activeContracts,
+  ] = await Promise.all([
+    prisma.facility.count(),
+    prisma.vendor.count(),
+    prisma.user.count(),
+    prisma.contract.count({ where: { status: "active" } }),
+    prisma.facility.count({ where: { status: "active" } }),
+    prisma.facility.count({ where: { status: "active" } }),
+    prisma.vendor.count({ where: { status: "active" } }),
+    prisma.user.count({ where: { lastLoginAt: { gte: thirtyDaysAgo } } }),
+    prisma.contract.count({ where: { status: "active" } }),
+  ])
 
   return serialize({
     totalFacilities,
@@ -25,6 +41,10 @@ export async function getAdminDashboardStats() {
     totalContracts,
     mrr: activeSubscriptions * 499, // placeholder MRR calc
     activeSubscriptions,
+    activeFacilities,
+    activeVendors,
+    activeUsers,
+    activeContracts,
   })
 }
 

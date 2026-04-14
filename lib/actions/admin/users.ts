@@ -15,8 +15,10 @@ export interface AdminUserRow {
   email: string
   image: string | null
   role: UserRole
+  userType: "facility" | "vendor" | "operator"
   organizationName: string | null
   createdAt: string
+  lastLoginAt: string | null
 }
 
 // ─── List Users ─────────────────────────────────────────────────
@@ -62,8 +64,15 @@ export async function adminGetUsers(input: {
       email: u.email,
       image: u.image,
       role: u.role,
+      userType:
+        u.role === "facility"
+          ? ("facility" as const)
+          : u.role === "vendor"
+            ? ("vendor" as const)
+            : ("operator" as const),
       organizationName: u.members[0]?.organization?.name ?? null,
       createdAt: u.createdAt.toISOString(),
+      lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
     })),
     total,
   })

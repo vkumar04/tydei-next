@@ -12,40 +12,23 @@ import {
   DollarSign,
   PieChart,
   BarChart3,
-  RefreshCw,
   Plus,
   Copy,
   Clock,
   Target,
-  Building2,
-  ArrowUpRight,
-  ArrowDownRight,
-  ChevronRight,
-  Lightbulb,
-  MoreHorizontal,
-  History,
-  Zap,
-  ShieldCheck,
   Handshake,
+  BarChart,
 } from "lucide-react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -101,52 +84,6 @@ const QUICK_ACTIONS = [
     icon: DollarSign,
     label: "Calculate rebate projections",
   },
-]
-
-const SAMPLE_INSIGHTS = [
-  {
-    id: "1",
-    type: "opportunity" as const,
-    title: "Market Share Growth Available",
-    description:
-      "Your spine portfolio has 23% market share at Memorial Hospital, below the 35% tier threshold. Increasing by 12pp would unlock an additional 2.5% rebate.",
-    trend: "up" as const,
-    metric: "+12pp needed",
-  },
-  {
-    id: "2",
-    type: "alert" as const,
-    title: "Contract Renewal in 45 Days",
-    description:
-      "The trauma instruments agreement with Regional Medical Center expires on May 15. Current compliance is at 87% with spend at $1.2M YTD.",
-    trend: "neutral" as const,
-    metric: "45 days",
-  },
-  {
-    id: "3",
-    type: "performance" as const,
-    title: "Pricing Below Benchmark",
-    description:
-      "Your knee replacement pricing at St. Mary's is 8% below the market median. Consider reviewing margins during the Q2 pricing review.",
-    trend: "down" as const,
-    metric: "-8% vs median",
-  },
-  {
-    id: "4",
-    type: "opportunity" as const,
-    title: "Cross-Sell Potential Identified",
-    description:
-      "3 facilities purchasing your hip systems are not yet contracted for matching surgical instruments. Bundling could increase account value by ~15%.",
-    trend: "up" as const,
-    metric: "+15% value",
-  },
-]
-
-const CONTRACT_METRICS = [
-  { label: "Active Contracts", value: "24", change: "+3", trend: "up" as const },
-  { label: "Avg. Market Share", value: "31%", change: "+2.4pp", trend: "up" as const },
-  { label: "Spend Compliance", value: "89%", change: "-1.2%", trend: "down" as const },
-  { label: "Renewal Pipeline", value: "7", change: "next 90d", trend: "neutral" as const },
 ]
 
 // ---------------------------------------------------------------------------
@@ -243,77 +180,6 @@ function ChatMessageBubble({ role, parts, isLoading, onCopy }: ChatMessageBubble
   )
 }
 
-function InsightCard({
-  insight,
-  onAsk,
-}: {
-  insight: (typeof SAMPLE_INSIGHTS)[number]
-  onAsk: (question: string) => void
-}) {
-  const typeConfig = {
-    opportunity: {
-      badge: "Opportunity",
-      badgeClass: "bg-green-500/10 text-green-700 dark:text-green-400",
-      icon: Zap,
-    },
-    alert: {
-      badge: "Alert",
-      badgeClass: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-      icon: Clock,
-    },
-    performance: {
-      badge: "Performance",
-      badgeClass: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
-      icon: BarChart3,
-    },
-  }[insight.type]
-
-  const TrendIcon =
-    insight.trend === "up"
-      ? ArrowUpRight
-      : insight.trend === "down"
-        ? ArrowDownRight
-        : ChevronRight
-
-  const trendColor =
-    insight.trend === "up"
-      ? "text-green-600 dark:text-green-400"
-      : insight.trend === "down"
-        ? "text-red-600 dark:text-red-400"
-        : "text-muted-foreground"
-
-  return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="pt-5 pb-4">
-        <div className="flex items-start justify-between mb-2">
-          <Badge variant="secondary" className={typeConfig.badgeClass}>
-            {typeConfig.badge}
-          </Badge>
-          <div className={`flex items-center gap-1 text-sm font-medium ${trendColor}`}>
-            <TrendIcon className="h-4 w-4" />
-            {insight.metric}
-          </div>
-        </div>
-        <h4 className="text-sm font-semibold mb-1.5">{insight.title}</h4>
-        <p className="text-xs text-muted-foreground leading-relaxed mb-3">
-          {insight.description}
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={() =>
-            onAsk(`Tell me more about: ${insight.title}`)
-          }
-        >
-          <MessageSquare className="mr-1.5 h-3 w-3" />
-          Ask AI about this
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -322,7 +188,7 @@ interface VendorAIAgentClientProps {
   vendorId: string
 }
 
-export function VendorAIAgentClient({ vendorId }: VendorAIAgentClientProps) {
+export function VendorAIAgentClient({ vendorId: _vendorId }: VendorAIAgentClientProps) {
   const [activeTab, setActiveTab] = useState("chat")
   const [chatInput, setChatInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -383,7 +249,7 @@ export function VendorAIAgentClient({ vendorId }: VendorAIAgentClientProps) {
             <Bot className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">AI Agent</h1>
+            <h1 className="text-2xl font-bold tracking-tight">AI Vendor Assistant</h1>
             <p className="text-sm text-muted-foreground">
               Ask questions about your contracts, market share, and performance
             </p>
@@ -399,41 +265,6 @@ export function VendorAIAgentClient({ vendorId }: VendorAIAgentClientProps) {
         </div>
       </div>
 
-      {/* Metrics bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        {CONTRACT_METRICS.map((metric) => {
-          const trendColor =
-            metric.trend === "up"
-              ? "text-green-600 dark:text-green-400"
-              : metric.trend === "down"
-                ? "text-red-600 dark:text-red-400"
-                : "text-muted-foreground"
-          const TrendIcon =
-            metric.trend === "up"
-              ? ArrowUpRight
-              : metric.trend === "down"
-                ? ArrowDownRight
-                : ChevronRight
-
-          return (
-            <Card key={metric.label}>
-              <CardContent className="pt-4 pb-3 px-4">
-                <p className="text-xs text-muted-foreground mb-1">
-                  {metric.label}
-                </p>
-                <div className="flex items-end justify-between">
-                  <p className="text-2xl font-bold">{metric.value}</p>
-                  <div className={`flex items-center gap-0.5 text-xs ${trendColor}`}>
-                    <TrendIcon className="h-3.5 w-3.5" />
-                    {metric.change}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
       {/* Tabs */}
       <Tabs
         value={activeTab}
@@ -445,13 +276,13 @@ export function VendorAIAgentClient({ vendorId }: VendorAIAgentClientProps) {
             <MessageSquare className="h-4 w-4" />
             Chat
           </TabsTrigger>
-          <TabsTrigger value="insights" className="gap-2">
-            <Lightbulb className="h-4 w-4" />
-            AI Insights
-          </TabsTrigger>
-          <TabsTrigger value="contracts" className="gap-2">
+          <TabsTrigger value="documents" className="gap-2">
             <FileText className="h-4 w-4" />
-            Contract Intel
+            Documents
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-2">
+            <BarChart className="h-4 w-4" />
+            Reports
           </TabsTrigger>
         </TabsList>
 
@@ -578,350 +409,43 @@ export function VendorAIAgentClient({ vendorId }: VendorAIAgentClientProps) {
         </TabsContent>
 
         {/* ================================================================ */}
-        {/* Insights Tab                                                     */}
+        {/* Documents Tab                                                    */}
         {/* ================================================================ */}
-        <TabsContent value="insights" className="flex-1 overflow-auto mt-0">
-          <div className="space-y-4">
-            {/* AI Insights header */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-                    <Lightbulb className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-semibold mb-1">
-                      AI-Generated Insights
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Actionable insights identified by analyzing your contract
-                      portfolio, market data, and performance metrics. Click any
-                      insight to explore further with the AI assistant.
-                    </p>
-                  </div>
+        <TabsContent value="documents" className="flex-1 overflow-auto mt-0">
+          <Card>
+            <CardContent className="py-16">
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted mb-4">
+                  <FileText className="h-6 w-6 text-muted-foreground" />
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Insights grid */}
-            <div className="grid gap-4 md:grid-cols-2">
-              {SAMPLE_INSIGHTS.map((insight) => (
-                <InsightCard
-                  key={insight.id}
-                  insight={insight}
-                  onAsk={handleSuggestion}
-                />
-              ))}
-            </div>
-
-            {/* Strategy suggestions */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Target className="h-5 w-5 text-primary" />
-                  Suggested Strategies
-                </CardTitle>
-                <CardDescription>
-                  AI-recommended actions based on your current portfolio
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[
-                    {
-                      icon: PieChart,
-                      title: "Increase Spine Market Share at Memorial Hospital",
-                      description:
-                        "Focus on converting 3 surgeons currently using competitor products. Potential revenue increase: $340K/year.",
-                      priority: "High",
-                    },
-                    {
-                      icon: Handshake,
-                      title: "Bundle Instruments with Implant Contracts",
-                      description:
-                        "3 facilities have separate instrument and implant agreements. Consolidating could improve compliance and rebate tiers.",
-                      priority: "Medium",
-                    },
-                    {
-                      icon: DollarSign,
-                      title: "Renegotiate Pricing at Regional Medical Center",
-                      description:
-                        "Your pricing is 8% below median. A 4% adjustment would still be competitive while improving margins by $120K annually.",
-                      priority: "Medium",
-                    },
-                    {
-                      icon: ShieldCheck,
-                      title: "Address Compliance Gap at City General",
-                      description:
-                        "Spend compliance dropped to 72% this quarter. Schedule a QBR to review utilization patterns and address concerns.",
-                      priority: "High",
-                    },
-                  ].map((strategy) => (
-                    <div
-                      key={strategy.title}
-                      className="flex items-start gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted shrink-0">
-                        <strategy.icon className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <h4 className="text-sm font-medium truncate">
-                            {strategy.title}
-                          </h4>
-                          <Badge
-                            variant="secondary"
-                            className={
-                              strategy.priority === "High"
-                                ? "bg-red-500/10 text-red-700 dark:text-red-400 shrink-0"
-                                : "shrink-0"
-                            }
-                          >
-                            {strategy.priority}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {strategy.description}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={() =>
-                          handleSuggestion(
-                            `Tell me more about the strategy: ${strategy.title}`
-                          )
-                        }
-                      >
-                        <MessageSquare className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                <h3 className="text-base font-semibold mb-1">Documents</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Coming soon — upload contracts, spec sheets, and reference
+                  material for the AI assistant to analyze.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ================================================================ */}
-        {/* Contract Intelligence Tab                                        */}
+        {/* Reports Tab                                                      */}
         {/* ================================================================ */}
-        <TabsContent value="contracts" className="flex-1 overflow-auto mt-0">
-          <div className="space-y-4">
-            {/* Summary cards */}
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card>
-                <CardContent className="pt-6 pb-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-                      <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        Total Contract Value
-                      </p>
-                      <p className="text-xl font-bold">$12.4M</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Across 24 active agreements with 18 facilities
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6 pb-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-                      <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        Renewals Due (90d)
-                      </p>
-                      <p className="text-xl font-bold">7</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    $3.1M in contract value at risk of expiration
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6 pb-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-                      <Target className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        Avg Spend Compliance
-                      </p>
-                      <p className="text-xl font-bold">89%</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    5 contracts below 80% compliance threshold
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Upcoming renewals */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-primary" />
-                    Upcoming Renewals
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" className="text-xs">
-                    View All
-                    <ChevronRight className="ml-1 h-3 w-3" />
-                  </Button>
+        <TabsContent value="reports" className="flex-1 overflow-auto mt-0">
+          <Card>
+            <CardContent className="py-16">
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted mb-4">
+                  <BarChart className="h-6 w-6 text-muted-foreground" />
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {[
-                    {
-                      facility: "Regional Medical Center",
-                      contract: "Trauma Instruments",
-                      expires: "May 15, 2026",
-                      value: "$890K",
-                      daysLeft: 45,
-                      compliance: 87,
-                    },
-                    {
-                      facility: "St. Mary's Hospital",
-                      contract: "Knee Replacement Systems",
-                      expires: "Jun 1, 2026",
-                      value: "$1.2M",
-                      daysLeft: 62,
-                      compliance: 94,
-                    },
-                    {
-                      facility: "City General Hospital",
-                      contract: "Spine Portfolio",
-                      expires: "Jun 20, 2026",
-                      value: "$650K",
-                      daysLeft: 81,
-                      compliance: 72,
-                    },
-                  ].map((renewal) => (
-                    <div
-                      key={renewal.contract}
-                      className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                          <Building2 className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">
-                            {renewal.contract}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {renewal.facility}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-right">
-                        <div>
-                          <p className="text-sm font-medium">{renewal.value}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {renewal.compliance}% compliant
-                          </p>
-                        </div>
-                        <Badge
-                          variant="secondary"
-                          className={
-                            renewal.daysLeft <= 60
-                              ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                              : ""
-                          }
-                        >
-                          {renewal.daysLeft}d left
-                        </Badge>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() =>
-                                handleSuggestion(
-                                  `Analyze the ${renewal.contract} contract at ${renewal.facility} and suggest a renewal strategy`
-                                )
-                              }
-                            >
-                              <MessageSquare className="mr-2 h-4 w-4" />
-                              Ask AI for renewal strategy
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <FileText className="mr-2 h-4 w-4" />
-                              View contract details
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem>
-                              <History className="mr-2 h-4 w-4" />
-                              View performance history
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* AI contract analysis prompt */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-                    <Sparkles className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-base font-semibold mb-1">
-                      Ask AI About Your Contracts
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Get AI-powered analysis on any aspect of your contract
-                      portfolio
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        "Which facilities have the lowest compliance?",
-                        "What's my total rebate exposure?",
-                        "Compare pricing across my top 5 accounts",
-                        "Identify contracts where I'm losing market share",
-                      ].map((q) => (
-                        <Button
-                          key={q}
-                          variant="outline"
-                          size="sm"
-                          className="h-auto py-1.5 px-3 text-xs"
-                          onClick={() => handleSuggestion(q)}
-                        >
-                          {q}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                <h3 className="text-base font-semibold mb-1">Reports</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Coming soon — AI-generated reports on market share, renewals,
+                  and performance will appear here.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

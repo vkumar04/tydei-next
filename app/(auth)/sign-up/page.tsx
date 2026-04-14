@@ -6,6 +6,7 @@ export default function SignUpPage() {
     <AuthCard
       title="Create an account"
       description="Get started with the contract management platform"
+      showTermsFooter={false}
     >
       <SignUpForm />
     </AuthCard>

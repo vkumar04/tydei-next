@@ -123,9 +123,6 @@ export function ChatInterface({ portalType }: ChatInterfaceProps) {
             )}
           </Button>
         </form>
-        <p className="text-xs text-muted-foreground mt-2 text-center">
-          AI responses are based on your contract data and may require verification
-        </p>
       </div>
 
     </Card>

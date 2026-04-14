@@ -12,6 +12,9 @@ export interface VendorPORow {
   orderDate: string
   totalCost: number
   status: string
+  poType: string
+  itemCount: number
+  receivedDate: string | null
 }
 
 export async function getVendorPurchaseOrders(_vendorId?: string): Promise<VendorPORow[]> {
@@ -19,7 +22,10 @@ export async function getVendorPurchaseOrders(_vendorId?: string): Promise<Vendo
 
   const pos = await prisma.purchaseOrder.findMany({
     where: { vendorId: vendor.id },
-    include: { facility: { select: { name: true } } },
+    include: {
+      facility: { select: { name: true } },
+      _count: { select: { lineItems: true } },
+    },
     orderBy: { orderDate: "desc" },
     take: 50,
   })
@@ -31,6 +37,9 @@ export async function getVendorPurchaseOrders(_vendorId?: string): Promise<Vendo
     orderDate: p.orderDate.toISOString(),
     totalCost: Number(p.totalCost ?? 0),
     status: p.status,
+    poType: p.isOffContract ? "Off-Contract" : "Standard",
+    itemCount: p._count.lineItems,
+    receivedDate: p.status === "completed" ? p.updatedAt.toISOString() : null,
   })))
 }
 

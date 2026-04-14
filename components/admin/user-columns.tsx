@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
-import { Pencil, Trash2, CheckCircle, XCircle } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 import { formatDate } from "@/lib/formatting"
 import type { AdminUserRow } from "@/lib/actions/admin/users"
 
@@ -51,28 +51,32 @@ export function getUserColumns(
       ),
     },
     {
-      accessorKey: "status",
-      header: "Status",
+      accessorKey: "userType",
+      header: "Type",
       cell: ({ row }) => {
-        const status = (row.original as AdminUserRow & { status?: string }).status ?? "active"
+        const t = row.original.userType ??
+          (row.original.role === "facility"
+            ? "facility"
+            : row.original.role === "vendor"
+              ? "vendor"
+              : "operator")
         return (
-          <Badge variant={status === "active" ? "default" : "secondary"}>
-            {status === "active" ? (
-              <><CheckCircle className="mr-1 h-3 w-3" /> Active</>
-            ) : (
-              <><XCircle className="mr-1 h-3 w-3" /> Inactive</>
-            )}
+          <Badge variant="outline" className="capitalize">
+            {t}
           </Badge>
         )
       },
     },
     { accessorKey: "organizationName", header: "Organization" },
     {
-      accessorKey: "createdAt",
-      header: "Last Active",
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{formatDate(row.original.createdAt)}</span>
-      ),
+      accessorKey: "lastLoginAt",
+      header: "Last Login",
+      cell: ({ row }) => {
+        const value = row.original.lastLoginAt ?? row.original.createdAt
+        return (
+          <span className="text-muted-foreground">{formatDate(value)}</span>
+        )
+      },
     },
     {
       id: "actions",

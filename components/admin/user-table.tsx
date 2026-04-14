@@ -80,7 +80,12 @@ export function UserTable() {
   const [newNotificationEmail, setNewNotificationEmail] = useState("")
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(defaultNotificationPrefs)
 
-  const filters = roleFilter === "all" ? {} : { role: roleFilter as UserRole }
+  const filters =
+    roleFilter === "all"
+      ? {}
+      : roleFilter === "operator"
+        ? { role: "admin" as UserRole }
+        : { role: roleFilter as UserRole }
 
   // ─── Queries ────────────────────────────────────────────────────
   const { data, isLoading } = useQuery({
@@ -251,7 +256,7 @@ export function UserTable() {
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="facility">Facility</TabsTrigger>
           <TabsTrigger value="vendor">Vendor</TabsTrigger>
-          <TabsTrigger value="admin">Admin</TabsTrigger>
+          <TabsTrigger value="operator">Operator</TabsTrigger>
         </TabsList>
       </Tabs>
       <DataTable

@@ -16,9 +16,10 @@ interface AuthCardProps {
   description?: string
   children: React.ReactNode
   footer?: React.ReactNode
+  showTermsFooter?: boolean
 }
 
-export function AuthCard({ title, description, children, footer }: AuthCardProps) {
+export function AuthCard({ title, description, children, footer, showTermsFooter = true }: AuthCardProps) {
   return (
     <motion.div className="flex flex-col gap-6" variants={scaleIn} initial="hidden" animate="show">
       {/* Logo */}
@@ -40,9 +41,11 @@ export function AuthCard({ title, description, children, footer }: AuthCardProps
         <CardContent>{children}</CardContent>
       </Card>
 
-      <p className="text-center text-xs text-muted-foreground">
-        By signing in, you agree to our Terms of Service and Privacy Policy
-      </p>
+      {showTermsFooter && (
+        <p className="text-center text-xs text-muted-foreground">
+          By signing in, you agree to our Terms of Service and Privacy Policy
+        </p>
+      )}
 
       {footer}
     </motion.div>

@@ -63,13 +63,8 @@ export function getVendorContractColumns(
       ),
     },
     {
-      accessorKey: "effectiveDate",
-      header: "Effective",
-      cell: ({ row }) => formatDate(row.original.effectiveDate),
-    },
-    {
       accessorKey: "expirationDate",
-      header: "Expiration",
+      header: "End Date",
       cell: ({ row }) => formatDate(row.original.expirationDate),
     },
     {

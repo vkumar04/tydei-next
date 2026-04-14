@@ -25,7 +25,7 @@ export function POTable({ data, isLoading, onViewPO }: POTableProps) {
     () => [
       {
         accessorKey: "poNumber",
-        header: "PO #",
+        header: "PO Number",
         cell: ({ row }) => <span className="font-medium">{row.original.poNumber}</span>,
       },
       {
@@ -39,16 +39,9 @@ export function POTable({ data, isLoading, onViewPO }: POTableProps) {
         ),
       },
       {
-        accessorKey: "orderDate",
-        header: "Order Date",
-        cell: ({ row }) => formatDate(row.original.orderDate),
-      },
-      {
-        accessorKey: "totalCost",
-        header: "Total",
-        cell: ({ row }) => (
-          <span className="font-semibold">{formatCurrency(row.original.totalCost)}</span>
-        ),
+        accessorKey: "poType",
+        header: "Type",
+        cell: ({ row }) => <span className="text-sm">{row.original.poType}</span>,
       },
       {
         accessorKey: "status",
@@ -58,6 +51,24 @@ export function POTable({ data, isLoading, onViewPO }: POTableProps) {
           const config = poStatusConfig[s] ?? { label: s, color: "bg-gray-100 text-gray-700" }
           return <Badge className={config.color}>{config.label}</Badge>
         },
+      },
+      {
+        accessorKey: "itemCount",
+        header: "Items",
+        cell: ({ row }) => <span className="text-sm">{row.original.itemCount}</span>,
+      },
+      {
+        accessorKey: "totalCost",
+        header: "Amount",
+        cell: ({ row }) => (
+          <span className="font-semibold">{formatCurrency(row.original.totalCost)}</span>
+        ),
+      },
+      {
+        accessorKey: "receivedDate",
+        header: "Received Date",
+        cell: ({ row }) =>
+          row.original.receivedDate ? formatDate(row.original.receivedDate) : "—",
       },
       {
         id: "actions",
