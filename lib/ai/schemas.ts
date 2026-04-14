@@ -32,6 +32,146 @@ export const extractedContractSchema = z.object({
 
 export type ExtractedContractData = z.infer<typeof extractedContractSchema>
 
+// ─── Rich Contract Extraction Schema (ported from v0) ────────────
+// Adapted to tydei's Prisma enum casing: lowercase/snake_case.
+
+export const richContractExtractSchema = z.object({
+  // Basic contract info
+  contractName: z.string().nullable().describe("The name or title of the contract"),
+  contractId: z.string().nullable().describe("The contract ID, contract number, agreement number, or reference number"),
+  vendorName: z.string().nullable().describe("The vendor/manufacturer name"),
+  vendorDivision: z.string().nullable().describe("Vendor division if mentioned"),
+  contractType: z
+    .enum(["usage", "capital", "service", "tie_in", "grouped", "pricing_only"])
+    .nullable()
+    .describe(
+      "Type of contract: usage (spend/volume rebates), capital (equipment purchase), service (maintenance/support), tie_in (capital tied to consumables), grouped (multi-division), pricing_only (locked pricing only)"
+    ),
+  productCategory: z.string().nullable().describe("Primary product category like Ortho Spine, Medical Supplies, etc."),
+  productCategories: z
+    .array(z.string())
+    .nullable()
+    .describe(
+      "All product categories covered by this contract - contracts often cover multiple categories like Ortho Spine, Ortho Trauma, Sports Medicine, etc."
+    ),
+
+  // Dates
+  effectiveDate: z.string().nullable().describe("Contract effective/start date in YYYY-MM-DD format"),
+  expirationDate: z.string().nullable().describe("Contract expiration/end date in YYYY-MM-DD format"),
+
+  // Rebate pay period
+  rebatePayPeriod: z
+    .enum(["monthly", "quarterly", "semi_annual", "annual"])
+    .nullable()
+    .describe("How often rebates are paid"),
+
+  // Contract attributes
+  isGroupedContract: z.boolean().nullable().describe("Whether this is a grouped contract with other vendors"),
+  isCapitalContract: z.boolean().nullable().describe("Whether this includes capital equipment purchases"),
+  isServiceContract: z.boolean().nullable().describe("Whether this is a standalone service contract"),
+  isPricingOnly: z.boolean().nullable().describe("Whether this contract is just a pricing file with no rebates"),
+
+  // Facilities
+  facilities: z
+    .array(
+      z.object({
+        name: z.string(),
+        city: z.string().nullable(),
+        state: z.string().nullable(),
+      })
+    )
+    .nullable()
+    .describe("List of facilities covered by this contract"),
+
+  // Terms extracted
+  terms: z
+    .array(
+      z.object({
+        termName: z.string().describe("Name of the term/agreement"),
+        termType: z
+          .enum([
+            "spend_rebate",
+            "volume_rebate",
+            "price_reduction",
+            "po_rebate",
+            "carve_out",
+            "market_share",
+            "market_share_price_reduction",
+            "capitated_price_reduction",
+            "capitated_pricing_rebate",
+            "periodic_maintenance",
+            "payment_rebate",
+            "growth_rebate",
+            "compliance_rebate",
+            "fixed_fee",
+            "locked_pricing",
+          ])
+          .nullable()
+          .describe("Type of rebate/discount term"),
+        effectiveFrom: z.string().nullable().describe("Term start date"),
+        effectiveTo: z.string().nullable().describe("Term end date"),
+        performancePeriod: z.enum(["monthly", "quarterly", "semi_annual", "annual"]).nullable(),
+        volumeType: z.enum(["product_category", "catalog_cap_based", "procedure_code"]).nullable(),
+
+        // Tier structure
+        tiers: z
+          .array(
+            z.object({
+              tierNumber: z.number(),
+              marketShareMin: z.number().nullable().describe("Minimum market share percentage"),
+              marketShareMax: z.number().nullable().describe("Maximum market share percentage"),
+              spendMin: z.number().nullable().describe("Minimum spend threshold"),
+              spendMax: z.number().nullable().describe("Maximum spend threshold"),
+              volumeMin: z.number().nullable().describe("Minimum volume/units"),
+              volumeMax: z.number().nullable().describe("Maximum volume/units"),
+              rebateType: z
+                .enum(["percent_of_spend", "fixed_rebate", "fixed_rebate_per_unit", "per_procedure_rebate"])
+                .nullable(),
+              rebateValue: z.number().nullable().describe("Rebate percentage or fixed amount"),
+              spendBaseline: z.number().nullable(),
+              growthBaseline: z.number().nullable(),
+            })
+          )
+          .nullable(),
+
+        // Products/Procedures
+        products: z
+          .array(
+            z.object({
+              catalogNumber: z.string().nullable(),
+              description: z.string().nullable(),
+              procedureCode: z.string().nullable(),
+            })
+          )
+          .nullable(),
+      })
+    )
+    .nullable()
+    .describe("Contract terms and rebate structures"),
+
+  // Tie-In specific
+  tieInDetails: z
+    .object({
+      capitalEquipmentValue: z.number().nullable().describe("Value of capital equipment to pay off"),
+      payoffPeriodMonths: z.number().nullable().describe("Expected payoff period in months"),
+      linkedProductCategories: z.array(z.string()).nullable(),
+    })
+    .nullable()
+    .describe("Details for tie-in contracts"),
+
+  // Additional notes
+  specialConditions: z.array(z.string()).nullable().describe("Any special conditions or notes"),
+  contactInfo: z
+    .object({
+      name: z.string().nullable(),
+      email: z.string().nullable(),
+      phone: z.string().nullable(),
+    })
+    .nullable(),
+})
+
+export type RichContractExtractData = z.infer<typeof richContractExtractSchema>
+
 // ─── Deal Score Schema ───────────────────────────────────────────
 
 export const dealScoreSchema = z.object({
