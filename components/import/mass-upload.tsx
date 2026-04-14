@@ -1,8 +1,13 @@
 "use client"
 
 import React, { useState, useCallback, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import {
+  ingestExtractedContracts,
+  ingestExtractedInvoices,
+} from "@/lib/actions/mass-upload"
+import type { RichContractExtractData } from "@/lib/ai/schemas"
 import {
   FileTextIcon,
   UploadIcon,
@@ -197,7 +202,7 @@ export function MassUpload({
   title = "Mass Document Upload",
   description = "Upload multiple documents at once. AI will classify and extract data from each.",
 }: MassUploadProps) {
-  const router = useRouter()
+  const queryClient = useQueryClient()
   const [documents, setDocuments] = useState<QueuedDocument[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -521,8 +526,15 @@ export function MassUpload({
           try {
             updateDocument(doc.id, { status: "extracting", progress: 70 })
             const result = await extractContract(currentDoc)
+            // extract-contract returns { richExtracted, extracted (legacy), ... }.
+            // Store the rich shape so handleComplete can feed it directly to
+            // ingestExtractedContracts without shape-shifting.
+            const richData =
+              (result?.richExtracted as Record<string, unknown> | undefined) ??
+              (result?.extracted as Record<string, unknown> | undefined) ??
+              null
             updateDocument(doc.id, {
-              extracted: result,
+              extracted: richData,
               status: "completed",
               progress: 100,
             })
@@ -616,47 +628,142 @@ export function MassUpload({
     processAllDocuments()
   }
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     const completed = documentsRef.current.filter((d) => d.status === "completed")
+    if (completed.length === 0) {
+      toast.error("No completed documents to commit")
+      return
+    }
+
+    // Partition completed docs by document type so we can route each group
+    // to the appropriate server action. Each group becomes its own inline
+    // commit — no navigation, no page redirects, no toast-lies.
+    const contractDocs = completed.filter(
+      (d) =>
+        (d.classification?.type === "contract" ||
+          d.classification?.type === "amendment") &&
+        d.extracted !== null
+    )
+    const invoiceDocs = completed.filter(
+      (d) => d.classification?.type === "invoice"
+    )
+
+    let totalCreated = 0
+    let totalFailed = 0
+    const errorMessages: string[] = []
+
+    // ── Contracts ────────────────────────────────────────────────
+    if (contractDocs.length > 0) {
+      try {
+        const result = await ingestExtractedContracts(
+          contractDocs.map((d) => ({
+            extracted: d.extracted as unknown as RichContractExtractData,
+            sourceFilename: d.file.name,
+          }))
+        )
+        totalCreated += result.created
+        totalFailed += result.failed
+        for (const r of result.results) {
+          if (!r.ok) errorMessages.push(`${r.name}: ${r.error}`)
+        }
+      } catch (err) {
+        totalFailed += contractDocs.length
+        errorMessages.push(
+          `Contract ingest failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      }
+    }
+
+    // ── Invoices ─────────────────────────────────────────────────
+    if (invoiceDocs.length > 0) {
+      try {
+        const result = await ingestExtractedInvoices(
+          invoiceDocs.map((d) => ({
+            invoiceNumber:
+              d.classification?.invoiceNumber ??
+              d.userOverrides?.invoiceNumber ??
+              null,
+            vendorName:
+              d.classification?.vendorName ??
+              d.userOverrides?.vendorName ??
+              null,
+            invoiceDate:
+              d.classification?.documentDate ??
+              d.userOverrides?.documentDate ??
+              null,
+            totalAmount: d.classification?.totalValue ?? null,
+            sourceFilename: d.file.name,
+          }))
+        )
+        totalCreated += result.created
+        totalFailed += result.failed
+        for (const r of result.results) {
+          if (!r.ok) errorMessages.push(`${r.invoiceNumber}: ${r.error}`)
+        }
+      } catch (err) {
+        totalFailed += invoiceDocs.length
+        errorMessages.push(
+          `Invoice ingest failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      }
+    }
+
+    // Optional callback for callers that want to react to completion.
     if (onComplete) {
       onComplete(completed)
     }
-    toast.success(
-      `${completed.length} document${completed.length !== 1 ? "s" : ""} processed`
-    )
 
-    // Route to the most relevant page based on the primary classification.
-    const counts: Partial<Record<DocumentType, number>> = {}
-    for (const d of completed) {
-      const t = d.classification?.type
-      if (t) counts[t] = (counts[t] ?? 0) + 1
-    }
-    const primary = Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] as
-      | DocumentType
-      | undefined
+    // Invalidate relevant caches so whatever page is in view refreshes.
+    queryClient.invalidateQueries({ queryKey: ["contracts"] })
+    queryClient.invalidateQueries({ queryKey: ["invoices"] })
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] })
+    queryClient.invalidateQueries({ queryKey: ["vendors"] })
 
+    // Reset + close the dialog
     onOpenChange(false)
     setDocuments([])
     setStep("upload")
     setOverallProgress(0)
 
-    switch (primary) {
-      case "contract":
-      case "amendment":
-        router.push("/dashboard/contracts/new")
-        break
-      case "cog_report":
-        router.push("/dashboard/cog-data?autoImport=true")
-        break
-      case "pricing_schedule":
-        router.push("/dashboard/cog-data?tab=pricing")
-        break
-      case "invoice":
-      case "purchase_order":
-        router.push("/dashboard/cog-data?autoImport=true")
-        break
-      default:
-        break
+    // Final toast reflects what was actually persisted.
+    if (totalCreated > 0 && totalFailed === 0) {
+      toast.success(
+        `Imported ${totalCreated} document${totalCreated !== 1 ? "s" : ""}`,
+        {
+          description:
+            contractDocs.length > 0 && invoiceDocs.length > 0
+              ? `${contractDocs.length} contract${
+                  contractDocs.length !== 1 ? "s" : ""
+                } · ${invoiceDocs.length} invoice${
+                  invoiceDocs.length !== 1 ? "s" : ""
+                }`
+              : undefined,
+        }
+      )
+    } else if (totalCreated > 0 && totalFailed > 0) {
+      toast.warning(
+        `Imported ${totalCreated} · ${totalFailed} failed`,
+        { description: errorMessages.slice(0, 3).join(" · ") }
+      )
+    } else if (totalFailed > 0) {
+      toast.error(`Import failed (${totalFailed})`, {
+        description: errorMessages.slice(0, 3).join(" · "),
+      })
+    } else {
+      // Nothing routed through an ingest action — the completed docs were
+      // all types we don't persist inline yet (cog_report / pricing_schedule /
+      // purchase_order). Keep them in the queue's onComplete callback and
+      // toast that classification is done.
+      toast.success(
+        `${completed.length} document${
+          completed.length !== 1 ? "s" : ""
+        } classified`,
+        { description: "Review in the destination tab to finalize." }
+      )
     }
   }
 
