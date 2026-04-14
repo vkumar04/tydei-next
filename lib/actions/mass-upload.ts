@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
+import { matchVendorByAlias } from "@/lib/vendor-aliases"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import type {
   ContractType,
@@ -16,9 +17,14 @@ import type {
 // ─── Vendor find-or-create ──────────────────────────────────────
 
 /**
- * Case-insensitive vendor lookup by name. Creates a new vendor stub if no
- * match is found so inline ingestion from extracted documents doesn't fail
- * when the AI surfaces a vendor we don't know yet.
+ * Resolve an incoming vendor name to an existing Vendor row, using (in order):
+ *   1. exact case-insensitive name match
+ *   2. the canonical alias table in lib/vendor-aliases.ts
+ *   3. Levenshtein fuzzy match against all existing vendors
+ *
+ * Only creates a new vendor stub when none of the above yield a hit. This
+ * prevents ingest from sharding the Vendor table into near-duplicates like
+ * "Stryker" / "Stryker Corp" / "Stryker Orthopaedics".
  */
 async function findOrCreateVendorByName(
   name: string | null | undefined,
@@ -40,12 +46,21 @@ async function findOrCreateVendorByName(
     return fallback.id
   }
 
-  const existing = await prisma.vendor.findFirst({
+  // Exact case-insensitive match first — cheap and covers the happy path.
+  const exact = await prisma.vendor.findFirst({
     where: { name: { equals: trimmed, mode: "insensitive" } },
     select: { id: true },
   })
-  if (existing) return existing.id
+  if (exact) return exact.id
 
+  // Alias + fuzzy match against the full vendor table.
+  const vendors = await prisma.vendor.findMany({
+    select: { id: true, name: true, displayName: true },
+  })
+  const aliasHit = matchVendorByAlias(trimmed, vendors)
+  if (aliasHit) return aliasHit
+
+  // Still nothing — create a new vendor with the AI-extracted name verbatim.
   const created = await prisma.vendor.create({
     data: {
       name: trimmed,
@@ -199,7 +214,10 @@ export async function ingestExtractedContracts(
                     termType: toTermType(term.termType),
                     effectiveStart: toSafeDate(term.effectiveFrom, effectiveDate),
                     effectiveEnd: toSafeDate(term.effectiveTo, expirationDate),
-                    performancePeriod: toPerfPeriod(term.performancePeriod) ?? undefined,
+                    // ContractTerm doesn't store a performancePeriod enum — it
+                    // tracks cadence in free-text evaluationPeriod/paymentTiming.
+                    evaluationPeriod: term.performancePeriod ?? "annual",
+                    paymentTiming: extracted.rebatePayPeriod ?? "quarterly",
                     ...(term.tiers && term.tiers.length > 0
                       ? {
                           tiers: {
@@ -239,7 +257,8 @@ export async function ingestExtractedContracts(
       results.push({ ok: true, contractId: contract.id, name: contract.name })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      results.push({ ok: false, error: message.slice(0, 200), name: displayName })
+      console.error("[ingestExtractedContracts] failure:", err)
+      results.push({ ok: false, error: message.slice(0, 4000), name: displayName })
     }
   }
 
