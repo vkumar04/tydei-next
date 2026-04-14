@@ -142,6 +142,19 @@ function classifyByHeaders(headersRow: string[]): {
     return { classification: "cog_data", confidence: 0.9 }
   }
 
+  // Case-level supply usage: MRN + Case ID + Manufacturer + cost columns.
+  // Matches Lighthouse-style per-case supply exports. Route as cog_data
+  // since case-supply is the per-case equivalent of cost of goods and no
+  // dedicated case_supply DocumentType exists. Checked before the generic
+  // pricing heuristic so we don't miscategorize it.
+  if (
+    (has("case id") || has("mrn")) &&
+    has("manufacturer") &&
+    (has("unit cost") || has("used cost"))
+  ) {
+    return { classification: "cog_data", confidence: 0.88 }
+  }
+
   if (has("vendor_item_no") || has("vendor item") || has("reference") || has("catalog")) {
     if (
       has("contract_price") ||
@@ -150,7 +163,9 @@ function classifyByHeaders(headersRow: string[]): {
       has("list price") ||
       has("price") ||
       has("net cost") ||
-      has("unit price")
+      has("unit cost") ||
+      has("unit price") ||
+      has("used cost")
     ) {
       return { classification: "pricing_file", confidence: 0.92 }
     }
@@ -212,17 +227,25 @@ export async function POST(request: Request) {
         const headerRow = parseCSVHeaders(text)
         heuristic = classifyByHeaders(headerRow)
       } else {
+        // Excel files: prioritize the more specific keyword. "price" beats
+        // "cog" when both appear (e.g. "Cogsart01012024 Price file.xlsx"
+        // is a price file, not a cog extract).
         const nameLower = fileName.toLowerCase()
-        if (nameLower.includes("cog") || nameLower.includes("usage") || nameLower.includes("purchase")) {
-          heuristic = { classification: "cog_data", confidence: 0.75 }
-        } else if (
+        if (
+          nameLower.includes("price") ||
           nameLower.includes("pricing") ||
           nameLower.includes("price list") ||
           nameLower.includes("catalog")
         ) {
-          heuristic = { classification: "pricing_file", confidence: 0.75 }
+          heuristic = { classification: "pricing_file", confidence: 0.78 }
         } else if (nameLower.includes("invoice")) {
           heuristic = { classification: "invoice", confidence: 0.75 }
+        } else if (
+          nameLower.includes("cog") ||
+          nameLower.includes("usage") ||
+          nameLower.includes("purchase")
+        ) {
+          heuristic = { classification: "cog_data", confidence: 0.75 }
         }
       }
 
