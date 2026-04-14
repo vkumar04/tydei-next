@@ -257,7 +257,7 @@ export function InvoiceValidationClient({
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Import Invoice
+            Add Invoices
           </Button>
           <Button onClick={() => toast.info("Export coming soon")}>
             <Download className="mr-2 h-4 w-4" />

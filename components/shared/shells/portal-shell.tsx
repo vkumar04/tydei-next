@@ -5,9 +5,12 @@ import type { ReactNode } from "react"
 import Link from "next/link"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
 import {
+  Building2,
   FileText,
+  Shield,
   Upload,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import {
   SidebarProvider,
   Sidebar,
@@ -71,12 +74,27 @@ export function PortalShell({
               </div>
             </Link>
           </div>
-          {/* Facility / Organization Selector */}
-          {sidebarHeader && (
-            <div className="border-b border-sidebar-border px-4 py-3">
-              {sidebarHeader}
-            </div>
-          )}
+          {/* Facility / Organization Selector — falls back to a portal badge
+              when the portal layout doesn't provide a custom selector */}
+          <div className="border-b border-sidebar-border px-4 py-3">
+            {sidebarHeader ?? (
+              <Badge
+                variant="secondary"
+                className="bg-sidebar-accent text-sidebar-accent-foreground"
+              >
+                {role === "admin" ? (
+                  <Shield className="mr-1 h-3 w-3" />
+                ) : (
+                  <Building2 className="mr-1 h-3 w-3" />
+                )}
+                {role === "facility"
+                  ? "Facility Portal"
+                  : role === "vendor"
+                    ? "Vendor Portal"
+                    : "Admin Portal"}
+              </Badge>
+            )}
+          </div>
         </SidebarHeader>
         <SidebarContent className="p-0">
           <ScrollArea className="flex-1 px-3 py-4">

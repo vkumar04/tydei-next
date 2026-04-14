@@ -58,7 +58,7 @@ export function SignUpForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="name">Full Name</Label>
-        <Input id="name" placeholder="Jane Smith" {...register("name")} />
+        <Input id="name" placeholder="John Smith" {...register("name")} />
         {errors.name && (
           <p className="text-xs text-destructive">{errors.name.message}</p>
         )}
@@ -136,7 +136,7 @@ export function SignUpForm() {
 
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
-        Create Account
+        Create account
       </Button>
 
       <p className="text-center text-sm text-muted-foreground">
