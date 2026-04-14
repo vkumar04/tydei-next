@@ -235,14 +235,6 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             <Link2 className="h-4 w-4 hidden sm:inline" />
             Connections
           </TabsTrigger>
-          <TabsTrigger value="features" className="gap-2">
-            <ToggleLeft className="h-4 w-4 hidden sm:inline" />
-            Features
-          </TabsTrigger>
-          <TabsTrigger value="ai-credits" className="gap-2">
-            <Sparkles className="h-4 w-4 hidden sm:inline" />
-            AI Credits
-          </TabsTrigger>
           <TabsTrigger value="vendors" className="gap-2">
             <Store className="h-4 w-4 hidden sm:inline" />
             Vendors
@@ -250,6 +242,14 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
           <TabsTrigger value="categories" className="gap-2">
             <FolderTree className="h-4 w-4 hidden sm:inline" />
             Categories
+          </TabsTrigger>
+          <TabsTrigger value="features" className="gap-2">
+            <ToggleLeft className="h-4 w-4 hidden sm:inline" />
+            Features
+          </TabsTrigger>
+          <TabsTrigger value="ai-credits" className="gap-2">
+            <Sparkles className="h-4 w-4 hidden sm:inline" />
+            AI Credits
           </TabsTrigger>
           <TabsTrigger value="addons" className="gap-2">
             <Puzzle className="h-4 w-4 hidden sm:inline" />

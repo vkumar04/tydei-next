@@ -9,7 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { Building2 } from "lucide-react"
+import { Building2Icon } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -36,7 +36,7 @@ export function SpendByVendorChart({ data }: SpendByVendorChartProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-muted-foreground" />
+          <Building2Icon className="h-5 w-5 text-muted-foreground" />
           <div>
             <CardTitle>Top Vendors by Spend</CardTitle>
             <CardDescription>Highest spending vendors</CardDescription>
@@ -71,7 +71,7 @@ export function SpendByVendorChart({ data }: SpendByVendorChartProps) {
           </ResponsiveContainer>
         ) : (
           <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
-            <Building2 className="h-10 w-10 mb-3 opacity-50" />
+            <Building2Icon className="h-10 w-10 mb-3 opacity-50" />
             <p className="font-medium">No vendor data available</p>
           </div>
         )}

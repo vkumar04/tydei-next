@@ -8,12 +8,11 @@ import {
   CheckCircle,
   AlertTriangle,
   Plus,
-  X,
   CalendarIcon,
+  FileStack,
+  Trash2,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -31,7 +30,17 @@ import { COGImportDialog } from "@/components/facility/cog/cog-import-dialog"
 import { PricingImportDialog } from "@/components/facility/cog/pricing-import-dialog"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { MassUpload } from "@/components/import/mass-upload"
-import { useCOGStats } from "@/hooks/use-cog"
+import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { formatCurrency } from "@/lib/formatting"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -54,15 +63,19 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   const [massUploadOpen, setMassUploadOpen] = useState(false)
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  const [clearAllOpen, setClearAllOpen] = useState(false)
 
   // Fetch aggregated stats from server (not from paginated records)
   const { data: stats, isPending: statsLoading, refetch: refetchStats } = useCOGStats(facilityId)
+  const clearAllMutation = useClearAllCOGRecords()
 
   const totalSpend = stats?.totalSpend ?? 0
   const totalItems = stats?.totalItems ?? 0
   const onContractCount = stats?.onContractCount ?? 0
   const offContractCount = stats?.offContractCount ?? 0
   const totalSavings = totalSpend * 0.05
+  const minPODate = stats?.minPODate ?? null
+  const maxPODate = stats?.maxPODate ?? null
 
   return (
     <div className="flex flex-col gap-6">
@@ -75,8 +88,12 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="destructive" onClick={() => setClearAllOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Clear All Data
+          </Button>
           <Button variant="outline" onClick={() => setMassUploadOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
+            <FileStack className="mr-2 h-4 w-4" />
             Mass Upload
           </Button>
           <Button variant="outline" onClick={() => setCogImportOpen(true)}>
@@ -89,6 +106,89 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
           </Button>
         </div>
       </div>
+
+      {/* Data Date Range Card */}
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Data Date Range</p>
+                <p className="text-sm text-muted-foreground">
+                  {minPODate && maxPODate
+                    ? `${format(new Date(minPODate), "MM/dd/yyyy")} - ${format(new Date(maxPODate), "MM/dd/yyyy")}`
+                    : "No data loaded"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Filter:</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "w-[130px] justify-start text-left font-normal",
+                      !dateFrom && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateFrom ? format(parseISO(dateFrom), "MM/dd/yyyy") : "From"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={dateFrom ? parseISO(dateFrom) : undefined}
+                    onSelect={(date) =>
+                      setDateFrom(date ? format(date, "yyyy-MM-dd") : "")
+                    }
+                  />
+                </PopoverContent>
+              </Popover>
+              <span className="text-muted-foreground">-</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "w-[130px] justify-start text-left font-normal",
+                      !dateTo && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateTo ? format(parseISO(dateTo), "MM/dd/yyyy") : "To"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={dateTo ? parseISO(dateTo) : undefined}
+                    onSelect={(date) =>
+                      setDateTo(date ? format(date, "yyyy-MM-dd") : "")
+                    }
+                  />
+                </PopoverContent>
+              </Popover>
+              {(dateFrom || dateTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDateFrom("")
+                    setDateTo("")
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Summary stats */}
       <div className="grid gap-4 sm:grid-cols-5">
@@ -159,76 +259,6 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         </Card>
       </div>
 
-      {/* Date range filter bar */}
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="grid gap-1.5">
-          <Label className="text-sm">From</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-[180px] justify-start text-left font-normal h-10",
-                  !dateFrom && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                {dateFrom
-                  ? format(parseISO(dateFrom), "MMMM do, yyyy")
-                  : "Select start date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={dateFrom ? parseISO(dateFrom) : undefined}
-                onSelect={(date) =>
-                  setDateFrom(date ? format(date, "yyyy-MM-dd") : "")
-                }
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-        <div className="grid gap-1.5">
-          <Label className="text-sm">To</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-[180px] justify-start text-left font-normal h-10",
-                  !dateTo && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                {dateTo
-                  ? format(parseISO(dateTo), "MMMM do, yyyy")
-                  : "Select end date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={dateTo ? parseISO(dateTo) : undefined}
-                onSelect={(date) =>
-                  setDateTo(date ? format(date, "yyyy-MM-dd") : "")
-                }
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-        {(dateFrom || dateTo) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => { setDateFrom(""); setDateTo("") }}
-          >
-            <X className="mr-1 h-4 w-4" />
-            Clear dates
-          </Button>
-        )}
-      </div>
-
       {/* Tabs */}
       <Tabs defaultValue="cog" className="space-y-4">
         <TabsList>
@@ -282,6 +312,30 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         open={massUploadOpen}
         onOpenChange={setMassUploadOpen}
       />
+
+      <AlertDialog open={clearAllOpen} onOpenChange={setClearAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all COG data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all {totalItems.toLocaleString()} COG
+              records for this facility. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await clearAllMutation.mutateAsync()
+                refetchStats()
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Clear All Data
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -3,12 +3,11 @@
 import { motion } from "motion/react"
 import { MetricCard } from "@/components/shared/cards/metric-card"
 import {
-  FileSignature,
-  DollarSign,
-  TrendingUp,
-  AlertTriangle,
+  FileSignatureIcon,
+  DollarSignIcon,
+  TrendingUpIcon,
+  AlertTriangleIcon,
 } from "lucide-react"
-import { formatCurrency, formatCompactNumber } from "@/lib/formatting"
 import { staggerContainer } from "@/lib/animations"
 
 interface DashboardStatsProps {
@@ -42,7 +41,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       <MetricCard
         title="Active Contracts"
         value={stats.activeContractCount.toString()}
-        icon={FileSignature}
+        icon={FileSignatureIcon}
         change={
           stats.recentContractsAdded > 0
             ? `+${stats.recentContractsAdded}`
@@ -54,7 +53,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       <MetricCard
         title="Total Spend"
         value={formatCurrencyShort(stats.totalSpend)}
-        icon={DollarSign}
+        icon={DollarSignIcon}
         change={`${stats.onContractPercent.toFixed(1)}%`}
         changeType={stats.onContractPercent >= 50 ? "positive" : "negative"}
         secondaryValue={formatCurrencyShort(stats.onContractSpend)}
@@ -64,7 +63,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       <MetricCard
         title="Rebates"
         value={formatCurrencyShort(stats.rebatesEarned)}
-        icon={TrendingUp}
+        icon={TrendingUpIcon}
         change={`${stats.collectionRate.toFixed(1)}%`}
         changeType={stats.collectionRate >= 80 ? "positive" : "negative"}
         secondaryValue={formatCurrencyShort(stats.rebatesCollected)}
@@ -74,7 +73,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       <MetricCard
         title="Pending Alerts"
         value={stats.pendingAlertCount.toString()}
-        icon={AlertTriangle}
+        icon={AlertTriangleIcon}
         change={stats.pendingAlertCount.toString()}
         changeType={stats.pendingAlertCount === 0 ? "positive" : "negative"}
         description="action needed"

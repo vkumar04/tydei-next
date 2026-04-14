@@ -17,18 +17,14 @@ import {
 } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Badge } from "@/components/ui/badge"
-import { CalendarIcon, X, Filter } from "lucide-react"
+import { CalendarIcon, XIcon, FilterIcon } from "lucide-react"
 import { format, subMonths, subYears, startOfYear } from "date-fns"
 import type { DateRange as RDPDateRange } from "react-day-picker"
-
-interface DateRange {
-  from: string
-  to: string
-}
+import type { DateRange } from "@/lib/query-keys"
 
 interface DashboardFiltersProps {
-  dateRange: DateRange
-  onDateRangeChange: (range: DateRange) => void
+  dateRange: DateRange | undefined
+  onDateRangeChange: (range: DateRange | undefined) => void
 }
 
 const vendors = [
@@ -56,7 +52,14 @@ const dateRangePresets = [
   { label: "Last year", getValue: () => ({ from: subYears(new Date(), 1), to: new Date() }) },
 ]
 
-export function DashboardFilters({ dateRange, onDateRangeChange }: DashboardFiltersProps) {
+function toIso(d: Date): string {
+  return d.toISOString().split("T")[0]!
+}
+
+export function DashboardFilters({
+  dateRange,
+  onDateRangeChange,
+}: DashboardFiltersProps) {
   const [mounted, setMounted] = useState(false)
   // TODO: fetch facilities from server action instead of hardcoded empty list
   const [facilities] = useState<{ id: string; name: string }[]>([])
@@ -70,18 +73,12 @@ export function DashboardFilters({ dateRange, onDateRangeChange }: DashboardFilt
 
   const handleDatePreset = (preset: (typeof dateRangePresets)[number]) => {
     const { from, to } = preset.getValue()
-    onDateRangeChange({
-      from: from.toISOString().split("T")[0],
-      to: to.toISOString().split("T")[0],
-    })
+    onDateRangeChange({ from: toIso(from), to: toIso(to) })
   }
 
   const handleCalendarSelect = (range: RDPDateRange | undefined) => {
     if (range?.from && range?.to) {
-      onDateRangeChange({
-        from: range.from.toISOString().split("T")[0],
-        to: range.to.toISOString().split("T")[0],
-      })
+      onDateRangeChange({ from: toIso(range.from), to: toIso(range.to) })
     }
   }
 
@@ -96,13 +93,13 @@ export function DashboardFilters({ dateRange, onDateRangeChange }: DashboardFilt
     setContractType("all")
   }
 
-  const calendarSelected: RDPDateRange = {
-    from: new Date(dateRange.from),
-    to: new Date(dateRange.to),
-  }
+  const calendarSelected: RDPDateRange | undefined = dateRange
+    ? { from: new Date(dateRange.from), to: new Date(dateRange.to) }
+    : undefined
 
+  // v0 parity: show "All Time" until user picks a range (and until mounted).
   const dateRangeText =
-    mounted
+    mounted && dateRange
       ? `${format(new Date(dateRange.from), "MMM d, yyyy")} - ${format(new Date(dateRange.to), "MMM d, yyyy")}`
       : "All Time"
 
@@ -207,7 +204,7 @@ export function DashboardFilters({ dateRange, onDateRangeChange }: DashboardFilt
         {activeFiltersCount > 0 && (
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="gap-1">
-              <Filter className="h-3 w-3" />
+              <FilterIcon className="h-3 w-3" />
               {activeFiltersCount} filter{activeFiltersCount > 1 ? "s" : ""} active
             </Badge>
             <Button
@@ -216,7 +213,7 @@ export function DashboardFilters({ dateRange, onDateRangeChange }: DashboardFilt
               onClick={clearFilters}
               className="h-7 px-2"
             >
-              <X className="h-3 w-3 mr-1" />
+              <XIcon className="h-3 w-3 mr-1" />
               Clear
             </Button>
           </div>

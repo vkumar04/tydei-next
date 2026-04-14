@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   FileText,
-  Clock,
-  DollarSign,
   Package,
   Plus,
   ShoppingCart,
@@ -88,6 +86,8 @@ export function POList({ facilityId }: POListProps) {
     status: status === "all" ? undefined : status,
     vendorId: vendorId === "all" ? undefined : vendorId,
   })
+  // Unfiltered orders for accurate client-side status stats
+  const { data: allData } = usePurchaseOrders(facilityId, {})
   const { data: stats, isLoading: statsLoading } = usePOStats(facilityId)
   const { data: vendors } = useFacilityVendors(facilityId)
   const updateStatus = useUpdatePOStatus()
@@ -102,6 +102,15 @@ export function POList({ facilityId }: POListProps) {
     status: string
     _count: { lineItems: number }
   }>
+
+  const allOrders = (allData?.orders ?? []) as typeof orders
+
+  // Derived status-breakdown stats (matches v0 parity)
+  const sentCount = allOrders.filter(
+    (po) => po.status === "sent" || po.status === "approved"
+  ).length
+  const completedCount = allOrders.filter((po) => po.status === "completed").length
+  const draftsCount = allOrders.filter((po) => po.status === "draft").length
 
   const filteredOrders = orders.filter((po) => {
     const q = searchQuery.toLowerCase()
@@ -177,13 +186,7 @@ export function POList({ facilityId }: POListProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {statsLoading ? (
-              <Skeleton className="h-7 w-20" />
-            ) : (
-              <div className="text-2xl font-bold text-blue-600">
-                {stats?.totalPOs ?? 0}
-              </div>
-            )}
+            <div className="text-2xl font-bold text-blue-600">{sentCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -193,13 +196,7 @@ export function POList({ facilityId }: POListProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {statsLoading ? (
-              <Skeleton className="h-7 w-20" />
-            ) : (
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {stats?.totalItems ?? 0}
-              </div>
-            )}
+            <div className="text-2xl font-bold text-green-600">{completedCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -209,13 +206,7 @@ export function POList({ facilityId }: POListProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {statsLoading ? (
-              <Skeleton className="h-7 w-20" />
-            ) : (
-              <div className="text-2xl font-bold">
-                {stats?.pendingApproval ?? 0}
-              </div>
-            )}
+            <div className="text-2xl font-bold">{draftsCount}</div>
           </CardContent>
         </Card>
       </div>
@@ -295,7 +286,6 @@ export function POList({ facilityId }: POListProps) {
                       <TableHead>Vendor</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
-                      <TableHead>Delivery</TableHead>
                       <TableHead>Items</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead className="w-[80px]">Actions</TableHead>
@@ -323,19 +313,6 @@ export function POList({ facilityId }: POListProps) {
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             {formatDate(po.orderDate)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Clock className="h-4 w-4" />
-                            <span>
-                              {formatDate(
-                                new Date(
-                                  new Date(po.orderDate).getTime() +
-                                    7 * 24 * 60 * 60 * 1000
-                                )
-                              )}
-                            </span>
                           </div>
                         </TableCell>
                         <TableCell>

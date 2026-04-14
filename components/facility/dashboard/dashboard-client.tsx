@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { DashboardFilters } from "./dashboard-filters"
 import { DashboardStats } from "./dashboard-stats"
 import { TotalSpendChart } from "./total-spend-chart"
@@ -17,12 +17,14 @@ import {
   useRecentContracts,
   useRecentAlerts,
 } from "@/hooks/use-dashboard"
+import type { DateRange } from "@/lib/query-keys"
 
-function getDefaultRange() {
-  const now = new Date()
-  // Look back 12 months so historical COG data is visible by default
-  const from = new Date(now.getFullYear() - 1, now.getMonth(), 1)
-  return { from: from.toISOString().split("T")[0], to: now.toISOString().split("T")[0] }
+// "All time" sentinel — v0 shows undefined dates as "All Time". Tydei's server
+// actions require concrete strings, so when the user hasn't picked a range we
+// send a wide window that effectively means "all data".
+const WIDE_RANGE: DateRange = {
+  from: "1970-01-01",
+  to: new Date().toISOString().split("T")[0]!,
 }
 
 interface DashboardClientProps {
@@ -30,12 +32,15 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ facilityId }: DashboardClientProps) {
-  const [dateRange, setDateRange] = useState(getDefaultRange)
+  // v0 parity: default to undefined (shows "All Time" in filter).
+  const [pickedRange, setPickedRange] = useState<DateRange | undefined>(undefined)
 
-  const stats = useDashboardStats(facilityId, dateRange)
-  const monthlySpend = useMonthlySpend(facilityId, dateRange)
-  const spendChart = useSpendByVendor(facilityId, dateRange)
-  const categoryChart = useSpendByCategory(facilityId, dateRange)
+  const effectiveRange = useMemo(() => pickedRange ?? WIDE_RANGE, [pickedRange])
+
+  const stats = useDashboardStats(facilityId, effectiveRange)
+  const monthlySpend = useMonthlySpend(facilityId, effectiveRange)
+  const spendChart = useSpendByVendor(facilityId, effectiveRange)
+  const categoryChart = useSpendByCategory(facilityId, effectiveRange)
   const recentContracts = useRecentContracts(facilityId)
   const recentAlerts = useRecentAlerts(facilityId)
 
@@ -50,7 +55,10 @@ export function DashboardClient({ facilityId }: DashboardClientProps) {
       </div>
 
       {/* Filters */}
-      <DashboardFilters dateRange={dateRange} onDateRangeChange={setDateRange} />
+      <DashboardFilters
+        dateRange={pickedRange}
+        onDateRangeChange={setPickedRange}
+      />
 
       {/* Metrics cards */}
       {stats.data ? (

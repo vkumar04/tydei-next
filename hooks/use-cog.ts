@@ -8,6 +8,7 @@ import {
   bulkImportCOGRecords,
   deleteCOGRecord,
   bulkDeleteCOGRecords,
+  clearAllCOGRecords,
   getCOGImportHistory,
   getCOGStats,
   deleteCOGFileByDate,
@@ -87,6 +88,18 @@ export function useBulkDeleteCOGRecords() {
       toast.success(`Deleted ${result.deleted} records`)
     },
     onError: (err) => toast.error(err.message || "Failed to delete records"),
+  })
+}
+
+export function useClearAllCOGRecords() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: clearAllCOGRecords,
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      toast.success(`Cleared all ${result.deleted.toLocaleString()} COG records`)
+    },
+    onError: (err) => toast.error(err.message || "Failed to clear records"),
   })
 }
 

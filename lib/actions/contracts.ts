@@ -50,6 +50,7 @@ export async function getContracts(input: ContractFilters) {
         vendor: { select: { id: true, name: true, logoUrl: true } },
         productCategory: { select: { id: true, name: true } },
         facility: { select: { id: true, name: true } },
+        rebates: { select: { rebateEarned: true, rebateCollected: true } },
       },
       orderBy: { updatedAt: "desc" },
       skip: ((filters.page ?? 1) - 1) * (filters.pageSize ?? 20),
@@ -58,7 +59,21 @@ export async function getContracts(input: ContractFilters) {
     prisma.contract.count({ where }),
   ])
 
-  return serialize({ contracts, total })
+  // Derive aggregated rebateEarned / rebateCollected per contract so UI can
+  // render the "Rebate Earned" column without an extra round-trip.
+  const withDerived = contracts.map((c) => {
+    const rebateEarned = (c.rebates ?? []).reduce(
+      (sum, r) => sum + Number(r.rebateEarned ?? 0),
+      0,
+    )
+    const rebateCollected = (c.rebates ?? []).reduce(
+      (sum, r) => sum + Number(r.rebateCollected ?? 0),
+      0,
+    )
+    return { ...c, rebateEarned, rebateCollected }
+  })
+
+  return serialize({ contracts: withDerived, total })
 }
 
 // ─── Single Contract ─────────────────────────────────────────────

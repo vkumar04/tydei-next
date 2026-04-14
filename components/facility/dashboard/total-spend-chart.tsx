@@ -9,7 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { TrendingUp } from "lucide-react"
+import { TrendingUpIcon } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -36,7 +36,7 @@ export function TotalSpendChart({ data }: TotalSpendChartProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-muted-foreground" />
+          <TrendingUpIcon className="h-5 w-5 text-muted-foreground" />
           <div>
             <CardTitle>Total Spend</CardTitle>
             <CardDescription>Monthly spend over time</CardDescription>
@@ -66,7 +66,7 @@ export function TotalSpendChart({ data }: TotalSpendChartProps) {
           </ResponsiveContainer>
         ) : (
           <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
-            <TrendingUp className="h-12 w-12 mb-4 opacity-50" />
+            <TrendingUpIcon className="h-12 w-12 mb-4 opacity-50" />
             <p className="text-lg font-medium">No spend data available</p>
             <p className="text-sm">Import COG data to see charts</p>
           </div>

@@ -1,12 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
 import {
   Select,
   SelectContent,
@@ -30,6 +33,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import {
   FileText,
   Download,
@@ -43,18 +48,6 @@ import {
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
-import { DataTable } from "@/components/shared/tables/data-table"
-import { formatCurrency } from "@/lib/formatting"
-import type { ColumnDef } from "@tanstack/react-table"
-import { getVendorReportData, type VendorContractReport } from "@/lib/actions/vendor-reports"
-
-const performanceColumns: ColumnDef<VendorContractReport>[] = [
-  { accessorKey: "name", header: "Contract" },
-  { accessorKey: "facilityName", header: "Facility" },
-  { accessorKey: "totalSpend", header: "Total Spend", cell: ({ row }) => formatCurrency(row.original.totalSpend) },
-  { accessorKey: "rebateEarned", header: "Rebate Earned", cell: ({ row }) => formatCurrency(row.original.rebateEarned) },
-  { accessorKey: "status", header: "Status" },
-]
 
 const reportTypes = [
   {
@@ -105,10 +98,12 @@ const defaultRecentReports: RecentReport[] = [
 ]
 
 interface VendorReportsClientProps {
+  // vendorId is accepted for future server-action integration but is not
+  // currently consumed — v0 parity renders static sample data.
   vendorId: string
 }
 
-export function VendorReportsClient({ vendorId }: VendorReportsClientProps) {
+export function VendorReportsClient(_props: VendorReportsClientProps) {
   const [selectedFacility, setSelectedFacility] = useState("all")
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false)
   const [selectedReportType, setSelectedReportType] = useState<typeof reportTypes[0] | null>(null)
@@ -116,11 +111,6 @@ export function VendorReportsClient({ vendorId }: VendorReportsClientProps) {
   const [generateProgress, setGenerateProgress] = useState(0)
   const [reportPeriod, setReportPeriod] = useState("current")
   const [generatedReports, setGeneratedReports] = useState<RecentReport[]>(defaultRecentReports)
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["vendorReports", vendorId],
-    queryFn: () => getVendorReportData(vendorId),
-  })
 
   const handleGenerateReport = (report: typeof reportTypes[0], e?: React.MouseEvent) => {
     e?.stopPropagation()
@@ -161,6 +151,10 @@ export function VendorReportsClient({ vendorId }: VendorReportsClientProps) {
         setGenerateProgress(0)
         toast.success("Report generated successfully", {
           description: `${newReport.name} is ready for download`,
+          action: {
+            label: "Download",
+            onClick: () => handleDownload(newReport),
+          },
         })
       }, 500)
     }, 2000)
@@ -173,21 +167,32 @@ export function VendorReportsClient({ vendorId }: VendorReportsClientProps) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Facility Filter */}
-      <div className="flex items-center gap-2">
-        <Select value={selectedFacility} onValueChange={setSelectedFacility}>
-          <SelectTrigger className="w-[180px]">
-            <Building2 className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Facility" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Facilities</SelectItem>
-          </SelectContent>
-        </Select>
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-balance">Reports</h1>
+          <p className="text-muted-foreground">
+            Generate and download performance and compliance reports
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={selectedFacility} onValueChange={setSelectedFacility}>
+            <SelectTrigger className="w-[180px]">
+              <Building2 className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Facility" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Facilities</SelectItem>
+              <SelectItem value="firsthealth">FirstHealth Regional</SelectItem>
+              <SelectItem value="memorial">Memorial Hospital</SelectItem>
+              <SelectItem value="clearwater">Clearwater Medical</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {/* Report Type Cards */}
+      {/* Report Types */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {reportTypes.map((report) => (
           <Card key={report.id} className="hover:bg-accent/50 transition-colors">
@@ -198,7 +203,9 @@ export function VendorReportsClient({ vendorId }: VendorReportsClientProps) {
                 </div>
                 <div>
                   <CardTitle className="text-sm">{report.name}</CardTitle>
-                  <Badge variant="outline" className="text-xs mt-1">{report.frequency}</Badge>
+                  <Badge variant="outline" className="text-xs mt-1">
+                    {report.frequency}
+                  </Badge>
                 </div>
               </div>
             </CardHeader>
@@ -222,7 +229,7 @@ export function VendorReportsClient({ vendorId }: VendorReportsClientProps) {
         ))}
       </div>
 
-      {/* Recent Reports Table */}
+      {/* Recent Reports */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Recent Reports</CardTitle>
@@ -287,38 +294,22 @@ export function VendorReportsClient({ vendorId }: VendorReportsClientProps) {
         </CardContent>
       </Card>
 
-      {/* Contract Performance Data Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Contract Performance</CardTitle>
-          <CardDescription>Performance data from your active contracts</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            columns={performanceColumns}
-            data={data ?? []}
-            searchKey="name"
-            searchPlaceholder="Search contracts..."
-            isLoading={isLoading}
-          />
-        </CardContent>
-      </Card>
-
       {/* Generate Report Dialog */}
-      <Dialog open={isGenerateDialogOpen} onOpenChange={(open) => {
-        if (!isGenerating) {
-          setIsGenerateDialogOpen(open)
-        }
-      }}>
+      <Dialog
+        open={isGenerateDialogOpen}
+        onOpenChange={(open) => {
+          if (!isGenerating) {
+            setIsGenerateDialogOpen(open)
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedReportType && <selectedReportType.icon className="h-5 w-5 text-primary" />}
               Generate {selectedReportType?.name}
             </DialogTitle>
-            <DialogDescription>
-              {selectedReportType?.description}
-            </DialogDescription>
+            <DialogDescription>{selectedReportType?.description}</DialogDescription>
           </DialogHeader>
 
           {isGenerating ? (
@@ -363,6 +354,9 @@ export function VendorReportsClient({ vendorId }: VendorReportsClientProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Facilities</SelectItem>
+                    <SelectItem value="firsthealth">FirstHealth Regional</SelectItem>
+                    <SelectItem value="memorial">Memorial Hospital</SelectItem>
+                    <SelectItem value="clearwater">Clearwater Medical</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

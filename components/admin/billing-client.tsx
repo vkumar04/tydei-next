@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { CreditCard, ExternalLink, Sparkles } from "lucide-react"
+import { CreditCard, ExternalLink, Sparkles, TrendingUp } from "lucide-react"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { BillingOverview } from "./billing-overview"
 import { MRRChart } from "./mrr-chart"
 import { InvoiceTable } from "./invoice-table"
+import { formatCurrency } from "@/lib/formatting"
 import {
   getSubscriptions,
   getStripeInvoices,
@@ -47,6 +48,11 @@ export function BillingClient() {
   const pendingAmount = invoiceData.filter((inv) => inv.status === "open").reduce((sum, inv) => sum + inv.amount, 0)
   const overdueAmount = invoiceData.filter((inv) => inv.status === "uncollectible" || inv.status === "void").reduce((sum, inv) => sum + inv.amount, 0)
 
+  // Latest MRR point
+  const latestMRR = mrr.data && mrr.data.length > 0 ? mrr.data[mrr.data.length - 1].mrr : 0
+  const subscriptionCount = subs.data?.total ?? 0
+  const avgRevenuePerAccount = subscriptionCount > 0 ? latestMRR / subscriptionCount : 0
+
   const handleManageSubscription = async (facilityId: string) => {
     setIsRedirecting(true)
     try {
@@ -73,7 +79,7 @@ export function BillingClient() {
     <div className="space-y-6">
       {subs.data ? (
         <BillingOverview
-          mrr={mrr.data?.reduce((_, d) => d.mrr, 0) ?? 0}
+          mrr={latestMRR}
           subscriptions={subs.data.total}
           paidAmount={paidAmount}
           pendingAmount={pendingAmount}
@@ -87,6 +93,39 @@ export function BillingClient() {
           <Skeleton className="h-[80px] rounded-xl" />
         </div>
       )}
+
+      {/* MRR Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Monthly Recurring Revenue
+          </CardTitle>
+          <CardDescription>Platform subscription metrics</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Current MRR</p>
+              <p className="text-3xl font-bold">{formatCurrency(latestMRR)}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                Active Subscriptions
+              </p>
+              <p className="text-3xl font-bold">{subscriptionCount}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                Avg. Revenue per Account
+              </p>
+              <p className="text-3xl font-bold">
+                {formatCurrency(avgRevenuePerAccount)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Subscription Actions */}
       <Card>
