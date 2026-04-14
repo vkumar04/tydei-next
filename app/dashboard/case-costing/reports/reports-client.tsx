@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { PageHeader } from "@/components/shared/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -23,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import { CostDistributionChart } from "@/components/facility/case-costing/cost-distribution-chart"
 import { useCaseCostingReport, useCases } from "@/hooks/use-case-costing"
 import {
@@ -36,28 +36,65 @@ import {
 } from "recharts"
 import { ChartCard } from "@/components/shared/charts/chart-card"
 import { chartTooltipStyle } from "@/lib/chart-config"
-import { ArrowLeft, TrendingUp, TrendingDown } from "lucide-react"
+import {
+  ArrowLeft,
+  TrendingUp,
+  TrendingDown,
+  Download,
+  Filter,
+  Printer,
+  Mail,
+  Stethoscope,
+  DollarSign,
+  Target,
+  User,
+  Activity,
+  BarChart3,
+} from "lucide-react"
 
 interface CaseCostingReportsClientProps {
   facilityId: string
 }
 
-type ReportType = "surgeon" | "procedure" | "trends"
-type DateRange = "3mo" | "6mo" | "12mo" | "all"
+type ReportTab =
+  | "surgeon-comparison"
+  | "procedure-analysis"
+  | "cost-trends"
+  | "rebate-contribution"
+
+type DateRange =
+  | "1month"
+  | "3months"
+  | "6months"
+  | "12months"
+  | "24months"
+  | "36months"
+  | "60months"
+  | "ytd"
+  | "all"
 
 function getDateFrom(range: DateRange): string | undefined {
   if (range === "all") return undefined
   const d = new Date()
-  if (range === "3mo") d.setMonth(d.getMonth() - 3)
-  else if (range === "6mo") d.setMonth(d.getMonth() - 6)
-  else if (range === "12mo") d.setFullYear(d.getFullYear() - 1)
+  if (range === "1month") d.setMonth(d.getMonth() - 1)
+  else if (range === "3months") d.setMonth(d.getMonth() - 3)
+  else if (range === "6months") d.setMonth(d.getMonth() - 6)
+  else if (range === "12months") d.setFullYear(d.getFullYear() - 1)
+  else if (range === "24months") d.setFullYear(d.getFullYear() - 2)
+  else if (range === "36months") d.setFullYear(d.getFullYear() - 3)
+  else if (range === "60months") d.setFullYear(d.getFullYear() - 5)
+  else if (range === "ytd") {
+    d.setMonth(0)
+    d.setDate(1)
+  }
   return d.toISOString().slice(0, 10)
 }
 
 export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClientProps) {
-  const [reportType, setReportType] = useState<ReportType>("surgeon")
-  const [dateRange, setDateRange] = useState<DateRange>("12mo")
-  const [activeTab, setActiveTab] = useState("surgeon-comparison")
+  const [dateRange, setDateRange] = useState<DateRange>("12months")
+  const [selectedSurgeon, setSelectedSurgeon] = useState<string>("all")
+  const [selectedProcedure, setSelectedProcedure] = useState<string>("all")
+  const [activeTab, setActiveTab] = useState<ReportTab>("surgeon-comparison")
 
   const dateFrom = getDateFrom(dateRange)
 
@@ -203,76 +240,237 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
 
   if (!report) return null
 
+  const surgeonOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of cases) if (c.surgeonName) set.add(c.surgeonName)
+    return Array.from(set)
+  }, [cases])
+
+  const procedureOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of cases) if (c.primaryCptCode) set.add(c.primaryCptCode)
+    return Array.from(set)
+  }, [cases])
+
+  const totalRebates = useMemo(
+    () => rebateStats.reduce((s, r) => s + r.estRebate, 0),
+    [rebateStats]
+  )
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Case Costing Reports"
-        description="Summary metrics and trends for surgical case costs"
-        action={
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
           <Link href="/dashboard/case-costing">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="mr-2 size-4" /> Back to Case Costing
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-        }
-      />
-
-      {/* ─── Filter Bar ──────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Select
-          value={reportType}
-          onValueChange={(v) => setReportType(v as ReportType)}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Report type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="surgeon">Surgeon Comparison</SelectItem>
-            <SelectItem value="procedure">Procedure Analysis</SelectItem>
-            <SelectItem value="trends">Cost Trends</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={dateRange}
-          onValueChange={(v) => setDateRange(v as DateRange)}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Date range" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="3mo">Last 3 Months</SelectItem>
-            <SelectItem value="6mo">Last 6 Months</SelectItem>
-            <SelectItem value="12mo">Last 12 Months</SelectItem>
-            <SelectItem value="all">All Time</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Badge variant="secondary" className="text-xs">
-          {cases.length} cases
-        </Badge>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              Case Costing Reports
+            </h1>
+            <p className="text-muted-foreground">
+              Surgeon performance, procedure analytics, and cost analysis
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm">
+            <Printer className="mr-2 h-4 w-4" />
+            Print
+          </Button>
+          <Button variant="outline" size="sm">
+            <Mail className="mr-2 h-4 w-4" />
+            Email
+          </Button>
+          <Button size="sm">
+            <Download className="mr-2 h-4 w-4" />
+            Export PDF
+          </Button>
+        </div>
       </div>
 
-      {/* ─── Stat Cards ──────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Total Cases" value={report.totalCases.toLocaleString()} />
-        <StatCard label="Total Spend" value={`$${Math.round(report.totalSpend).toLocaleString()}`} />
-        <StatCard label="Avg Cost/Case" value={`$${Math.round(report.avgCostPerCase).toLocaleString()}`} />
-        <StatCard label="Total Reimbursement" value={`$${Math.round(report.totalReimbursement).toLocaleString()}`} />
-        <StatCard label="Avg Margin" value={`$${Math.round(report.avgMargin).toLocaleString()}`} />
-        <StatCard label="Compliance Rate" value={`${Math.round(report.complianceRate)}%`} />
+      {/* Filters */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            Report Filters
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="space-y-2">
+              <Label>Report Type</Label>
+              <Select
+                value={activeTab}
+                onValueChange={(v) => setActiveTab(v as ReportTab)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="surgeon-comparison">
+                    Surgeon Comparison
+                  </SelectItem>
+                  <SelectItem value="procedure-analysis">
+                    Procedure Analysis
+                  </SelectItem>
+                  <SelectItem value="cost-trends">Cost Trends</SelectItem>
+                  <SelectItem value="rebate-contribution">
+                    Rebate Contribution
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Surgeon</Label>
+              <Select
+                value={selectedSurgeon}
+                onValueChange={setSelectedSurgeon}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Surgeons</SelectItem>
+                  {surgeonOptions.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Procedure</Label>
+              <Select
+                value={selectedProcedure}
+                onValueChange={setSelectedProcedure}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Procedures</SelectItem>
+                  {procedureOptions.map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Date Range</Label>
+              <Select
+                value={dateRange}
+                onValueChange={(v) => setDateRange(v as DateRange)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1month">Last Month</SelectItem>
+                  <SelectItem value="3months">Last 3 Months</SelectItem>
+                  <SelectItem value="6months">Last 6 Months</SelectItem>
+                  <SelectItem value="12months">Last 12 Months</SelectItem>
+                  <SelectItem value="24months">Last 2 Years</SelectItem>
+                  <SelectItem value="36months">Last 3 Years</SelectItem>
+                  <SelectItem value="60months">Last 5 Years</SelectItem>
+                  <SelectItem value="ytd">Year to Date</SelectItem>
+                  <SelectItem value="all">All Time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Summary Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Cases</CardTitle>
+            <Stethoscope className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {report.totalCases.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {cases.length} in selected range
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Rebates</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              ${Math.round(totalRebates).toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">Estimated @ 3%</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Avg Margin</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              ${Math.round(report.avgMargin).toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">Per case</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Contract Compliance
+            </CardTitle>
+            <Target className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {Math.round(report.complianceRate)}%
+            </div>
+            <p className="text-xs text-muted-foreground">Across all surgeons</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* ─── Cost Distribution Chart ─────────────────────────────── */}
+      {/* Cost Distribution Chart */}
       <CostDistributionChart cases={cases} />
 
-      {/* ─── 4-Tab Section ───────────────────────────────────────── */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {/* Report Tabs */}
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as ReportTab)}
+        className="space-y-4"
+      >
         <TabsList>
-          <TabsTrigger value="surgeon-comparison">Surgeon Comparison</TabsTrigger>
-          <TabsTrigger value="procedure-analysis">Procedure Analysis</TabsTrigger>
-          <TabsTrigger value="cost-trends">Cost Trends</TabsTrigger>
-          <TabsTrigger value="rebate-contribution">Rebate Contribution</TabsTrigger>
+          <TabsTrigger value="surgeon-comparison" className="gap-2">
+            <User className="h-4 w-4" />
+            Surgeon Comparison
+          </TabsTrigger>
+          <TabsTrigger value="procedure-analysis" className="gap-2">
+            <Activity className="h-4 w-4" />
+            Procedure Analysis
+          </TabsTrigger>
+          <TabsTrigger value="cost-trends" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Cost Trends
+          </TabsTrigger>
+          <TabsTrigger value="rebate-contribution" className="gap-2">
+            <DollarSign className="h-4 w-4" />
+            Rebate Contribution
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── Tab 1: Surgeon Comparison ─────────────────────────── */}
@@ -540,16 +738,5 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
         </TabsContent>
       </Tabs>
     </div>
-  )
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-2xl font-bold">{value}</p>
-      </CardContent>
-    </Card>
   )
 }

@@ -74,22 +74,24 @@ export function ContractFilters({
         </SelectContent>
       </Select>
 
-      <Select
-        value={facilityFilter}
-        onValueChange={(v) => onFacilityChange?.(v)}
-      >
-        <SelectTrigger className="w-[170px]">
-          <SelectValue placeholder="All Facilities" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Facilities</SelectItem>
-          {facilities?.map((f) => (
-            <SelectItem key={f.id} value={f.id}>
-              {f.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {facilities && facilities.length > 0 && (
+        <Select
+          value={facilityFilter}
+          onValueChange={(v) => onFacilityChange?.(v)}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="All Facilities" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Facilities</SelectItem>
+            {facilities.map((f) => (
+              <SelectItem key={f.id} value={f.id}>
+                {f.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
     </>
   )
 }

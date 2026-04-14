@@ -7,8 +7,10 @@ import {
   Truck,
   Users,
   DollarSign,
+  TrendingUp,
   Plus,
   ArrowRight,
+  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,10 +20,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { AdminStats } from "./admin-stats"
 import { ActivityFeed } from "./activity-feed"
-import { PendingActions } from "./pending-actions"
 import {
   getAdminDashboardStats,
   getAdminRecentActivity,
@@ -43,14 +44,41 @@ export function AdminDashboardClient() {
     queryFn: getAdminPendingActions,
   })
 
+  const pendingItems = pending.data
+    ? [
+        ...(pending.data.newFacilitySetups > 0
+          ? [
+              {
+                message: "New facilities pending setup",
+                count: pending.data.newFacilitySetups,
+              },
+            ]
+          : []),
+        ...(pending.data.trialExpirations > 0
+          ? [
+              {
+                message: "Trials expiring in 30 days",
+                count: pending.data.trialExpirations,
+              },
+            ]
+          : []),
+        ...(pending.data.failedPayments > 0
+          ? [
+              {
+                message: "Payment failed - requires attention",
+                count: pending.data.failedPayments,
+              },
+            ]
+          : []),
+      ]
+    : []
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Page header */}
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-bold tracking-tight text-balance">
-            Admin Dashboard
-          </h1>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
           <p className="text-muted-foreground">
             Manage facilities, vendors, and users across the platform
           </p>
@@ -71,17 +99,109 @@ export function AdminDashboardClient() {
         </div>
       </div>
 
+      {/* Pending Actions Alert */}
+      {pendingItems.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <AlertCircle className="h-5 w-5" />
+              Pending Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-4">
+              {pendingItems.map((action, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+                  >
+                    {action.count}
+                  </Badge>
+                  <span className="text-sm">{action.message}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stats Grid */}
       {stats.data ? (
-        <AdminStats stats={stats.data} />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Facilities
+              </CardTitle>
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.data.totalFacilities}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {stats.data.activeSubscriptions} active
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Vendors
+              </CardTitle>
+              <Truck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.data.totalVendors}</div>
+              <p className="text-xs text-muted-foreground">vendor partners</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Users
+              </CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.data.totalUsers}</div>
+              <p className="text-xs text-muted-foreground">
+                active this month
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Monthly Revenue
+              </CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                ${(stats.data.mrr / 1000).toFixed(1)}K
+              </div>
+              <div className="flex items-center text-xs text-green-600 dark:text-green-400">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                +12.4% from last month
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[140px] rounded-xl" />
+            <Skeleton key={i} className="h-[120px] rounded-xl" />
           ))}
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Quick Access & Activity */}
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Quick Actions */}
         <Card>
           <CardHeader>
@@ -128,6 +248,7 @@ export function AdminDashboardClient() {
           </CardContent>
         </Card>
 
+        {/* Recent Activity */}
         {activity.data ? (
           <ActivityFeed activities={activity.data} />
         ) : (
@@ -135,60 +256,48 @@ export function AdminDashboardClient() {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {pending.data ? (
-          <PendingActions actions={pending.data} />
-        ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
-        )}
-
-        {/* Platform Performance */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Platform Performance</CardTitle>
-            <CardDescription>
-              Contract processing and engagement metrics
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-6 sm:grid-cols-3">
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">
-                  Contracts Processed
-                </p>
-                <p className="text-2xl font-bold">
-                  {stats.data
-                    ? stats.data.totalContracts.toLocaleString()
-                    : "--"}
-                </p>
-                <p className="text-xs text-muted-foreground">Lifetime total</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">
-                  Active Subscriptions
-                </p>
-                <p className="text-2xl font-bold">
-                  {stats.data
-                    ? stats.data.activeSubscriptions.toLocaleString()
-                    : "--"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Currently tracked
-                </p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">
-                  Avg. Response Time
-                </p>
-                <p className="text-2xl font-bold">2.4 days</p>
-                <p className="text-xs text-muted-foreground">
-                  Contract review turnaround
-                </p>
-              </div>
+      {/* Platform Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Platform Performance</CardTitle>
+          <CardDescription>
+            Contract processing and engagement metrics
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                Contracts Processed
+              </p>
+              <p className="text-2xl font-bold">
+                {stats.data ? stats.data.totalContracts.toLocaleString() : "--"}
+              </p>
+              <p className="text-xs text-muted-foreground">Lifetime total</p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Active Contracts</p>
+              <p className="text-2xl font-bold">
+                {stats.data
+                  ? stats.data.activeSubscriptions.toLocaleString()
+                  : "--"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Currently being tracked
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                Avg. Response Time
+              </p>
+              <p className="text-2xl font-bold">2.4 days</p>
+              <p className="text-xs text-muted-foreground">
+                Contract review turnaround
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

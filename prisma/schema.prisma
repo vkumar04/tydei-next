@@ -222,6 +222,7 @@ model User {
   emailVerified Boolean  @default(false)
   image         String?
   role          UserRole @default(facility)
+  lastLoginAt   DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -403,6 +404,9 @@ model Vendor {
   contactPhone   String?
   website        String?
   address        String?
+  city           String?
+  state          String?
+  zip            String?
   status         String     @default("active")
   tier           VendorTier @default(standard)
   organizationId String?    @unique
@@ -447,6 +451,8 @@ model ProductCategory {
   name        String
   description String?
   parentId    String?
+  source      String?  // 'manual' | 'contract' | 'pricing_file' | 'cog'
+  sourceId    String?  // FK back to the originating entity
   spendTotal  Decimal  @default(0) @db.Decimal(14, 2)
   itemCount   Int      @default(0)
   createdAt   DateTime @default(now())

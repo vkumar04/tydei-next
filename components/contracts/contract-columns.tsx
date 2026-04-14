@@ -22,6 +22,8 @@ type ContractWithVendor = Contract & {
   vendor: Pick<Vendor, "id" | "name" | "logoUrl">
   productCategory: Pick<ProductCategory, "id" | "name"> | null
   facility: Pick<Facility, "id" | "name"> | null
+  rebateEarned?: number
+  rebateCollected?: number
 }
 
 const typeLabels: Record<string, string> = {
@@ -130,6 +132,15 @@ export function getContractColumns(
       cell: ({ row }) => (
         <div className="text-right font-medium">
           {formatCurrency(Number(row.original.totalValue))}
+        </div>
+      ),
+    },
+    {
+      id: "rebateEarned",
+      header: () => <div className="text-right">Rebate Earned</div>,
+      cell: ({ row }) => (
+        <div className="text-right font-medium text-green-600 dark:text-green-400">
+          {formatCurrency(Number(row.original.rebateEarned ?? 0))}
         </div>
       ),
     },

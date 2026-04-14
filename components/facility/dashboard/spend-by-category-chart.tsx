@@ -7,7 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { Tag } from "lucide-react"
+import { TagIcon } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -45,7 +45,7 @@ export function SpendByCategoryChart({ data }: SpendByCategoryChartProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Tag className="h-5 w-5 text-muted-foreground" />
+          <TagIcon className="h-5 w-5 text-muted-foreground" />
           <div>
             <CardTitle>Spend by Category</CardTitle>
             <CardDescription>Distribution across product categories</CardDescription>
@@ -100,7 +100,7 @@ export function SpendByCategoryChart({ data }: SpendByCategoryChartProps) {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
-            <Tag className="h-10 w-10 mb-3 opacity-50" />
+            <TagIcon className="h-10 w-10 mb-3 opacity-50" />
             <p className="font-medium">No category data available</p>
             <p className="text-xs mt-1">
               Add categories to pricing files to see spend by category

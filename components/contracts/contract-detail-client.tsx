@@ -7,9 +7,10 @@ import {
   ArrowLeft,
   Calendar,
   DollarSign,
-  GitCompareArrows,
+  Download,
   Pencil,
   Percent,
+  Plus,
   Sparkles,
   Trash2,
   TrendingUp,
@@ -155,13 +156,7 @@ export function ContractDetailClient({
               router.push(`/dashboard/contracts/${contractId}/score`)
             }
           >
-            <Sparkles className="size-4" /> AI Score
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowAmendment(true)}
-          >
-            <GitCompareArrows className="size-4" /> Extract Amendment
+            <Sparkles className="mr-2 size-4" /> AI Score
           </Button>
           <Button
             variant="outline"
@@ -169,13 +164,21 @@ export function ContractDetailClient({
               router.push(`/dashboard/contracts/${contractId}/edit`)
             }
           >
-            <Pencil className="size-4" /> Edit
+            <Pencil className="mr-2 size-4" /> Edit Contract
+          </Button>
+          <Button variant="outline" onClick={() => setShowAmendment(true)}>
+            <Plus className="mr-2 size-4" /> Add Amendment
+          </Button>
+          <Button>
+            <Download className="mr-2 size-4" /> Export
           </Button>
           <Button
             variant="destructive"
+            size="icon"
             onClick={() => setShowDelete(true)}
+            aria-label="Delete contract"
           >
-            <Trash2 className="size-4" /> Delete
+            <Trash2 className="size-4" />
           </Button>
         </div>
       </div>

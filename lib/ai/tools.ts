@@ -260,6 +260,49 @@ export const chatTools = {
     },
   }),
 
+  calculateProspectiveRebate: tool({
+    description:
+      "Calculate projected rebates for a prospective contract scenario, returning a yearly breakdown and totals",
+    inputSchema: z.object({
+      annualSpend: z.number().describe("Expected annual spend in dollars"),
+      rebateRate: z.number().describe("Rebate percentage (e.g., 3 for 3%)"),
+      contractYears: z
+        .number()
+        .describe("Contract length in years (e.g., 3)"),
+      growthRate: z
+        .number()
+        .nullable()
+        .describe("Annual growth rate as a percentage; null for no growth"),
+    }),
+    execute: async ({ annualSpend, rebateRate, contractYears, growthRate }) => {
+      const growth = growthRate ?? 0
+      let totalRebate = 0
+      const yearlyBreakdown: Array<{
+        year: number
+        spend: number
+        rebate: number
+      }> = []
+
+      for (let year = 1; year <= contractYears; year++) {
+        const yearSpend =
+          annualSpend * Math.pow(1 + growth / 100, year - 1)
+        const yearRebate = yearSpend * (rebateRate / 100)
+        totalRebate += yearRebate
+        yearlyBreakdown.push({
+          year,
+          spend: Math.round(yearSpend),
+          rebate: Math.round(yearRebate),
+        })
+      }
+
+      return {
+        totalProjectedRebate: Math.round(totalRebate),
+        yearlyBreakdown,
+        averageAnnualRebate: Math.round(totalRebate / contractYears),
+      }
+    },
+  }),
+
   getOptimizationSuggestions: tool({
     description: "Get rebate optimization suggestions for a facility",
     inputSchema: z.object({

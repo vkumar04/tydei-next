@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, AlertTriangle } from "lucide-react"
+import { ArrowRightIcon, AlertTriangleIcon } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -40,7 +40,7 @@ export function RecentAlerts({ alerts }: RecentAlertsProps) {
         <Button asChild variant="ghost" size="sm">
           <Link href="/dashboard/alerts">
             View all
-            <ArrowRight className="ml-2 h-4 w-4" />
+            <ArrowRightIcon className="ml-2 h-4 w-4" />
           </Link>
         </Button>
       </CardHeader>
@@ -49,7 +49,7 @@ export function RecentAlerts({ alerts }: RecentAlertsProps) {
           <div className="flex flex-col gap-4">
             {alerts.map((alert) => {
               const typeConfig = alertTypeIconConfig[alert.alertType]
-              const Icon = typeConfig?.icon ?? AlertTriangle
+              const Icon = typeConfig?.icon ?? AlertTriangleIcon
               const iconColor = typeConfig?.color ?? "text-yellow-500"
               return (
                 <Link

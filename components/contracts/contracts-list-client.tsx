@@ -56,10 +56,12 @@ export function ContractsListClient({
 }: ContractsListClientProps) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("contracts")
+  const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<ContractStatus | "all">(
     "all"
   )
   const [typeFilter, setTypeFilter] = useState<ContractType | "all">("all")
+  const [facilityFilter, setFacilityFilter] = useState<string>("all")
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [contractToDelete, setContractToDelete] = useState<{
     id: string
@@ -89,7 +91,37 @@ export function ContractsListClient({
     [router]
   )
 
-  const contracts = data?.contracts ?? []
+  const allContracts = data?.contracts ?? []
+
+  // Facility options derived from the current result set so the filter matches
+  // v0's "All Facilities" behavior.
+  const facilityOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const c of allContracts) {
+      if (c.facility?.id && c.facility?.name) {
+        map.set(c.facility.id, c.facility.name)
+      }
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
+  }, [allContracts])
+
+  // Client-side search + facility filter (server already applied status/type)
+  const contracts = useMemo(() => {
+    return allContracts.filter((contract) => {
+      const q = searchQuery.trim().toLowerCase()
+      const matchesSearch =
+        q === "" ||
+        contract.name.toLowerCase().includes(q) ||
+        contract.vendor.name.toLowerCase().includes(q) ||
+        (contract.contractNumber ?? "").toLowerCase().includes(q)
+
+      const matchesFacility =
+        facilityFilter === "all" || contract.facility?.id === facilityFilter
+
+      return matchesSearch && matchesFacility
+    })
+  }, [allContracts, searchQuery, facilityFilter])
+
   const isEmpty = !isLoading && contracts.length === 0
 
   const handleDeleteContract = async () => {
@@ -192,10 +224,8 @@ export function ContractsListClient({
                   <Input
                     placeholder="Search contracts, vendors, IDs..."
                     className="pl-9"
-                    onChange={(e) => {
-                      // Use DataTable's built-in search via column filter on "name"
-                      // This is handled inline for visual match
-                    }}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     id="contract-search"
                   />
                 </div>
@@ -204,6 +234,9 @@ export function ContractsListClient({
                   onStatusChange={setStatusFilter}
                   type={typeFilter}
                   onTypeChange={setTypeFilter}
+                  facilities={facilityOptions}
+                  facilityFilter={facilityFilter}
+                  onFacilityChange={setFacilityFilter}
                 />
                 <Button variant="outline" size="icon">
                   <Download className="h-4 w-4" />

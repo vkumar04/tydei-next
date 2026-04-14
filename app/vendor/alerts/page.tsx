@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { PageHeader } from "@/components/shared/page-header"
 import { AlertsList } from "@/components/shared/alerts/alerts-list"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -62,23 +61,30 @@ export default function VendorAlertsPage() {
   }, [visibleAlerts])
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Alerts"
-        description="Contract expirations, compliance issues, and action items"
-        action={
-          selectedIds.size > 0 ? (
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => bulkResolve.mutate(Array.from(selectedIds))}>
-                Resolve ({selectedIds.size})
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => bulkDismiss.mutate(Array.from(selectedIds))}>
-                Dismiss ({selectedIds.size})
-              </Button>
-            </div>
-          ) : undefined
-        }
-      />
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-balance">Alerts</h1>
+          <p className="text-muted-foreground">
+            Contract expirations, compliance issues, and action items
+          </p>
+        </div>
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => bulkResolve.mutate(Array.from(selectedIds))}>
+              Resolve ({selectedIds.size})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => bulkDismiss.mutate(Array.from(selectedIds))}
+            >
+              Dismiss ({selectedIds.size})
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Alert Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">

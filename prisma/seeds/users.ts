@@ -58,7 +58,7 @@ export async function seedUsers(
 
   // --- Demo: facility user ---
   const facilityUser = await prisma.user.create({
-    data: { name: "Facility Demo", email: "demo-facility@tydei.com", emailVerified: true, role: "facility" },
+    data: { name: "Facility Demo", email: "demo-facility@tydei.com", emailVerified: true, role: "facility", lastLoginAt: new Date() },
   })
   await prisma.account.create({
     data: { userId: facilityUser.id, accountId: facilityUser.id, providerId: "credential", password: facilityHash },
@@ -69,7 +69,7 @@ export async function seedUsers(
 
   // --- Demo: vendor user ---
   const vendorUser = await prisma.user.create({
-    data: { name: "Vendor Demo", email: "demo-vendor@tydei.com", emailVerified: true, role: "vendor" },
+    data: { name: "Vendor Demo", email: "demo-vendor@tydei.com", emailVerified: true, role: "vendor", lastLoginAt: new Date() },
   })
   await prisma.account.create({
     data: { userId: vendorUser.id, accountId: vendorUser.id, providerId: "credential", password: vendorHash },
@@ -80,7 +80,7 @@ export async function seedUsers(
 
   // --- Demo: admin user ---
   const adminUser = await prisma.user.create({
-    data: { name: "Admin Demo", email: "demo-admin@tydei.com", emailVerified: true, role: "admin" },
+    data: { name: "Admin Demo", email: "demo-admin@tydei.com", emailVerified: true, role: "admin", lastLoginAt: new Date() },
   })
   await prisma.account.create({
     data: { userId: adminUser.id, accountId: adminUser.id, providerId: "credential", password: adminHash },
@@ -88,7 +88,7 @@ export async function seedUsers(
 
   // --- Extra team members ---
   const sarahChen = await prisma.user.create({
-    data: { name: "Sarah Chen", email: "sarah.chen@lighthouse.com", emailVerified: true, role: "facility" },
+    data: { name: "Sarah Chen", email: "sarah.chen@lighthouse.com", emailVerified: true, role: "facility", lastLoginAt: new Date() },
   })
   await prisma.account.create({
     data: { userId: sarahChen.id, accountId: sarahChen.id, providerId: "credential", password: memberHash },
@@ -98,7 +98,7 @@ export async function seedUsers(
   })
 
   const jamesWilson = await prisma.user.create({
-    data: { name: "James Wilson", email: "james.wilson@stryker.com", emailVerified: true, role: "vendor" },
+    data: { name: "James Wilson", email: "james.wilson@stryker.com", emailVerified: true, role: "vendor", lastLoginAt: new Date() },
   })
   await prisma.account.create({
     data: { userId: jamesWilson.id, accountId: jamesWilson.id, providerId: "credential", password: memberHash },
@@ -108,7 +108,7 @@ export async function seedUsers(
   })
 
   const mariaGarcia = await prisma.user.create({
-    data: { name: "Maria Garcia", email: "maria.garcia@medtronic.com", emailVerified: true, role: "vendor" },
+    data: { name: "Maria Garcia", email: "maria.garcia@medtronic.com", emailVerified: true, role: "vendor", lastLoginAt: new Date() },
   })
   await prisma.account.create({
     data: { userId: mariaGarcia.id, accountId: mariaGarcia.id, providerId: "credential", password: memberHash },

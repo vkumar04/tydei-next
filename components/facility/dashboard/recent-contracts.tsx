@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { ArrowRightIcon } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,7 +38,7 @@ export function RecentContracts({ contracts }: RecentContractsProps) {
           <Button asChild variant="ghost" size="sm">
             <Link href="/dashboard/contracts">
               View all
-              <ArrowRight className="ml-2 h-4 w-4" />
+              <ArrowRightIcon className="ml-2 h-4 w-4" />
             </Link>
           </Button>
         </CardHeader>
@@ -64,7 +64,7 @@ export function RecentContracts({ contracts }: RecentContractsProps) {
         <Button asChild variant="ghost" size="sm">
           <Link href="/dashboard/contracts">
             View all
-            <ArrowRight className="ml-2 h-4 w-4" />
+            <ArrowRightIcon className="ml-2 h-4 w-4" />
           </Link>
         </Button>
       </CardHeader>

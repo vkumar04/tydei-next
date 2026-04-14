@@ -370,6 +370,16 @@ export async function bulkDeleteCOGRecords(ids: string[]) {
   return { deleted: result.count }
 }
 
+// ─── Clear All COG Records for Facility ────────────────────────
+
+export async function clearAllCOGRecords() {
+  const { facility } = await requireFacility()
+  const result = await prisma.cOGRecord.deleteMany({
+    where: { facilityId: facility.id },
+  })
+  return { deleted: result.count }
+}
+
 // ─── Delete COG File (all records from a given import date) ────
 
 export async function deleteCOGFileByDate(dateStr: string) {
@@ -452,7 +462,7 @@ export async function getCOGImportHistory(_facilityId?: string) {
 export async function getCOGStats(facilityId: string) {
   const { facility } = await requireFacility()
 
-  const [totalItems, totalSpendResult, onContractCount, vendorGroups] =
+  const [totalItems, totalSpendResult, onContractCount, vendorGroups, dateRange] =
     await Promise.all([
       prisma.cOGRecord.count({
         where: { facilityId: facility.id },
@@ -482,6 +492,11 @@ export async function getCOGStats(facilityId: string) {
         _count: { id: true },
         orderBy: { _count: { id: "desc" } },
       }),
+      prisma.cOGRecord.aggregate({
+        where: { facilityId: facility.id },
+        _min: { transactionDate: true },
+        _max: { transactionDate: true },
+      }),
     ])
 
   const totalSpend = Number(totalSpendResult._sum.extendedPrice ?? 0)
@@ -499,5 +514,7 @@ export async function getCOGStats(facilityId: string) {
     offContractCount,
     uniqueVendors,
     topVendors,
+    minPODate: dateRange._min.transactionDate ?? null,
+    maxPODate: dateRange._max.transactionDate ?? null,
   })
 }
