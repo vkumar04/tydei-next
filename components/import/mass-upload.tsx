@@ -6,6 +6,8 @@ import { toast } from "sonner"
 import {
   ingestExtractedContracts,
   ingestExtractedInvoices,
+  ingestCaseDataCSV,
+  ingestCaseProceduresCSV,
 } from "@/lib/actions/mass-upload"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import {
@@ -59,7 +61,11 @@ export type DocumentType =
   | "invoice"
   | "purchase_order"
   | "pricing_schedule"
+  | "pricing_file"
   | "cog_report"
+  | "cog_data"
+  | "case_data"
+  | "case_procedures"
   | "unknown"
 
 interface DocumentClassification {
@@ -157,6 +163,26 @@ const DOCUMENT_TYPE_INFO: Record<
     icon: <FileTextIcon className="h-4 w-4" />,
     color: "bg-yellow-500",
   },
+  cog_data: {
+    label: "COG Data",
+    icon: <FileTextIcon className="h-4 w-4" />,
+    color: "bg-yellow-500",
+  },
+  pricing_file: {
+    label: "Pricing File",
+    icon: <FileTextIcon className="h-4 w-4" />,
+    color: "bg-cyan-500",
+  },
+  case_data: {
+    label: "Case Data",
+    icon: <FileTextIcon className="h-4 w-4" />,
+    color: "bg-pink-500",
+  },
+  case_procedures: {
+    label: "Case Procedures",
+    icon: <FileTextIcon className="h-4 w-4" />,
+    color: "bg-rose-500",
+  },
   unknown: {
     label: "Unknown",
     icon: <FileQuestionIcon className="h-4 w-4" />,
@@ -172,15 +198,21 @@ function normalizeApiType(t: string | null | undefined): DocumentType {
     case "amendment":
       return "amendment"
     case "cog_data":
+      return "cog_data"
     case "cog_report":
       return "cog_report"
     case "pricing_file":
+      return "pricing_file"
     case "pricing_schedule":
       return "pricing_schedule"
     case "invoice":
       return "invoice"
     case "purchase_order":
       return "purchase_order"
+    case "case_data":
+      return "case_data"
+    case "case_procedures":
+      return "case_procedures"
     default:
       return "unknown"
   }
@@ -647,6 +679,12 @@ export function MassUpload({
     const invoiceDocs = completed.filter(
       (d) => d.classification?.type === "invoice"
     )
+    const caseDataDocs = completed.filter(
+      (d) => d.classification?.type === "case_data"
+    )
+    const caseProcedureDocs = completed.filter(
+      (d) => d.classification?.type === "case_procedures"
+    )
 
     let totalCreated = 0
     let totalFailed = 0
@@ -712,6 +750,39 @@ export function MassUpload({
       }
     }
 
+    // ── Case Data CSVs — ingest patient-level case metadata ────
+    // Ingest case data BEFORE procedures so procedures find parent cases.
+    for (const d of caseDataDocs) {
+      try {
+        const csvText = await d.file.text()
+        const r = await ingestCaseDataCSV(csvText, d.file.name)
+        totalCreated += r.created + r.updated
+        totalFailed += r.failed
+        for (const e of r.errors) errorMessages.push(`${d.file.name}: ${e}`)
+      } catch (err) {
+        totalFailed++
+        errorMessages.push(
+          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
+        )
+      }
+    }
+
+    // ── Case Procedures CSVs ───────────────────────────────────
+    for (const d of caseProcedureDocs) {
+      try {
+        const csvText = await d.file.text()
+        const r = await ingestCaseProceduresCSV(csvText, d.file.name)
+        totalCreated += r.created
+        totalFailed += r.failed
+        for (const e of r.errors) errorMessages.push(`${d.file.name}: ${e}`)
+      } catch (err) {
+        totalFailed++
+        errorMessages.push(
+          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
+        )
+      }
+    }
+
     // Optional callback for callers that want to react to completion.
     if (onComplete) {
       onComplete(completed)
@@ -722,6 +793,8 @@ export function MassUpload({
     queryClient.invalidateQueries({ queryKey: ["invoices"] })
     queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     queryClient.invalidateQueries({ queryKey: ["vendors"] })
+    queryClient.invalidateQueries({ queryKey: ["cases"] })
+    queryClient.invalidateQueries({ queryKey: ["case-costing"] })
 
     // Reset + close the dialog
     onOpenChange(false)

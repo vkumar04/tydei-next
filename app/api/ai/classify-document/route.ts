@@ -14,6 +14,8 @@ type Classification =
   | "pricing_schedule"
   | "invoice"
   | "purchase_order"
+  | "case_data"
+  | "case_procedures"
   | "unknown"
 
 // v0-style rich classification output
@@ -27,6 +29,8 @@ const richClassificationSchema = z.object({
     "pricing_schedule",
     "invoice",
     "purchase_order",
+    "case_data",
+    "case_procedures",
     "unknown",
   ]),
   confidence: z.number().min(0).max(1),
@@ -140,6 +144,21 @@ function classifyByHeaders(headersRow: string[]): {
   }
   if (has("vendor") && has("date ordered") && has("unit cost")) {
     return { classification: "cog_data", confidence: 0.9 }
+  }
+
+  // Case procedures: Case ID + CPT Code, often with primary flag.
+  if (has("case id") && has("cpt code")) {
+    return { classification: "case_procedures", confidence: 0.95 }
+  }
+
+  // Patient-level case data: MRN + Case ID + Surgeon + surgery date,
+  // no cost columns. This is the Lighthouse Patient Fields export shape.
+  if (
+    (has("mrn") || has("patient mrn")) &&
+    has("case id") &&
+    (has("surgeon") || has("date of surgery"))
+  ) {
+    return { classification: "case_data", confidence: 0.92 }
   }
 
   // Case-level supply usage: MRN + Case ID + Manufacturer + cost columns.
