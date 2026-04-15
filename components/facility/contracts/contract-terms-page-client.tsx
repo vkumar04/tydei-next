@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { useContract } from "@/hooks/use-contracts"
@@ -11,6 +11,7 @@ import {
   deleteContractTerm,
   upsertContractTiers,
 } from "@/lib/actions/contract-terms"
+import { getCategories } from "@/lib/actions/categories"
 import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { PageHeader } from "@/components/shared/page-header"
@@ -32,6 +33,44 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
     queryKey: queryKeys.contractTerms.list(contractId),
     queryFn: () => getContractTerms(contractId),
   })
+
+  // Fall-back global category list — used when the contract has no
+  // populated ContractProductCategory join rows (e.g. seeded contracts
+  // which only set the single productCategoryId column). Without this
+  // the category picker renders empty and the user is told "add at
+  // least one Category to the contract above" even when the contract
+  // genuinely has categories.
+  const { data: allCategories } = useQuery({
+    queryKey: queryKeys.categories.all,
+    queryFn: () => getCategories(),
+  })
+
+  const availableCategories = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>()
+    // 1. Contract's primary productCategory.
+    if (contract?.productCategory) {
+      map.set(contract.productCategory.id, {
+        id: contract.productCategory.id,
+        name: contract.productCategory.name,
+      })
+    }
+    // 2. Any join-table categories linked to the contract.
+    for (const cc of contract?.contractCategories ?? []) {
+      const pc = cc.productCategory
+      if (pc?.id && pc?.name && !map.has(pc.id)) {
+        map.set(pc.id, { id: pc.id, name: pc.name })
+      }
+    }
+    // 3. Fallback: if the contract has no linked categories at all,
+    //    show the full platform category list so category-scoped tiers
+    //    can still be created.
+    if (map.size === 0 && allCategories) {
+      for (const c of allCategories) {
+        map.set(c.id, { id: c.id, name: c.name })
+      }
+    }
+    return Array.from(map.values())
+  }, [contract, allCategories])
 
   const [editing, setEditing] = useState(false)
   const [editTerms, setEditTerms] = useState<TermFormValues[]>([])
@@ -154,19 +193,7 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
         <ContractTermsEntry
           terms={editTerms}
           onChange={setEditTerms}
-          availableCategories={[
-            ...(contract?.productCategory
-              ? [
-                  {
-                    id: contract.productCategory.id,
-                    name: contract.productCategory.name,
-                  },
-                ]
-              : []),
-            ...((contract?.contractCategories ?? [])
-              .map((cc) => cc.productCategory)
-              .filter((c): c is { id: string; name: string } => !!c)),
-          ]}
+          availableCategories={availableCategories}
         />
       ) : (
         <ContractTermsDisplay terms={terms ?? []} />

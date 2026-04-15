@@ -204,6 +204,10 @@ export function ContractsListClient({
             <FileText className="h-4 w-4" />
             All Contracts
           </TabsTrigger>
+          <TabsTrigger value="pending" className="flex items-center gap-2">
+            <Inbox className="h-4 w-4" />
+            Pending Approval
+          </TabsTrigger>
           <TabsTrigger value="compare" className="flex items-center gap-2">
             <ArrowLeftRight className="h-4 w-4" />
             Compare
@@ -267,6 +271,10 @@ export function ContractsListClient({
               }
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="pending" className="space-y-4">
+          <PendingContractsTab facilityId={facilityId} userId={userId ?? ""} />
         </TabsContent>
 
         <TabsContent value="compare">

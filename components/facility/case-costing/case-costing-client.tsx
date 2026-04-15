@@ -112,6 +112,10 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
             <User className="h-4 w-4" />
             Surgeon Scorecard
           </TabsTrigger>
+          <TabsTrigger value="payor-contracts" className="gap-2">
+            <FileHeart className="h-4 w-4" />
+            Payor Contracts
+          </TabsTrigger>
         </TabsList>
 
         {/* Cases Tab */}
@@ -320,6 +324,10 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
               avgCostPerCase={avgCostPerCase}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="payor-contracts" className="space-y-6 mt-6">
+          <PayorContractsManager facilityId={facilityId} />
         </TabsContent>
       </Tabs>
 
