@@ -197,9 +197,9 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Spend</p>
-                <p className="text-2xl font-bold">
+                <div className="text-2xl font-bold">
                   {statsLoading ? <Skeleton className="h-8 w-24" /> : formatCurrency(totalSpend)}
-                </p>
+                </div>
               </div>
               <FileText className="h-8 w-8 text-muted-foreground/50" />
             </div>
@@ -210,9 +210,9 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Items</p>
-                <p className="text-2xl font-bold">
+                <div className="text-2xl font-bold">
                   {statsLoading ? <Skeleton className="h-8 w-24" /> : totalItems.toLocaleString()}
-                </p>
+                </div>
               </div>
               <FileText className="h-8 w-8 text-muted-foreground/50" />
             </div>
@@ -223,9 +223,9 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">On Contract</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {statsLoading ? <Skeleton className="h-8 w-24" /> : onContractCount}
-                </p>
+                </div>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500/50" />
             </div>
@@ -236,9 +236,9 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Off Contract</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                <div className="text-2xl font-bold text-red-600 dark:text-red-400">
                   {statsLoading ? <Skeleton className="h-8 w-24" /> : offContractCount}
-                </p>
+                </div>
               </div>
               <AlertTriangle className="h-8 w-8 text-red-500/50" />
             </div>
@@ -249,9 +249,9 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Savings</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {statsLoading ? <Skeleton className="h-8 w-24" /> : formatCurrency(totalSavings)}
-                </p>
+                </div>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500/50" />
             </div>

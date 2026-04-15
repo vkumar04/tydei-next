@@ -94,16 +94,6 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
               Reports
             </Button>
           </Link>
-          {totalCases > 0 && (
-            <Button
-              variant="outline"
-              onClick={() => setClearConfirmOpen(true)}
-              disabled={deleteAllMutation.isPending}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Clear Prior Data
-            </Button>
-          )}
           <Button onClick={() => setImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Upload Data
@@ -121,10 +111,6 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
           <TabsTrigger value="surgeons" className="gap-2">
             <User className="h-4 w-4" />
             Surgeon Scorecard
-          </TabsTrigger>
-          <TabsTrigger value="payor-contracts" className="gap-2">
-            <FileHeart className="h-4 w-4" />
-            Payor Contracts
           </TabsTrigger>
         </TabsList>
 
@@ -334,11 +320,6 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
               avgCostPerCase={avgCostPerCase}
             />
           )}
-        </TabsContent>
-
-        {/* Payor Contracts Tab */}
-        <TabsContent value="payor-contracts" className="space-y-6 mt-6">
-          <PayorContractsManager facilityId={facilityId} />
         </TabsContent>
       </Tabs>
 

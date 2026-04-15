@@ -296,27 +296,27 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
                   <XAxis
                     type="number"
                     tickFormatter={(v) => `$${(v / 1000).toFixed(0)}K`}
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    axisLine={{ stroke: "hsl(var(--border))" }}
-                    tickLine={{ stroke: "hsl(var(--border))" }}
+                    tick={{ fill: "var(--muted-foreground)" }}
+                    axisLine={{ stroke: "var(--border)" }}
+                    tickLine={{ stroke: "var(--border)" }}
                   />
                   <YAxis
                     type="category"
                     dataKey="name"
                     width={100}
-                    tick={{ fill: "hsl(var(--foreground))" }}
-                    axisLine={{ stroke: "hsl(var(--border))" }}
-                    tickLine={{ stroke: "hsl(var(--border))" }}
+                    tick={{ fill: "var(--foreground)" }}
+                    axisLine={{ stroke: "var(--border)" }}
+                    tickLine={{ stroke: "var(--border)" }}
                   />
                   <Tooltip
                     formatter={(value) => formatCurrency(Number(value))}
                     contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
+                      backgroundColor: "var(--card)",
+                      border: "1px solid var(--border)",
                       borderRadius: "8px",
-                      color: "hsl(var(--foreground))",
+                      color: "var(--foreground)",
                     }}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    labelStyle={{ color: "var(--foreground)" }}
                   />
                   <Bar
                     dataKey="earned"

@@ -14,24 +14,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { MetricCard } from "@/components/shared/cards/metric-card"
 import { VendorRenewalPipeline } from "./vendor-renewal-pipeline"
 import { useExpiringContracts } from "@/hooks/use-renewals"
 import {
   Calendar,
   Download,
   FileText,
-  AlertTriangle,
-  Clock,
-  CalendarClock,
-  ListChecks,
   Building2,
   Eye,
 } from "lucide-react"
 import { toast } from "sonner"
 import { formatCurrency, formatDate } from "@/lib/formatting"
-import { motion } from "motion/react"
-import { staggerContainer } from "@/lib/animations"
 import Link from "next/link"
 
 interface VendorRenewalsClientProps {
@@ -154,47 +147,6 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
         </div>
       ) : (
         <>
-          {/* Pipeline Summary Cards */}
-          <motion.div
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-          >
-            <MetricCard
-              title="Total Renewals"
-              value={pipelineStats.total}
-              icon={ListChecks}
-              description="Contracts expiring within 1 year"
-              change={`${pipelineStats.total} in pipeline`}
-              changeType="positive"
-            />
-            <MetricCard
-              title="Critical (<30 days)"
-              value={pipelineStats.critical}
-              icon={AlertTriangle}
-              description="Require immediate action"
-              change={pipelineStats.critical > 0 ? "Urgent" : "None"}
-              changeType={pipelineStats.critical > 0 ? "negative" : "positive"}
-            />
-            <MetricCard
-              title="Warning (<90 days)"
-              value={pipelineStats.warning}
-              icon={Clock}
-              description="Start renewal discussions"
-              change={pipelineStats.warning > 0 ? `${pipelineStats.warning} need attention` : "Clear"}
-              changeType={pipelineStats.warning > 0 ? "negative" : "positive"}
-            />
-            <MetricCard
-              title="Upcoming (<180 days)"
-              value={pipelineStats.upcoming}
-              icon={CalendarClock}
-              description="Plan ahead for these renewals"
-              change={`${pipelineStats.ok} more beyond 180d`}
-              changeType="positive"
-            />
-          </motion.div>
-
           {/* Renewals Summary Table */}
           <Card>
             <CardHeader>

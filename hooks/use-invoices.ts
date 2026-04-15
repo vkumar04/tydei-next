@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import {
   getInvoices,
+  getInvoicesForVendor,
   getInvoice,
   getInvoiceSummary,
   importInvoice,
@@ -19,6 +20,14 @@ export function useInvoices(entityId: string, filters?: Partial<InvoiceFilters>)
   return useQuery({
     queryKey: queryKeys.invoices.list(entityId, filters),
     queryFn: () => getInvoices({ ...filters }),
+  })
+}
+
+export function useVendorInvoices(vendorId: string, filters?: Partial<InvoiceFilters>) {
+  return useQuery({
+    queryKey: queryKeys.invoices.list(`vendor:${vendorId}`, filters),
+    queryFn: () => getInvoicesForVendor(filters),
+    enabled: !!vendorId,
   })
 }
 

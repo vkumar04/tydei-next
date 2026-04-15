@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import {
   AlertTriangle,
   Clock,
-  FileText,
   CheckCircle2,
 } from "lucide-react"
 import {
@@ -41,7 +40,6 @@ export default function VendorAlertsPage() {
   // Compute severity counts from active alerts
   const computedHighCount = activeAlerts.filter((a) => a.severity === "high").length
   const computedMediumCount = activeAlerts.filter((a) => a.severity === "medium").length
-  const computedLowCount = activeAlerts.filter((a) => a.severity === "low").length
 
   // Pick the visible list based on tab
   const visibleAlerts = tab === "resolved" ? resolvedAlerts : tab === "active" ? activeAlerts : [...activeAlerts, ...resolvedAlerts]
@@ -87,7 +85,7 @@ export default function VendorAlertsPage() {
       </div>
 
       {/* Alert Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
@@ -110,19 +108,6 @@ export default function VendorAlertsPage() {
               <div>
                 <div className="text-2xl font-bold">{computedMediumCount}</div>
                 <div className="text-sm text-muted-foreground">Medium Priority</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{computedLowCount}</div>
-                <div className="text-sm text-muted-foreground">Low Priority</div>
               </div>
             </div>
           </CardContent>

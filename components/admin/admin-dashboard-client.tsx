@@ -141,7 +141,7 @@ export function AdminDashboardClient() {
                 {stats.data.totalFacilities}
               </div>
               <p className="text-xs text-muted-foreground">
-                {stats.data.activeSubscriptions} active
+                {stats.data.activeFacilities} active
               </p>
             </CardContent>
           </Card>
@@ -155,7 +155,9 @@ export function AdminDashboardClient() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.data.totalVendors}</div>
-              <p className="text-xs text-muted-foreground">vendor partners</p>
+              <p className="text-xs text-muted-foreground">
+                {stats.data.activeVendors} active
+              </p>
             </CardContent>
           </Card>
 
@@ -169,7 +171,7 @@ export function AdminDashboardClient() {
             <CardContent>
               <div className="text-2xl font-bold">{stats.data.totalUsers}</div>
               <p className="text-xs text-muted-foreground">
-                active this month
+                {stats.data.activeUsers} active this month
               </p>
             </CardContent>
           </Card>
@@ -279,7 +281,7 @@ export function AdminDashboardClient() {
               <p className="text-sm text-muted-foreground">Active Contracts</p>
               <p className="text-2xl font-bold">
                 {stats.data
-                  ? stats.data.activeSubscriptions.toLocaleString()
+                  ? stats.data.activeContracts.toLocaleString()
                   : "--"}
               </p>
               <p className="text-xs text-muted-foreground">

@@ -413,15 +413,15 @@ function AnalyticsSection({ proposals, isLoading }: { proposals: VendorProposal[
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     dataKey="status"
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                    axisLine={{ stroke: "hsl(var(--border))" }}
-                    tickLine={{ stroke: "hsl(var(--border))" }}
+                    tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                    axisLine={{ stroke: "var(--border)" }}
+                    tickLine={{ stroke: "var(--border)" }}
                   />
                   <YAxis
                     allowDecimals={false}
-                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                    axisLine={{ stroke: "hsl(var(--border))" }}
-                    tickLine={{ stroke: "hsl(var(--border))" }}
+                    tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                    axisLine={{ stroke: "var(--border)" }}
+                    tickLine={{ stroke: "var(--border)" }}
                   />
                   <RechartsTooltip contentStyle={chartTooltipStyle} />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Proposals">
@@ -987,14 +987,6 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
         <TabsList>
           <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
           <TabsTrigger value="proposals">My Proposals</TabsTrigger>
-          <TabsTrigger value="deal-scorer" className="gap-2">
-            <Gauge className="h-4 w-4" />
-            Deal Scorer
-          </TabsTrigger>
-          <TabsTrigger value="benchmarks" className="gap-2">
-            <Scale className="h-4 w-4" />
-            Benchmarks
-          </TabsTrigger>
           <TabsTrigger value="analytics" className="gap-2">
             <BarChart3 className="h-4 w-4" />
             Analytics
@@ -1102,23 +1094,6 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
             isLoading={isLoading}
             onNewProposal={() => setActiveTab("new-proposal")}
           />
-        </TabsContent>
-
-        {/* Deal Scorer Tab */}
-        <TabsContent value="deal-scorer" className="mt-4 space-y-4">
-          {isLoading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-20 rounded-lg" />
-              <Skeleton className="h-[380px] rounded-lg" />
-            </div>
-          ) : (
-            <DealScorerSection proposals={proposals ?? []} />
-          )}
-        </TabsContent>
-
-        {/* Benchmarks Tab */}
-        <TabsContent value="benchmarks" className="mt-4 space-y-4">
-          <BenchmarksSection proposals={proposals ?? []} />
         </TabsContent>
 
         {/* Analytics Tab */}

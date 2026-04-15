@@ -17,7 +17,7 @@ export default async function AdminPayorContractsPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="text-2xl font-bold tracking-tight">
               Payor Contracts
             </h1>
             <p className="text-sm text-muted-foreground">

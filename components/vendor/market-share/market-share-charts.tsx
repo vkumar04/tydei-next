@@ -112,15 +112,15 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis
                   dataKey="month"
-                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                  tickLine={{ stroke: "hsl(var(--border))" }}
-                  axisLine={{ stroke: "hsl(var(--border))" }}
+                  tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
+                  tickLine={{ stroke: "var(--border)" }}
+                  axisLine={{ stroke: "var(--border)" }}
                 />
                 <YAxis
                   tickFormatter={(v: number) => `${v}%`}
-                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                  tickLine={{ stroke: "hsl(var(--border))" }}
-                  axisLine={{ stroke: "hsl(var(--border))" }}
+                  tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
+                  tickLine={{ stroke: "var(--border)" }}
+                  axisLine={{ stroke: "var(--border)" }}
                 />
                 <Tooltip
                   formatter={(v) => `${Number(v)}%`}
@@ -147,16 +147,16 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
                 type="number"
                 domain={[0, 100]}
                 tickFormatter={(v: number) => `${v}%`}
-                tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={{ stroke: "hsl(var(--border))" }}
-                axisLine={{ stroke: "hsl(var(--border))" }}
+                tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
+                tickLine={{ stroke: "var(--border)" }}
+                axisLine={{ stroke: "var(--border)" }}
               />
               <YAxis
                 type="category"
                 dataKey="facility"
-                tick={{ fontSize: 12, fill: "hsl(var(--foreground))" }}
-                tickLine={{ stroke: "hsl(var(--border))" }}
-                axisLine={{ stroke: "hsl(var(--border))" }}
+                tick={{ fontSize: 12, fill: "var(--foreground)" }}
+                tickLine={{ stroke: "var(--border)" }}
+                axisLine={{ stroke: "var(--border)" }}
                 width={120}
               />
               <Tooltip

@@ -188,8 +188,8 @@ export function SurgeonDetailDialog({
                       <Radar
                         name="Score"
                         dataKey="value"
-                        stroke="hsl(var(--primary))"
-                        fill="hsl(var(--primary))"
+                        stroke="var(--primary)"
+                        fill="var(--primary)"
                         fillOpacity={0.3}
                       />
                     </RadarChart>

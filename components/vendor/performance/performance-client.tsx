@@ -443,25 +443,25 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis
                         dataKey="month"
-                        tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                        axisLine={{ stroke: "hsl(var(--border))" }}
-                        tickLine={{ stroke: "hsl(var(--border))" }}
+                        tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                        axisLine={{ stroke: "var(--border)" }}
+                        tickLine={{ stroke: "var(--border)" }}
                       />
                       <YAxis
                         tickFormatter={(v) => formatCurrency(v)}
-                        tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                        axisLine={{ stroke: "hsl(var(--border))" }}
-                        tickLine={{ stroke: "hsl(var(--border))" }}
+                        tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                        axisLine={{ stroke: "var(--border)" }}
+                        tickLine={{ stroke: "var(--border)" }}
                       />
                       <Tooltip
                         formatter={(value) => formatCurrency(Number(value))}
                         contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
+                          backgroundColor: "var(--card)",
+                          border: "1px solid var(--border)",
                           borderRadius: "8px",
-                          color: "hsl(var(--foreground))",
+                          color: "var(--foreground)",
                         }}
-                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                        labelStyle={{ color: "var(--foreground)" }}
                       />
                       <Legend />
                       <Area
@@ -496,15 +496,15 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={performanceRadar}>
-                      <PolarGrid stroke="hsl(var(--border))" />
+                      <PolarGrid stroke="var(--border)" />
                       <PolarAngleAxis
                         dataKey="metric"
-                        tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}
+                        tick={{ fill: "var(--foreground)", fontSize: 11 }}
                       />
                       <PolarRadiusAxis
                         angle={30}
                         domain={[0, 100]}
-                        tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                        tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
                       />
                       <Radar
                         name="Performance"
@@ -532,25 +532,25 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis
                       dataKey="month"
-                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                      axisLine={{ stroke: "hsl(var(--border))" }}
-                      tickLine={{ stroke: "hsl(var(--border))" }}
+                      tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                      axisLine={{ stroke: "var(--border)" }}
+                      tickLine={{ stroke: "var(--border)" }}
                     />
                     <YAxis
                       tickFormatter={(v) => formatCurrency(v)}
-                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                      axisLine={{ stroke: "hsl(var(--border))" }}
-                      tickLine={{ stroke: "hsl(var(--border))" }}
+                      tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                      axisLine={{ stroke: "var(--border)" }}
+                      tickLine={{ stroke: "var(--border)" }}
                     />
                     <Tooltip
                       formatter={(value) => formatCurrency(Number(value))}
                       contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
+                        backgroundColor: "var(--card)",
+                        border: "1px solid var(--border)",
                         borderRadius: "8px",
-                        color: "hsl(var(--foreground))",
+                        color: "var(--foreground)",
                       }}
-                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      labelStyle={{ color: "var(--foreground)" }}
                     />
                     <Bar dataKey="rebates" fill="#22c55e" radius={[4, 4, 0, 0]} name="Rebates" />
                   </BarChart>
@@ -857,27 +857,27 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                     <XAxis
                       type="number"
                       tickFormatter={(v) => formatCurrency(v)}
-                      tick={{ fill: "hsl(var(--muted-foreground))" }}
-                      axisLine={{ stroke: "hsl(var(--border))" }}
-                      tickLine={{ stroke: "hsl(var(--border))" }}
+                      tick={{ fill: "var(--muted-foreground)" }}
+                      axisLine={{ stroke: "var(--border)" }}
+                      tickLine={{ stroke: "var(--border)" }}
                     />
                     <YAxis
                       type="category"
                       dataKey="category"
                       width={100}
-                      tick={{ fill: "hsl(var(--foreground))" }}
-                      axisLine={{ stroke: "hsl(var(--border))" }}
-                      tickLine={{ stroke: "hsl(var(--border))" }}
+                      tick={{ fill: "var(--foreground)" }}
+                      axisLine={{ stroke: "var(--border)" }}
+                      tickLine={{ stroke: "var(--border)" }}
                     />
                     <Tooltip
                       formatter={(value) => formatCurrency(Number(value))}
                       contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
+                        backgroundColor: "var(--card)",
+                        border: "1px solid var(--border)",
                         borderRadius: "8px",
-                        color: "hsl(var(--foreground))",
+                        color: "var(--foreground)",
                       }}
-                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      labelStyle={{ color: "var(--foreground)" }}
                     />
                     <Legend />
                     <Bar dataKey="target" fill="#94a3b8" name="Target" radius={[0, 4, 4, 0]} />

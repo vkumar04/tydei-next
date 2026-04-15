@@ -3,7 +3,13 @@
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { getVendorContractColumns } from "./vendor-contract-columns"
 import { useVendorContracts } from "@/hooks/use-vendor-contracts"
@@ -16,14 +22,15 @@ interface VendorContractListProps {
   vendorId: string
 }
 
-type TabValue = ContractStatus | "all" | "submitted"
+type TabValue = ContractStatus | "all" | "submitted" | "rejected"
 
-const TABS: { label: string; value: TabValue }[] = [
+const STATUS_OPTIONS: { label: string; value: TabValue }[] = [
   { label: "All", value: "all" },
   { label: "Draft", value: "draft" },
   { label: "Submitted", value: "submitted" },
+  { label: "Pending", value: "pending" },
   { label: "Active", value: "active" },
-  { label: "Expired", value: "expired" },
+  { label: "Rejected", value: "rejected" },
 ]
 
 export function VendorContractList({ vendorId }: VendorContractListProps) {
@@ -68,14 +75,18 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
   )
 
   const { data, isLoading: contractsLoading } = useVendorContracts(vendorId, {
-    status: tab === "all" || tab === "submitted" ? undefined : tab,
+    status:
+      tab === "all" || tab === "submitted" || tab === "rejected"
+        ? undefined
+        : (tab as ContractStatus),
   })
 
   const rawContracts = data?.contracts ?? []
 
-  // Merge contracts with pending depending on the active tab
+  // Merge contracts with pending depending on the active filter
   const contracts = useMemo(() => {
     if (tab === "submitted") return mappedPending
+    if (tab === "rejected") return []
     if (tab === "all") return [...rawContracts, ...mappedPending]
     return rawContracts
   }, [tab, rawContracts, mappedPending])
@@ -142,14 +153,21 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
         </Card>
       </div>
 
-      {/* Tabs + DataTable */}
-      <Tabs value={tab} onValueChange={(v) => setTab(v as TabValue)}>
-        <TabsList>
-          {TABS.map((t) => (
-            <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      {/* Status filter + DataTable */}
+      <div className="flex items-center gap-2">
+        <Select value={tab} onValueChange={(v) => setTab(v as TabValue)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <Card>
         <CardHeader>

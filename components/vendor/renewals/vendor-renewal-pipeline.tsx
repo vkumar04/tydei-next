@@ -187,7 +187,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Rebates Earned</p>
+                <p className="text-sm text-muted-foreground">Rebates Paid YTD</p>
                 <p className="text-2xl font-bold">{formatCurrency(stats.totalRebate)}</p>
                 <p className="text-xs text-muted-foreground mt-1">across all contracts</p>
               </div>
