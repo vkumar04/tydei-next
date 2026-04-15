@@ -39,6 +39,14 @@ export async function seedAlerts(
     { portalType: "facility", alertType: "pricing_error" as const, title: "Invoice Variance: DePuy ATTUNE Knee", description: "Invoice price $4,500 exceeds contract price $4,200 (7.1% variance).", severity: "high" as const, facilityId: f.summitGeneral.id, contractId: c.depuyTrauma.id },
     { portalType: "facility", alertType: "pricing_error" as const, title: "Invoice Variance: Integra DuraGen", description: "DuraGen Plus invoiced at $1,380 vs contract $1,250 (10.4% variance).", severity: "high" as const, facilityId: f.lighthouseCommunity.id, contractId: c.integraDural.id },
     { portalType: "vendor", alertType: "pricing_error" as const, title: "Pricing Discrepancy Flagged", description: "Lighthouse Community flagged DuraGen Plus pricing — review invoice.", severity: "medium" as const, vendorId: v.integra.id, contractId: c.integraDural.id },
+
+    // --- Lighthouse Surgical — ensure the primary demo facility has
+    //     enough alerts for the Alerts page + bell badge to look populated.
+    { portalType: "facility", alertType: "off_contract" as const, title: "Off-Contract: Medline Gloves", description: "Medline surgical gloves purchased without contract pricing at Lighthouse Surgical.", severity: "medium" as const, facilityId: f.lighthouseSurgical.id },
+    { portalType: "facility", alertType: "pricing_error" as const, title: "Invoice Variance: Arthrex Anchor", description: "BioRaptor 2.9 anchors invoiced at $520 vs contract $480 (8.3% variance).", severity: "high" as const, facilityId: f.lighthouseSurgical.id, contractId: c.arthrexLighthouse.id },
+    { portalType: "facility", alertType: "expiring_contract" as const, title: "Renewal Window: Stryker Capital", description: "Stryker Capital Equipment - Mako Robot enters renewal window in 60 days.", severity: "medium" as const, facilityId: f.lighthouseSurgical.id, contractId: c.strykerMako.id, actionLink: "/dashboard/renewals" },
+    { portalType: "facility", alertType: "rebate_due" as const, title: "Rebate Collection: Arthrex Q3", description: "Arthrex Q3 rebate of $8,200 unpaid 45 days past due date.", severity: "high" as const, facilityId: f.lighthouseSurgical.id, contractId: c.arthrexLighthouse.id },
+    { portalType: "facility", alertType: "tier_threshold" as const, title: "Tier 1 Achieved: Smith & Nephew", description: "S&N Sports Medicine spend crossed $250K — Tier 1 rate now active.", severity: "low" as const, facilityId: f.lighthouseSurgical.id, contractId: c.snSports.id },
   ]
 
   for (const alert of alerts) {
