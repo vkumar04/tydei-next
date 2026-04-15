@@ -24,8 +24,14 @@ const routes: Route[] = [
   { slug: "admin-billing", path: "/admin/billing" },
 ];
 
-const viewport = { label: "desktop", width: 1440, height: 900 };
-const theme: "light" = "light";
+const FULL_MATRIX = process.env.FULL_MATRIX === "1";
+const viewports = FULL_MATRIX
+  ? [
+      { label: "desktop", width: 1440, height: 900 },
+      { label: "mobile", width: 390, height: 844 },
+    ]
+  : [{ label: "desktop", width: 1440, height: 900 }];
+const themes: Array<"light" | "dark"> = FULL_MATRIX ? ["light", "dark"] : ["light"];
 
 let cachedStorageState: Awaited<ReturnType<import("playwright").BrowserContext["storageState"]>> | null = null;
 
@@ -71,67 +77,72 @@ async function captureRoute(browser: Browser, route: Route) {
   if (!existsSync(slugDir)) mkdirSync(slugDir, { recursive: true });
 
   const state = await loginAsAdmin(browser);
-  const context = await browser.newContext({
-    viewport: { width: viewport.width, height: viewport.height },
-    deviceScaleFactor: 2,
-    colorScheme: theme,
-    storageState: state,
-  });
 
-  const page = await context.newPage();
-  await page.addInitScript((t) => {
-    try {
-      localStorage.setItem("theme", t);
-    } catch {}
-  }, theme);
+  for (const viewport of viewports) {
+    for (const theme of themes) {
+      const context = await browser.newContext({
+        viewport: { width: viewport.width, height: viewport.height },
+        deviceScaleFactor: 2,
+        colorScheme: theme,
+        storageState: state,
+      });
 
-  const full = `${PROD_URL}${route.path}`;
-  try {
-    await page.goto(full, { waitUntil: "networkidle", timeout: 30_000 });
-  } catch {
-    try {
-      await page.goto(full, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    } catch (err) {
-      console.error(`[fail] ${route.slug}: ${(err as Error).message}`);
+      const page = await context.newPage();
+      await page.addInitScript((t) => {
+        try {
+          localStorage.setItem("theme", t);
+        } catch {}
+      }, theme);
+
+      const full = `${PROD_URL}${route.path}`;
+      try {
+        await page.goto(full, { waitUntil: "networkidle", timeout: 30_000 });
+      } catch {
+        try {
+          await page.goto(full, { waitUntil: "domcontentloaded", timeout: 30_000 });
+        } catch (err) {
+          console.error(`[fail] ${route.slug} ${theme} ${viewport.label}: ${(err as Error).message}`);
+          await context.close();
+          continue;
+        }
+      }
+
+      await page
+        .evaluate((t) => {
+          const root = document.documentElement;
+          root.classList.remove("light", "dark");
+          root.classList.add(t);
+          root.style.colorScheme = t;
+        }, theme)
+        .catch(() => {});
+
+      await page.evaluate(async () => {
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        const total = document.documentElement.scrollHeight;
+        const step = window.innerHeight * 0.8;
+        for (let y = 0; y < total; y += step) {
+          window.scrollTo(0, y);
+          await sleep(100);
+        }
+        window.scrollTo(0, total);
+        await sleep(400);
+        window.scrollTo(0, 0);
+        await sleep(300);
+      });
+
+      await page.waitForTimeout(800);
+
+      const file = resolve(slugDir, `${theme}-${viewport.label}.png`);
+      try {
+        await page.screenshot({ path: file, fullPage: true });
+        console.log(`[ok]   ${route.slug} ${theme} ${viewport.label}`);
+      } catch (err) {
+        console.error(`[fail] screenshot ${route.slug} ${theme} ${viewport.label}: ${(err as Error).message}`);
+      }
+
       await context.close();
-      return;
     }
   }
-
-  await page
-    .evaluate((t) => {
-      const root = document.documentElement;
-      root.classList.remove("light", "dark");
-      root.classList.add(t);
-      root.style.colorScheme = t;
-    }, theme)
-    .catch(() => {});
-
-  await page.evaluate(async () => {
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    const total = document.documentElement.scrollHeight;
-    const step = window.innerHeight * 0.8;
-    for (let y = 0; y < total; y += step) {
-      window.scrollTo(0, y);
-      await sleep(100);
-    }
-    window.scrollTo(0, total);
-    await sleep(400);
-    window.scrollTo(0, 0);
-    await sleep(300);
-  });
-
-  await page.waitForTimeout(800);
-
-  const file = resolve(slugDir, `${theme}-${viewport.label}.png`);
-  try {
-    await page.screenshot({ path: file, fullPage: true });
-    console.log(`[ok]   ${route.slug}`);
-  } catch (err) {
-    console.error(`[fail] screenshot ${route.slug}: ${(err as Error).message}`);
-  }
-
-  await context.close();
 }
 
 async function main() {

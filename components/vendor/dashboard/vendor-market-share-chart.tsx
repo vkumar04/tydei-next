@@ -57,7 +57,7 @@ export function VendorMarketShareChart({ data }: VendorMarketShareChartProps) {
               />
               <Bar
                 dataKey="share"
-                fill="hsl(var(--primary))"
+                fill="var(--primary)"
                 radius={[0, 4, 4, 0]}
               />
             </BarChart>

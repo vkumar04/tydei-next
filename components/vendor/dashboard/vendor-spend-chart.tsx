@@ -55,9 +55,9 @@ export function VendorSpendChart({ data }: VendorSpendChartProps) {
               <Line
                 type="monotone"
                 dataKey="spend"
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 strokeWidth={2}
-                dot={{ fill: "hsl(var(--primary))" }}
+                dot={{ fill: "var(--primary)" }}
               />
             </LineChart>
           </ResponsiveContainer>

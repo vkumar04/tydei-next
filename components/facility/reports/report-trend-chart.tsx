@@ -41,20 +41,20 @@ export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartP
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
             dataKey="period"
-            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
             angle={-45}
             textAnchor="end"
             height={80}
           />
           <YAxis
             tickFormatter={(value: number) => `${(value / 1000).toFixed(0)}k`}
-            tick={{ fill: "hsl(var(--muted-foreground))" }}
+            tick={{ fill: "var(--muted-foreground)" }}
           />
           <Tooltip
             formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
             contentStyle={{
-              backgroundColor: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
+              backgroundColor: "var(--card)",
+              border: "1px solid var(--border)",
             }}
           />
           <Legend />

@@ -264,17 +264,17 @@ export function OverviewTab({
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     dataKey="month"
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tick={{ fill: "var(--muted-foreground)" }}
                   />
                   <YAxis
                     tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tick={{ fill: "var(--muted-foreground)" }}
                   />
                   <RechartsTooltip
                     formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]}
                     contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
+                      backgroundColor: "var(--card)",
+                      border: "1px solid var(--border)",
                     }}
                   />
                   <Legend />
