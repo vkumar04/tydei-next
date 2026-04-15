@@ -554,7 +554,7 @@ export async function ingestCaseDataCSV(
     [
       { key: "caseNumber", label: "Case ID / Case Number", required: true },
       { key: "surgeryDate", label: "Date of Surgery", required: true },
-      { key: "surgeonName", label: "Surgeon Name", required: false },
+      { key: "surgeonName", label: "Surgeon — accept any column whose header contains 'surgeon' or 'physician' or 'doctor' or 'provider'", required: false },
       { key: "patientDob", label: "Patient Date of Birth", required: false },
       { key: "timeIn", label: "Time wheeled into OR / Incision Time", required: false },
       { key: "timeOut", label: "Time wheeled out of OR / Closure Time", required: false },
@@ -582,7 +582,28 @@ export async function ingestCaseDataCSV(
     }
 
     const patientDob = parseDate(get(row, mapping, "patientDob"))
-    const surgeonName = get(row, mapping, "surgeonName") || null
+    // Fallback surgeon resolution when Gemini misses the column: walk
+    // every row key looking for something that obviously looks like a
+    // name column. Rows with just "Smith, John" or "Dr. Jane Doe"
+    // still get captured so the margin table doesn't render
+    // "Unknown Surgeon".
+    let surgeonName: string | null = get(row, mapping, "surgeonName") || null
+    if (!surgeonName) {
+      for (const [key, val] of Object.entries(row)) {
+        const lowerKey = key.toLowerCase()
+        if (
+          (lowerKey.includes("surgeon") ||
+            lowerKey.includes("physician") ||
+            lowerKey.includes("doctor") ||
+            lowerKey.includes("provider")) &&
+          val &&
+          val.trim().length > 0
+        ) {
+          surgeonName = val.trim()
+          break
+        }
+      }
+    }
     const timeIn = get(row, mapping, "timeIn") || null
     const timeOut = get(row, mapping, "timeOut") || null
 

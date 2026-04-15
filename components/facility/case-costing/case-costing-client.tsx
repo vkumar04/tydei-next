@@ -94,6 +94,16 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
               Reports
             </Button>
           </Link>
+          {totalCases > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => setClearConfirmOpen(true)}
+              disabled={deleteAllMutation.isPending}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Clear Prior Data
+            </Button>
+          )}
           <Button onClick={() => setImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Upload Data
