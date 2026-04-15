@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireAuth, requireFacility } from "@/lib/actions/auth"
 import type { ProductCategory } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 
@@ -12,9 +12,16 @@ export interface CategoryNode extends ProductCategory {
 }
 
 // ─── List Categories (flat - for dropdowns) ─────────────────────
+//
+// Shared across every portal (facility + vendor + admin contract
+// forms). Gating this on requireFacility() meant ANY vendor screen
+// that mounted <ContractTermsEntry> silently redirected to
+// /vendor/dashboard — Charles's recurring "contracts/new bounces
+// me out" bug. ProductCategory rows are global, not
+// facility-scoped, so authenticated is enough.
 
 export async function getCategories() {
-  await requireFacility()
+  await requireAuth()
 
   const categories = await prisma.productCategory.findMany({
     select: { id: true, name: true },
