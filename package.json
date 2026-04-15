@@ -9,8 +9,10 @@
     "lint": "oxlint .",
     "db:push": "prisma db push --config prisma/prisma.config.ts",
     "db:migrate": "prisma migrate dev --config prisma/prisma.config.ts",
-    "db:seed": "bun run prisma/seed.ts",
-    "db:studio": "prisma studio --config prisma/prisma.config.ts"
+    "db:seed": "bun run prisma/seed.ts && bun run scripts/qa-sanity.ts",
+    "db:studio": "prisma studio --config prisma/prisma.config.ts",
+    "qa:sanity": "bun run scripts/qa-sanity.ts",
+    "qa:dom-diff": "bun run scripts/dual-app-dom-diff.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.63",
