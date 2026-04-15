@@ -101,7 +101,10 @@ export async function getContract(id: string) {
         include: { facility: { select: { id: true, name: true } } },
       },
       contractCategories: {
-        select: { productCategoryId: true },
+        select: {
+          productCategoryId: true,
+          productCategory: { select: { id: true, name: true } },
+        },
       },
       rebates: {
         select: { id: true, rebateEarned: true, rebateCollected: true },
@@ -110,7 +113,19 @@ export async function getContract(id: string) {
     },
   })
 
-  return serialize(contract)
+  // Derive aggregates from the rebates relation so the detail view can
+  // render "Rebates Earned" and "Rebates Collected" without an extra
+  // server round-trip. Mirrors the reduction in getContracts.
+  const rebateEarned = contract.rebates.reduce(
+    (sum, r) => sum + Number(r.rebateEarned ?? 0),
+    0
+  )
+  const rebateCollected = contract.rebates.reduce(
+    (sum, r) => sum + Number(r.rebateCollected ?? 0),
+    0
+  )
+
+  return serialize({ ...contract, rebateEarned, rebateCollected })
 }
 
 // ─── Contract Stats ──────────────────────────────────────────────

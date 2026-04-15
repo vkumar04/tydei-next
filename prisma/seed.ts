@@ -14,6 +14,7 @@ import { seedPayorContracts } from "./seeds/payor-contracts"
 import { seedBenchmarks } from "./seeds/benchmarks"
 import { seedPendingContracts } from "./seeds/pending-contracts"
 import { seedCOGRecords } from "./seeds/cog-records"
+import { seedCOGForContracts } from "./seeds/cog-for-contracts"
 import { seedPricingFiles } from "./seeds/pricing-files"
 import { seedAlerts } from "./seeds/alerts"
 import { seedPurchaseOrders } from "./seeds/purchase-orders"
@@ -49,6 +50,7 @@ async function main() {
 
   // Existing seeds
   await seedCOGRecords(prisma, { facilities, vendors })
+  await seedCOGForContracts(prisma)
   await seedPricingFiles(prisma, { facilities, vendors })
   await seedAlerts(prisma, { facilities, vendors, contracts })
   await seedPurchaseOrders(prisma, { facilities, vendors })

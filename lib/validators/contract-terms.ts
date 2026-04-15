@@ -40,6 +40,7 @@ export const createTermSchema = z.object({
   volumeBaseline: z.number().int().min(0).optional(),
   growthBaselinePercent: z.number().min(0).max(100).optional(),
   desiredMarketShare: z.number().min(0).max(100).optional(),
+  scopedCategoryId: z.string().optional(),
   tiers: z.array(tierInputSchema).optional().default([]),
 })
 
@@ -68,6 +69,7 @@ export const termFormSchema = z.object({
   volumeBaseline: z.number().int().min(0).optional(),
   growthBaselinePercent: z.number().min(0).max(100).optional(),
   desiredMarketShare: z.number().min(0).max(100).optional(),
+  scopedCategoryId: z.string().optional(),
   tiers: z.array(tierInputSchema).default([]),
 })
 

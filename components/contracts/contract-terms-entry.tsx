@@ -37,6 +37,10 @@ import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
 interface ContractTermsEntryProps {
   terms: TermFormValues[]
   onChange: (terms: TermFormValues[]) => void
+  /** Categories the user has picked on the contract header — scoped tiers can
+   *  only reference one of these. When empty, the category selector is
+   *  disabled with a helper message. */
+  availableCategories?: { id: string; name: string }[]
 }
 
 const termTypes = [
@@ -86,6 +90,7 @@ function createEmptyTier(tierNumber: number): TierInput {
 export function ContractTermsEntry({
   terms,
   onChange,
+  availableCategories = [],
 }: ContractTermsEntryProps) {
   function addTerm() {
     onChange([...terms, createEmptyTerm()])
@@ -295,7 +300,15 @@ export function ContractTermsEntry({
                     <Select
                       value={term.appliesTo}
                       onValueChange={(v) =>
-                        updateTerm(termIdx, { appliesTo: v })
+                        updateTerm(termIdx, {
+                          appliesTo: v,
+                          // Drop the scoped category when moving back to
+                          // all_products / specific_items.
+                          scopedCategoryId:
+                            v === "specific_category"
+                              ? term.scopedCategoryId
+                              : undefined,
+                        })
                       }
                     >
                       <SelectTrigger>
@@ -308,6 +321,38 @@ export function ContractTermsEntry({
                       </SelectContent>
                     </Select>
                   </Field>
+
+                  {/* When a tier is scoped to a specific category, require
+                      the user to pick which category from the contract's
+                      selected categories. */}
+                  {term.appliesTo === "specific_category" && (
+                    <Field label="Category" required>
+                      {availableCategories.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Add at least one Category to the contract above
+                          before scoping a tier to one.
+                        </p>
+                      ) : (
+                        <Select
+                          value={term.scopedCategoryId ?? ""}
+                          onValueChange={(v) =>
+                            updateTerm(termIdx, { scopedCategoryId: v })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Pick a category..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableCategories.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </Field>
+                  )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="Effective Start" required>

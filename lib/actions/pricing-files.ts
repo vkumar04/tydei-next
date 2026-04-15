@@ -170,6 +170,17 @@ export async function updateContractPricing(id: string, data: {
   return serialize(record)
 }
 
+// ─── List ContractPricing for a given contract ─────────────────
+
+export async function getContractPricing(contractId: string) {
+  await requireFacility()
+  const records = await prisma.contractPricing.findMany({
+    where: { contractId },
+    orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
+  })
+  return serialize(records)
+}
+
 // ─── Delete a single ContractPricing record ────────────────────
 
 export async function deleteContractPricing(id: string) {

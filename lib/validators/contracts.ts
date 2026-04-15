@@ -42,6 +42,8 @@ export const createContractSchema = z.object({
   rebatePayPeriod: PerformancePeriodSchema,
   isMultiFacility: z.boolean(),
   facilityIds: z.array(z.string()),
+  tieInCapitalValue: z.number().optional(),
+  tieInPayoffMonths: z.number().int().optional(),
 })
 
 export type CreateContractInput = z.infer<typeof createContractSchema>
