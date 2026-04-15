@@ -174,13 +174,14 @@ export async function getSpendByCategory(input: {
   const facilityId = facility.id
   const { dateFrom, dateTo } = input
 
-  // Category resolution order:
-  //   1. The free-text category column on the COGRecord itself (when
-  //      the import payload supplied it).
-  //   2. The vendor's active contract's productCategory.name (most
-  //      realistic source — COG imports almost never ship a category
-  //      column, but contracts do).
-  //   3. "Uncategorized" as a last-resort bucket.
+  // Category resolution order, each layer only used when the previous
+  // can't answer:
+  //   1. The free-text `category` column on the COGRecord itself.
+  //   2. Pricing file match by (vendorId, vendorItemNo) — most common
+  //      source of real-world category coverage because pricing files
+  //      almost always have categories even when COG imports don't.
+  //   3. Vendor's active contract productCategory.
+  //   4. "Uncategorized".
   const records = await prisma.cOGRecord.findMany({
     where: {
       facilityId,
@@ -189,6 +190,8 @@ export async function getSpendByCategory(input: {
     select: {
       category: true,
       extendedPrice: true,
+      vendorId: true,
+      vendorItemNo: true,
       vendor: {
         select: {
           contracts: {
@@ -209,11 +212,43 @@ export async function getSpendByCategory(input: {
     },
   })
 
+  // Build a (vendorId, vendorItemNo) → category lookup from pricing
+  // files that cover the items actually appearing in this COG window.
+  const vendorIdsSeen = new Set<string>()
+  const itemNosSeen = new Set<string>()
+  for (const r of records) {
+    if (r.vendorId && r.vendorItemNo) {
+      vendorIdsSeen.add(r.vendorId)
+      itemNosSeen.add(r.vendorItemNo)
+    }
+  }
+  const pricingCategoryMap = new Map<string, string>()
+  if (vendorIdsSeen.size > 0 && itemNosSeen.size > 0) {
+    const pricingRows = await prisma.pricingFile.findMany({
+      where: {
+        vendorId: { in: Array.from(vendorIdsSeen) },
+        vendorItemNo: { in: Array.from(itemNosSeen) },
+        category: { not: null },
+      },
+      select: { vendorId: true, vendorItemNo: true, category: true },
+    })
+    for (const pr of pricingRows) {
+      if (pr.category) {
+        pricingCategoryMap.set(`${pr.vendorId}::${pr.vendorItemNo}`, pr.category)
+      }
+    }
+  }
+
   const catMap = new Map<string, number>()
   for (const r of records) {
+    const pricingCategory =
+      r.vendorId && r.vendorItemNo
+        ? pricingCategoryMap.get(`${r.vendorId}::${r.vendorItemNo}`) ?? null
+        : null
     const vendorCategory =
       r.vendor?.contracts[0]?.productCategory?.name ?? null
-    const cat = r.category || vendorCategory || "Uncategorized"
+    const cat =
+      r.category || pricingCategory || vendorCategory || "Uncategorized"
     catMap.set(cat, (catMap.get(cat) ?? 0) + Number(r.extendedPrice ?? 0))
   }
 

@@ -52,7 +52,29 @@ export async function getCOGRecords(input: COGFilters) {
   const [records, total] = await Promise.all([
     prisma.cOGRecord.findMany({
       where,
-      include: { vendor: { select: { id: true, name: true } } },
+      include: {
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            // Every active/expiring contract the vendor has at this
+            // facility. If there's at least one, the row is on-contract.
+            // Capped at 1 so the payload stays small — we only need
+            // existence.
+            contracts: {
+              where: {
+                status: { in: ["active", "expiring"] },
+                OR: [
+                  { facilityId: facility.id },
+                  { contractFacilities: { some: { facilityId: facility.id } } },
+                ],
+              },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        },
+      },
       orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -60,7 +82,17 @@ export async function getCOGRecords(input: COGFilters) {
     prisma.cOGRecord.count({ where }),
   ])
 
-  return serialize({ records, total })
+  // Attach a computed _onContract flag per row so the table renderer
+  // doesn't need its own join or fall back to "does category have a
+  // non-empty string" (which was the previous bug: rows imported without
+  // categories were labelled Off Contract even when the vendor had an
+  // active contract at this facility).
+  const recordsWithFlag = records.map((r) => ({
+    ...r,
+    _onContract: (r.vendor?.contracts.length ?? 0) > 0,
+  }))
+
+  return serialize({ records: recordsWithFlag, total })
 }
 
 // ─── Create Single COG Record ───────────────────────────────────

@@ -125,11 +125,11 @@ export async function getCases(input: {
       : {}),
   }
 
-  const [records, total] = await Promise.all([
+  const [records, total, payorContracts] = await Promise.all([
     prisma.case.findMany({
       where,
       include: {
-        procedures: { select: { id: true } },
+        procedures: { select: { id: true, cptCode: true } },
         supplies: { select: { id: true } },
       },
       orderBy: { dateOfSurgery: "desc" },
@@ -137,22 +137,68 @@ export async function getCases(input: {
       take: pageSize,
     }),
     prisma.case.count({ where }),
+    // Live payor-contract CPT rate lookup. Build a single CPT → best-rate
+    // map from every active facility payor contract so every case row can
+    // compute its expected reimbursement without the user manually
+    // selecting a payor. Overrides Case.totalReimbursement (which is 0 in
+    // most seed states) when we have a rate match.
+    prisma.payorContract.findMany({
+      where: { facilityId: facility.id, status: "active" },
+      select: { cptRates: true },
+    }),
   ])
 
+  const cptRateMap = new Map<string, number>()
+  for (const pc of payorContracts) {
+    // The seeded payor contract JSON uses `{cpt, rate, description}`,
+    // but a future migration to Prisma relations may use `{cptCode, rate}`.
+    // Accept both shapes so either seed format lights up reimbursement.
+    const rates =
+      (pc.cptRates as
+        | Array<{ cpt?: string; cptCode?: string; rate: number }>
+        | null) ?? []
+    for (const r of rates) {
+      const code = r.cptCode ?? r.cpt
+      if (!code || typeof r.rate !== "number") continue
+      const existing = cptRateMap.get(code)
+      if (existing === undefined || r.rate > existing) {
+        cptRateMap.set(code, r.rate)
+      }
+    }
+  }
+
   return serialize({
-    cases: records.map((c) => ({
-      id: c.id,
-      caseNumber: c.caseNumber,
-      surgeonName: c.surgeonName,
-      dateOfSurgery: c.dateOfSurgery.toISOString().slice(0, 10),
-      primaryCptCode: c.primaryCptCode,
-      totalSpend: Number(c.totalSpend),
-      totalReimbursement: Number(c.totalReimbursement),
-      margin: Number(c.margin),
-      complianceStatus: c.complianceStatus,
-      procedureCount: c.procedures.length,
-      supplyCount: c.supplies.length,
-    })),
+    cases: records.map((c) => {
+      const stored = Number(c.totalReimbursement)
+      // Prefer the highest rate across (a) the case's primaryCptCode and
+      // (b) any CPT on its procedures — some cases import with
+      // procedure rows but no primary flag set.
+      let computed = 0
+      if (c.primaryCptCode && cptRateMap.has(c.primaryCptCode)) {
+        computed = cptRateMap.get(c.primaryCptCode) ?? 0
+      }
+      for (const p of c.procedures) {
+        if (p.cptCode && cptRateMap.has(p.cptCode)) {
+          computed = Math.max(computed, cptRateMap.get(p.cptCode) ?? 0)
+        }
+      }
+      const effectiveReimbursement = stored > 0 ? stored : computed
+      const effectiveMargin = effectiveReimbursement - Number(c.totalSpend)
+
+      return {
+        id: c.id,
+        caseNumber: c.caseNumber,
+        surgeonName: c.surgeonName,
+        dateOfSurgery: c.dateOfSurgery.toISOString().slice(0, 10),
+        primaryCptCode: c.primaryCptCode,
+        totalSpend: Number(c.totalSpend),
+        totalReimbursement: effectiveReimbursement,
+        margin: effectiveMargin,
+        complianceStatus: c.complianceStatus,
+        procedureCount: c.procedures.length,
+        supplyCount: c.supplies.length,
+      }
+    }),
     total,
   })
 }

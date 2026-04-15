@@ -1,5 +1,7 @@
 "use client"
 
+import { useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   Plus,
   Trash2,
@@ -32,14 +34,17 @@ import {
 import { Field } from "@/components/shared/forms/field"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 import { ContractTierRow } from "@/components/contracts/contract-tier-row"
+import { getCategories } from "@/lib/actions/categories"
+import { queryKeys } from "@/lib/query-keys"
 import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
 
 interface ContractTermsEntryProps {
   terms: TermFormValues[]
   onChange: (terms: TermFormValues[]) => void
-  /** Categories the user has picked on the contract header — scoped tiers can
-   *  only reference one of these. When empty, the category selector is
-   *  disabled with a helper message. */
+  /** Preferred list of categories — usually the ones the user already
+   *  picked on the contract header. When omitted or empty, the component
+   *  falls back to fetching the full platform category list so
+   *  Specific-Category tiers can always be scoped. */
   availableCategories?: { id: string; name: string }[]
 }
 
@@ -92,6 +97,23 @@ export function ContractTermsEntry({
   onChange,
   availableCategories = [],
 }: ContractTermsEntryProps) {
+  // Fallback category fetch — runs only when the caller didn't pass any.
+  // Every mount point of this component previously had to wire its own
+  // "get categories from contract → fall back to global list" logic,
+  // which meant most mount points simply didn't (new-contract form,
+  // edit-contract form, vendor submission) and the Specific-Category
+  // tier picker always told the user "add a category first" even though
+  // dozens exist platform-wide.
+  const { data: fallbackCategories } = useQuery({
+    queryKey: queryKeys.categories.all,
+    queryFn: () => getCategories(),
+    enabled: availableCategories.length === 0,
+  })
+
+  const resolvedCategories = useMemo(() => {
+    if (availableCategories.length > 0) return availableCategories
+    return (fallbackCategories ?? []).map((c) => ({ id: c.id, name: c.name }))
+  }, [availableCategories, fallbackCategories])
   function addTerm() {
     onChange([...terms, createEmptyTerm()])
   }

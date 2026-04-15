@@ -63,8 +63,17 @@ export async function calculatePayorMargins(input: {
     }),
   ])
 
-  const cptRates = (contract.cptRates as { cptCode: string; rate: number }[]) ?? []
-  const rateMap = new Map(cptRates.map((r) => [r.cptCode, r.rate]))
+  // Same shape-tolerance as in getCases: accept both {cpt,rate} (seed
+  // format) and {cptCode,rate} (future migration target).
+  const cptRates =
+    (contract.cptRates as
+      | Array<{ cpt?: string; cptCode?: string; rate: number }>
+      | null) ?? []
+  const rateMap = new Map<string, number>()
+  for (const r of cptRates) {
+    const code = r.cptCode ?? r.cpt
+    if (code && typeof r.rate === "number") rateMap.set(code, r.rate)
+  }
 
   let totalEstimatedReimbursement = 0
   let totalSpend = 0
