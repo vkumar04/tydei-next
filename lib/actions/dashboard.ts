@@ -61,27 +61,46 @@ export async function getDashboardStats(input: {
       },
       _sum: { extendedPrice: true },
     }),
+    // "On-contract" spend = COG rows whose vendor has an active contract
+    // scoped to this facility (direct or via contract_facility join). The
+    // previous `vendorId: { not: null }` proxy just counted every
+    // vendor-tagged row and reported "100% on-contract" even when the
+    // vendor had no contract at all.
     prisma.cOGRecord.aggregate({
       where: {
         facilityId,
         transactionDate: { gte: new Date(dateFrom), lte: new Date(dateTo) },
-        vendorId: { not: null },
+        vendor: {
+          contracts: {
+            some: {
+              status: { in: ["active", "expiring"] },
+              OR: [
+                { facilityId },
+                { contractFacilities: { some: { facilityId } } },
+              ],
+            },
+          },
+        },
       },
       _sum: { extendedPrice: true },
     }),
+    // Rebate aggregates use date *overlap* instead of containment —
+    // otherwise a monthly period that straddles the window edge gets
+    // dropped entirely, which is why the dashboard card was stuck at $0
+    // on 30/60/90-day windows.
     prisma.contractPeriod.aggregate({
       where: {
         facilityId,
-        periodStart: { gte: new Date(dateFrom) },
-        periodEnd: { lte: new Date(dateTo) },
+        periodStart: { lte: new Date(dateTo) },
+        periodEnd: { gte: new Date(dateFrom) },
       },
       _sum: { rebateEarned: true },
     }),
     prisma.contractPeriod.aggregate({
       where: {
         facilityId,
-        periodStart: { gte: new Date(dateFrom) },
-        periodEnd: { lte: new Date(dateTo) },
+        periodStart: { lte: new Date(dateTo) },
+        periodEnd: { gte: new Date(dateFrom) },
       },
       _sum: { rebateCollected: true },
     }),
@@ -155,17 +174,46 @@ export async function getSpendByCategory(input: {
   const facilityId = facility.id
   const { dateFrom, dateTo } = input
 
+  // Category resolution order:
+  //   1. The free-text category column on the COGRecord itself (when
+  //      the import payload supplied it).
+  //   2. The vendor's active contract's productCategory.name (most
+  //      realistic source — COG imports almost never ship a category
+  //      column, but contracts do).
+  //   3. "Uncategorized" as a last-resort bucket.
   const records = await prisma.cOGRecord.findMany({
     where: {
       facilityId,
       transactionDate: { gte: new Date(dateFrom), lte: new Date(dateTo) },
     },
-    select: { category: true, extendedPrice: true },
+    select: {
+      category: true,
+      extendedPrice: true,
+      vendor: {
+        select: {
+          contracts: {
+            where: {
+              status: { in: ["active", "expiring"] },
+              OR: [
+                { facilityId },
+                { contractFacilities: { some: { facilityId } } },
+              ],
+              productCategoryId: { not: null },
+            },
+            select: { productCategory: { select: { name: true } } },
+            take: 1,
+            orderBy: { effectiveDate: "desc" },
+          },
+        },
+      },
+    },
   })
 
   const catMap = new Map<string, number>()
   for (const r of records) {
-    const cat = r.category || "Uncategorized"
+    const vendorCategory =
+      r.vendor?.contracts[0]?.productCategory?.name ?? null
+    const cat = r.category || vendorCategory || "Uncategorized"
     catMap.set(cat, (catMap.get(cat) ?? 0) + Number(r.extendedPrice ?? 0))
   }
 
@@ -191,8 +239,9 @@ export async function getEarnedRebateByMonth(input: {
   const periods = await prisma.contractPeriod.findMany({
     where: {
       facilityId,
-      periodStart: { gte: new Date(dateFrom) },
-      periodEnd: { lte: new Date(dateTo) },
+      // Overlap semantics so periods straddling the window edge count.
+      periodStart: { lte: new Date(dateTo) },
+      periodEnd: { gte: new Date(dateFrom) },
       rebateEarned: { gt: 0 },
     },
     include: {

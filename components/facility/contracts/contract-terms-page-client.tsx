@@ -151,7 +151,23 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
       />
 
       {editing ? (
-        <ContractTermsEntry terms={editTerms} onChange={setEditTerms} />
+        <ContractTermsEntry
+          terms={editTerms}
+          onChange={setEditTerms}
+          availableCategories={[
+            ...(contract?.productCategory
+              ? [
+                  {
+                    id: contract.productCategory.id,
+                    name: contract.productCategory.name,
+                  },
+                ]
+              : []),
+            ...((contract?.contractCategories ?? [])
+              .map((cc) => cc.productCategory)
+              .filter((c): c is { id: string; name: string } => !!c)),
+          ]}
+        />
       ) : (
         <ContractTermsDisplay terms={terms ?? []} />
       )}

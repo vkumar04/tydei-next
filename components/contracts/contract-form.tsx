@@ -1,20 +1,32 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import type { CreateContractInput } from "@/lib/validators/contracts"
 import { getVendorCOGSpend } from "@/lib/actions/cog-records"
 import { getContracts } from "@/lib/actions/contracts"
-import { useQuery } from "@tanstack/react-query"
-import { Link2, X } from "lucide-react"
+import { getVendors } from "@/lib/actions/vendors"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/query-keys"
+import { useCreateVendor } from "@/hooks/use-vendor-crud"
+import { Link2, X, Plus } from "lucide-react"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -123,6 +135,68 @@ export function ContractFormBasicInfo({
   const [additionalVendorIds, setAdditionalVendorIds] = useState<string[]>([])
   const [vendorToAdd, setVendorToAdd] = useState<string>("")
 
+  // Inline vendor creation
+  const queryClient = useQueryClient()
+  const { data: liveVendorsData } = useQuery({
+    queryKey: queryKeys.vendors.all,
+    queryFn: () => getVendors(),
+    initialData: vendors,
+  })
+  const liveVendors = useMemo<VendorOption[]>(
+    () => (liveVendorsData ?? vendors) as VendorOption[],
+    [liveVendorsData, vendors],
+  )
+  const createVendorMutation = useCreateVendor()
+  const [addVendorOpen, setAddVendorOpen] = useState(false)
+  const [newVendorName, setNewVendorName] = useState("")
+  const [newVendorDisplayName, setNewVendorDisplayName] = useState("")
+  const [newVendorContactName, setNewVendorContactName] = useState("")
+  const [newVendorContactEmail, setNewVendorContactEmail] = useState("")
+  const [newVendorError, setNewVendorError] = useState<string | null>(null)
+
+  const handleCreateVendor = useCallback(async () => {
+    setNewVendorError(null)
+    const name = newVendorName.trim()
+    if (!name) {
+      setNewVendorError("Name is required")
+      return
+    }
+    const existing = liveVendors.find(
+      (v) => v.name.toLowerCase() === name.toLowerCase(),
+    )
+    if (existing) {
+      setNewVendorError("A vendor with that name already exists")
+      return
+    }
+    try {
+      const created = await createVendorMutation.mutateAsync({
+        name,
+        displayName: newVendorDisplayName.trim() || undefined,
+        contactName: newVendorContactName.trim() || undefined,
+        contactEmail: newVendorContactEmail.trim() || undefined,
+        tier: "standard",
+      })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.vendors.all })
+      setValue("vendorId", created.id)
+      setAddVendorOpen(false)
+      setNewVendorName("")
+      setNewVendorDisplayName("")
+      setNewVendorContactName("")
+      setNewVendorContactEmail("")
+    } catch (err) {
+      setNewVendorError(err instanceof Error ? err.message : "Failed to create vendor")
+    }
+  }, [
+    createVendorMutation,
+    liveVendors,
+    newVendorContactEmail,
+    newVendorContactName,
+    newVendorDisplayName,
+    newVendorName,
+    queryClient,
+    setValue,
+  ])
+
   // Fetch existing contracts for tie-in / capital linking
   const { data: contractsData } = useQuery({
     queryKey: ["contracts", "link-options"],
@@ -209,17 +283,30 @@ export function ContractFormBasicInfo({
             <Field label="Vendor" error={errors.vendorId?.message} required>
               <Select
                 value={watch("vendorId")}
-                onValueChange={(v) => setValue("vendorId", v)}
+                onValueChange={(v) => {
+                  if (v === "__add_new__") {
+                    setAddVendorOpen(true)
+                    return
+                  }
+                  setValue("vendorId", v)
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {vendors.map((v) => (
+                  {liveVendors.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.displayName || v.name}
                     </SelectItem>
                   ))}
+                  <SelectSeparator />
+                  <SelectItem value="__add_new__" className="text-primary font-medium">
+                    <span className="flex items-center gap-2">
+                      <Plus className="h-4 w-4" />
+                      Add new vendor
+                    </span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -546,7 +633,7 @@ export function ContractFormBasicInfo({
               {additionalVendorIds.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {additionalVendorIds.map((vid) => {
-                    const vendor = vendors.find((v) => v.id === vid)
+                    const vendor = liveVendors.find((v) => v.id === vid)
                     return (
                       <Badge key={vid} variant="secondary" className="gap-1 pr-1">
                         {vendor?.displayName || vendor?.name || vid}
@@ -575,7 +662,7 @@ export function ContractFormBasicInfo({
                     <SelectValue placeholder="Select a vendor to add..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {vendors
+                    {liveVendors
                       .filter(
                         (v) =>
                           v.id !== vendorId &&
@@ -617,36 +704,82 @@ export function ContractFormBasicInfo({
               Linked Contract
             </CardTitle>
             <CardDescription>
-              Link this {contractType === "tie_in" ? "tie-in" : "capital equipment"} contract to an existing contract
+              {contractType === "tie_in"
+                ? "Tie this contract to the capital equipment purchase it pays down with rebates."
+                : "Link this capital equipment contract to an existing contract."}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Field label="Related Contract">
-              <Select
-                value={linkedContractId}
-                onValueChange={setLinkedContractId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a contract to link..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {contractsData?.contracts?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      <div className="flex items-center justify-between w-full gap-2">
-                        <span>{c.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {c.vendor?.name}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Select
+                    value={linkedContractId}
+                    onValueChange={setLinkedContractId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a contract to link..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {contractsData?.contracts?.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <span>{c.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {c.vendor?.name}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {linkedContractId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      setLinkedContractId("")
+                      setValue("tieInCapitalValue", undefined as never)
+                      setValue("tieInPayoffMonths", undefined as never)
+                    }}
+                    aria-label="Unlink contract"
+                    title="Unlink contract"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </Field>
-            {linkedContractId && (
-              <p className="text-xs text-muted-foreground mt-2">
-                This contract will be linked for reference after creation.
-              </p>
+
+            {/* Tie-in contracts: pay-down amount + period so rebates on
+                this contract can be applied to the capital contract's
+                outstanding balance. */}
+            {contractType === "tie_in" && linkedContractId && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Capital Equipment Value">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      $
+                    </span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      className="pl-7"
+                      placeholder="0"
+                      {...register("tieInCapitalValue", { valueAsNumber: true })}
+                    />
+                  </div>
+                </Field>
+                <Field label="Expected Pay-off (months)">
+                  <Input
+                    type="number"
+                    placeholder="36"
+                    {...register("tieInPayoffMonths", { valueAsNumber: true })}
+                  />
+                </Field>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -703,6 +836,69 @@ export function ContractFormBasicInfo({
           </div>
         </CardContent>
       </Card>
+
+      {/* Add Vendor Dialog */}
+      <Dialog open={addVendorOpen} onOpenChange={setAddVendorOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add new vendor</DialogTitle>
+            <DialogDescription>
+              Create a new vendor inline. Only the name is required.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Field label="Name" required>
+              <Input
+                value={newVendorName}
+                onChange={(e) => setNewVendorName(e.target.value)}
+                placeholder="e.g., Acme Medical"
+                autoFocus
+              />
+            </Field>
+            <Field label="Display name">
+              <Input
+                value={newVendorDisplayName}
+                onChange={(e) => setNewVendorDisplayName(e.target.value)}
+                placeholder="Optional"
+              />
+            </Field>
+            <Field label="Contact name">
+              <Input
+                value={newVendorContactName}
+                onChange={(e) => setNewVendorContactName(e.target.value)}
+                placeholder="Optional"
+              />
+            </Field>
+            <Field label="Contact email">
+              <Input
+                type="email"
+                value={newVendorContactEmail}
+                onChange={(e) => setNewVendorContactEmail(e.target.value)}
+                placeholder="Optional"
+              />
+            </Field>
+            {newVendorError && (
+              <p className="text-sm text-destructive">{newVendorError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAddVendorOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreateVendor}
+              disabled={createVendorMutation.isPending}
+            >
+              {createVendorMutation.isPending ? "Creating..." : "Create vendor"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

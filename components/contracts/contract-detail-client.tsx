@@ -22,6 +22,7 @@ import { ContractDetailOverview } from "@/components/contracts/contract-detail-o
 import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import { ContractTransactions } from "@/components/contracts/contract-transactions"
+import { ContractPricingTab } from "@/components/contracts/contract-pricing-tab"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
 import { Button } from "@/components/ui/button"
@@ -262,6 +263,7 @@ export function ContractDetailClient({
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="rebates">Rebates &amp; Tiers</TabsTrigger>
+          <TabsTrigger value="pricing">Pricing</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
@@ -393,6 +395,14 @@ export function ContractDetailClient({
         {/* ── Rebates & Tiers Tab ──────────────────────────────── */}
         <TabsContent value="rebates" className="mt-6">
           <ContractTermsDisplay terms={contract.terms} currentSpend={stats?.totalSpend} />
+        </TabsContent>
+
+        {/* ── Pricing Tab ──────────────────────────────────────── */}
+        <TabsContent value="pricing" className="mt-6">
+          <ContractPricingTab
+            contractId={contractId}
+            vendorId={contract.vendorId}
+          />
         </TabsContent>
 
         {/* ── Documents Tab ────────────────────────────────────── */}
