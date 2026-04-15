@@ -12,7 +12,8 @@
     "db:seed": "bun run prisma/seed.ts && bun run scripts/qa-sanity.ts",
     "db:studio": "prisma studio --config prisma/prisma.config.ts",
     "qa:sanity": "bun run scripts/qa-sanity.ts",
-    "qa:dom-diff": "bun run scripts/dual-app-dom-diff.ts"
+    "qa:dom-diff": "bun run scripts/dual-app-dom-diff.ts",
+    "qa:workflows": "bun run tests/workflows/run-all.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.63",
