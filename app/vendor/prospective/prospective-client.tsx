@@ -963,9 +963,10 @@ function TopMetrics({ proposals, totalProposals, totalProjectedSpend }: {
 
 interface VendorProspectiveClientProps {
   vendorId: string
+  facilities: { id: string; name: string }[]
 }
 
-export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientProps) {
+export function VendorProspectiveClient({ vendorId, facilities }: VendorProspectiveClientProps) {
   const { data: proposals, isLoading } = useVendorProposals(vendorId)
   const [activeTab, setActiveTab] = useState("opportunities")
 
@@ -1105,7 +1106,7 @@ export function VendorProspectiveClient({ vendorId }: VendorProspectiveClientPro
         <TabsContent value="new-proposal" className="mt-4 space-y-4">
           <ProposalBuilder
             vendorId={vendorId}
-            facilities={[]}
+            facilities={facilities}
             onClose={() => setActiveTab("proposals")}
           />
         </TabsContent>

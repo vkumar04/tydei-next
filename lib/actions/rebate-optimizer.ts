@@ -37,7 +37,14 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
 
   const contracts = await prisma.contract.findMany({
     where: {
-      facilityId,
+      // Multi-facility scoping: include contracts that reach this
+      // facility through the contractFacilities join table as well as
+      // directly-attached ones. Without this, facilities whose seeded
+      // contracts live only on the join get an empty optimizer.
+      OR: [
+        { facilityId },
+        { contractFacilities: { some: { facilityId } } },
+      ],
       status: { in: ["active", "expiring"] },
     },
     include: {
