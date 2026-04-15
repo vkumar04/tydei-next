@@ -349,10 +349,9 @@ export function ContractTermsEntry({
                       selected categories. */}
                   {term.appliesTo === "specific_category" && (
                     <Field label="Category" required>
-                      {availableCategories.length === 0 ? (
+                      {resolvedCategories.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
-                          Add at least one Category to the contract above
-                          before scoping a tier to one.
+                          Loading categories…
                         </p>
                       ) : (
                         <Select
@@ -365,7 +364,7 @@ export function ContractTermsEntry({
                             <SelectValue placeholder="Pick a category..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {availableCategories.map((c) => (
+                            {resolvedCategories.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
                                 {c.name}
                               </SelectItem>
