@@ -752,6 +752,7 @@ model COGRecord {
   inventoryDescription String
   vendorItemNo         String?
   manufacturerNo       String?
+  poNumber             String?
   unitCost             Decimal  @db.Decimal(12, 2)
   extendedPrice        Decimal? @db.Decimal(14, 2)
   quantity             Int      @default(1)

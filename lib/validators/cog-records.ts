@@ -9,6 +9,7 @@ export const cogRecordInputSchema = z.object({
   inventoryDescription: z.string().min(1, "Description is required"),
   vendorItemNo: z.string().optional(),
   manufacturerNo: z.string().optional(),
+  poNumber: z.string().optional(),
   unitCost: z.number().min(0, "Unit cost must be positive"),
   extendedPrice: z.number().optional(),
   quantity: z.number().int().min(1),

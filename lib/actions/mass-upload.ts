@@ -917,11 +917,14 @@ export async function ingestCOGRecordsCSV(
       const extended =
         parseMoney(get(row, mapping, "extended")) || unitCost * quantity
 
+      const poNumber = get(row, mapping, "poNumber") || undefined
+
       return {
         vendorName,
         inventoryNumber: refNumber || description || vendorName || "Unknown",
         inventoryDescription: description || refNumber || "Unknown item",
         vendorItemNo: refNumber || undefined,
+        poNumber,
         unitCost,
         extendedPrice: extended,
         quantity,

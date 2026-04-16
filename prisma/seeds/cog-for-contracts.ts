@@ -104,6 +104,7 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
         const product = pickProduct(vendorName)
         const qty = Math.max(1, Math.round(perRecord / product.unitCost))
         const extended = product.unitCost * qty
+        const txd = randomDateBetween(start, end)
         rows.push({
           facilityId: fId,
           vendorId: contract.vendorId,
@@ -111,10 +112,11 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
           inventoryNumber: `SYN-${contract.id.slice(-6)}-${i.toString().padStart(4, "0")}`,
           inventoryDescription: product.description,
           vendorItemNo: product.vendorItemNo,
+          poNumber: `PO-${txd.getFullYear()}-${(20000 + totalCogCreated + i).toString().padStart(5, "0")}`,
           unitCost: product.unitCost,
           quantity: qty,
           extendedPrice: extended,
-          transactionDate: randomDateBetween(start, end),
+          transactionDate: txd,
           category: product.category,
         })
       }

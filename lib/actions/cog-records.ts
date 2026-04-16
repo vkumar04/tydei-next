@@ -110,6 +110,7 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
       inventoryDescription: data.inventoryDescription,
       vendorItemNo: data.vendorItemNo,
       manufacturerNo: data.manufacturerNo,
+      poNumber: data.poNumber,
       unitCost: data.unitCost,
       extendedPrice: data.extendedPrice,
       quantity: data.quantity,
@@ -195,6 +196,7 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
     inventoryDescription: record.inventoryDescription,
     vendorItemNo: record.vendorItemNo,
     manufacturerNo: record.manufacturerNo,
+    poNumber: record.poNumber,
     unitCost: record.unitCost,
     // Calculate extendedPrice from unitCost * quantity when not provided
     extendedPrice: record.extendedPrice ?? (record.unitCost * (record.quantity ?? 1)),

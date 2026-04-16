@@ -98,10 +98,14 @@ export async function seedCOGRecords(
     { facilityId: f.heritageRegional.id, vendorId: v.conmed.id, vendorName: "Conmed", inventoryNumber: "INV-060", inventoryDescription: "AirSeal iFS Intelligent Flow System", vendorItemNo: "CNMD-IFS-001", unitCost: 4200, quantity: 1, transactionDate: txDate(2, 18), category: "General Surgery" },
   ]
 
+  let poCounter = 10001
   for (const rec of records) {
+    const d = rec.transactionDate
+    const poNum = `PO-${d.getFullYear()}-${String(poCounter++).padStart(5, "0")}`
     await prisma.cOGRecord.create({
       data: {
         ...rec,
+        poNumber: poNum,
         extendedPrice: rec.unitCost * rec.quantity,
       },
     })

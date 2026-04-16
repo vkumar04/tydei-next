@@ -27,7 +27,7 @@ export function getCOGColumns({
       header: "PO #",
       cell: ({ row }) => (
         <span className="font-mono text-sm">
-          {(row.original as COGRecordWithVendor & { poNumber?: string }).poNumber ?? "\u2014"}
+          {row.original.poNumber ?? "\u2014"}
         </span>
       ),
     },
