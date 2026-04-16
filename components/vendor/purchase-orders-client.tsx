@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/vendor-purchase-orders"
 import { toast } from "sonner"
 
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { POStatsCards } from "./purchase-orders/po-stats-cards"
 import { POFilterBar } from "./purchase-orders/po-filter-bar"
 import { POTable } from "./purchase-orders/po-table"
@@ -449,11 +450,18 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
         onAddPO={() => setIsAddPODialogOpen(true)}
       />
 
-      <POTable
-        data={filteredOrders}
-        isLoading={isLoading}
-        onViewPO={handleViewPO}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>All Purchase Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <POTable
+            data={filteredOrders}
+            isLoading={isLoading}
+            onViewPO={handleViewPO}
+          />
+        </CardContent>
+      </Card>
 
       <POViewDialog
         open={isViewDialogOpen}

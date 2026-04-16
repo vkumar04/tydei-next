@@ -260,12 +260,15 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
             </TabsList>
 
             <TabsContent value="upload" className="space-y-6">
-              <UploadTab onExtracted={(data) => {
-                if (data.contractTotal) setContractTotal(data.contractTotal)
-                if (data.contractLength) setContractLength(data.contractLength)
-                if (data.rebatePercent) setRebatePercent(data.rebatePercent)
-                setActiveTab("inputs")
-              }} />
+              <UploadTab
+                onExtracted={(data) => {
+                  if (data.contractTotal) setContractTotal(data.contractTotal)
+                  if (data.contractLength) setContractLength(data.contractLength)
+                  if (data.rebatePercent) setRebatePercent(data.rebatePercent)
+                }}
+                onNavigateToInputs={() => setActiveTab("inputs")}
+                onNavigateToAnalysis={() => setActiveTab("analysis")}
+              />
             </TabsContent>
 
             <TabsContent value="inputs" className="space-y-6">

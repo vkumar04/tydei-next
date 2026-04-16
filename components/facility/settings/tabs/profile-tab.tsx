@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ProfileForm } from "@/components/facility/settings/profile-form"
@@ -59,7 +60,7 @@ export function ProfileTab({
                     .toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1">
+              <div className="flex-1 space-y-3">
                 <h3 className="text-lg font-semibold">{profileData.name}</h3>
                 <p className="text-sm text-muted-foreground">
                   {profileData.type
@@ -74,6 +75,28 @@ export function ProfileTab({
                     {profileData.healthSystemName}
                   </Badge>
                 )}
+                <Button variant="outline" size="sm">
+                  Change Avatar
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  defaultValue={profileData.name.split(" ")[0] ?? ""}
+                  placeholder="First name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  defaultValue={profileData.name.split(" ").slice(1).join(" ")}
+                  placeholder="Last name"
+                />
               </div>
             </div>
           </div>
