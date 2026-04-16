@@ -37,6 +37,12 @@ import {
 } from "@/hooks/use-case-costing"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { cn } from "@/lib/utils"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { ChevronDown, ArrowRight, Info } from "lucide-react"
 
 interface CaseCostingClientProps {
   facilityId: string
@@ -110,6 +116,46 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
           </Button>
         </div>
       </div>
+
+      {/* How Case Costing Links Your Data */}
+      <Collapsible>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                How Case Costing Links Your Data
+              </CardTitle>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <span className="text-xs mr-1">How it works</span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent className="pt-0">
+              <div className="grid gap-3 sm:grid-cols-5 items-center text-center text-sm">
+                <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/30 p-3">
+                  <p className="font-medium text-blue-900 dark:text-blue-300">Case Procedures</p>
+                  <p className="text-xs text-muted-foreground mt-1">CPT codes, dates</p>
+                </div>
+                <ArrowRight className="h-4 w-4 mx-auto text-muted-foreground hidden sm:block" />
+                <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 p-3">
+                  <p className="font-medium text-amber-900 dark:text-amber-300">Supply Costs</p>
+                  <p className="text-xs text-muted-foreground mt-1">Items, quantities, prices</p>
+                </div>
+                <ArrowRight className="h-4 w-4 mx-auto text-muted-foreground hidden sm:block" />
+                <div className="rounded-lg border bg-green-50 dark:bg-green-950/30 p-3">
+                  <p className="font-medium text-green-900 dark:text-green-300">Case Margins</p>
+                  <p className="text-xs text-muted-foreground mt-1">Spend vs reimbursement</p>
+                </div>
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {/* Main Tabs */}
       <Tabs value={activeMainTab} onValueChange={setActiveMainTab}>

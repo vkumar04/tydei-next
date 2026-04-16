@@ -11,6 +11,7 @@ import {
   CalendarIcon,
   FileStack,
   Trash2,
+  RefreshCw,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -30,6 +31,7 @@ import { COGImportDialog } from "@/components/facility/cog/cog-import-dialog"
 import { PricingImportDialog } from "@/components/facility/cog/pricing-import-dialog"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { MassUpload } from "@/components/import/mass-upload"
+import { toast } from "sonner"
 import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
 import {
   AlertDialog,
@@ -95,6 +97,12 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
           <Button variant="outline" onClick={() => setMassUploadOpen(true)}>
             <FileStack className="mr-2 h-4 w-4" />
             Mass Upload
+          </Button>
+          <Button variant="outline" onClick={() => {
+            toast.info("Matching COG items to contracts...")
+          }}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Match Pricing
           </Button>
           <Button variant="outline" onClick={() => setCogImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />

@@ -923,6 +923,8 @@ function BenchmarksSection({ proposals }: { proposals: VendorProposal[] }) {
 
 // ─── Top-level Metrics ─────────────────────────────────────────
 
+// ─── Top-level Metrics ─────────────────────────────────────────
+
 function TopMetrics({ proposals, totalProposals, totalProjectedSpend }: {
   proposals: VendorProposal[]; totalProposals: number; totalProjectedSpend: number
 }) {
@@ -988,6 +990,14 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
         <TabsList>
           <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
           <TabsTrigger value="proposals">My Proposals</TabsTrigger>
+          <TabsTrigger value="deal-scorer" className="gap-2">
+            <Gauge className="h-4 w-4" />
+            Deal Scorer
+          </TabsTrigger>
+          <TabsTrigger value="benchmarks" className="gap-2">
+            <Scale className="h-4 w-4" />
+            Benchmarks
+          </TabsTrigger>
           <TabsTrigger value="analytics" className="gap-2">
             <BarChart3 className="h-4 w-4" />
             Analytics
@@ -1095,6 +1105,16 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             isLoading={isLoading}
             onNewProposal={() => setActiveTab("new-proposal")}
           />
+        </TabsContent>
+
+        {/* Deal Scorer Tab */}
+        <TabsContent value="deal-scorer" className="mt-4 space-y-4">
+          <DealScorerSection proposals={proposals ?? []} />
+        </TabsContent>
+
+        {/* Benchmarks Tab */}
+        <TabsContent value="benchmarks" className="mt-4 space-y-4">
+          <BenchmarksSection proposals={proposals ?? []} />
         </TabsContent>
 
         {/* Analytics Tab */}

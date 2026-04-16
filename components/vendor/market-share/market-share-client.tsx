@@ -44,6 +44,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   LayoutGrid,
   PieChart as PieChartIcon,
@@ -267,6 +268,14 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
             />
           </motion.div>
 
+          <Tabs defaultValue="categories">
+            <TabsList>
+              <TabsTrigger value="categories">Categories</TabsTrigger>
+              <TabsTrigger value="breakdown">Breakdown</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="categories" className="space-y-6 mt-6">
+
           {/* Pie Chart + Category Table side-by-side */}
           <div className="grid gap-4 lg:grid-cols-5">
             {/* Pie Chart */}
@@ -314,7 +323,7 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
             {/* Category Table */}
             <Card className="lg:col-span-3">
               <CardHeader>
-                <CardTitle>Market Share by Category</CardTitle>
+                <CardTitle>Market Share by Product Category</CardTitle>
                 <CardDescription>
                   Your spend vs total market across product categories
                   {mergedCategories.size > 0 && (
@@ -581,10 +590,14 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
             </Alert>
           )}
 
+            </TabsContent>
+
+            <TabsContent value="breakdown" className="space-y-6 mt-6">
+
           {/* Facility Breakdown Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Market Share by Facility</CardTitle>
+              <CardTitle>Market Share by Facility &amp; Category</CardTitle>
               <CardDescription>
                 Your spend distribution across facilities
               </CardDescription>
@@ -645,6 +658,9 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
 
           {/* Existing Charts Component */}
           <MarketShareCharts data={data} />
+
+            </TabsContent>
+          </Tabs>
         </>
       )}
     </div>

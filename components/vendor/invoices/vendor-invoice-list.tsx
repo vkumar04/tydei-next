@@ -333,7 +333,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
 
         <Button onClick={() => setSubmitDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          Submit Invoice
+          New Invoice
         </Button>
       </div>
 
