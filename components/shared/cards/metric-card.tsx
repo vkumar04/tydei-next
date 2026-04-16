@@ -3,7 +3,7 @@
 import type { LucideIcon } from "lucide-react"
 import { motion } from "motion/react"
 import { ArrowUpRight, ArrowDownRight } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardTitle } from "@/components/ui/card"
 import { fadeInUp } from "@/lib/animations"
 
 interface MetricCardProps {
@@ -52,7 +52,9 @@ export function MetricCard({
           </div>
           <div className="mt-4">
             <p className="text-2xl font-bold">{value}</p>
-            <p className="text-sm text-muted-foreground">{title}</p>
+            <CardTitle className="text-sm font-normal text-muted-foreground">
+              {title}
+            </CardTitle>
             {secondaryValue && (
               <div className="mt-2 flex items-center gap-2 rounded bg-muted/50 px-2 py-1">
                 <span className="text-sm font-semibold text-primary">

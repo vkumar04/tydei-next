@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
-import { matchVendorByAlias } from "@/lib/vendor-aliases"
+import { resolveVendorId } from "@/lib/vendors/resolve"
 import { bulkImportCOGRecords } from "@/lib/actions/cog-records"
 import { geminiModel } from "@/lib/ai/config"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
@@ -128,50 +128,27 @@ function get(
  * prevents ingest from sharding the Vendor table into near-duplicates like
  * "Stryker" / "Stryker Corp" / "Stryker Orthopaedics".
  */
+/**
+ * Thin wrapper over the shared resolver so the AI-contract-ingest
+ * path can also persist a `division` field on newly-created vendors.
+ * Shared logic (exact → alias → fuzzy → create) lives in
+ * `lib/vendors/resolve.ts`.
+ */
 async function findOrCreateVendorByName(
   name: string | null | undefined,
   division?: string | null
 ): Promise<string> {
-  const trimmed = (name ?? "").trim()
-  if (!trimmed) {
-    // Last-resort fallback so we always have SOME vendor to attach to.
-    const fallback = await prisma.vendor.upsert({
-      where: { id: "unknown-vendor-placeholder" },
-      update: {},
-      create: {
-        id: "unknown-vendor-placeholder",
-        name: "Unknown Vendor",
-        status: "active",
-      },
-      select: { id: true },
-    })
-    return fallback.id
+  const id = await resolveVendorId(name)
+  // resolveVendorId creates a vendor with default fields. If we have
+  // a division to set and the vendor was freshly minted (name matches
+  // exactly and no division on the row yet), patch it.
+  if (id && division?.trim()) {
+    await prisma.vendor.update({
+      where: { id },
+      data: { division: division.trim() },
+    }).catch(() => {})
   }
-
-  // Exact case-insensitive match first — cheap and covers the happy path.
-  const exact = await prisma.vendor.findFirst({
-    where: { name: { equals: trimmed, mode: "insensitive" } },
-    select: { id: true },
-  })
-  if (exact) return exact.id
-
-  // Alias + fuzzy match against the full vendor table.
-  const vendors = await prisma.vendor.findMany({
-    select: { id: true, name: true, displayName: true },
-  })
-  const aliasHit = matchVendorByAlias(trimmed, vendors)
-  if (aliasHit) return aliasHit
-
-  // Still nothing — create a new vendor with the AI-extracted name verbatim.
-  const created = await prisma.vendor.create({
-    data: {
-      name: trimmed,
-      division: division?.trim() || null,
-      status: "active",
-    },
-    select: { id: true },
-  })
-  return created.id
+  return id!
 }
 
 // ─── Enum normalizers ───────────────────────────────────────────

@@ -14,44 +14,11 @@
  *   bun run tests/workflows/facility-dashboard-rebates-live.spec.ts
  */
 
-import { chromium, type Browser, type Page } from "playwright"
+import { chromium, type Page } from "playwright"
+import { login, step, reportAndExit, TYDEI_URL, type StepResult } from "./_helpers"
 
-const TYDEI_URL = process.env.TYDEI_URL ?? "http://localhost:3000"
-const FACILITY_EMAIL = "demo-facility@tydei.com"
-const FACILITY_PASSWORD = "demo-facility-2024"
-
-type StepResult = { name: string; ok: boolean; detail?: string }
 const results: StepResult[] = []
-const logStep = async (name: string, fn: () => Promise<void>) => {
-  try {
-    await fn()
-    results.push({ name, ok: true })
-    console.log(`  \x1b[32m✓\x1b[0m ${name}`)
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err)
-    results.push({ name, ok: false, detail: detail.slice(0, 300) })
-    console.log(`  \x1b[31m✗\x1b[0m ${name}`)
-    console.log(`    \x1b[33m${detail.slice(0, 300)}\x1b[0m`)
-  }
-}
-
-async function loginFacility(browser: Browser): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
-  const page = await ctx.newPage()
-  await page.goto(TYDEI_URL, { waitUntil: "domcontentloaded" })
-  await page.evaluate(
-    async ({ email, password }) => {
-      const r = await fetch("/api/auth/sign-in/email", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      })
-      if (!r.ok) throw new Error(`login failed: ${r.status}`)
-    },
-    { email: FACILITY_EMAIL, password: FACILITY_PASSWORD },
-  )
-  return page
-}
+const logStep = (name: string, fn: () => Promise<void>) => step(results, name, fn)
 
 // Scans every main-area card and returns the first card whose combined
 // text matches `keyword`. Dashboard stat cards don't use a discrete
@@ -86,7 +53,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true })
 
   try {
-    const page = await loginFacility(browser)
+    const page = await login(browser, "facility")
 
     await logStep("navigate to /dashboard", async () => {
       await page.goto(`${TYDEI_URL}/dashboard`, {
@@ -173,12 +140,7 @@ async function main() {
     await browser.close()
   }
 
-  const passed = results.filter((r) => r.ok).length
-  const failed = results.length - passed
-  console.log(
-    `\n${failed === 0 ? "\x1b[32m" : "\x1b[31m"}${passed}/${results.length} steps passing\x1b[0m\n`,
-  )
-  if (failed > 0) process.exit(1)
+  reportAndExit(results)
 }
 
 main().catch((err) => {

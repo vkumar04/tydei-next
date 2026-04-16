@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 import {
   contractFiltersSchema,
   createContractSchema,
@@ -124,7 +125,8 @@ export async function getContract(id: string) {
   )
 
   // Dynamic fallback: if no persisted rebate rows exist but the contract
-  // has tiers and matching COG spend, compute rebates from live data.
+  // has tiers and matching COG spend, compute rebates from live data
+  // using the shared rebate calculator.
   if (rebateEarned === 0 && contract.terms.length > 0) {
     const tiers = contract.terms[0]?.tiers ?? []
     if (tiers.length > 0) {
@@ -137,14 +139,9 @@ export async function getContract(id: string) {
       })
       const cogSpend = Number(cogAgg._sum.extendedPrice ?? 0)
       if (cogSpend > 0) {
-        let bestRebatePercent = 0
-        for (const tier of tiers) {
-          if (cogSpend >= Number(tier.spendMin ?? 0)) {
-            bestRebatePercent = Number(tier.rebateValue)
-          }
-        }
-        rebateEarned = (cogSpend * bestRebatePercent) / 100
-        rebateCollected = rebateEarned * 0.8
+        const result = computeRebateFromPrismaTiers(cogSpend, tiers)
+        rebateEarned = result.rebateEarned
+        rebateCollected = result.rebateCollected
       }
     }
   }

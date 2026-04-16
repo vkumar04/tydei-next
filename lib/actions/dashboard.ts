@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { ContractStatus } from "@prisma/client"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import { computeRebateFromPrismaTiers, DEFAULT_COLLECTION_RATE } from "@/lib/rebates/calculate"
 
 // ─── Dashboard Stats ─────────────────────────────────────────────
 
@@ -154,15 +155,10 @@ export async function getDashboardStats(input: {
       const vendorSpend = Number(vendorSpendAgg._sum.extendedPrice ?? 0)
       if (vendorSpend <= 0) continue
 
-      let bestRebatePercent = 0
-      for (const tier of tiers) {
-        if (vendorSpend >= Number(tier.spendMin ?? 0)) {
-          bestRebatePercent = Number(tier.rebateValue)
-        }
-      }
-      rebatesEarned += (vendorSpend * bestRebatePercent) / 100
+      const result = computeRebateFromPrismaTiers(vendorSpend, tiers)
+      rebatesEarned += result.rebateEarned
     }
-    rebatesCollected = rebatesEarned * 0.8
+    rebatesCollected = rebatesEarned * DEFAULT_COLLECTION_RATE
   }
 
   const collectionRate = rebatesEarned > 0 ? (rebatesCollected / rebatesEarned) * 100 : 0
