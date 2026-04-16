@@ -13,7 +13,9 @@
     "db:studio": "prisma studio --config prisma/prisma.config.ts",
     "qa:sanity": "bun run scripts/qa-sanity.ts",
     "qa:dom-diff": "bun run scripts/dual-app-dom-diff.ts",
-    "qa:workflows": "bun run tests/workflows/run-all.ts"
+    "qa:workflows": "bun run tests/workflows/run-all.ts",
+    "qa:v0-ledger": "bun run scripts/build-v0-feature-ledger.ts",
+    "qa:v0-ledger-check": "bun run scripts/build-v0-feature-ledger.ts --check"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.63",
