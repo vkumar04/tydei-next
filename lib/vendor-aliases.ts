@@ -13,6 +13,7 @@ export const VENDOR_ALIASES: Record<string, string[]> = {
     "Johnson & Johnson",
     "Ethicon",
     "DePuy Synthes",
+    "DePuy Synthes Companies",
     "DePuy",
   ],
   Medtronic: [
@@ -30,6 +31,20 @@ export const VENDOR_ALIASES: Record<string, string[]> = {
   "Zimmer Biomet": [
     "Zimmer",
     "Biomet",
+  ],
+  Conmed: [
+    "Conmed Corporation",
+    "CONMED Corp",
+  ],
+  "Integra LifeSciences": [
+    "Integra",
+    "Integra Life Sciences",
+  ],
+  NuVasive: [
+    "NuVasive Inc",
+  ],
+  Hologic: [
+    "Hologic Inc",
   ],
   Medline: [
     "Medline Industries",

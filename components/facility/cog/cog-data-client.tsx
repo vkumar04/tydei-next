@@ -33,6 +33,8 @@ import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { MassUpload } from "@/components/import/mass-upload"
 import { toast } from "sonner"
 import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
+import { matchCOGToContracts } from "@/lib/actions/cog-records"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +72,22 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   // Fetch aggregated stats from server (not from paginated records)
   const { data: stats, isPending: statsLoading, refetch: refetchStats } = useCOGStats(facilityId)
   const clearAllMutation = useClearAllCOGRecords()
+  const qc = useQueryClient()
+  const matchMutation = useMutation({
+    mutationFn: matchCOGToContracts,
+    onSuccess: (result) => {
+      toast.success(
+        `Matched ${result.recordsUpdated.toLocaleString()} records to vendors. ` +
+        `${result.onContractAfter.toLocaleString()} now on-contract. ` +
+        `${result.vendorsUnmatched} vendor(s) unmatched.`
+      )
+      refetchStats()
+      qc.invalidateQueries({ queryKey: ["cog-records"] })
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Matching failed")
+    },
+  })
 
   const totalSpend = stats?.totalSpend ?? 0
   const totalItems = stats?.totalItems ?? 0
@@ -98,11 +116,16 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <FileStack className="mr-2 h-4 w-4" />
             Mass Upload
           </Button>
-          <Button variant="outline" onClick={() => {
-            toast.info("Matching COG items to contracts...")
-          }}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Match Pricing
+          <Button
+            variant="outline"
+            disabled={matchMutation.isPending}
+            onClick={() => {
+              toast.info("Matching COG items to contracts...")
+              matchMutation.mutate()
+            }}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${matchMutation.isPending ? "animate-spin" : ""}`} />
+            {matchMutation.isPending ? "Matching..." : "Match Pricing"}
           </Button>
           <Button variant="outline" onClick={() => setCogImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />

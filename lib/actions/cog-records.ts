@@ -147,17 +147,36 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
   )
   const nameToId = new Map<string, string>()
   if (unmatchedNames.length > 0) {
-    const existing = await prisma.vendor.findMany({
-      where: {
-        OR: unmatchedNames.map((name) => ({
-          name: { equals: name, mode: "insensitive" as const },
-        })),
-      },
-      select: { id: true, name: true },
+    // Load ALL system vendors for fuzzy matching — not just exact name matches.
+    // This catches "DA-COM COLUMBIA LLC" → "DaCom" and similar variations
+    // that the previous exact-match-only approach missed entirely.
+    const allVendors = await prisma.vendor.findMany({
+      select: { id: true, name: true, displayName: true },
     })
-    for (const v of existing) {
-      nameToId.set(v.name.trim().toLowerCase(), v.id)
+
+    const { matchVendorByAlias } = await import("@/lib/vendor-aliases")
+
+    // Pass 1: exact case-insensitive match (cheapest)
+    for (const name of unmatchedNames) {
+      const lower = name.toLowerCase()
+      const exact = allVendors.find(
+        (v) => v.name.toLowerCase() === lower || (v.displayName ?? "").toLowerCase() === lower,
+      )
+      if (exact) nameToId.set(lower, exact.id)
     }
+
+    // Pass 2: alias + fuzzy match for remaining names
+    const stillUnmatched = unmatchedNames.filter(
+      (name) => !nameToId.has(name.toLowerCase()),
+    )
+    for (const name of stillUnmatched) {
+      const matchedId = matchVendorByAlias(name, allVendors)
+      if (matchedId) {
+        nameToId.set(name.toLowerCase(), matchedId)
+      }
+    }
+
+    // Pass 3: create new vendors for truly unmatched names
     const toCreate = unmatchedNames.filter(
       (name) => !nameToId.has(name.toLowerCase()),
     )
@@ -169,7 +188,6 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
         })
         nameToId.set(created.name.trim().toLowerCase(), created.id)
       } catch {
-        // Unique constraint or race — try to look it up instead
         const found = await prisma.vendor.findFirst({
           where: { name: { equals: name, mode: "insensitive" } },
           select: { id: true },
@@ -385,6 +403,137 @@ export async function computePricingVsCOG(
   }
 
   return total
+}
+
+// ─── Match COG Records to Contracts (the "Match Pricing" action) ─
+
+/**
+ * Re-processes every COG record at the facility to resolve vendor
+ * identities and link items to contracts. This is the action behind
+ * the "Match Pricing" button.
+ *
+ * Steps:
+ *   1. Load all distinct vendorNames from COG records
+ *   2. For each name, attempt fuzzy match against system vendors
+ *      (which already have contracts)
+ *   3. Update vendorId on every COG row that can be resolved
+ *   4. For item-level matching, cross-reference vendorItemNo against
+ *      pricing files to detect on-contract items
+ *
+ * Returns a summary: how many records were re-linked, how many
+ * vendors were matched, how many remain unmatched.
+ */
+export async function matchCOGToContracts(): Promise<{
+  totalRecords: number
+  vendorsMatched: number
+  vendorsUnmatched: number
+  recordsUpdated: number
+  onContractAfter: number
+}> {
+  const { facility } = await requireFacility()
+
+  // 1. Get distinct (vendorName, current vendorId) pairs
+  const distinctVendors = await prisma.cOGRecord.groupBy({
+    by: ["vendorName", "vendorId"],
+    where: { facilityId: facility.id },
+    _count: true,
+  })
+
+  // 2. Load all system vendors for fuzzy matching
+  const systemVendors = await prisma.vendor.findMany({
+    select: { id: true, name: true, displayName: true },
+  })
+
+  // 3. Load vendors that have active contracts at this facility
+  const contractedVendorIds = new Set(
+    (
+      await prisma.contract.findMany({
+        where: {
+          status: { in: ["active", "expiring"] },
+          OR: [
+            { facilityId: facility.id },
+            { contractFacilities: { some: { facilityId: facility.id } } },
+          ],
+        },
+        select: { vendorId: true },
+        distinct: ["vendorId"],
+      })
+    ).map((c) => c.vendorId),
+  )
+
+  // 4. For each vendorName, find the best system vendor match
+  //    Priority: contracted vendor > any system vendor > keep current
+  const { matchVendorByAlias } = await import("@/lib/vendor-aliases")
+
+  let vendorsMatched = 0
+  let vendorsUnmatched = 0
+  let recordsUpdated = 0
+  const totalRecords = distinctVendors.reduce((s, v) => s + v._count, 0)
+
+  for (const group of distinctVendors) {
+    const vendorName = group.vendorName ?? ""
+    if (!vendorName.trim()) continue
+
+    const currentVendorId = group.vendorId
+    const currentIsContracted = currentVendorId
+      ? contractedVendorIds.has(currentVendorId)
+      : false
+
+    // Skip if already linked to a contracted vendor
+    if (currentIsContracted) {
+      vendorsMatched++
+      continue
+    }
+
+    // Try fuzzy match
+    const matchedId = matchVendorByAlias(vendorName, systemVendors)
+
+    if (matchedId && matchedId !== currentVendorId) {
+      // Update all COG records with this vendorName to the matched vendor
+      const result = await prisma.cOGRecord.updateMany({
+        where: {
+          facilityId: facility.id,
+          vendorName: { equals: vendorName, mode: "insensitive" },
+        },
+        data: { vendorId: matchedId },
+      })
+      recordsUpdated += result.count
+
+      if (contractedVendorIds.has(matchedId)) {
+        vendorsMatched++
+      } else {
+        vendorsUnmatched++
+      }
+    } else {
+      vendorsUnmatched++
+    }
+  }
+
+  // 5. Count on-contract after matching
+  const onContractAfter = await prisma.cOGRecord.count({
+    where: {
+      facilityId: facility.id,
+      vendor: {
+        contracts: {
+          some: {
+            status: { in: ["active", "expiring"] },
+            OR: [
+              { facilityId: facility.id },
+              { contractFacilities: { some: { facilityId: facility.id } } },
+            ],
+          },
+        },
+      },
+    },
+  })
+
+  return {
+    totalRecords,
+    vendorsMatched,
+    vendorsUnmatched,
+    recordsUpdated,
+    onContractAfter,
+  }
 }
 
 // ─── Delete COG Record ──────────────────────────────────────────

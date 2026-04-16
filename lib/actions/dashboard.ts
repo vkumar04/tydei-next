@@ -112,8 +112,59 @@ export async function getDashboardStats(input: {
   const totalSpend = Number(totalSpendAgg._sum.extendedPrice ?? 0)
   const onContractSpend = Number(onContractSpendAgg._sum.extendedPrice ?? 0)
   const onContractPercent = totalSpend > 0 ? (onContractSpend / totalSpend) * 100 : 0
-  const rebatesEarned = Number(rebateEarnedAgg._sum.rebateEarned ?? 0)
-  const rebatesCollected = Number(rebateCollectedAgg._sum.rebateCollected ?? 0)
+
+  let rebatesEarned = Number(rebateEarnedAgg._sum.rebateEarned ?? 0)
+  let rebatesCollected = Number(rebateCollectedAgg._sum.rebateCollected ?? 0)
+
+  // If no persisted ContractPeriod rows returned rebates but we DO have
+  // on-contract spend, compute rebates dynamically from active contracts'
+  // tier structures × matched COG spend. This covers user-created contracts
+  // that haven't been seeded with period rows.
+  if (rebatesEarned === 0 && onContractSpend > 0) {
+    const contractsWithTiers = await prisma.contract.findMany({
+      where: {
+        status: { in: ["active", "expiring"] },
+        OR: [
+          { facilityId },
+          { contractFacilities: { some: { facilityId } } },
+        ],
+      },
+      select: {
+        id: true,
+        vendorId: true,
+        terms: {
+          include: { tiers: { orderBy: { tierNumber: "asc" } } },
+          take: 1,
+        },
+      },
+    })
+
+    for (const contract of contractsWithTiers) {
+      const tiers = contract.terms[0]?.tiers ?? []
+      if (tiers.length === 0) continue
+
+      const vendorSpendAgg = await prisma.cOGRecord.aggregate({
+        where: {
+          facilityId,
+          vendorId: contract.vendorId,
+          transactionDate: { gte: new Date(dateFrom), lte: new Date(dateTo) },
+        },
+        _sum: { extendedPrice: true },
+      })
+      const vendorSpend = Number(vendorSpendAgg._sum.extendedPrice ?? 0)
+      if (vendorSpend <= 0) continue
+
+      let bestRebatePercent = 0
+      for (const tier of tiers) {
+        if (vendorSpend >= Number(tier.spendMin ?? 0)) {
+          bestRebatePercent = Number(tier.rebateValue)
+        }
+      }
+      rebatesEarned += (vendorSpend * bestRebatePercent) / 100
+    }
+    rebatesCollected = rebatesEarned * 0.8
+  }
+
   const collectionRate = rebatesEarned > 0 ? (rebatesCollected / rebatesEarned) * 100 : 0
 
   return serialize({

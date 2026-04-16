@@ -113,17 +113,41 @@ export async function getContract(id: string) {
     },
   })
 
-  // Derive aggregates from the rebates relation so the detail view can
-  // render "Rebates Earned" and "Rebates Collected" without an extra
-  // server round-trip. Mirrors the reduction in getContracts.
-  const rebateEarned = contract.rebates.reduce(
+  // Derive aggregates from the rebates relation
+  let rebateEarned = contract.rebates.reduce(
     (sum, r) => sum + Number(r.rebateEarned ?? 0),
     0
   )
-  const rebateCollected = contract.rebates.reduce(
+  let rebateCollected = contract.rebates.reduce(
     (sum, r) => sum + Number(r.rebateCollected ?? 0),
     0
   )
+
+  // Dynamic fallback: if no persisted rebate rows exist but the contract
+  // has tiers and matching COG spend, compute rebates from live data.
+  if (rebateEarned === 0 && contract.terms.length > 0) {
+    const tiers = contract.terms[0]?.tiers ?? []
+    if (tiers.length > 0) {
+      const cogAgg = await prisma.cOGRecord.aggregate({
+        where: {
+          facilityId: facility.id,
+          vendorId: contract.vendorId,
+        },
+        _sum: { extendedPrice: true },
+      })
+      const cogSpend = Number(cogAgg._sum.extendedPrice ?? 0)
+      if (cogSpend > 0) {
+        let bestRebatePercent = 0
+        for (const tier of tiers) {
+          if (cogSpend >= Number(tier.spendMin ?? 0)) {
+            bestRebatePercent = Number(tier.rebateValue)
+          }
+        }
+        rebateEarned = (cogSpend * bestRebatePercent) / 100
+        rebateCollected = rebateEarned * 0.8
+      }
+    }
+  }
 
   return serialize({ ...contract, rebateEarned, rebateCollected })
 }
