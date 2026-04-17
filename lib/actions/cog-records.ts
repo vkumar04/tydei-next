@@ -13,6 +13,7 @@ import {
 import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
+import { resolveVendorIdsBulk } from "@/lib/vendors/resolve"
 
 // ─── List COG Records ───────────────────────────────────────────
 
@@ -135,67 +136,14 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
   let errors = 0
 
   // Auto-create Vendor rows for any vendorName that doesn't already match an
-  // existing vendor (case-insensitive). Without this, the Vendors list only
-  // shows vendors the user explicitly created via the vendor-match step, so
-  // imported COG data appears to "lose" its vendors.
-  const unmatchedNames = Array.from(
-    new Set(
-      data.records
-        .filter((r) => !r.vendorId && r.vendorName && r.vendorName.trim())
-        .map((r) => r.vendorName!.trim()),
-    ),
-  )
-  const nameToId = new Map<string, string>()
-  if (unmatchedNames.length > 0) {
-    // Load ALL system vendors for fuzzy matching — not just exact name matches.
-    // This catches "DA-COM COLUMBIA LLC" → "DaCom" and similar variations
-    // that the previous exact-match-only approach missed entirely.
-    const allVendors = await prisma.vendor.findMany({
-      select: { id: true, name: true, displayName: true },
-    })
-
-    const { matchVendorByAlias } = await import("@/lib/vendor-aliases")
-
-    // Pass 1: exact case-insensitive match (cheapest)
-    for (const name of unmatchedNames) {
-      const lower = name.toLowerCase()
-      const exact = allVendors.find(
-        (v) => v.name.toLowerCase() === lower || (v.displayName ?? "").toLowerCase() === lower,
-      )
-      if (exact) nameToId.set(lower, exact.id)
-    }
-
-    // Pass 2: alias + fuzzy match for remaining names
-    const stillUnmatched = unmatchedNames.filter(
-      (name) => !nameToId.has(name.toLowerCase()),
-    )
-    for (const name of stillUnmatched) {
-      const matchedId = matchVendorByAlias(name, allVendors)
-      if (matchedId) {
-        nameToId.set(name.toLowerCase(), matchedId)
-      }
-    }
-
-    // Pass 3: create new vendors for truly unmatched names
-    const toCreate = unmatchedNames.filter(
-      (name) => !nameToId.has(name.toLowerCase()),
-    )
-    for (const name of toCreate) {
-      try {
-        const created = await prisma.vendor.create({
-          data: { name, displayName: name },
-          select: { id: true, name: true },
-        })
-        nameToId.set(created.name.trim().toLowerCase(), created.id)
-      } catch {
-        const found = await prisma.vendor.findFirst({
-          where: { name: { equals: name, mode: "insensitive" } },
-          select: { id: true },
-        })
-        if (found) nameToId.set(name.toLowerCase(), found.id)
-      }
-    }
-  }
+  // existing vendor. The shared resolver runs exact → alias → fuzzy, then
+  // creates vendors for names that still don't match (e.g. distributors
+  // not in our catalog). Without this, imported COG data "loses" its
+  // vendors and the Vendors list goes stale.
+  const unmatchedNames = data.records
+    .filter((r) => !r.vendorId && r.vendorName && r.vendorName.trim())
+    .map((r) => r.vendorName!.trim())
+  const nameToId = await resolveVendorIdsBulk(unmatchedNames)
 
   const resolveVendorId = (record: (typeof data.records)[number]) => {
     if (record.vendorId) return record.vendorId
@@ -439,12 +387,16 @@ export async function matchCOGToContracts(): Promise<{
     _count: true,
   })
 
-  // 2. Load all system vendors for fuzzy matching
-  const systemVendors = await prisma.vendor.findMany({
-    select: { id: true, name: true, displayName: true },
-  })
+  // 2. Resolve every distinct name to an id via the shared resolver
+  //    (createMissing: false — if a name can't match, we leave it alone
+  //    rather than fragment the vendor table further).
+  const distinctNames = distinctVendors
+    .map((g) => g.vendorName ?? "")
+    .filter((n) => n.trim())
+  const resolved = await resolveVendorIdsBulk(distinctNames, { createMissing: false })
 
-  // 3. Load vendors that have active contracts at this facility
+  // 3. Load vendors that have active contracts at this facility so we
+  //    can tell the user which matches are "on contract" vs just "matched".
   const contractedVendorIds = new Set(
     (
       await prisma.contract.findMany({
@@ -461,10 +413,6 @@ export async function matchCOGToContracts(): Promise<{
     ).map((c) => c.vendorId),
   )
 
-  // 4. For each vendorName, find the best system vendor match
-  //    Priority: contracted vendor > any system vendor > keep current
-  const { matchVendorByAlias } = await import("@/lib/vendor-aliases")
-
   let vendorsMatched = 0
   let vendorsUnmatched = 0
   let recordsUpdated = 0
@@ -475,21 +423,13 @@ export async function matchCOGToContracts(): Promise<{
     if (!vendorName.trim()) continue
 
     const currentVendorId = group.vendorId
-    const currentIsContracted = currentVendorId
-      ? contractedVendorIds.has(currentVendorId)
-      : false
-
-    // Skip if already linked to a contracted vendor
-    if (currentIsContracted) {
+    if (currentVendorId && contractedVendorIds.has(currentVendorId)) {
       vendorsMatched++
       continue
     }
 
-    // Try fuzzy match
-    const matchedId = matchVendorByAlias(vendorName, systemVendors)
-
+    const matchedId = resolved.get(vendorName.toLowerCase())
     if (matchedId && matchedId !== currentVendorId) {
-      // Update all COG records with this vendorName to the matched vendor
       const result = await prisma.cOGRecord.updateMany({
         where: {
           facilityId: facility.id,

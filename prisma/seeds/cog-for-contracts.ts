@@ -1,4 +1,5 @@
 import type { PrismaClient, Prisma } from "@prisma/client"
+import { applyTiers, computeRebate } from "@/lib/rebates/calculate"
 
 // Vendor-specific realistic product catalogs used to generate synthetic COG
 // records that match active contracts. These are intentionally scoped to the
@@ -156,23 +157,15 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
         pe.setDate(pe.getDate() - 1)
         if (pe.getTime() > periodEnd.getTime()) pe.setTime(periodEnd.getTime())
 
-        // Cumulative spend up to this period end
+        // Tier is determined by CUMULATIVE spend-to-date. Rebate is
+        // earned on THIS period's spend at that tier's rate. Shared
+        // calculator keeps seed/dashboard/detail tier logic identical.
         const cumulative = spendPerPeriod * (m + 1)
-
-        // Determine tier achieved on cumulative
-        let tierAchieved = 0
-        let activeTierIdx = -1
-        for (let t = 0; t < tiers.length; t++) {
-          if (cumulative >= Number(tiers[t].spendMin)) {
-            tierAchieved = tiers[t].tierNumber
-            activeTierIdx = t
-          }
-        }
-        const tierRebatePercent =
-          activeTierIdx >= 0 ? Number(tiers[activeTierIdx].rebateValue) : 0
+        const { tierAchieved, rebatePercent } = applyTiers(cumulative, tiers)
         const periodSpend = spendPerPeriod
-        const rebateEarned = (periodSpend * tierRebatePercent) / 100
-        const rebateCollected = rebateEarned * 0.8 // 80% collected on average
+        const { rebateEarned, rebateCollected } = computeRebate(periodSpend, [
+          { tierNumber: tierAchieved, spendMin: 0, rebateValue: rebatePercent },
+        ])
 
         if (primaryTerm) {
           const period = await prisma.contractPeriod.create({

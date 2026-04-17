@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 
 /**
  * Fetch all contract periods for a given contract, ordered by periodStart desc.
@@ -90,16 +91,12 @@ export async function getContractPeriods(contractId: string) {
     const bucket = monthBuckets.get(key)!
     cumulative += bucket.spend
 
-    let tierAchieved = 0
-    let tierRebatePercent = 0
-    for (const t of tiers) {
-      if (cumulative >= Number(t.spendMin)) {
-        tierAchieved = t.tierNumber
-        tierRebatePercent = Number(t.rebateValue)
-      }
-    }
-    const rebateEarned = (bucket.spend * tierRebatePercent) / 100
-    const rebateCollected = rebateEarned * 0.8
+    // Tier is determined by CUMULATIVE spend-to-date, but the rebate
+    // amount is earned on THIS month's spend at that tier's rate.
+    const { tierAchieved, rebatePercent } = computeRebateFromPrismaTiers(cumulative, tiers)
+    const { rebateEarned, rebateCollected } = computeRebateFromPrismaTiers(bucket.spend, [
+      { tierNumber: tierAchieved, spendMin: 0, rebateValue: rebatePercent },
+    ] as unknown as Parameters<typeof computeRebateFromPrismaTiers>[1])
 
     return {
       id: `synthetic-${contract.id}-${key}`,
