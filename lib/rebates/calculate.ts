@@ -1,23 +1,30 @@
 /**
- * Shared rebate calculation logic.
+ * Shared rebate calculation facade.
  *
- * Every place in the codebase that computes rebates — the seed, the
- * synthetic ContractPeriod generator, the dashboard aggregate fallback,
- * the contract-detail fallback — must use these functions. That way
- * tier logic lives in one file and every surface stays consistent.
+ * All callers compute rebates through this module so tier logic stays
+ * consistent. The actual engine lives in `lib/contracts/rebate-method.ts`
+ * — this facade adds the DEFAULT_COLLECTION_RATE concept and a
+ * Prisma-shaped convenience wrapper.
  *
  * Previous bug pattern: each caller re-implemented the tier lookup
  * slightly differently (e.g. some used `>=` on spendMin, one used `>`,
  * one ignored tierNumber ordering) and user-visible rebate numbers
- * disagreed depending on which page you were on.
+ * disagreed depending on which page you were on. Keep this the single
+ * choke point.
  */
 import type { ContractTier } from "@prisma/client"
+import {
+  calculateRebate,
+  type RebateMethodName,
+  type TierLike,
+} from "@/lib/contracts/rebate-method"
 
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface TierInput {
   tierNumber: number
   spendMin: number | string | { toString(): string }
+  spendMax?: number | string | { toString(): string } | null
   rebateValue: number | string | { toString(): string }
 }
 
@@ -38,50 +45,39 @@ export const DEFAULT_COLLECTION_RATE = 0.8
 // ─── Tier lookup ────────────────────────────────────────────────
 
 /**
- * Given a cumulative spend amount and a list of tiers, return the
- * highest tier whose spendMin the spend meets or exceeds, plus the
- * corresponding rebate percentage.
- *
- * Tiers don't need to be pre-sorted — we scan all of them and pick the
- * highest qualifying tierNumber. This matches how the seed builds
- * data and the synthetic period generator walks the list.
+ * Returns the highest tier whose spendMin the spend meets, plus the
+ * rebate percentage at that tier. Kept for backward compat — this is the
+ * cumulative-method view. New code should call `computeRebate` /
+ * `calculateRebate` directly and pass the method.
  */
 export function applyTiers(
   spend: number,
   tiers: TierInput[],
 ): { tierAchieved: number; rebatePercent: number } {
-  let tierAchieved = 0
-  let rebatePercent = 0
-
-  for (const tier of tiers) {
-    const min = Number(tier.spendMin)
-    if (spend >= min && tier.tierNumber >= tierAchieved) {
-      tierAchieved = tier.tierNumber
-      rebatePercent = Number(tier.rebateValue)
-    }
-  }
-
-  return { tierAchieved, rebatePercent }
+  const r = calculateRebate(spend, tiers as TierLike[], "cumulative")
+  return { tierAchieved: r.tierAchieved, rebatePercent: r.rebatePercent }
 }
 
 // ─── Full rebate computation ────────────────────────────────────
 
 /**
  * Compute earned + collected rebate for a given spend amount and
- * tier structure. Collection rate defaults to DEFAULT_COLLECTION_RATE
- * but can be overridden per-contract.
- *
- * Returns zeroed result when no tiers or no spend — always safe to
- * call unconditionally.
+ * tier structure. Defaults to cumulative method for backward compat;
+ * pass `method: "marginal"` for bracket-style calculation.
  */
 export function computeRebate(
   spend: number,
   tiers: TierInput[],
-  opts: { collectionRate?: number } = {},
+  opts: { collectionRate?: number; method?: RebateMethodName } = {},
 ): RebateResult {
-  const { tierAchieved, rebatePercent } = applyTiers(spend, tiers)
-  const rebateEarned = (spend * rebatePercent) / 100
-  const rebateCollected = rebateEarned * (opts.collectionRate ?? DEFAULT_COLLECTION_RATE)
+  const method = opts.method ?? "cumulative"
+  const { tierAchieved, rebatePercent, rebateEarned } = calculateRebate(
+    spend,
+    tiers as TierLike[],
+    method,
+  )
+  const rebateCollected =
+    rebateEarned * (opts.collectionRate ?? DEFAULT_COLLECTION_RATE)
 
   return {
     tierAchieved,
@@ -100,8 +96,8 @@ export function computeRebate(
  */
 export function computeRebateFromPrismaTiers(
   spend: number,
-  tiers: Pick<ContractTier, "tierNumber" | "spendMin" | "rebateValue">[],
-  opts?: { collectionRate?: number },
+  tiers: Pick<ContractTier, "tierNumber" | "spendMin" | "spendMax" | "rebateValue">[],
+  opts?: { collectionRate?: number; method?: RebateMethodName },
 ): RebateResult {
   return computeRebate(spend, tiers as TierInput[], opts)
 }

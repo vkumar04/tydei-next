@@ -77,6 +77,7 @@ function createEmptyTerm(): TermFormValues {
     evaluationPeriod: "annual",
     paymentTiming: "quarterly",
     appliesTo: "all_products",
+    rebateMethod: "cumulative",
     effectiveStart: "",
     effectiveEnd: "",
     tiers: [],
@@ -317,6 +318,34 @@ export function ContractTermsEntry({
                       </Select>
                     </Field>
                   </div>
+
+                  <Field label="Rebate Calculation Method">
+                    <Select
+                      value={term.rebateMethod ?? "cumulative"}
+                      onValueChange={(v) =>
+                        updateTerm(termIdx, {
+                          rebateMethod: v as "cumulative" | "marginal",
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cumulative">
+                          Cumulative (whole-spend at top tier)
+                        </SelectItem>
+                        <SelectItem value="marginal">
+                          Marginal (per-bracket rate)
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {term.rebateMethod === "marginal"
+                        ? "Each spend bracket earns its own rate."
+                        : "Entire spend earns the highest achieved tier's rate."}
+                    </p>
+                  </Field>
 
                   <Field label="Product Scope">
                     <Select

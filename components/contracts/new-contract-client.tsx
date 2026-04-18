@@ -420,6 +420,7 @@ export function NewContractClient({
             evaluationPeriod: "annual" as const,
             paymentTiming: "quarterly" as const,
             appliesTo: "all_products" as const,
+            rebateMethod: "cumulative" as const,
             effectiveStart: data.effectiveDate,
             effectiveEnd: data.expirationDate,
             tiers: t.tiers.map((tier) => ({

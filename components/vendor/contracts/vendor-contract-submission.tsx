@@ -372,6 +372,7 @@ export function VendorContractSubmission({
           evaluationPeriod: "annual",
           paymentTiming: "quarterly",
           appliesTo: "all_products",
+          rebateMethod: "cumulative" as const,
           effectiveStart: data.effectiveDate,
           effectiveEnd: data.expirationDate,
           tiers: t.tiers.map((tier) => ({

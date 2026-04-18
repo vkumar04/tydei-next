@@ -92,6 +92,12 @@ export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDispl
                       {term.termType.replace(/_/g, " ")}
                     </Badge>
                   </DefinitionTooltip>
+                  <Badge
+                    variant={term.rebateMethod === "marginal" ? "default" : "outline"}
+                    className="text-xs"
+                  >
+                    {term.rebateMethod === "marginal" ? "Marginal" : "Cumulative"}
+                  </Badge>
                   <span className="text-xs text-muted-foreground">
                     {formatDate(term.effectiveStart)} -{" "}
                     {formatDate(term.effectiveEnd)}

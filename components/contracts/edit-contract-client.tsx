@@ -70,6 +70,7 @@ export function EditContractClient({
           evaluationPeriod: t.evaluationPeriod,
           paymentTiming: t.paymentTiming,
           appliesTo: t.appliesTo,
+          rebateMethod: t.rebateMethod ?? "cumulative",
           effectiveStart: new Date(t.effectiveStart).toISOString().split("T")[0],
           effectiveEnd: new Date(t.effectiveEnd).toISOString().split("T")[0],
           spendBaseline: t.spendBaseline ? Number(t.spendBaseline) : undefined,

@@ -4,6 +4,7 @@ import {
   BaselineTypeSchema,
   VolumeTypeSchema,
   RebateTypeSchema,
+  RebateMethodSchema,
 } from "@/lib/validators"
 
 // ─── Tier Input ──────────────────────────────────────────────────
@@ -33,6 +34,7 @@ export const createTermSchema = z.object({
   evaluationPeriod: z.string().optional().default("annual"),
   paymentTiming: z.string().optional().default("quarterly"),
   appliesTo: z.string().optional().default("all_products"),
+  rebateMethod: RebateMethodSchema.default("cumulative"),
   effectiveStart: z.string().min(1, "Start date is required"),
   effectiveEnd: z.string().min(1, "End date is required"),
   volumeType: VolumeTypeSchema.optional(),
@@ -62,6 +64,7 @@ export const termFormSchema = z.object({
   evaluationPeriod: z.string().optional().default("annual"),
   paymentTiming: z.string().optional().default("quarterly"),
   appliesTo: z.string().optional().default("all_products"),
+  rebateMethod: RebateMethodSchema.default("cumulative"),
   effectiveStart: z.string().min(1, "Start date is required"),
   effectiveEnd: z.string().min(1, "End date is required"),
   volumeType: VolumeTypeSchema.optional(),

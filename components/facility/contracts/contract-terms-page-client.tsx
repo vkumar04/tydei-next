@@ -86,6 +86,7 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
       evaluationPeriod: t.evaluationPeriod ?? "annual",
       paymentTiming: t.paymentTiming ?? "quarterly",
       appliesTo: t.appliesTo ?? "all_products",
+      rebateMethod: (t.rebateMethod ?? "cumulative") as TermFormValues["rebateMethod"],
       effectiveStart: String(t.effectiveStart).slice(0, 10),
       effectiveEnd: String(t.effectiveEnd).slice(0, 10),
       spendBaseline: t.spendBaseline ? Number(t.spendBaseline) : undefined,
