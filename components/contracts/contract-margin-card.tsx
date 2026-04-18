@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
-import { getContractMarginAnalysis } from "@/lib/actions/contracts"
+import { getContractMarginAnalysis } from "@/lib/actions/contracts/margin"
 
 interface ContractMarginCardProps {
   contractId: string

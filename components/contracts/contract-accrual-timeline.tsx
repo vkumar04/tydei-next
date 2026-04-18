@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
-import { getAccrualTimeline } from "@/lib/actions/contracts"
+import { getAccrualTimeline } from "@/lib/actions/contracts/accrual"
 
 interface ContractAccrualTimelineProps {
   contractId: string

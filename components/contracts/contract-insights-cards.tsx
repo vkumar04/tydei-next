@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
-import { getContractInsights } from "@/lib/actions/contracts"
+import { getContractInsights } from "@/lib/actions/contracts/insights"
 
 interface ContractInsightsCardsProps {
   contractId: string

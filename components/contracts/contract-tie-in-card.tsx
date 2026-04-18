@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
-import { getContractTieInBundle } from "@/lib/actions/contracts"
+import { getContractTieInBundle } from "@/lib/actions/contracts/tie-in"
 
 interface ContractTieInCardProps {
   contractId: string
