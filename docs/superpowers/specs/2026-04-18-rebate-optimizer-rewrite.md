@@ -49,6 +49,15 @@
 - No stack swaps.
 - No new schema.
 
+### Cross-cutting rule (mirrors contracts-rewrite)
+
+Tier-engine math on this page is **projection only** — "if you spent $X more,
+this is the tier you'd hit and the rebate you'd earn." Never display
+projected/computed rebate as `Earned YTD`; that number must come from
+`Rebate.rebateEarned` rows or `ContractPeriod.rebateEarned` rollups.
+Projection slots must be visually distinct (use labels like
+"Projected additional", "If you reach Tier N", "What-if scenario").
+
 ---
 
 ## 2. Translation notes — canonical prototype → tydei

@@ -143,16 +143,28 @@ type MergedContract = {
 
 ```
 For each contractId:
-  1. Primary: aggregate COGRecord.extendedPrice WHERE contractId = X (matches enriched rows; faster post-COG-rewrite)
-  2. Fallback: sum ContractPeriod.totalSpend (existing contracts-rewrite data)
-  3. Final fallback: contract.currentSpend (legacy column)
-  Rebate: computeRebateFromPrismaTiers(spend, firstTerm.tiers, { method })
-          fallback to contract.rebateEarned if zero
+  Spend:
+    1. Primary: aggregate COGRecord.extendedPrice WHERE contractId = X (enriched rows)
+    2. Fallback: sum ContractPeriod.totalSpend
+    3. Final fallback: vendor-level COGRecord.extendedPrice
+  Rebate (NEVER auto-computed from tiers):
+    1. Primary: sum Rebate.rebateEarned WHERE contractId = X (manually entered / imported)
+    2. Fallback: sum ContractPeriod.rebateEarned (period rollups)
+    3. Otherwise: 0
   TotalValue: contract.totalValue (passthrough)
 ```
 
+> **Rule:** rebate values shown anywhere in the contracts surface (list rows, summary
+> cards, detail page) come only from explicit `Rebate` rows or `ContractPeriod`
+> rollups. We never call `computeRebateFromPrismaTiers` to "estimate" rebate based
+> on spend × tier ladder — earned/collected rebate is always something a user
+> manually enters or imports. This applies to `getContract`, `getContractMetricsBatch`,
+> `getContractStats`, dashboard composites, and reports overview alike.
+
 **Acceptance:**
-- Every contract row shows a non-zero spend/rebate/totalValue when data exists.
+- Every contract row shows a non-zero spend when COG data exists.
+- Rebate column shows `$0` until the facility records a `Rebate` row or a `ContractPeriod`
+  with `rebateEarned` — even when the contract has tiers and matching spend.
 - Vendor-submitted pending contracts show $0 spend (they have no COG history yet; expected).
 - Query runs in parallel with the main contracts query; combined latency <500ms on demo scale.
 

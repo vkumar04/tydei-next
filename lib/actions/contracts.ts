@@ -2,7 +2,6 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
-import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 import {
   contractFiltersSchema,
   createContractSchema,
@@ -271,21 +270,19 @@ export async function getContract(id: string) {
     },
   })
 
-  // Derive aggregates from the rebates relation
-  let rebateEarned = contract.rebates.reduce(
+  // Aggregates come from explicit Rebate rows only — never compute
+  // rebates from tier definitions. Rebates must be manually entered
+  // (or imported) before they show up on the contract.
+  const rebateEarned = contract.rebates.reduce(
     (sum, r) => sum + Number(r.rebateEarned ?? 0),
     0
   )
-  let rebateCollected = contract.rebates.reduce(
+  const rebateCollected = contract.rebates.reduce(
     (sum, r) => sum + Number(r.rebateCollected ?? 0),
     0
   )
 
-  // Always aggregate current COG spend against this contract's vendor —
-  // we need it for tier-progress surfaces even when persisted rebate
-  // rows already exist. When persisted rebate rows are zero but there's
-  // matching spend, we also recompute earned/collected from the tiers
-  // below.
+  // Live spend is still useful for tier-progress / projection surfaces.
   const cogAgg = await prisma.cOGRecord.aggregate({
     where: {
       facilityId: facility.id,
@@ -294,21 +291,6 @@ export async function getContract(id: string) {
     _sum: { extendedPrice: true },
   })
   const currentSpend = Number(cogAgg._sum.extendedPrice ?? 0)
-
-  // Dynamic fallback: if no persisted rebate rows exist but the contract
-  // has tiers and matching COG spend, compute rebates from live data
-  // using the shared rebate calculator.
-  if (rebateEarned === 0 && contract.terms.length > 0) {
-    const firstTerm = contract.terms[0]
-    const tiers = firstTerm?.tiers ?? []
-    if (tiers.length > 0 && currentSpend > 0) {
-      const result = computeRebateFromPrismaTiers(currentSpend, tiers, {
-        method: firstTerm?.rebateMethod ?? "cumulative",
-      })
-      rebateEarned = result.rebateEarned
-      rebateCollected = result.rebateCollected
-    }
-  }
 
   return serialize({ ...contract, rebateEarned, rebateCollected, currentSpend })
 }
@@ -438,6 +420,32 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
     }
   }
 
+  // Pass 4 — rebate is *not* computed from tiers. Show what the
+  // facility has actually recorded (manually entered or imported)
+  // via the Rebate model. ContractPeriod.rebateEarned is the
+  // fallback for contracts where periods rolled up but no per-payment
+  // Rebate rows exist yet.
+  const [rebateAgg, periodRebateAgg] = await Promise.all([
+    prisma.rebate.groupBy({
+      by: ["contractId"],
+      where: { contractId: { in: contractIds } },
+      _sum: { rebateEarned: true },
+    }),
+    prisma.contractPeriod.groupBy({
+      by: ["contractId"],
+      where: { contractId: { in: contractIds } },
+      _sum: { rebateEarned: true },
+    }),
+  ])
+  const rebateFromTable = new Map<string, number>()
+  for (const row of rebateAgg) {
+    rebateFromTable.set(row.contractId, Number(row._sum.rebateEarned ?? 0))
+  }
+  const rebateFromPeriods = new Map<string, number>()
+  for (const row of periodRebateAgg) {
+    rebateFromPeriods.set(row.contractId, Number(row._sum.rebateEarned ?? 0))
+  }
+
   // Combine into per-contract result.
   const result: Record<
     string,
@@ -451,14 +459,11 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
     // Precedence: COG (enrichment) → ContractPeriod → Vendor-level COG.
     const spend = cogSpend > 0 ? cogSpend : periodSpend > 0 ? periodSpend : vendorSpend
 
-    let rebate = 0
-    const firstTerm = c.terms[0]
-    if (firstTerm && firstTerm.tiers.length > 0 && spend > 0) {
-      const result = computeRebateFromPrismaTiers(spend, firstTerm.tiers, {
-        method: firstTerm.rebateMethod ?? "cumulative",
-      })
-      rebate = result.rebateEarned
-    }
+    // Precedence: Rebate model (per-payment) → ContractPeriod rollup.
+    // No tier-engine fallback — never "estimate" a rebate.
+    const directRebate = rebateFromTable.get(c.id) ?? 0
+    const periodRebate = rebateFromPeriods.get(c.id) ?? 0
+    const rebate = directRebate > 0 ? directRebate : periodRebate
 
     result[c.id] = {
       spend,

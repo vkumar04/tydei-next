@@ -43,6 +43,26 @@
 - No debug-route ports, no AI model swap.
 - No unilateral refactor of unrelated files touched incidentally.
 
+### Cross-cutting rule: rebates are **never** auto-computed for display
+
+Earned and collected rebate values shown in the UI (contracts list, contract
+detail, dashboard cards, reports overview, vendor performance) come **only**
+from explicit `Rebate` rows or `ContractPeriod` rollups. Engines like
+`computeRebateFromPrismaTiers` are reserved for **projection** surfaces —
+tier progress, "what-if" rebate-optimizer scenarios, accrual estimates that
+are clearly labeled as projections. Never use them to fill in `rebateEarned`
+when no `Rebate` row exists; the correct value in that case is `$0`.
+
+This applies to:
+- `getContract`, `getContractMetricsBatch`, `getContractStats`
+- Dashboard KPI + charts (`getDashboardKPISummary`, `getDashboardCharts`)
+- Reports overview (`getReportsOverview`)
+- Any future contracts surface that displays an "earned rebate" number
+
+If a downstream surface needs a projection, name it explicitly
+(`projectedRebate`, `tierProgressEstimate`) and render it in a separate
+slot from real earned/collected.
+
 ---
 
 ## 2. File structure
