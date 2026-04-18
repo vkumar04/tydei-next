@@ -2,13 +2,9 @@
  * Unified rebate engine — dispatcher.
  *
  * `calculateRebate(config, periodData, options)` is the single entry
- * point. Dispatches to the 8 type-specific engines. Subsystem 2-8 will
- * implement the actual engines — this stub currently returns a
- * zero-rebate RebateResult with `errors: ["engine not yet implemented"]`
- * for any type.
- *
- * This lets downstream callers type against the unified API today; as
- * each engine ships, it wires into this dispatcher.
+ * point. Dispatches to the 8 type-specific engines. Subsystems 2-8 ship
+ * engines incrementally; types not yet implemented return a zero-rebate
+ * RebateResult with `errors: ["engine not yet implemented"]`.
  */
 import type {
   EngineOptions,
@@ -19,6 +15,8 @@ import type {
 import { zeroResult } from "./types"
 import { calculateSpendRebate } from "./spend-rebate"
 import { calculateVolumeRebate } from "./volume-rebate"
+import { calculateTierPriceReduction } from "./tier-price-reduction"
+import { calculateMarketSharePriceReduction } from "./market-share-price-reduction"
 
 export type { RebateConfig, RebateResult, PeriodData, EngineOptions } from "./types"
 
@@ -35,8 +33,10 @@ export function calculateRebate(
     case "VOLUME_REBATE":
       return calculateVolumeRebate(config, periodData, options)
     case "TIER_PRICE_REDUCTION":
-    case "MARKET_SHARE_REBATE":
+      return calculateTierPriceReduction(config, periodData, options)
     case "MARKET_SHARE_PRICE_REDUCTION":
+      return calculateMarketSharePriceReduction(config, periodData, options)
+    case "MARKET_SHARE_REBATE":
     case "CAPITATED":
     case "CARVE_OUT":
     case "TIE_IN_CAPITAL": {

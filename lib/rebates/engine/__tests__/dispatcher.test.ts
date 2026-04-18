@@ -7,22 +7,16 @@ const emptyPeriod: PeriodData = {
   totalSpend: 0,
 }
 
-describe("calculateRebate dispatcher — stub phase", () => {
-  // Each engine file will replace the stub error as it ships; until then,
-  // the dispatcher returns a zero-rebate result with a descriptive error.
-  // SPEND_REBATE is live as of subsystem 2 — its case is asserted separately
-  // below (empty errors array, type echoed through).
+describe("calculateRebate dispatcher — stub + live phases", () => {
+  // Live engines (each has a standalone live-dispatch assertion below):
+  //   - SPEND_REBATE (subsystem 2)
+  //   - VOLUME_REBATE (subsystem 3)
+  //   - TIER_PRICE_REDUCTION (subsystem 4)
+  //   - MARKET_SHARE_PRICE_REDUCTION (subsystem 4)
+  //
+  // The parametrized stub phase below covers types still awaiting their
+  // engine implementation.
   const types: Array<{ config: RebateConfig; label: string }> = [
-    {
-      label: "TIER_PRICE_REDUCTION",
-      config: {
-        type: "TIER_PRICE_REDUCTION",
-        boundaryRule: "EXCLUSIVE",
-        tiers: [],
-        spendBasis: "ALL_SPEND",
-        trigger: "RETROACTIVE",
-      },
-    },
     {
       label: "MARKET_SHARE_REBATE",
       config: {
@@ -30,15 +24,6 @@ describe("calculateRebate dispatcher — stub phase", () => {
         method: "CUMULATIVE",
         boundaryRule: "EXCLUSIVE",
         tiers: [],
-      },
-    },
-    {
-      label: "MARKET_SHARE_PRICE_REDUCTION",
-      config: {
-        type: "MARKET_SHARE_PRICE_REDUCTION",
-        boundaryRule: "EXCLUSIVE",
-        tiers: [],
-        trigger: "RETROACTIVE",
       },
     },
     {
@@ -114,6 +99,51 @@ describe("calculateRebate dispatcher — stub phase", () => {
     expect(result.type).toBe("VOLUME_REBATE")
     expect(result.errors).toEqual([])
     expect(result.periodLabel).toBe("2026-Q1")
+  })
+
+  it("TIER_PRICE_REDUCTION — dispatches to live engine (simple valid config, no errors)", () => {
+    const config: RebateConfig = {
+      type: "TIER_PRICE_REDUCTION",
+      boundaryRule: "EXCLUSIVE",
+      tiers: [
+        {
+          tierNumber: 1,
+          thresholdMin: 0,
+          thresholdMax: null,
+          rebateValue: 0,
+          reducedPrice: 50,
+        },
+      ],
+      spendBasis: "ALL_SPEND",
+      trigger: "RETROACTIVE",
+    }
+    const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
+    expect(result.type).toBe("TIER_PRICE_REDUCTION")
+    expect(result.errors).toEqual([])
+    expect(result.rebateEarned).toBe(0)
+    expect(result.periodLabel).toBe("2026-Q1")
+  })
+
+  it("MARKET_SHARE_PRICE_REDUCTION — dispatches to live engine; missing totalCategorySpend surfaces error", () => {
+    const config: RebateConfig = {
+      type: "MARKET_SHARE_PRICE_REDUCTION",
+      boundaryRule: "EXCLUSIVE",
+      tiers: [
+        {
+          tierNumber: 1,
+          thresholdMin: 0,
+          thresholdMax: null,
+          rebateValue: 0,
+          reducedPrice: 50,
+        },
+      ],
+      trigger: "RETROACTIVE",
+    }
+    const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
+    expect(result.type).toBe("MARKET_SHARE_PRICE_REDUCTION")
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]).toContain("totalCategorySpend")
+    expect(result.rebateEarned).toBe(0)
   })
 
   it("unknown config type returns zero-rebate with descriptive error", () => {
