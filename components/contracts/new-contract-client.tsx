@@ -34,6 +34,8 @@ import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { AITextExtract } from "@/components/contracts/ai-text-extract"
+import { ExtractedReviewCard } from "@/components/contracts/extracted-review-card"
+import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -73,6 +75,7 @@ export function NewContractClient({
 
   const [entryMode, setEntryMode] = useState<"ai" | "manual" | "pdf">("ai")
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
+  const [extractedReady, setExtractedReady] = useState(false)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
   const [pricingFileName, setPricingFileName] = useState<string | null>(null)
   const [pricingCategories, setPricingCategories] = useState<string[]>([])
@@ -356,24 +359,21 @@ export function NewContractClient({
     if (data.description) form.setValue("description", data.description)
 
     // Try to match vendor by name, auto-create if not found
-    const matchedVendor = vendors.find(
-      (v) =>
-        v.name.toLowerCase().includes(data.vendorName.toLowerCase()) ||
-        (v.displayName ?? "")
-          .toLowerCase()
-          .includes(data.vendorName.toLowerCase())
-    )
-    if (matchedVendor) {
-      form.setValue("vendorId", matchedVendor.id)
-    } else if (data.vendorName) {
-      // Auto-create vendor
+    const matchedId = matchOrCreateVendorId(data.vendorName ?? "", vendors)
+    if (matchedId) {
+      form.setValue("vendorId", matchedId)
+    } else if (data.vendorName?.trim()) {
       try {
-        const newVendor = await createVendor({ name: data.vendorName, displayName: data.vendorName, tier: "standard" })
+        const newVendor = await createVendor({
+          name: data.vendorName,
+          displayName: data.vendorName,
+          tier: "standard",
+        })
         form.setValue("vendorId", newVendor.id)
         toast.success(`Vendor "${data.vendorName}" added to vendor list`)
         router.refresh()
       } catch {
-        // Vendor creation failed — user can select manually
+        toast.warning(`Could not auto-create vendor "${data.vendorName}" — please pick one`)
       }
     }
 
@@ -443,7 +443,7 @@ export function NewContractClient({
     } else {
       toast.success("Contract data extracted — upload a pricing file or switch to Manual Entry to review")
     }
-    setEntryMode("pdf")
+    setExtractedReady(true)
   }
 
   async function handleSubmit() {
@@ -618,6 +618,10 @@ export function NewContractClient({
           </Card>
 
           <AITextExtract onExtracted={(data) => handleAIExtract(data)} />
+
+          {extractedReady && (
+            <ExtractedReviewCard form={form} terms={terms} onEdit={() => setEntryMode("manual")} />
+          )}
         </TabsContent>
 
         {/* Upload PDF Tab */}
@@ -809,6 +813,10 @@ export function NewContractClient({
               )}
             </CardContent>
           </Card>
+
+          {extractedReady && (
+            <ExtractedReviewCard form={form} terms={terms} onEdit={() => setEntryMode("manual")} />
+          )}
         </TabsContent>
 
         {/* Manual Entry Tab */}
