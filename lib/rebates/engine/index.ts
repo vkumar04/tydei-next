@@ -17,6 +17,7 @@ import { calculateSpendRebate } from "./spend-rebate"
 import { calculateVolumeRebate } from "./volume-rebate"
 import { calculateTierPriceReduction } from "./tier-price-reduction"
 import { calculateMarketSharePriceReduction } from "./market-share-price-reduction"
+import { calculateMarketShareRebate } from "./market-share-rebate"
 
 export type { RebateConfig, RebateResult, PeriodData, EngineOptions } from "./types"
 
@@ -37,6 +38,7 @@ export function calculateRebate(
     case "MARKET_SHARE_PRICE_REDUCTION":
       return calculateMarketSharePriceReduction(config, periodData, options)
     case "MARKET_SHARE_REBATE":
+      return calculateMarketShareRebate(config, periodData, options)
     case "CAPITATED":
     case "CARVE_OUT":
     case "TIE_IN_CAPITAL": {

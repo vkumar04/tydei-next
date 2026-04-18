@@ -13,19 +13,11 @@ describe("calculateRebate dispatcher — stub + live phases", () => {
   //   - VOLUME_REBATE (subsystem 3)
   //   - TIER_PRICE_REDUCTION (subsystem 4)
   //   - MARKET_SHARE_PRICE_REDUCTION (subsystem 4)
+  //   - MARKET_SHARE_REBATE (subsystem 5)
   //
   // The parametrized stub phase below covers types still awaiting their
   // engine implementation.
   const types: Array<{ config: RebateConfig; label: string }> = [
-    {
-      label: "MARKET_SHARE_REBATE",
-      config: {
-        type: "MARKET_SHARE_REBATE",
-        method: "CUMULATIVE",
-        boundaryRule: "EXCLUSIVE",
-        tiers: [],
-      },
-    },
     {
       label: "CAPITATED",
       config: {
@@ -120,6 +112,28 @@ describe("calculateRebate dispatcher — stub + live phases", () => {
     const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
     expect(result.type).toBe("TIER_PRICE_REDUCTION")
     expect(result.errors).toEqual([])
+    expect(result.rebateEarned).toBe(0)
+    expect(result.periodLabel).toBe("2026-Q1")
+  })
+
+  it("MARKET_SHARE_REBATE — dispatches to live engine; missing totalCategorySpend surfaces error", () => {
+    const config: RebateConfig = {
+      type: "MARKET_SHARE_REBATE",
+      method: "CUMULATIVE",
+      boundaryRule: "EXCLUSIVE",
+      tiers: [
+        {
+          tierNumber: 1,
+          thresholdMin: 0,
+          thresholdMax: null,
+          rebateValue: 2,
+        },
+      ],
+    }
+    const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
+    expect(result.type).toBe("MARKET_SHARE_REBATE")
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]).toContain("totalCategorySpend")
     expect(result.rebateEarned).toBe(0)
     expect(result.periodLabel).toBe("2026-Q1")
   })
