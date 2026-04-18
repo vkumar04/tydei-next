@@ -1,0 +1,256 @@
+import { describe, it, expect } from "vitest"
+import {
+  buildConfigFromPrismaTerm,
+  computeRebateFromPrismaTerm,
+} from "../from-prisma"
+import type { ContractTerm, ContractTier } from "@prisma/client"
+
+/** Minimal Prisma fixture builder — nullable/default fields set to
+ * their engine-equivalent defaults. */
+function makeTerm(
+  overrides: Partial<ContractTerm & { tiers: ContractTier[] }> = {},
+): ContractTerm & { tiers: ContractTier[] } {
+  const base: ContractTerm & { tiers: ContractTier[] } = {
+    id: "t-1",
+    contractId: "c-1",
+    termName: "Test",
+    termType: "spend_rebate",
+    baselineType: "spend_based",
+    evaluationPeriod: "annual",
+    paymentTiming: "quarterly",
+    appliesTo: "all_products",
+    rebateMethod: "cumulative",
+    effectiveStart: new Date("2026-01-01"),
+    effectiveEnd: new Date("2026-12-31"),
+    volumeType: null,
+    spendBaseline: null,
+    volumeBaseline: null,
+    growthBaselinePercent: null,
+    desiredMarketShare: null,
+    boundaryRule: null,
+    priceReductionTrigger: null,
+    shortfallHandling: null,
+    negotiatedBaseline: null,
+    growthOnly: false,
+    periodCap: null,
+    fixedRebatePerOccurrence: null,
+    capitalCost: null,
+    interestRate: null,
+    termMonths: null,
+    cptCodes: [],
+    groupedReferenceNumbers: [],
+    referenceNumbers: [],
+    categories: [],
+    marketShareVendorId: null,
+    marketShareCategory: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    tiers: [],
+    ...overrides,
+  }
+  return base
+}
+
+function makeTier(
+  overrides: Partial<ContractTier> = {},
+): ContractTier {
+  return {
+    id: `tier-${overrides.tierNumber ?? 1}`,
+    termId: "t-1",
+    tierNumber: 1,
+    tierName: null,
+    spendMin: 0 as unknown as ContractTier["spendMin"],
+    spendMax: null,
+    volumeMin: null,
+    volumeMax: null,
+    marketShareMin: null,
+    marketShareMax: null,
+    rebateType: "percent_of_spend",
+    rebateValue: 2 as unknown as ContractTier["rebateValue"],
+    fixedRebateAmount: null,
+    reducedPrice: null,
+    priceReductionPercent: null,
+    createdAt: new Date(),
+    ...overrides,
+  }
+}
+
+describe("buildConfigFromPrismaTerm — spend_rebate", () => {
+  it("maps a basic spend_rebate term with tiers to SpendRebateConfig", () => {
+    const term = makeTerm({
+      termType: "spend_rebate",
+      rebateMethod: "cumulative",
+      tiers: [
+        makeTier({ tierNumber: 1, spendMin: 0, spendMax: 50_000, rebateValue: 2 }),
+        makeTier({ tierNumber: 2, spendMin: 50_000, spendMax: null, rebateValue: 4 }),
+      ],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    expect(config.type).toBe("SPEND_REBATE")
+    if (config.type === "SPEND_REBATE") {
+      expect(config.method).toBe("CUMULATIVE")
+      expect(config.boundaryRule).toBe("EXCLUSIVE")
+      expect(config.spendBasis).toBe("ALL_SPEND")
+      expect(config.baselineType).toBe("NONE")
+      expect(config.tiers).toHaveLength(2)
+      expect(config.tiers[0].thresholdMin).toBe(0)
+      expect(config.tiers[1].rebateValue).toBe(4)
+    }
+  })
+
+  it("defaults boundaryRule to EXCLUSIVE when null", () => {
+    const term = makeTerm({
+      tiers: [makeTier()],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    if (config.type === "SPEND_REBATE") {
+      expect(config.boundaryRule).toBe("EXCLUSIVE")
+    }
+  })
+
+  it("maps INCLUSIVE boundary", () => {
+    const term = makeTerm({
+      boundaryRule: "inclusive",
+      tiers: [makeTier()],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    if (config.type === "SPEND_REBATE") {
+      expect(config.boundaryRule).toBe("INCLUSIVE")
+    }
+  })
+
+  it("maps marginal method", () => {
+    const term = makeTerm({
+      rebateMethod: "marginal",
+      tiers: [makeTier()],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    if (config.type === "SPEND_REBATE") {
+      expect(config.method).toBe("MARGINAL")
+    }
+  })
+
+  it("picks REFERENCE_NUMBER basis when referenceNumbers set", () => {
+    const term = makeTerm({
+      referenceNumbers: ["REF-1", "REF-2"],
+      tiers: [makeTier()],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    if (config.type === "SPEND_REBATE") {
+      expect(config.spendBasis).toBe("REFERENCE_NUMBER")
+      expect(config.referenceNumbers).toEqual(["REF-1", "REF-2"])
+    }
+  })
+
+  it("picks PRODUCT_CATEGORY basis when exactly one category", () => {
+    const term = makeTerm({
+      categories: ["Orthopedics"],
+      tiers: [makeTier()],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    if (config.type === "SPEND_REBATE") {
+      expect(config.spendBasis).toBe("PRODUCT_CATEGORY")
+      expect(config.productCategory).toBe("Orthopedics")
+    }
+  })
+
+  it("picks MULTI_CATEGORY basis when multiple categories", () => {
+    const term = makeTerm({
+      categories: ["Orthopedics", "Spine"],
+      tiers: [makeTier()],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    if (config.type === "SPEND_REBATE") {
+      expect(config.spendBasis).toBe("MULTI_CATEGORY")
+      expect(config.categories).toEqual(["Orthopedics", "Spine"])
+    }
+  })
+
+  it("maps growth-only to PRIOR_YEAR_ACTUAL by default", () => {
+    const term = makeTerm({
+      growthOnly: true,
+      tiers: [makeTier()],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    if (config.type === "SPEND_REBATE") {
+      expect(config.baselineType).toBe("PRIOR_YEAR_ACTUAL")
+      expect(config.growthOnly).toBe(true)
+    }
+  })
+
+  it("maps growth-only + negotiatedBaseline to NEGOTIATED_FIXED", () => {
+    const term = makeTerm({
+      growthOnly: true,
+      negotiatedBaseline: 50_000 as unknown as ContractTerm["negotiatedBaseline"],
+      tiers: [makeTier()],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    if (config.type === "SPEND_REBATE") {
+      expect(config.baselineType).toBe("NEGOTIATED_FIXED")
+      expect(config.negotiatedBaseline).toBe(50_000)
+    }
+  })
+})
+
+describe("buildConfigFromPrismaTerm — volume_rebate", () => {
+  it("maps a volume_rebate term to VolumeRebateConfig", () => {
+    const term = makeTerm({
+      termType: "volume_rebate",
+      cptCodes: ["29881", "27447"],
+      fixedRebatePerOccurrence: 100 as unknown as ContractTerm["fixedRebatePerOccurrence"],
+      tiers: [makeTier({ tierNumber: 1, spendMin: 0, rebateValue: 1 })],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    expect(config.type).toBe("VOLUME_REBATE")
+    if (config.type === "VOLUME_REBATE") {
+      expect(config.cptCodes).toEqual(["29881", "27447"])
+      expect(config.fixedRebatePerOccurrence).toBe(100)
+      expect(config.tiers).toHaveLength(1)
+    }
+  })
+})
+
+describe("buildConfigFromPrismaTerm — tier sort order", () => {
+  it("sorts tiers by tierNumber ascending regardless of input order", () => {
+    const term = makeTerm({
+      tiers: [
+        makeTier({ tierNumber: 3, spendMin: 100_000, rebateValue: 6 }),
+        makeTier({ tierNumber: 1, spendMin: 0, rebateValue: 2 }),
+        makeTier({ tierNumber: 2, spendMin: 50_000, rebateValue: 4 }),
+      ],
+    })
+    const config = buildConfigFromPrismaTerm(term)
+    expect(config.tiers.map((t) => t.tierNumber)).toEqual([1, 2, 3])
+  })
+})
+
+describe("computeRebateFromPrismaTerm", () => {
+  it("end-to-end — computes a cumulative spend rebate via the unified engine", () => {
+    const term = makeTerm({
+      termType: "spend_rebate",
+      rebateMethod: "cumulative",
+      tiers: [
+        makeTier({ tierNumber: 1, spendMin: 0, spendMax: 50_000, rebateValue: 2 }),
+        makeTier({ tierNumber: 2, spendMin: 50_000, spendMax: null, rebateValue: 4 }),
+      ],
+    })
+    const result = computeRebateFromPrismaTerm(term, {
+      purchases: [],
+      totalSpend: 75_000,
+    })
+    expect(result.type).toBe("SPEND_REBATE")
+    expect(result.errors).toEqual([])
+    // $75K at tier 2 (4%) cumulative → $3,000
+    expect(result.rebateEarned).toBe(3_000)
+  })
+
+  it("passes through periodLabel", () => {
+    const term = makeTerm({ tiers: [makeTier()] })
+    const result = computeRebateFromPrismaTerm(
+      term,
+      { purchases: [], totalSpend: 0 },
+      { periodLabel: "2026-Q1" },
+    )
+    expect(result.periodLabel).toBe("2026-Q1")
+  })
+})
