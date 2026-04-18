@@ -24,6 +24,7 @@ import { ContractDocumentsList } from "@/components/contracts/contract-documents
 import { ContractTransactions } from "@/components/contracts/contract-transactions"
 import { ContractPricingTab } from "@/components/contracts/contract-pricing-tab"
 import { ContractInsightsCards } from "@/components/contracts/contract-insights-cards"
+import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
 import { Button } from "@/components/ui/button"
@@ -388,6 +389,7 @@ export function ContractDetailClient({
         {/* ── Performance Tab ──────────────────────────────────── */}
         <TabsContent value="performance" className="mt-6 space-y-6">
           <ContractInsightsCards contractId={contractId} />
+          <ContractAccrualTimeline contractId={contractId} />
           <PerformanceSummary
             periods={periods ?? []}
             totalValue={stats?.totalValue ?? 0}
