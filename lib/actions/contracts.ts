@@ -41,6 +41,8 @@ import {
 import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
+import { revalidatePath } from "next/cache"
+import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -265,6 +267,17 @@ export async function createContract(input: CreateContractInput) {
     metadata: { name: data.name, vendorId: data.vendorId },
   })
 
+  // Recompute COG match-statuses for this vendor so rows flip to
+  // on_contract / price_variance / out_of_scope as appropriate.
+  // Scope tight: only the affected vendor at this facility.
+  await recomputeMatchStatusesForVendor(prisma, {
+    vendorId: data.vendorId,
+    facilityId: session.facility.id,
+  })
+  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/contracts")
+  revalidatePath("/dashboard")
+
   return serialize(contract)
 }
 
@@ -341,6 +354,25 @@ export async function updateContract(id: string, input: UpdateContractInput) {
     metadata: { updatedFields: Object.keys(updateData) },
   })
 
+  // Recompute COG match-statuses for this contract's vendor. If the vendor
+  // changed, recompute for both the old and new vendor so COG rows flip
+  // off the old contract and onto (or off of) the new one.
+  const vendorsToRecompute = new Set<string>()
+  vendorsToRecompute.add(contract.vendorId)
+  if (data.vendorId !== undefined && data.vendorId !== contract.vendorId) {
+    vendorsToRecompute.add(data.vendorId)
+  }
+  for (const vendorId of vendorsToRecompute) {
+    await recomputeMatchStatusesForVendor(prisma, {
+      vendorId,
+      facilityId: facility.id,
+    })
+  }
+  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/contracts")
+  revalidatePath(`/dashboard/contracts/${id}`)
+  revalidatePath("/dashboard")
+
   return serialize(contract)
 }
 
@@ -407,8 +439,9 @@ export async function deleteContract(id: string) {
   const session = await requireFacility()
   const { facility } = session
 
-  // Verify ownership before deleting
-  await prisma.contract.findUniqueOrThrow({
+  // Verify ownership + capture vendorId before deleting so we can
+  // recompute COG match-statuses after.
+  const existing = await prisma.contract.findUniqueOrThrow({
     where: {
       id,
       OR: [
@@ -416,7 +449,7 @@ export async function deleteContract(id: string) {
         { contractFacilities: { some: { facilityId: facility.id } } },
       ],
     },
-    select: { id: true },
+    select: { id: true, vendorId: true },
   })
 
   await prisma.contract.delete({ where: { id } })
@@ -427,6 +460,16 @@ export async function deleteContract(id: string) {
     entityType: "contract",
     entityId: id,
   })
+
+  // Recompute: rows that were on this contract flip to
+  // off_contract_item / out_of_scope depending on remaining contracts.
+  await recomputeMatchStatusesForVendor(prisma, {
+    vendorId: existing.vendorId,
+    facilityId: facility.id,
+  })
+  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/contracts")
+  revalidatePath("/dashboard")
 }
 
 // ─── Contract Insights (compliance, market share, price variance) ───
