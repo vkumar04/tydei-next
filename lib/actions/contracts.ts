@@ -16,6 +16,7 @@ import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import { recomputeContractScore } from "@/lib/actions/contracts/scoring"
 import {
   contractOwnershipWhere,
   contractsOwnedByFacility,
@@ -526,6 +527,14 @@ export async function createContract(input: CreateContractInput) {
     vendorId: data.vendorId,
     facilityId: session.facility.id,
   })
+
+  // Compute the initial Contract.score so the list/detail pages show
+  // a number right after creation. Swallow errors — scoring failure
+  // shouldn't fail contract creation.
+  await recomputeContractScore(contract.id).catch((err) => {
+    console.warn("[createContract] score recompute failed:", err)
+  })
+
   revalidatePath("/dashboard/cog")
   revalidatePath("/dashboard/contracts")
   revalidatePath("/dashboard")
@@ -614,6 +623,13 @@ export async function updateContract(id: string, input: UpdateContractInput) {
       facilityId: facility.id,
     })
   }
+
+  // Recompute Contract.score so the list / detail pages reflect any
+  // change in commitment / compliance / timeliness. Swallow errors.
+  await recomputeContractScore(id).catch((err) => {
+    console.warn("[updateContract] score recompute failed:", err)
+  })
+
   revalidatePath("/dashboard/cog")
   revalidatePath("/dashboard/contracts")
   revalidatePath(`/dashboard/contracts/${id}`)
