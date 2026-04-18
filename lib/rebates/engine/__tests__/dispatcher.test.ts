@@ -13,11 +13,8 @@ describe("calculateRebate dispatcher — stub + live phases", () => {
   //   - VOLUME_REBATE (subsystem 3)
   //   - TIER_PRICE_REDUCTION (subsystem 4)
   //   - MARKET_SHARE_PRICE_REDUCTION (subsystem 4)
-<<<<<<< HEAD
   //   - MARKET_SHARE_REBATE (subsystem 5)
-=======
   //   - CARVE_OUT (subsystem 7)
->>>>>>> 2ef8bb7 (feat(rebates): CARVE_OUT engine (subsystem 7))
   //
   // The parametrized stub phase below covers types still awaiting their
   // engine implementation.
