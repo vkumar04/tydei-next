@@ -18,6 +18,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { resolveVendorId } from "@/lib/vendors/resolve"
 import { claudeModel } from "@/lib/ai/config"
+import { columnMappingPrompt } from "@/lib/ai/prompts"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import type {
   ContractType,
@@ -54,33 +55,23 @@ export async function mapColumnsWithAI(
     }
     const schema = z.object(mappingShape)
 
-    const sampleContext = sampleRows.slice(0, 3).length
-      ? `\n\nSample data rows (for disambiguation):\n${sampleRows
-          .slice(0, 3)
-          .map((r) =>
-            Object.entries(r)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(" | "),
-          )
-          .join("\n")}`
-      : ""
-
-    const targetList = targetFields
-      .map((f) => `- ${f.key} ("${f.label}")${f.required ? " [REQUIRED]" : ""}`)
-      .join("\n")
+    // Prompt text is built by the centralized `columnMappingPrompt` in
+    // `lib/ai/prompts/index.ts` so there's one source of truth shared
+    // across every column-mapping surface (this action, COG rewrite,
+    // data pipeline). The builder returns a stable `system` prefix
+    // (cacheable) and a volatile `user` suffix (the actual headers +
+    // sample rows).
+    const { system, user } = columnMappingPrompt(
+      sourceHeaders,
+      targetFields,
+      sampleRows,
+    )
 
     const result = await generateText({
       model: claudeModel,
       output: Output.object({ schema }),
-      prompt: `You are a data mapping assistant. Match each target field to the most likely source column header. Be tolerant of typos, capitalization, spacing, abbreviations, and non-English labels. Return "" for any target that has no reasonable match.
-
-Source headers:
-${sourceHeaders.map((h) => `- "${h}"`).join("\n")}
-
-Target fields:
-${targetList}${sampleContext}
-
-Return a mapping object with one entry per target field.`,
+      system,
+      prompt: user,
     })
 
     const mapping = result.output as Record<string, string>
