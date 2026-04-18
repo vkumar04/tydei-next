@@ -243,6 +243,16 @@ export async function importInvoice(input: ImportInvoiceInput) {
     metadata: { invoiceNumber: data.invoiceNumber, lineItemCount: data.lineItems.length, totalCost },
   })
 
+  // Auto-compute price variance rows per subsystem 1 of
+  // data-pipeline-rewrite spec. Errors are swallowed so variance
+  // failures can't break the invoice import.
+  const { recomputeInvoiceVariance } = await import(
+    "@/lib/actions/invoices/variance"
+  )
+  await recomputeInvoiceVariance(invoice.id).catch((err) => {
+    console.warn("[importInvoice] variance recompute failed:", err)
+  })
+
   return serialize(invoice)
 }
 
