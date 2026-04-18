@@ -175,5 +175,40 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
     metadata: { imported, skipped, errors, totalRecords: data.records.length },
   })
 
+  // ─── Post-import enrichment (subsystem 3 wiring) ─────────────
+  //
+  // For every distinct vendorId in the persisted batch, recompute
+  // match statuses so newly-imported rows pick up contract pricing
+  // immediately. Errors are swallowed with a console.warn — audit /
+  // import success must not regress if a single vendor's recompute
+  // fails (e.g. malformed contract pricing). Dynamic import avoids a
+  // static cycle with lib/cog/recompute → lib/contracts/*.
+  if (imported > 0) {
+    const vendorIds = new Set<string>()
+    for (const record of data.records) {
+      const vid = resolveVendorId(record)
+      if (vid) vendorIds.add(vid)
+    }
+
+    if (vendorIds.size > 0) {
+      const { recomputeMatchStatusesForVendor } = await import(
+        "@/lib/cog/recompute"
+      )
+      for (const vendorId of vendorIds) {
+        try {
+          await recomputeMatchStatusesForVendor(prisma, {
+            vendorId,
+            facilityId: session.facility.id,
+          })
+        } catch (err) {
+          console.warn(
+            `[cog-import] recompute failed for vendor ${vendorId}`,
+            err,
+          )
+        }
+      }
+    }
+  }
+
   return { imported, skipped, errors }
 }
