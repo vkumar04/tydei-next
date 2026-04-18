@@ -1,0 +1,4 @@
+Patient MRN,Case ID,Facility Name,Date of birth,Surgeon,Date of Surgery,OR Name,Time wheeled into OR,Time wheeled out of OR
+MRN001,CASE-100,Lighthouse Surgical,01/15/1970,Dr. Smith,03/15/2026,OR-1,08:00,10:30
+MRN002,CASE-101,Lighthouse Surgical,05/22/1965,Dr. Jones,03/15/2026,OR-2,09:00,11:15
+MRN003,CASE-102,Lighthouse Surgical,11/30/1980,Dr. Smith,03/16/2026,OR-1,07:30,09:45

@@ -1,0 +1,5 @@
+Patient MRN,Case ID,Business Entity,Manufacturer,Material Name,Unit Cost,Catalog number,Model #,Serial #,Quantity Used,Used Cost
+MRN001,CASE-100,Orthopedics,Arthrex,Disposable Knee Jig,125.00,AR-9000,AR-9000-M,SN001,1,125.00
+MRN001,CASE-100,Orthopedics,Arthrex,Suture Anchor,22.00,AR-9002,AR-9002-M,SN002,4,88.00
+MRN002,CASE-101,Orthopedics,Stryker,Bone Cement Kit,450.00,STR-5500,STR-5500-M,SN003,1,450.00
+MRN003,CASE-102,Spine,Medtronic,Spinal Screw,89.50,MDT-1200,MDT-1200-M,SN004,6,537.00
