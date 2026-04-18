@@ -33,7 +33,7 @@ import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { MassUpload } from "@/components/import/mass-upload"
 import { toast } from "sonner"
 import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
-import { matchCOGToContracts } from "@/lib/actions/cog-records"
+import { matchCOGToContracts } from "@/lib/actions/cog-match"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   AlertDialog,

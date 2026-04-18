@@ -8,7 +8,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import { resolveVendorId } from "@/lib/vendors/resolve"
-import { bulkImportCOGRecords } from "@/lib/actions/cog-records"
+import { bulkImportCOGRecords } from "@/lib/actions/cog-import"
 import { claudeModel } from "@/lib/ai/config"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import type {

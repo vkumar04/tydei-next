@@ -5,7 +5,6 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   getCOGRecords,
   createCOGRecord,
-  bulkImportCOGRecords,
   deleteCOGRecord,
   bulkDeleteCOGRecords,
   clearAllCOGRecords,
@@ -14,6 +13,7 @@ import {
   deleteCOGFileByDate,
   updateCOGRecord,
 } from "@/lib/actions/cog-records"
+import { bulkImportCOGRecords } from "@/lib/actions/cog-import"
 import type { COGFilters } from "@/lib/validators/cog-records"
 import { toast } from "sonner"
 
