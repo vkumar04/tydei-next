@@ -1,110 +1,149 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { DashboardFilters } from "./dashboard-filters"
-import { DashboardStats } from "./dashboard-stats"
-import { TotalSpendChart } from "./total-spend-chart"
-import { SpendByVendorChart } from "./spend-by-vendor-chart"
-import { SpendByCategoryChart } from "./spend-by-category-chart"
-import { RecentContracts } from "./recent-contracts"
-import { RecentAlerts } from "./recent-alerts"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
-  useDashboardStats,
-  useMonthlySpend,
-  useSpendByVendor,
-  useSpendByCategory,
-  useRecentContracts,
-  useRecentAlerts,
-} from "@/hooks/use-dashboard"
-import type { DateRange } from "@/lib/query-keys"
+/**
+ * Facility dashboard — client orchestrator.
+ *
+ * The server component (`app/dashboard/page.tsx`) fetches initial data in
+ * parallel via the new dashboard-rewrite actions and passes it down.
+ * This client component hydrates the three payloads into TanStack Query
+ * so the rest of the app's mutation `onSuccess` handlers can invalidate
+ * and refetch just the dashboard slices they touched.
+ *
+ * Keep this orchestrator ≤200 lines — presentation lives in the per-
+ * section components.
+ */
 
-// "All time" sentinel — v0 shows undefined dates as "All Time". Tydei's server
-// actions require concrete strings, so when the user hasn't picked a range we
-// send a wide window that effectively means "all data".
-const WIDE_RANGE: DateRange = {
-  from: "1970-01-01",
-  to: new Date().toISOString().split("T")[0]!,
+import { useQuery, type QueryClient, useQueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
+import { queryKeys } from "@/lib/query-keys"
+import {
+  getDashboardKPISummary,
+  type DashboardKPISummary,
+} from "@/lib/actions/dashboard/kpi"
+import {
+  getDashboardCharts,
+  type DashboardChartsPayload,
+} from "@/lib/actions/dashboard/lifecycle"
+import { getContractStats } from "@/lib/actions/contracts"
+import { DashboardKPICards } from "./dashboard-kpi-cards"
+import { DashboardLifecyclePie } from "./dashboard-lifecycle-pie"
+import { DashboardSpendTrendChart } from "./dashboard-spend-trend-chart"
+import { DashboardTopAlerts } from "./dashboard-top-alerts"
+import { DashboardSpendProjection } from "./dashboard-spend-projection"
+
+export interface DashboardInitialData {
+  kpiSummary: DashboardKPISummary
+  charts: DashboardChartsPayload
+  contractStats: ContractStats
+}
+
+export interface ContractStats {
+  totalContracts: number
+  totalValue: number
+  totalRebates: number
 }
 
 interface DashboardClientProps {
   facilityId: string
+  initialData: DashboardInitialData
+  chartMonths: number
 }
 
-export function DashboardClient({ facilityId }: DashboardClientProps) {
-  // v0 parity: default to undefined (shows "All Time" in filter).
-  const [pickedRange, setPickedRange] = useState<DateRange | undefined>(undefined)
+/** Seed the React Query cache with the server-rendered payload so the
+ *  initial render is a cache hit (no loading flash) and subsequent
+ *  refetches / invalidations work via queryClient. */
+function seedCache(
+  queryClient: QueryClient,
+  facilityId: string,
+  chartMonths: number,
+  initial: DashboardInitialData,
+): void {
+  queryClient.setQueryData(
+    queryKeys.dashboard.kpiSummary(facilityId),
+    initial.kpiSummary,
+  )
+  queryClient.setQueryData(
+    queryKeys.dashboard.charts(facilityId, chartMonths),
+    initial.charts,
+  )
+  queryClient.setQueryData(
+    queryKeys.dashboard.contractStats(facilityId),
+    initial.contractStats,
+  )
+}
 
-  const effectiveRange = useMemo(() => pickedRange ?? WIDE_RANGE, [pickedRange])
+export function DashboardClient({
+  facilityId,
+  initialData,
+  chartMonths,
+}: DashboardClientProps) {
+  const queryClient = useQueryClient()
 
-  const stats = useDashboardStats(facilityId, effectiveRange)
-  const monthlySpend = useMonthlySpend(facilityId, effectiveRange)
-  const spendChart = useSpendByVendor(facilityId, effectiveRange)
-  const categoryChart = useSpendByCategory(facilityId, effectiveRange)
-  const recentContracts = useRecentContracts(facilityId)
-  const recentAlerts = useRecentAlerts(facilityId)
+  // Seed once per mount so server-rendered data hydrates the cache
+  // before any hook reads it. Effect ordering is fine — the hooks
+  // below pass `initialData` themselves too, belt-and-braces.
+  useEffect(() => {
+    seedCache(queryClient, facilityId, chartMonths, initialData)
+    // We intentionally only want this to run on initial mount — the
+    // initialData is snapshot data for this render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const kpiQuery = useQuery({
+    queryKey: queryKeys.dashboard.kpiSummary(facilityId),
+    queryFn: () => getDashboardKPISummary(),
+    initialData: initialData.kpiSummary,
+  })
+
+  const chartsQuery = useQuery({
+    queryKey: queryKeys.dashboard.charts(facilityId, chartMonths),
+    queryFn: () => getDashboardCharts({ months: chartMonths }),
+    initialData: initialData.charts,
+  })
+
+  const statsQuery = useQuery({
+    queryKey: queryKeys.dashboard.contractStats(facilityId),
+    queryFn: () => getContractStats(),
+    initialData: initialData.contractStats,
+  })
+
+  const kpi = kpiQuery.data
+  const charts = chartsQuery.data
+  const stats = statsQuery.data
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight text-balance">Dashboard</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-balance">
+          Dashboard
+        </h1>
         <p className="text-muted-foreground">
-          Overview of your contract performance and analytics
+          Overview of your contract portfolio, spend, and alerts
         </p>
       </div>
 
-      {/* Filters */}
-      <DashboardFilters
-        dateRange={pickedRange}
-        onDateRangeChange={setPickedRange}
+      <DashboardKPICards
+        totalContracts={stats.totalContracts}
+        activeContracts={kpi.activeContractsCount}
+        totalContractValue={kpi.totalContractValue}
+        totalSpendYTD={kpi.totalSpendYTD}
+        totalRebatesEarned={kpi.totalRebatesEarned}
+        pendingAlerts={kpi.pendingAlerts}
       />
 
-      {/* Metrics cards */}
-      {stats.data ? (
-        <DashboardStats stats={stats.data} />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <DashboardSpendTrendChart data={charts.monthlyTrend} />
         </div>
-      )}
-
-      {/* Charts - v0 layout: full-width spend trend, then 2-col vendor + category */}
-      <div className="space-y-6">
-        {monthlySpend.data ? (
-          <TotalSpendChart data={monthlySpend.data} />
-        ) : (
-          <Skeleton className="h-80" />
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {spendChart.data ? (
-            <SpendByVendorChart data={spendChart.data} />
-          ) : (
-            <Skeleton className="h-80" />
-          )}
-          {categoryChart.data ? (
-            <SpendByCategoryChart data={categoryChart.data} />
-          ) : (
-            <Skeleton className="h-80" />
-          )}
-        </div>
+        <DashboardSpendProjection projection={kpi.spendProjection} />
       </div>
 
-      {/* Recent data */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {recentContracts.data ? (
-          <RecentContracts contracts={recentContracts.data} />
-        ) : (
-          <Skeleton className="h-96" />
-        )}
-        {recentAlerts.data ? (
-          <RecentAlerts alerts={recentAlerts.data} />
-        ) : (
-          <Skeleton className="h-96" />
-        )}
+        <DashboardLifecyclePie lifecycle={charts.lifecycle} />
+        <DashboardTopAlerts
+          alerts={kpi.topAlerts}
+          totalUnresolved={kpi.alertSummary.totalUnresolved}
+        />
       </div>
     </div>
   )

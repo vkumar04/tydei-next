@@ -69,6 +69,15 @@ export const queryKeys = {
       ["dashboard", "recentContracts", facilityId] as const,
     recentAlerts: (facilityId: string) =>
       ["dashboard", "recentAlerts", facilityId] as const,
+    // Canonical dashboard-rewrite composite keys — facility dashboard
+    // subsystems 1-6. See docs/superpowers/specs/2026-04-18-facility-
+    // dashboard-rewrite.md.
+    kpiSummary: (facilityId: string) =>
+      ["dashboard", "kpiSummary", facilityId] as const,
+    charts: (facilityId: string, months: number) =>
+      ["dashboard", "charts", facilityId, months] as const,
+    contractStats: (facilityId: string) =>
+      ["dashboard", "contractStats", facilityId] as const,
   },
   reports: {
     data: (facilityId: string, reportType: string, dateRange: DateRange) =>
