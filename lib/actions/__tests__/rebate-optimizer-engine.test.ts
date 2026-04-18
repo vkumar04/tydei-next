@@ -277,6 +277,55 @@ describe("getRebateOpportunities (engine-wired)", () => {
     )
   })
 
+  it("surfaces a volume_rebate contract with tiers as an opportunity (Charles bug bash)", async () => {
+    // Previously the optimizer hid contracts whose tiered rebates lived
+    // under termType=volume_rebate (or market_share / locked_pricing),
+    // because the action filter implicitly narrowed to spend_rebate. The
+    // unified engine handles every rebate type — as long as there's a
+    // tier ladder and some spend, an opportunity should appear.
+    contractRows = [
+      {
+        id: "c-vol",
+        name: "Med Spine",
+        vendorId: "v-vol",
+        facilityId: "fac-1",
+        status: "active",
+        expirationDate: new Date("2027-03-31"),
+        vendor: { id: "v-vol", name: "Medtronic" },
+        terms: [
+          {
+            id: "t-vol",
+            termType: "volume_rebate",
+            rebateMethod: "cumulative",
+            boundaryRule: "exclusive",
+            tiers: [
+              makeTier(1, 0, 2),
+              makeTier(2, 100_000, 3),
+              makeTier(3, 250_000, 5),
+            ],
+          },
+        ],
+      },
+    ]
+    cogAggRows = [{ vendorId: "v-vol", _sum: { extendedPrice: 120_000 } }]
+
+    const result = await getRebateOpportunities()
+
+    expect(result.opportunities).toHaveLength(1)
+    const opp = result.opportunities[0]!
+    expect(opp.contractId).toBe("c-vol")
+    expect(opp.currentTierNumber).toBe(2)
+    expect(opp.nextTierThreshold).toBe(250_000)
+
+    // And the findMany filter must include the "at least one tier"
+    // predicate so the DB query itself no longer hides these rows.
+    const w = lastContractWhere as {
+      status: { in: string[] }
+      terms: { some: { tiers: { some: Record<string, never> } } }
+    }
+    expect(w.terms).toEqual({ some: { tiers: { some: {} } } })
+  })
+
   it("serializes all Decimals — opportunities survive JSON round-trip", async () => {
     contractRows = [
       {

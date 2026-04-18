@@ -109,6 +109,13 @@ export async function getRebateOpportunities(): Promise<RebateOptimizerActionRes
     where: {
       ...ownership,
       status: { in: ["active", "expiring"] },
+      // Include any contract whose terms has at least one tier — the
+      // unified rebate engine handles every rebate type (spend_rebate,
+      // volume_rebate, market_share, locked_pricing, etc.), so we no
+      // longer narrow by termType. Previously the optimizer hid
+      // contracts that had tiers under non-"spend_rebate" term types
+      // (Charles bug bash: "No optimizable contracts…").
+      terms: { some: { tiers: { some: {} } } },
     },
     include: {
       vendor: { select: { id: true, name: true } },
