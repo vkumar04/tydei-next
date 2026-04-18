@@ -124,29 +124,36 @@ export async function getContract(id: string) {
     0
   )
 
+  // Always aggregate current COG spend against this contract's vendor —
+  // we need it for tier-progress surfaces even when persisted rebate
+  // rows already exist. When persisted rebate rows are zero but there's
+  // matching spend, we also recompute earned/collected from the tiers
+  // below.
+  const cogAgg = await prisma.cOGRecord.aggregate({
+    where: {
+      facilityId: facility.id,
+      vendorId: contract.vendorId,
+    },
+    _sum: { extendedPrice: true },
+  })
+  const currentSpend = Number(cogAgg._sum.extendedPrice ?? 0)
+
   // Dynamic fallback: if no persisted rebate rows exist but the contract
   // has tiers and matching COG spend, compute rebates from live data
   // using the shared rebate calculator.
   if (rebateEarned === 0 && contract.terms.length > 0) {
-    const tiers = contract.terms[0]?.tiers ?? []
-    if (tiers.length > 0) {
-      const cogAgg = await prisma.cOGRecord.aggregate({
-        where: {
-          facilityId: facility.id,
-          vendorId: contract.vendorId,
-        },
-        _sum: { extendedPrice: true },
+    const firstTerm = contract.terms[0]
+    const tiers = firstTerm?.tiers ?? []
+    if (tiers.length > 0 && currentSpend > 0) {
+      const result = computeRebateFromPrismaTiers(currentSpend, tiers, {
+        method: firstTerm?.rebateMethod ?? "cumulative",
       })
-      const cogSpend = Number(cogAgg._sum.extendedPrice ?? 0)
-      if (cogSpend > 0) {
-        const result = computeRebateFromPrismaTiers(cogSpend, tiers)
-        rebateEarned = result.rebateEarned
-        rebateCollected = result.rebateCollected
-      }
+      rebateEarned = result.rebateEarned
+      rebateCollected = result.rebateCollected
     }
   }
 
-  return serialize({ ...contract, rebateEarned, rebateCollected })
+  return serialize({ ...contract, rebateEarned, rebateCollected, currentSpend })
 }
 
 // ─── Contract Stats ──────────────────────────────────────────────

@@ -12,12 +12,70 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
+import { calculateTierProgress } from "@/lib/contracts/tier-progress"
+import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
 
 type ContractTermWithTiers = ContractTerm & { tiers: ContractTier[] }
 
 interface ContractTermsDisplayProps {
   terms: ContractTermWithTiers[]
   currentSpend?: number
+}
+
+function TierProgressCard({
+  term,
+  currentSpend,
+}: {
+  term: ContractTermWithTiers
+  currentSpend: number
+}) {
+  if (term.tiers.length === 0) return null
+
+  const tiersForEngine: TierLike[] = term.tiers.map((t) => ({
+    tierNumber: t.tierNumber,
+    tierName: t.tierName ?? null,
+    spendMin: Number(t.spendMin),
+    spendMax: t.spendMax ? Number(t.spendMax) : null,
+    rebateValue: Number(t.rebateValue),
+  }))
+  const method = (term.rebateMethod ?? "cumulative") as RebateMethodName
+
+  const progress = calculateTierProgress(currentSpend, tiersForEngine, method)
+
+  if (!progress.currentTier) return null
+
+  const currentLabel =
+    progress.currentTier.tierName ??
+    `Tier ${progress.currentTier.tierNumber}`
+  const nextLabel = progress.nextTier
+    ? progress.nextTier.tierName ?? `Tier ${progress.nextTier.tierNumber}`
+    : null
+
+  return (
+    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+      <div className="flex items-baseline justify-between text-sm">
+        <span className="font-medium">
+          Current: {currentLabel} · {progress.currentTier.rebateValue}%
+        </span>
+        {nextLabel ? (
+          <span className="text-xs text-muted-foreground">
+            {formatCurrency(progress.amountToNextTier)} to {nextLabel}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Top tier achieved</span>
+        )}
+      </div>
+      <Progress value={progress.progressPercent} className="h-2" />
+      {progress.nextTier && progress.projectedAdditionalRebate > 0 && (
+        <div className="text-xs text-muted-foreground">
+          Projected additional rebate at {nextLabel}:{" "}
+          <span className="font-medium text-foreground">
+            {formatCurrency(progress.projectedAdditionalRebate)}
+          </span>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function TierDisplay({ tier, currentSpend }: { tier: ContractTier; currentSpend?: number }) {
@@ -134,6 +192,9 @@ export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDispl
                       </span>
                     </div>
                   </div>
+                  {currentSpend !== undefined && term.tiers.length > 0 && (
+                    <TierProgressCard term={term} currentSpend={currentSpend} />
+                  )}
                   {term.tiers.length > 0 && (
                     <div className="space-y-2">
                       {term.tiers.map((tier) => (

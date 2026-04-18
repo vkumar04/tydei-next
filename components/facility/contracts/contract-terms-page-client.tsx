@@ -197,7 +197,10 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
           availableCategories={availableCategories}
         />
       ) : (
-        <ContractTermsDisplay terms={terms ?? []} />
+        <ContractTermsDisplay
+          terms={terms ?? []}
+          currentSpend={contract?.currentSpend ?? undefined}
+        />
       )}
     </div>
   )

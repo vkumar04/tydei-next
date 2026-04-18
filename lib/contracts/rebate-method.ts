@@ -14,6 +14,7 @@ export type RebateMethodName = "cumulative" | "marginal"
 
 export interface TierLike {
   tierNumber: number
+  tierName?: string | null
   spendMin: number | string | { toString(): string }
   spendMax?: number | string | { toString(): string } | null
   rebateValue: number | string | { toString(): string }
