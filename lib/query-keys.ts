@@ -46,6 +46,12 @@ export const queryKeys = {
     all: ["alerts"] as const,
     list: (portalType: string, entityId: string, filters?: Record<string, unknown>) =>
       ["alerts", "list", portalType, entityId, filters] as const,
+    summary: (portalType: string, entityId: string) =>
+      ["alerts", "summary", portalType, entityId] as const,
+    ranked: (portalType: string, entityId: string, options?: Record<string, unknown>) =>
+      ["alerts", "ranked", portalType, entityId, options] as const,
+    badge: (portalType: string, entityId: string) =>
+      ["alerts", "badge", portalType, entityId] as const,
     detail: (id: string) => ["alerts", "detail", id] as const,
     unreadCount: (portalType: string, entityId: string) =>
       ["alerts", "unreadCount", portalType, entityId] as const,
