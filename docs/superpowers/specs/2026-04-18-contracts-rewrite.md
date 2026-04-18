@@ -305,6 +305,36 @@ Subsystems are sequenced so each builds on prior (engines before UI). Within a s
 
 ---
 
+### Subsystem 9 — Audit fixes retrofit from unified rebate engine (P0, follow-up)
+
+**Priority:** P0 — added 2026-04-18 after Charles's unified engine doc landed. This subsystem retrofits the 10 audit fixes [A1]-[A10] from `2026-04-18-rebate-term-types-extension.md` (now the "Unified Rebate Engine" spec) into the rebate engine shipped in subsystems 1 + 3.
+
+**Why this is P0 despite being a follow-up:** the shipped engine has silent-wrong-number potential that the audit fixes correct. Specifically:
+
+- **[A1]** `applyTiers` EXCLUSIVE boundary behavior — the shipped version may early-break before finding the highest qualifying tier at the boundary dollar
+- **[A2]** `calculateMarginal` in `lib/contracts/rebate-method.ts` uses `Math.min(remainingSpend, bracketCapacity)` which is correct, but needs a regression test matching Charles's worked examples with non-round thresholds
+- **[A4]** `calculateTierProgress` from subsystem 2 — verify `amountToNextTier` uses `totalSpend` (pre-growth-adjustment) and not the eligibleSpend variant
+- **[A10]** True-up sign convention across accrual / contracts-rewrite §3 — verify positive = facility owed more
+
+**Files:**
+- Modify: `lib/rebates/calculate.ts` — internals delegate to the new `calculateRebate` dispatcher from `lib/rebates/engine/index.ts` (once shipped via the unified-engine spec subsystem 9)
+- Modify: `lib/contracts/rebate-method.ts` — add [A1]-[A3] regression tests covering Charles's worked examples
+- Modify: `lib/contracts/tier-progress.ts` — verify [A4] behavior with a regression test
+- Modify: `lib/contracts/accrual.ts` — verify [A10] sign convention with a regression test
+- Add: golden-file tests capturing current numeric outputs *before* retrofit; re-run *after* retrofit to prove no regression (except where bugs are intentionally corrected)
+
+**Dependency:** Depends on unified-rebate-engine spec subsystems 0-9 having landed. Cannot execute standalone — the dispatcher this retrofits against doesn't exist yet.
+
+**Acceptance:**
+- All shipped engine tests still pass.
+- New regression tests for [A1]-[A10] pass.
+- `bun run db:seed` qa-sanity unchanged.
+- `bun run build` compiles.
+
+**Plan detail:** On-demand — `09-audit-fixes-retrofit-plan.md`. This subsystem is also tracked as subsystem 10 of the unified-rebate-engine spec — either location's plan can drive execution.
+
+---
+
 ## 4. Execution model
 
 **Sequencing:**
