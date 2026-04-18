@@ -268,6 +268,23 @@ enum FileImportStatus {
   failed
 }
 
+// ─── Unified rebate engine additions ──────────────────────────────
+
+enum TierBoundaryRule {
+  exclusive
+  inclusive
+}
+
+enum PriceReductionTrigger {
+  retroactive
+  forward_only
+}
+
+enum TrueUpShortfallHandling {
+  bill_immediately
+  carry_forward
+}
+
 // ─── Better Auth managed tables ───────────────────────────────────
 
 model User {
@@ -564,6 +581,7 @@ model Contract {
   pricingItems       ContractPricing[]
   documents          ContractDocument[]
   periods            ContractPeriod[]
+  amortizationRows   ContractAmortizationSchedule[]
   rebates            Rebate[]
   payments           Payment[]
   creditEntries      Credit[]
@@ -624,15 +642,34 @@ model ContractTerm {
   volumeType           VolumeType?
   spendBaseline        Decimal?     @db.Decimal(14, 2)
   volumeBaseline       Int?
-  growthBaselinePercent Decimal?     @db.Decimal(5, 2)
+  growthBaselinePercent Decimal?    @db.Decimal(5, 2)
   desiredMarketShare   Decimal?     @db.Decimal(5, 2)
+  // Unified rebate engine additions (all nullable / defaulted) —
+  // used by engine config builders to express the full 8-type matrix.
+  boundaryRule             TierBoundaryRule?
+  priceReductionTrigger    PriceReductionTrigger?
+  shortfallHandling        TrueUpShortfallHandling?
+  negotiatedBaseline       Decimal?        @db.Decimal(14, 2)
+  growthOnly               Boolean         @default(false)
+  periodCap                Decimal?        @db.Decimal(14, 2)
+  fixedRebatePerOccurrence Decimal?        @db.Decimal(12, 2)
+  capitalCost              Decimal?        @db.Decimal(14, 2)
+  interestRate             Decimal?        @db.Decimal(6, 4)
+  termMonths               Int?
+  cptCodes                 String[]        @default([])
+  groupedReferenceNumbers  String[]        @default([])
+  referenceNumbers         String[]        @default([])
+  categories               String[]        @default([])
+  marketShareVendorId      String?
+  marketShareCategory      String?
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
-  contract   Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  tiers      ContractTier[]
-  products   ContractTermProduct[]
-  procedures ContractTermProcedure[]
+  contract          Contract                      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  tiers             ContractTier[]
+  products          ContractTermProduct[]
+  procedures        ContractTermProcedure[]
+  amortizationRows  ContractAmortizationSchedule[]
 
   @@index([contractId])
   @@map("contract_term")
@@ -651,12 +688,36 @@ model ContractTier {
   marketShareMax Decimal?   @db.Decimal(5, 2)
   rebateType     RebateType @default(percent_of_spend)
   rebateValue    Decimal    @default(0) @db.Decimal(10, 4)
+  // Unified engine additions
+  fixedRebateAmount     Decimal? @db.Decimal(14, 2)
+  reducedPrice          Decimal? @db.Decimal(12, 4)
+  priceReductionPercent Decimal? @db.Decimal(5, 4)
   createdAt      DateTime   @default(now())
 
   term ContractTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
 
   @@index([termId])
   @@map("contract_tier")
+}
+
+model ContractAmortizationSchedule {
+  id              String   @id @default(cuid())
+  contractId      String
+  termId          String
+  periodNumber    Int
+  openingBalance  Decimal  @db.Decimal(14, 2)
+  interestCharge  Decimal  @db.Decimal(14, 2)
+  principalDue    Decimal  @db.Decimal(14, 2)
+  amortizationDue Decimal  @db.Decimal(14, 2)
+  closingBalance  Decimal  @db.Decimal(14, 2)
+  createdAt       DateTime @default(now())
+
+  contract Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  term     ContractTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@unique([termId, periodNumber])
+  @@index([contractId])
+  @@map("contract_amortization_schedule")
 }
 
 model ContractTermProduct {
