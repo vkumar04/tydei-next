@@ -3,15 +3,15 @@
 import React, { useState, useCallback, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { ingestExtractedContracts } from "@/lib/actions/imports/contract-import"
+import { ingestExtractedInvoices } from "@/lib/actions/imports/invoice-import"
 import {
-  ingestExtractedContracts,
-  ingestExtractedInvoices,
   ingestCaseDataCSV,
   ingestCaseProceduresCSV,
   ingestCaseSuppliesCSV,
-  ingestCOGRecordsCSV,
-  ingestPricingFile,
-} from "@/lib/actions/mass-upload"
+} from "@/lib/actions/imports/case-costing-import"
+import { ingestCOGRecordsCSV } from "@/lib/actions/imports/cog-csv-import"
+import { ingestPricingFile } from "@/lib/actions/imports/pricing-import"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import {
   FileTextIcon,
