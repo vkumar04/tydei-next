@@ -106,6 +106,144 @@ export async function getContracts(input: ContractFilters) {
   return serialize({ contracts: withDerived, total })
 }
 
+// ─── Merged List (system + vendor-submitted pending) ─────────────
+//
+// Returns both system Contract rows and vendor-submitted PendingContract
+// rows in a single array with a typed `source` discriminator. Used by
+// the facility contracts list page (contracts-list-closure §4.0).
+
+export type MergedContract = {
+  id: string // stable row id (prefixed to avoid collision across sources)
+  contractId: string | null // real Contract.id when source=system, null for pending
+  name: string
+  source: "system" | "vendor"
+  status:
+    | "active"
+    | "expired"
+    | "expiring"
+    | "pending"
+    | "draft"
+    | "rejected"
+    | "revision_requested"
+  vendor: { id: string; name: string }
+  contractType: string
+  facilityId: string | null
+  facilities: string[]
+  effectiveDate: Date | null
+  expirationDate: Date | null
+  totalValue: number
+  score: number | null
+}
+
+/**
+ * Translate a PendingContractStatus to the unified status enum
+ * used by the merged list. `approved` is promoted to `active` because
+ * once approved, a pending row has already become a real Contract and
+ * wouldn't appear in this list anyway; we treat the edge case defensively.
+ * `withdrawn` is filtered out upstream.
+ */
+function mapPendingStatus(
+  status:
+    | "draft"
+    | "submitted"
+    | "approved"
+    | "rejected"
+    | "revision_requested"
+    | "withdrawn",
+): MergedContract["status"] | null {
+  switch (status) {
+    case "submitted":
+      return "pending"
+    case "approved":
+      return "active"
+    case "rejected":
+      return "rejected"
+    case "revision_requested":
+      return "revision_requested"
+    case "draft":
+      return "draft"
+    case "withdrawn":
+      return null // hide
+  }
+}
+
+export async function getMergedContracts() {
+  const { facility } = await requireFacility()
+
+  const [systemContracts, pendingContracts] = await Promise.all([
+    prisma.contract.findMany({
+      where: {
+        OR: [
+          { facilityId: facility.id },
+          { contractFacilities: { some: { facilityId: facility.id } } },
+        ],
+      },
+      include: {
+        vendor: { select: { id: true, name: true } },
+        contractFacilities: { select: { facilityId: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.pendingContract.findMany({
+      where: {
+        facilityId: facility.id,
+        status: {
+          in: ["submitted", "revision_requested", "rejected", "draft"],
+        },
+      },
+      include: { vendor: { select: { id: true, name: true } } },
+      orderBy: { submittedAt: "desc" },
+    }),
+  ])
+
+  const systemRows: MergedContract[] = systemContracts.map((c) => ({
+    id: `system:${c.id}`,
+    contractId: c.id,
+    name: c.name,
+    source: "system",
+    status: c.status,
+    vendor: { id: c.vendor.id, name: c.vendor.name },
+    contractType: c.contractType,
+    facilityId: c.facilityId,
+    facilities: Array.from(
+      new Set([
+        ...(c.facilityId ? [c.facilityId] : []),
+        ...c.contractFacilities.map((cf) => cf.facilityId),
+      ]),
+    ),
+    effectiveDate: c.effectiveDate,
+    expirationDate: c.expirationDate,
+    totalValue: Number(c.totalValue),
+    // Contract.score doesn't exist on the current schema; reserved for
+    // future contracts-rewrite scoring subsystem. Always null for now.
+    score: null,
+  }))
+
+  const vendorRows: MergedContract[] = pendingContracts
+    .map((p): MergedContract | null => {
+      const mapped = mapPendingStatus(p.status)
+      if (mapped === null) return null
+      return {
+        id: `vendor:${p.id}`,
+        contractId: null,
+        name: p.contractName,
+        source: "vendor",
+        status: mapped,
+        vendor: { id: p.vendor.id, name: p.vendor.name },
+        contractType: p.contractType,
+        facilityId: p.facilityId,
+        facilities: p.facilityId ? [p.facilityId] : [],
+        effectiveDate: p.effectiveDate,
+        expirationDate: p.expirationDate,
+        totalValue: Number(p.totalValue ?? 0),
+        score: null,
+      }
+    })
+    .filter((x): x is MergedContract => x !== null)
+
+  return serialize([...systemRows, ...vendorRows])
+}
+
 // ─── Single Contract ─────────────────────────────────────────────
 
 export async function getContract(id: string) {
