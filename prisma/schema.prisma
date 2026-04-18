@@ -285,6 +285,13 @@ enum TrueUpShortfallHandling {
   carry_forward
 }
 
+enum InvoiceDisputeStatus {
+  none
+  disputed
+  resolved
+  rejected
+}
+
 // ─── Better Auth managed tables ───────────────────────────────────
 
 model User {
@@ -1093,6 +1100,9 @@ model Invoice {
   invoiceDate      DateTime @db.Date
   totalInvoiceCost Decimal? @db.Decimal(14, 2)
   status           String   @default("pending")
+  disputeStatus    InvoiceDisputeStatus @default(none)
+  disputeNote      String?
+  disputeAt        DateTime?
   createdAt        DateTime @default(now())
 
   facility      Facility        @relation(fields: [facilityId], references: [id])
