@@ -28,6 +28,7 @@ import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -112,6 +113,40 @@ export function ContractDetailClient({
       expirationDate: contract.expirationDate,
     }
   }, [contract, periods])
+
+  // Build a deduped, ordered list of product categories: primary first,
+  // then remaining join-table categories alphabetically. Dedupe by id.
+  const productCategories = useMemo<Array<{ id: string; name: string }>>(() => {
+    if (!contract) return []
+
+    const primary = contract.productCategory ?? null
+    const joined = (contract.contractCategories ?? [])
+      .map((cc) => cc.productCategory)
+      .filter(
+        (pc): pc is { id: string; name: string } =>
+          pc !== null && pc !== undefined,
+      )
+
+    const seen = new Set<string>()
+    const ordered: Array<{ id: string; name: string }> = []
+
+    if (primary) {
+      seen.add(primary.id)
+      ordered.push({ id: primary.id, name: primary.name })
+    }
+
+    const rest = joined
+      .filter((pc) => !seen.has(pc.id))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    for (const pc of rest) {
+      if (seen.has(pc.id)) continue
+      seen.add(pc.id)
+      ordered.push({ id: pc.id, name: pc.name })
+    }
+
+    return ordered
+  }, [contract])
 
   if (isLoading) {
     return (
@@ -289,10 +324,26 @@ export function ContractDetailClient({
                     </span>
                   }
                 />
-                {contract.productCategory && (
+                {productCategories.length > 0 && (
                   <DetailRow
-                    label="Product Category"
-                    value={contract.productCategory.name}
+                    label={
+                      productCategories.length > 1
+                        ? "Product Categories"
+                        : "Product Category"
+                    }
+                    value={
+                      productCategories.length > 3 ? (
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {productCategories.map((pc) => (
+                            <Badge key={pc.id} variant="secondary">
+                              {pc.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        productCategories.map((pc) => pc.name).join(", ")
+                      )
+                    }
                   />
                 )}
                 <DetailRow
