@@ -17,6 +17,7 @@ import {
   type ContractPricingItemForMatch,
 } from "@/lib/contracts/match"
 import { enrichCOGRecord } from "@/lib/cog/enrichment"
+import { prisma as defaultPrisma } from "@/lib/db"
 
 type Db = PrismaClient | Prisma.TransactionClient
 
@@ -99,8 +100,37 @@ export async function recomputeMatchStatusesForVendor(
   offContract: number
   outOfScope: number
   unknownVendor: number
+}>
+export async function recomputeMatchStatusesForVendor(
+  vendorId: string,
+  facilityId: string,
+): Promise<{
+  total: number
+  updated: number
+  onContract: number
+  priceVariance: number
+  offContract: number
+  outOfScope: number
+  unknownVendor: number
+}>
+export async function recomputeMatchStatusesForVendor(
+  dbOrVendorId: Db | string,
+  inputOrFacilityId: { vendorId: string; facilityId: string } | string,
+): Promise<{
+  total: number
+  updated: number
+  onContract: number
+  priceVariance: number
+  offContract: number
+  outOfScope: number
+  unknownVendor: number
 }> {
-  const { vendorId, facilityId } = input
+  const db: Db =
+    typeof dbOrVendorId === "string" ? defaultPrisma : dbOrVendorId
+  const { vendorId, facilityId } =
+    typeof dbOrVendorId === "string"
+      ? { vendorId: dbOrVendorId, facilityId: inputOrFacilityId as string }
+      : (inputOrFacilityId as { vendorId: string; facilityId: string })
 
   const contracts = await loadContractsForVendor(db, vendorId, facilityId)
 

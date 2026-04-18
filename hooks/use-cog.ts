@@ -14,6 +14,7 @@ import {
   updateCOGRecord,
 } from "@/lib/actions/cog-records"
 import { bulkImportCOGRecords } from "@/lib/actions/cog-import"
+import { backfillCOGEnrichment } from "@/lib/actions/cog-import/backfill"
 import type { COGFilters } from "@/lib/validators/cog-records"
 import { toast } from "sonner"
 
@@ -125,5 +126,21 @@ export function useUpdateCOGRecord() {
       toast.success("Record updated")
     },
     onError: (err) => toast.error(err.message || "Failed to update record"),
+  })
+}
+
+export function useBackfillCOGEnrichment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: backfillCOGEnrichment,
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      qc.invalidateQueries({ queryKey: ["cog"] })
+      toast.success(
+        `Enriched ${r.enriched} records (${r.pendingAfter} still pending)`,
+      )
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Backfill failed"),
   })
 }

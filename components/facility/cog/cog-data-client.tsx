@@ -35,6 +35,7 @@ import { MassUpload } from "@/components/import/mass-upload"
 import { toast } from "sonner"
 import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
 import { matchCOGToContracts } from "@/lib/actions/cog-match"
+import { backfillCOGEnrichment } from "@/lib/actions/cog-import/backfill"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   AlertDialog,
@@ -89,6 +90,20 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
       toast.error(err instanceof Error ? err.message : "Matching failed")
     },
   })
+  const backfillMutation = useMutation({
+    mutationFn: backfillCOGEnrichment,
+    onSuccess: (r) => {
+      toast.success(
+        `Enriched ${r.enriched} records (${r.pendingAfter} still pending)`,
+      )
+      refetchStats()
+      qc.invalidateQueries({ queryKey: ["cog"] })
+      qc.invalidateQueries({ queryKey: ["cog-records"] })
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Backfill failed")
+    },
+  })
 
   const totalSpend = stats?.totalSpend ?? 0
   const totalItems = stats?.totalItems ?? 0
@@ -127,6 +142,15 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${matchMutation.isPending ? "animate-spin" : ""}`} />
             {matchMutation.isPending ? "Matching..." : "Match Pricing"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => backfillMutation.mutate()}
+            disabled={backfillMutation.isPending}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${backfillMutation.isPending ? "animate-spin" : ""}`} />
+            Re-run match
           </Button>
           <Button variant="outline" onClick={() => setCogImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
