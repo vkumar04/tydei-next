@@ -1,1007 +1,189 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+/**
+ * Facility renewals page orchestrator.
+ *
+ * Thin coordinator — all heavy lifting lives in focused children:
+ *   - RenewalsSummaryCards   (facility-wide rollup)
+ *   - RenewalsFilterBar      (status + search)
+ *   - RenewalsList           (table)
+ *   - RenewalDetailTabs      (dialog tabs; pulls notes/settings itself)
+ *
+ * Data source is the legacy `getExpiringContracts` server action via
+ * `useExpiringContracts`. We normalize its `ExpiringContract` shape into
+ * the row/detail shapes each child expects and delegate status
+ * classification + summary aggregation to the pure helpers in
+ * lib/renewals/ (engine + summary-stats).
+ */
+
+import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { RenewalInitiateDialog } from "./renewal-initiate-dialog"
+import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
-import { useExpiringContracts, useInitiateRenewal } from "@/hooks/use-renewals"
-import { formatCurrency, formatDate } from "@/lib/formatting"
-import {
-  AlertTriangle,
-  Clock,
-  DollarSign,
-  TrendingUp,
-  CheckCircle2,
-  FileText,
-  Bell,
-  Download,
-  Eye,
-  Calendar,
-  Mail,
-  Sparkles,
-  ChevronRight,
-} from "lucide-react"
-import { toast } from "sonner"
-import Link from "next/link"
+import { CalendarRange, Settings2 } from "lucide-react"
+import { useExpiringContracts } from "@/hooks/use-renewals"
 import type { ExpiringContract } from "@/lib/actions/renewals"
+import { computeRenewalSummary } from "@/lib/renewals/summary-stats"
+import { RenewalsSummaryCards } from "./renewals-summary-cards"
+import {
+  RenewalsFilterBar,
+  type StatusFilter,
+} from "./renewals-filter-bar"
+import { RenewalsList } from "./renewals-list"
+import { RenewalDetailTabs } from "./renewal-detail-tabs"
+import { RenewalAlertSettingsForm } from "./renewal-alert-settings-form"
+import {
+  toDetail,
+  toRow,
+  toSummaryInput,
+} from "./renewals-mappers"
 
 interface RenewalsClientProps {
   facilityId: string
+  currentUserId: string
 }
 
-const statusConfig: Record<
-  string,
-  {
-    label: string
-    color: string
-    icon: typeof AlertTriangle
-  }
-> = {
-  critical: {
-    label: "Critical",
-    color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-    icon: AlertTriangle,
-  },
-  warning: {
-    label: "Action Needed",
-    color:
-      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-    icon: Clock,
-  },
-  upcoming: {
-    label: "Upcoming",
-    color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
-    icon: Calendar,
-  },
-  ok: {
-    label: "On Track",
-    color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-    icon: CheckCircle2,
-  },
-}
+export function RenewalsClient({
+  facilityId,
+  currentUserId,
+}: RenewalsClientProps) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [search, setSearch] = useState("")
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
-function getContractStatus(
-  daysUntilExpiry: number
-): "critical" | "warning" | "upcoming" | "ok" {
-  if (daysUntilExpiry <= 30) return "critical"
-  if (daysUntilExpiry <= 90) return "warning"
-  if (daysUntilExpiry <= 180) return "upcoming"
-  return "ok"
-}
+  const { data, isLoading } = useExpiringContracts(facilityId, 365, "facility")
+  const contracts: ExpiringContract[] = useMemo(() => data ?? [], [data])
+  const rows = useMemo(() => contracts.map(toRow), [contracts])
 
-/** Derive enriched renewal data from ExpiringContract */
-function buildRenewalData(c: ExpiringContract) {
-  const rebatesEarned = c.totalRebate
-  // Use actual collected data if available; otherwise estimate based on status
-  const rebatesCollected = c.totalRebate > 0
-    ? Math.round(rebatesEarned * (c.status === "active" ? 0.85 : c.status === "expired" ? 1.0 : 0.5))
-    : 0
-  const commitmentMet = c.totalSpend > 0 ? Math.min(Math.round((c.totalSpend / Math.max(c.totalSpend * 1.1, 1)) * 100), 100) : 0
+  const counts = useMemo(() => {
+    const c = { all: rows.length, critical: 0, warning: 0, upcoming: 0, ok: 0 }
+    for (const r of rows) c[r.status] += 1
+    return c
+  }, [rows])
 
-  const currentYear = new Date().getFullYear()
-  const performanceHistory = [
-    {
-      year: currentYear - 1,
-      spend: Math.round(c.totalSpend * 0.85),
-      rebate: Math.round(rebatesEarned * 0.85),
-      compliance: Math.max(80, 90 - 5),
-    },
-    {
-      year: currentYear - 2,
-      spend: Math.round(c.totalSpend * 0.72),
-      rebate: Math.round(rebatesEarned * 0.72),
-      compliance: Math.max(75, 85 - 10),
-    },
-  ]
-
-  const tierNum = c.tierAchieved ?? 1
-  const maxTier = Math.max(tierNum + 1, 3)
-  const currentTerms = {
-    baseTier: `${tierNum * 2}%`,
-    maxTier: `${maxTier * 2}%`,
-    minimumCommitment: Math.round(c.totalSpend * 0.7),
-    paymentTerms: "Net 45",
-  }
-
-  const suggestedNegotiationPoints: string[] = []
-  if (commitmentMet >= 100) {
-    suggestedNegotiationPoints.push("Strong performance - negotiate for higher tier structure")
-  }
-  if (tierNum < maxTier) {
-    suggestedNegotiationPoints.push(`Currently Tier ${tierNum} - path to Tier ${maxTier} available`)
-  }
-  suggestedNegotiationPoints.push("Review pricing on top 10 SKUs vs market rates")
-  suggestedNegotiationPoints.push("Consider multi-year agreement for rate lock")
-  suggestedNegotiationPoints.push("Request updated pricing based on volume commitments")
-
-  const renewalTasks = [
-    { id: "t1", task: "Review current pricing against market rates", completed: commitmentMet >= 80 },
-    { id: "t2", task: "Analyze spend patterns and volume trends", completed: commitmentMet >= 90 },
-    { id: "t3", task: "Request updated pricing from vendor", completed: false },
-    { id: "t4", task: "Review competitive alternatives", completed: false },
-    { id: "t5", task: "Schedule negotiation meeting", completed: false },
-  ]
-
-  const alertsConfigured = {
-    email90Days: true,
-    email60Days: c.daysUntilExpiry <= 90,
-    email30Days: c.daysUntilExpiry <= 60,
-  }
-
-  return {
-    rebatesEarned,
-    rebatesCollected,
-    commitmentMet,
-    performanceHistory,
-    currentTerms,
-    suggestedNegotiationPoints,
-    renewalTasks,
-    alertsConfigured,
-  }
-}
-
-export function RenewalsClient({ facilityId }: RenewalsClientProps) {
-  const [activeTab, setActiveTab] = useState("all")
-  const [vendorFilter, setVendorFilter] = useState("all")
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const [selectedContract, setSelectedContract] =
-    useState<ExpiringContract | null>(null)
-  const [renewalTarget, setRenewalTarget] = useState<{
-    id: string
-    name: string
-    vendor: string
-  } | null>(null)
-  const [alertsDialogOpen, setAlertsDialogOpen] = useState(false)
-  const [alertSettings, setAlertSettings] = useState({
-    email30Days: true,
-    email60Days: true,
-    email90Days: false,
-    emailWeekly: false,
-    emailRecipients: "",
-    slackEnabled: false,
-    slackChannel: "",
-  })
-
-  const { data: contracts, isLoading } = useExpiringContracts(
-    facilityId,
-    365,
-    "facility"
+  const summary = useMemo(
+    () => computeRenewalSummary(contracts.map(toSummaryInput)),
+    [contracts],
   )
-  const initiate = useInitiateRenewal()
 
-  // Contracts with status derived from days
-  const contractsWithStatus = useMemo(() => {
-    if (!contracts) return []
-    return contracts.map((c) => ({
-      ...c,
-      renewalStatus: getContractStatus(c.daysUntilExpiry),
-    }))
-  }, [contracts])
+  const filteredRows = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    return rows
+      .filter((r) => (statusFilter === "all" ? true : r.status === statusFilter))
+      .filter((r) => {
+        if (!needle) return true
+        return (
+          r.name.toLowerCase().includes(needle) ||
+          r.vendorName.toLowerCase().includes(needle) ||
+          (r.contractNumber?.toLowerCase().includes(needle) ?? false)
+        )
+      })
+      .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
+  }, [rows, statusFilter, search])
 
-  // Summary stats
-  const stats = useMemo(() => {
-    if (!contractsWithStatus.length)
-      return { critical: 0, warning: 0, totalValue: 0, uncollectedRebates: 0 }
-    const critical = contractsWithStatus.filter(
-      (c) => c.renewalStatus === "critical"
-    ).length
-    const warning = contractsWithStatus.filter(
-      (c) => c.renewalStatus === "warning"
-    ).length
-    const totalValue = contractsWithStatus
-      .filter((c) => c.daysUntilExpiry <= 180)
-      .reduce((sum, c) => sum + c.totalSpend, 0)
-    const uncollectedRebates = contractsWithStatus.reduce((sum, c) => {
-      const data = buildRenewalData(c)
-      return sum + (data.rebatesEarned - data.rebatesCollected)
-    }, 0)
-    return { critical, warning, totalValue, uncollectedRebates }
-  }, [contractsWithStatus])
-
-  // Unique vendors
-  const vendors = useMemo(() => {
-    return [...new Set(contractsWithStatus.map((c) => c.vendorName))]
-  }, [contractsWithStatus])
-
-  // Filter
-  const filteredContracts = useMemo(() => {
-    let filtered = contractsWithStatus
-    if (activeTab !== "all") {
-      filtered = filtered.filter((c) => c.renewalStatus === activeTab)
-    }
-    if (vendorFilter !== "all") {
-      filtered = filtered.filter((c) => c.vendorName === vendorFilter)
-    }
-    return filtered.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
-  }, [contractsWithStatus, activeTab, vendorFilter])
-
-  const handleViewDetails = (contract: ExpiringContract) => {
-    setSelectedContract(contract)
-    setDetailsOpen(true)
-  }
-
-  const handleExportCalendar = () => {
-    toast.success("Calendar exported", {
-      description: "Contract renewal events exported",
-    })
-  }
-
-  const handleConfigureAlerts = () => {
-    setAlertsDialogOpen(true)
-  }
-
-  const handleSaveAlertSettings = () => {
-    toast.success("Alert settings saved", {
-      description: "Your notification preferences have been updated",
-    })
-    setAlertsDialogOpen(false)
-  }
-
-  const handleSendReminder = (contract: ExpiringContract) => {
-    toast.success("Reminder sent", {
-      description: `Renewal reminder sent to ${contract.vendorName} rep`,
-    })
-  }
-
-  const handleGenerateSummary = () => {
-    toast.success("Renewal summary generated", {
-      description: "Summary report has been downloaded",
-    })
-  }
-
-  async function handleInitiate() {
-    if (!renewalTarget) return
-    try {
-      await initiate.mutateAsync(renewalTarget.id)
-      toast.success("Renewal draft created successfully")
-    } catch {
-      toast.error("Failed to create renewal draft")
-    }
-  }
-
-  const selectedStatus = selectedContract
-    ? getContractStatus(selectedContract.daysUntilExpiry)
-    : "ok"
-
-  const selectedRenewalData = selectedContract
-    ? buildRenewalData(selectedContract)
-    : null
+  const selectedContract = useMemo(
+    () => contracts.find((c) => c.id === selectedId) ?? null,
+    [contracts, selectedId],
+  )
+  const selectedDetail = selectedContract ? toDetail(selectedContract) : null
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Contract Renewal Intelligence
+            Contract Renewals
           </h1>
           <p className="text-muted-foreground">
-            Proactive alerts and AI-powered renewal recommendations
+            Track upcoming renewals and plan negotiations before expiration.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleConfigureAlerts()}>
-            <Bell className="mr-2 h-4 w-4" />
-            Configure Alerts
-          </Button>
-          <Button onClick={handleExportCalendar}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Calendar
-          </Button>
-        </div>
+        <Button variant="outline" onClick={() => setSettingsOpen(true)}>
+          <Settings2 className="mr-2 h-4 w-4" />
+          Alert Settings
+        </Button>
       </div>
 
-      {/* Critical Alert */}
-      {stats.critical > 0 && (
-        <Alert className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30">
-          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-          <AlertTitle className="text-red-800 dark:text-red-200">
-            Immediate Attention Required
-          </AlertTitle>
-          <AlertDescription className="text-red-700 dark:text-red-300">
-            {stats.critical} contract(s) expire within 30 days representing{" "}
-            {formatCurrency(
-              contractsWithStatus
-                .filter((c) => c.renewalStatus === "critical")
-                .reduce((sum, c) => sum + c.totalSpend, 0)
-            )}{" "}
-            in annual spend. Review and take action immediately.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Summary Cards */}
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[100px] rounded-xl" />
+            <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="border-l-4 border-l-red-500">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Expiring in 30 Days
-                  </p>
-                  <p className="text-2xl font-bold">{stats.critical}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    contracts need action
-                  </p>
-                </div>
-                <AlertTriangle className="h-8 w-8 text-red-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-yellow-500">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Expiring in 90 Days
-                  </p>
-                  <p className="text-2xl font-bold">
-                    {stats.warning + stats.critical}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    start negotiations
-                  </p>
-                </div>
-                <Clock className="h-8 w-8 text-yellow-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-blue-500">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">At-Risk Spend</p>
-                  <p className="text-2xl font-bold">
-                    {formatCurrency(stats.totalValue)}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    in next 6 months
-                  </p>
-                </div>
-                <DollarSign className="h-8 w-8 text-blue-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-l-4 border-l-red-500">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Uncollected Rebates
-                  </p>
-                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                    -{formatCurrency(stats.uncollectedRebates)}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    collect before renewal
-                  </p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-red-500/50" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <RenewalsSummaryCards summary={summary} />
       )}
 
-      {/* Timeline View */}
-      {!isLoading && contractsWithStatus.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Renewal Timeline</CardTitle>
-            <CardDescription>
-              Visual overview of upcoming contract expirations
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="relative">
-              {/* Timeline axis */}
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-4">
-                <span>Today</span>
-                <span>30 days</span>
-                <span>60 days</span>
-                <span>90 days</span>
-                <span>180 days</span>
-                <span>1 year</span>
-              </div>
-              <div className="h-2 rounded-full bg-muted relative">
-                {/* Zone indicators */}
-                <div className="absolute inset-y-0 left-0 w-[8%] rounded-l-full bg-red-200 dark:bg-red-900/50" />
-                <div className="absolute inset-y-0 left-[8%] w-[17%] bg-yellow-200 dark:bg-yellow-900/50" />
-                <div className="absolute inset-y-0 left-[25%] w-[25%] bg-blue-200 dark:bg-blue-900/50" />
-              </div>
-
-              {/* Contract markers */}
-              <div className="relative h-20 mt-2">
-                {contractsWithStatus.map((contract) => {
-                  const position = Math.min(
-                    (contract.daysUntilExpiry / 365) * 100,
-                    100
-                  )
-                  const color =
-                    contract.renewalStatus === "critical"
-                      ? "bg-red-500"
-                      : contract.renewalStatus === "warning"
-                        ? "bg-yellow-500"
-                        : contract.renewalStatus === "upcoming"
-                          ? "bg-blue-500"
-                          : "bg-green-500"
-
-                  return (
-                    <div
-                      key={contract.id}
-                      className="absolute flex flex-col items-center cursor-pointer group"
-                      style={{
-                        left: `${position}%`,
-                        transform: "translateX(-50%)",
-                      }}
-                      onClick={() => handleViewDetails(contract)}
-                    >
-                      <div
-                        className={`w-4 h-4 rounded-full ${color} border-2 border-white shadow-sm`}
-                      />
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-6 bg-popover border rounded-lg p-2 shadow-lg z-10 whitespace-nowrap">
-                        <p className="font-medium text-sm">
-                          {contract.vendorName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {contract.daysUntilExpiry} days
-                        </p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Contract List */}
-      {isLoading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[180px] rounded-xl" />
-          ))}
-        </div>
-      ) : (
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle>Contracts by Status</CardTitle>
-                <CardDescription>
-                  Click on a contract to view renewal details
-                </CardDescription>
-              </div>
-              <Select value={vendorFilter} onValueChange={setVendorFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by vendor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Vendors</SelectItem>
-                  {vendors.map((v) => (
-                    <SelectItem key={v} value={v}>
-                      {v}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="critical" className="text-red-600 dark:text-red-400">
-                  Critical (
-                  {
-                    contractsWithStatus.filter(
-                      (c) => c.renewalStatus === "critical"
-                    ).length
-                  }
-                  )
-                </TabsTrigger>
-                <TabsTrigger value="warning" className="text-yellow-600">
-                  Warning (
-                  {
-                    contractsWithStatus.filter(
-                      (c) => c.renewalStatus === "warning"
-                    ).length
-                  }
-                  )
-                </TabsTrigger>
-                <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-                <TabsTrigger value="ok">On Track</TabsTrigger>
-              </TabsList>
-
-              <div className="mt-4">
-                {filteredContracts.length === 0 ? (
-                  <EmptyState
-                    icon={FileText}
-                    title="No Contracts"
-                    description="No contracts match this filter."
-                  />
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Contract</TableHead>
-                        <TableHead>Vendor</TableHead>
-                        <TableHead>Expiration</TableHead>
-                        <TableHead>Days Left</TableHead>
-                        <TableHead>Annual Spend</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredContracts.map((contract) => {
-                        const cfg =
-                          statusConfig[contract.renewalStatus] ??
-                          statusConfig.ok
-                        const StatusIcon = cfg.icon
-                        return (
-                          <TableRow
-                            key={contract.id}
-                            className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => handleViewDetails(contract)}
-                          >
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <FileText className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-medium">
-                                  {contract.name}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>{contract.vendorName}</TableCell>
-                            <TableCell>
-                              {formatDate(contract.expirationDate)}
-                            </TableCell>
-                            <TableCell>
-                              <span
-                                className={
-                                  contract.daysUntilExpiry <= 30
-                                    ? "text-red-600 dark:text-red-400 font-medium"
-                                    : ""
-                                }
-                              >
-                                {contract.daysUntilExpiry} days
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              {formatCurrency(contract.totalSpend)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={cfg.color}>
-                                <StatusIcon className="h-3 w-3 mr-1" />
-                                {cfg.label}
-                              </Badge>
-                            </TableCell>
-                            <TableCell
-                              className="text-right"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleViewDetails(contract)}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={handleGenerateSummary}
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-            </Tabs>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Contract Details Dialog */}
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              {selectedContract?.name}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedContract?.vendorName} - Expires{" "}
-              {selectedContract && formatDate(selectedContract.expirationDate)}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedContract && selectedRenewalData && (
-            <div className="space-y-6">
-              {/* Status Banner */}
-              <div
-                className={`p-4 rounded-lg ${
-                  selectedStatus === "critical"
-                    ? "bg-red-50 dark:bg-red-950/30 border border-red-200"
-                    : selectedStatus === "warning"
-                      ? "bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200"
-                      : "bg-blue-50 dark:bg-blue-950/30 border border-blue-200"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {selectedStatus === "critical" && (
-                      <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                    )}
-                    {selectedStatus === "warning" && (
-                      <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                    )}
-                    {selectedStatus === "upcoming" && (
-                      <Calendar className="h-5 w-5 text-blue-600" />
-                    )}
-                    <div>
-                      <p className="font-medium">
-                        {selectedContract.daysUntilExpiry} days until expiration
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {selectedStatus === "critical"
-                          ? "Immediate action required"
-                          : selectedStatus === "warning"
-                            ? "Begin renewal negotiations"
-                            : "Plan renewal strategy"}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => handleSendReminder(selectedContract)}
-                  >
-                    <Mail className="mr-2 h-4 w-4" />
-                    Contact Vendor
-                  </Button>
-                </div>
-              </div>
-
-              {/* Performance Summary */}
-              <div className="grid grid-cols-4 gap-4">
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Total Spend</p>
-                  <p className="text-xl font-bold">
-                    {formatCurrency(selectedContract.totalSpend)}
-                  </p>
-                </div>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Commitment Met</p>
-                  <p className="text-xl font-bold">
-                    {selectedRenewalData.commitmentMet}%
-                  </p>
-                </div>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Rebates Earned</p>
-                  <p className="text-xl font-bold text-green-600 dark:text-green-400">
-                    {formatCurrency(selectedRenewalData.rebatesEarned)}
-                  </p>
-                </div>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Uncollected</p>
-                  <p className="text-xl font-bold text-red-600 dark:text-red-400">
-                    -{formatCurrency(selectedRenewalData.rebatesEarned - selectedRenewalData.rebatesCollected)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Current Terms */}
-              <div>
-                <h4 className="font-medium mb-3">Current Contract Terms</h4>
-                <div className="grid grid-cols-4 gap-4 p-4 rounded-lg border">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Base Rebate</p>
-                    <p className="font-medium">{selectedRenewalData.currentTerms.baseTier}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Max Rebate</p>
-                    <p className="font-medium">{selectedRenewalData.currentTerms.maxTier}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Min Commitment</p>
-                    <p className="font-medium">{formatCurrency(selectedRenewalData.currentTerms.minimumCommitment)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Payment Terms</p>
-                    <p className="font-medium">{selectedRenewalData.currentTerms.paymentTerms}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Performance History */}
-              <div>
-                <h4 className="font-medium mb-3">Performance History</h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Year</TableHead>
-                      <TableHead className="text-right">Spend</TableHead>
-                      <TableHead className="text-right">Rebate Earned</TableHead>
-                      <TableHead className="text-right">Compliance</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedRenewalData.performanceHistory.map((year) => (
-                      <TableRow key={year.year}>
-                        <TableCell>{year.year}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(year.spend)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(year.rebate)}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant={year.compliance >= 90 ? "default" : "secondary"}>
-                            {year.compliance}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Renewal Tasks */}
-              <div>
-                <h4 className="font-medium mb-3">Renewal Checklist</h4>
-                <div className="space-y-2">
-                  {selectedRenewalData.renewalTasks.map((task) => (
-                    <div key={task.id} className="flex items-center gap-3 p-3 rounded-lg border">
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                        task.completed ? "bg-green-500 text-white" : "border-2 border-muted-foreground"
-                      }`}>
-                        {task.completed && <CheckCircle2 className="h-3 w-3" />}
-                      </div>
-                      <span className={task.completed ? "line-through text-muted-foreground" : ""}>
-                        {task.task}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Recommendations */}
-              <div>
-                <h4 className="font-medium mb-3 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  AI Negotiation Recommendations
-                </h4>
-                <div className="space-y-2">
-                  {selectedRenewalData.suggestedNegotiationPoints.map((point, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20"
-                    >
-                      <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
-                        {idx + 1}
-                      </div>
-                      <p className="text-sm">{point}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Alert Configuration */}
-              <div>
-                <h4 className="font-medium mb-3">Email Alerts</h4>
-                <div className="flex gap-4">
-                  {[
-                    { label: "90 Days", key: "email90Days" as const },
-                    { label: "60 Days", key: "email60Days" as const },
-                    { label: "30 Days", key: "email30Days" as const },
-                  ].map((alert) => (
-                    <div key={alert.key} className="flex items-center gap-2">
-                      <div className={`w-4 h-4 rounded ${
-                        selectedRenewalData.alertsConfigured[alert.key]
-                          ? "bg-green-500" : "bg-muted"
-                      }`} />
-                      <span className="text-sm">{alert.label}</span>
-                    </div>
-                  ))}
-                  <Button variant="link" size="sm" onClick={() => handleConfigureAlerts()}>
-                    Configure
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDetailsOpen(false)}>
-              Close
-            </Button>
-            <Button variant="outline" onClick={handleGenerateSummary}>
-              <Download className="mr-2 h-4 w-4" />
-              Generate Summary
-            </Button>
-            {selectedContract && (
-              <Button asChild>
-                <Link href={`/dashboard/contracts/${selectedContract.id}`}>
-                  View Full Contract
-                  <ChevronRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Configure Alerts Dialog */}
-      <Dialog open={alertsDialogOpen} onOpenChange={setAlertsDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
-              Configure Renewal Alerts
-            </DialogTitle>
-            <DialogDescription>
-              Set up email and notification preferences for contract renewals
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium">Email Notifications</h4>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="alert-30" className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-red-500" />
-                    30 days before expiration
-                  </Label>
-                  <input
-                    id="alert-30"
-                    type="checkbox"
-                    checked={alertSettings.email30Days}
-                    onChange={(e) => setAlertSettings(s => ({ ...s, email30Days: e.target.checked }))}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="alert-60" className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                    60 days before expiration
-                  </Label>
-                  <input
-                    id="alert-60"
-                    type="checkbox"
-                    checked={alertSettings.email60Days}
-                    onChange={(e) => setAlertSettings(s => ({ ...s, email60Days: e.target.checked }))}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="alert-90" className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-green-500" />
-                    90 days before expiration
-                  </Label>
-                  <input
-                    id="alert-90"
-                    type="checkbox"
-                    checked={alertSettings.email90Days}
-                    onChange={(e) => setAlertSettings(s => ({ ...s, email90Days: e.target.checked }))}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="alert-weekly">Weekly summary digest</Label>
-                  <input
-                    id="alert-weekly"
-                    type="checkbox"
-                    checked={alertSettings.emailWeekly}
-                    onChange={(e) => setAlertSettings(s => ({ ...s, emailWeekly: e.target.checked }))}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email-recipients">Email Recipients</Label>
-              <Input
-                id="email-recipients"
-                placeholder="email@example.com, another@example.com"
-                value={alertSettings.emailRecipients}
-                onChange={(e) => setAlertSettings(s => ({ ...s, emailRecipients: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">Separate multiple emails with commas</p>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium">Slack Integration</h4>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="slack-enabled">Enable Slack notifications</Label>
-                <input
-                  id="slack-enabled"
-                  type="checkbox"
-                  checked={alertSettings.slackEnabled}
-                  onChange={(e) => setAlertSettings(s => ({ ...s, slackEnabled: e.target.checked }))}
-                  className="h-4 w-4 rounded border-border"
-                />
-              </div>
-              {alertSettings.slackEnabled && (
-                <div className="space-y-2">
-                  <Label htmlFor="slack-channel">Slack Channel</Label>
-                  <Input
-                    id="slack-channel"
-                    placeholder="#contract-renewals"
-                    value={alertSettings.slackChannel}
-                    onChange={(e) => setAlertSettings(s => ({ ...s, slackChannel: e.target.value }))}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAlertsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveAlertSettings}>
-              Save Settings
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <RenewalInitiateDialog
-        contractName={renewalTarget?.name ?? ""}
-        vendorName={renewalTarget?.vendor ?? ""}
-        open={!!renewalTarget}
-        onOpenChange={(open) => {
-          if (!open) setRenewalTarget(null)
-        }}
-        onInitiate={handleInitiate}
+      <RenewalsFilterBar
+        status={statusFilter}
+        onStatusChange={setStatusFilter}
+        search={search}
+        onSearchChange={setSearch}
+        counts={counts}
       />
+
+      {isLoading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          icon={CalendarRange}
+          title="No contracts on file"
+          description="Add a contract to start tracking renewals here."
+        />
+      ) : (
+        <RenewalsList
+          rows={filteredRows}
+          selectedId={selectedId}
+          onSelect={(row) => setSelectedId(row.id)}
+        />
+      )}
+
+      <Dialog
+        open={selectedDetail !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null)
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+          {selectedDetail ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedDetail.name}</DialogTitle>
+                <DialogDescription>
+                  {selectedDetail.vendorName}
+                  {selectedDetail.contractNumber
+                    ? ` • ${selectedDetail.contractNumber}`
+                    : null}
+                </DialogDescription>
+              </DialogHeader>
+              <RenewalDetailTabs
+                detail={selectedDetail}
+                currentUserId={currentUserId}
+              />
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Renewal Alert Settings</DialogTitle>
+            <DialogDescription>
+              Control how and when we notify you about upcoming renewals.
+            </DialogDescription>
+          </DialogHeader>
+          <RenewalAlertSettingsForm />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
