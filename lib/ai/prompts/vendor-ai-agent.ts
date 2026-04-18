@@ -36,5 +36,7 @@ export const vendorAiAgentSuggestedQuestions = [
 
 // Re-export the vendor prompt under the path the task spec expects, so
 // downstream imports can use either `@/lib/ai/prompts` or
-// `@/lib/ai/prompts/vendor-ai-agent`.
-export { vendorSystemPrompt } from "../prompts"
+// `@/lib/ai/prompts/vendor-ai-agent`. Chat-agent prompts live in
+// `./index.ts` now (consolidated out of the old `lib/ai/prompts.ts`
+// during the AI integration foundation refactor).
+export { vendorSystemPrompt } from "./index"
