@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useId } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { EmptyState } from "@/components/shared/empty-state"
 import {
   Select,
   SelectContent,
@@ -44,11 +45,22 @@ import {
   Sparkles,
   CheckCircle2,
 } from "lucide-react"
-import { useRebateOpportunities, useSetSpendTarget } from "@/hooks/use-rebate-optimizer"
+import {
+  useRebateOpportunities,
+  useSetSpendTarget,
+  useRebateOptimizerEngine,
+} from "@/hooks/use-rebate-optimizer"
 import { formatCurrency } from "@/lib/formatting"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { RebateOpportunity } from "@/lib/actions/rebate-optimizer"
+import type { RebateOpportunity as EngineRebateOpportunity } from "@/lib/actions/rebate-optimizer-engine"
+import { ScenarioBuilder, type RebateScenarioInput } from "./scenario-builder"
+import { ResultCards } from "./result-cards"
+import { SensitivityChart } from "./sensitivity-chart"
+import { CompareScenariosTable } from "./compare-scenarios-table"
+import { evaluateScenario } from "./scenario-math"
+import type { SavedScenario } from "./scenario-types"
 
 interface OptimizerClientProps {
   facilityId: string
@@ -63,6 +75,66 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
 
   const { data: opportunities, isLoading } = useRebateOpportunities(facilityId)
   const setTarget = useSetSpendTarget()
+
+  // ─── Scenario builder state ──────────────────────────────────────
+  const scenarioIdSeed = useId()
+  const {
+    data: engineData,
+    isLoading: isEngineLoading,
+  } = useRebateOptimizerEngine(facilityId)
+  const engineOpportunities: EngineRebateOpportunity[] = useMemo(
+    () => engineData?.opportunities ?? [],
+    [engineData],
+  )
+  const [scenarios, setScenarios] = useState<SavedScenario[]>([])
+  const [activeOpportunityId, setActiveOpportunityId] = useState<string | null>(
+    null,
+  )
+
+  const activeOpportunity = useMemo<EngineRebateOpportunity | null>(() => {
+    if (activeOpportunityId) {
+      const match = engineOpportunities.find(
+        (o) => o.contractId === activeOpportunityId,
+      )
+      if (match) return match
+    }
+    return engineOpportunities[0] ?? null
+  }, [engineOpportunities, activeOpportunityId])
+
+  const latestEvaluation = useMemo(() => {
+    if (scenarios.length === 0) return null
+    const sameContract = [...scenarios]
+      .reverse()
+      .find((s) => s.input.contractId === activeOpportunity?.contractId)
+    if (sameContract) return sameContract.evaluation
+    return scenarios[scenarios.length - 1]?.evaluation ?? null
+  }, [scenarios, activeOpportunity])
+
+  const optimalScenario = useMemo(() => {
+    if (scenarios.length === 0) return null
+    return scenarios.reduce<SavedScenario | null>((best, s) => {
+      if (!best) return s
+      return s.evaluation.rebateDelta > best.evaluation.rebateDelta ? s : best
+    }, null)
+  }, [scenarios])
+
+  function handleAddScenario(input: RebateScenarioInput) {
+    const evaluation = evaluateScenario(input.opportunity, input.projectedSpend)
+    const id = `${scenarioIdSeed}-${scenarios.length}-${Date.now()}`
+    setScenarios((prev) => [
+      ...prev,
+      { id, input, evaluation, createdAt: Date.now() },
+    ])
+    setActiveOpportunityId(input.opportunity.contractId)
+  }
+
+  function handleRemoveScenario(id: string) {
+    setScenarios((prev) => prev.filter((s) => s.id !== id))
+  }
+
+  function handleClearScenarios() {
+    setScenarios([])
+  }
 
   // Unique vendors for filter
   const vendors = useMemo(() => {
@@ -172,6 +244,57 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
           </Button>
         </div>
       </div>
+
+      {/* Scenario Builder — loading, empty, and loaded states */}
+      {isEngineLoading ? (
+        <div className="grid gap-4">
+          <Skeleton className="h-[280px] rounded-xl" />
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[120px] rounded-xl" />
+            ))}
+          </div>
+          <Skeleton className="h-[360px] rounded-xl" />
+        </div>
+      ) : engineOpportunities.length === 0 ? (
+        <EmptyState
+          icon={Sparkles}
+          title="No optimizable contracts"
+          description="Add contracts with tiered spend rebates to start building what-if scenarios."
+        />
+      ) : (
+        <div className="space-y-6">
+          <ScenarioBuilder
+            opportunities={engineOpportunities}
+            onAddScenario={handleAddScenario}
+          />
+
+          <ResultCards
+            opportunity={activeOpportunity}
+            currentEvaluation={latestEvaluation}
+            optimalScenario={
+              optimalScenario
+                ? {
+                    label: optimalScenario.input.label,
+                    evaluation: optimalScenario.evaluation,
+                  }
+                : null
+            }
+          />
+
+          <SensitivityChart
+            opportunity={activeOpportunity}
+            activeEvaluation={latestEvaluation}
+          />
+
+          <CompareScenariosTable
+            scenarios={scenarios}
+            optimalId={optimalScenario?.id ?? null}
+            onRemove={handleRemoveScenario}
+            onClearAll={handleClearScenarios}
+          />
+        </div>
+      )}
 
       {/* Summary Cards */}
       {isLoading ? (
