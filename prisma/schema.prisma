@@ -313,6 +313,7 @@ model User {
   payments         Payment[]
   credits          Credit[]
   auditLogs        AuditLog[]
+  renewalAlertSettings RenewalAlertSettings?
 
   @@index([role])
   @@map("user")
@@ -575,6 +576,9 @@ model Contract {
   complianceRate         Decimal?          @db.Decimal(5, 2)
   currentMarketShare     Decimal?          @db.Decimal(5, 2)
   marketShareCommitment  Decimal?          @db.Decimal(5, 2)
+  score                  Int?
+  scoreBand              String?
+  scoreUpdatedAt         DateTime?
   createdById            String?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
@@ -589,6 +593,7 @@ model Contract {
   documents          ContractDocument[]
   periods            ContractPeriod[]
   amortizationRows   ContractAmortizationSchedule[]
+  renewalNotes       RenewalNote[]
   rebates            Rebate[]
   payments           Payment[]
   creditEntries      Credit[]
@@ -783,12 +788,62 @@ model ContractDocument {
   effectiveDate DateTime?    @db.Date
   size          Int?
   url           String?
+  indexStatus   String       @default("pending")
+  indexedAt     DateTime?
   createdAt     DateTime     @default(now())
+
+  contract Contract                @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  pages    ContractDocumentPage[]
+
+  @@index([contractId])
+  @@map("contract_document")
+}
+
+model ContractDocumentPage {
+  id         String   @id @default(cuid())
+  documentId String
+  pageNumber Int
+  text       String
+  // Optional embedding for vector search (pgvector ships later; stored as
+  // nullable JSON for now — each row carries exactly one text chunk per page).
+  embedding  Json?
+  createdAt  DateTime @default(now())
+
+  document ContractDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, pageNumber])
+  @@index([documentId])
+  @@map("contract_document_page")
+}
+
+model RenewalNote {
+  id         String   @id @default(cuid())
+  contractId String
+  note       String
+  authorId   String?
+  createdAt  DateTime @default(now())
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
   @@index([contractId])
-  @@map("contract_document")
+  @@index([createdAt])
+  @@map("renewal_note")
+}
+
+model RenewalAlertSettings {
+  id                            String   @id @default(cuid())
+  userId                        String   @unique
+  renewalReminderDaysBefore     Int[]    @default([180, 90, 30])
+  expirationAlertDays           Int      @default(60)
+  includeUnderperformingContracts Boolean @default(true)
+  includeOverperformingContracts Boolean  @default(false)
+  notifyChannels                String[] @default(["email"])
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("renewal_alert_settings")
 }
 
 model ContractPeriod {
