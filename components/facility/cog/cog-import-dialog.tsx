@@ -32,6 +32,10 @@ import {
 import { FileDropzone } from "@/components/facility/cog/file-dropzone"
 import { COGColumnMapper } from "@/components/facility/cog/cog-column-mapper"
 import { COGImportPreview } from "@/components/facility/cog/cog-import-preview"
+import {
+  ImportWizardStepper,
+  type ImportWizardStage,
+} from "@/components/facility/cog/import-wizard-stepper"
 import { useCOGImport } from "@/hooks/use-cog-import"
 import { useFileParser } from "@/hooks/use-file-parser"
 import { useImportCOGRecords } from "@/hooks/use-cog"
@@ -45,6 +49,22 @@ interface COGImportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onComplete: () => void
+}
+
+// Collapse the fine-grained dialog step machine into the 4 visual
+// stages the user sees in the stepper. Keeping this mapping in one
+// place so new intermediate steps (e.g. AI column assist) slot in
+// without breaking the header progress indicator.
+function resolveWizardStage(
+  step: string,
+  hasResult: boolean
+): ImportWizardStage {
+  if (hasResult) return "success"
+  if (step === "upload" || step === "mapping") return "upload"
+  if (step === "map" || step === "vendor_match" || step === "duplicate_check")
+    return "preview"
+  // "preview" (strategy chooser) + "import" (loading) → Confirm stage.
+  return "confirm"
 }
 
 export function COGImportDialog({
@@ -230,6 +250,12 @@ export function COGImportDialog({
           <DialogTitle>Import COG Data</DialogTitle>
         </DialogHeader>
 
+        <div className="border-b pb-4">
+          <ImportWizardStepper
+            stage={resolveWizardStage(importState.step, !!result)}
+          />
+        </div>
+
         {importState.step === "upload" && (
           <FileDropzone
             accept={[".csv", ".xlsx", ".xls", ".pdf"]}
@@ -361,6 +387,31 @@ export function COGImportDialog({
                 duplicates.
               </p>
             </div>
+
+            {!duplicateChecking && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-md border bg-card p-3">
+                  <p className="text-xs text-muted-foreground">Total rows</p>
+                  <p className="text-xl font-semibold tabular-nums">
+                    {importState.mappedRecords.length.toLocaleString()}
+                  </p>
+                </div>
+                <div className="rounded-md border bg-card p-3">
+                  <p className="text-xs text-muted-foreground">Unique</p>
+                  <p className="text-xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {(
+                      importState.mappedRecords.length - duplicates.length
+                    ).toLocaleString()}
+                  </p>
+                </div>
+                <div className="rounded-md border bg-card p-3">
+                  <p className="text-xs text-muted-foreground">Duplicates</p>
+                  <p className="text-xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                    {duplicates.length.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {duplicateChecking && (
               <div className="space-y-3 py-4 text-center">

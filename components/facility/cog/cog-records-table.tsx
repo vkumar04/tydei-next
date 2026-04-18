@@ -1,11 +1,15 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus, Download, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import { useForm } from "react-hook-form"
 import { useCOGRecords, useDeleteCOGRecord, useUpdateCOGRecord } from "@/hooks/use-cog"
 import { useVendorList } from "@/hooks/use-vendor-crud"
-import { getCOGColumns } from "@/components/facility/cog/cog-columns"
+import {
+  getCOGColumns,
+  MATCH_STATUS_META,
+} from "@/components/facility/cog/cog-columns"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
@@ -20,7 +24,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { COGRecord } from "@prisma/client"
+import { Badge } from "@/components/ui/badge"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty"
+import { FileText, AlertTriangle } from "lucide-react"
+import type { COGRecord, COGMatchStatus } from "@prisma/client"
 
 type COGRecordWithVendor = COGRecord & {
   vendor: { id: string; name: string } | null
@@ -32,9 +45,25 @@ interface COGRecordsTableProps {
   dateTo?: string
 }
 
+type MatchFilterValue = COGMatchStatus | "all" | "variance_only"
+
+const MATCH_FILTER_OPTIONS: readonly {
+  value: MatchFilterValue
+  label: string
+}[] = [
+  { value: "all", label: "All match statuses" },
+  { value: "variance_only", label: "Variance only (off + variance)" },
+  { value: "on_contract", label: MATCH_STATUS_META.on_contract.label },
+  { value: "off_contract_item", label: MATCH_STATUS_META.off_contract_item.label },
+  { value: "price_variance", label: MATCH_STATUS_META.price_variance.label },
+  { value: "out_of_scope", label: MATCH_STATUS_META.out_of_scope.label },
+  { value: "unknown_vendor", label: MATCH_STATUS_META.unknown_vendor.label },
+  { value: "pending", label: MATCH_STATUS_META.pending.label },
+] as const
+
 export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
-  const [contractFilter, setContractFilter] = useState<string>("all")
+  const [matchFilter, setMatchFilter] = useState<MatchFilterValue>("all")
   const [page, setPage] = useState(1)
   const pageSize = 50
   const [manualOpen, setManualOpen] = useState(false)
@@ -43,9 +72,10 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
     id: string
     desc: string
   } | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const filters = {
-    ...(vendorFilter && { vendorId: vendorFilter }),
+    ...(vendorFilter && vendorFilter !== "all" && { vendorId: vendorFilter }),
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
     page,
@@ -89,62 +119,156 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
     [editForm]
   )
 
-  // Filter by contract status client-side
+  // Filter by match status client-side. Server-side filtering on
+  // matchStatus lives in a future subsystem; for now the active page
+  // is filtered in-memory which is fine for the 50-row pageSize.
   const filteredRecords = useMemo(() => {
     const records = data?.records ?? []
-    if (contractFilter === "all") return records
-    if (contractFilter === "on") return records.filter((r) => r.category && r.category !== "")
-    if (contractFilter === "off") return records.filter((r) => !r.category || r.category === "")
-    return records
-  }, [data, contractFilter])
+    if (matchFilter === "all") return records
+    if (matchFilter === "variance_only") {
+      return records.filter((r) => {
+        const s = r.matchStatus as COGMatchStatus | undefined
+        return s === "off_contract_item" || s === "price_variance"
+      })
+    }
+    return records.filter((r) => r.matchStatus === matchFilter)
+  }, [data, matchFilter])
+
+  const hasAnyRecords = (data?.records?.length ?? 0) > 0
+  const hasFilters =
+    !!vendorFilter && vendorFilter !== "all"
+      ? true
+      : matchFilter !== "all" || !!dateFrom || !!dateTo
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const params = new URLSearchParams()
+      params.set("facilityId", facilityId)
+      if (vendorFilter && vendorFilter !== "all")
+        params.set("vendorId", vendorFilter)
+      if (dateFrom) params.set("dateFrom", dateFrom)
+      if (dateTo) params.set("dateTo", dateTo)
+      if (matchFilter !== "all") params.set("matchStatus", matchFilter)
+
+      const res = await fetch(`/api/cog/export?${params.toString()}`, {
+        method: "GET",
+      })
+      if (!res.ok) {
+        throw new Error(`Export failed: ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `cog-data-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success("Export downloaded")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed")
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <DataTable
-        columns={columns}
-        data={filteredRecords}
-        searchKey="inventoryDescription"
-        searchPlaceholder="Search by description, vendor item, or inventory number..."
-        isLoading={isLoading}
-        pagination={false}
-        filterComponent={
-          <>
-            <Select value={vendorFilter} onValueChange={setVendorFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="All vendors" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All vendors</SelectItem>
-                {vendorData?.vendors.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    {v.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={contractFilter} onValueChange={setContractFilter}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Items</SelectItem>
-                <SelectItem value="on">On Contract</SelectItem>
-                <SelectItem value="off">Off Contract</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setManualOpen(true)}
-            >
-              <Plus className="mr-1 h-4 w-4" /> Add Record
-            </Button>
-            <Button variant="outline" size="icon">
-              <Download className="h-4 w-4" />
-            </Button>
-          </>
-        }
-      />
+      {!isLoading && !hasAnyRecords && !hasFilters ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileText />
+            </EmptyMedia>
+            <EmptyTitle>No COG records yet</EmptyTitle>
+            <EmptyDescription>
+              Upload your first COG file to start matching contract pricing
+              and surfacing savings opportunities.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={filteredRecords}
+          searchKey="inventoryDescription"
+          searchPlaceholder="Search by description, vendor item, or inventory number..."
+          isLoading={isLoading}
+          pagination={false}
+          filterComponent={
+            <>
+              <Select
+                value={vendorFilter || "all"}
+                onValueChange={(v) => setVendorFilter(v === "all" ? "" : v)}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="All vendors" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All vendors</SelectItem>
+                  {vendorData?.vendors.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={matchFilter}
+                onValueChange={(v) => setMatchFilter(v as MatchFilterValue)}
+              >
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MATCH_FILTER_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {matchFilter !== "all" && (
+                <Badge variant="outline" className="shrink-0">
+                  {filteredRecords.length} filtered
+                </Badge>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setManualOpen(true)}
+              >
+                <Plus className="mr-1 h-4 w-4" /> Add Record
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-1 h-4 w-4" />
+                )}
+                Export
+              </Button>
+            </>
+          }
+        />
+      )}
+
+      {!isLoading && hasAnyRecords && filteredRecords.length === 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+          <AlertTriangle className="h-5 w-5 text-amber-600" />
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            No records match the current filters on this page. Adjust your
+            filters or navigate pages to see more data.
+          </p>
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between">

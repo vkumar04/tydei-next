@@ -30,6 +30,7 @@ import { COGUploadHistory } from "@/components/facility/cog/cog-upload-history"
 import { COGImportDialog } from "@/components/facility/cog/cog-import-dialog"
 import { PricingImportDialog } from "@/components/facility/cog/pricing-import-dialog"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
+import { CogEnrichmentStatsPanel } from "@/components/facility/cog/cog-enrichment-stats-panel"
 import { MassUpload } from "@/components/import/mass-upload"
 import { toast } from "sonner"
 import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
@@ -289,6 +290,10 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Enrichment stats panel — rows total / matched / unmatched /
+          on-contract%. See COG data rewrite spec §6. */}
+      <CogEnrichmentStatsPanel facilityId={facilityId} />
 
       {/* Tabs */}
       <Tabs defaultValue="cog" className="space-y-4">
