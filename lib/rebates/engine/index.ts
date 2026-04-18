@@ -18,6 +18,7 @@ import { calculateVolumeRebate } from "./volume-rebate"
 import { calculateTierPriceReduction } from "./tier-price-reduction"
 import { calculateMarketSharePriceReduction } from "./market-share-price-reduction"
 import { calculateMarketShareRebate } from "./market-share-rebate"
+import { calculateCarveOut } from "./carve-out"
 
 export type { RebateConfig, RebateResult, PeriodData, EngineOptions } from "./types"
 
@@ -37,10 +38,11 @@ export function calculateRebate(
       return calculateTierPriceReduction(config, periodData, options)
     case "MARKET_SHARE_PRICE_REDUCTION":
       return calculateMarketSharePriceReduction(config, periodData, options)
+    case "CARVE_OUT":
+      return calculateCarveOut(config, periodData, options)
     case "MARKET_SHARE_REBATE":
       return calculateMarketShareRebate(config, periodData, options)
     case "CAPITATED":
-    case "CARVE_OUT":
     case "TIE_IN_CAPITAL": {
       const result = zeroResult(config.type, periodLabel)
       result.errors.push(`Engine for ${config.type} not yet implemented`)

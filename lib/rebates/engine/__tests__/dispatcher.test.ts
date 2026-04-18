@@ -13,7 +13,11 @@ describe("calculateRebate dispatcher — stub + live phases", () => {
   //   - VOLUME_REBATE (subsystem 3)
   //   - TIER_PRICE_REDUCTION (subsystem 4)
   //   - MARKET_SHARE_PRICE_REDUCTION (subsystem 4)
+<<<<<<< HEAD
   //   - MARKET_SHARE_REBATE (subsystem 5)
+=======
+  //   - CARVE_OUT (subsystem 7)
+>>>>>>> 2ef8bb7 (feat(rebates): CARVE_OUT engine (subsystem 7))
   //
   // The parametrized stub phase below covers types still awaiting their
   // engine implementation.
@@ -25,10 +29,6 @@ describe("calculateRebate dispatcher — stub + live phases", () => {
         groupedReferenceNumbers: [],
         periodCap: 0,
       },
-    },
-    {
-      label: "CARVE_OUT",
-      config: { type: "CARVE_OUT", lines: [] },
     },
     {
       label: "TIE_IN_CAPITAL",
@@ -135,6 +135,20 @@ describe("calculateRebate dispatcher — stub + live phases", () => {
     expect(result.errors).toHaveLength(1)
     expect(result.errors[0]).toContain("totalCategorySpend")
     expect(result.rebateEarned).toBe(0)
+    expect(result.periodLabel).toBe("2026-Q1")
+  })
+
+  it("CARVE_OUT — dispatches to live engine (empty lines, no errors)", () => {
+    const config: RebateConfig = {
+      type: "CARVE_OUT",
+      lines: [],
+    }
+    const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
+    expect(result.type).toBe("CARVE_OUT")
+    expect(result.errors).toEqual([])
+    expect(result.rebateEarned).toBe(0)
+    expect(result.eligibleSpend).toBe(0)
+    expect(result.carveOutLines).toEqual([])
     expect(result.periodLabel).toBe("2026-Q1")
   })
 
