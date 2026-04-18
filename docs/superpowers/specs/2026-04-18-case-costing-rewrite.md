@@ -251,7 +251,60 @@ If the existing schema is missing fields the canonical doc references, subsystem
 
 ---
 
-### Subsystem 6 — UI polish (P2)
+### Subsystem 6 — Contract Contribution engine + UI (P1)
+
+**Priority:** P1 — new feature per Charles's unified-engine doc.
+
+**Files:**
+- Create: `lib/case-costing/contract-contribution.ts`:
+  - `calculateContractContribution(input)` — returns per-case + aggregate + peer-comparison shape per Charles's `ContractContributionResult`
+  - `resolveCurrentAccrualRate(config, spendAmount)` helper — returns current rebate rate as decimal for attribution math across all 8 rebate types
+- Create: `lib/case-costing/__tests__/contract-contribution.test.ts` — covers every rebate-config type's accrual-rate resolution + per-case attribution + peer comparison
+- Create: `components/facility/case-costing/contribution/surgeon-contribution-card.tsx` — surgeon-level roll-up (Application Mode A: Surgeon Scorecard)
+- Create: `components/facility/case-costing/contribution/case-contribution-block.tsx` — per-case breakdown (Application Mode B: Case-Level Dashboard)
+- Create: `components/facility/case-costing/contribution/user-contribution-report.tsx` — period roll-up across all cases (Application Mode C: Aggregate User Report)
+- Modify: subsystem 2's surgeon-scorecard-list to embed the `SurgeonContributionCard` per surgeon
+- Modify: subsystem 1's case-list row-expand drawer to show `CaseContributionBlock`
+- Modify: subsystem 4's reports page to expose a new "Contract Contribution" tab rendering `UserContributionReport` for the selected surgeon(s)
+
+**Engine contract (from Charles's spec, adapted to tydei types):**
+
+Inputs:
+- `userId`, `userName`, `userRole?` — the surgeon or user being attributed
+- `cases: CaseContributionData[]` — cases the user performed in the period
+- `activeContracts: ContractContributionRef[]` — contracts with their rebateConfig + active price-reduction lookups
+- `periodStart`, `periodEnd`
+- `peerOnContractRateByProcedure?: Record<cptCode, percent>` — optional peer benchmark
+
+Per-case outputs:
+- `onContractSpend`, `offContractSpend`, `onContractPercent`
+- `rebateGenerated` = on-contract spend × current accrual rate (via `resolveCurrentAccrualRate`)
+- `priceReductionCaptured` = sum of `(paidUnitPrice − effectiveContractPrice) × quantity` across on-contract purchases
+- `totalContractBenefit` = `rebateGenerated + priceReductionCaptured`
+- `effectiveCost` = direct cost − total contract benefit
+- `standardMargin`, `standardMarginPercent`, `trueMargin`, `trueMarginPercent`, `marginImprovement`
+- `peerOnContractRate`, `vsPerBenchmark` (optional)
+- `vendorContributions[]` — per-vendor breakdown within the case
+
+Aggregate outputs (across all cases in period):
+- Totals for spend / on-contract / rebate generated / price reduction captured / contract benefit
+- Aggregate margins (standard + true + improvement)
+- `peerComparison` — user vs peer-avg on-contract %; `estimatedAdditionalRebateIfAtPeerRate`
+
+**[A9] zero-reimbursement guard:** margins computed only when `totalReimbursement > 0`; otherwise percents default to 0 and the engine returns with a warning in the result.
+
+**Acceptance:**
+- Surgeon with 10 cases, 82% on-contract rate, $500K total spend → correct rebate generated + price reduction captured aggregate
+- Peer comparison shows variance in percentage points + dollar estimate of additional-rebate-at-peer-rate
+- Per-case drill-down exposes per-vendor breakdown (rebate + price reduction per vendor)
+- Resolves accrual rates correctly for all 8 rebate config types (tests verify VOLUME_REBATE returns 0 — captured via priceReductionCaptured not rebate — and other correct-by-type mappings)
+- Engine is pure; no Prisma imports; caller precomputes `activeContracts` from ContractTerm + Tier rows + active price-reductions
+
+**Plan detail:** On-demand — `06-contract-contribution-plan.md`.
+
+---
+
+### Subsystem 7 — UI polish (P2)
 
 **Priority:** P2.
 
@@ -260,19 +313,38 @@ If the existing schema is missing fields the canonical doc references, subsystem
 - a11y
 - Hydration safety
 - Responsive
+- Contribution-card polish (peer-comparison badges; trend arrows on margin improvement)
 
 **Acceptance:**
 - Lighthouse a11y pass on all 3 routes.
 - Manual smoke at all breakpoints.
 
-**Plan detail:** On-demand — `06-ui-polish-plan.md`.
+**Plan detail:** On-demand — `07-ui-polish-plan.md`.
+
+---
+
+## True-margin engine update (affects subsystem 0)
+
+Charles's unified engine expands `allocateRebatesToProcedures` with two new fields beyond what contracts-rewrite subsystem 6 shipped:
+
+- `priceReductionAllocation` — procedure's share of each vendor's active price-reduction benefit
+- `totalContractBenefit` — `rebateAllocation + priceReductionAllocation`
+- `vendorRebateAllocations` (renamed from `vendorAllocations` for clarity) + `vendorPriceReductionAllocations` — per-vendor breakdowns
+
+This is a **small update to the shipped `lib/contracts/true-margin.ts`** from contracts-rewrite subsystem 6:
+
+- Extend `VendorRebateSummary` with `priceReductionAmount?: number`
+- Extend `TrueMarginResult` with `priceReductionAllocation`, `totalContractBenefit`, `vendorPriceReductionAllocations`
+- [A9] guard against zero reimbursement — return 0% margins instead of NaN
+
+Subsystem 0's audit phase identifies the exact call sites to update. No breaking change — existing callers that don't pass `priceReductionAmount` get `0` by default.
 
 ---
 
 ## 5. Execution model
 
 ```
-Subsystem 0 (derivation engine + data audit)
+Subsystem 0 (derivation engine + data audit + true-margin v2)
   ↓
 Subsystem 1 (cases list)   Subsystem 2 (surgeons tab)
   ↓                          ↓
@@ -282,7 +354,9 @@ Subsystem 1 (cases list)   Subsystem 2 (surgeons tab)
                 ↓
          Subsystem 5 (mega-file splits — parallelizable)
                 ↓
-         Subsystem 6 (UI polish)
+         Subsystem 6 (Contract Contribution engine + UI)
+                ↓
+         Subsystem 7 (UI polish)
 ```
 
 **Global verification:**
@@ -298,11 +372,12 @@ bun run test lib/case-costing/__tests__/
 
 ## 6. Acceptance
 
-- All 7 subsystems merged.
+- All 8 subsystems merged.
 - Surgeons derived correctly; scores match canonical formulas.
-- True-margin column reflects contracts-rewrite subsystem 6 output.
+- True-margin column reflects contracts-rewrite subsystem 6 output + v2 updates (priceReductionAllocation + totalContractBenefit).
 - Compare page loads 2 surgeons side-by-side with charts + what-if.
-- Reports page supports 9 date-range presets + 4 tabs + CSV export.
+- Reports page supports 9 date-range presets + 4 tabs + CSV export + new Contract Contribution tab.
+- Contract Contribution engine works end-to-end across all 8 rebate config types; per-case + aggregate + peer comparison outputs populated.
 - `bunx tsc --noEmit` → 0; `bun run test` → passing.
 
 ---
