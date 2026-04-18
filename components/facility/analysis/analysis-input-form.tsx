@@ -36,6 +36,7 @@ export interface ContractPickOption {
   id: string
   name: string
   vendorName: string
+  contractType: string
 }
 
 export interface AnalysisInputFormProps {
@@ -43,6 +44,8 @@ export interface AnalysisInputFormProps {
   contractsLoading: boolean
   value: AnalysisFormState
   onChange: (next: AnalysisFormState) => void
+  /** When false, the capital-only "Pay upfront" switch is hidden. */
+  showPayUpfront?: boolean
 }
 
 export function AnalysisInputForm({
@@ -50,6 +53,7 @@ export function AnalysisInputForm({
   contractsLoading,
   value,
   onChange,
+  showPayUpfront = false,
 }: AnalysisInputFormProps) {
   const update = <K extends keyof AnalysisFormState>(
     key: K,
@@ -133,22 +137,24 @@ export function AnalysisInputForm({
           onChange={(n) => update("marketDeclineRate", n)}
         />
 
-        <div className="flex items-center justify-between rounded-md border p-3 md:col-span-2">
-          <div>
-            <Label htmlFor="payUpfront" className="text-sm font-medium">
-              Pay upfront
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              When on, the full capital cost is booked at t=0. When off, it
-              is amortized linearly across the contract term.
-            </p>
+        {showPayUpfront && (
+          <div className="flex items-center justify-between rounded-md border p-3 md:col-span-2">
+            <div>
+              <Label htmlFor="payUpfront" className="text-sm font-medium">
+                Pay upfront
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                When on, the full capital cost is booked at t=0. When off, it
+                is amortized linearly across the contract term.
+              </p>
+            </div>
+            <Switch
+              id="payUpfront"
+              checked={value.payUpfront}
+              onCheckedChange={(c) => update("payUpfront", c)}
+            />
           </div>
-          <Switch
-            id="payUpfront"
-            checked={value.payUpfront}
-            onCheckedChange={(c) => update("payUpfront", c)}
-          />
-        </div>
+        )}
       </CardContent>
     </Card>
   )

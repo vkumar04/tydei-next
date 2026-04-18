@@ -65,9 +65,16 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
         id: c.id,
         name: c.name,
         vendorName: c.vendor?.name ?? "Unknown vendor",
+        contractType: c.contractType,
       })),
     [contractsQuery.data],
   )
+
+  const selectedContract = useMemo(
+    () => contractOptions.find((c) => c.id === form.contractId) ?? null,
+    [contractOptions, form.contractId],
+  )
+  const isCapital = selectedContract?.contractType === "capital"
 
   // Seed the form's contractId with the first active contract once loaded.
   useEffect(() => {
@@ -114,6 +121,7 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
           contractsLoading={contractsQuery.isLoading}
           value={form}
           onChange={setForm}
+          showPayUpfront={isCapital}
         />
       </div>
 
