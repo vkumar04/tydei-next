@@ -139,12 +139,45 @@ function mapPendingStatus(
   }
 }
 
-export async function getMergedContracts() {
+export async function getMergedContracts(options?: {
+  /**
+   * Optional 3-way facility filter (canonical doc §7). When set:
+   * - System contracts match `facilityId == filter` OR any
+   *   ContractFacility row has `facilityId == filter`.
+   * - Vendor-submitted pending contracts match on `facilityId == filter`
+   *   only (PendingContract has no multi-facility join yet).
+   */
+  facilityFilter?: string | null
+}) {
   const { facility } = await requireFacility()
+  const facilityFilter = options?.facilityFilter ?? null
+
+  // Build the system-contracts where clause — base ownership + optional
+  // 3-way filter narrowing.
+  const systemWhere: Prisma.ContractWhereInput = {
+    AND: [
+      contractsOwnedByFacility(facility.id),
+      ...(facilityFilter
+        ? [
+            {
+              OR: [
+                { facilityId: facilityFilter },
+                { contractFacilities: { some: { facilityId: facilityFilter } } },
+              ],
+            },
+          ]
+        : []),
+    ],
+  }
+
+  const pendingWhere: Prisma.PendingContractWhereInput = {
+    facilityId: facilityFilter ?? facility.id,
+    status: { in: ["submitted", "revision_requested", "rejected", "draft"] },
+  }
 
   const [systemContracts, pendingContracts] = await Promise.all([
     prisma.contract.findMany({
-      where: contractsOwnedByFacility(facility.id),
+      where: systemWhere,
       include: {
         vendor: { select: { id: true, name: true } },
         contractFacilities: { select: { facilityId: true } },
@@ -152,12 +185,7 @@ export async function getMergedContracts() {
       orderBy: { updatedAt: "desc" },
     }),
     prisma.pendingContract.findMany({
-      where: {
-        facilityId: facility.id,
-        status: {
-          in: ["submitted", "revision_requested", "rejected", "draft"],
-        },
-      },
+      where: pendingWhere,
       include: { vendor: { select: { id: true, name: true } } },
       orderBy: { submittedAt: "desc" },
     }),
@@ -289,12 +317,7 @@ export async function getContract(id: string) {
 export async function getContractStats() {
   const { facility } = await requireFacility()
 
-  const where: Prisma.ContractWhereInput = {
-    OR: [
-      { facilityId: facility.id },
-      { contractFacilities: { some: { facilityId: facility.id } } },
-    ],
-  }
+  const where = contractsOwnedByFacility(facility.id)
 
   const [totalContracts, aggregates] = await Promise.all([
     prisma.contract.count({ where }),
@@ -314,6 +337,136 @@ export async function getContractStats() {
     totalValue: Number(aggregates._sum.totalValue ?? 0),
     totalRebates: Number(rebateResult._sum?.rebateEarned ?? 0),
   })
+}
+
+// ─── Per-row Metrics Batch (contracts-list-closure §4.1) ─────────
+//
+// Returns { [contractId]: { spend, rebate, totalValue } } for a batch
+// of contracts, letting the list page render per-row metrics without
+// N round-trips. Resolution chain per contract:
+//   1. Aggregate COGRecord.extendedPrice WHERE contractId = X (fastest
+//      once COG enrichment has populated the contractId FK)
+//   2. Fall back to ContractPeriod.totalSpend sum
+//   3. Final fallback: contract-level stored `totalValue` (passthrough)
+//
+// Rebate is always computed live from `firstTerm.tiers` using the
+// shared rebate calculator (ensures alignment with the detail page).
+
+export async function getContractMetricsBatch(contractIds: string[]): Promise<
+  Record<
+    string,
+    {
+      spend: number
+      rebate: number
+      totalValue: number
+    }
+  >
+> {
+  const { facility } = await requireFacility()
+  if (contractIds.length === 0) return {}
+
+  // Load contract shells with terms (for rebate computation) + totalValue.
+  const contracts = await prisma.contract.findMany({
+    where: {
+      id: { in: contractIds },
+      ...contractsOwnedByFacility(facility.id),
+    },
+    select: {
+      id: true,
+      vendorId: true,
+      totalValue: true,
+      terms: {
+        include: { tiers: { orderBy: { tierNumber: "asc" } } },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+      },
+    },
+  })
+
+  // Pass 1 — aggregate COG spend by contractId (fast: one query).
+  const cogByContract = await prisma.cOGRecord.groupBy({
+    by: ["contractId"],
+    where: {
+      facilityId: facility.id,
+      contractId: { in: contractIds },
+    },
+    _sum: { extendedPrice: true },
+  })
+  const spendFromCog = new Map<string, number>()
+  for (const row of cogByContract) {
+    if (row.contractId) {
+      spendFromCog.set(row.contractId, Number(row._sum.extendedPrice ?? 0))
+    }
+  }
+
+  // Pass 2 — ContractPeriod fallback for rows where COG pass yielded zero.
+  const periodByContract = await prisma.contractPeriod.groupBy({
+    by: ["contractId"],
+    where: { contractId: { in: contractIds } },
+    _sum: { totalSpend: true },
+  })
+  const spendFromPeriods = new Map<string, number>()
+  for (const row of periodByContract) {
+    spendFromPeriods.set(row.contractId, Number(row._sum.totalSpend ?? 0))
+  }
+
+  // Pass 3 — cross-vendor COG spend as final fallback (for vendors
+  // whose COG rows haven't been enriched with contractId yet).
+  const vendorIdToContractIds = new Map<string, string[]>()
+  for (const c of contracts) {
+    const existing = vendorIdToContractIds.get(c.vendorId) ?? []
+    existing.push(c.id)
+    vendorIdToContractIds.set(c.vendorId, existing)
+  }
+  const vendorIds = Array.from(vendorIdToContractIds.keys())
+  const vendorSpendAgg =
+    vendorIds.length > 0
+      ? await prisma.cOGRecord.groupBy({
+          by: ["vendorId"],
+          where: {
+            facilityId: facility.id,
+            vendorId: { in: vendorIds },
+          },
+          _sum: { extendedPrice: true },
+        })
+      : []
+  const spendFromVendor = new Map<string, number>()
+  for (const row of vendorSpendAgg) {
+    if (row.vendorId) {
+      spendFromVendor.set(row.vendorId, Number(row._sum.extendedPrice ?? 0))
+    }
+  }
+
+  // Combine into per-contract result.
+  const result: Record<
+    string,
+    { spend: number; rebate: number; totalValue: number }
+  > = {}
+  for (const c of contracts) {
+    const cogSpend = spendFromCog.get(c.id) ?? 0
+    const periodSpend = spendFromPeriods.get(c.id) ?? 0
+    const vendorSpend = spendFromVendor.get(c.vendorId) ?? 0
+
+    // Precedence: COG (enrichment) → ContractPeriod → Vendor-level COG.
+    const spend = cogSpend > 0 ? cogSpend : periodSpend > 0 ? periodSpend : vendorSpend
+
+    let rebate = 0
+    const firstTerm = c.terms[0]
+    if (firstTerm && firstTerm.tiers.length > 0 && spend > 0) {
+      const result = computeRebateFromPrismaTiers(spend, firstTerm.tiers, {
+        method: firstTerm.rebateMethod ?? "cumulative",
+      })
+      rebate = result.rebateEarned
+    }
+
+    result[c.id] = {
+      spend,
+      rebate,
+      totalValue: Number(c.totalValue),
+    }
+  }
+
+  return result
 }
 
 // ─── Create Contract ─────────────────────────────────────────────
