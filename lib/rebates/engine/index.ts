@@ -17,18 +17,20 @@ import type {
   RebateResult,
 } from "./types"
 import { zeroResult } from "./types"
+import { calculateSpendRebate } from "./spend-rebate"
 
 export type { RebateConfig, RebateResult, PeriodData, EngineOptions } from "./types"
 
 export function calculateRebate(
   config: RebateConfig,
-  _periodData: PeriodData,
+  periodData: PeriodData,
   options?: EngineOptions,
 ): RebateResult {
   const periodLabel = options?.periodLabel ?? null
 
   switch (config.type) {
     case "SPEND_REBATE":
+      return calculateSpendRebate(config, periodData, options)
     case "VOLUME_REBATE":
     case "TIER_PRICE_REDUCTION":
     case "MARKET_SHARE_REBATE":

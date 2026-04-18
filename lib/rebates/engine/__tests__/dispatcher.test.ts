@@ -10,18 +10,9 @@ const emptyPeriod: PeriodData = {
 describe("calculateRebate dispatcher — stub phase", () => {
   // Each engine file will replace the stub error as it ships; until then,
   // the dispatcher returns a zero-rebate result with a descriptive error.
+  // SPEND_REBATE is live as of subsystem 2 — its case is asserted separately
+  // below (empty errors array, type echoed through).
   const types: Array<{ config: RebateConfig; label: string }> = [
-    {
-      label: "SPEND_REBATE",
-      config: {
-        type: "SPEND_REBATE",
-        method: "CUMULATIVE",
-        boundaryRule: "EXCLUSIVE",
-        tiers: [],
-        spendBasis: "ALL_SPEND",
-        baselineType: "NONE",
-      },
-    },
     {
       label: "VOLUME_REBATE",
       config: {
@@ -105,6 +96,21 @@ describe("calculateRebate dispatcher — stub phase", () => {
       expect(result.periodLabel).toBe("2026-Q1")
     })
   }
+
+  it("SPEND_REBATE — dispatches to live engine (no stub error)", () => {
+    const config: RebateConfig = {
+      type: "SPEND_REBATE",
+      method: "CUMULATIVE",
+      boundaryRule: "EXCLUSIVE",
+      tiers: [],
+      spendBasis: "ALL_SPEND",
+      baselineType: "NONE",
+    }
+    const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
+    expect(result.type).toBe("SPEND_REBATE")
+    expect(result.errors).toEqual([])
+    expect(result.periodLabel).toBe("2026-Q1")
+  })
 
   it("unknown config type returns zero-rebate with descriptive error", () => {
     const bogus = { type: "BOGUS_TYPE" } as unknown as RebateConfig
