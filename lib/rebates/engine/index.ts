@@ -2,9 +2,7 @@
  * Unified rebate engine — dispatcher.
  *
  * `calculateRebate(config, periodData, options)` is the single entry
- * point. Dispatches to the 8 type-specific engines. Subsystems 2-8 ship
- * engines incrementally; types not yet implemented return a zero-rebate
- * RebateResult with `errors: ["engine not yet implemented"]`.
+ * point. All 8 type-specific engines are LIVE as of subsystem 8.
  */
 import type {
   EngineOptions,
@@ -20,6 +18,7 @@ import { calculateMarketSharePriceReduction } from "./market-share-price-reducti
 import { calculateMarketShareRebate } from "./market-share-rebate"
 import { calculateCarveOut } from "./carve-out"
 import { calculateCapitated } from "./capitated"
+import { calculateTieInCapital } from "./tie-in-capital"
 
 export type { RebateConfig, RebateResult, PeriodData, EngineOptions } from "./types"
 
@@ -45,11 +44,8 @@ export function calculateRebate(
       return calculateMarketShareRebate(config, periodData, options)
     case "CAPITATED":
       return calculateCapitated(config, periodData, options)
-    case "TIE_IN_CAPITAL": {
-      const result = zeroResult(config.type, periodLabel)
-      result.errors.push(`Engine for ${config.type} not yet implemented`)
-      return result
-    }
+    case "TIE_IN_CAPITAL":
+      return calculateTieInCapital(config, periodData, options)
     default: {
       // Exhaustiveness check — should be unreachable with typed input.
       const fallback = zeroResult("SPEND_REBATE", periodLabel)
