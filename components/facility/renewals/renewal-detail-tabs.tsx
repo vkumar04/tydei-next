@@ -58,8 +58,14 @@ export interface RenewalDetail {
   rebatesEarned: number
   /** 0..100+; null when commitment can't be computed. */
   commitmentMet: number | null
+  /**
+   * Plan 2026-04-18 Task 4: raw `currentMarketShare / marketShareCommitment`
+   * percentage (unrounded) — `null` when commitment data is missing.
+   */
+  commitmentProgressPercent: number | null
   currentTier: number
   maxTier: number
+  tier: { current: number; total: number }
   currentMarketShare: number | null
   marketShareCommitment: number | null
   performanceHistory: PerformanceHistoryRow[]
@@ -125,9 +131,9 @@ export function RenewalDetailTabs({
 
   const StatusIcon = statusIcon(status)
   const commitmentText =
-    detail.commitmentMet === null
+    detail.commitmentProgressPercent === null
       ? "—"
-      : `${Math.round(detail.commitmentMet)}%`
+      : `${Math.round(detail.commitmentProgressPercent)}%`
 
   return (
     <Tabs defaultValue="overview" className="w-full">
@@ -179,7 +185,7 @@ export function RenewalDetailTabs({
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Tier</p>
               <p className="mt-1 text-xl font-semibold tabular-nums">
-                {detail.currentTier} / {detail.maxTier}
+                {detail.tier.current}/{detail.tier.total}
               </p>
             </CardContent>
           </Card>

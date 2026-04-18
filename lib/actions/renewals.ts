@@ -21,6 +21,15 @@ export interface ExpiringContract {
   totalRebate: number
   tierAchieved: number | null
   autoRenewal: boolean
+  // Plan-aligned optional aliases — populated when upstream data has the
+  // detailed renewal metrics surfaced in the Overview modal. Real loader
+  // may still return the legacy fields above; mapDetail falls back.
+  currentSpend?: number
+  rebatesEarned?: number
+  marketShareCommitment?: number | null
+  currentMarketShare?: number | null
+  tier?: { current: number; total: number }
+  daysUntilExpiration?: number
 }
 
 export interface RenewalSummary {
