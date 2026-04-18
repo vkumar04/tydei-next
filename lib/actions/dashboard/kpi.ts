@@ -214,12 +214,14 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
       },
       _sum: { extendedPrice: true },
     }),
+    // Earned/collected count only periods that have actually closed —
+    // pre-recorded rows for upcoming periods are projections, not earned.
     prisma.contractPeriod.aggregate({
-      where: { facilityId },
+      where: { facilityId, periodEnd: { lte: referenceDate } },
       _sum: { rebateEarned: true },
     }),
     prisma.contractPeriod.aggregate({
-      where: { facilityId },
+      where: { facilityId, periodEnd: { lte: referenceDate } },
       _sum: { rebateCollected: true },
     }),
     prisma.alert.findMany({

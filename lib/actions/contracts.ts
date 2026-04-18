@@ -264,22 +264,35 @@ export async function getContract(id: string) {
         },
       },
       rebates: {
-        select: { id: true, rebateEarned: true, rebateCollected: true },
+        select: {
+          id: true,
+          rebateEarned: true,
+          rebateCollected: true,
+          payPeriodEnd: true,
+          collectionDate: true,
+        },
       },
       createdBy: { select: { id: true, name: true } },
     },
   })
 
-  // Aggregates come from explicit Rebate rows only — never compute
-  // rebates from tier definitions. Rebates must be manually entered
-  // (or imported) before they show up on the contract.
+  // Aggregates come from explicit Rebate rows only (never tier-engine math).
+  // Earned counts only periods that have actually closed (payPeriodEnd ≤ today)
+  // — pre-recorded rows for upcoming periods are projections, not earned.
+  // Collected counts only rows with a collectionDate set — a row with
+  // rebateCollected=0 and no collectionDate is "pending collection".
+  const today = new Date()
   const rebateEarned = contract.rebates.reduce(
-    (sum, r) => sum + Number(r.rebateEarned ?? 0),
-    0
+    (sum, r) =>
+      r.payPeriodEnd && r.payPeriodEnd <= today
+        ? sum + Number(r.rebateEarned ?? 0)
+        : sum,
+    0,
   )
   const rebateCollected = contract.rebates.reduce(
-    (sum, r) => sum + Number(r.rebateCollected ?? 0),
-    0
+    (sum, r) =>
+      r.collectionDate ? sum + Number(r.rebateCollected ?? 0) : sum,
+    0,
   )
 
   // Live spend is still useful for tier-progress / projection surfaces.
@@ -310,8 +323,13 @@ export async function getContractStats() {
     }),
   ])
 
+  // Earned counts only periods that have actually closed — pre-recorded
+  // rows for upcoming periods are projections, not earned.
   const rebateResult = await prisma.rebate.aggregate({
-    where: { facilityId: facility.id },
+    where: {
+      facilityId: facility.id,
+      payPeriodEnd: { lte: new Date() },
+    },
     _sum: { rebateEarned: true },
   })
 
@@ -421,19 +439,29 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
   }
 
   // Pass 4 — rebate is *not* computed from tiers. Show what the
-  // facility has actually recorded (manually entered or imported)
-  // via the Rebate model. ContractPeriod.rebateEarned is the
-  // fallback for contracts where periods rolled up but no per-payment
-  // Rebate rows exist yet.
+  // facility has actually recorded (manually entered or imported).
+  // Earned counts only Rebate rows whose payPeriodEnd has passed
+  // (pre-recorded rows for upcoming periods are projections, not
+  // earned). ContractPeriod.rebateEarned is the fallback for
+  // contracts where periods rolled up but no per-payment Rebate
+  // rows exist yet — and we filter those by periodEnd ≤ today
+  // for the same reason.
+  const today = new Date()
   const [rebateAgg, periodRebateAgg] = await Promise.all([
     prisma.rebate.groupBy({
       by: ["contractId"],
-      where: { contractId: { in: contractIds } },
+      where: {
+        contractId: { in: contractIds },
+        payPeriodEnd: { lte: today },
+      },
       _sum: { rebateEarned: true },
     }),
     prisma.contractPeriod.groupBy({
       by: ["contractId"],
-      where: { contractId: { in: contractIds } },
+      where: {
+        contractId: { in: contractIds },
+        periodEnd: { lte: today },
+      },
       _sum: { rebateEarned: true },
     }),
   ])
