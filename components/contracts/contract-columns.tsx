@@ -3,7 +3,7 @@
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Contract, Vendor, ProductCategory, Facility } from "@prisma/client"
-import { MoreHorizontal, Eye, Pencil, Trash2 } from "lucide-react"
+import { ArrowUpDown, MoreHorizontal, Eye, Pencil, Trash2 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
@@ -44,13 +44,48 @@ interface ColumnActions {
   onDelete: (contract: ContractWithVendor) => void
 }
 
+function SortableHeader({
+  label,
+  column,
+  align = "left",
+}: {
+  label: string
+  column: {
+    getIsSorted: () => false | "asc" | "desc"
+    toggleSorting: (desc?: boolean) => void
+  }
+  align?: "left" | "right"
+}) {
+  const sorted = column.getIsSorted()
+  return (
+    <button
+      type="button"
+      onClick={() => column.toggleSorting(sorted === "asc")}
+      className={`inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground ${
+        align === "right" ? "w-full justify-end" : ""
+      }`}
+      aria-label={`Sort by ${label}`}
+    >
+      {label}
+      <ArrowUpDown
+        className={`h-3 w-3 ${
+          sorted ? "text-foreground" : "text-muted-foreground/50"
+        }`}
+      />
+    </button>
+  )
+}
+
 export function getContractColumns(
   actions: ColumnActions
 ): ColumnDef<ContractWithVendor>[] {
   return [
     {
       accessorKey: "name",
-      header: "Contract Name",
+      header: ({ column }) => (
+        <SortableHeader label="Contract Name" column={column} />
+      ),
+      enableSorting: true,
       cell: ({ row }) => (
         <Link
           href={`/dashboard/contracts/${row.original.id}`}
@@ -66,14 +101,20 @@ export function getContractColumns(
     },
     {
       accessorKey: "facility.name",
-      header: "Facility",
+      header: ({ column }) => (
+        <SortableHeader label="Facility" column={column} />
+      ),
       accessorFn: (row) => row.facility?.name ?? "All Facilities",
       cell: ({ row }) => row.original.facility?.name ?? "All Facilities",
+      enableSorting: true,
     },
     {
       accessorKey: "vendor.name",
-      header: "Vendor",
+      header: ({ column }) => (
+        <SortableHeader label="Vendor" column={column} />
+      ),
       accessorFn: (row) => row.vendor.name,
+      enableSorting: true,
     },
     {
       accessorKey: "contractType",
@@ -95,7 +136,10 @@ export function getContractColumns(
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: ({ column }) => (
+        <SortableHeader label="Status" column={column} />
+      ),
+      enableSorting: true,
       cell: ({ row }) => (
         <StatusBadge
           status={row.original.status}
@@ -105,7 +149,16 @@ export function getContractColumns(
     },
     {
       id: "score",
-      header: "Score",
+      accessorFn: (row) =>
+        row.score ??
+        ("aiScore" in row
+          ? ((row as Record<string, unknown>).aiScore as number | null)
+          : null) ??
+        -1,
+      header: ({ column }) => (
+        <SortableHeader label="Score" column={column} />
+      ),
+      enableSorting: true,
       cell: ({ row }) => (
         <ScoreBadge
           // Prefer the new Contract.score column; fall back to the
@@ -125,17 +178,26 @@ export function getContractColumns(
     },
     {
       accessorKey: "effectiveDate",
-      header: "Effective",
+      header: ({ column }) => (
+        <SortableHeader label="Effective" column={column} />
+      ),
+      enableSorting: true,
       cell: ({ row }) => formatDate(row.original.effectiveDate),
     },
     {
       accessorKey: "expirationDate",
-      header: "Expires",
+      header: ({ column }) => (
+        <SortableHeader label="Expires" column={column} />
+      ),
+      enableSorting: true,
       cell: ({ row }) => formatDate(row.original.expirationDate),
     },
     {
       accessorKey: "totalValue",
-      header: () => <div className="text-right">Total Value</div>,
+      header: ({ column }) => (
+        <SortableHeader label="Total Value" column={column} align="right" />
+      ),
+      enableSorting: true,
       cell: ({ row }) => (
         <div className="text-right font-medium">
           {formatCurrency(Number(row.original.totalValue))}
@@ -144,7 +206,11 @@ export function getContractColumns(
     },
     {
       id: "metricsSpend",
-      header: () => <div className="text-right">Spend</div>,
+      accessorFn: (row) => row.metricsSpend ?? 0,
+      header: ({ column }) => (
+        <SortableHeader label="Spend" column={column} align="right" />
+      ),
+      enableSorting: true,
       cell: ({ row }) => (
         <div className="text-right font-medium text-muted-foreground">
           {row.original.metricsSpend !== undefined
@@ -155,7 +221,11 @@ export function getContractColumns(
     },
     {
       id: "rebateEarned",
-      header: () => <div className="text-right">Rebate Earned</div>,
+      accessorFn: (row) => row.metricsRebate ?? Number(row.rebateEarned ?? 0),
+      header: ({ column }) => (
+        <SortableHeader label="Rebate Earned" column={column} align="right" />
+      ),
+      enableSorting: true,
       cell: ({ row }) => {
         // Prefer the live metrics rebate (from getContractMetricsBatch)
         // when present; fall back to the rebateEarned aggregate.
