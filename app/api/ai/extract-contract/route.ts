@@ -8,10 +8,7 @@ import {
   type ExtractedContractData,
   type RichContractExtractData,
 } from "@/lib/ai/schemas"
-import {
-  getDemoExtractedData,
-  toLegacyExtractedContract,
-} from "@/lib/ai/demo-contract-extract"
+import { toLegacyExtractedContract } from "@/lib/ai/contract-extract-mapper"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -134,7 +131,6 @@ ${text.trim()}`,
     }
 
     const file = formData.get("file") as File | null
-    const demoMode = formData.get("demoMode") === "true"
     const userInstructions = (formData.get("userInstructions") as string | null)?.trim() || ""
 
     if (!file) {
@@ -151,35 +147,20 @@ ${text.trim()}`,
       )
     }
 
-    // If explicit demo mode, skip AI entirely.
-    if (demoMode) {
-      const rich = getDemoExtractedData(file.name)
-      const legacy = toLegacyExtractedContract(rich)
-      return Response.json({
-        success: true,
-        extracted: legacy,
-        richExtracted: rich,
-        confidence: 0.75,
-        demoMode: true,
-      })
-    }
-
-    // Read file bytes (fall back to demo on read failure).
+    // Read file bytes — fail loudly so the user can retry, instead of
+    // returning placeholder content that looks like a real extraction.
     let bytes: ArrayBuffer
     try {
       bytes = await file.arrayBuffer()
     } catch (err) {
-      console.warn("[extract-contract] File read failed, using demo extraction:", err)
-      const rich = getDemoExtractedData(file.name)
-      const legacy = toLegacyExtractedContract(rich)
-      return Response.json({
-        success: true,
-        extracted: legacy,
-        richExtracted: rich,
-        confidence: 0.5,
-        demoMode: true,
-        aiError: "File read failed - using demo extraction",
-      })
+      console.warn("[extract-contract] File read failed:", err)
+      return Response.json(
+        {
+          error: "Could not read uploaded file",
+          details: err instanceof Error ? err.message : "Unknown error",
+        },
+        { status: 400 },
+      )
     }
     const fileData = new Uint8Array(bytes)
 
@@ -239,33 +220,27 @@ ${text.trim()}`,
       }
     } catch (aiError: unknown) {
       const errorMessage = aiError instanceof Error ? aiError.message : "Unknown error"
-      console.warn("[extract-contract] Gemini unavailable, using demo extraction:", errorMessage)
-      const demo = getDemoExtractedData(file.name)
-      const legacy = toLegacyExtractedContract(demo)
-      return Response.json({
-        success: true,
-        extracted: legacy,
-        richExtracted: demo,
-        confidence: 0.5,
-        s3Key,
-        demoMode: true,
-        aiError: `AI parsing unavailable: ${errorMessage.substring(0, 200)}`,
-      })
+      console.warn("[extract-contract] AI extraction failed:", errorMessage)
+      return Response.json(
+        {
+          error: "AI extraction unavailable",
+          details: errorMessage.substring(0, 400),
+          s3Key,
+        },
+        { status: 502 },
+      )
     }
 
     if (!rich) {
-      // Last-ditch fallback — never 500 on the user.
-      const demo = getDemoExtractedData(file.name)
-      const legacy = toLegacyExtractedContract(demo)
-      return Response.json({
-        success: true,
-        extracted: legacy,
-        richExtracted: demo,
-        confidence: 0.5,
-        s3Key,
-        demoMode: true,
-        aiError: "Could not parse AI response",
-      })
+      return Response.json(
+        {
+          error: "Could not parse AI response",
+          details:
+            "The model returned a response that did not match the expected contract schema. Try uploading again or use Manual Entry.",
+          s3Key,
+        },
+        { status: 502 },
+      )
     }
 
     const legacy = toLegacyExtractedContract(rich)

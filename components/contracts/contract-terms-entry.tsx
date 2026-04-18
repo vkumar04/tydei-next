@@ -61,6 +61,9 @@ const termTypes = [
   { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate amount" },
   { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price locked for contract duration" },
   { value: "rebate_per_use", label: "Rebate Per Use", icon: Coins, description: "Per-unit rebate tracked by usage count" },
+  { value: "po_rebate", label: "PO Rebate", icon: DollarSign, description: "Per-purchase-order rebate triggered by PO totals" },
+  { value: "carve_out", label: "Carve Out", icon: Shield, description: "Specific items excluded from the broader contract terms" },
+  { value: "payment_rebate", label: "Payment Rebate", icon: Coins, description: "Rebate triggered by payment timing or method" },
 ] as const
 
 const baselineTypes = [

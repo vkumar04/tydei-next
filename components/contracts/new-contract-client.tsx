@@ -377,17 +377,26 @@ export function NewContractClient({
       }
     }
 
-    // Map term types from AI extraction instead of hardcoding
+    // Map term types from AI extraction. Keep this in sync with the
+    // TermType enum in prisma/schema.prisma — every value the schema
+    // accepts must round-trip here.
     const mapTermType = (t: string): TermFormValues["termType"] => {
       const typeMap: Record<string, TermFormValues["termType"]> = {
         spend_rebate: "spend_rebate",
         volume_rebate: "volume_rebate",
         price_reduction: "price_reduction",
         market_share: "market_share",
+        market_share_price_reduction: "market_share_price_reduction",
+        capitated_price_reduction: "capitated_price_reduction",
+        capitated_pricing_rebate: "capitated_pricing_rebate",
         growth_rebate: "growth_rebate",
         compliance_rebate: "compliance_rebate",
         fixed_fee: "fixed_fee",
         locked_pricing: "locked_pricing",
+        rebate_per_use: "rebate_per_use",
+        po_rebate: "po_rebate",
+        carve_out: "carve_out",
+        payment_rebate: "payment_rebate",
       }
       const normalized = t.toLowerCase().replace(/[\s-]/g, "_")
       return typeMap[normalized] ?? "spend_rebate"
