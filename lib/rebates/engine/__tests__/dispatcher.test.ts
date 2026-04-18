@@ -14,17 +14,6 @@ describe("calculateRebate dispatcher — stub phase", () => {
   // below (empty errors array, type echoed through).
   const types: Array<{ config: RebateConfig; label: string }> = [
     {
-      label: "VOLUME_REBATE",
-      config: {
-        type: "VOLUME_REBATE",
-        method: "CUMULATIVE",
-        boundaryRule: "EXCLUSIVE",
-        tiers: [],
-        cptCodes: [],
-        baselineType: "NONE",
-      },
-    },
-    {
       label: "TIER_PRICE_REDUCTION",
       config: {
         type: "TIER_PRICE_REDUCTION",
@@ -108,6 +97,21 @@ describe("calculateRebate dispatcher — stub phase", () => {
     }
     const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
     expect(result.type).toBe("SPEND_REBATE")
+    expect(result.errors).toEqual([])
+    expect(result.periodLabel).toBe("2026-Q1")
+  })
+
+  it("VOLUME_REBATE — dispatches to live engine (no stub error)", () => {
+    const config: RebateConfig = {
+      type: "VOLUME_REBATE",
+      method: "CUMULATIVE",
+      boundaryRule: "EXCLUSIVE",
+      tiers: [],
+      cptCodes: [],
+      baselineType: "NONE",
+    }
+    const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
+    expect(result.type).toBe("VOLUME_REBATE")
     expect(result.errors).toEqual([])
     expect(result.periodLabel).toBe("2026-Q1")
   })

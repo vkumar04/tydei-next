@@ -18,6 +18,7 @@ import type {
 } from "./types"
 import { zeroResult } from "./types"
 import { calculateSpendRebate } from "./spend-rebate"
+import { calculateVolumeRebate } from "./volume-rebate"
 
 export type { RebateConfig, RebateResult, PeriodData, EngineOptions } from "./types"
 
@@ -32,6 +33,7 @@ export function calculateRebate(
     case "SPEND_REBATE":
       return calculateSpendRebate(config, periodData, options)
     case "VOLUME_REBATE":
+      return calculateVolumeRebate(config, periodData, options)
     case "TIER_PRICE_REDUCTION":
     case "MARKET_SHARE_REBATE":
     case "MARKET_SHARE_PRICE_REDUCTION":
