@@ -7,7 +7,7 @@ import {
 import { z } from "zod"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import { chatTools } from "@/lib/ai/tools"
 import { facilitySystemPrompt, vendorSystemPrompt } from "@/lib/ai/prompts"
 import { rateLimit } from "@/lib/rate-limit"
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     portalType === "vendor" ? vendorSystemPrompt : facilitySystemPrompt
 
   const result = streamText({
-    model: geminiModel,
+    model: claudeModel,
     system: systemPrompt,
     messages: await convertToModelMessages(messages as UIMessage[]),
     tools: chatTools,

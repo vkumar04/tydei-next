@@ -2,7 +2,7 @@ import { generateText, Output } from "ai"
 import { z } from "zod"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import { supplyMatchSchema } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       .join("\n")
 
     const result = await generateText({
-      model: geminiModel,
+      model: claudeModel,
       output: Output.object({ schema: supplyMatchSchema }),
       prompt: `Match this surgical supply to the closest item in the contract pricing list.
 

@@ -9,7 +9,7 @@ import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import { resolveVendorId } from "@/lib/vendors/resolve"
 import { bulkImportCOGRecords } from "@/lib/actions/cog-records"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import type {
   ContractType,
@@ -60,7 +60,7 @@ async function mapColumnsWithGemini(
       .join("\n")
 
     const result = await generateText({
-      model: geminiModel,
+      model: claudeModel,
       output: Output.object({ schema }),
       prompt: `You are a data mapping assistant. Match each target field to the most likely source column header. Be tolerant of typos, capitalization, spacing, abbreviations, and non-English labels. Return "" for any target that has no reasonable match.
 

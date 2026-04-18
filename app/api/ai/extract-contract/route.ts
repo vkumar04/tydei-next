@@ -1,7 +1,7 @@
 import { generateText, Output } from "ai"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import {
   extractedContractSchema,
   richContractExtractSchema,
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 
       // Use the legacy (simpler) schema for raw-text parsing.
       const result = await generateText({
-        model: geminiModel,
+        model: claudeModel,
         output: Output.object({ schema: extractedContractSchema }),
         prompt: `Parse this contract information into structured data. Be precise with numbers and dates.
 
@@ -202,7 +202,7 @@ ${text.trim()}`,
     let rich: RichContractExtractData | undefined
     try {
       const result = await generateText({
-        model: geminiModel,
+        model: claudeModel,
         output: Output.object({ schema: richContractExtractSchema }),
         messages: [
           {

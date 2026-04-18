@@ -1,7 +1,7 @@
 import { generateText, Output } from "ai"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import { extractedPayorContractSchema, type ExtractedPayorContractData } from "@/lib/ai/schemas"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
     // Step 1: Extract text content from the payor contract
     const extraction = await generateText({
-      model: geminiModel,
+      model: claudeModel,
       messages: [
         {
           role: "user",
@@ -80,7 +80,7 @@ Be thorough - extract EVERY CPT code and rate you can find. Return all informati
 
     // Step 2: Parse into structured data
     const result = await generateText({
-      model: geminiModel,
+      model: claudeModel,
       output: Output.object({ schema: extractedPayorContractSchema }),
       prompt: `Parse this payor contract information into structured data. Extract ALL CPT codes and their reimbursement rates. For dates use YYYY-MM-DD format. If a field is not clearly present, use null.
 

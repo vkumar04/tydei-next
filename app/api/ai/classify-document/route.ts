@@ -2,7 +2,7 @@ import { generateText, Output } from "ai"
 import { headers } from "next/headers"
 import { z } from "zod"
 import { auth } from "@/lib/auth-server"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import { rateLimit } from "@/lib/rate-limit"
 
 type Classification =
@@ -291,7 +291,7 @@ export async function POST(request: Request) {
 
       try {
         const result = await generateText({
-          model: geminiModel,
+          model: claudeModel,
           output: Output.object({ schema: richClassificationSchema }),
           messages: [
             {

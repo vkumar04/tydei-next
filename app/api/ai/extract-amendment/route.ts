@@ -2,7 +2,7 @@ import { generateText, Output } from "ai"
 import { headers } from "next/headers"
 import { z } from "zod"
 import { auth } from "@/lib/auth-server"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
 
     // ── Step 1: Read the amendment document ────────────────────
     const extraction = await generateText({
-      model: geminiModel,
+      model: claudeModel,
       messages: [
         {
           role: "user",
@@ -127,7 +127,7 @@ Return all details as structured text.`,
 
     // ── Step 2: Compare against current contract ───────────────
     const result = await generateText({
-      model: geminiModel,
+      model: claudeModel,
       output: Output.object({ schema: extractedAmendmentSchema }),
       prompt: `You are comparing a contract amendment against the current contract data. Identify every change the amendment makes.
 

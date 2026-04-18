@@ -1,8 +1,22 @@
-import { google } from "@ai-sdk/google"
+import { anthropic } from "@ai-sdk/anthropic"
 
-export const geminiModel = google("gemini-2.5-flash")
-// Pro requires paid plan — use flash for all routes on free tier
-export const geminiProModel = google("gemini-2.5-flash")
+// Default provider: Claude via the Vercel AI SDK's Anthropic adapter.
+// We use @ai-sdk/anthropic (not the raw @anthropic-ai/sdk) because the
+// rest of the AI layer relies on Vercel AI SDK abstractions (streamText,
+// generateObject, convertToModelMessages, toUIMessageStreamResponse,
+// @ai-sdk/react's useChat, etc.) that work across providers. @ai-sdk/anthropic
+// is Anthropic's official provider for that ecosystem — it calls the
+// real Anthropic API, not an OpenAI-compat shim.
+//
+// Model selection defaults to Claude Opus 4.6. Each endpoint can opt
+// into a faster/cheaper model via `claudeHaiku`/`claudeSonnet` if the
+// task is mechanical (classification, column mapping, etc.).
+export const claudeModel = anthropic("claude-opus-4-6")
+
+// Faster / cheaper models for mechanical tasks. Not currently wired in
+// — any caller that wants to downgrade can import directly.
+export const claudeSonnet = anthropic("claude-sonnet-4-6")
+export const claudeHaiku = anthropic("claude-haiku-4-5")
 
 export const AI_CREDIT_COSTS = {
   document_extraction_per_page: 2,

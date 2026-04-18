@@ -18,7 +18,7 @@
     "qa:v0-ledger-check": "bun run scripts/build-v0-feature-ledger.ts --check"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.64",
+    "@ai-sdk/anthropic": "^3.0.71",
     "@ai-sdk/react": "^3.0.170",
     "@aws-sdk/client-s3": "^3.1032.0",
     "@aws-sdk/s3-request-presigner": "^3.1032.0",

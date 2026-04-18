@@ -1,7 +1,7 @@
 // Vendor AI Agent — system prompt + suggested questions.
 //
 // Ported from v0's vendor ai-agent page.tsx, adapted for Gemini via
-// @ai-sdk/google. The shared chat route (`app/api/ai/chat/route.ts`) selects
+// @ai-sdk/anthropic. The shared chat route (`app/api/ai/chat/route.ts`) selects
 // this prompt when `portalType === "vendor"`.
 //
 // Vendor-specific framing: analyze deals, track market share, identify growth

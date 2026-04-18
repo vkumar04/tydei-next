@@ -2,7 +2,7 @@ import { generateText, Output } from "ai"
 import { headers } from "next/headers"
 import { z } from "zod"
 import { auth } from "@/lib/auth-server"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import { rateLimit } from "@/lib/rate-limit"
 
 const requestSchema = z.object({
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     }
 
     const result = await generateText({
-      model: geminiModel,
+      model: claudeModel,
       output: Output.object({ schema: mappingSchema }),
       prompt: `You are a data mapping assistant. Given a set of source CSV/Excel column headers and target database fields, determine which source column best maps to each target field.
 

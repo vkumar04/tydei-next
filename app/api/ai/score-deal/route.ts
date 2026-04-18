@@ -2,7 +2,7 @@ import { generateText, Output } from "ai"
 import { z } from "zod"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import { geminiModel } from "@/lib/ai/config"
+import { claudeModel } from "@/lib/ai/config"
 import { dealScoreSchema } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const { contractData, cogData, benchmarkData } = parsed.data
 
     const result = await generateText({
-      model: geminiModel,
+      model: claudeModel,
       output: Output.object({ schema: dealScoreSchema }),
       prompt: `Analyze this healthcare supply chain contract deal and score it across 5 dimensions (0-100 each).
 
