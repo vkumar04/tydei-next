@@ -1,353 +1,171 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
+import { useEffect, useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { Loader2 } from "lucide-react"
+import { getContracts } from "@/lib/actions/contracts"
 import {
-  usePriceProjections,
-  useVendorSpendTrends,
-  useCategorySpendTrends,
-  useSpendForecast,
-  useRebateForecast,
-} from "@/hooks/use-analysis"
-import type { DepreciationSchedule } from "@/lib/analysis/depreciation"
-import Link from "next/link"
-import { Calculator, Target, Upload, Download, TrendingUp } from "lucide-react"
-import { ForecastTable } from "./forecast-table"
-import { ForecastChart } from "./forecast-chart"
-import { Skeleton } from "@/components/ui/skeleton"
+  analyzeCapitalContract,
+  type AnalyzeCapitalContractResult,
+} from "@/lib/actions/financial-analysis"
+import { queryKeys } from "@/lib/query-keys"
+import { AnalysisInputForm, type AnalysisFormState } from "./analysis-input-form"
+import { AnalysisResultsPanel } from "./analysis-results-panel"
+import { AnalysisDepreciationTable } from "./analysis-depreciation-table"
+import { AnalysisCashflowChart } from "./analysis-cashflow-chart"
+import { AnalysisNarrativeCard } from "./analysis-narrative-card"
+import { AnalysisClauseRiskCard } from "./analysis-clause-risk-card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
-import { UploadTab } from "./capital/upload-tab"
-import { ContractInputsTab } from "./capital/contract-inputs-tab"
-import { ProjectionsTab } from "./capital/projections-tab"
-import { FinancialAnalysisTab } from "./capital/financial-analysis-tab"
-import { SummaryReportTab } from "./capital/summary-report-tab"
-
-interface AnalysisClientProps {
+/**
+ * Financial-analysis orchestrator (subsystems 1-7).
+ *
+ * Responsibilities:
+ *   1. Load the facility's active contracts for the picker (subsystem 2).
+ *   2. Hold form state + call `analyzeCapitalContract` whenever inputs
+ *      settle (subsystems 1 + 3).
+ *   3. Lay out the result cards: KPI panel, depreciation, cashflow,
+ *      narrative, and (when available) clause-risk adjustment.
+ *
+ * Keeps under 200 lines by delegating rendering to the six dedicated
+ * child components — this file is pure glue.
+ */
+export interface AnalysisClientProps {
   facilityId: string
 }
 
+const DEFAULT_FORM: AnalysisFormState = {
+  contractId: null,
+  discountRate: 8,
+  taxRate: 21,
+  annualSpend: 100_000,
+  rebateRate: 3.5,
+  growthRatePerYear: 3,
+  marketDeclineRate: 2,
+  payUpfront: false,
+}
+
 export function AnalysisClient({ facilityId }: AnalysisClientProps) {
-  const [schedule, setSchedule] = useState<DepreciationSchedule | null>(null)
-  const [analysisType, setAnalysisType] = useState<"capital" | "prospective">(
-    "capital"
+  const [form, setForm] = useState<AnalysisFormState>(DEFAULT_FORM)
+
+  const contractsQuery = useQuery({
+    queryKey: queryKeys.contracts.list(facilityId, { status: "active" }),
+    queryFn: () =>
+      getContracts({
+        facilityId,
+        status: "active",
+        page: 1,
+        pageSize: 100,
+      }),
+  })
+
+  const contractOptions = useMemo(
+    () =>
+      (contractsQuery.data?.contracts ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        vendorName: c.vendor?.name ?? "Unknown vendor",
+      })),
+    [contractsQuery.data],
   )
-  const [activeTab, setActiveTab] = useState("upload")
 
-  // Financial assumption state
-  const [discountRate, setDiscountRate] = useState(7)
-  const [taxRate, setTaxRate] = useState(21)
-  const [annualGrowthRate, setAnnualGrowthRate] = useState(3)
-  const [rebatePercent, setRebatePercent] = useState(3)
-  const [contractTotal, setContractTotal] = useState(0)
-  const [contractLength, setContractLength] = useState(0)
-
-  const dateRange = useMemo(() => {
-    const now = new Date()
-    const from = new Date(now)
-    from.setMonth(now.getMonth() - 6)
-    return {
-      from: from.toISOString().slice(0, 10),
-      to: now.toISOString().slice(0, 10),
+  // Seed the form's contractId with the first active contract once loaded.
+  useEffect(() => {
+    if (!form.contractId && contractOptions.length > 0) {
+      setForm((prev) => ({ ...prev, contractId: contractOptions[0].id }))
     }
-  }, [])
+  }, [contractOptions, form.contractId])
 
-  const { data: projections, isLoading: projLoading } = usePriceProjections(
-    facilityId,
-    { periods: 12 }
-  )
-  const { data: vendorTrends, isLoading: vtLoading } = useVendorSpendTrends(
-    facilityId,
-    dateRange
-  )
-  const { data: catTrends, isLoading: ctLoading } = useCategorySpendTrends(
-    facilityId,
-    dateRange
-  )
+  const analyzeQuery = useQuery<AnalyzeCapitalContractResult>({
+    queryKey: [
+      "financialAnalysis",
+      "capital",
+      form.contractId,
+      form.discountRate,
+      form.taxRate,
+      form.annualSpend,
+      form.rebateRate,
+      form.growthRatePerYear,
+      form.marketDeclineRate,
+      form.payUpfront,
+    ],
+    queryFn: () =>
+      analyzeCapitalContract({
+        contractId: form.contractId as string,
+        discountRate: form.discountRate / 100,
+        taxRate: form.taxRate / 100,
+        annualSpend: form.annualSpend,
+        rebateRate: form.rebateRate / 100,
+        growthRatePerYear: form.growthRatePerYear / 100,
+        marketDeclineRate: form.marketDeclineRate / 100,
+        payUpfront: form.payUpfront,
+      }),
+    enabled: !!form.contractId,
+    staleTime: 60_000,
+  })
 
-  const { data: spendForecast, isLoading: spendForecastLoading } =
-    useSpendForecast(facilityId, { periods: 6 })
-  const { data: rebateForecast, isLoading: rebateForecastLoading } =
-    useRebateForecast(facilityId, { periods: 6 })
-
-  const totalCapitalValue = useMemo(() => {
-    if (!schedule) return 0
-    return schedule.assetCost
-  }, [schedule])
-
-  const avgDepreciationRate = useMemo(() => {
-    if (!schedule || schedule.years.length === 0) return 0
-    const totalRate = schedule.years.reduce((s, y) => s + y.rate, 0)
-    return Math.round((totalRate / schedule.years.length) * 100) / 100
-  }, [schedule])
-
-  const projectedAnnualSpend = useMemo(() => {
-    if (!vendorTrends || vendorTrends.length === 0) return 0
-    const totalSpend = vendorTrends.reduce((s, t) => s + t.spend, 0)
-    const months = new Set(vendorTrends.map((t) => t.month)).size
-    if (months === 0) return 0
-    return Math.round((totalSpend / months) * 12)
-  }, [vendorTrends])
-
-  // --- Yearly Projections ---
-  const yearlyProjections = useMemo(() => {
-    const years = []
-    for (let i = 1; i <= contractLength; i++) {
-      const spend =
-        (contractTotal / contractLength) *
-        Math.pow(1 + annualGrowthRate / 100, i - 1)
-      const revenue = spend * 1.1
-      const rebate = (spend * rebatePercent) / 100
-      const netCashFlow = revenue - spend + rebate
-      years.push({ year: i, spend, revenue, rebate, netCashFlow })
-    }
-    return years
-  }, [contractTotal, contractLength, annualGrowthRate, rebatePercent])
-
-  // --- MACRS Depreciation ---
-  const macrsRates = [20, 32, 19.2, 11.52, 11.52, 5.76]
-  const depreciationSchedule = useMemo(() => {
-    let accumulated = 0
-    return macrsRates.map((rate, i) => {
-      const depreciation = (contractTotal * rate) / 100
-      const taxSavings = (depreciation * taxRate) / 100
-      accumulated += depreciation
-      return { year: i + 1, rate, depreciation, taxSavings, accumulated }
-    })
-  }, [contractTotal, taxRate])
-
-  // --- NPV ---
-  const npv = useMemo(() => {
-    let value = -contractTotal
-    for (const year of yearlyProjections) {
-      const cashFlow =
-        year.netCashFlow +
-        (depreciationSchedule[year.year - 1]?.taxSavings ?? 0)
-      value += cashFlow / Math.pow(1 + discountRate / 100, year.year)
-    }
-    return value
-  }, [contractTotal, yearlyProjections, depreciationSchedule, discountRate])
-
-  // --- IRR (bisection method) ---
-  const irr = useMemo(() => {
-    const cashFlows = [
-      -contractTotal,
-      ...yearlyProjections.map(
-        (y, i) => y.netCashFlow + (depreciationSchedule[i]?.taxSavings ?? 0)
-      ),
-    ]
-    let low = -0.5,
-      high = 2.0
-    for (let iter = 0; iter < 100; iter++) {
-      const mid = (low + high) / 2
-      const npvAtMid = cashFlows.reduce(
-        (sum, cf, t) => sum + cf / Math.pow(1 + mid, t),
-        0
-      )
-      if (Math.abs(npvAtMid) < 0.01) return mid * 100
-      if (npvAtMid > 0) low = mid
-      else high = mid
-    }
-    return ((low + high) / 2) * 100
-  }, [contractTotal, yearlyProjections, depreciationSchedule])
-
-  // --- Price Lock Cost ---
-  const priceLockCosts = useMemo(() => {
-    const annualCost = contractTotal / contractLength
-    let totalExtraCost = 0
-    return Array.from({ length: contractLength }, (_, i) => {
-      const yourPrice = annualCost
-      const marketPrice = annualCost * Math.pow(0.98, i + 1)
-      const extraCost = yourPrice - marketPrice
-      totalExtraCost += extraCost
-      return { year: i + 1, yourPrice, marketPrice, extraCost, totalExtraCost }
-    })
-  }, [contractTotal, contractLength])
-
-  // --- Derived totals ---
-  const totalRebate = useMemo(
-    () => yearlyProjections.reduce((s, y) => s + y.rebate, 0),
-    [yearlyProjections]
-  )
-  const totalTaxSavings = useMemo(
-    () => depreciationSchedule.reduce((s, d) => s + d.taxSavings, 0),
-    [depreciationSchedule]
-  )
-  const totalPriceLockCost =
-    priceLockCosts[priceLockCosts.length - 1]?.totalExtraCost ?? 0
-  const trueCost = contractTotal + totalPriceLockCost - totalRebate - totalTaxSavings
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value)
+  const result = analyzeQuery.data
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-balance">
-            Contract Analysis
-          </h1>
-          <p className="text-muted-foreground">
-            Evaluate contracts with financial projections, composite scoring, and
-            ROI analysis
-          </p>
-        </div>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+      <div className="space-y-4">
+        <AnalysisInputForm
+          contracts={contractOptions}
+          contractsLoading={contractsQuery.isLoading}
+          value={form}
+          onChange={setForm}
+        />
       </div>
 
-      {/* Analysis Type Toggle */}
-      <div className="flex gap-2">
-        <Button
-          variant={analysisType === "capital" ? "default" : "outline"}
-          className="gap-2"
-          onClick={() => setAnalysisType("capital")}
-        >
-          <Calculator className="h-4 w-4" />
-          Capital Contract Analysis
-        </Button>
-        <Link href="/dashboard/analysis/prospective">
-          <Button
-            variant={analysisType === "prospective" ? "default" : "outline"}
-            className="gap-2"
-            onClick={() => setAnalysisType("prospective")}
-          >
-            <Target className="h-4 w-4" />
-            Prospective Contract Analysis
-          </Button>
-        </Link>
-      </div>
+      <div className="space-y-6">
+        {analyzeQuery.isError && (
+          <Alert variant="destructive">
+            <AlertTitle>Analysis failed</AlertTitle>
+            <AlertDescription>
+              {analyzeQuery.error instanceof Error
+                ? analyzeQuery.error.message
+                : "Unable to compute capital ROI."}
+            </AlertDescription>
+          </Alert>
+        )}
 
-      {analysisType === "capital" && (
-        <>
-          {/* Capital Analysis Section Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">
-                Capital Contract Analysis
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Evaluate NPV, IRR, and true cost of capital contracts with
-                rebate projections
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Export Report
-              </Button>
-            </div>
+        {!form.contractId && !contractsQuery.isLoading && (
+          <Alert>
+            <AlertTitle>Select a contract</AlertTitle>
+            <AlertDescription>
+              Pick an active contract from the form to run a capital ROI
+              analysis.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {analyzeQuery.isFetching && !result && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Computing analysis...
           </div>
+        )}
 
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="space-y-6"
-          >
-            <TabsList>
-              <TabsTrigger value="upload" className="gap-2">
-                <Upload className="h-4 w-4" />
-                Upload Contract
-              </TabsTrigger>
-              <TabsTrigger value="inputs">Contract Inputs</TabsTrigger>
-              <TabsTrigger value="projections">Yearly Projections</TabsTrigger>
-              <TabsTrigger value="analysis">Financial Analysis</TabsTrigger>
-              <TabsTrigger value="report">Summary Report</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="upload" className="space-y-6">
-              <UploadTab
-                onExtracted={(data) => {
-                  if (data.contractTotal) setContractTotal(data.contractTotal)
-                  if (data.contractLength) setContractLength(data.contractLength)
-                  if (data.rebatePercent) setRebatePercent(data.rebatePercent)
-                }}
-                onNavigateToInputs={() => setActiveTab("inputs")}
-                onNavigateToAnalysis={() => setActiveTab("analysis")}
-              />
-            </TabsContent>
-
-            <TabsContent value="inputs" className="space-y-6">
-              <ContractInputsTab
-                contractTotal={contractTotal}
-                contractLength={contractLength}
-                discountRate={discountRate}
-                taxRate={taxRate}
-                annualGrowthRate={annualGrowthRate}
-                rebatePercent={rebatePercent}
-                onContractTotalChange={setContractTotal}
-                onContractLengthChange={setContractLength}
-                onDiscountRateChange={setDiscountRate}
-                onTaxRateChange={setTaxRate}
-                onAnnualGrowthRateChange={setAnnualGrowthRate}
-                onRebatePercentChange={setRebatePercent}
-                onScheduleChange={setSchedule}
-              />
-            </TabsContent>
-
-            <TabsContent value="projections" className="space-y-6">
-              <ProjectionsTab
-                schedule={schedule}
-                totalCapitalValue={totalCapitalValue}
-                avgDepreciationRate={avgDepreciationRate}
-                projectedAnnualSpend={projectedAnnualSpend}
-                vtLoading={vtLoading}
-                projLoading={projLoading}
-                projections={projections}
-                yearlyProjections={yearlyProjections}
-                totalRebate={totalRebate}
-                contractLength={contractLength}
-                annualGrowthRate={annualGrowthRate}
-                formatCurrency={formatCurrency}
-              />
-            </TabsContent>
-
-            <TabsContent value="analysis" className="space-y-6">
-              <FinancialAnalysisTab
-                npv={npv}
-                irr={irr}
-                trueCost={trueCost}
-                totalRebate={totalRebate}
-                totalTaxSavings={totalTaxSavings}
-                contractTotal={contractTotal}
-                discountRate={discountRate}
-                rebatePercent={rebatePercent}
-                contractLength={contractLength}
-                taxRate={taxRate}
-                depreciationSchedule={depreciationSchedule}
-                priceLockCosts={priceLockCosts}
-                vendorTrends={vendorTrends}
-                catTrends={catTrends}
-                vtLoading={vtLoading}
-                ctLoading={ctLoading}
-                formatCurrency={formatCurrency}
-              />
-            </TabsContent>
-
-            <TabsContent value="report" className="space-y-6">
-              <SummaryReportTab
-                contractTotal={contractTotal}
-                contractLength={contractLength}
-                npv={npv}
-                irr={irr}
-                discountRate={discountRate}
-                totalRebate={totalRebate}
-                totalTaxSavings={totalTaxSavings}
-                totalPriceLockCost={totalPriceLockCost}
-                trueCost={trueCost}
-                yearlyProjections={yearlyProjections}
-                projections={projections}
-                vendorTrends={vendorTrends}
-                formatCurrency={formatCurrency}
-              />
-            </TabsContent>
-          </Tabs>
-        </>
-      )}
+        {result && (
+          <>
+            <AnalysisResultsPanel
+              npv={result.roi.npv}
+              irr={result.roi.irr}
+              discountRate={form.discountRate / 100}
+              verdict={result.narrative.verdict}
+              headline={result.narrative.headline}
+            />
+            <div className="grid gap-6 xl:grid-cols-2">
+              <AnalysisCashflowChart cashflows={result.roi.cashflows} />
+              <AnalysisNarrativeCard narrative={result.narrative} />
+            </div>
+            <AnalysisDepreciationTable schedule={result.roi.depreciation} />
+            {result.riskAdjustedNPV && (
+              <AnalysisClauseRiskCard adjusted={result.riskAdjustedNPV} />
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
