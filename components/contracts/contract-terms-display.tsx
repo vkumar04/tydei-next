@@ -2,6 +2,7 @@
 
 import type { ContractTerm, ContractTier } from "@prisma/client"
 import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
+import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Accordion,
@@ -55,7 +56,7 @@ function TierProgressCard({
     <div className="space-y-2 rounded-md border bg-muted/30 p-3">
       <div className="flex items-baseline justify-between text-sm">
         <span className="font-medium">
-          Current: {currentLabel} · {progress.currentTier.rebateValue}%
+          Current: {currentLabel} · {formatPercent(progress.currentTier.rebateValue * 100)}
         </span>
         {nextLabel ? (
           <span className="text-xs text-muted-foreground">
@@ -79,10 +80,10 @@ function TierProgressCard({
 }
 
 function TierDisplay({ tier, currentSpend }: { tier: ContractTier; currentSpend?: number }) {
-  const rebateLabel =
-    tier.rebateType === "percent_of_spend"
-      ? formatPercent(Number(tier.rebateValue))
-      : formatCurrency(Number(tier.rebateValue), true)
+  const rebateLabel = formatTierRebateLabel(
+    tier.rebateType,
+    Number(tier.rebateValue),
+  )
 
   const spendMin = Number(tier.spendMin)
   const spendMax = tier.spendMax ? Number(tier.spendMax) : null
