@@ -65,10 +65,10 @@ export async function getDashboardCharts(options?: {
     prisma.rebate.findMany({
       where: {
         facilityId: facility.id,
-        periodEnd: { gte: windowStart, lte: referenceDate },
+        payPeriodEnd: { gte: windowStart, lte: referenceDate },
       },
       select: {
-        periodEnd: true,
+        payPeriodEnd: true,
         rebateEarned: true,
       },
     }),
@@ -88,7 +88,7 @@ export async function getDashboardCharts(options?: {
       extendedPrice: Number(r.extendedPrice ?? 0),
     })),
     rebates.map((r) => ({
-      periodEndDate: r.periodEnd,
+      periodEndDate: r.payPeriodEnd,
       rebateEarned: Number(r.rebateEarned ?? 0),
     })),
     { months, referenceDate },
