@@ -2,10 +2,12 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { PriceDiscrepancyTable } from "@/components/facility/reports/price-discrepancy-table"
+import { PriceVarianceDashboard } from "@/components/facility/reports/price-variance-dashboard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, Download } from "lucide-react"
 import Link from "next/link"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
 import { getPriceDiscrepancies } from "@/lib/actions/reports"
 import { toast } from "sonner"
@@ -49,11 +51,22 @@ export default function PriceDiscrepancyPage() {
         </div>
       </div>
 
-      {isLoading ? (
-        <Skeleton className="h-[400px] rounded-xl" />
-      ) : (
-        <PriceDiscrepancyTable discrepancies={data ?? []} />
-      )}
+      <Tabs defaultValue="severity" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="severity">By severity</TabsTrigger>
+          <TabsTrigger value="detail">Line-item detail</TabsTrigger>
+        </TabsList>
+        <TabsContent value="severity" className="space-y-6">
+          <PriceVarianceDashboard facilityId="current" />
+        </TabsContent>
+        <TabsContent value="detail" className="space-y-6">
+          {isLoading ? (
+            <Skeleton className="h-[400px] rounded-xl" />
+          ) : (
+            <PriceDiscrepancyTable discrepancies={data ?? []} />
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

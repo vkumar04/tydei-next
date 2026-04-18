@@ -13,6 +13,10 @@ import {
   resolveInvoiceLineItem,
   deleteInvoice,
 } from "@/lib/actions/invoices"
+import {
+  flagInvoiceAsDisputed,
+  resolveInvoiceDispute,
+} from "@/lib/actions/invoices/dispute"
 import type { InvoiceFilters, ImportInvoiceInput } from "@/lib/validators/invoices"
 import { toast } from "sonner"
 
@@ -101,5 +105,34 @@ export function useResolveInvoiceLineItem() {
       toast.success("Item resolved")
     },
     onError: (e) => toast.error(e.message || "Failed to resolve item"),
+  })
+}
+
+export function useFlagInvoiceAsDisputed() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { invoiceId: string; note: string }) =>
+      flagInvoiceAsDisputed(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
+      toast.success("Invoice flagged as disputed")
+    },
+    onError: (e) => toast.error(e.message || "Failed to flag invoice"),
+  })
+}
+
+export function useResolveInvoiceDispute() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      invoiceId: string
+      resolution: "resolved" | "rejected"
+      note?: string
+    }) => resolveInvoiceDispute(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
+      toast.success("Dispute updated")
+    },
+    onError: (e) => toast.error(e.message || "Failed to update dispute"),
   })
 }

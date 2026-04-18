@@ -64,8 +64,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { InvoiceImportDialog } from "./invoice-import-dialog"
+import { InvoiceDisputeDialog } from "./invoice-dispute-dialog"
 import { useInvoiceSummary, useInvoices } from "@/hooks/use-invoices"
-import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
+import { formatCurrency, formatDate } from "@/lib/formatting"
 import { toast } from "sonner"
 
 interface Vendor {
@@ -77,6 +78,8 @@ interface InvoiceValidationClientProps {
   facilityId: string
   vendors: Vendor[]
 }
+
+type DisputeStatus = "none" | "disputed" | "resolved" | "rejected"
 
 type InvoiceRow = {
   id: string
@@ -90,6 +93,8 @@ type InvoiceRow = {
   status: string
   flaggedCount: number
   lineItemCount: number
+  disputeStatus?: DisputeStatus
+  disputeNote?: string | null
 }
 
 const statusColors: Record<string, string> = {
@@ -115,11 +120,14 @@ export function InvoiceValidationClient({
   const [searchQuery, setSearchQuery] = useState("")
   const [vendorFilter, setVendorFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [disputeFilter, setDisputeFilter] = useState<"all" | "disputed">("all")
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([])
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(
     null
   )
+  const [disputeDialogInvoice, setDisputeDialogInvoice] =
+    useState<InvoiceRow | null>(null)
   const [manualEntryOpen, setManualEntryOpen] = useState(false)
   const [manualForm, setManualForm] = useState({
     invoiceNumber: "",
@@ -153,9 +161,16 @@ export function InvoiceValidationClient({
         !q ||
         inv.invoiceNumber.toLowerCase().includes(q) ||
         inv.vendor.name.toLowerCase().includes(q)
-      return matchesSearch
+      const matchesDispute =
+        disputeFilter === "all" || inv.disputeStatus === "disputed"
+      return matchesSearch && matchesDispute
     })
-  }, [invoices, searchQuery])
+  }, [invoices, searchQuery, disputeFilter])
+
+  const activeDisputeCount = useMemo(
+    () => invoices.filter((i) => i.disputeStatus === "disputed").length,
+    [invoices]
+  )
 
   const toggleSelectInvoice = (id: string) => {
     setSelectedInvoices((prev) =>
@@ -168,22 +183,20 @@ export function InvoiceValidationClient({
     setDetailsDialogOpen(true)
   }
 
-  const handleDisputeInvoice = (invoiceId: string) => {
-    toast.success("Dispute submitted", {
-      description: "Vendor has been notified of the pricing discrepancy",
-    })
+  const handleDisputeInvoice = (invoice: InvoiceRow) => {
+    setDisputeDialogInvoice(invoice)
   }
 
-  const handleApproveInvoice = (invoiceId: string) => {
+  const handleApproveInvoice = (_invoiceId: string) => {
     toast.success("Invoice approved", {
       description: "Invoice has been marked as verified",
     })
   }
 
   const handleBulkDispute = () => {
-    toast.success(`${selectedInvoices.length} invoices disputed`, {
-      description: "Vendors have been notified of pricing discrepancies",
-    })
+    // Bulk dispute surface deferred to vendor-transactions spec;
+    // single-invoice flow drives the canonical dispute dialog.
+    toast.info("Bulk dispute coming soon — use per-row flag for now.")
     setSelectedInvoices([])
   }
 
@@ -321,11 +334,11 @@ export function InvoiceValidationClient({
                 <p className="text-sm text-muted-foreground">
                   Active Disputes
                 </p>
-                {summaryLoading ? (
+                {tableLoading ? (
                   <Skeleton className="mt-1 h-7 w-16" />
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">0</p>
+                    <p className="text-2xl font-bold">{activeDisputeCount}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       awaiting vendor response
                     </p>
@@ -483,6 +496,21 @@ export function InvoiceValidationClient({
                 <SelectItem value="verified">Verified</SelectItem>
               </SelectContent>
             </Select>
+            <Select
+              value={disputeFilter}
+              onValueChange={(v) =>
+                setDisputeFilter(v as "all" | "disputed")
+              }
+            >
+              <SelectTrigger className="w-[180px]">
+                <Flag className="mr-2 h-4 w-4" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Invoices</SelectItem>
+                <SelectItem value="disputed">Disputed Only</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Table */}
@@ -598,27 +626,34 @@ export function InvoiceValidationClient({
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={
+                                  invoice.disputeStatus === "disputed"
+                                    ? "Resolve dispute"
+                                    : "Flag as disputed"
+                                }
+                                onClick={() => handleDisputeInvoice(invoice)}
+                              >
+                                <Flag
+                                  className={
+                                    invoice.disputeStatus === "disputed"
+                                      ? "h-4 w-4 text-red-600 dark:text-red-400"
+                                      : "h-4 w-4"
+                                  }
+                                />
+                              </Button>
                               {invoice.status === "pending" && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                      handleDisputeInvoice(invoice.id)
-                                    }
-                                  >
-                                    <Flag className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                      handleApproveInvoice(invoice.id)
-                                    }
-                                  >
-                                    <Check className="h-4 w-4" />
-                                  </Button>
-                                </>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleApproveInvoice(invoice.id)
+                                  }
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
                               )}
                             </div>
                           </TableCell>
@@ -702,31 +737,47 @@ export function InvoiceValidationClient({
               Close
             </Button>
             {selectedInvoice?.status === "pending" && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    handleApproveInvoice(selectedInvoice.id)
-                    setDetailsDialogOpen(false)
-                  }}
-                >
-                  <Check className="mr-2 h-4 w-4" />
-                  Approve
-                </Button>
-                <Button
-                  onClick={() => {
-                    handleDisputeInvoice(selectedInvoice.id)
-                    setDetailsDialogOpen(false)
-                  }}
-                >
-                  <Flag className="mr-2 h-4 w-4" />
-                  Dispute with Vendor
-                </Button>
-              </>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  handleApproveInvoice(selectedInvoice.id)
+                  setDetailsDialogOpen(false)
+                }}
+              >
+                <Check className="mr-2 h-4 w-4" />
+                Approve
+              </Button>
+            )}
+            {selectedInvoice && (
+              <Button
+                onClick={() => {
+                  handleDisputeInvoice(selectedInvoice)
+                  setDetailsDialogOpen(false)
+                }}
+              >
+                <Flag className="mr-2 h-4 w-4" />
+                {selectedInvoice.disputeStatus === "disputed"
+                  ? "Resolve Dispute"
+                  : "Flag as Disputed"}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {disputeDialogInvoice && (
+        <InvoiceDisputeDialog
+          open={!!disputeDialogInvoice}
+          onOpenChange={(open) => {
+            if (!open) setDisputeDialogInvoice(null)
+          }}
+          invoiceId={disputeDialogInvoice.id}
+          invoiceNumber={disputeDialogInvoice.invoiceNumber}
+          vendorName={disputeDialogInvoice.vendor.name}
+          currentStatus={disputeDialogInvoice.disputeStatus ?? "none"}
+          existingNote={disputeDialogInvoice.disputeNote ?? null}
+        />
+      )}
 
       <InvoiceImportDialog
         facilityId={facilityId}

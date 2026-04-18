@@ -21,7 +21,24 @@ export default async function InvoiceDetailPage({ params }: Props) {
         title={`Invoice ${invoice.invoiceNumber}`}
         description={`${invoice.vendor.name} - Validation results`}
       />
-      <InvoiceValidationDetail invoiceId={id} validation={validation} />
+      <InvoiceValidationDetail
+        invoiceId={id}
+        validation={validation}
+        invoice={{
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          vendorName: invoice.vendor.name,
+          disputeStatus:
+            (invoice.disputeStatus as
+              | "none"
+              | "disputed"
+              | "resolved"
+              | "rejected"
+              | undefined) ?? "none",
+          disputeNote: invoice.disputeNote ?? null,
+          totalInvoiceCost: Number(invoice.totalInvoiceCost ?? 0),
+        }}
+      />
     </div>
   )
 }
