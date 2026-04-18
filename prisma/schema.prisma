@@ -213,6 +213,40 @@ enum CreditTierId {
   unlimited
 }
 
+enum RebateMethod {
+  cumulative
+  marginal
+}
+
+enum AccrualGranularity {
+  monthly
+  quarterly
+  annual
+}
+
+enum AccrualStatus {
+  pending
+  trued_up
+  settled
+}
+
+enum TieInMode {
+  all_or_nothing
+  proportional
+}
+
+enum VarianceDirection {
+  overcharge
+  undercharge
+  at_price
+}
+
+enum VarianceSeverity {
+  minor
+  moderate
+  major
+}
+
 // ─── Better Auth managed tables ───────────────────────────────────
 
 model User {
@@ -491,6 +525,9 @@ model Contract {
   isGrouped              Boolean           @default(false)
   isMultiFacility        Boolean           @default(false)
   tieInCapitalContractId String?
+  complianceRate         Decimal?          @db.Decimal(5, 2)
+  currentMarketShare     Decimal?          @db.Decimal(5, 2)
+  marketShareCommitment  Decimal?          @db.Decimal(5, 2)
   createdById            String?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
@@ -510,9 +547,13 @@ model Contract {
   alerts             Alert[]
   purchaseOrders     PurchaseOrder[]
   surgeonUsages      SurgeonUsage[]
-  contractFacilities  ContractFacility[]
-  contractCategories  ContractProductCategory[]
-  changeProposals     ContractChangeProposal[]
+  contractFacilities   ContractFacility[]
+  contractCategories   ContractProductCategory[]
+  changeProposals      ContractChangeProposal[]
+  tieInBundlePrimary   TieInBundle?        @relation("PrimaryContract")
+  tieInBundleMembers   TieInBundleMember[]
+  priceVariances       InvoicePriceVariance[]
+  accruals             RebateAccrual[]
 
   @@index([vendorId])
   @@index([facilityId])
@@ -554,6 +595,7 @@ model ContractTerm {
   evaluationPeriod     String       @default("annual")
   paymentTiming        String       @default("quarterly")
   appliesTo            String       @default("all_products")
+  rebateMethod         RebateMethod @default(cumulative)
   effectiveStart       DateTime     @db.Date
   effectiveEnd         DateTime     @db.Date
   volumeType           VolumeType?
@@ -577,6 +619,7 @@ model ContractTier {
   id             String     @id @default(cuid())
   termId         String
   tierNumber     Int        @default(1)
+  tierName       String?
   spendMin       Decimal    @default(0) @db.Decimal(14, 2)
   spendMax       Decimal?   @db.Decimal(14, 2)
   volumeMin      Int?
@@ -681,6 +724,38 @@ model ContractPeriod {
 
   @@index([contractId])
   @@map("contract_period")
+}
+
+// ─── Tie-In Bundles ───────────────────────────────────────────────
+
+model TieInBundle {
+  id                String    @id @default(cuid())
+  primaryContractId String    @unique
+  complianceMode   TieInMode @default(all_or_nothing)
+  bonusMultiplier  Decimal?  @db.Decimal(5, 4)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  primaryContract Contract            @relation("PrimaryContract", fields: [primaryContractId], references: [id], onDelete: Cascade)
+  members         TieInBundleMember[]
+
+  @@map("tie_in_bundle")
+}
+
+model TieInBundleMember {
+  id            String   @id @default(cuid())
+  bundleId      String
+  contractId    String
+  weightPercent Decimal  @db.Decimal(5, 2)
+  minimumSpend  Decimal? @db.Decimal(14, 2)
+  createdAt     DateTime @default(now())
+
+  bundle   TieInBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  contract Contract    @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([bundleId, contractId])
+  @@index([bundleId])
+  @@map("tie_in_bundle_member")
 }
 
 // ─── Pending Contracts (Vendor Submissions) ───────────────────────
@@ -911,9 +986,30 @@ model InvoiceLineItem {
   isFlagged            Boolean  @default(false)
   createdAt            DateTime @default(now())
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice       Invoice               @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  priceVariance InvoicePriceVariance?
 
   @@map("invoice_line_item")
+}
+
+model InvoicePriceVariance {
+  id                String             @id @default(cuid())
+  invoiceLineItemId String             @unique
+  contractId        String
+  contractPrice     Decimal            @db.Decimal(12, 2)
+  actualPrice       Decimal            @db.Decimal(12, 2)
+  variancePercent   Decimal            @db.Decimal(6, 2)
+  direction         VarianceDirection
+  severity          VarianceSeverity
+  dollarImpact      Decimal            @db.Decimal(14, 2)
+  detectedAt        DateTime           @default(now())
+
+  invoiceLineItem InvoiceLineItem @relation(fields: [invoiceLineItemId], references: [id], onDelete: Cascade)
+  contract        Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([severity])
+  @@map("invoice_price_variance")
 }
 
 // ─── Rebates / Payments / Credits ─────────────────────────────────
@@ -939,6 +1035,25 @@ model Rebate {
 
   @@index([contractId])
   @@map("rebate")
+}
+
+model RebateAccrual {
+  id             String             @id @default(cuid())
+  contractId     String
+  periodStart    DateTime           @db.Date
+  periodEnd      DateTime           @db.Date
+  granularity    AccrualGranularity
+  accruedAmount  Decimal            @default(0) @db.Decimal(14, 2)
+  trueUpAmount   Decimal            @default(0) @db.Decimal(14, 2)
+  status         AccrualStatus      @default(pending)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([contractId, periodStart])
+  @@map("rebate_accrual")
 }
 
 model Payment {
