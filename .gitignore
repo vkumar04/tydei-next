@@ -50,3 +50,4 @@ docs/v0-reference/_prod-current/
 
 # superpowers worktrees (isolated feature work)
 .worktrees/
+.claude/
