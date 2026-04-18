@@ -24,6 +24,9 @@ type ContractWithVendor = Contract & {
   facility: Pick<Facility, "id" | "name"> | null
   rebateEarned?: number
   rebateCollected?: number
+  /** From getContractMetricsBatch (when loaded). */
+  metricsSpend?: number
+  metricsRebate?: number
 }
 
 const typeLabels: Record<string, string> = {
@@ -105,12 +108,16 @@ export function getContractColumns(
       header: "Score",
       cell: ({ row }) => (
         <ScoreBadge
+          // Prefer the new Contract.score column; fall back to the
+          // legacy aiScore field for older rows that haven't been
+          // recomputed yet.
           score={
-            "aiScore" in row.original
+            row.original.score ??
+            ("aiScore" in row.original
               ? ((row.original as Record<string, unknown>).aiScore as
                   | number
                   | null)
-              : null
+              : null)
           }
           size="sm"
         />
@@ -136,13 +143,31 @@ export function getContractColumns(
       ),
     },
     {
-      id: "rebateEarned",
-      header: () => <div className="text-right">Rebate Earned</div>,
+      id: "metricsSpend",
+      header: () => <div className="text-right">Spend</div>,
       cell: ({ row }) => (
-        <div className="text-right font-medium text-green-600 dark:text-green-400">
-          {formatCurrency(Number(row.original.rebateEarned ?? 0))}
+        <div className="text-right font-medium text-muted-foreground">
+          {row.original.metricsSpend !== undefined
+            ? formatCurrency(row.original.metricsSpend)
+            : "—"}
         </div>
       ),
+    },
+    {
+      id: "rebateEarned",
+      header: () => <div className="text-right">Rebate Earned</div>,
+      cell: ({ row }) => {
+        // Prefer the live metrics rebate (from getContractMetricsBatch)
+        // when present; fall back to the rebateEarned aggregate.
+        const value =
+          row.original.metricsRebate ??
+          Number(row.original.rebateEarned ?? 0)
+        return (
+          <div className="text-right font-medium text-green-600 dark:text-green-400">
+            {formatCurrency(value)}
+          </div>
+        )
+      },
     },
     {
       id: "actions",
