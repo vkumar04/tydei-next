@@ -220,20 +220,33 @@ if (selectedContract === 'all') {
 - Create: `components/facility/reports/calculations-tab.tsx`
 - Requires a selected contract (shows a picker otherwise)
 
-**Displays:**
-1. Contract info card
-2. Tier structure table (rate per tier, min/max spend)
-3. Current tier pill
-4. Rebate calculation formula walk-through
-5. Included POs table (green rows)
-6. Excluded POs table (amber rows) with per-row exclusion reason
-7. Carve-out exclusions (from rebate-term-types spec)
-8. Net rebate callout
+**Displays (per canonical doc §4):**
+1. **Contract info card** — name, vendor, type, effective + expiration dates (§4.1)
+2. **Tier structure table** — rate per tier, min/max spend, current-tier indicator, retroactive-application tooltip (§4.2)
+3. **Rebate calculation display** (§4.3):
+   - `totalEligibleSpend`
+   - `currentTierRate`
+   - `grossRebate = eligibleSpend × tierRate`
+   - **Adjustments** — signed list (e.g., `Administrative fee (2%) -1,014`, `Early payment credit +500`)
+   - `netRebate = grossRebate + sum(adjustments)`
+   - Plain-English `formula` and algebraic `detailedFormula` strings (copyable)
+4. **Eligible purchases table** (§4.4) — per-PO per-item with columns: PO, Date, Item, Description, Qty, Unit Price, Ext Price, Eligible?, Rebate Amount, Exclusion Reason
+5. **Exclusions summary** grouped-by-category (§4.5):
+   | Category | Reason | Item Count | Total Value |
+   | Service & Repairs | Section 4.2 | 3 | $7,500 |
+   - Pulls from enriched COG `matchStatus` (out_of_scope / off_contract_item / price_variance) + contract carve-outs (rebate-term-types spec)
+6. **Tier progress projection** (§4.6):
+   - `currentSpend`, `nextTierThreshold`, `spendNeeded`, `nextTierRate`
+   - `additionalRebateIfReached = spendNeeded × (nextRate - currentRate)`
+   - Projection string: `"At current monthly rate of $X, Tier N reached in Y.Y months"` based on trailing-3-month spend velocity
+   - Hidden when already at top tier or zero eligible spend
 
 **Acceptance:**
 - Every number traceable to a source row or formula.
-- Exclusion reasons pull real reasons from match algorithm (`out_of_scope`, `off_contract_item`, `carve_out`, etc.).
+- Exclusion reasons pull real reasons from match algorithm (`out_of_scope`, `off_contract_item`, `carve_out`, `price_variance`).
 - Copy button on formula displays.
+- Adjustments display handles empty + multi-line correctly.
+- Tier progress projection hides gracefully when spend velocity is zero.
 
 **Plan detail:** On-demand — `04-calc-audit-tab-plan.md`.
 
@@ -249,9 +262,16 @@ if (selectedContract === 'all') {
   - **Price Discrepancy Drill-Down** (navigates to `/dashboard/reports/price-discrepancy`)
   - **Scheduled Reports** (opens schedule dialog)
 - Create: `components/facility/reports/scheduled-reports-dialog.tsx`:
-  - List of `ReportSchedule` rows
+  - List of `ReportSchedule` rows — columns: `name`, `type`, `frequency`, `nextRun`, `recipients[]`
   - Edit / pause / delete actions
-  - "New Schedule" form (type / frequency / recipients / filter preset)
+  - "New Schedule" form with fields (per canonical §6):
+    - `name` (string)
+    - `reportType` (usage | capital | service | tie_in | grouped | pricing_only | discrepancy)
+    - `frequency` (daily | weekly | monthly | quarterly)
+    - `recipients` (email[] — comma-separated input, validated)
+    - `includeCharts` (bool toggle)
+    - `includeLineItems` (bool toggle)
+    - filter preset (inherit current filters on create)
   - Banner: "Scheduled delivery is in development. These settings will apply once the scheduled job goes live." (same pattern as renewals spec's alert settings)
 
 **Acceptance:**

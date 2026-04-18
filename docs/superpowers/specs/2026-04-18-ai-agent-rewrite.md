@@ -153,10 +153,32 @@ Report generator outputs aren't persisted — ephemeral per-request. If we later
 - Add: "New Chat" button on non-empty state
 - Verify streaming render + auto-scroll
 
+**Suggested questions (empty state, canonical §2):**
+
+| Category | Question |
+|---|---|
+| Contract Performance | How are our top contracts performing this quarter? |
+| Rebate Analysis | What is our total earned rebate this year and how close are we to hitting the next tier? |
+| Alerts Summary | What are the critical alerts I should address today? |
+| Cost Savings | Where are our biggest opportunities to save money on contracts? |
+| Market Share | What does our market share look like across product categories? |
+| Surgeon Metrics | Which surgeons have the best spend efficiency scores? |
+
+Each chip dispatches `sendMessage({ text })` directly; bypasses input field.
+
+**Request body** (injected server-side per canonical §6):
+```ts
+{
+  messages,
+  userRole: "facility"  // vendor portal sends "vendor"; server scopes data access
+}
+```
+
 **Acceptance:**
 - Streaming renders incrementally; auto-scroll sticks to bottom.
-- Suggested-question chips fire `sendMessage` directly.
+- Suggested-question chips fire `sendMessage` directly (6 chips; hidden when `messages.length > 0`).
 - Tool invocations render inline (per-tool-call display).
+- `userRole: 'facility'` is injected via `prepareSendMessagesRequest`.
 
 **Plan detail:** On-demand — `01-chat-tab-plan.md`.
 
@@ -226,14 +248,35 @@ const generatedReportSchema = z.object({
   data: z.array(z.record(z.union([z.string(), z.number()]))),
   generatedAt: z.string(),
   notes: z.string().optional(),
+  reportType: z.enum([
+    "contract_performance",
+    "surgeon_performance",
+    "rebate_analysis",
+    "invoice_discrepancy",
+    "custom",
+  ]),
 })
 ```
 
+**Prompt routing** (canonical §4.3, deterministic pre-filter before the Claude call to pick a column template — lowest-priority match wins the fallback):
+
+| Substring in prompt (case-insensitive) | reportType | Columns |
+|---|---|---|
+| `contract` or `vendor` | `contract_performance` | Vendor, Contract ID, Start Date, End Date, Total Spend, Rebate Earned, Compliance % |
+| `surgeon` or `physician` | `surgeon_performance` | Surgeon, Specialty, Total Cases, Avg Case Cost, Contract Compliance, Rebate Contribution, Cost Efficiency |
+| `rebate` or `tier` | `rebate_analysis` | Vendor, Contract, Current Tier, Next Tier, Current Spend, Spend to Next Tier, Potential Additional Rebate |
+| `invoice`, `discrepancy`, or `variance` | `invoice_discrepancy` | Invoice #, Vendor, Invoice Date, Invoiced Amount, Contract Amount, Variance, Status |
+| fallback | `custom` | Category, Metric, Value, Change, Status |
+
 - Download as CSV button
+- CSV filename pattern: `${title.replace(/\s+/g, '_')}_${YYYY-MM-DD}.csv`
+- Every column value double-quoted to handle commas in cell values
 
 **Acceptance:**
-- "What are my top 10 rebate opportunities?" → structured table output.
-- CSV download respects the generated report's columns + data.
+- "What are my top 10 rebate opportunities?" → routes to `rebate_analysis` → structured table output.
+- "Show me surgeon efficiency" → routes to `surgeon_performance`.
+- CSV download respects the generated report's columns + data, with proper quoting.
+- Filename format matches pattern.
 - Credits deducted; audit log populated.
 
 **Plan detail:** On-demand — `04-report-generator-plan.md`.
