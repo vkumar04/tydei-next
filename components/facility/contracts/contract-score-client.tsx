@@ -54,6 +54,7 @@ import {
 } from "recharts"
 import { chartTooltipStyle } from "@/lib/chart-config"
 import type { DealScoreResult } from "@/lib/ai/schemas"
+import { ContractMarginCard } from "@/components/contracts/contract-margin-card"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -654,6 +655,11 @@ export function ContractScoreClient({
                 </div>
               </CardContent>
             </Card>
+          </div>
+
+          {/* True Margin analysis — procedure-level rebate allocation */}
+          <div className="mt-6">
+            <ContractMarginCard contractId={contractId} />
           </div>
         </TabsContent>
 
