@@ -6,6 +6,7 @@ import {
   getContracts,
   getContract,
   getContractStats,
+  getContractMetricsBatch,
   createContract,
   updateContract,
   deleteContract,
@@ -32,6 +33,19 @@ export function useContractStats(facilityId: string) {
   return useQuery({
     queryKey: queryKeys.contracts.stats(facilityId),
     queryFn: () => getContractStats(),
+  })
+}
+
+/**
+ * Per-row live metrics (spend / rebate / totalValue) for a batch of
+ * contract ids. Loaded in parallel with the main contracts list so
+ * the UI can render the metrics columns without an extra round-trip.
+ */
+export function useContractMetricsBatch(contractIds: string[]) {
+  return useQuery({
+    queryKey: ["contracts", "metricsBatch", contractIds.slice().sort().join(",")],
+    queryFn: () => getContractMetricsBatch(contractIds),
+    enabled: contractIds.length > 0,
   })
 }
 
