@@ -23,6 +23,12 @@ import {
   calculateMargins,
   type ProcedureSpend,
 } from "@/lib/contracts/true-margin"
+import {
+  evaluateAllOrNothing,
+  evaluateProportional,
+  type TieInMember,
+  type MemberPerformance,
+} from "@/lib/contracts/tie-in"
 import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
 import {
   contractFiltersSchema,
@@ -766,5 +772,107 @@ export async function getContractMarginAnalysis(contractId: string) {
     procedures,
     totalVendorSpend,
     totalRebate,
+  })
+}
+
+// ─── Tie-In Bundle ──────────────────────────────────────────────────
+//
+// Reads a bundle (if this contract is the primary), loads each member's
+// current spend + rebate, runs the appropriate compliance engine, and
+// returns a struct for the detail page.
+
+export async function getContractTieInBundle(contractId: string) {
+  const { facility } = await requireFacility()
+
+  const bundle = await prisma.tieInBundle.findUnique({
+    where: { primaryContractId: contractId },
+    include: {
+      primaryContract: { select: { id: true, name: true, vendorId: true } },
+      members: {
+        include: {
+          contract: {
+            include: {
+              vendor: { select: { id: true, name: true } },
+              terms: {
+                include: { tiers: { orderBy: { tierNumber: "asc" } } },
+                take: 1,
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!bundle) {
+    return serialize({ bundle: null })
+  }
+
+  // Load each member's current COG spend for the facility/vendor.
+  const perf: MemberPerformance[] = []
+  for (const m of bundle.members) {
+    const cogAgg = await prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
+        vendorId: m.contract.vendorId,
+      },
+      _sum: { extendedPrice: true },
+    })
+    const spend = Number(cogAgg._sum.extendedPrice ?? 0)
+    let rebate = 0
+    const term = m.contract.terms[0]
+    if (term && term.tiers.length > 0 && spend > 0) {
+      rebate = computeRebateFromPrismaTiers(spend, term.tiers, {
+        method: term.rebateMethod ?? "cumulative",
+      }).rebateEarned
+    }
+    perf.push({
+      contractId: m.contractId,
+      currentSpend: spend,
+      currentRebate: rebate,
+    })
+  }
+
+  const members: TieInMember[] = bundle.members.map((m) => ({
+    contractId: m.contractId,
+    weightPercent: Number(m.weightPercent),
+    minimumSpend: m.minimumSpend != null ? Number(m.minimumSpend) : null,
+  }))
+
+  const bonusMultiplier =
+    bundle.bonusMultiplier != null ? Number(bundle.bonusMultiplier) : undefined
+
+  const evaluation =
+    bundle.complianceMode === "proportional"
+      ? evaluateProportional(members, perf)
+      : evaluateAllOrNothing(members, perf, { bonusMultiplier })
+
+  // Enrich member rows with display fields.
+  const memberRows = bundle.members.map((m) => {
+    const p = perf.find((p) => p.contractId === m.contractId)
+    return {
+      contractId: m.contractId,
+      contractName: m.contract.name,
+      vendorName: m.contract.vendor.name,
+      weightPercent: Number(m.weightPercent),
+      minimumSpend: m.minimumSpend != null ? Number(m.minimumSpend) : null,
+      currentSpend: p?.currentSpend ?? 0,
+      currentRebate: p?.currentRebate ?? 0,
+      compliantSoFar:
+        m.minimumSpend == null
+          ? true
+          : (p?.currentSpend ?? 0) >= Number(m.minimumSpend),
+    }
+  })
+
+  return serialize({
+    bundle: {
+      id: bundle.id,
+      complianceMode: bundle.complianceMode,
+      bonusMultiplier: bundle.bonusMultiplier != null ? Number(bundle.bonusMultiplier) : null,
+      members: memberRows,
+      evaluation,
+    },
   })
 }

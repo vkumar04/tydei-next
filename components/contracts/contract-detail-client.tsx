@@ -25,6 +25,7 @@ import { ContractTransactions } from "@/components/contracts/contract-transactio
 import { ContractPricingTab } from "@/components/contracts/contract-pricing-tab"
 import { ContractInsightsCards } from "@/components/contracts/contract-insights-cards"
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
+import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
 import { Button } from "@/components/ui/button"
@@ -270,7 +271,9 @@ export function ContractDetailClient({
         </TabsList>
 
         {/* ── Overview Tab ─────────────────────────────────────── */}
-        <TabsContent value="overview" className="mt-6">
+        <TabsContent value="overview" className="mt-6 space-y-6">
+          {/* Tie-in bundle card — renders only when this contract is a bundle primary */}
+          <ContractTieInCard contractId={contractId} />
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Contract Details Card */}
             <Card>
