@@ -250,6 +250,48 @@ Standard polish — empty states, a11y, responsive breakpoints, dropzone accessi
 
 ---
 
+### Subsystem 7 — Clause-risk adjustment to NPV (P2)
+
+**Priority:** P2 — depends on prospective-analysis-rewrite subsystem 7 (PDF clause analyzer) shipping first.
+
+**Goal:** When a capital contract has been through the PDF clause analyzer (from prospective-analysis spec), surface the clause risk alongside the NPV output. Early-termination-friendly + assignment-permitted contracts are worth more than exclusivity + minimum-commitment contracts at the same headline NPV.
+
+**Files:**
+- Create: `lib/financial-analysis/clause-risk-adjustment.ts`:
+  - `adjustNPVForClauseRisk(baseNPV: number, clauses: ClauseAnalysis): AdjustedNPV`
+  - Rules (starter set):
+    - Exclusivity clause present + high risk → −5% NPV
+    - Minimum commitment >80% of expected spend → −3% NPV
+    - No termination-for-convenience → −2% NPV
+    - Auto-renewal without opt-out window → −2% NPV
+    - Price protection with cap → +2% NPV (de-risks inflation)
+- Create: `lib/financial-analysis/__tests__/clause-risk-adjustment.test.ts`
+- Modify: `components/facility/analysis/results-panel.tsx` — show "Risk-Adjusted NPV" alongside base NPV when a clause analysis is available; tooltip explains each adjustment with link to the clause finding.
+
+**Return shape:**
+```ts
+type AdjustedNPV = {
+  baseNPV: number
+  adjustments: Array<{
+    clauseCategory: ClauseCategory
+    adjustmentPercent: number   // signed
+    reason: string
+    linkToFinding: string | null
+  }>
+  totalAdjustmentPercent: number
+  riskAdjustedNPV: number
+}
+```
+
+**Acceptance:**
+- Adjustments apply deterministically from clause findings.
+- UI surfaces the adjustment alongside NPV with a one-line reason.
+- Missing clause analysis → UI hides the adjustment panel gracefully.
+
+**Plan detail:** On-demand — `07-clause-risk-plan.md`.
+
+---
+
 ## 5. Execution model
 
 ```

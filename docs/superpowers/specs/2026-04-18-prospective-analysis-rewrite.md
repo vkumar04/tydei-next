@@ -246,19 +246,128 @@ Standard polish — empty states, a11y, responsive, hydration.
 
 ---
 
+### Subsystem 7 — PDF contract clause analyzer (P1)
+
+**Priority:** P1 — sourced from Charles's `analyzePDFContract` engine. New territory not covered in subsystems 0-6 (which evaluate proposals as scored line-items, not clause-by-clause legal review).
+
+**Context:** Charles shared a complete `analyzePDFContract(pdfText)` engine that:
+- Matches text against a library of 20+ clause categories (auto-renewal, termination, price protection, minimum commitment, exclusivity, payment terms, rebate structure, audit rights, indemnification, governing law, dispute resolution, assignment, force majeure, confidentiality, warranty, limitation of liability, IP ownership, most-favored-nation, volume commitment, co-op marketing, data rights, insurance, compliance reps, non-solicitation, GPO affiliation)
+- Scores each clause on (a) presence, (b) risk level (low / medium / high), (c) favor-ability (facility-friendly / neutral / vendor-friendly)
+- Emits a structured risk report + recommended re-negotiation language
+
+**Files:**
+- Create: `lib/prospective-analysis/clause-library.ts` — the 20+ clause-category patterns + detection regex/keywords + risk annotations (ports Charles's library verbatim)
+- Create: `lib/prospective-analysis/pdf-clause-analyzer.ts`:
+  - `analyzePDFContract(pdfText: string): ClauseAnalysis`
+  - Uses clause library + matches text segments → produces `ClauseFinding[]` per category
+  - Per finding: `{ category, found, quote?, riskLevel, favorability, recommendedAction? }`
+  - Missing-clause flags: high-risk categories that SHOULD be present but aren't (e.g., termination-for-convenience, audit-rights)
+- Create: `lib/prospective-analysis/__tests__/pdf-clause-analyzer.test.ts` — coverage for every clause category with Charles's worked examples
+- Create: `components/facility/analysis/prospective/pdf-clause-tab.tsx` — render findings as a 3-column table (category / risk-badge / quote) + missing-clauses alert panel + export-as-markdown button
+- Wire: available as a new sub-tab under "Proposal Upload" (the PDF already uploaded in subsystem 1)
+
+**Integration with AI:**
+- First pass is deterministic (regex + keyword matching)
+- Optional Claude fallback (`ai-integration-foundation` feature): for clauses where regex is ambiguous (confidence < 0.8), run a single Claude call that returns `{ found, quote, reasoning }` — user confirms pair-wise before the finding is committed
+- NEVER auto-mark a clause as "high risk" without a matched quote — user always sees the source text
+
+**Return shape:**
+```ts
+type ClauseFinding = {
+  category: ClauseCategory          // 25+ enum values
+  found: boolean
+  quote: string | null              // the matched text segment
+  riskLevel: "low" | "medium" | "high"
+  favorability: "facility" | "neutral" | "vendor"
+  recommendedAction: string | null  // from Charles's risk library
+}
+
+type ClauseAnalysis = {
+  findings: ClauseFinding[]
+  missingHighRiskCategories: ClauseCategory[]
+  overallRiskScore: number          // 0-10, aggregated from high-risk findings
+  summary: string                   // human-readable headline
+}
+```
+
+**Cross-cutting reference:**
+- Contracts-list-closure spec §4.5 (compare cards) — when a clause analysis has been run, the "Contract Terms" compare card renders the top-3 risks as chip badges for quick comparison between 2 proposals.
+- Financial-analysis-rewrite spec — when a capital contract is analyzed, the termination + assignment clauses feed into the NPV adjustment (early termination penalty raises risk discount).
+
+**Acceptance:**
+- PDF → within 3s produces finding for every clause category in the library.
+- Missing high-risk categories surface prominently.
+- Claude fallback fires only when regex is ambiguous.
+- Export to markdown renders a legal-readable risk report.
+- Charles's worked examples green as fixture tests.
+
+**Plan detail:** On-demand — `07-pdf-clause-analyzer-plan.md`.
+
+---
+
+### Subsystem 8 — COG spend-pattern analyzer (P2)
+
+**Priority:** P2 — sourced from Charles's `analyzeCOGSpendPatterns` engine.
+
+**Goal:** When a proposal arrives for a vendor the facility already buys from, pull the vendor's last-12-months COG spend and analyze patterns:
+- Seasonal variation (if >20% monthly stdev, flag for buffer stock)
+- Top-5 items by spend (focus negotiation on these)
+- Price drift vs pricing-file (if COG avg > 5% above pricing-file, flag for review)
+- Vendor market share of category (if >40%, tie-in risk)
+
+**Files:**
+- Create: `lib/prospective-analysis/cog-spend-analyzer.ts`:
+  - `analyzeCOGSpendPatterns(vendorId, months?: 12): SpendPatternAnalysis`
+  - Server action wrapper in `lib/actions/prospective-analysis.ts`
+- Create: `lib/prospective-analysis/__tests__/cog-spend-analyzer.test.ts`
+- Wire: shown as a sidebar card alongside the scored proposal (subsystem 1)
+
+**Return shape:**
+```ts
+type SpendPatternAnalysis = {
+  vendorId: string
+  totalSpend12Mo: number
+  monthlyStdevPct: number
+  seasonalityFlag: boolean
+  top5ItemsBySpend: Array<{ vendorItemNo: string; description: string; spend: number }>
+  priceDriftVsPricingFile: number  // % — positive means COG is above pricing-file
+  categoryMarketShare: number       // 0-1
+  tieInRiskFlag: boolean            // true if marketShare > 0.4
+}
+```
+
+**Acceptance:**
+- 12-month COG pull in <1s for demo scale.
+- Seasonality + drift + tie-in flags surface correctly on worked fixtures.
+
+**Plan detail:** On-demand — `08-cog-spend-analyzer-plan.md`.
+
+---
+
 ## 5. Execution model
 
 ```
 Subsystem 0 (engines)
-  ↓                     ↘
-Subsystem 1 (proposal)  Subsystem 2 (pricing file)   Subsystem 3 (manual)
-  ↓                      ↓                            ↓
+  ↓                     ↘                           ↘
+Subsystem 1 (proposal)  Subsystem 2 (pricing file)  Subsystem 3 (manual)
+  ↓                      ↓                           ↓
          Subsystem 4 (comparison)
                 ↓
          Subsystem 5 (state machine + split)
                 ↓
          Subsystem 6 (UI polish)
+
+        ── separate track (can run in parallel) ──
+Subsystem 7 (PDF clause analyzer)
+Subsystem 8 (COG spend-pattern analyzer — depends on cog-data-rewrite subsystem 0+1)
 ```
+
+**Canonical reference:** Charles's Prospective Contract Analysis Engine
+(vendor/facility/PDF/pricing-file/COG sub-engines) is the authoritative
+reference implementation for subsystems 0, 2, 7, and 8. Scoring formulas
+in subsystem 0 match Charles's verbatim; the PDF clause library in
+subsystem 7 ports Charles's 20+ clause categories + risk annotations
+directly.
 
 **Global verification:**
 ```bash
@@ -271,9 +380,11 @@ bun run test lib/prospective-analysis/__tests__/
 
 ## 6. Acceptance
 
-- All 7 subsystems merged.
-- Scoring formulas match canonical doc exactly; worked examples green.
+- All 9 subsystems merged.
+- Scoring formulas match Charles's engine + canonical doc exactly; worked examples green.
 - Pricing file produces variance + summary; matches expected shape.
+- PDF clause analyzer covers all 25+ categories; missing-high-risk flags work.
+- COG spend-pattern analyzer emits seasonality/drift/tie-in flags correctly.
 - Comparison mode works end-to-end.
 - `prospective-client.tsx` ≤200 lines.
 - `bunx tsc --noEmit` → 0.

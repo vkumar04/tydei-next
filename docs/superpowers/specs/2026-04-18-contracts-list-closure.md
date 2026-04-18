@@ -230,6 +230,9 @@ WHERE
 4. **Pricing Items** — Items count, Categories count, Avg Unit Price. Top 3 category badges + "N more" overflow.
 5. **Contract Terms** — Duration (months), Days Remaining (color-coded), Auto Renewal, Scope. "Expiring Soon" badge when `0 < daysRemaining < 180`.
 
+**Optional clause-risk chips** (depends on prospective-analysis-rewrite subsystem 7):
+When any compared contract has a stored PDF clause analysis, the **Contract Terms** card additionally shows up to 3 top-risk chip badges (color-coded by risk level — red for high, yellow for medium). Each chip hovers the clause quote. Missing analysis → chips hidden gracefully; base card renders unchanged.
+
 Dynamic column CSS grid: `style={{ gridTemplateColumns: "repeat(" + N + ", 1fr)" }}` where N = selected count.
 
 **Acceptance:**
