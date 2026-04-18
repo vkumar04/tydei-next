@@ -4,6 +4,17 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 import {
+  calculateComplianceRate,
+  calculateMarketShare,
+  type CompliancePurchase,
+  type ComplianceContract,
+} from "@/lib/contracts/compliance"
+import {
+  analyzePriceDiscrepancies,
+  type ContractPriceLookup,
+  type InvoiceLineForVariance,
+} from "@/lib/contracts/price-variance"
+import {
   contractFiltersSchema,
   createContractSchema,
   updateContractSchema,
@@ -399,5 +410,137 @@ export async function deleteContract(id: string) {
     action: "contract.deleted",
     entityType: "contract",
     entityId: id,
+  })
+}
+
+// ─── Contract Insights (compliance, market share, price variance) ───
+//
+// Live-computes the subsystem 4 / 5 engines against the facility's
+// purchase-order + invoice history for one contract. Returns a summary
+// struct the detail page renders as cards.
+
+export async function getContractInsights(contractId: string) {
+  const { facility } = await requireFacility()
+
+  const contract = await prisma.contract.findUniqueOrThrow({
+    where: { id: contractId },
+    include: {
+      pricingItems: true,
+      purchaseOrders: {
+        include: { lineItems: true },
+      },
+    },
+  })
+
+  // Build the ComplianceContract from current contract pricing.
+  const priceMap = new Map<string, number>()
+  for (const item of contract.pricingItems) {
+    priceMap.set(item.vendorItemNo, Number(item.unitPrice))
+  }
+  const approvedItems = new Set(
+    contract.pricingItems.map((p) => p.vendorItemNo),
+  )
+  const complianceContract: ComplianceContract = {
+    id: contract.id,
+    vendorId: contract.vendorId,
+    effectiveDate: contract.effectiveDate,
+    expirationDate: contract.expirationDate,
+    approvedItems,
+    priceByItem: priceMap,
+  }
+
+  // Pull purchases from PurchaseOrder.lineItems for the facility + vendor.
+  // Fall back to COG records where PO history is thin.
+  const poLines = await prisma.pOLineItem.findMany({
+    where: {
+      purchaseOrder: {
+        facilityId: facility.id,
+        vendorId: contract.vendorId,
+      },
+    },
+    include: { purchaseOrder: { select: { orderDate: true } } },
+  })
+
+  const purchases: CompliancePurchase[] = poLines.map((l) => ({
+    vendorId: contract.vendorId,
+    vendorItemNo: l.vendorItemNo ?? "",
+    unitPrice: Number(l.unitPrice),
+    purchaseDate: l.purchaseOrder?.orderDate ?? contract.effectiveDate,
+  }))
+
+  const compliance = calculateComplianceRate(
+    purchases,
+    [complianceContract],
+    new Date(),
+  )
+
+  // Price variance: only lines with a contractPrice set on InvoiceLineItem
+  // get a variance today. For a live read we re-compute from
+  // InvoiceLineItem where the contract's pricingItems have a matching SKU.
+  const invoiceLines = await prisma.invoiceLineItem.findMany({
+    where: {
+      vendorItemNo: { in: contract.pricingItems.map((p) => p.vendorItemNo) },
+      invoice: { facilityId: facility.id, vendorId: contract.vendorId },
+    },
+    select: {
+      id: true,
+      vendorItemNo: true,
+      invoicePrice: true,
+      invoiceQuantity: true,
+    },
+  })
+  const priceLookup: ContractPriceLookup = new Map()
+  for (const item of contract.pricingItems) {
+    priceLookup.set(`${contract.id}::${item.vendorItemNo}`, Number(item.unitPrice))
+  }
+  const varianceLines: InvoiceLineForVariance[] = invoiceLines
+    .filter((l): l is typeof l & { vendorItemNo: string } => l.vendorItemNo != null)
+    .map((l) => ({
+      id: l.id,
+      contractId: contract.id,
+      vendorItemNo: l.vendorItemNo,
+      actualPrice: Number(l.invoicePrice),
+      quantity: l.invoiceQuantity,
+    }))
+  const priceVariance = analyzePriceDiscrepancies(varianceLines, priceLookup)
+
+  // Market share: vendor spend over product-category total.
+  let marketShare: ReturnType<typeof calculateMarketShare> | null = null
+  if (contract.productCategoryId) {
+    const [vendorAgg, categoryAgg] = await Promise.all([
+      prisma.cOGRecord.aggregate({
+        where: {
+          facilityId: facility.id,
+          vendorId: contract.vendorId,
+          productCategoryId: contract.productCategoryId,
+        },
+        _sum: { extendedPrice: true },
+      }),
+      prisma.cOGRecord.aggregate({
+        where: {
+          facilityId: facility.id,
+          productCategoryId: contract.productCategoryId,
+        },
+        _sum: { extendedPrice: true },
+      }),
+    ])
+    marketShare = calculateMarketShare(
+      Number(vendorAgg._sum.extendedPrice ?? 0),
+      Number(categoryAgg._sum.extendedPrice ?? 0),
+      contract.marketShareCommitment != null
+        ? Number(contract.marketShareCommitment)
+        : null,
+    )
+  }
+
+  return serialize({
+    compliance,
+    priceVariance: {
+      totalLines: priceVariance.totalLines,
+      overchargeTotal: priceVariance.overchargeTotal,
+      underchargeTotal: priceVariance.underchargeTotal,
+      bySeverity: priceVariance.bySeverity,
+    },
+    marketShare,
   })
 }
