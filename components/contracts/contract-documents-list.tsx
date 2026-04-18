@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import type { ContractDocument } from "@prisma/client"
-import { FileText, Loader2, Trash2, Upload } from "lucide-react"
+import { FileText, Loader2, Sparkles, Trash2, Upload } from "lucide-react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { deleteContractDocument } from "@/lib/actions/contracts"
@@ -26,6 +26,7 @@ export function ContractDocumentsList({
 }: ContractDocumentsListProps) {
   const queryClient = useQueryClient()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [reindexingId, setReindexingId] = useState<string | null>(null)
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteContractDocument(id),
@@ -36,6 +37,42 @@ export function ContractDocumentsList({
     },
     onError: (err) => toast.error(err.message || "Failed to delete document"),
   })
+
+  async function handleReindex(doc: ContractDocument) {
+    setReindexingId(doc.id)
+    try {
+      let rawText = ""
+      if (doc.url) {
+        try {
+          const fileRes = await fetch(doc.url)
+          if (fileRes.ok) {
+            const buf = await fileRes.arrayBuffer()
+            rawText = new TextDecoder("utf-8", { fatal: false }).decode(buf)
+          }
+        } catch (err) {
+          console.warn("[contract-documents-list] fetch doc url failed:", err)
+        }
+      }
+
+      const res = await fetch("/api/ai/index-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: doc.id, rawText }),
+      })
+
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(contractId) })
+        toast.success("Indexed for AI search")
+      } else {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        toast.error(body.error ?? "Re-index failed")
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Re-index failed")
+    } finally {
+      setReindexingId(null)
+    }
+  }
 
   return (
     <Card>
@@ -72,6 +109,19 @@ export function ContractDocumentsList({
                   <Badge variant="outline" className="capitalize">
                     {doc.type}
                   </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleReindex(doc)}
+                    disabled={reindexingId === doc.id}
+                  >
+                    {reindexingId === doc.id ? (
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-2 h-3 w-3" />
+                    )}
+                    Re-index for AI
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
