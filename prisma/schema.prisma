@@ -256,6 +256,18 @@ enum COGMatchStatus {
   price_variance
 }
 
+enum FileImportType {
+  cog
+  pricing
+  invoice
+}
+
+enum FileImportStatus {
+  processing
+  completed
+  failed
+}
+
 // ─── Better Auth managed tables ───────────────────────────────────
 
 model User {
@@ -414,6 +426,7 @@ model Facility {
   pendingContracts   PendingContract[]
   cogRecords         COGRecord[]
   pricingFiles       PricingFile[]
+  fileImports        FileImport[]
   purchaseOrders     PurchaseOrder[]
   invoices           Invoice[]
   alerts             Alert[]            @relation("FacilityAlerts")
@@ -464,6 +477,7 @@ model Vendor {
   pendingContracts   PendingContract[]
   cogRecords         COGRecord[]
   pricingFiles       PricingFile[]
+  fileImports        FileImport[]
   purchaseOrders     PurchaseOrder[]
   invoices           Invoice[]
   alerts             Alert[]            @relation("VendorAlerts")
@@ -844,11 +858,18 @@ model COGRecord {
   category             String?
   createdBy            String?
   matchStatus          COGMatchStatus @default(pending)
+  contractId           String?
+  contractPrice        Decimal? @db.Decimal(12, 2)
+  isOnContract         Boolean  @default(false)
+  savingsAmount        Decimal? @db.Decimal(14, 2)
+  variancePercent      Decimal? @db.Decimal(6, 2)
+  fileImportId         String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  facility Facility @relation(fields: [facilityId], references: [id])
-  vendor   Vendor?  @relation(fields: [vendorId], references: [id])
+  facility   Facility    @relation(fields: [facilityId], references: [id])
+  vendor     Vendor?     @relation(fields: [vendorId], references: [id])
+  fileImport FileImport? @relation(fields: [fileImportId], references: [id])
 
   @@index([facilityId])
   @@index([vendorId])
@@ -856,6 +877,9 @@ model COGRecord {
   @@index([vendorItemNo])
   @@index([matchStatus])
   @@index([facilityId, matchStatus])
+  @@index([contractId])
+  @@index([facilityId, isOnContract])
+  @@index([fileImportId])
   @@map("cog_record")
 }
 
@@ -882,6 +906,41 @@ model PricingFile {
   @@index([facilityId])
   @@index([vendorItemNo])
   @@map("pricing_file")
+}
+
+model FileImport {
+  id                   String           @id @default(cuid())
+  facilityId           String
+  vendorId             String?
+  fileType             FileImportType
+  fileName             String
+  recordCount          Int?
+  onContractSpend      Decimal?         @db.Decimal(14, 2)
+  offContractSpend     Decimal?         @db.Decimal(14, 2)
+  totalSavings         Decimal?         @db.Decimal(14, 2)
+  matchedRecords       Int?
+  unmatchedRecords     Int?
+  uniqueVendors        Int?
+  uniqueItems          Int?
+  minTransactionDate   DateTime?        @db.Date
+  maxTransactionDate   DateTime?        @db.Date
+  errorCount           Int              @default(0)
+  warningCount         Int              @default(0)
+  processingDurationMs Int?
+  status               FileImportStatus @default(processing)
+  createdBy            String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  facility   Facility    @relation(fields: [facilityId], references: [id])
+  vendor     Vendor?     @relation(fields: [vendorId], references: [id])
+  cogRecords COGRecord[]
+
+  @@index([facilityId])
+  @@index([facilityId, fileType])
+  @@index([facilityId, status])
+  @@index([vendorId])
+  @@map("file_import")
 }
 
 // ─── Alerts ───────────────────────────────────────────────────────
