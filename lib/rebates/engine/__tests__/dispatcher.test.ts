@@ -15,18 +15,11 @@ describe("calculateRebate dispatcher — stub + live phases", () => {
   //   - MARKET_SHARE_PRICE_REDUCTION (subsystem 4)
   //   - MARKET_SHARE_REBATE (subsystem 5)
   //   - CARVE_OUT (subsystem 7)
+  //   - CAPITATED (subsystem 6)
   //
   // The parametrized stub phase below covers types still awaiting their
   // engine implementation.
   const types: Array<{ config: RebateConfig; label: string }> = [
-    {
-      label: "CAPITATED",
-      config: {
-        type: "CAPITATED",
-        groupedReferenceNumbers: [],
-        periodCap: 0,
-      },
-    },
     {
       label: "TIE_IN_CAPITAL",
       config: {
@@ -169,6 +162,22 @@ describe("calculateRebate dispatcher — stub + live phases", () => {
     expect(result.errors).toHaveLength(1)
     expect(result.errors[0]).toContain("totalCategorySpend")
     expect(result.rebateEarned).toBe(0)
+  })
+
+  it("CAPITATED — dispatches to live engine (empty group, no embedded rebate, no errors)", () => {
+    const config: RebateConfig = {
+      type: "CAPITATED",
+      groupedReferenceNumbers: [],
+      periodCap: 0,
+    }
+    const result = calculateRebate(config, emptyPeriod, { periodLabel: "2026-Q1" })
+    expect(result.type).toBe("CAPITATED")
+    expect(result.errors).toEqual([])
+    expect(result.rebateEarned).toBe(0)
+    expect(result.priceReductionValue).toBe(0)
+    expect(result.eligibleSpend).toBe(0)
+    expect(result.warnings).toEqual([])
+    expect(result.periodLabel).toBe("2026-Q1")
   })
 
   it("unknown config type returns zero-rebate with descriptive error", () => {

@@ -19,6 +19,7 @@ import { calculateTierPriceReduction } from "./tier-price-reduction"
 import { calculateMarketSharePriceReduction } from "./market-share-price-reduction"
 import { calculateMarketShareRebate } from "./market-share-rebate"
 import { calculateCarveOut } from "./carve-out"
+import { calculateCapitated } from "./capitated"
 
 export type { RebateConfig, RebateResult, PeriodData, EngineOptions } from "./types"
 
@@ -43,6 +44,7 @@ export function calculateRebate(
     case "MARKET_SHARE_REBATE":
       return calculateMarketShareRebate(config, periodData, options)
     case "CAPITATED":
+      return calculateCapitated(config, periodData, options)
     case "TIE_IN_CAPITAL": {
       const result = zeroResult(config.type, periodLabel)
       result.errors.push(`Engine for ${config.type} not yet implemented`)
