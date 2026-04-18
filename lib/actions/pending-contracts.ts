@@ -9,6 +9,79 @@ import {
   type UpdatePendingContractInput,
 } from "@/lib/validators/pending-contracts"
 import { serialize } from "@/lib/serialize"
+import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import { revalidatePath } from "next/cache"
+
+/**
+ * Loose pending-pricing-item shape. `pending.pricingData` is stored as
+ * `Json?` with `z.any()` validation, so we accept arbitrary row shapes
+ * but only port entries that look like a real pricing row (must have
+ * vendorItemNo + numeric unitPrice).
+ */
+type PendingPricingItem = {
+  vendorItemNo?: unknown
+  description?: unknown
+  category?: unknown
+  unitPrice?: unknown
+  listPrice?: unknown
+  uom?: unknown
+}
+
+function coerceNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v
+  if (typeof v === "string") {
+    const n = Number(v.replace(/[$,]/g, ""))
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+function coerceString(v: unknown): string | null {
+  if (typeof v === "string" && v.trim().length > 0) return v.trim()
+  return null
+}
+
+/**
+ * Normalize pending.pricingData (Json?) into ContractPricing-shaped
+ * input rows. Drops invalid entries silently; returns [] for anything
+ * that isn't a non-empty array.
+ */
+function extractPendingPricingItems(
+  pricingData: unknown,
+): Array<{
+  vendorItemNo: string
+  description: string | null
+  category: string | null
+  unitPrice: number
+  listPrice: number | null
+  uom: string
+}> {
+  if (!Array.isArray(pricingData)) return []
+  const rows: Array<{
+    vendorItemNo: string
+    description: string | null
+    category: string | null
+    unitPrice: number
+    listPrice: number | null
+    uom: string
+  }> = []
+  for (const raw of pricingData) {
+    if (raw === null || typeof raw !== "object") continue
+    const r = raw as PendingPricingItem
+    const vendorItemNo = coerceString(r.vendorItemNo)
+    const unitPrice = coerceNumber(r.unitPrice)
+    if (!vendorItemNo || unitPrice === null) continue
+    rows.push({
+      vendorItemNo,
+      description: coerceString(r.description),
+      category: coerceString(r.category),
+      unitPrice,
+      listPrice: coerceNumber(r.listPrice),
+      uom: coerceString(r.uom) ?? "EA",
+    })
+  }
+  return rows
+}
 
 // ─── Vendor: List Pending ───────────────────────────────────────
 
@@ -118,6 +191,10 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
     where: { id, facilityId: facility.id },
   })
 
+  // F3 — port pricingData JSON into ContractPricing rows. Defensively
+  // extract only items that look real (vendorItemNo + numeric unitPrice).
+  const pricingItems = extractPendingPricingItems(pending.pricingData)
+
   const contract = await prisma.contract.create({
     data: {
       name: pending.contractName,
@@ -128,6 +205,11 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
       effectiveDate: pending.effectiveDate ?? new Date(),
       expirationDate: pending.expirationDate ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
       totalValue: pending.totalValue ?? 0,
+      ...(pricingItems.length > 0 && {
+        pricingItems: {
+          create: pricingItems,
+        },
+      }),
     },
   })
 
@@ -135,6 +217,18 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
     where: { id },
     data: { status: "approved", reviewedAt: new Date(), reviewedBy },
   })
+
+  // F2 — recompute COG match-statuses so rows flip from
+  // off_contract_item → on_contract / price_variance now that the
+  // vendor has an active contract with pricing.
+  await recomputeMatchStatusesForVendor(prisma, {
+    vendorId: pending.vendorId,
+    facilityId: facility.id,
+  })
+  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/contracts")
+  revalidatePath("/dashboard/alerts")
+  revalidatePath("/dashboard")
 
   return serialize(contract)
 }
