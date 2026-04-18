@@ -247,6 +247,15 @@ enum VarianceSeverity {
   major
 }
 
+enum COGMatchStatus {
+  pending
+  on_contract
+  off_contract_item
+  out_of_scope
+  unknown_vendor
+  price_variance
+}
+
 // ─── Better Auth managed tables ───────────────────────────────────
 
 model User {
@@ -834,6 +843,7 @@ model COGRecord {
   transactionDate      DateTime @db.Date
   category             String?
   createdBy            String?
+  matchStatus          COGMatchStatus @default(pending)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -844,6 +854,8 @@ model COGRecord {
   @@index([vendorId])
   @@index([transactionDate])
   @@index([vendorItemNo])
+  @@index([matchStatus])
+  @@index([facilityId, matchStatus])
   @@map("cog_record")
 }
 

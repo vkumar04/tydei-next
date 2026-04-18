@@ -129,7 +129,7 @@ export const PendingContractScalarFieldEnumSchema = z.enum(['id','vendorId','ven
 
 export const ContractChangeProposalScalarFieldEnumSchema = z.enum(['id','contractId','vendorId','vendorName','facilityId','facilityName','proposalType','status','changes','proposedTerms','vendorMessage','submittedAt','reviewedAt','reviewedBy','reviewNotes']);
 
-export const COGRecordScalarFieldEnumSchema = z.enum(['id','facilityId','vendorId','vendorName','inventoryNumber','inventoryDescription','vendorItemNo','manufacturerNo','poNumber','unitCost','extendedPrice','quantity','transactionDate','category','createdBy','createdAt','updatedAt']);
+export const COGRecordScalarFieldEnumSchema = z.enum(['id','facilityId','vendorId','vendorName','inventoryNumber','inventoryDescription','vendorItemNo','manufacturerNo','poNumber','unitCost','extendedPrice','quantity','transactionDate','category','createdBy','matchStatus','createdAt','updatedAt']);
 
 export const PricingFileScalarFieldEnumSchema = z.enum(['id','vendorId','facilityId','vendorItemNo','manufacturerNo','productDescription','listPrice','contractPrice','effectiveDate','expirationDate','category','uom','createdAt','updatedAt']);
 
@@ -322,6 +322,10 @@ export type VarianceDirectionType = `${z.infer<typeof VarianceDirectionSchema>}`
 export const VarianceSeveritySchema = z.enum(['minor','moderate','major']);
 
 export type VarianceSeverityType = `${z.infer<typeof VarianceSeveritySchema>}`
+
+export const COGMatchStatusSchema = z.enum(['pending','on_contract','off_contract_item','out_of_scope','unknown_vendor','price_variance']);
+
+export type COGMatchStatusType = `${z.infer<typeof COGMatchStatusSchema>}`
 
 /////////////////////////////////////////
 // MODELS
@@ -3273,6 +3277,7 @@ export const ContractChangeProposalWithPartialRelationsSchema: z.ZodType<Contrac
 /////////////////////////////////////////
 
 export const COGRecordSchema = z.object({
+  matchStatus: COGMatchStatusSchema,
   id: z.cuid(),
   facilityId: z.string(),
   vendorId: z.string().nullable(),
@@ -3306,6 +3311,7 @@ export type COGRecordPartial = z.infer<typeof COGRecordPartialSchema>
 //------------------------------------------------------
 
 export const COGRecordOptionalDefaultsSchema = COGRecordSchema.merge(z.object({
+  matchStatus: COGMatchStatusSchema.optional(),
   id: z.cuid().optional(),
   quantity: z.number().int().optional(),
   createdAt: z.coerce.date().optional(),
@@ -6864,6 +6870,7 @@ export const COGRecordSelectSchema: z.ZodType<Prisma.COGRecordSelect> = z.object
   transactionDate: z.boolean().optional(),
   category: z.boolean().optional(),
   createdBy: z.boolean().optional(),
+  matchStatus: z.boolean().optional(),
   createdAt: z.boolean().optional(),
   updatedAt: z.boolean().optional(),
   facility: z.union([z.boolean(),z.lazy(() => FacilityArgsSchema)]).optional(),
@@ -10218,6 +10225,7 @@ export const COGRecordWhereInputSchema: z.ZodType<Prisma.COGRecordWhereInput> = 
   transactionDate: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   category: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   createdBy: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => EnumCOGMatchStatusFilterSchema), z.lazy(() => COGMatchStatusSchema) ]).optional(),
   createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   updatedAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   facility: z.union([ z.lazy(() => FacilityScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional(),
@@ -10240,6 +10248,7 @@ export const COGRecordOrderByWithRelationInputSchema: z.ZodType<Prisma.COGRecord
   transactionDate: z.lazy(() => SortOrderSchema).optional(),
   category: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   createdBy: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  matchStatus: z.lazy(() => SortOrderSchema).optional(),
   createdAt: z.lazy(() => SortOrderSchema).optional(),
   updatedAt: z.lazy(() => SortOrderSchema).optional(),
   facility: z.lazy(() => FacilityOrderByWithRelationInputSchema).optional(),
@@ -10268,6 +10277,7 @@ export const COGRecordWhereUniqueInputSchema: z.ZodType<Prisma.COGRecordWhereUni
   transactionDate: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   category: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   createdBy: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => EnumCOGMatchStatusFilterSchema), z.lazy(() => COGMatchStatusSchema) ]).optional(),
   createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   updatedAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   facility: z.union([ z.lazy(() => FacilityScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional(),
@@ -10290,6 +10300,7 @@ export const COGRecordOrderByWithAggregationInputSchema: z.ZodType<Prisma.COGRec
   transactionDate: z.lazy(() => SortOrderSchema).optional(),
   category: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   createdBy: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  matchStatus: z.lazy(() => SortOrderSchema).optional(),
   createdAt: z.lazy(() => SortOrderSchema).optional(),
   updatedAt: z.lazy(() => SortOrderSchema).optional(),
   _count: z.lazy(() => COGRecordCountOrderByAggregateInputSchema).optional(),
@@ -10318,6 +10329,7 @@ export const COGRecordScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.COG
   transactionDate: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
   category: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
   createdBy: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => EnumCOGMatchStatusWithAggregatesFilterSchema), z.lazy(() => COGMatchStatusSchema) ]).optional(),
   createdAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
   updatedAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
 });
@@ -15415,6 +15427,7 @@ export const COGRecordCreateInputSchema: z.ZodType<Prisma.COGRecordCreateInput> 
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutCogRecordsInputSchema),
@@ -15437,6 +15450,7 @@ export const COGRecordUncheckedCreateInputSchema: z.ZodType<Prisma.COGRecordUnch
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });
@@ -15455,6 +15469,7 @@ export const COGRecordUpdateInputSchema: z.ZodType<Prisma.COGRecordUpdateInput> 
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   facility: z.lazy(() => FacilityUpdateOneRequiredWithoutCogRecordsNestedInputSchema).optional(),
@@ -15477,6 +15492,7 @@ export const COGRecordUncheckedUpdateInputSchema: z.ZodType<Prisma.COGRecordUnch
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
@@ -15497,6 +15513,7 @@ export const COGRecordCreateManyInputSchema: z.ZodType<Prisma.COGRecordCreateMan
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });
@@ -15515,6 +15532,7 @@ export const COGRecordUpdateManyMutationInputSchema: z.ZodType<Prisma.COGRecordU
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
@@ -15535,6 +15553,7 @@ export const COGRecordUncheckedUpdateManyInputSchema: z.ZodType<Prisma.COGRecord
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
@@ -20307,6 +20326,13 @@ export const EnumProposalStatusWithAggregatesFilterSchema: z.ZodType<Prisma.Enum
   _max: z.lazy(() => NestedEnumProposalStatusFilterSchema).optional(),
 });
 
+export const EnumCOGMatchStatusFilterSchema: z.ZodType<Prisma.EnumCOGMatchStatusFilter> = z.strictObject({
+  equals: z.lazy(() => COGMatchStatusSchema).optional(),
+  in: z.lazy(() => COGMatchStatusSchema).array().optional(),
+  notIn: z.lazy(() => COGMatchStatusSchema).array().optional(),
+  not: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => NestedEnumCOGMatchStatusFilterSchema) ]).optional(),
+});
+
 export const COGRecordCountOrderByAggregateInputSchema: z.ZodType<Prisma.COGRecordCountOrderByAggregateInput> = z.strictObject({
   id: z.lazy(() => SortOrderSchema).optional(),
   facilityId: z.lazy(() => SortOrderSchema).optional(),
@@ -20323,6 +20349,7 @@ export const COGRecordCountOrderByAggregateInputSchema: z.ZodType<Prisma.COGReco
   transactionDate: z.lazy(() => SortOrderSchema).optional(),
   category: z.lazy(() => SortOrderSchema).optional(),
   createdBy: z.lazy(() => SortOrderSchema).optional(),
+  matchStatus: z.lazy(() => SortOrderSchema).optional(),
   createdAt: z.lazy(() => SortOrderSchema).optional(),
   updatedAt: z.lazy(() => SortOrderSchema).optional(),
 });
@@ -20349,6 +20376,7 @@ export const COGRecordMaxOrderByAggregateInputSchema: z.ZodType<Prisma.COGRecord
   transactionDate: z.lazy(() => SortOrderSchema).optional(),
   category: z.lazy(() => SortOrderSchema).optional(),
   createdBy: z.lazy(() => SortOrderSchema).optional(),
+  matchStatus: z.lazy(() => SortOrderSchema).optional(),
   createdAt: z.lazy(() => SortOrderSchema).optional(),
   updatedAt: z.lazy(() => SortOrderSchema).optional(),
 });
@@ -20369,6 +20397,7 @@ export const COGRecordMinOrderByAggregateInputSchema: z.ZodType<Prisma.COGRecord
   transactionDate: z.lazy(() => SortOrderSchema).optional(),
   category: z.lazy(() => SortOrderSchema).optional(),
   createdBy: z.lazy(() => SortOrderSchema).optional(),
+  matchStatus: z.lazy(() => SortOrderSchema).optional(),
   createdAt: z.lazy(() => SortOrderSchema).optional(),
   updatedAt: z.lazy(() => SortOrderSchema).optional(),
 });
@@ -20377,6 +20406,16 @@ export const COGRecordSumOrderByAggregateInputSchema: z.ZodType<Prisma.COGRecord
   unitCost: z.lazy(() => SortOrderSchema).optional(),
   extendedPrice: z.lazy(() => SortOrderSchema).optional(),
   quantity: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const EnumCOGMatchStatusWithAggregatesFilterSchema: z.ZodType<Prisma.EnumCOGMatchStatusWithAggregatesFilter> = z.strictObject({
+  equals: z.lazy(() => COGMatchStatusSchema).optional(),
+  in: z.lazy(() => COGMatchStatusSchema).array().optional(),
+  notIn: z.lazy(() => COGMatchStatusSchema).array().optional(),
+  not: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => NestedEnumCOGMatchStatusWithAggregatesFilterSchema) ]).optional(),
+  _count: z.lazy(() => NestedIntFilterSchema).optional(),
+  _min: z.lazy(() => NestedEnumCOGMatchStatusFilterSchema).optional(),
+  _max: z.lazy(() => NestedEnumCOGMatchStatusFilterSchema).optional(),
 });
 
 export const PricingFileCountOrderByAggregateInputSchema: z.ZodType<Prisma.PricingFileCountOrderByAggregateInput> = z.strictObject({
@@ -25498,6 +25537,10 @@ export const VendorCreateNestedOneWithoutCogRecordsInputSchema: z.ZodType<Prisma
   connect: z.lazy(() => VendorWhereUniqueInputSchema).optional(),
 });
 
+export const EnumCOGMatchStatusFieldUpdateOperationsInputSchema: z.ZodType<Prisma.EnumCOGMatchStatusFieldUpdateOperationsInput> = z.strictObject({
+  set: z.lazy(() => COGMatchStatusSchema).optional(),
+});
+
 export const FacilityUpdateOneRequiredWithoutCogRecordsNestedInputSchema: z.ZodType<Prisma.FacilityUpdateOneRequiredWithoutCogRecordsNestedInput> = z.strictObject({
   create: z.union([ z.lazy(() => FacilityCreateWithoutCogRecordsInputSchema), z.lazy(() => FacilityUncheckedCreateWithoutCogRecordsInputSchema) ]).optional(),
   connectOrCreate: z.lazy(() => FacilityCreateOrConnectWithoutCogRecordsInputSchema).optional(),
@@ -27037,6 +27080,23 @@ export const NestedEnumProposalStatusWithAggregatesFilterSchema: z.ZodType<Prism
   _count: z.lazy(() => NestedIntFilterSchema).optional(),
   _min: z.lazy(() => NestedEnumProposalStatusFilterSchema).optional(),
   _max: z.lazy(() => NestedEnumProposalStatusFilterSchema).optional(),
+});
+
+export const NestedEnumCOGMatchStatusFilterSchema: z.ZodType<Prisma.NestedEnumCOGMatchStatusFilter> = z.strictObject({
+  equals: z.lazy(() => COGMatchStatusSchema).optional(),
+  in: z.lazy(() => COGMatchStatusSchema).array().optional(),
+  notIn: z.lazy(() => COGMatchStatusSchema).array().optional(),
+  not: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => NestedEnumCOGMatchStatusFilterSchema) ]).optional(),
+});
+
+export const NestedEnumCOGMatchStatusWithAggregatesFilterSchema: z.ZodType<Prisma.NestedEnumCOGMatchStatusWithAggregatesFilter> = z.strictObject({
+  equals: z.lazy(() => COGMatchStatusSchema).optional(),
+  in: z.lazy(() => COGMatchStatusSchema).array().optional(),
+  notIn: z.lazy(() => COGMatchStatusSchema).array().optional(),
+  not: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => NestedEnumCOGMatchStatusWithAggregatesFilterSchema) ]).optional(),
+  _count: z.lazy(() => NestedIntFilterSchema).optional(),
+  _min: z.lazy(() => NestedEnumCOGMatchStatusFilterSchema).optional(),
+  _max: z.lazy(() => NestedEnumCOGMatchStatusFilterSchema).optional(),
 });
 
 export const NestedEnumAlertTypeFilterSchema: z.ZodType<Prisma.NestedEnumAlertTypeFilter> = z.strictObject({
@@ -28958,6 +29018,7 @@ export const COGRecordCreateWithoutFacilityInputSchema: z.ZodType<Prisma.COGReco
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
   vendor: z.lazy(() => VendorCreateNestedOneWithoutCogRecordsInputSchema).optional(),
@@ -28978,6 +29039,7 @@ export const COGRecordUncheckedCreateWithoutFacilityInputSchema: z.ZodType<Prism
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });
@@ -29766,6 +29828,7 @@ export const COGRecordScalarWhereInputSchema: z.ZodType<Prisma.COGRecordScalarWh
   transactionDate: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   category: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   createdBy: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => EnumCOGMatchStatusFilterSchema), z.lazy(() => COGMatchStatusSchema) ]).optional(),
   createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   updatedAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
 });
@@ -30633,6 +30696,7 @@ export const COGRecordCreateWithoutVendorInputSchema: z.ZodType<Prisma.COGRecord
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutCogRecordsInputSchema),
@@ -30653,6 +30717,7 @@ export const COGRecordUncheckedCreateWithoutVendorInputSchema: z.ZodType<Prisma.
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });
@@ -43820,6 +43885,7 @@ export const COGRecordCreateManyFacilityInputSchema: z.ZodType<Prisma.COGRecordC
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });
@@ -44244,6 +44310,7 @@ export const COGRecordUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.COGReco
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   vendor: z.lazy(() => VendorUpdateOneWithoutCogRecordsNestedInputSchema).optional(),
@@ -44264,6 +44331,7 @@ export const COGRecordUncheckedUpdateWithoutFacilityInputSchema: z.ZodType<Prism
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
@@ -44283,6 +44351,7 @@ export const COGRecordUncheckedUpdateManyWithoutFacilityInputSchema: z.ZodType<P
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
@@ -45046,6 +45115,7 @@ export const COGRecordCreateManyVendorInputSchema: z.ZodType<Prisma.COGRecordCre
   transactionDate: z.coerce.date(),
   category: z.string().optional().nullable(),
   createdBy: z.string().optional().nullable(),
+  matchStatus: z.lazy(() => COGMatchStatusSchema).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 });
@@ -45464,6 +45534,7 @@ export const COGRecordUpdateWithoutVendorInputSchema: z.ZodType<Prisma.COGRecord
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   facility: z.lazy(() => FacilityUpdateOneRequiredWithoutCogRecordsNestedInputSchema).optional(),
@@ -45484,6 +45555,7 @@ export const COGRecordUncheckedUpdateWithoutVendorInputSchema: z.ZodType<Prisma.
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
@@ -45503,6 +45575,7 @@ export const COGRecordUncheckedUpdateManyWithoutVendorInputSchema: z.ZodType<Pri
   transactionDate: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   category: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   createdBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  matchStatus: z.union([ z.lazy(() => COGMatchStatusSchema), z.lazy(() => EnumCOGMatchStatusFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
