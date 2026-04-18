@@ -10,10 +10,9 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 import {
-  allocateRebatesToProcedures,
-  calculateMargins,
-  type ProcedureSpend,
-} from "@/lib/contracts/true-margin"
+  allocateContractBenefitsToProcedures,
+  calculateMarginsV2,
+} from "@/lib/case-costing/contract-contribution"
 import { serialize } from "@/lib/serialize"
 
 export async function getContractMarginAnalysis(contractId: string) {
@@ -77,10 +76,19 @@ export async function getContractMarginAnalysis(contractId: string) {
     byProcedure.set(cpt, entry)
   }
 
-  const procedureSpends: ProcedureSpend[] = Array.from(byProcedure.entries()).map(
-    ([cpt, agg]) => ({ procedureId: cpt, vendorSpend: agg.vendorSpend }),
+  // [A9] retrofit: switched from lib/contracts/true-margin.ts to the
+  // unified case-costing Contract Contribution engine so price-reduction
+  // allocations + totalContractBenefit surface on every row alongside
+  // the cash rebate. All rebate-only downstream consumers still see
+  // rebateAllocation unchanged.
+  const procedureVendorSpends = Array.from(byProcedure.entries()).map(
+    ([cpt, agg]) => ({
+      procedureId: cpt,
+      vendorId: contract.vendorId,
+      vendorSpend: agg.vendorSpend,
+    }),
   )
-  const totalVendorSpend = procedureSpends.reduce(
+  const totalVendorSpend = procedureVendorSpends.reduce(
     (s, p) => s + p.vendorSpend,
     0,
   )
@@ -103,18 +111,40 @@ export async function getContractMarginAnalysis(contractId: string) {
     }
   }
 
-  const allocations = allocateRebatesToProcedures(
-    procedureSpends,
-    totalVendorSpend,
-    totalRebate,
-  )
+  // Price-reduction allocation is not yet tracked on this surface —
+  // the underlying contract pricing price-reduction math ships in a
+  // follow-up that also adds a ContractPriceReduction accrual source.
+  // Default to 0 for now; allocation still works and rows pick up the
+  // priceReductionAllocation column for future-proof rendering.
+  const priceReductionAmount = 0
+
+  const { allocations } = allocateContractBenefitsToProcedures({
+    procedures: procedureVendorSpends,
+    vendors: [
+      {
+        vendorId: contract.vendorId,
+        totalVendorSpend,
+        rebateAmount: totalRebate,
+        priceReductionAmount,
+      },
+    ],
+  })
 
   const procedures = Array.from(byProcedure.entries())
     .map(([cpt, agg]) => {
-      const allocation = allocations.get(cpt) ?? 0
-      const margins = calculateMargins(
-        { revenue: agg.revenue, costs: agg.costs },
-        allocation,
+      const allocation = allocations.get(cpt) ?? {
+        procedureId: cpt,
+        rebateAllocation: 0,
+        priceReductionAllocation: 0,
+        totalContractBenefit: 0,
+      }
+      const margins = calculateMarginsV2(
+        { reimbursement: agg.revenue, costs: agg.costs },
+        {
+          rebateAllocation: allocation.rebateAllocation,
+          priceReductionAllocation: allocation.priceReductionAllocation,
+          totalContractBenefit: allocation.totalContractBenefit,
+        },
       )
       return {
         cptCode: cpt,
@@ -122,7 +152,9 @@ export async function getContractMarginAnalysis(contractId: string) {
         caseCount: agg.caseIds.size,
         revenue: agg.revenue,
         costs: agg.costs,
-        rebateAllocation: allocation,
+        rebateAllocation: allocation.rebateAllocation,
+        priceReductionAllocation: allocation.priceReductionAllocation,
+        totalContractBenefit: allocation.totalContractBenefit,
         standardMargin: margins.standardMargin,
         trueMargin: margins.trueMargin,
         standardMarginPercent: margins.standardMarginPercent,
@@ -135,5 +167,7 @@ export async function getContractMarginAnalysis(contractId: string) {
     procedures,
     totalVendorSpend,
     totalRebate,
+    totalPriceReduction: priceReductionAmount,
+    totalContractBenefit: totalRebate + priceReductionAmount,
   })
 }

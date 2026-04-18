@@ -51,27 +51,45 @@ function makeTerm(
   return base
 }
 
-function makeTier(
-  overrides: Partial<ContractTier> = {},
-): ContractTier {
+/**
+ * Override shape — accepts plain numbers for Decimal-typed fields;
+ * we cast back to Decimal when building the row.
+ */
+type TierOverrides = Omit<
+  Partial<ContractTier>,
+  "spendMin" | "spendMax" | "rebateValue" | "marketShareMin" | "marketShareMax" | "fixedRebateAmount" | "reducedPrice" | "priceReductionPercent"
+> & {
+  spendMin?: number | null
+  spendMax?: number | null
+  rebateValue?: number | null
+  marketShareMin?: number | null
+  marketShareMax?: number | null
+  fixedRebateAmount?: number | null
+  reducedPrice?: number | null
+  priceReductionPercent?: number | null
+}
+
+function makeTier(overrides: TierOverrides = {}): ContractTier {
+  const asDecimal = <T>(v: number | null | undefined, fallback: number | null): T =>
+    (v === undefined ? fallback : v) as unknown as T
+
   return {
     id: `tier-${overrides.tierNumber ?? 1}`,
     termId: "t-1",
-    tierNumber: 1,
-    tierName: null,
-    spendMin: 0 as unknown as ContractTier["spendMin"],
-    spendMax: null,
-    volumeMin: null,
-    volumeMax: null,
-    marketShareMin: null,
-    marketShareMax: null,
-    rebateType: "percent_of_spend",
-    rebateValue: 2 as unknown as ContractTier["rebateValue"],
-    fixedRebateAmount: null,
-    reducedPrice: null,
-    priceReductionPercent: null,
-    createdAt: new Date(),
-    ...overrides,
+    tierNumber: overrides.tierNumber ?? 1,
+    tierName: overrides.tierName ?? null,
+    spendMin: asDecimal(overrides.spendMin, 0),
+    spendMax: asDecimal(overrides.spendMax, null),
+    volumeMin: overrides.volumeMin ?? null,
+    volumeMax: overrides.volumeMax ?? null,
+    marketShareMin: asDecimal(overrides.marketShareMin, null),
+    marketShareMax: asDecimal(overrides.marketShareMax, null),
+    rebateType: overrides.rebateType ?? "percent_of_spend",
+    rebateValue: asDecimal(overrides.rebateValue, 2),
+    fixedRebateAmount: asDecimal(overrides.fixedRebateAmount, null),
+    reducedPrice: asDecimal(overrides.reducedPrice, null),
+    priceReductionPercent: asDecimal(overrides.priceReductionPercent, null),
+    createdAt: overrides.createdAt ?? new Date(),
   }
 }
 
@@ -220,7 +238,11 @@ describe("buildConfigFromPrismaTerm — tier sort order", () => {
       ],
     })
     const config = buildConfigFromPrismaTerm(term)
-    expect(config.tiers.map((t) => t.tierNumber)).toEqual([1, 2, 3])
+    if (config.type === "SPEND_REBATE") {
+      expect(config.tiers.map((t) => t.tierNumber)).toEqual([1, 2, 3])
+    } else {
+      throw new Error("Expected SPEND_REBATE config")
+    }
   })
 })
 
