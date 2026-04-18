@@ -336,10 +336,16 @@ export function ContractTermsEntry({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="cumulative">
-                          Cumulative (whole-spend at top tier)
+                          <div className="flex flex-col">
+                            <span className="font-medium">Whole-spend at the highest tier</span>
+                            <span className="text-xs text-muted-foreground">All spend earns the rate of the top tier reached. Example: $750K at tier 3 (3%) → $22,500.</span>
+                          </div>
                         </SelectItem>
                         <SelectItem value="marginal">
-                          Marginal (per-bracket rate)
+                          <div className="flex flex-col">
+                            <span className="font-medium">Each bracket at its own rate</span>
+                            <span className="text-xs text-muted-foreground">Spend in each bracket earns that bracket&apos;s rate, summed. Example: $500K @ 2% + $250K @ 3% → $17,500.</span>
+                          </div>
                         </SelectItem>
                       </SelectContent>
                     </Select>
