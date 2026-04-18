@@ -43,6 +43,10 @@ import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import {
+  contractOwnershipWhere,
+  contractsOwnedByFacility,
+} from "@/lib/actions/contracts-auth"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -51,12 +55,7 @@ export async function getContracts(input: ContractFilters) {
   const filters = contractFiltersSchema.parse(input)
 
   const conditions: Prisma.ContractWhereInput[] = [
-    {
-      OR: [
-        { facilityId: facility.id },
-        { contractFacilities: { some: { facilityId: facility.id } } },
-      ],
-    },
+    contractsOwnedByFacility(facility.id),
   ]
 
   if (filters.status) conditions.push({ status: filters.status })
@@ -172,12 +171,7 @@ export async function getMergedContracts() {
 
   const [systemContracts, pendingContracts] = await Promise.all([
     prisma.contract.findMany({
-      where: {
-        OR: [
-          { facilityId: facility.id },
-          { contractFacilities: { some: { facilityId: facility.id } } },
-        ],
-      },
+      where: contractsOwnedByFacility(facility.id),
       include: {
         vendor: { select: { id: true, name: true } },
         contractFacilities: { select: { facilityId: true } },
@@ -250,13 +244,7 @@ export async function getContract(id: string) {
   const { facility } = await requireFacility()
 
   const contract = await prisma.contract.findUniqueOrThrow({
-    where: {
-      id,
-      OR: [
-        { facilityId: facility.id },
-        { contractFacilities: { some: { facilityId: facility.id } } },
-      ],
-    },
+    where: contractOwnershipWhere(id, facility.id),
     include: {
       vendor: { select: { id: true, name: true, logoUrl: true, contactName: true, contactEmail: true } },
       productCategory: { select: { id: true, name: true } },
@@ -428,13 +416,7 @@ export async function updateContract(id: string, input: UpdateContractInput) {
 
   // Verify ownership before updating
   await prisma.contract.findUniqueOrThrow({
-    where: {
-      id,
-      OR: [
-        { facilityId: facility.id },
-        { contractFacilities: { some: { facilityId: facility.id } } },
-      ],
-    },
+    where: contractOwnershipWhere(id, facility.id),
     select: { id: true },
   })
 
@@ -580,13 +562,7 @@ export async function deleteContract(id: string) {
   // Verify ownership + capture vendorId before deleting so we can
   // recompute COG match-statuses after.
   const existing = await prisma.contract.findUniqueOrThrow({
-    where: {
-      id,
-      OR: [
-        { facilityId: facility.id },
-        { contractFacilities: { some: { facilityId: facility.id } } },
-      ],
-    },
+    where: contractOwnershipWhere(id, facility.id),
     select: { id: true, vendorId: true },
   })
 
