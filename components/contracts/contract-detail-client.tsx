@@ -469,6 +469,41 @@ export function ContractDetailClient({
               </CardContent>
             </Card>
           )}
+
+          {/* Compliance Status Card */}
+          {contract.complianceRate != null && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Compliance</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="text-3xl font-bold">
+                    {Number(contract.complianceRate).toFixed(0)}%
+                  </div>
+                  <Badge
+                    className={
+                      Number(contract.complianceRate) >= 90
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                        : Number(contract.complianceRate) >= 75
+                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                          : "bg-red-500/15 text-red-700 dark:text-red-400"
+                    }
+                  >
+                    {Number(contract.complianceRate) >= 90
+                      ? "On Track"
+                      : Number(contract.complianceRate) >= 75
+                        ? "Needs Attention"
+                        : "At Risk"}
+                  </Badge>
+                </div>
+                <Progress value={Number(contract.complianceRate)} />
+                <p className="text-xs text-muted-foreground">
+                  % of vendor purchases routed through this contract.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ── Transactions Tab ─────────────────────────────────── */}
