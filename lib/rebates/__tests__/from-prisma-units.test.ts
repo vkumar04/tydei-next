@@ -60,3 +60,49 @@ describe("computeRebateFromPrismaTiers — percent_of_spend unit scaling", () =>
     expect(r.rebateEarned).toBe(75_000)
   })
 })
+
+describe("computeRebateFromPrismaTiers — non-percent rebate types", () => {
+  it("returns 0 for fixed_rebate_per_unit tiers (unit count not available in this facade)", () => {
+    const tiers: Tier[] = [
+      {
+        tierNumber: 1,
+        rebateType: "fixed_rebate_per_unit",
+        rebateValue: new Prisma.Decimal(100),
+        spendMin: new Prisma.Decimal(0),
+        spendMax: null,
+      } as Tier,
+    ]
+    const r = computeRebateFromPrismaTiers(750_000, tiers, { method: "cumulative" })
+    // Facade is spend-based. Unit-based tiers need computeRebateFromPrismaTerm.
+    expect(r.rebateEarned).toBe(0)
+  })
+
+  it("returns the flat amount for fixed_rebate tiers", () => {
+    const tiers: Tier[] = [
+      {
+        tierNumber: 1,
+        rebateType: "fixed_rebate",
+        rebateValue: new Prisma.Decimal(10_000),
+        spendMin: new Prisma.Decimal(0),
+        spendMax: null,
+      } as Tier,
+    ]
+    const r = computeRebateFromPrismaTiers(500_000, tiers, { method: "cumulative" })
+    // Flat amount — not scaled by spend.
+    expect(r.rebateEarned).toBe(10_000)
+  })
+
+  it("returns 0 for per_procedure_rebate tiers (procedure count not available in this facade)", () => {
+    const tiers: Tier[] = [
+      {
+        tierNumber: 1,
+        rebateType: "per_procedure_rebate",
+        rebateValue: new Prisma.Decimal(50),
+        spendMin: new Prisma.Decimal(0),
+        spendMax: null,
+      } as Tier,
+    ]
+    const r = computeRebateFromPrismaTiers(750_000, tiers, { method: "cumulative" })
+    expect(r.rebateEarned).toBe(0)
+  })
+})

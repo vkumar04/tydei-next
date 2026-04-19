@@ -99,6 +99,16 @@ export function computeRebate(
  * INTEGER percent (2). Multiply by 100 at this boundary so every caller
  * reading from Prisma gets consistent results. Mirrors the display-side
  * convention in `lib/contracts/tier-rebate-label.ts`.
+ *
+ * Rebate-type routing: this facade is spend-based. Unit-based tier types
+ * (`fixed_rebate_per_unit`, `per_procedure_rebate`) need a unit count that
+ * callers must obtain from `computeRebateFromPrismaTerm` (which has access
+ * to the full `RebateConfig` including `ContractPeriod` unit rollups).
+ * Returning a spend-scaled number here silently inflates values 100× (see
+ * Medtronic regression: tier-3 fixed_rebate_per_unit=100 @ $750K returned
+ * $750,000 instead of a unit-count-based number). We short-circuit to 0
+ * for non-percent types — callers that need real numbers must use the
+ * bridge helper.
  */
 export function computeRebateFromPrismaTiers(
   spend: number,
@@ -108,14 +118,71 @@ export function computeRebateFromPrismaTiers(
   >[],
   opts?: { collectionRate?: number; method?: RebateMethodName },
 ): RebateResult {
-  const scaled: TierInput[] = tiers.map((t) => ({
-    tierNumber: t.tierNumber,
-    spendMin: t.spendMin,
-    spendMax: t.spendMax,
-    rebateValue:
-      t.rebateType === "percent_of_spend"
-        ? Number(t.rebateValue) * 100
-        : t.rebateValue,
-  }))
-  return computeRebate(spend, scaled, opts)
+  if (tiers.length === 0) {
+    return {
+      tierAchieved: 0,
+      rebatePercent: 0,
+      rebateEarned: 0,
+      rebateCollected: 0,
+    }
+  }
+
+  // Identify the applicable tier first (highest spendMin <= spend).
+  const sortedTiers = [...tiers].sort(
+    (a, b) => Number(a.spendMin) - Number(b.spendMin),
+  )
+  const applicable = sortedTiers.reduce<(typeof sortedTiers)[number] | null>(
+    (best, t) => (spend >= Number(t.spendMin) ? t : best),
+    null,
+  )
+  if (!applicable) {
+    return {
+      tierAchieved: 0,
+      rebatePercent: 0,
+      rebateEarned: 0,
+      rebateCollected: 0,
+    }
+  }
+
+  const collectionRate = opts?.collectionRate ?? DEFAULT_COLLECTION_RATE
+
+  // Route by rebateType. Tiers can mix types in theory, but in practice a
+  // single contract term uses one type across all its tiers. We branch on
+  // the *applicable* tier's type to decide how to compute.
+  switch (applicable.rebateType) {
+    case "percent_of_spend": {
+      // Existing percent-of-spend path — scale fractional .02 to 2% for
+      // the math engine (mirrors lib/contracts/tier-rebate-label.ts).
+      const scaled: TierInput[] = sortedTiers.map((t) => ({
+        tierNumber: t.tierNumber,
+        spendMin: t.spendMin,
+        spendMax: t.spendMax,
+        rebateValue:
+          t.rebateType === "percent_of_spend"
+            ? Number(t.rebateValue) * 100
+            : 0,
+      }))
+      return computeRebate(spend, scaled, opts)
+    }
+    case "fixed_rebate": {
+      const rebateEarned = Number(applicable.rebateValue)
+      return {
+        tierAchieved: applicable.tierNumber,
+        rebatePercent: 0,
+        rebateEarned,
+        rebateCollected: rebateEarned * collectionRate,
+      }
+    }
+    case "fixed_rebate_per_unit":
+    case "per_procedure_rebate":
+    default:
+      // Unit-based or unknown — can't compute from spend alone. Callers
+      // must route through computeRebateFromPrismaTerm for a real number.
+      return {
+        tierAchieved: applicable.tierNumber,
+        rebatePercent: 0,
+        rebateEarned: 0,
+        rebateCollected: 0,
+      }
+  }
 }
