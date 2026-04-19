@@ -563,6 +563,7 @@ export async function createContract(input: CreateContractInput) {
       performancePeriod: data.performancePeriod,
       rebatePayPeriod: data.rebatePayPeriod,
       isMultiFacility: data.isMultiFacility,
+      isGrouped: data.isGrouped ?? false,
       tieInCapitalContractId: data.tieInCapitalContractId,
       createdById: session.user.id,
       ...(data.facilityIds.length > 0 && {
@@ -656,6 +657,7 @@ export async function updateContract(id: string, input: UpdateContractInput) {
   if (data.performancePeriod !== undefined) updateData.performancePeriod = data.performancePeriod
   if (data.rebatePayPeriod !== undefined) updateData.rebatePayPeriod = data.rebatePayPeriod
   if (data.isMultiFacility !== undefined) updateData.isMultiFacility = data.isMultiFacility
+  if (data.isGrouped !== undefined) updateData.isGrouped = data.isGrouped
 
   if (data.facilityIds !== undefined) {
     await prisma.contractFacility.deleteMany({ where: { contractId: id } })
