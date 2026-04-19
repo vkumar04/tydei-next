@@ -183,8 +183,11 @@ describe("recomputeContractScore — happy path", () => {
     expect(result.components.timelinessScore).toBe(100)
     // variance = 100 (no rows)
     expect(result.components.varianceScore).toBe(100)
-    // overall = 80*.3 + 80*.25 + 50*.15 + 100*.15 + 100*.15 = 24 + 20 + 7.5 + 15 + 15 = 81.5
-    expect(result.overallScore).toBeCloseTo(81.5, 5)
+    // Weights (commit 0ea0165 added the 6th dim + reweighted):
+    //   commitment .20, compliance .20, rebateEff .20, timeliness .15,
+    //   variance .15, priceCompetitiveness .10
+    // 80*.20 + 80*.20 + 50*.20 + 100*.15 + 100*.15 + 100*.10 = 16+16+10+15+15+10 = 82
+    expect(result.overallScore).toBeCloseTo(82, 5)
     expect(result.band).toBe("B")
 
     // Persisted with rounded score, band, and a timestamp.
