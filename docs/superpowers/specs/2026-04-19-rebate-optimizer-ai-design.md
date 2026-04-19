@@ -274,13 +274,13 @@ Both are user-triggered (no background jobs). Cost scales with engagement, not f
 
 ---
 
-## 10. Open questions for Charles
+## 10. Decisions locked (Charles delegated to superpowers)
 
-1. **Surface placement for Tier 1:** next to "Quick Win" alert, or a new full-width section above the KPI cards?
-2. **Regeneration UX:** 15-minute cache then regen button, or always fresh on click?
-3. **Tier 4 surface:** modal on contract detail or a dedicated "Renewal Briefs" page?
-4. **Action buttons on insight cards:** "Open in Scenario Builder" + "Flag for review" as a starter set — any others you want wired?
-5. **PDF export for renewal brief:** in scope for v1 or follow-up?
+1. **Tier 1 surface placement** — full-width section above the KPI cards, collapsed-by-default expander with a "Generate Smart Recommendations" button. The section is the star of the page when expanded; collapsed it's a 1-line header so page layout doesn't bloat for users who don't click.
+2. **Regeneration UX** — 15-min per-facility TTL cache (stored in a lightweight `RebateInsightCache` Prisma table keyed by `facilityId + hash(opportunities+alerts)`). "Regenerate" button always bypasses cache and overwrites. Snappy second-load + cost control + manual override.
+3. **Tier 4 surface** — modal launched from a "Generate Renewal Brief" button on the contract detail header. Dedicated "Renewal Briefs" page is over-engineered when the starting point is always a specific contract.
+4. **Insight card action buttons** — two for v1: `Open in Scenario Builder` (prefills form with the insight's numbers) and `Flag for review` (writes to a new `RebateInsightFlag` row for a "followups" feed). More buttons can come later based on usage.
+5. **PDF export for renewal brief** — follow-up, not v1. v1 ships with a `Copy as Markdown` button which is <5 lines of code and solves the same "paste into my doc" use case. PDF export is a nice-to-have layered on later.
 
 ---
 
