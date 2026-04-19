@@ -590,9 +590,24 @@ export function COGImportDialog({
         )}
 
         {importState.step === "import" && !result && (
-          <div className="space-y-3 py-4">
-            <p className="text-sm text-muted-foreground">Importing records...</p>
-            <Progress value={50} />
+          <div
+            className="flex flex-col items-center justify-center space-y-4 py-12 text-center"
+            role="status"
+            aria-live="polite"
+          >
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <div className="space-y-1">
+              <p className="text-base font-medium">
+                Importing {importState.mappedRecords.length.toLocaleString()}{" "}
+                record{importState.mappedRecords.length === 1 ? "" : "s"}...
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Please keep this window open while we ingest your data.
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This may take 30-60s for files with 500+ rows.
+            </p>
           </div>
         )}
 
