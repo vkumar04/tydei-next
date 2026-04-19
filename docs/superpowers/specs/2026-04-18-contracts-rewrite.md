@@ -435,3 +435,559 @@ docker compose up -d && bun run db:push && bun run dev  # smoke test affected pa
 4. Verify, review, merge, proceed to next subsystem.
 
 Per-subsystem plans land in `docs/superpowers/plans/` as they're generated. This design spec stays as the anchor doc.
+
+---
+
+## 9. v0 Parity Gaps
+
+Source: 2026-04-19 audit of v0 prototype at `/Users/vickkumar/Downloads/b_T2SEkJJdo8w/`.
+These subsystems are **additive** to sections 1-8 above — they capture user-facing v0
+behavior that isn't already covered by the original engine subsystems 1-7. Some items
+are blocked by those engines landing first; dependencies are noted per entry.
+
+Sequencing groups these into 3 waves (see `docs/superpowers/plans/` once generated):
+- **Wave 1** (no engine deps): 9.1, 9.2, 9.5, 9.11
+- **Wave 2** (standalone workflows): 9.4, 9.6, 9.7, 9.8, 9.12
+- **Wave 3** (engine-dependent / nice-to-have): 9.3, 9.9, 9.10
+
+### Subsystem 9.1 — Compare modal wired to "Compare (N)" button
+
+**Priority:** P1 (visible UX gap)
+
+**Why this exists:** v0's contracts list lets the user multi-select contracts and view
+them side-by-side. Tydei has the modal component (`components/contracts/compare-modal.tsx`,
+shipped commit `dc26a37`) but the button on the list page renders only inside the
+Compare tab — selecting contracts from the main list and getting to the modal isn't
+obvious. v0 puts the action inline next to each row.
+
+**v0 reference:** `app/dashboard/contracts/page.tsx` line ~440 — `GitCompare` icon
+trigger on each row + compare-mode toggle.
+
+**Files (tydei):**
+- Modify: `components/contracts/contracts-list-client.tsx` — surface a sticky
+  "Compare (N)" toolbar at the top of the list whenever ≥2 rows are selected, in
+  addition to the existing in-tab button.
+- Modify: `components/contracts/contract-columns.tsx` — add a per-row checkbox
+  column (currently selection lives only in the Compare tab).
+- Test: `components/contracts/__tests__/compare-rows.test.ts` — already exists,
+  no test additions required.
+
+**Approach:**
+1. Add a `selection` column to the column defs with a Checkbox bound to
+   `selectedForCompare` state.
+2. Lift `selectedForCompare` to the list client root (it's already there).
+3. Render a sticky toolbar above the table that's visible when
+   `selectedForCompare.length >= 2`, with the same `Compare (N)` button + a
+   `Clear selection` button.
+
+**Acceptance:**
+- Selecting 2+ rows on the All Contracts tab shows a sticky "Compare" toolbar.
+- Clicking it opens the existing `<CompareModal />` populated with the picks.
+- Test: `bunx vitest run components/contracts/__tests__/compare-rows.test.ts` passes.
+- Type check: `bunx tsc --noEmit` clean.
+
+**Known risks:**
+- Existing contract-columns is shared across multiple list views; selection column
+  may bleed into the Compare tab inappropriately. Gate behind a `selectable: boolean`
+  prop on the columns helper.
+- Sticky toolbar competing with the existing filter bar — z-index ordering.
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 9.2 — 3-way facility scope filter (this / all / shared)
+
+**Priority:** P1
+
+**Why this exists:** v0 lets the user toggle list scope across "this facility",
+"all I have access to", and "shared / multi-facility contracts only". Tydei's
+list ships single-facility scope only.
+
+**v0 reference:** `app/dashboard/contracts/page.tsx` lines 71-78 — radio toggle
+with the three modes wired to the contracts query.
+
+**Files (tydei):**
+- Modify: `lib/validators/contracts.ts` — extend `ContractFilters` with
+  `facilityScope: z.enum(["this", "all", "shared"]).optional().default("this")`.
+- Modify: `lib/actions/contracts.ts::getContracts` — branch the `where` clause:
+  - `this`: existing `contractsOwnedByFacility(facility.id)`
+  - `all`: drop the facility filter (auth still required, cross-facility view)
+  - `shared`: `{isMultiFacility: true, OR: [{facilityId: facility.id}, {contractFacilities: {some: {facilityId: facility.id}}}]}`
+- Modify: `components/contracts/contracts-list-client.tsx` — Tabs/RadioGroup
+  above the filter bar bound to a `facilityScope` URL param.
+- Test: new `lib/actions/__tests__/get-contracts-scope.test.ts` — three cases
+  (this / all / shared), mocked prisma.
+
+**Approach:**
+1. Schema-side validator + action change first (TDD: write the action test).
+2. UI radio wired to URL param + TanStack Query key (so refresh preserves state).
+3. Default selection "this" — matches today's behavior.
+
+**Acceptance:**
+- Toggling the radio re-runs the contracts query with the new scope.
+- "this" returns the current owned set (regression check).
+- "shared" returns only `isMultiFacility=true` rows the facility participates in.
+- "all" returns every contract the user can see.
+- Test: `bunx vitest run lib/actions/__tests__/get-contracts-scope.test.ts` passes (3 cases).
+
+**Known risks:**
+- "all" must still respect auth — a facility user shouldn't see *every* contract
+  in the system, only ones they can read. Confirm with `requireFacility()` first
+  and verify the `where` doesn't accidentally leak.
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 9.3 — PDF entry-mode tab + preview-before-save on contract create
+
+**Priority:** P2
+
+**Why this exists:** v0's create page exposes three explicit entry modes
+(Manual | PDF | Paste). Tydei has the PDF/AI extraction wired, but the user
+arrives on Manual by default and must discover the AI button. v0's UX flips
+the default — PDF first, with a preview step.
+
+**v0 reference:** `app/dashboard/contracts/new/page.tsx` lines 1-50 — three-tab
+selector + dedicated review pane.
+
+**Files (tydei):**
+- Modify: `components/contracts/new-contract-client.tsx` — promote the entry-mode
+  Tabs (currently exists but not the landing surface). Default tab = `pdf`.
+- Modify: `components/contracts/ai-extract-dialog.tsx` — surface the parsed
+  contract preview *inside* the page (not a modal) so the user can edit before
+  hitting Save.
+- Test: `components/contracts/__tests__/new-contract-tab-routing.test.tsx` —
+  asserts default tab + that AI extract no longer routes to manual.
+
+**Approach:**
+1. Set `entryMode` initial state to `"pdf"`.
+2. Move the `<AIExtractDialog>` content into an inline panel rendered when
+   `entryMode === "pdf"`.
+3. After extraction, populate the form fields and stay on the PDF tab with an
+   editable preview card.
+
+**Acceptance:**
+- `/dashboard/contracts/new` lands on the PDF tab.
+- Uploading a PDF runs extraction and populates the form *inline* without
+  bouncing to Manual.
+- Test passes.
+
+**Known risks:**
+- Existing users have muscle memory for Manual default — soft-launch with a
+  feature flag if any production users complain.
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 9.4 — Off-contract spend panel
+
+**Priority:** P1
+
+**Why this exists:** v0's contract detail surfaces "off-contract spend" — the
+$ amount of vendor purchases that *didn't* match this contract. Today, tydei
+shows on-contract spend only; the user can't see leakage at the contract level.
+
+**v0 reference:** `app/dashboard/contracts/[id]/page.tsx` lines ~650-700.
+
+**Files (tydei):**
+- Create: `lib/actions/contracts/off-contract-spend.ts` — server action
+  returning `{onContract: number, offContract: number, offContractItems: Array<{vendorItemNo, description, totalSpend}>}` for a contract.
+- Create: `components/contracts/off-contract-spend-card.tsx` — Card with the
+  two totals + a top-10 list of off-contract items.
+- Modify: `components/contracts/contract-detail-client.tsx` — render the card
+  on the Overview tab below the existing performance section.
+- Test: `lib/actions/contracts/__tests__/off-contract-spend.test.ts` — mocked
+  prisma covering all-on / all-off / mixed cases.
+
+**Approach:**
+1. Aggregate `prisma.cOGRecord` for the contract's vendor at this facility,
+   grouped by `isOnContract` flag.
+2. For off-contract rows, group by `vendorItemNo` and pick the top 10 by spend.
+3. Card renders both totals + the top-10 table. Empty state when off-contract
+   total is 0.
+
+**Acceptance:**
+- Card visible on contract Overview tab when COG records exist.
+- Numbers match `prisma.cOGRecord.aggregate({where:{contractId},_sum:{extendedPrice}})`
+  (on-contract) and the inverse (off-contract).
+- Empty state when contract has zero COG matches.
+- Test passes.
+
+**Known risks:**
+- "Off-contract" requires COG enrichment to have run (`backfillCOGEnrichment`).
+  Pre-enrichment, every record is `isOnContract=false`. Document this in the
+  card's empty state.
+
+**Dependencies:** Subsystem 4 (compliance engine) shares the matcher; this can
+land independently using existing `isOnContract` flag.
+
+---
+
+### Subsystem 9.5 — Market-share progress bar (current vs commitment)
+
+**Priority:** P1
+
+**Why this exists:** Schema has `Contract.currentMarketShare` and
+`marketShareCommitment` (both `Decimal?`); UI surfaces neither. v0 shows a
+progress bar on the contract detail with the % met.
+
+**v0 reference:** `app/dashboard/contracts/[id]/page.tsx` lines ~520-540.
+
+**Files (tydei):**
+- Modify: `components/contracts/contract-detail-client.tsx` — render a
+  Card below "Commitment Progress" when both fields are non-null. Use the
+  existing shadcn `Progress` (already imported).
+- Test: visual smoke only (no new test — the rendering is trivial).
+
+**Approach:**
+1. Conditional Card with the two numbers + a Progress bar
+   `(currentMarketShare / marketShareCommitment) * 100`.
+2. Color the bar emerald when ≥80%, amber 60-80%, red <60% — matches the
+   compliance card pattern from commit `122c7a3`.
+
+**Acceptance:**
+- Card renders when both fields populated.
+- Card hidden when either is null (no broken state).
+- Type check clean.
+
+**Known risks:** none.
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 9.6 — Contract-period selector for multi-year contracts
+
+**Priority:** P2
+
+**Why this exists:** Multi-year contracts have multiple `ContractPeriod` rows;
+v0 shows a dropdown on the detail page so the user can scope the displayed
+metrics to a specific period. Today tydei always shows aggregated totals.
+
+**v0 reference:** `app/dashboard/contracts/[id]/page.tsx` lines ~450-480.
+
+**Files (tydei):**
+- Modify: `components/contracts/contract-detail-client.tsx` — add a
+  period-selector `<Select>` above the metrics row when
+  `contract.periods.length >= 2`. Default = "All periods".
+- Modify: relevant data-fetching hooks (e.g. `useContract`,
+  `getContractMetricsBatch` consumer) to accept an optional `periodId` filter.
+- Modify: `lib/actions/contracts.ts::getContract` — when `periodId` is provided,
+  limit the included `rebates` and `cogRecords` queries to that period's date
+  range.
+- Test: new test asserting period-scoped totals match unscoped totals when
+  "All periods" is selected.
+
+**Approach:**
+1. Read `prisma.contractPeriod.findMany({where:{contractId}, orderBy:{periodStart:"asc"}})`
+   in `getContract` (likely already loaded; verify).
+2. Plumb `periodId` through the relevant queries.
+3. UI selector + state + URL param.
+
+**Acceptance:**
+- Selector visible only on multi-period contracts.
+- Choosing a period filters the displayed totals to its date range.
+- "All periods" returns to current behavior.
+
+**Known risks:**
+- `Rebate.payPeriodStart`/`payPeriodEnd` may not align cleanly with
+  `ContractPeriod.periodStart`/`periodEnd` — pick a join convention upfront
+  (e.g. include rebate when `payPeriodEnd` falls within the period).
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 9.7 — Amendment multi-step flow integration
+
+**Priority:** P2
+
+**Why this exists:** v0 wraps amendment uploads in a 4-stage modal
+(Upload → Review changes → Pricing updates → Confirm). Tydei has
+`<AmendmentExtractor>` (commit `3e3ad63` verified the 4 stages exist) but the
+trigger from the contract detail page lands on the upload step only — the
+review/pricing/confirm flow needs end-to-end smoke testing and the "Add
+Amendment" button placement should match v0.
+
+**v0 reference:** `app/dashboard/contracts/[id]/page.tsx` lines ~70-82 +
+`components/contracts/amendment-extractor.tsx`.
+
+**Files (tydei):**
+- Modify: `components/contracts/contract-detail-client.tsx` — confirm the
+  `<AmendmentExtractor>` is wired with `onApplied` invalidating the contract
+  query, and the entry button sits next to "Edit Contract" (currently it
+  exists but copy may differ).
+- Modify: `components/contracts/amendment-extractor.tsx` — add a stage
+  indicator (1 → 2 → 3 → 4) header so the user knows where they are.
+- Test: end-to-end smoke of the 4 stages with a mock PDF (no AI call —
+  use `getDemoExtractedData` shape directly... oh wait, that file's been
+  removed. Use a fixture JSON in tests.)
+
+**Approach:**
+1. Add stage breadcrumb to the dialog header.
+2. Verify each stage transition wires `onChangeStage` correctly.
+3. Add a Vitest test feeding a fixture extraction JSON and asserting all 4
+   stages render their expected components.
+
+**Acceptance:**
+- Stage indicator visible at the top of the dialog.
+- Test asserting 4-stage progression passes.
+- "Add Amendment" button placement matches v0.
+
+**Known risks:**
+- AI extraction failures should still leave the user at stage 1 with a clear
+  error, not an empty stage 2.
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 9.8 — ContractChangeProposal workflow
+
+**Priority:** P1
+
+**Why this exists:** Schema has `ContractChangeProposal` (vendor proposes an
+edit, facility reviews). UI is missing — vendors can't submit changes today,
+and facilities have no "review proposed changes" surface. v0 has it via
+localStorage but the workflow concept is the same.
+
+**v0 reference:** `lib/contract-change-proposals-store.ts` (CRUD store) +
+`app/dashboard/contracts/[id]/page.tsx` lines ~500+ (approve/reject/revision
+buttons on the facility side).
+
+**Files (tydei):**
+- Create: `lib/actions/contracts/proposals.ts` — three server actions:
+  `submitContractChangeProposal(contractId, changes, notes)` (vendor),
+  `approveContractChangeProposal(proposalId)` (facility — applies changes),
+  `requestProposalRevision(proposalId, notes)` (facility — sends back),
+  `rejectContractChangeProposal(proposalId, notes)` (facility).
+- Create: `components/contracts/contract-change-proposals-card.tsx` — visible
+  on contract detail when proposals exist for the contract; shows pending
+  count + per-proposal review row.
+- Modify: vendor edit flow to wrap an edit in a proposal submission.
+- Modify: `components/contracts/contract-detail-client.tsx` — render the new
+  card above the Overview tab when `pendingProposals.length > 0`.
+- Test: `lib/actions/contracts/__tests__/proposals.test.ts` — cover submit /
+  approve (verifies fields applied) / revise / reject paths with mocked prisma.
+
+**Approach:**
+1. Server actions first, with Vitest TDD covering the four flows.
+2. Facility detail page: query `getPendingProposalsForContract(contractId)` +
+   render the review card.
+3. Vendor edit: out of scope per "no vendor for now" — leave a TODO note in
+   the spec so the schema-side server actions exist when vendor work resumes.
+
+**Acceptance:**
+- Submit creates a `ContractChangeProposal` row with `status=pending`.
+- Approve flips status to `approved` and applies the change to the contract.
+- Revise flips status to `needs_revision` and stores the revision notes.
+- Reject flips status to `rejected`.
+- Facility detail page shows pending proposals with action buttons.
+- Tests pass.
+
+**Known risks:**
+- "Apply" must compose well with existing `updateContract` validation —
+  reuse the validator instead of bypassing it.
+- Approving may race against another approval; use Prisma transaction.
+
+**Dependencies:** none on the facility side. Vendor submission UI deferred
+until vendor portal work resumes.
+
+---
+
+### Subsystem 9.9 — Industry benchmarks radar on score page
+
+**Priority:** P2
+
+**Why this exists:** v0's score page overlays a peer-hospital benchmark on the
+radar so the user can see "your contract scores 82, peer median is 75". Tydei
+has only the rule-based radar (commit `4f011d1`) — no benchmark comparison.
+
+**v0 reference:** `app/dashboard/contracts/[id]/score/page.tsx` lines 51-52
++ `getIndustryBenchmarks()` / `isIndustryBenchmarksImported()`.
+
+**Files (tydei):**
+- Decide: ship a static seed benchmark file vs a new `IndustryBenchmark` Prisma
+  model. **Recommend static seed first** at `lib/contracts/score-benchmarks.ts`
+  (median per dimension by contract type) — promote to DB when real data
+  arrives.
+- Modify: `components/contracts/contract-score-radar.tsx` — accept an optional
+  `benchmark` prop; render a second translucent Radar series.
+- Modify: `app/dashboard/contracts/[id]/score/page.tsx` — pass a benchmark
+  lookup based on `contract.contractType`.
+- Test: `lib/contracts/__tests__/score-benchmarks.test.ts` — assert lookup
+  returns the right shape for each contract type.
+
+**Approach:**
+1. Static seed first — get the visualization in front of users; iterate on
+   data sourcing later.
+2. Lookup function takes `contractType`, returns the same `components` shape
+   as `ContractScoreResult`.
+3. Render two-series radar with legend.
+
+**Acceptance:**
+- Score page radar shows two overlaid series (this contract vs peer median).
+- Legend identifies which is which.
+- Test passes.
+
+**Known risks:**
+- Seed values are placeholders — make that explicit in the radar tooltip
+  ("Peer median based on aggregated industry data — placeholder until real
+  benchmarks ingested").
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 9.10 — 6th score dimension (extend `ContractScoreResult.components`)
+
+**Priority:** P2
+
+**Why this exists:** v0 score has 6 axes; tydei's rule-based scorer
+(`lib/contracts/scoring.ts`) returns 5 components today
+(`commitmentScore / complianceScore / rebateEfficiencyScore / timelinessScore
+/ varianceScore`). The 6th axis in v0 is a **price competitiveness** score
+(actual prices vs market median).
+
+**v0 reference:** v0 page derives 6 dimensions from contract + benchmark data.
+
+**Files (tydei):**
+- Modify: `lib/contracts/scoring.ts` — add `priceCompetitivenessScore: number`
+  to `ContractScoreResult["components"]`. Initial implementation: 100 - average
+  positive variance % across the contract's invoice line items, clamped 0-100.
+- Modify: `lib/actions/contracts/scoring.ts::loadAndScoreContract` — query
+  `prisma.invoicePriceVariance` for the contract and feed the average to
+  `calculateContractScore`.
+- Modify: `components/contracts/contract-score-radar.tsx` — add the 6th axis.
+- Test: `lib/contracts/__tests__/scoring.test.ts` — add cases for the new
+  component.
+
+**Approach:**
+1. Engine change first (TDD).
+2. Score-loading action plumbing.
+3. Radar UI updates automatically (driven by the components map).
+
+**Acceptance:**
+- `ContractScoreResult.components` returns 6 keys.
+- Radar shows 6 axes.
+- Engine tests cover happy path + zero-variance + heavy-overcharge cases.
+
+**Known risks:**
+- `InvoicePriceVariance` may be empty for many contracts (variance engine still
+  lands per Subsystem 5). Default to 100 when no variance data — better than
+  punishing contracts that haven't been audited yet.
+
+**Dependencies:** Subsystem 5 (price variance engine) for real signal.
+Pre-engine, falls back to default-100.
+
+---
+
+### Subsystem 9.11 — `lib/contract-definitions.ts` centralized tooltips
+
+**Priority:** P2
+
+**Why this exists:** v0 centralizes term/rebate/tier definitions in one file
+that powers tooltips across the contracts surface. Tydei has the same labels
+inlined in components — drift risk.
+
+**v0 reference:** `lib/contract-definitions.ts` + `components/contracts/definition-tooltip.tsx`.
+
+**Files (tydei):**
+- Create: `lib/contract-definitions.ts` — exports
+  `CONTRACT_TYPE_DEFINITIONS`, `REBATE_TYPE_DEFINITIONS`,
+  `TIER_STRUCTURE_DEFINITIONS`, `PERFORMANCE_PERIOD_DEFINITIONS` as readonly
+  records keyed by enum value.
+- Create: `components/contracts/definition-tooltip.tsx` — small wrapper that
+  renders a `?` icon + Tooltip with the matched definition.
+- Modify: existing form components to consume the constants instead of
+  inlined strings.
+- Test: `lib/contracts/__tests__/contract-definitions.test.ts` — assert every
+  Prisma enum value has a definition entry (catches drift when new term types
+  ship).
+
+**Approach:**
+1. Extract every inline term-type/rebate-type description from
+   `components/contracts/contract-terms-entry.tsx` and similar.
+2. Move into the new constants file.
+3. Replace inline strings with constant lookups + tooltips.
+4. Test asserts coverage.
+
+**Acceptance:**
+- Every TermType / RebateType enum value has a definition entry.
+- Tooltips render on hover next to the field labels.
+- Adding a new enum value without a definition fails the coverage test.
+
+**Known risks:**
+- Coverage test must import the Prisma enum at runtime to enumerate values —
+  use `Object.values(TermType)` from `@prisma/client`.
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 9.12 — Multi-category audit & fixes
+
+**Priority:** P1
+
+**Why this exists:** Architecture supports multi-category (
+`ContractProductCategory` join + `categoryIds` validator + Popover checkbox UI
++ create/update actions persist all ids). User feedback says "feels like one
+at a time." Audit each surface that may consume only the primary
+`productCategory`:
+
+1. **List filter** — does the category filter dropdown match contracts whose
+   *any* category contains the pick, or only the primary `productCategoryId`?
+2. **Per-tier scope** (`contract-terms-entry.tsx`) — currently single-select
+   when `appliesTo === "specific_category"`. v0 (per spec preface) is the
+   same, but multi-select would be more useful for terms scoped to multiple
+   categories.
+3. **AI extraction** — when the model returns multiple categories from a PDF,
+   does `handleAIExtract` populate the multi-select correctly, or only the
+   first match?
+4. **Pricing-file extraction** — auto-merge categories from pricing rows into
+   the form's `categoryIds` (v0 does this at lines 466-484 of
+   `new/page.tsx`).
+5. **Detail page badges** — already shipped (Bug 7, commit `8607b50`);
+   regression-check this still works after wave-1 churn.
+
+**v0 reference:** `app/dashboard/contracts/new/page.tsx` lines 116-126
+(extract unique categories from pricing file) and 466-484 (match
+multi-categories from PDF extraction).
+
+**Files (tydei):**
+- Audit: `components/contracts/contracts-list-client.tsx` filter logic —
+  modify to match against any category in `contract.contractCategories[]`.
+- Audit + fix: `components/contracts/contract-terms-entry.tsx` "Specific
+  Category" picker — convert to multi-select when scope = `specific_category`,
+  persist `scopedCategoryIds: string[]` (validator + action change).
+- Audit: `components/contracts/new-contract-client.tsx::handleAIExtract` —
+  ensure it merges every extracted category into `categoryIds`.
+- Audit: pricing-file upload flow — append unique categories to `categoryIds`
+  on import.
+- Test: extend `lib/actions/__tests__/contract-metrics-batch.test.ts` (or new
+  test) — assert filtering by a non-primary category matches the contract.
+
+**Approach:**
+1. Inventory each surface listed above with a quick read pass.
+2. Fix each in its own commit (small surface changes, easy to review).
+3. Add tests where the fix involves a server action change.
+
+**Acceptance:**
+- List category filter matches by any category, not just primary.
+- Term form's "Specific Category" picker accepts multiple.
+- AI extract auto-populates all returned categories.
+- Pricing-file import merges its categories into the contract.
+- Detail page badges still render every category.
+- Tests pass.
+
+**Known risks:**
+- Schema migration may be needed to convert
+  `ContractTerm.scopedCategoryId: String?` to `scopedCategoryIds: String[]`
+  (additive — keep the old column for a release or two).
+
+**Dependencies:** none.
+
+---

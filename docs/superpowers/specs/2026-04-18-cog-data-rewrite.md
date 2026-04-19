@@ -490,3 +490,225 @@ bun run test lib/cog/__tests__/quality.test.ts
 2. Generate per-subsystem plan via superpowers:writing-plans.
 3. Execute per plan; commit each separately.
 4. Verify acceptance; merge to main; proceed.
+
+---
+
+## 10. v0 Parity Gaps
+
+Source: 2026-04-19 audit of v0 prototype at `/Users/vickkumar/Downloads/b_T2SEkJJdo8w/`.
+These subsystems are **additive** to sections 1-9 above — they capture user-facing v0
+behavior that isn't already covered by the original COG subsystems 1-6.
+
+### Subsystem 10.1 — Import-wizard enrichment feedback
+
+**Priority:** P1
+
+**Why this exists:** v0's COG import wizard, after parsing the CSV, runs the
+match-to-contracts step and shows a stats card on the success screen
+("8,432 records matched", "1,891 unmatched", "On-contract rate: 81.7%"). Tydei's
+import dialog completes silently — the user sees a toast and a count, but no
+match summary.
+
+**v0 reference:** `components/cog/cog-importer.tsx` final step + the
+match-status histogram on import completion.
+
+**Files (tydei):**
+- Modify: `lib/actions/cog-import.ts::ingestCOGRecordsCSV` — return
+  `{ created: number, matched: number, unmatched: number, onContractRate: number }`
+  in addition to current return shape.
+- Modify: `components/facility/cog/cog-import-dialog.tsx` — render a final
+  "Import complete" Card with the four metrics + a "Re-run match" CTA that
+  invokes Subsystem 10.2.
+- Test: `lib/actions/__tests__/cog-csv-import.test.ts` — extend with a case
+  asserting the return shape includes the new fields.
+
+**Approach:**
+1. Action change — after the existing ingest + enrichment passes, query
+   `prisma.cOGRecord.aggregate({where:{...justImported}})` to compute
+   matched/unmatched counts.
+2. UI surfaces those numbers on completion.
+
+**Acceptance:**
+- Import action returns the four new fields.
+- Dialog shows the stats card after a successful import.
+- Test passes with the extended return shape.
+
+**Known risks:**
+- "Just imported" needs a stable filter — pass back the file id from the
+  ingest action, then filter `cOGRecord.fileImportId` for the count.
+
+**Dependencies:** Subsystem 1 (FileImport tracking) — for the per-file scoping
+of the count. Otherwise falls back to facility-wide counts.
+
+---
+
+### Subsystem 10.2 — "Re-run match" button on COG page
+
+**Priority:** P1
+
+**Why this exists:** The `backfillCOGEnrichment` server action shipped today
+(commit `153ae97`) lets a facility re-run match-to-contracts across every
+existing COG row. The button to trigger it lives on the COG page (also shipped
+in `153ae97`) — but verify it's actually visible and wired (cg subagent
+reported it shipped, audit on the live page).
+
+**v0 reference:** v0 doesn't have an explicit "re-run match" — its store
+auto-recomputes on every contract change. Tydei needs the manual button
+because Prisma writes are explicit.
+
+**Files (tydei):**
+- Verify: `components/facility/cog/cog-data-client.tsx` — confirm the button
+  exists, is enabled for facility users, and shows the result toast.
+- If missing/broken, fix per the original Bug 1 plan.
+- Smoke test: hit `/dashboard/cog-data` as `demo-facility@tydei.com`, click
+  the button, confirm at least one record changes from `pending` to a
+  matched status.
+
+**Approach:**
+1. Read the file, check for the button + mutation wiring.
+2. If absent: re-port from the worktree `agent-a5c61de1` (Task 1) which had
+   the original implementation.
+3. Add a Vitest assertion if missing — `bunx vitest run lib/cog/__tests__/recompute-backfill.test.ts`.
+
+**Acceptance:**
+- Button visible on the COG page header.
+- Click runs `backfillCOGEnrichment`, shows "Enriched N records" toast.
+- COG records table refreshes via TanStack Query invalidation.
+
+**Known risks:** none.
+
+**Dependencies:** Subsystem 1 (already shipped via Bug 1).
+
+---
+
+### Subsystem 10.3 — Pricing-file import history table
+
+**Priority:** P2
+
+**Why this exists:** v0 has a separate track for pricing-file imports
+(distinct from COG imports) with a history table showing per-file stats
+(rows imported, items matched to contracts, last import date). Tydei imports
+pricing files (commit `bff3a3c` and similar) but doesn't surface the history.
+
+**v0 reference:** `components/cog/PricingFileUpload` line ~87 (referenced in
+diff report).
+
+**Files (tydei):**
+- Create: `lib/actions/imports/pricing-history.ts` — server action
+  `getPricingImportHistory()` returning recent `PricingFile` rows with their
+  associated `_count.items`.
+- Create: `components/facility/cog/pricing-import-history-card.tsx` — table
+  with columns: filename / uploaded / row count / matched items / actions
+  (download original).
+- Modify: `components/facility/cog/cog-data-client.tsx` — render the card
+  below the existing import section.
+- Test: `lib/actions/imports/__tests__/pricing-history.test.ts` — mocked
+  prisma returning two pricing files, assert the rows.
+
+**Approach:**
+1. Action first.
+2. UI card consuming the action via TanStack Query.
+3. No mutations — read-only history.
+
+**Acceptance:**
+- Card renders the last 20 pricing-file imports.
+- Empty state visible when no imports exist.
+- Test passes.
+
+**Known risks:**
+- `PricingFile` schema model may not exist by that name — confirm the
+  Prisma model used by the existing pricing import flow first.
+
+**Dependencies:** existing pricing-import infrastructure (assumed shipped).
+
+---
+
+### Subsystem 10.4 — AI dedup advisor
+
+**Priority:** P2
+
+**Why this exists:** Today's duplicate detector (`lib/cog/duplicate-detection.ts`)
+catches exact-match dupes via the (vendorItemNo, transactionDate, extendedPrice)
+key. v0's `DuplicateValidator` component layers an AI suggestion on near-misses
+("These two rows look like the same purchase split across two invoices —
+deduplicate?"). Adds value when CSV exports are messy.
+
+**v0 reference:** `components/cog/duplicate-validator.tsx`.
+
+**Files (tydei):**
+- Create: `lib/cog/ai-dedup.ts` — `findFuzzyDuplicates(records)` returns
+  pairs that the deterministic detector missed but look duplicate-ish (close
+  in date, same vendor, same item description, similar price). No AI call
+  yet — start with a deterministic fuzzy matcher.
+- Create: `components/facility/cog/dedup-advisor-card.tsx` — shows pairs +
+  per-pair "Merge" / "Ignore" actions (writes a `cog_dedup_decision` log).
+- Modify: `components/facility/cog/cog-import-dialog.tsx` — add a step
+  between dedup-preview and confirm that surfaces the advisor.
+- Test: `lib/cog/__tests__/ai-dedup.test.ts` — fixture with 2 obvious dupes
+  + 1 borderline, assert the advisor flags the borderline.
+
+**Approach:**
+1. Deterministic fuzzy matcher first (Levenshtein distance on description +
+   ±5% price + ±7d date).
+2. AI escalation deferred — this prepares the surface for it.
+3. Decisions logged in audit table for traceability.
+
+**Acceptance:**
+- Advisor flags fuzzy-match candidates that the deterministic detector misses.
+- "Ignore" suppresses the pair on future imports for this facility.
+- Test passes.
+
+**Known risks:**
+- Fuzzy matcher false-positive rate matters — start strict and loosen with
+  feedback.
+
+**Dependencies:** none.
+
+---
+
+### Subsystem 10.5 — Canonical `matchCOGRecordToContract`
+
+**Priority:** P1
+
+**Why this exists:** Today's COG → contract enrichment uses fuzzy vendor-name
+matching (`lib/cog/match.ts`). The platform-data-model spec defines a
+canonical resolver (`findVendorByName` cascade + canonical contract pricing
+lookup) that should replace the interim fuzzy approach. v0 effectively
+performs canonical matching via in-memory contract pricing arrays.
+
+**v0 reference:** v0's `lib/cog-data-store.ts` matches by exact `vendorItemNo`
+against contract pricing rows; misses fall back to fuzzy vendor-name only.
+
+**Files (tydei):**
+- Modify: `lib/cog/match.ts::findContractForCOGRecord` — try in order:
+  1. Exact `vendorItemNo` match against `ContractPricing.vendorItemNo` for
+     contracts active on `transactionDate`.
+  2. Exact `vendorId` match (when COG row has a resolved vendor) AND record
+     date falls within an active contract's effectiveDate/expirationDate.
+  3. Fuzzy vendor-name match (current behavior — last resort).
+- Modify: `lib/cog/recompute.ts::recomputeMatchStatusesForVendor` — feed the
+  upgraded resolver, set `matchStatus` per the four-state enum from
+  platform-data-model.
+- Test: `lib/cog/__tests__/match.test.ts` — extend with cases for each
+  match-mode precedence.
+
+**Approach:**
+1. Test-first: write the precedence cases.
+2. Implement the cascade.
+3. Re-run `backfillCOGEnrichment` on the demo facility — confirm the match
+   rate improves vs the fuzzy-only baseline (489/571 from today's smoke).
+
+**Acceptance:**
+- Match rate on the demo facility's COG ≥ today's 86% (489/571), preferably
+  approaching 100% for records whose vendorItemNo exists in active contract
+  pricing.
+- Tests cover all three precedence modes.
+
+**Known risks:**
+- `ContractPricing` rows may not exist for every active contract — will need
+  to be backfilled (separate task) for the canonical match to be useful.
+
+**Dependencies:** platform-data-model spec for the `findVendorByName`
+canonical helper.
+
+---
