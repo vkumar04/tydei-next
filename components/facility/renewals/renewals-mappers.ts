@@ -14,6 +14,7 @@
  */
 
 import { classifyRenewalStatus } from "@/lib/renewals/engine"
+import type { PerformanceHistoryRow } from "@/lib/renewals/performance-history"
 import type { RenewalContractInput } from "@/lib/renewals/summary-stats"
 import type { ExpiringContract } from "@/lib/actions/renewals"
 import type { RenewalRow } from "./renewals-list"
@@ -52,7 +53,10 @@ export function toRow(c: ExpiringContract): RenewalRow {
  * row and falls back to the legacy `totalSpend` / `totalRebate` /
  * `tierAchieved` fields so existing production payloads keep working.
  */
-export function mapDetail(row: ExpiringContract): RenewalDetail {
+export function mapDetail(
+  row: ExpiringContract,
+  performanceHistory: PerformanceHistoryRow[] = [],
+): RenewalDetail {
   const commit = row.marketShareCommitment ?? null
   const current = row.currentMarketShare ?? null
   const commitmentProgressPercent =
@@ -89,16 +93,20 @@ export function mapDetail(row: ExpiringContract): RenewalDetail {
     tier,
     currentMarketShare: current,
     marketShareCommitment: commit,
-    // Real history loads via a dedicated detail query in a later slice.
-    // Empty here emits the "insufficient history" empty state — better
-    // than synthesizing numbers we don't have.
-    performanceHistory: [],
+    // Real history is lazy-loaded via `useContractPerformanceHistory`
+    // when the detail modal opens (W1.1). Defaults to `[]` so callers
+    // that don't pass it still see the "insufficient history" empty
+    // state — we never synthesize rows.
+    performanceHistory,
   }
 }
 
 /** @deprecated Use `mapDetail` — retained for back-compat with existing callers. */
-export function toDetail(c: ExpiringContract): RenewalDetail {
-  return mapDetail(c)
+export function toDetail(
+  c: ExpiringContract,
+  performanceHistory: PerformanceHistoryRow[] = [],
+): RenewalDetail {
+  return mapDetail(c, performanceHistory)
 }
 
 export function toSummaryInput(c: ExpiringContract): RenewalContractInput {

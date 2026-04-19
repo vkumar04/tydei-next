@@ -29,7 +29,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Calendar, CalendarRange, Settings2 } from "lucide-react"
 import { toast } from "sonner"
-import { useExpiringContracts } from "@/hooks/use-renewals"
+import {
+  useContractPerformanceHistory,
+  useExpiringContracts,
+} from "@/hooks/use-renewals"
 import type { ExpiringContract } from "@/lib/actions/renewals"
 import { computeRenewalSummary } from "@/lib/renewals/summary-stats"
 import { RenewalsSummaryCards } from "./renewals-summary-cards"
@@ -94,7 +97,11 @@ export function RenewalsClient({
     () => contracts.find((c) => c.id === selectedId) ?? null,
     [contracts, selectedId],
   )
-  const selectedDetail = selectedContract ? toDetail(selectedContract) : null
+  // W1.1: lazy-load real per-year performance history for the open modal.
+  const { data: performanceHistory } = useContractPerformanceHistory(selectedId)
+  const selectedDetail = selectedContract
+    ? toDetail(selectedContract, performanceHistory ?? [])
+    : null
 
   return (
     <div className="space-y-6">

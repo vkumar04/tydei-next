@@ -157,6 +157,8 @@ export const queryKeys = {
     expiring: (entityId: string, windowDays: number) =>
       ["renewals", "expiring", entityId, windowDays] as const,
     summary: (contractId: string) => ["renewals", "summary", contractId] as const,
+    performanceHistory: (contractId: string) =>
+      ["renewals", "performanceHistory", contractId] as const,
   },
   rebateOptimizer: {
     opportunities: (facilityId: string) =>

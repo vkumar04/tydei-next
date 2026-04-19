@@ -4,6 +4,10 @@ import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import { addDays } from "date-fns"
 import { serialize } from "@/lib/serialize"
+import {
+  buildRealPerformanceHistory,
+  type PerformanceHistoryRow,
+} from "@/lib/renewals/performance-history"
 
 export interface ExpiringContract {
   id: string
@@ -154,6 +158,54 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
     totalRebate,
     tierAchieved,
     renewalRecommendation: recommendation,
+  })
+}
+
+// ─── Get Contract Performance History ───────────────────────────
+
+/**
+ * Real per-year performance history for the renewals detail modal.
+ *
+ * Loads the contract's `ContractPeriod` rows and hands them to
+ * `buildRealPerformanceHistory` (pure aggregator). Returns `[]` when no
+ * closed periods exist — the UI renders the "insufficient history"
+ * empty state in that case. NO SYNTHESIS.
+ *
+ * NOTE: `ContractPeriod` does not persist a per-period compliance rate
+ * today (spec §13 leaves the door open), so we pass `compliance: null`
+ * for every period. The aggregator preserves null through to the UI.
+ * Rebate values come from `ContractPeriod.rebateEarned` — the same
+ * rollup that drives the contracts list / dashboard surfaces (CLAUDE.md
+ * rule: rebates are never auto-synthesized for display).
+ */
+export async function getContractPerformanceHistory(
+  contractId: string,
+): Promise<PerformanceHistoryRow[]> {
+  await requireAuth()
+
+  const periods = await prisma.contractPeriod.findMany({
+    where: { contractId },
+    select: {
+      periodStart: true,
+      periodEnd: true,
+      totalSpend: true,
+      rebateEarned: true,
+    },
+    orderBy: { periodStart: "asc" },
+  })
+
+  return buildRealPerformanceHistory({
+    periods: periods.map((p) => ({
+      periodStart: p.periodStart,
+      periodEnd: p.periodEnd,
+      totalSpend: Number(p.totalSpend),
+      compliance: null,
+    })),
+    accruals: periods.map((p) => ({
+      periodStart: p.periodStart,
+      periodEnd: p.periodEnd,
+      rebateEarned: Number(p.rebateEarned),
+    })),
   })
 }
 
