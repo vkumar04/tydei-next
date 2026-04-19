@@ -26,7 +26,10 @@ import {
 } from "@/components/ui/tooltip"
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
 import { getContractPeriods } from "@/lib/actions/contract-periods"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
+import { calculateTierProgress } from "@/lib/contracts/tier-progress"
+import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
+import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
 import { ContractDetailOverview } from "@/components/contracts/contract-detail-overview"
 import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
@@ -136,6 +139,44 @@ export function ContractDetailClient({
     const totalSpend = Number(contract.currentSpend ?? 0)
 
     const totalValue = Number(contract.totalValue)
+
+    // Tier-progress view: the Commitment Progress card's "Spend Progress" bar
+    // should measure how close current spend is to unlocking the next rebate
+    // tier, not how much of the paper contract-value has been burned. Contract
+    // Value remains the denominator for the header "Current Spend / commitment"
+    // stat and the Contract Details card. When the contract has no tiered
+    // rebate structure (e.g. pricing_only, or a draft usage/tie-in contract
+    // that hasn't had terms wired up yet), we fall back to the legacy
+    // totalSpend / totalValue ratio purely so the bar still renders — the UI
+    // branch above suppresses tier copy in that state.
+    const firstTermWithTiers = contract.terms?.find((t) => t.tiers.length > 0)
+    const tiersForEngine: TierLike[] | null = firstTermWithTiers
+      ? firstTermWithTiers.tiers.map((t) => ({
+          tierNumber: t.tierNumber,
+          tierName: t.tierName ?? null,
+          spendMin: Number(t.spendMin),
+          spendMax: t.spendMax != null ? Number(t.spendMax) : null,
+          rebateValue: Number(t.rebateValue),
+        }))
+      : null
+    const tierMethod: RebateMethodName =
+      (firstTermWithTiers?.rebateMethod as RebateMethodName | undefined) ??
+      "cumulative"
+    const tierProgress =
+      tiersForEngine && tiersForEngine.length > 0
+        ? calculateTierProgress(totalSpend, tiersForEngine, tierMethod)
+        : null
+    const currentTierSourceTier = firstTermWithTiers && tierProgress?.currentTier
+      ? firstTermWithTiers.tiers.find(
+          (t) => t.tierNumber === tierProgress.currentTier!.tierNumber,
+        ) ?? null
+      : null
+    const atTopTier = !!tierProgress && tierProgress.nextTier === null
+    // commitmentPct — header stat card's "X% of commitment" caption stays on
+    // the legacy spend-of-contract-value math. The Commitment Progress card
+    // below uses tierProgress.progressPercent via the dedicated UI branch
+    // instead (so the bar denominator is the next-tier threshold, not the
+    // paper contract value — Charles W1.H).
     const commitmentPct =
       totalValue > 0 ? Math.round((totalSpend / totalValue) * 100) : 0
 
@@ -157,6 +198,10 @@ export function ContractDetailClient({
       rebateCollected,
       daysUntilExpiration,
       expirationDate: contract.expirationDate,
+      tierProgress,
+      currentTierSourceTier,
+      atTopTier,
+      hasTiers: !!tierProgress,
     }
   }, [contract])
 
@@ -577,76 +622,173 @@ export function ContractDetailClient({
               <CardContent className="space-y-6">
                 {stats && (
                   <>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="inline-flex items-center gap-1 text-muted-foreground">
-                          Spend Progress
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="inline-flex cursor-help items-center">
-                                  <HelpCircle
-                                    className="h-3.5 w-3.5 text-muted-foreground"
-                                    aria-label="Spend Progress help"
-                                  />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-[320px] p-3 text-xs">
-                                <p>
-                                  Current Spend (trailing 12 months) divided
-                                  by the Contract Value entered on the
-                                  agreement. The denominator is the
-                                  contract&apos;s Total Value field, not a
-                                  per-period minimum.
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </span>
-                        <span className="font-medium">
-                          {stats.commitmentPct}%
-                        </span>
-                      </div>
-                      <Progress
-                        value={Math.min(stats.commitmentPct, 100)}
-                        className="h-2"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {formatCurrency(stats.totalSpend)} of{" "}
-                        {formatCurrency(stats.totalValue)} Contract Value
-                      </p>
-                      {(() => {
-                        const term = contract.terms?.[0]
-                        const mpc =
-                          term?.minimumPurchaseCommitment != null
-                            ? Number(term.minimumPurchaseCommitment)
-                            : null
-                        if (mpc == null || mpc <= 0) return null
-                        const cadence = term?.paymentCadence ?? "monthly"
-                        const cadenceLabel =
-                          cadence === "quarterly"
-                            ? "Quarterly"
-                            : cadence === "annual"
-                              ? "Annual"
-                              : "Monthly"
-                        const perPeriods =
-                          cadence === "quarterly"
-                            ? 4
-                            : cadence === "annual"
-                              ? 1
-                              : 12
-                        const perPeriod = mpc / perPeriods
-                        return (
-                          <p className="text-xs text-muted-foreground">
-                            Minimum {cadenceLabel} Purchase:{" "}
+                    {stats.hasTiers &&
+                      stats.tierProgress &&
+                      stats.tierProgress.currentTier && (
+                        <div className="space-y-2">
+                          {(() => {
+                            const tp = stats.tierProgress!
+                            const currentTier = tp.currentTier!
+                            const nextTier = tp.nextTier
+                            const atTop = stats.atTopTier
+                            const currentLabel =
+                              currentTier.tierName ??
+                              `Tier ${currentTier.tierNumber}`
+                            const nextLabel = nextTier
+                              ? nextTier.tierName ??
+                                `Tier ${nextTier.tierNumber}`
+                              : null
+                            const rateDisplay = stats.currentTierSourceTier
+                              ? formatTierRebateLabel(
+                                  stats.currentTierSourceTier.rebateType,
+                                  Number(
+                                    stats.currentTierSourceTier.rebateValue,
+                                  ),
+                                )
+                              : formatPercent(currentTier.rebateValue * 100)
+                            const barPct = atTop
+                              ? 100
+                              : Math.round(tp.progressPercent)
+                            const nextThreshold = nextTier?.spendMin ?? 0
+                            return (
+                              <>
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                    {atTop
+                                      ? "Top Tier Achieved"
+                                      : `Spend Progress to ${nextLabel}`}
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="inline-flex cursor-help items-center">
+                                            <HelpCircle
+                                              className="h-3.5 w-3.5 text-muted-foreground"
+                                              aria-label="Spend Progress help"
+                                            />
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="max-w-[320px] p-3 text-xs">
+                                          <p>
+                                            Progress toward the next rebate
+                                            tier. The denominator is the spend
+                                            threshold that unlocks a higher
+                                            rate — hitting it moves you from
+                                            Tier N to Tier N+1. Contract Value
+                                            is a separate metric shown on the
+                                            header card.
+                                          </p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  </span>
+                                  <span className="font-medium">{barPct}%</span>
+                                </div>
+                                <Progress
+                                  value={barPct}
+                                  className={
+                                    atTop
+                                      ? "h-2 opacity-60"
+                                      : "h-2"
+                                  }
+                                />
+                                {atTop ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {currentLabel} rebate rate: {rateDisplay}.
+                                    Keep spending to maximize rebate.
+                                  </p>
+                                ) : (
+                                  <>
+                                    <p className="text-xs text-muted-foreground">
+                                      {formatCurrency(stats.totalSpend)} of{" "}
+                                      {formatCurrency(nextThreshold)} to unlock{" "}
+                                      {nextLabel}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Currently {currentLabel} · {rateDisplay}{" "}
+                                      rebate
+                                    </p>
+                                  </>
+                                )}
+                                {(() => {
+                                  const term = contract.terms?.[0]
+                                  const mpc =
+                                    term?.minimumPurchaseCommitment != null
+                                      ? Number(term.minimumPurchaseCommitment)
+                                      : null
+                                  if (mpc == null || mpc <= 0) return null
+                                  const cadence =
+                                    term?.paymentCadence ?? "monthly"
+                                  const cadenceLabel =
+                                    cadence === "quarterly"
+                                      ? "Quarterly"
+                                      : cadence === "annual"
+                                        ? "Annual"
+                                        : "Monthly"
+                                  const perPeriods =
+                                    cadence === "quarterly"
+                                      ? 4
+                                      : cadence === "annual"
+                                        ? 1
+                                        : 12
+                                  const perPeriod = mpc / perPeriods
+                                  return (
+                                    <p className="text-xs text-muted-foreground">
+                                      Minimum {cadenceLabel} Purchase:{" "}
+                                      <span className="font-medium">
+                                        {formatCurrency(perPeriod)}
+                                      </span>{" "}
+                                      ({formatCurrency(mpc)}/yr)
+                                    </p>
+                                  )
+                                })()}
+                              </>
+                            )
+                          })()}
+                        </div>
+                      )}
+                    {!stats.hasTiers &&
+                      contract.contractType !== "pricing_only" && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="inline-flex items-center gap-1 text-muted-foreground">
+                              Spend Progress
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex cursor-help items-center">
+                                      <HelpCircle
+                                        className="h-3.5 w-3.5 text-muted-foreground"
+                                        aria-label="Spend Progress help"
+                                      />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-[320px] p-3 text-xs">
+                                    <p>
+                                      This contract has no rebate tiers
+                                      configured yet, so progress is shown
+                                      against the Contract Value field on the
+                                      agreement. Add tiers under Terms to see
+                                      progress toward the next rebate
+                                      threshold.
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </span>
                             <span className="font-medium">
-                              {formatCurrency(perPeriod)}
-                            </span>{" "}
-                            ({formatCurrency(mpc)}/yr)
+                              {stats.commitmentPct}%
+                            </span>
+                          </div>
+                          <Progress
+                            value={Math.min(stats.commitmentPct, 100)}
+                            className="h-2"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(stats.totalSpend)} of{" "}
+                            {formatCurrency(stats.totalValue)} Contract Value
                           </p>
-                        )
-                      })()}
-                    </div>
+                        </div>
+                      )}
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
