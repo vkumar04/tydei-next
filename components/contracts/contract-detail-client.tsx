@@ -579,8 +579,29 @@ export function ContractDetailClient({
                   <>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
                           Spend Progress
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex cursor-help items-center">
+                                  <HelpCircle
+                                    className="h-3.5 w-3.5 text-muted-foreground"
+                                    aria-label="Spend Progress help"
+                                  />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[320px] p-3 text-xs">
+                                <p>
+                                  Current Spend (trailing 12 months) divided
+                                  by the Contract Value entered on the
+                                  agreement. The denominator is the
+                                  contract&apos;s Total Value field, not a
+                                  per-period minimum.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </span>
                         <span className="font-medium">
                           {stats.commitmentPct}%
@@ -592,14 +613,66 @@ export function ContractDetailClient({
                       />
                       <p className="text-xs text-muted-foreground">
                         {formatCurrency(stats.totalSpend)} of{" "}
-                        {formatCurrency(stats.totalValue)} commitment
+                        {formatCurrency(stats.totalValue)} Contract Value
                       </p>
+                      {(() => {
+                        const term = contract.terms?.[0]
+                        const mpc =
+                          term?.minimumPurchaseCommitment != null
+                            ? Number(term.minimumPurchaseCommitment)
+                            : null
+                        if (mpc == null || mpc <= 0) return null
+                        const cadence = term?.paymentCadence ?? "monthly"
+                        const cadenceLabel =
+                          cadence === "quarterly"
+                            ? "Quarterly"
+                            : cadence === "annual"
+                              ? "Annual"
+                              : "Monthly"
+                        const perPeriods =
+                          cadence === "quarterly"
+                            ? 4
+                            : cadence === "annual"
+                              ? 1
+                              : 12
+                        const perPeriod = mpc / perPeriods
+                        return (
+                          <p className="text-xs text-muted-foreground">
+                            Minimum {cadenceLabel} Purchase:{" "}
+                            <span className="font-medium">
+                              {formatCurrency(perPeriod)}
+                            </span>{" "}
+                            ({formatCurrency(mpc)}/yr)
+                          </p>
+                        )
+                      })()}
                     </div>
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
                           Rebate Collection
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex cursor-help items-center">
+                                  <HelpCircle
+                                    className="h-3.5 w-3.5 text-muted-foreground"
+                                    aria-label="Rebate Collection help"
+                                  />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[320px] p-3 text-xs">
+                                <p>
+                                  Rebate dollars collected divided by rebate
+                                  dollars earned (lifetime). Earned sums
+                                  Rebate rows whose pay period has closed;
+                                  Collected sums rows with a collection date
+                                  recorded. No tier-engine projections.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </span>
                         <span className="font-medium">
                           {stats.rebateEarned > 0
