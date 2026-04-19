@@ -15,6 +15,7 @@ import {
   matchCOGRecordToContract,
   type ContractForMatch,
   type ContractPricingItemForMatch,
+  type MatchResult,
 } from "@/lib/contracts/match"
 import { enrichCOGRecord } from "@/lib/cog/enrichment"
 import {
@@ -231,8 +232,6 @@ export async function recomputeMatchStatusesForVendor(
     //   none                          → delegated below to matchCOGRecordToContract
     //                                   for off_contract_item / out_of_scope /
     //                                   unknown_vendor differentiation.
-    void cascade.mode
-
     const result = matchCOGRecordToContract(
       {
         facilityId: r.facilityId,
@@ -246,10 +245,34 @@ export async function recomputeMatchStatusesForVendor(
       contracts,
     )
 
-    const cols = enrichCOGRecord(result, {
+    // If the cascade found a contract via vendor+date or fuzzy-name but the
+    // strict item-level matcher returned off_contract_item (e.g. the
+    // contract has zero ContractPricing rows, or the vendorItemNo simply
+    // isn't on the contract line-sheet), trust the weaker cascade signal
+    // and classify the row as on_contract against that contractId.
+    //
+    // Without this override the match cascade's steps 2 & 3 have no effect:
+    // `matchCOGRecordToContract` only returns on_contract/price_variance
+    // when a pricingItems row matches, which defeats the whole purpose of
+    // a cascade fallback.
+    const effectiveResult: MatchResult =
+      result.status === "off_contract_item" &&
+      cascade.contractId !== null &&
+      (cascade.mode === "vendorAndDate" || cascade.mode === "fuzzyVendorName")
+        ? { status: "on_contract", contractId: cascade.contractId, contractPrice: 0, savings: 0 }
+        : result
+
+    const cols = enrichCOGRecord(effectiveResult, {
       quantity: r.quantity,
       unitCost: Number(r.unitCost),
     })
+
+    // When we took the cascade override, null out contractPrice (we have no
+    // authoritative price) rather than persisting the sentinel 0.
+    if (effectiveResult !== result && effectiveResult.status === "on_contract") {
+      cols.contractPrice = null
+      cols.savingsAmount = null
+    }
 
     await db.cOGRecord.update({
       where: { id: r.id },

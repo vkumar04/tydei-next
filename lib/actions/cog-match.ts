@@ -21,6 +21,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { resolveVendorIdsBulk } from "@/lib/vendors/resolve"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
+import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 
 export async function matchCOGToContracts(): Promise<{
   totalRecords: number
@@ -97,18 +98,21 @@ export async function matchCOGToContracts(): Promise<{
     }
   }
 
-  // 5. Count on-contract after matching
+  // 4b. For every contracted vendor at this facility, recompute COG
+  //     enrichment columns so matchStatus / contractId / isOnContract
+  //     reflect the freshly-resolved vendorIds. Without this step the
+  //     "Match Pricing" button only updates vendorId — matchStatus stays
+  //     `pending` and Charles sees nothing linked to a contract.
+  for (const vendorId of contractedVendorIds) {
+    await recomputeMatchStatusesForVendor(vendorId, facility.id)
+  }
+
+  // 5. Count on-contract after matching — now driven by matchStatus so the
+  //    badge on the UI matches the toast count.
   const onContractAfter = await prisma.cOGRecord.count({
     where: {
       facilityId: facility.id,
-      vendor: {
-        contracts: {
-          some: {
-            status: { in: ["active", "expiring"] },
-            ...contractsOwnedByFacility(facility.id),
-          },
-        },
-      },
+      matchStatus: { in: ["on_contract", "price_variance"] },
     },
   })
 

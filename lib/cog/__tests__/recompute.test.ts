@@ -205,6 +205,58 @@ describe("recomputeMatchStatusesForVendor", () => {
     expect(Number(updates[0]!.data.variancePercent)).toBeCloseTo(15, 2)
   })
 
+  it("flips records to on_contract via the cascade vendor+date fallback when the contract has zero pricing rows (regression: Charles round-3 task 3)", async () => {
+    // Regression: in seeded DBs, contracts may exist but ContractPricing
+    // rows can be empty (pricing lives in PricingFile instead). Before the
+    // cascade-override fix, every record here would flip to
+    // off_contract_item because matchCOGRecordToContract couldn't find an
+    // item-level match. The cascade's vendorAndDate step must still yield
+    // on_contract linkage.
+    const { db, updates } = makeDb({
+      contracts: [
+        {
+          id: "c-empty-pricing",
+          vendorId: "v-1",
+          status: "active",
+          effectiveDate: new Date("2026-01-01"),
+          expirationDate: new Date("2026-12-31"),
+          facilityId: "fac-1",
+          contractFacilities: [],
+          pricingItems: [], // ← empty ContractPricing
+        },
+      ],
+      records: [
+        {
+          id: "r-1",
+          facilityId: "fac-1",
+          vendorId: "v-1",
+          vendorName: "Acme",
+          vendorItemNo: "ITEM-A",
+          unitCost: 100,
+          quantity: 5,
+          transactionDate: new Date("2026-06-15"),
+        },
+      ],
+    })
+
+    // @ts-expect-error — fake DB shape
+    const summary = await recomputeMatchStatusesForVendor(db, {
+      vendorId: "v-1",
+      facilityId: "fac-1",
+    })
+
+    expect(summary.onContract).toBe(1)
+    expect(summary.offContract).toBe(0)
+    expect(updates[0]!.data).toMatchObject({
+      matchStatus: "on_contract",
+      contractId: "c-empty-pricing",
+      isOnContract: true,
+      // No authoritative price without a ContractPricing row.
+      contractPrice: null,
+      savingsAmount: null,
+    })
+  })
+
   it("flips records to out_of_scope when contract dates don't cover transaction", async () => {
     const { db, updates } = makeDb({
       contracts: [
