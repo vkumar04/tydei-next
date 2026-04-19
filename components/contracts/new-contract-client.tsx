@@ -638,6 +638,12 @@ export function NewContractClient({
           form={form}
           vendors={vendors}
           categories={liveCategories}
+          onCreateCategory={async (name) => {
+            const created = await createCategory({ name })
+            await queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
+            toast.success(`Created category "${created.name}"`)
+            return { id: created.id, name: created.name }
+          }}
         />
 
         <div className="flex items-center justify-end">

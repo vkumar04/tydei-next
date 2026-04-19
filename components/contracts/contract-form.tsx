@@ -13,6 +13,7 @@ import { queryKeys } from "@/lib/query-keys"
 import { useCreateVendor } from "@/hooks/use-vendor-crud"
 import { Link2, X, Plus } from "lucide-react"
 import { GroupedVendorPicker } from "@/components/contracts/grouped-vendor-picker"
+import { suggestSimilarCategory } from "@/lib/categories/fuzzy-match"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -68,6 +69,12 @@ interface ContractFormProps {
   form: UseFormReturn<CreateContractInput>
   vendors: VendorOption[]
   categories: CategoryOption[]
+  /**
+   * Optional hook to create a new Category row from the form. When
+   * provided, the Categories popover shows an inline "Add category"
+   * input that fuzzy-matches existing names first (Charles R5.17).
+   */
+  onCreateCategory?: (name: string) => Promise<{ id: string; name: string }>
 }
 
 const contractTypes = [
@@ -121,6 +128,7 @@ export function ContractFormBasicInfo({
   form,
   vendors,
   categories,
+  onCreateCategory,
 }: ContractFormProps) {
   const {
     register,
@@ -160,6 +168,22 @@ export function ContractFormBasicInfo({
   )
   const createVendorMutation = useCreateVendor()
   const [addVendorOpen, setAddVendorOpen] = useState(false)
+  // Inline "Add category" state — Charles R5.17. Typed name is
+  // fuzzy-matched against `categories` so we suggest an existing
+  // row before creating a duplicate.
+  const [newCategoryName, setNewCategoryName] = useState("")
+  const [creatingCategory, setCreatingCategory] = useState(false)
+  const categorySuggestion = useMemo(() => {
+    const trimmed = newCategoryName.trim()
+    if (!trimmed) return null
+    // Don't suggest when the typed name already exactly matches
+    // (user will just tick the existing checkbox).
+    const exact = categories.find(
+      (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
+    )
+    if (exact) return null
+    return suggestSimilarCategory(trimmed, categories)
+  }, [newCategoryName, categories])
   const [newVendorName, setNewVendorName] = useState("")
   const [newVendorDisplayName, setNewVendorDisplayName] = useState("")
   const [newVendorContactName, setNewVendorContactName] = useState("")
@@ -208,6 +232,37 @@ export function ContractFormBasicInfo({
     queryClient,
     setValue,
   ])
+
+  const selectCategoryId = useCallback(
+    (id: string) => {
+      const current = form.getValues("categoryIds") ?? []
+      if (current.includes(id)) return
+      const next = [...current, id]
+      setValue("categoryIds", next)
+      setValue("productCategoryId", next[0])
+    },
+    [form, setValue],
+  )
+
+  const handleCreateNewCategory = useCallback(async () => {
+    if (!onCreateCategory) return
+    const name = newCategoryName.trim()
+    if (!name) return
+    setCreatingCategory(true)
+    try {
+      const created = await onCreateCategory(name)
+      selectCategoryId(created.id)
+      setNewCategoryName("")
+    } finally {
+      setCreatingCategory(false)
+    }
+  }, [newCategoryName, onCreateCategory, selectCategoryId])
+
+  const handleUseSuggestedCategory = useCallback(() => {
+    if (!categorySuggestion) return
+    selectCategoryId(categorySuggestion.id)
+    setNewCategoryName("")
+  }, [categorySuggestion, selectCategoryId])
 
   // Fetch existing contracts for tie-in / capital linking
   const { data: contractsData } = useQuery({
@@ -377,6 +432,67 @@ export function ContractFormBasicInfo({
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[--radix-popover-trigger-width] p-2" align="start">
+                  {onCreateCategory && (
+                    <div className="border-b pb-2 mb-2 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Add category</Label>
+                      <div className="flex gap-1">
+                        <Input
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          placeholder="e.g., Trauma Implants"
+                          className="h-8 text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              if (categorySuggestion) {
+                                handleUseSuggestedCategory()
+                              } else {
+                                void handleCreateNewCategory()
+                              }
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-2"
+                          disabled={!newCategoryName.trim() || creatingCategory}
+                          onClick={() => void handleCreateNewCategory()}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      {categorySuggestion && (
+                        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs space-y-1.5">
+                          <div>
+                            Similar category exists: <span className="font-medium">&quot;{categorySuggestion.name}&quot;</span> — use that instead?
+                          </div>
+                          <div className="flex gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="default"
+                              className="h-6 text-xs"
+                              onClick={handleUseSuggestedCategory}
+                            >
+                              Use &quot;{categorySuggestion.name}&quot;
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-xs"
+                              disabled={creatingCategory}
+                              onClick={() => void handleCreateNewCategory()}
+                            >
+                              Create new &quot;{newCategoryName.trim()}&quot;
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="max-h-[200px] overflow-y-auto space-y-1">
                     {categories.map((c) => {
                       const checked = selectedCategoryIds.includes(c.id)

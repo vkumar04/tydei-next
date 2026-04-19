@@ -7,6 +7,9 @@ import { ArrowLeft, Loader2, Save, X } from "lucide-react"
 import { useContract, useUpdateContract } from "@/hooks/use-contracts"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { upsertContractTiers, createContractTerm, deleteContractTerm, updateContractTerm } from "@/lib/actions/contract-terms"
+import { createCategory, getCategories } from "@/lib/actions/categories"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/query-keys"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
@@ -28,9 +31,15 @@ export function EditContractClient({
   categories,
 }: EditContractClientProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { data: contract, isLoading } = useContract(contractId)
   const updateMutation = useUpdateContract()
   const [initialized, setInitialized] = useState(false)
+  const { data: liveCategories } = useQuery({
+    queryKey: queryKeys.categories.all,
+    queryFn: () => getCategories(),
+    initialData: categories,
+  })
 
   const { form, terms, setTerms } = useContractForm()
 
@@ -215,7 +224,13 @@ export function EditContractClient({
           <ContractFormBasicInfo
             form={form}
             vendors={vendors}
-            categories={categories}
+            categories={liveCategories ?? categories}
+            onCreateCategory={async (name) => {
+              const created = await createCategory({ name })
+              await queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
+              toast.success(`Created category "${created.name}"`)
+              return { id: created.id, name: created.name }
+            }}
           />
         </TabsContent>
 
