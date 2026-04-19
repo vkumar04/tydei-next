@@ -15,6 +15,9 @@ import {
   type TieInMember,
   type MemberPerformance,
 } from "@/lib/contracts/tie-in"
+import { buildTieInAmortizationSchedule } from "@/lib/rebates/engine/amortization"
+import type { AmortizationEntry } from "@/lib/rebates/engine/types"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 
 export async function getContractTieInBundle(contractId: string) {
@@ -116,4 +119,223 @@ export async function getContractTieInBundle(contractId: string) {
       evaluation,
     },
   })
+}
+
+/**
+ * ─── Wave A: tie-in capital schedule read ─────────────────────────
+ *
+ * Returns the full amortization schedule plus the three capital
+ * summary numbers for a tie-in contract: remaining balance, principal
+ * paid to date, and a linear-projection payoff date.
+ *
+ * The engine (lib/rebates/engine/amortization.ts) already builds the
+ * schedule from capitalCost / interestRate / termMonths / cadence —
+ * we just sequence it with the contract's effective date so we can
+ * label rows with real dates and count how many periods have elapsed.
+ *
+ * If ContractAmortizationSchedule rows are persisted for the term we
+ * prefer those (future writer paths will populate the table); if not,
+ * we compute on the fly so the UI still renders something useful.
+ *
+ * Shape is fully serialized (Decimals → numbers, Dates → ISO strings)
+ * so it crosses the server-action boundary cleanly.
+ */
+
+export interface ContractCapitalScheduleRow {
+  periodNumber: number
+  periodDate: string
+  openingBalance: number
+  interestCharge: number
+  principalDue: number
+  amortizationDue: number
+  closingBalance: number
+}
+
+export interface ContractCapitalScheduleResult {
+  /** null → this contract does not have a tie-in capital term yet. */
+  hasSchedule: boolean
+  capitalCost: number
+  interestRate: number
+  termMonths: number
+  period: "monthly" | "quarterly" | "annual"
+  schedule: ContractCapitalScheduleRow[]
+  /** periodNumber of the last row whose periodDate ≤ today; 0 when none. */
+  elapsedPeriods: number
+  remainingBalance: number
+  paidToDate: number
+  /** ISO string; null when run-rate is zero (would never payoff). */
+  projectedPayoff: string | null
+}
+
+function normalizeCadence(
+  raw: string | null | undefined,
+): "monthly" | "quarterly" | "annual" {
+  switch (raw) {
+    case "monthly":
+    case "quarterly":
+    case "annual":
+      return raw
+    // paymentTiming uses "quarterly" as default; other values fall back.
+    default:
+      return "monthly"
+  }
+}
+
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date)
+  d.setMonth(d.getMonth() + months)
+  return d
+}
+
+function monthsPerPeriod(p: "monthly" | "quarterly" | "annual"): number {
+  switch (p) {
+    case "monthly":
+      return 1
+    case "quarterly":
+      return 3
+    case "annual":
+      return 12
+  }
+}
+
+export async function getContractCapitalSchedule(
+  contractId: string,
+): Promise<ContractCapitalScheduleResult> {
+  const { facility } = await requireFacility()
+
+  const contract = await prisma.contract.findFirst({
+    where: contractOwnershipWhere(contractId, facility.id),
+    select: {
+      id: true,
+      effectiveDate: true,
+      terms: {
+        where: {
+          capitalCost: { not: null },
+          interestRate: { not: null },
+          termMonths: { not: null },
+        },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          capitalCost: true,
+          interestRate: true,
+          termMonths: true,
+          paymentTiming: true,
+          amortizationRows: {
+            orderBy: { periodNumber: "asc" },
+          },
+        },
+        take: 1,
+      },
+    },
+  })
+
+  const empty: ContractCapitalScheduleResult = {
+    hasSchedule: false,
+    capitalCost: 0,
+    interestRate: 0,
+    termMonths: 0,
+    period: "monthly",
+    schedule: [],
+    elapsedPeriods: 0,
+    remainingBalance: 0,
+    paidToDate: 0,
+    projectedPayoff: null,
+  }
+
+  if (!contract || contract.terms.length === 0) return empty
+  const term = contract.terms[0]!
+
+  const capitalCost = Number(term.capitalCost ?? 0)
+  const interestRate = Number(term.interestRate ?? 0)
+  const termMonths = Number(term.termMonths ?? 0)
+  const period = normalizeCadence(term.paymentTiming)
+
+  if (capitalCost <= 0 || termMonths <= 0) return empty
+
+  // Prefer persisted rows; fall back to live engine build.
+  let entries: AmortizationEntry[]
+  if (term.amortizationRows.length > 0) {
+    entries = term.amortizationRows.map((r) => ({
+      periodNumber: r.periodNumber,
+      openingBalance: Number(r.openingBalance),
+      interestCharge: Number(r.interestCharge),
+      principalDue: Number(r.principalDue),
+      amortizationDue: Number(r.amortizationDue),
+      closingBalance: Number(r.closingBalance),
+    }))
+  } else {
+    entries = buildTieInAmortizationSchedule({
+      capitalCost,
+      interestRate,
+      termMonths,
+      period,
+    })
+  }
+
+  // Attach a period date to each row, anchored to contract.effectiveDate.
+  const start = new Date(contract.effectiveDate)
+  const monthsStep = monthsPerPeriod(period)
+  const today = new Date()
+  const schedule: ContractCapitalScheduleRow[] = entries.map((e) => {
+    const periodDate = addMonths(start, e.periodNumber * monthsStep)
+    return {
+      periodNumber: e.periodNumber,
+      periodDate: periodDate.toISOString(),
+      openingBalance: e.openingBalance,
+      interestCharge: e.interestCharge,
+      principalDue: e.principalDue,
+      amortizationDue: e.amortizationDue,
+      closingBalance: e.closingBalance,
+    }
+  })
+
+  // Elapsed = count rows whose periodDate ≤ today.
+  const elapsedPeriods = schedule.filter(
+    (r) => new Date(r.periodDate).getTime() <= today.getTime(),
+  ).length
+
+  const paidToDate = schedule
+    .slice(0, elapsedPeriods)
+    .reduce((acc, r) => acc + r.principalDue, 0)
+  const remainingBalance = Math.max(0, capitalCost - paidToDate)
+
+  // Linear projection: use trailing-90-day average monthly principal from
+  // the elapsed rows. Empty elapsed window → no projection (null).
+  let projectedPayoff: string | null = null
+  if (remainingBalance > 0 && elapsedPeriods > 0) {
+    const ninetyDaysAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000)
+    const trailing = schedule
+      .slice(0, elapsedPeriods)
+      .filter((r) => new Date(r.periodDate).getTime() >= ninetyDaysAgo.getTime())
+    const windowPrincipal = trailing.length > 0
+      ? trailing.reduce((a, r) => a + r.principalDue, 0)
+      : // Fall back to the last elapsed row's per-period principal.
+        schedule[elapsedPeriods - 1]!.principalDue
+    const avgMonthlyPrincipal =
+      trailing.length > 0
+        ? windowPrincipal / (trailing.length * monthsStep)
+        : windowPrincipal / monthsStep
+    if (avgMonthlyPrincipal > 0) {
+      const monthsRemaining = remainingBalance / avgMonthlyPrincipal
+      projectedPayoff = addMonths(today, Math.ceil(monthsRemaining)).toISOString()
+    }
+  } else if (remainingBalance === 0) {
+    // Already paid off — payoff date is the last row's period date.
+    const last = schedule[schedule.length - 1]
+    projectedPayoff = last ? last.periodDate : null
+  }
+
+  return {
+    hasSchedule: true,
+    capitalCost,
+    interestRate,
+    termMonths,
+    period,
+    schedule,
+    elapsedPeriods,
+    remainingBalance,
+    paidToDate,
+    projectedPayoff,
+  }
 }

@@ -39,6 +39,8 @@ import { ContractInsightsCards } from "@/components/contracts/contract-insights-
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
 import { ContractPerformanceCharts } from "@/components/contracts/contract-performance-charts"
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
+import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
+import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
 import { OffContractSpendCard } from "@/components/contracts/off-contract-spend-card"
 import { ContractChangeProposalsCard } from "@/components/contracts/contract-change-proposals-card"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
@@ -423,6 +425,12 @@ export function ContractDetailClient({
                 <p className="text-xs text-muted-foreground">
                   {formatCurrency(stats.rebateCollected)} collected (lifetime)
                 </p>
+                {contract.contractType === "tie_in" && (
+                  <TieInRebateSplit
+                    contractId={contractId}
+                    rebateEarned={stats.rebateEarned}
+                  />
+                )}
               </div>
             </CardContent>
           </Card>
@@ -465,6 +473,14 @@ export function ContractDetailClient({
           <ContractChangeProposalsCard contractId={contractId} />
           {/* Tie-in bundle card — renders only when this contract is a bundle primary */}
           <ContractTieInCard contractId={contractId} />
+          {/* Wave A: tie-in amortization + capital summary.
+              Shows only for tie-in contracts that either link to a capital
+              contract or carry capital fields on a term themselves. */}
+          {contract.contractType === "tie_in" &&
+            (contract.tieInCapitalContractId != null ||
+              contract.terms.some((t) => t.capitalCost != null)) && (
+              <ContractAmortizationCard contractId={contractId} />
+            )}
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Contract Details Card */}
             <Card>

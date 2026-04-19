@@ -1,0 +1,132 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+/**
+ * Wave A coverage: `getContractCapitalSchedule` returns the three
+ * capital summary numbers (remainingBalance, paidToDate, projectedPayoff)
+ * and the full amortization schedule for a tie-in contract.
+ *
+ * We stub prisma to return a single ContractTerm with capital fields and
+ * NO persisted amortizationRows, so the action falls back to the engine
+ * in lib/rebates/engine/amortization.ts (untouched). That exercises the
+ * on-the-fly path, which is the path real tie-in contracts hit today.
+ */
+
+const { findFirstMock } = vi.hoisted(() => ({
+  findFirstMock: vi.fn(),
+}))
+
+vi.mock("@/lib/db", () => ({
+  prisma: { contract: { findFirst: findFirstMock } },
+}))
+
+vi.mock("@/lib/actions/auth", () => ({
+  requireFacility: vi.fn().mockResolvedValue({
+    facility: { id: "fac-1" },
+    user: { id: "u-1" },
+  }),
+}))
+
+import { getContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
+
+describe("getContractCapitalSchedule (Wave A)", () => {
+  it("returns an empty, well-formed shape when the contract has no capital term", async () => {
+    findFirstMock.mockResolvedValueOnce({
+      id: "c-1",
+      effectiveDate: new Date("2026-01-01"),
+      terms: [],
+    })
+
+    const r = await getContractCapitalSchedule("c-1")
+
+    expect(r.hasSchedule).toBe(false)
+    expect(r.schedule).toEqual([])
+    expect(r.remainingBalance).toBe(0)
+    expect(r.paidToDate).toBe(0)
+    expect(r.projectedPayoff).toBeNull()
+  })
+
+  it("returns remaining balance, paid to date, and projected payoff for a 12-month monthly schedule", async () => {
+    // Contract that started 3 months ago → 3 periods elapsed, 9 remaining.
+    const effectiveDate = new Date()
+    effectiveDate.setMonth(effectiveDate.getMonth() - 3)
+
+    findFirstMock.mockResolvedValueOnce({
+      id: "c-1",
+      effectiveDate,
+      terms: [
+        {
+          id: "t-1",
+          capitalCost: 12_000, // $12k over 12 months, 0% → $1k principal/mo
+          interestRate: 0,
+          termMonths: 12,
+          paymentTiming: "monthly",
+          amortizationRows: [],
+        },
+      ],
+    })
+
+    const r = await getContractCapitalSchedule("c-1")
+
+    expect(r.hasSchedule).toBe(true)
+    expect(r.schedule).toHaveLength(12)
+    // With r=0, every period pays $1,000 principal.
+    expect(r.schedule[0]!.principalDue).toBeCloseTo(1000, 2)
+    expect(r.schedule[0]!.amortizationDue).toBeCloseTo(1000, 2)
+    // 3 periods elapsed → paid $3k, remaining $9k.
+    expect(r.elapsedPeriods).toBe(3)
+    expect(r.paidToDate).toBeCloseTo(3000, 2)
+    expect(r.remainingBalance).toBeCloseTo(9000, 2)
+    // Projected payoff is a future ISO date.
+    expect(r.projectedPayoff).not.toBeNull()
+    expect(new Date(r.projectedPayoff!).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it("uses persisted ContractAmortizationSchedule rows when present", async () => {
+    const effectiveDate = new Date()
+    effectiveDate.setMonth(effectiveDate.getMonth() - 1)
+
+    findFirstMock.mockResolvedValueOnce({
+      id: "c-1",
+      effectiveDate,
+      terms: [
+        {
+          id: "t-1",
+          capitalCost: 1000,
+          interestRate: 0,
+          termMonths: 2,
+          paymentTiming: "monthly",
+          amortizationRows: [
+            {
+              periodNumber: 1,
+              openingBalance: 1000,
+              interestCharge: 0,
+              principalDue: 500,
+              amortizationDue: 500,
+              closingBalance: 500,
+            },
+            {
+              periodNumber: 2,
+              openingBalance: 500,
+              interestCharge: 0,
+              principalDue: 500,
+              amortizationDue: 500,
+              closingBalance: 0,
+            },
+          ],
+        },
+      ],
+    })
+
+    const r = await getContractCapitalSchedule("c-1")
+
+    expect(r.hasSchedule).toBe(true)
+    expect(r.schedule).toHaveLength(2)
+    expect(r.schedule[0]!.principalDue).toBe(500)
+    expect(r.paidToDate).toBe(500)
+    expect(r.remainingBalance).toBe(500)
+  })
+})

@@ -1,0 +1,209 @@
+"use client"
+
+/**
+ * Tie-In capital amortization card.
+ *
+ * Wave A (2026-04-19 tie-in parity): surfaces the numbers the engine
+ * in lib/rebates/engine/amortization.ts has been producing since R3.8
+ * but which no UI has ever rendered. Shows:
+ *   1. A 3-tile summary strip — remaining balance, principal paid to
+ *      date, and a linear-projection payoff date.
+ *   2. A full schedule table (period #, period date, opening balance,
+ *      interest charge, principal due, amortization due, closing
+ *      balance).
+ *
+ * Data comes from getContractCapitalSchedule (lib/actions/contracts/
+ * tie-in.ts), which prefers persisted ContractAmortizationSchedule
+ * rows and falls back to an on-the-fly engine build when none exist.
+ * The engine is untouched — this component is pure wiring.
+ */
+
+import { useQuery } from "@tanstack/react-query"
+import { HelpCircle } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { formatCurrency, formatDate } from "@/lib/formatting"
+import { getContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
+
+interface ContractAmortizationCardProps {
+  contractId: string
+}
+
+export function ContractAmortizationCard({
+  contractId,
+}: ContractAmortizationCardProps) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["contract-capital-schedule", contractId],
+    queryFn: () => getContractCapitalSchedule(contractId),
+  })
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Capital Amortization</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-48 w-full" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!data || !data.hasSchedule || data.schedule.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Capital Amortization</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No amortization schedule yet — set capital cost, interest rate,
+            and term months on a term to generate.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <span>Capital Amortization</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {formatCurrency(data.capitalCost)} @{" "}
+            {(data.interestRate * 100).toFixed(2)}% over {data.termMonths} mo (
+            {data.period})
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* ── Capital summary strip (A2) ───────────────────────────── */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <SummaryTile
+            label="Remaining Balance"
+            tooltip="Capital cost minus the sum of principal paid across every period whose scheduled date has already passed."
+            value={formatCurrency(data.remainingBalance)}
+          />
+          <SummaryTile
+            label="Paid To Date"
+            tooltip="Sum of principal due across elapsed periods. Interest charges are not counted here — only principal reduces the capital balance."
+            value={formatCurrency(data.paidToDate)}
+          />
+          <SummaryTile
+            label="Projected Payoff"
+            tooltip="Linear projection: today + (remaining balance / average monthly principal from the trailing 90 days of elapsed periods). When no principal has been paid yet, this shows the scheduled payoff date."
+            value={
+              data.projectedPayoff
+                ? formatDate(data.projectedPayoff)
+                : "—"
+            }
+          />
+        </div>
+
+        {/* ── Schedule table (A1) ──────────────────────────────────── */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-muted-foreground">
+              <tr className="border-b">
+                <th className="py-2 pr-3 text-left font-medium">Period #</th>
+                <th className="py-2 pr-3 text-left font-medium">Period Date</th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  Opening Balance
+                </th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  Interest Charge
+                </th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  Principal Due
+                </th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  Amortization Due
+                </th>
+                <th className="py-2 text-right font-medium">Closing Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.schedule.map((row) => {
+                const elapsed = row.periodNumber <= data.elapsedPeriods
+                return (
+                  <tr
+                    key={row.periodNumber}
+                    className={
+                      "border-b last:border-0 " +
+                      (elapsed ? "bg-muted/30" : "")
+                    }
+                  >
+                    <td className="py-2 pr-3 font-medium">
+                      {row.periodNumber}
+                    </td>
+                    <td className="py-2 pr-3 text-muted-foreground">
+                      {formatDate(row.periodDate)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {formatCurrency(row.openingBalance)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {formatCurrency(row.interestCharge)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {formatCurrency(row.principalDue)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {formatCurrency(row.amortizationDue)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {formatCurrency(row.closingBalance)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SummaryTile({
+  label,
+  value,
+  tooltip,
+}: {
+  label: string
+  value: string
+  tooltip: string
+}) {
+  return (
+    <div className="rounded-md border bg-card p-3">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <span>{label}</span>
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={`What is ${label}?`}
+                className="inline-flex items-center text-muted-foreground hover:text-foreground"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p className="text-xs">{tooltip}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+    </div>
+  )
+}
