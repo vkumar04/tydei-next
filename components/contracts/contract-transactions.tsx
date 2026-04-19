@@ -47,7 +47,8 @@ import {
 } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate } from "@/lib/formatting"
-import { getContractPeriods } from "@/lib/actions/contract-periods"
+import { getContractPeriods, getContractRebates } from "@/lib/actions/contract-periods"
+import { queryKeys } from "@/lib/query-keys"
 import { toast } from "sonner"
 
 interface ContractTransactionsProps {
@@ -62,11 +63,20 @@ interface PeriodRow {
   rebateEarned: number
   rebateCollected: number
   tierAchieved: number | null
+  // Rows sourced from the `Rebate` table (vs synthesized ContractPeriods)
+  // have a collectionDate + notes. Used to label the row in the ledger
+  // and to short-circuit status logic.
+  source: "period" | "rebate"
+  collectionDate?: string | null
+  notes?: string | null
 }
 
 type TransactionType = "rebate" | "credit" | "payment"
 
 function getCollectionStatus(row: PeriodRow): "collected" | "pending" | "overdue" {
+  // A Rebate row with a collectionDate is, by definition, collected —
+  // it's the same rule the detail page's "Rebates Collected" card uses.
+  if (row.source === "rebate" && row.collectionDate) return "collected"
   const now = new Date()
   const end = new Date(row.periodEnd)
   if (row.rebateCollected >= row.rebateEarned && row.rebateEarned > 0) return "collected"
@@ -138,8 +148,16 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
         date,
       })
       toast.success("Transaction recorded")
-      // Refetch periods to show the new transaction
+      // Refetch periods + rebates to surface the new row, and invalidate
+      // the contract detail so the "Rebates Earned / Collected" cards
+      // pick it up immediately (rebates are a fact written into the
+      // `Rebate` table and aggregated server-side — see getContract).
+      queryClient.invalidateQueries({ queryKey: ["contract-periods", contractId] })
       queryClient.invalidateQueries({ queryKey: ["contractPeriods", contractId] })
+      queryClient.invalidateQueries({ queryKey: ["contractRebates", contractId] })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.detail(contractId),
+      })
     } catch {
       toast.error("Failed to save transaction")
     }
@@ -313,8 +331,13 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     queryFn: () => getContractPeriods(contractId),
     enabled: !!contractId,
   })
+  const { data: rebatesData, isLoading: rebatesLoading } = useQuery({
+    queryKey: ["contractRebates", contractId],
+    queryFn: () => getContractRebates(contractId),
+    enabled: !!contractId,
+  })
 
-  if (isLoading) {
+  if (isLoading || rebatesLoading) {
     return (
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -327,7 +350,7 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     )
   }
 
-  const rows: PeriodRow[] = (periods ?? []).map((p: Record<string, unknown>) => ({
+  const periodRows: PeriodRow[] = (periods ?? []).map((p: Record<string, unknown>) => ({
     id: p.id as string,
     periodStart: p.periodStart as string,
     periodEnd: p.periodEnd as string,
@@ -335,9 +358,43 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     rebateEarned: Number(p.rebateEarned ?? 0),
     rebateCollected: Number(p.rebateCollected ?? 0),
     tierAchieved: p.tierAchieved != null ? Number(p.tierAchieved) : null,
+    source: "period" as const,
+    collectionDate: null,
+    notes: null,
   }))
 
-  const totalRebates = rows.reduce((s, r) => s + r.rebateEarned, 0)
+  // Surface explicit Rebate rows the user logged via "Add Transaction"
+  // (or any imported rebate). These feed the detail page's "Rebates Earned"
+  // card directly, so showing them here gives a consistent audit trail.
+  const rebateRows: PeriodRow[] = ((rebatesData ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    id: r.id as string,
+    periodStart: r.payPeriodStart as string,
+    periodEnd: r.payPeriodEnd as string,
+    totalSpend: 0,
+    rebateEarned: Number(r.rebateEarned ?? 0),
+    rebateCollected: Number(r.rebateCollected ?? 0),
+    tierAchieved: null,
+    source: "rebate" as const,
+    collectionDate: (r.collectionDate as string | null) ?? null,
+    notes: (r.notes as string | null) ?? null,
+  }))
+
+  const rows: PeriodRow[] = [...rebateRows, ...periodRows].sort(
+    (a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime(),
+  )
+
+  // Earned mirrors the detail-page card: Rebate rows are only "earned"
+  // once their payPeriodEnd has passed. Period rows fall back to their
+  // stored rebateEarned.
+  const today = new Date()
+  const totalRebates = rows.reduce((s, r) => {
+    if (r.source === "rebate") {
+      return r.periodEnd && new Date(r.periodEnd) <= today
+        ? s + r.rebateEarned
+        : s
+    }
+    return s + r.rebateEarned
+  }, 0)
   // Credits and payments are 0 for now since we don't have separate transaction types yet
   const totalCredits = 0
   const totalPayments = 0
@@ -431,6 +488,9 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
               <TabsTrigger value="rebate">Rebates ({rows.length})</TabsTrigger>
               <TabsTrigger value="credit">Credits (0)</TabsTrigger>
               <TabsTrigger value="payment">Payments (0)</TabsTrigger>
+              {/* credit/payment counts stay at 0 until separate transaction
+                  types are first-class; rebate rows cover both Rebate +
+                  ContractPeriod ledger entries. */}
             </TabsList>
 
             <TabsContent value={activeTab} className="m-0">

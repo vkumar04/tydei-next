@@ -55,7 +55,14 @@ export async function getContracts(input: ContractFilters) {
         vendor: { select: { id: true, name: true, logoUrl: true } },
         productCategory: { select: { id: true, name: true } },
         facility: { select: { id: true, name: true } },
-        rebates: { select: { rebateEarned: true, rebateCollected: true } },
+        rebates: {
+          select: {
+            rebateEarned: true,
+            rebateCollected: true,
+            payPeriodEnd: true,
+            collectionDate: true,
+          },
+        },
       },
       orderBy: { updatedAt: "desc" },
       skip: ((filters.page ?? 1) - 1) * (filters.pageSize ?? 20),
@@ -65,14 +72,22 @@ export async function getContracts(input: ContractFilters) {
   ])
 
   // Derive aggregated rebateEarned / rebateCollected per contract so UI can
-  // render the "Rebate Earned" column without an extra round-trip.
+  // render the "Rebate Earned" column without an extra round-trip. Same
+  // temporal filters as getContract (see CLAUDE.md "Rebates are NEVER
+  // auto-computed for display"): earned counts only closed periods,
+  // collected counts only rows with a collectionDate set.
+  const today = new Date()
   const withDerived = contracts.map((c) => {
     const rebateEarned = (c.rebates ?? []).reduce(
-      (sum, r) => sum + Number(r.rebateEarned ?? 0),
+      (sum, r) =>
+        r.payPeriodEnd && r.payPeriodEnd <= today
+          ? sum + Number(r.rebateEarned ?? 0)
+          : sum,
       0,
     )
     const rebateCollected = (c.rebates ?? []).reduce(
-      (sum, r) => sum + Number(r.rebateCollected ?? 0),
+      (sum, r) =>
+        r.collectionDate ? sum + Number(r.rebateCollected ?? 0) : sum,
       0,
     )
     return { ...c, rebateEarned, rebateCollected }

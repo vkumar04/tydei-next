@@ -125,7 +125,16 @@ export async function getContractPeriods(contractId: string) {
 }
 
 /**
- * Create a contract transaction (stored as a ContractPeriod record).
+ * Create a contract transaction.
+ *
+ * A `rebate` transaction represents the facility recording that a vendor
+ * rebate has been earned *and* collected — it writes a `Rebate` row with
+ * `collectionDate` set so the detail page's "Rebates Earned" /
+ * "Rebates Collected" summary cards (which aggregate Rebate rows per the
+ * CLAUDE.md rules) pick it up immediately.
+ *
+ * Credits and payments continue to be stored on `ContractPeriod` since
+ * those don't flow through the Rebate aggregations.
  */
 export async function createContractTransaction(input: {
   contractId: string
@@ -148,21 +157,79 @@ export async function createContractTransaction(input: {
     select: { id: true },
   })
 
-  const periodDate = new Date(input.date)
+  const txnDate = new Date(input.date)
+
+  if (input.type === "rebate") {
+    // Record both earned + collected on the Rebate row so aggregates that
+    // filter on `payPeriodEnd <= today` (earned) and `collectionDate != null`
+    // (collected) both include it. `payPeriodStart` matches `payPeriodEnd`
+    // for a point-in-time entry — the user is logging a realized rebate.
+    const rebate = await prisma.rebate.create({
+      data: {
+        contractId: input.contractId,
+        facilityId: facility.id,
+        rebateEarned: input.amount,
+        rebateCollected: input.amount,
+        payPeriodStart: txnDate,
+        payPeriodEnd: txnDate,
+        collectionDate: txnDate,
+        notes: input.description,
+      },
+    })
+    return serialize({ kind: "rebate" as const, row: rebate })
+  }
 
   const period = await prisma.contractPeriod.create({
     data: {
       contractId: input.contractId,
       facilityId: facility.id,
-      periodStart: periodDate,
-      periodEnd: periodDate,
+      periodStart: txnDate,
+      periodEnd: txnDate,
       totalSpend: input.type === "payment" ? input.amount : 0,
-      rebateEarned: input.type === "rebate" ? input.amount : 0,
-      rebateCollected: input.type === "rebate" ? input.amount : 0,
+      rebateEarned: 0,
+      rebateCollected: 0,
       paymentExpected: input.type === "credit" ? input.amount : 0,
       paymentActual: input.type === "credit" ? input.amount : 0,
     },
   })
 
-  return serialize(period)
+  return serialize({ kind: "period" as const, row: period })
+}
+
+// ─── Rebate rows per contract ───────────────────────────────────
+//
+// Returns the underlying Rebate rows for a contract so the UI can
+// surface what the user has actually logged. Aggregation rules live
+// in getContract (see lib/actions/contracts.ts); this endpoint is
+// the row-level companion used by the Transactions ledger.
+export async function getContractRebates(contractId: string) {
+  const { facility } = await requireFacility()
+
+  await prisma.contract.findUniqueOrThrow({
+    where: {
+      id: contractId,
+      OR: [
+        { facilityId: facility.id },
+        { contractFacilities: { some: { facilityId: facility.id } } },
+      ],
+    },
+    select: { id: true },
+  })
+
+  const rows = await prisma.rebate.findMany({
+    where: { contractId },
+    orderBy: { payPeriodEnd: "desc" },
+    select: {
+      id: true,
+      rebateEarned: true,
+      rebateCollected: true,
+      payPeriodStart: true,
+      payPeriodEnd: true,
+      collectionDate: true,
+      notes: true,
+      createdAt: true,
+    },
+  })
+
+  return serialize(rows)
 }
