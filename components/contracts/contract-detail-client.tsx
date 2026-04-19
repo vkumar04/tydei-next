@@ -342,7 +342,29 @@ export function ContractDetailClient({
                 <TrendingUp className="size-5" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Current Spend</p>
+                <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                  Current Spend (Last 12 Months)
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex cursor-help items-center">
+                          <HelpCircle
+                            className="h-3.5 w-3.5 text-muted-foreground"
+                            aria-label="Current Spend help"
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[320px] p-3 text-xs">
+                        <p>
+                          Total spend on this contract&apos;s vendor over the
+                          trailing 12 calendar months. Includes all purchase
+                          activity whether or not a contract pricing file is
+                          linked.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </p>
                 <p className="text-2xl font-bold">
                   {formatCurrency(stats.totalSpend)}
                 </p>

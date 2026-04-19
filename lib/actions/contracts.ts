@@ -331,39 +331,39 @@ export async function getContract(
     0,
   )
 
-  // Spend resolution chain — persisted `ContractPeriod.totalSpend` is the
-  // authoritative source (facility-recorded rollups match the tier/rebate
-  // math and the reports page). Precedence:
-  //   1. Aggregate ContractPeriod.totalSpend WHERE contractId = X
-  //   2. COGRecord.extendedPrice WHERE contractId = X (matched records)
-  //   3. COGRecord.extendedPrice WHERE vendorId = X AND transactionDate
-  //      inside the contract's effective window. This mirrors the
-  //      `getContractPeriods` synthetic-periods fallback (Charles R5.24):
-  //      without it the "Current Spend" card reads $0 while the
-  //      transactions ledger below shows vendor activity for the same
-  //      window — an inconsistency Charles called out on a contract whose
-  //      ContractPricing rows hadn't been uploaded yet (so no COG had
-  //      been matched to contractId = X). Leakage risk is bounded by the
-  //      contract's own effective dates, so two overlapping contracts on
-  //      the same vendor will each over-count within the overlap; the
-  //      remediation for that is uploading pricing files so the cascade
-  //      can tag each COG row with the correct contractId.
+  // Spend resolution chain — Charles R5.28: "Current Spend" is the
+  // trailing 12 calendar months of activity, NOT lifetime and NOT the
+  // contract's effective window. Horizon: transactionDate (or period
+  // window) between (today - 12 months) and today. All three cascade
+  // tiers apply the same horizon so they're directly comparable.
+  // Precedence (unchanged):
+  //   1. ContractPeriod.totalSpend WHERE contractId AND periodStart >= today-12mo AND periodEnd <= today
+  //   2. COGRecord.extendedPrice WHERE contractId AND transactionDate in [today-12mo, today]
+  //   3. COGRecord.extendedPrice WHERE vendorId AND transactionDate in [today-12mo, today]
+  //      (the contract.effectiveDate/expirationDate clamp from R5.24 is
+  //      dropped — "last 12 months" is user-facing, not contract-window.
+  //      A contract expired > 12 months ago will correctly read $0.)
   // No tier-engine derivation — spend is a recorded figure.
   // If a periodId was passed, constrain the ContractPeriod aggregate to
-  // that window so the displayed value matches the period filter.
+  // that window so the displayed value matches the period filter
+  // (explicit period filter overrides the 12-month default).
+  const windowEnd = new Date()
+  const windowStart = new Date(windowEnd)
+  windowStart.setFullYear(windowStart.getFullYear() - 1)
   const [cogAgg, cogVendorAgg, periodAgg] = await Promise.all([
     prisma.cOGRecord.aggregate({
-      where: { facilityId: facility.id, contractId: contract.id },
+      where: {
+        facilityId: facility.id,
+        contractId: contract.id,
+        transactionDate: { gte: windowStart, lte: windowEnd },
+      },
       _sum: { extendedPrice: true },
     }),
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
         vendorId: contract.vendorId,
-        transactionDate: {
-          gte: contract.effectiveDate,
-          lte: contract.expirationDate,
-        },
+        transactionDate: { gte: windowStart, lte: windowEnd },
       },
       _sum: { extendedPrice: true },
     }),
@@ -375,7 +375,10 @@ export async function getContract(
               periodStart: { gte: period.periodStart },
               periodEnd: { lte: period.periodEnd },
             }
-          : {}),
+          : {
+              periodStart: { gte: windowStart },
+              periodEnd: { lte: windowEnd },
+            }),
       },
       _sum: { totalSpend: true },
     }),
