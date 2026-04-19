@@ -79,6 +79,12 @@ export interface RenewalNote {
   contractId: string
   note: string
   authorId: string
+  /**
+   * Display name for the note's author, surfaced via the Prisma `author`
+   * relation. Null when the user record has no name (e.g. legacy seed
+   * rows) — UI renders initials from the id fallback in that case.
+   */
+  authorName?: string | null
   createdAt: Date
 }
 

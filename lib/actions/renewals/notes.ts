@@ -20,7 +20,7 @@
  */
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
@@ -48,6 +48,7 @@ export async function listRenewalNotes(
 
   const rows = await prisma.renewalNote.findMany({
     where: { contractId },
+    include: { author: { select: { name: true } } },
   })
 
   const serialized = serialize(
@@ -56,12 +57,60 @@ export async function listRenewalNotes(
       contractId: r.contractId,
       note: r.note,
       authorId: r.authorId,
+      authorName: r.author?.name ?? null,
       createdAt: r.createdAt,
     })),
   ) as RenewalNote[]
 
   // sortNotesNewestFirst compares via Date#getTime — re-hydrate Date
   // from the serialized ISO string so the sort is deterministic.
+  const withDates: RenewalNote[] = serialized.map((n) => ({
+    ...n,
+    createdAt: new Date(n.createdAt as unknown as string),
+  }))
+
+  return sortNotesNewestFirst(withDates)
+}
+
+// ─── List (Vendor) ───────────────────────────────────────────────
+//
+// Vendor-side READ of renewal notes. The existing `listRenewalNotes`
+// is `requireFacility`-gated, so vendors need a parallel reader that
+// checks the caller's vendor organization owns the contract before
+// returning notes. Mirrors the facility version's shape (newest-first,
+// author name included) so the same UI can render both.
+//
+// Ownership is enforced by matching `contract.vendorId === vendor.id`
+// (no multi-vendor contract model exists yet). If the relationship is
+// missing, we return `[]` rather than throwing — matching the facility
+// path's "no notes" convention.
+export async function listRenewalNotesForVendor(
+  contractId: string,
+): Promise<RenewalNote[]> {
+  const { vendor } = await requireVendor()
+
+  const contract = await prisma.contract.findUnique({
+    where: { id: contractId, vendorId: vendor.id },
+    select: { id: true },
+  })
+  if (!contract) return []
+
+  const rows = await prisma.renewalNote.findMany({
+    where: { contractId },
+    include: { author: { select: { name: true } } },
+  })
+
+  const serialized = serialize(
+    rows.map((r) => ({
+      id: r.id,
+      contractId: r.contractId,
+      note: r.note,
+      authorId: r.authorId,
+      authorName: r.author?.name ?? null,
+      createdAt: r.createdAt,
+    })),
+  ) as RenewalNote[]
+
   const withDates: RenewalNote[] = serialized.map((n) => ({
     ...n,
     createdAt: new Date(n.createdAt as unknown as string),

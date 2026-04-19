@@ -159,6 +159,8 @@ export const queryKeys = {
     summary: (contractId: string) => ["renewals", "summary", contractId] as const,
     performanceHistory: (contractId: string) =>
       ["renewals", "performanceHistory", contractId] as const,
+    notes: (contractId: string) =>
+      ["renewals", "notes", contractId] as const,
   },
   rebateOptimizer: {
     opportunities: (facilityId: string) =>

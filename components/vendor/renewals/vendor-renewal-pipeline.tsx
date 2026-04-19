@@ -43,6 +43,7 @@ import { toast } from "sonner"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { useSubmitRenewalProposal } from "@/hooks/use-renewals"
 import type { ExpiringContract } from "@/lib/actions/renewals"
+import { VendorRenewalNotesTimeline } from "./vendor-renewal-notes-timeline"
 
 const statusConfig = {
   critical: { label: "Urgent", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300", icon: AlertTriangle },
@@ -454,6 +455,20 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
                         <p className="font-medium">{selectedRenewal.autoRenewal ? "Yes" : "No"}</p>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Renewal Notes — read-only timeline showing facility-posted
+                    context. Composer lives on the facility side (W1.8). */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Renewal Notes</CardTitle>
+                    <CardDescription>
+                      Context posted by the facility team, newest first
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <VendorRenewalNotesTimeline contractId={selectedRenewal.id} />
                   </CardContent>
                 </Card>
               </div>
