@@ -10,7 +10,7 @@ import type { ContractTerm, ContractTier } from "@prisma/client"
 function makeTerm(
   overrides: Partial<ContractTerm & { tiers: ContractTier[] }> = {},
 ): ContractTerm & { tiers: ContractTier[] } {
-  const base: ContractTerm & { tiers: ContractTier[] } = {
+  const base = {
     id: "t-1",
     contractId: "c-1",
     termName: "Test",
@@ -50,7 +50,7 @@ function makeTerm(
     updatedAt: new Date(),
     tiers: [],
     ...overrides,
-  }
+  } as ContractTerm & { tiers: ContractTier[] }
   return base
 }
 

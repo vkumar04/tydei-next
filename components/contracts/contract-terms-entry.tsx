@@ -667,6 +667,49 @@ export function ContractTermsEntry({
                           />
                         </div>
                       </div>
+                      {/* Wave C — shortfall handling policy select */}
+                      <div className="space-y-2">
+                        <Label className="inline-flex items-center gap-1">
+                          Shortfall Handling
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                What happens when consumable spend falls below
+                                the minimum annual purchase commitment.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </Label>
+                        <Select
+                          value={term.shortfallHandling ?? "carry_forward"}
+                          onValueChange={(value) =>
+                            updateTerm(termIdx, {
+                              shortfallHandling:
+                                value === "bill_immediately" ||
+                                value === "carry_forward"
+                                  ? value
+                                  : null,
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select shortfall handling" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="carry_forward">
+                              Carry forward — apply the shortfall to the next
+                              period&apos;s commitment
+                            </SelectItem>
+                            <SelectItem value="bill_immediately">
+                              Bill immediately — invoice the shortfall at
+                              period close
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   )}
 

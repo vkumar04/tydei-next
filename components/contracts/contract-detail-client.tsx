@@ -39,6 +39,7 @@ import { ContractInsightsCards } from "@/components/contracts/contract-insights-
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
 import { ContractPerformanceCharts } from "@/components/contracts/contract-performance-charts"
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
+import { ContractCapitalProjectionCard } from "@/components/contracts/contract-capital-projection-card"
 import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
 import { OffContractSpendCard } from "@/components/contracts/off-contract-spend-card"
@@ -481,6 +482,36 @@ export function ContractDetailClient({
               contract.terms.some((t) => t.capitalCost != null)) && (
               <ContractAmortizationCard contractId={contractId} />
             )}
+          {/* Wave C — shortfall handling banner + run-rate projection
+              (only for tie-in contracts). */}
+          {contract.contractType === "tie_in" &&
+            (() => {
+              const tieInTerm = contract.terms.find(
+                (t) => t.shortfallHandling != null,
+              )
+              const handling = tieInTerm?.shortfallHandling ?? "carry_forward"
+              const billImmediately = handling === "bill_immediately"
+              return (
+                <div
+                  className={
+                    "rounded-md border p-3 text-sm " +
+                    (billImmediately
+                      ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                      : "border-muted bg-muted/30 text-muted-foreground")
+                  }
+                >
+                  <span className="font-medium">
+                    {billImmediately ? "⚠ Shortfall handling: " : "ℹ Shortfall handling: "}
+                  </span>
+                  {billImmediately
+                    ? "Bill immediately — vendor invoices the shortfall at period close."
+                    : "Carry forward — the shortfall applies to the next period's commitment."}
+                </div>
+              )
+            })()}
+          {contract.contractType === "tie_in" && (
+            <ContractCapitalProjectionCard contractId={contractId} />
+          )}
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Contract Details Card */}
             <Card>

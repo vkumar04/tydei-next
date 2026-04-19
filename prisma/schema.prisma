@@ -670,7 +670,11 @@ model ContractTerm {
   // used by engine config builders to express the full 8-type matrix.
   boundaryRule             TierBoundaryRule?
   priceReductionTrigger    PriceReductionTrigger?
-  shortfallHandling        TrueUpShortfallHandling?
+  // Wave C — tie-in shortfall handling policy. Existing enum is reused
+  // (TrueUpShortfallHandling has the same two values). Default carry_forward
+  // so tie-in terms that omit the field behave per the safer policy; non-
+  // tie-in terms are unaffected since the column is ignored by their engines.
+  shortfallHandling        TrueUpShortfallHandling? @default(carry_forward)
   negotiatedBaseline       Decimal?        @db.Decimal(14, 2)
   growthOnly               Boolean         @default(false)
   periodCap                Decimal?        @db.Decimal(14, 2)

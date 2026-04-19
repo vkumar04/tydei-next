@@ -54,6 +54,11 @@ export const createTermSchema = z.object({
   downPayment: z.number().min(0).nullish(),
   paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
   minimumPurchaseCommitment: z.number().min(0).nullish(),
+  // Wave C — shortfall handling policy for tie-in capital.
+  shortfallHandling: z
+    .enum(["bill_immediately", "carry_forward"])
+    .nullable()
+    .optional(),
   tiers: z.array(tierInputSchema).optional().default([]),
 })
 
@@ -95,6 +100,11 @@ export const termFormSchema = z.object({
   downPayment: z.number().min(0).nullish(),
   paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
   minimumPurchaseCommitment: z.number().min(0).nullish(),
+  // Wave C — shortfall handling policy for tie-in capital.
+  shortfallHandling: z
+    .enum(["bill_immediately", "carry_forward"])
+    .nullable()
+    .optional(),
   tiers: z.array(tierInputSchema).default([]),
 })
 

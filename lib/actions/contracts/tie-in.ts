@@ -339,3 +339,171 @@ export async function getContractCapitalSchedule(
     projectedPayoff,
   }
 }
+
+export interface ContractCapitalProjection {
+  /** True when the contract has a tie-in capital term with capitalCost > 0. */
+  hasProjection: boolean
+  /** Dollars per month, from trailing-90-day rebate velocity. */
+  monthlyPaydownRun: number
+  /** null when monthlyPaydownRun ≤ 0. */
+  projectedMonthsToPayoff: number | null
+  /** Capped at 0; see paidOffBeforeTermEnd. */
+  projectedEndOfTermBalance: number
+  /** Months between today and contract.expirationDate, floored at 0. */
+  termMonthsRemaining: number
+  /** True when run-rate retires the balance before term end. */
+  paidOffBeforeTermEnd: boolean
+  /** Capital balance at the moment of projection. */
+  remainingBalance: number
+}
+
+// Local helpers — duplicated from the schedule action intentionally so
+// this file is self-contained and we don't churn Wave A's surface.
+function normalizeCadenceLocal(
+  raw: string | null | undefined,
+): "monthly" | "quarterly" | "annual" {
+  switch (raw) {
+    case "monthly":
+    case "quarterly":
+    case "annual":
+      return raw
+    default:
+      return "monthly"
+  }
+}
+
+function addMonthsLocal(date: Date, months: number): Date {
+  const d = new Date(date)
+  d.setMonth(d.getMonth() + months)
+  return d
+}
+
+function monthsPerPeriodLocal(
+  p: "monthly" | "quarterly" | "annual",
+): number {
+  switch (p) {
+    case "monthly":
+      return 1
+    case "quarterly":
+      return 3
+    case "annual":
+      return 12
+  }
+}
+
+export async function getContractCapitalProjection(
+  contractId: string,
+): Promise<ContractCapitalProjection> {
+  const { facility } = await requireFacility()
+
+  const contract = await prisma.contract.findFirst({
+    where: contractOwnershipWhere(contractId, facility.id),
+    select: {
+      id: true,
+      effectiveDate: true,
+      expirationDate: true,
+      terms: {
+        where: {
+          capitalCost: { not: null },
+          interestRate: { not: null },
+          termMonths: { not: null },
+        },
+        orderBy: { createdAt: "asc" },
+        select: {
+          capitalCost: true,
+          interestRate: true,
+          termMonths: true,
+          paymentTiming: true,
+        },
+        take: 1,
+      },
+    },
+  })
+
+  const empty: ContractCapitalProjection = {
+    hasProjection: false,
+    monthlyPaydownRun: 0,
+    projectedMonthsToPayoff: null,
+    projectedEndOfTermBalance: 0,
+    termMonthsRemaining: 0,
+    paidOffBeforeTermEnd: false,
+    remainingBalance: 0,
+  }
+
+  if (!contract || contract.terms.length === 0) return empty
+  const term = contract.terms[0]!
+  const capitalCost = Number(term.capitalCost ?? 0)
+  const interestRate = Number(term.interestRate ?? 0)
+  const termMonths = Number(term.termMonths ?? 0)
+  if (capitalCost <= 0 || termMonths <= 0) return empty
+
+  const period = normalizeCadenceLocal(term.paymentTiming)
+
+  // Remaining balance — computed the same way as getContractCapitalSchedule
+  // so the two surfaces never disagree.
+  const entries = buildTieInAmortizationSchedule({
+    capitalCost,
+    interestRate,
+    termMonths,
+    period,
+  })
+  const start = new Date(contract.effectiveDate)
+  const monthsStep = monthsPerPeriodLocal(period)
+  const today = new Date()
+  const scheduleDates = entries.map((e) => ({
+    principalDue: e.principalDue,
+    periodDate: addMonthsLocal(start, e.periodNumber * monthsStep),
+  }))
+  const elapsedPeriods = scheduleDates.filter(
+    (r) => r.periodDate.getTime() <= today.getTime(),
+  ).length
+  const paidToDate = scheduleDates
+    .slice(0, elapsedPeriods)
+    .reduce((acc, r) => acc + r.principalDue, 0)
+  const remainingBalance = Math.max(0, capitalCost - paidToDate)
+
+  // Trailing 90-day rebate velocity.
+  const ninetyDaysAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000)
+  const rebateAgg = await prisma.rebate.aggregate({
+    where: {
+      contractId,
+      facilityId: facility.id,
+      payPeriodEnd: { gte: ninetyDaysAgo, lte: today },
+    },
+    _sum: { rebateEarned: true },
+  })
+  const trailing90Rebate = Number(rebateAgg._sum.rebateEarned ?? 0)
+  // Spec: "divided by 90 * 30 for a monthly rate" — daily average × 30.
+  const monthlyPaydownRun = (trailing90Rebate / 90) * 30
+
+  const projectedMonthsToPayoff =
+    monthlyPaydownRun > 0 && remainingBalance > 0
+      ? Math.ceil(remainingBalance / monthlyPaydownRun)
+      : null
+
+  const expiration = contract.expirationDate
+    ? new Date(contract.expirationDate)
+    : null
+  const termMonthsRemaining = expiration
+    ? Math.max(
+        0,
+        (expiration.getTime() - today.getTime()) /
+          (1000 * 60 * 60 * 24 * 30),
+      )
+    : 0
+
+  const rawEndOfTerm =
+    remainingBalance - monthlyPaydownRun * termMonthsRemaining
+  const paidOffBeforeTermEnd = rawEndOfTerm <= 0 && remainingBalance > 0
+  const projectedEndOfTermBalance = Math.max(0, rawEndOfTerm)
+
+  return {
+    hasProjection: true,
+    monthlyPaydownRun,
+    projectedMonthsToPayoff,
+    projectedEndOfTermBalance,
+    termMonthsRemaining,
+    paidOffBeforeTermEnd,
+    remainingBalance,
+  }
+}
