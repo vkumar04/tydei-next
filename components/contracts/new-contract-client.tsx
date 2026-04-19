@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useMemo } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import {
@@ -34,11 +34,8 @@ import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
-import { AITextExtract } from "@/components/contracts/ai-text-extract"
-import { ExtractedReviewCard } from "@/components/contracts/extracted-review-card"
 import { TieInCapitalPicker } from "@/components/contracts/tie-in-capital-picker"
 import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -52,13 +49,6 @@ import {
 import { toast } from "sonner"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 
-export function initialEntryMode(searchParam: string | null): "pdf" | "manual" | "ai" {
-  if (searchParam === "manual" || searchParam === "ai" || searchParam === "pdf") {
-    return searchParam
-  }
-  return "pdf"
-}
-
 interface NewContractClientProps {
   vendors: { id: string; name: string; displayName: string | null }[]
   categories: { id: string; name: string }[]
@@ -69,7 +59,6 @@ export function NewContractClient({
   categories,
 }: NewContractClientProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
 
   // Dynamically fetch categories so newly-created ones appear without full page refresh
@@ -83,11 +72,7 @@ export function NewContractClient({
     [dynamicCategories, categories],
   )
 
-  const [entryMode, setEntryMode] = useState<"ai" | "manual" | "pdf">(() =>
-    initialEntryMode(searchParams?.get("mode") ?? null),
-  )
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
-  const [extractedReady, setExtractedReady] = useState(false)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
   const [pricingFileName, setPricingFileName] = useState<string | null>(null)
   const [pricingCategories, setPricingCategories] = useState<string[]>([])
@@ -495,9 +480,8 @@ export function NewContractClient({
       if (aiPricingCategories) setPricingCategories(aiPricingCategories)
       toast.success(`Contract data extracted with ${aiPricingItems.length} pricing items`)
     } else {
-      toast.success("Contract data extracted — upload a pricing file or switch to Manual Entry to review")
+      toast.success("Contract data extracted — review the form below and submit")
     }
-    setExtractedReady(true)
   }
 
   async function handleSubmit() {
@@ -625,444 +609,334 @@ export function NewContractClient({
         onApply={handleMappingApply}
       />
 
-      {/* Entry Mode Tabs */}
-      <Tabs
-        value={entryMode}
-        onValueChange={(v) => setEntryMode(v as "ai" | "manual" | "pdf")}
-        className="mb-2"
-      >
-        <TabsList className="grid w-full max-w-lg grid-cols-3">
-          <TabsTrigger value="ai" className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" />
-            AI Assistant
-          </TabsTrigger>
-          <TabsTrigger value="pdf" className="flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            Upload PDF
-          </TabsTrigger>
-          <TabsTrigger value="manual" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Manual Entry
-          </TabsTrigger>
-        </TabsList>
+      {/* Upload Contract PDF */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5" />
+            Upload Contract PDF
+          </CardTitle>
+          <CardDescription>
+            Upload a PDF document to auto-fill the contract form below via AI extraction
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center gap-4 py-6">
+          <Button onClick={() => setAiExtractOpen(true)}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Upload &amp; Extract with AI
+          </Button>
+        </CardContent>
+      </Card>
 
-        {/* AI Assistant Tab */}
-        <TabsContent value="ai" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5" />
-                AI Contract Extraction
-              </CardTitle>
-              <CardDescription>
-                Upload a contract PDF and AI will extract the key fields
-                automatically
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center gap-4 py-8">
-              <p className="text-sm text-muted-foreground">
-                Upload a contract document and AI will extract all the relevant
-                details.
-              </p>
-              <Button onClick={() => setAiExtractOpen(true)}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Start AI Extraction
-              </Button>
-            </CardContent>
-          </Card>
-
-          <AITextExtract onExtracted={(data) => handleAIExtract(data)} />
-
-          {extractedReady && (
-            <ExtractedReviewCard form={form} terms={terms} onEdit={() => setEntryMode("manual")} />
-          )}
-        </TabsContent>
-
-        {/* Upload PDF Tab */}
-        <TabsContent value="pdf" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                Upload Contract PDF
-              </CardTitle>
-              <CardDescription>
-                Upload a PDF document to auto-fill the contract form via AI extraction
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center gap-4 py-6">
-              <Button onClick={() => setAiExtractOpen(true)}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Upload & Extract with AI
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Additional Documents */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Paperclip className="h-5 w-5" />
-                Additional Documents
-              </CardTitle>
-              <CardDescription>
-                Upload amendments, addendums, or exhibits related to this contract
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {additionalDocs.length > 0 && (
-                <div className="space-y-2">
-                  {additionalDocs.map((doc, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-2 rounded-lg border"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-sm truncate">{doc.name}</span>
-                        <Badge variant="secondary" className="shrink-0 text-xs">
-                          {doc.type}
-                        </Badge>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        onClick={() =>
-                          setAdditionalDocs((prev) =>
-                            prev.filter((_, i) => i !== idx)
-                          )
-                        }
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const input = document.createElement("input")
-                    input.type = "file"
-                    input.accept = ".pdf,.doc,.docx,.txt"
-                    input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0]
-                      if (file) {
-                        setAdditionalDocs((prev) => [
-                          ...prev,
-                          { file, type: "amendment", name: file.name },
-                        ])
-                      }
-                    }
-                    input.click()
-                  }}
+      {/* Additional Documents */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Paperclip className="h-5 w-5" />
+            Additional Documents
+          </CardTitle>
+          <CardDescription>
+            Upload amendments, addendums, or exhibits related to this contract
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {additionalDocs.length > 0 && (
+            <div className="space-y-2">
+              {additionalDocs.map((doc, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-2 rounded-lg border"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Document
-                </Button>
-                {additionalDocs.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {additionalDocs.length} document{additionalDocs.length !== 1 ? "s" : ""} attached
-                  </p>
-                )}
-              </div>
-              {additionalDocs.length > 0 && (
-                <div className="space-y-2 pt-2 border-t">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Set document types:
-                  </p>
-                  {additionalDocs.map((doc, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <span className="text-xs truncate max-w-[180px]">
-                        {doc.name}
-                      </span>
-                      <Select
-                        value={doc.type}
-                        onValueChange={(value) =>
-                          setAdditionalDocs((prev) =>
-                            prev.map((d, i) =>
-                              i === idx ? { ...d, type: value } : d
-                            )
-                          )
-                        }
-                      >
-                        <SelectTrigger className="h-7 w-[140px] text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="amendment">Amendment</SelectItem>
-                          <SelectItem value="addendum">Addendum</SelectItem>
-                          <SelectItem value="exhibit">Exhibit</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileSpreadsheet className="h-5 w-5" />
-                Upload Pricing File
-              </CardTitle>
-              <CardDescription>
-                Upload a CSV or Excel file with vendor item numbers and pricing to link to this contract
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {pricingItems.length > 0 ? (
-                <div className="flex items-center justify-between p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                    <div>
-                      <p className="text-sm font-medium">{pricingFileName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {pricingItems.length} pricing items loaded
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm truncate">{doc.name}</span>
+                    <Badge variant="secondary" className="shrink-0 text-xs">
+                      {doc.type}
+                    </Badge>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{pricingItems.length} items</Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => {
-                        setPricingItems([])
-                        setPricingFileName(null)
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-4 py-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    Upload a CSV or Excel file with columns like vendor_item_no, description, contract_price
-                  </p>
                   <Button
-                    variant="outline"
-                    onClick={() => {
-                      const input = document.createElement("input")
-                      input.type = "file"
-                      input.accept = ".csv,.xlsx,.xls"
-                      input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0]
-                        if (file) handlePricingUpload(file)
-                      }
-                      input.click()
-                    }}
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={() =>
+                      setAdditionalDocs((prev) =>
+                        prev.filter((_, i) => i !== idx)
+                      )
+                    }
                   >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Pricing File
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
-              )}
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const input = document.createElement("input")
+                input.type = "file"
+                input.accept = ".pdf,.doc,.docx,.txt"
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0]
+                  if (file) {
+                    setAdditionalDocs((prev) => [
+                      ...prev,
+                      { file, type: "amendment", name: file.name },
+                    ])
+                  }
+                }
+                input.click()
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Document
+            </Button>
+            {additionalDocs.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {additionalDocs.length} document{additionalDocs.length !== 1 ? "s" : ""} attached
+              </p>
+            )}
+          </div>
+          {additionalDocs.length > 0 && (
+            <div className="space-y-2 pt-2 border-t">
+              <p className="text-xs font-medium text-muted-foreground">
+                Set document types:
+              </p>
+              {additionalDocs.map((doc, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="text-xs truncate max-w-[180px]">
+                    {doc.name}
+                  </span>
+                  <Select
+                    value={doc.type}
+                    onValueChange={(value) =>
+                      setAdditionalDocs((prev) =>
+                        prev.map((d, i) =>
+                          i === idx ? { ...d, type: value } : d
+                        )
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-7 w-[140px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="amendment">Amendment</SelectItem>
+                      <SelectItem value="addendum">Addendum</SelectItem>
+                      <SelectItem value="exhibit">Exhibit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Upload Pricing File */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5" />
+            Upload Pricing File
+          </CardTitle>
+          <CardDescription>
+            Upload a CSV or Excel file with vendor item numbers and pricing to link to this contract
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {pricingItems.length > 0 ? (
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <p className="text-sm font-medium">{pricingFileName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {pricingItems.length} pricing items loaded
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{pricingItems.length} items</Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => {
+                    setPricingItems([])
+                    setPricingFileName(null)
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <p className="text-sm text-muted-foreground text-center">
+                Upload a CSV or Excel file with columns like vendor_item_no, description, contract_price
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const input = document.createElement("input")
+                  input.type = "file"
+                  input.accept = ".csv,.xlsx,.xls"
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0]
+                    if (file) handlePricingUpload(file)
+                  }
+                  input.click()
+                }}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Pricing File
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Contract Details form */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main form - 2 columns */}
+        <div className="lg:col-span-2 space-y-6">
+          <ContractFormBasicInfo
+            form={form}
+            vendors={vendors}
+            categories={liveCategories}
+          />
+
+          <div className="flex items-center justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!form.watch("vendorId")}
+              onClick={async () => {
+                const vendorId = form.watch("vendorId")
+                if (!vendorId) return
+                try {
+                  const r = await deriveContractTotalFromCOG(vendorId)
+                  form.setValue("totalValue", r.totalValue)
+                  form.setValue("annualValue", r.annualValue)
+                  toast.success(
+                    `Filled from ${r.monthsObserved}-month COG aggregate`
+                  )
+                } catch {
+                  toast.error("Could not derive total from COG")
+                }
+              }}
+            >
+              Suggest from COG
+            </Button>
+          </div>
+
+          {/* Tie-in capital contract picker */}
+          {form.watch("contractType") === "tie_in" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Tied to Capital Contract</CardTitle>
+                <CardDescription>
+                  Pick the capital contract this tie-in pays down with rebates.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TieInCapitalPicker
+                  value={form.watch("tieInCapitalContractId") ?? null}
+                  onChange={(v) =>
+                    form.setValue(
+                      "tieInCapitalContractId",
+                      v ?? undefined,
+                    )
+                  }
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Contract Terms */}
+          {form.watch("contractType") !== "pricing_only" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Contract Terms</CardTitle>
+                <CardDescription>
+                  Define rebate tiers, pricing terms, market share
+                  commitments, carve-outs, and other contract conditions
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ContractTermsEntry
+                  terms={terms}
+                  onChange={setTerms}
+                  contractType={form.watch("contractType")}
+                  availableItems={pricingItems.map((p) => ({
+                    vendorItemNo: p.vendorItemNo,
+                    description: p.description ?? null,
+                  }))}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Actions */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={handleSubmit}
+                  disabled={createMutation.isPending}
+                  className="w-full"
+                >
+                  {createMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  {createMutation.isPending
+                    ? "Creating..."
+                    : "Create Contract"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleSaveAsDraft}
+                  disabled={createMutation.isPending}
+                  className="w-full"
+                >
+                  Save as Draft
+                </Button>
+                <Button variant="outline" asChild className="w-full">
+                  <Link href="/dashboard/contracts">Cancel</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          {extractedReady && (
-            <ExtractedReviewCard form={form} terms={terms} onEdit={() => setEntryMode("manual")} />
-          )}
-        </TabsContent>
+          {/* Review Summary */}
+          <ContractFormReview
+            values={form.getValues()}
+            terms={terms}
+            vendors={vendors}
+            categories={liveCategories}
+          />
 
-        {/* Manual Entry Tab */}
-        <TabsContent value="manual" className="mt-4">
-          <p className="text-sm text-muted-foreground mb-4">
-            Fill in the contract details manually using the form below.
-          </p>
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Main form - 2 columns */}
-            <div className="lg:col-span-2 space-y-6">
-              <ContractFormBasicInfo
-                form={form}
-                vendors={vendors}
-                categories={liveCategories}
-              />
-
-              <div className="flex items-center justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!form.watch("vendorId")}
-                  onClick={async () => {
-                    const vendorId = form.watch("vendorId")
-                    if (!vendorId) return
-                    try {
-                      const r = await deriveContractTotalFromCOG(vendorId)
-                      form.setValue("totalValue", r.totalValue)
-                      form.setValue("annualValue", r.annualValue)
-                      toast.success(
-                        `Filled from ${r.monthsObserved}-month COG aggregate`
-                      )
-                    } catch {
-                      toast.error("Could not derive total from COG")
-                    }
-                  }}
-                >
-                  Suggest from COG
-                </Button>
-              </div>
-
-              {/* Tie-in capital contract picker */}
-              {form.watch("contractType") === "tie_in" && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Tied to Capital Contract</CardTitle>
-                    <CardDescription>
-                      Pick the capital contract this tie-in pays down with rebates.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <TieInCapitalPicker
-                      value={form.watch("tieInCapitalContractId") ?? null}
-                      onChange={(v) =>
-                        form.setValue(
-                          "tieInCapitalContractId",
-                          v ?? undefined,
-                        )
-                      }
-                    />
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Contract Terms */}
-              {form.watch("contractType") !== "pricing_only" && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Contract Terms</CardTitle>
-                    <CardDescription>
-                      Define rebate tiers, pricing terms, market share
-                      commitments, carve-outs, and other contract conditions
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ContractTermsEntry
-                      terms={terms}
-                      onChange={setTerms}
-                      contractType={form.watch("contractType")}
-                      availableItems={pricingItems.map((p) => ({
-                        vendorItemNo: p.vendorItemNo,
-                        description: p.description ?? null,
-                      }))}
-                    />
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Actions */}
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={createMutation.isPending}
-                      className="w-full"
-                    >
-                      {createMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="mr-2 h-4 w-4" />
-                      )}
-                      {createMutation.isPending
-                        ? "Creating..."
-                        : "Create Contract"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleSaveAsDraft}
-                      disabled={createMutation.isPending}
-                      className="w-full"
-                    >
-                      Save as Draft
-                    </Button>
-                    <Button variant="outline" asChild className="w-full">
-                      <Link href="/dashboard/contracts">Cancel</Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Review Summary */}
-              <ContractFormReview
-                values={form.getValues()}
-                terms={terms}
-                vendors={vendors}
-                categories={liveCategories}
-              />
-
-              {/* Pricing File */}
-              <Card>
-                <CardContent className="p-4 space-y-3">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <FileSpreadsheet className="h-4 w-4" />
-                    Pricing File
-                  </h4>
-                  {pricingItems.length > 0 ? (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium truncate max-w-[160px]">{pricingFileName}</p>
-                        <p className="text-xs text-muted-foreground">{pricingItems.length} items</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => { setPricingItems([]); setPricingFileName(null) }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => {
-                        const input = document.createElement("input")
-                        input.type = "file"
-                        input.accept = ".csv,.xlsx,.xls"
-                        input.onchange = (e) => {
-                          const file = (e.target as HTMLInputElement).files?.[0]
-                          if (file) handlePricingUpload(file)
-                        }
-                        input.click()
-                      }}
-                    >
-                      <Upload className="mr-2 h-3 w-3" />
-                      Upload Pricing File
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Help */}
-              <Card className="bg-muted/50">
-                <CardContent className="p-4">
-                  <h4 className="font-medium mb-2">Need help?</h4>
-                  <p className="text-sm text-muted-foreground">
-                    After creating the contract, you can add terms with specific
-                    rebate structures, tiers, and product pricing.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+          {/* Help */}
+          <Card className="bg-muted/50">
+            <CardContent className="p-4">
+              <h4 className="font-medium mb-2">Need help?</h4>
+              <p className="text-sm text-muted-foreground">
+                After creating the contract, you can add terms with specific
+                rebate structures, tiers, and product pricing.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }
