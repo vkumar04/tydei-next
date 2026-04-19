@@ -79,6 +79,7 @@ interface PeriodRow {
 }
 
 type TransactionType = "rebate" | "credit" | "payment"
+type RebateKind = "earned" | "collected"
 
 function getCollectionStatus(row: PeriodRow): "collected" | "pending" | "overdue" {
   // A Rebate row with a collectionDate is, by definition, collected —
@@ -131,6 +132,10 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 function AddTransactionDialog({ contractId, queryClient }: { contractId: string; queryClient: ReturnType<typeof useQueryClient> }) {
   const [open, setOpen] = useState(false)
   const [type, setType] = useState<TransactionType>("rebate")
+  // Charles R5.34: for type=rebate, split earned (accrual) vs collected
+  // (payment received). The server writes into distinct Rebate columns so
+  // a collection entry no longer inflates "Rebates Earned".
+  const [rebateKind, setRebateKind] = useState<RebateKind>("earned")
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
   const [date, setDate] = useState("")
@@ -148,7 +153,8 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
     }
     // Quantity is optional, but if present it must parse to a positive number.
     // Only meaningful for rebate-type entries tied to per-unit / per-procedure
-    // contract terms; ignored by the server for credit/payment.
+    // contract terms; ignored by the server for credit/payment AND for
+    // rebateKind=collected (a collection row records money received, not units).
     let parsedQuantity: number | undefined
     if (quantity.trim() !== "") {
       const q = parseFloat(quantity.replace(/[^0-9.]/g, ""))
@@ -166,7 +172,9 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
         amount: parsedAmount,
         description,
         date,
-        quantity: type === "rebate" ? parsedQuantity : undefined,
+        rebateKind: type === "rebate" ? rebateKind : undefined,
+        quantity:
+          type === "rebate" && rebateKind === "earned" ? parsedQuantity : undefined,
       })
       toast.success("Transaction recorded")
       // Refetch periods + rebates to surface the new row, and invalidate
@@ -183,6 +191,7 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
       toast.error("Failed to save transaction")
     }
     setType("rebate")
+    setRebateKind("earned")
     setAmount("")
     setDescription("")
     setDate("")
@@ -219,6 +228,32 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
               </SelectContent>
             </Select>
           </div>
+          {type === "rebate" && (
+            <div className="space-y-2">
+              <Label>Transaction Kind</Label>
+              <Select
+                value={rebateKind}
+                onValueChange={(v) => setRebateKind(v as RebateKind)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="earned">
+                    Rebate earned &mdash; accrual for a closed period
+                  </SelectItem>
+                  <SelectItem value="collected">
+                    Rebate collected &mdash; payment received from vendor
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {rebateKind === "earned"
+                  ? "Adds to Rebates Earned once the period closes. Use for a manual accrual entry."
+                  : "Adds to Rebates Collected only. Use when the vendor payment lands — does NOT add to Rebates Earned."}
+              </p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="txn-amount">Amount *</Label>
             <div className="relative">
@@ -232,7 +267,7 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
               />
             </div>
           </div>
-          {type === "rebate" && (
+          {type === "rebate" && rebateKind === "earned" && (
             <div className="space-y-2">
               <Label htmlFor="txn-qty">Quantity</Label>
               <Input
@@ -310,6 +345,7 @@ function TransactionTable({
             <TableHead>Type</TableHead>
             <TableHead className="text-right">Spend</TableHead>
             <TableHead className="text-right">Rebate Earned</TableHead>
+            <TableHead className="text-right">Rebate Collected</TableHead>
             <TableHead className="text-center">Tier</TableHead>
             <TableHead className="text-center">Status</TableHead>
             <TableHead className="text-center">Collection</TableHead>
@@ -338,6 +374,9 @@ function TransactionTable({
                 </TableCell>
                 <TableCell className="text-right text-emerald-600">
                   {formatCurrency(row.rebateEarned)}
+                </TableCell>
+                <TableCell className="text-right text-blue-600">
+                  {formatCurrency(row.rebateCollected)}
                 </TableCell>
                 <TableCell className="text-center">
                   {row.tierAchieved != null ? (
@@ -434,8 +473,18 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     if (!r.periodEnd) return s
     return new Date(r.periodEnd) <= today ? s + r.rebateEarned : s
   }, 0)
-  // Credits and payments are 0 for now since we don't have separate transaction types yet
-  const totalCredits = 0
+  // Charles R5.34: "Total Collected" sums `rebateCollected` across every
+  // row (both Rebate-sourced and ContractPeriod-sourced). Pure-collection
+  // entries (rebateEarned=0, rebateCollected=amount) contribute here
+  // exclusively — they never inflate `totalRebates` above. The receipt
+  // condition is the CLAUDE.md rule: a collected amount counts only when
+  // the originating row has a `collectionDate` set. Rebate rows written
+  // by `createContractTransaction({rebateKind:"collected"})` set that;
+  // period rollups already carry the same invariant.
+  const totalCollected = rows.reduce((s, r) => {
+    if (r.source === "rebate" && !r.collectionDate) return s
+    return s + r.rebateCollected
+  }, 0)
   const totalPayments = 0
 
   if (rows.length === 0) {
@@ -500,9 +549,9 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
         <Card>
           <CardContent className="flex items-center justify-between gap-3 pt-6">
             <div>
-              <p className="text-sm text-muted-foreground">Total Credits</p>
+              <p className="text-sm text-muted-foreground">Collected</p>
               <p className="text-2xl font-bold text-blue-600">
-                {formatCurrency(totalCredits)}
+                {formatCurrency(totalCollected)}
               </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">

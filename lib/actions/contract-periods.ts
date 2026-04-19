@@ -177,11 +177,18 @@ export async function getContractPeriods(contractId: string) {
 /**
  * Create a contract transaction.
  *
- * A `rebate` transaction represents the facility recording that a vendor
- * rebate has been earned *and* collected — it writes a `Rebate` row with
- * `collectionDate` set so the detail page's "Rebates Earned" /
- * "Rebates Collected" summary cards (which aggregate Rebate rows per the
- * CLAUDE.md rules) pick it up immediately.
+ * A `rebate` transaction splits into two distinct intents via `rebateKind`:
+ *   - `"earned"` (default): the facility is logging an accrual for a closed
+ *     period. Writes `rebateEarned=amount, rebateCollected=0, collectionDate=null`
+ *     so only the "Rebates Earned" aggregate picks it up.
+ *   - `"collected"`: the facility is logging a payment *received* from the
+ *     vendor. Writes `rebateEarned=0, rebateCollected=amount, collectionDate=txnDate`
+ *     so only the "Rebates Collected" aggregate picks it up. The Rebate Earned
+ *     column stays at $0 for this row — a pure-collection entry must not
+ *     double-count into the earned total (Charles R5.34).
+ *
+ * Manual rebates never carry the `[auto-accrual]` notes prefix — that prefix
+ * is reserved for rows emitted by `recomputeAccrualForContract`.
  *
  * Credits and payments continue to be stored on `ContractPeriod` since
  * those don't flow through the Rebate aggregations.
@@ -192,10 +199,14 @@ export async function createContractTransaction(input: {
   amount: number
   description: string
   date: string
+  // For type=rebate, disambiguate accrual (earned) vs payment-in (collected).
+  // Ignored for credit/payment. Defaults to "earned" to preserve the pre-R5.34
+  // call-site semantics for callers that haven't been updated.
+  rebateKind?: "earned" | "collected"
   // Optional unit count for per-unit / per-procedure rebate terms. Persisted
   // into the Rebate row's `notes` as a "Qty: N" suffix so the facility can
   // audit the basis of the entry without a schema migration. Only applies
-  // when type === "rebate"; ignored for credit/payment.
+  // when type === "rebate" && rebateKind === "earned"; ignored otherwise.
   quantity?: number
 }) {
   const { facility } = await requireFacility()
@@ -215,28 +226,37 @@ export async function createContractTransaction(input: {
   const txnDate = new Date(input.date)
 
   if (input.type === "rebate") {
-    // Record both earned + collected on the Rebate row so aggregates that
-    // filter on `payPeriodEnd <= today` (earned) and `collectionDate != null`
-    // (collected) both include it. `payPeriodStart` matches `payPeriodEnd`
-    // for a point-in-time entry — the user is logging a realized rebate.
-    // If a quantity was supplied (per-unit / per-procedure terms), append it
-    // to `notes` as "Qty: N" so audit trails preserve the unit count even
-    // though Rebate has no dedicated quantity column.
+    const kind: "earned" | "collected" = input.rebateKind ?? "earned"
+    // Quantity only makes sense for an earned-accrual row where unit counts
+    // drive per-unit / per-procedure tier math. Collection rows record money
+    // received and don't carry a unit basis.
     const qty =
-      typeof input.quantity === "number" && Number.isFinite(input.quantity) && input.quantity > 0
+      kind === "earned" &&
+      typeof input.quantity === "number" &&
+      Number.isFinite(input.quantity) &&
+      input.quantity > 0
         ? input.quantity
         : null
+    const descriptionForNotes = input.description.trim().length > 0
+      ? input.description
+      : kind === "collected"
+        ? `Collected payment: $${input.amount.toLocaleString()} received ${txnDate.toDateString()}`
+        : `Rebate earned (manual): $${input.amount.toLocaleString()}`
     const notes =
-      qty != null ? `${input.description} (Qty: ${qty})` : input.description
+      qty != null ? `${descriptionForNotes} (Qty: ${qty})` : descriptionForNotes
+
+    // Split earned vs collected at the Prisma boundary. A collected row has
+    // rebateEarned=0 so it does NOT roll up into the "Rebates Earned"
+    // aggregate (which sums rebateEarned where payPeriodEnd <= today).
     const rebate = await prisma.rebate.create({
       data: {
         contractId: input.contractId,
         facilityId: facility.id,
-        rebateEarned: input.amount,
-        rebateCollected: input.amount,
+        rebateEarned: kind === "earned" ? input.amount : 0,
+        rebateCollected: kind === "collected" ? input.amount : 0,
         payPeriodStart: txnDate,
         payPeriodEnd: txnDate,
-        collectionDate: txnDate,
+        collectionDate: kind === "collected" ? txnDate : null,
         notes,
       },
     })
