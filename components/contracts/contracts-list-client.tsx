@@ -15,8 +15,15 @@ import {
   Gauge,
   CalendarClock,
   CircleCheck,
+  HelpCircle,
   Inbox,
 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type { ContractStatus, ContractType } from "@prisma/client"
 import {
   useContracts,
@@ -310,12 +317,14 @@ export function ContractsListClient({
 
       <div className="grid gap-4 md:grid-cols-1">
         <StatCard
-          title="Total Rebates Earned"
+          title="Total Rebates Earned (YTD)"
           value={formatCurrency(stats?.totalRebates ?? 0)}
           icon={TrendingUp}
           accent="green"
           isLoading={isLoading && !stats}
           wide
+          tooltip="Earned this calendar year across all listed contracts — closed rebate periods only. 'Closed' means the period's end date has passed."
+          tooltipAriaLabel="Total Rebates Earned (YTD) help"
         />
       </div>
 
@@ -593,6 +602,10 @@ interface StatCardProps {
   accent?: StatAccent
   isLoading?: boolean
   wide?: boolean
+  /** Optional explanatory tooltip rendered next to the title. */
+  tooltip?: string
+  /** A11y label for the help trigger; defaults to `${title} help`. */
+  tooltipAriaLabel?: string
 }
 
 function StatCard({
@@ -603,6 +616,8 @@ function StatCard({
   accent,
   isLoading,
   wide,
+  tooltip,
+  tooltipAriaLabel,
 }: StatCardProps) {
   const accentClass =
     accent === "green"
@@ -615,7 +630,26 @@ function StatCard({
   return (
     <Card className="h-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="inline-flex items-center gap-1 text-sm font-medium">
+          {title}
+          {tooltip ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex cursor-help items-center">
+                    <HelpCircle
+                      className="h-3.5 w-3.5 text-muted-foreground"
+                      aria-label={tooltipAriaLabel ?? `${title} help`}
+                    />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[320px] p-3 text-xs">
+                  <p>{tooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
+        </CardTitle>
         <Icon className={`h-4 w-4 ${accentClass}`} />
       </CardHeader>
       <CardContent>

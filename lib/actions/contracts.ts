@@ -76,11 +76,19 @@ export async function getContracts(input: ContractFilters) {
   // temporal filters as getContract (see CLAUDE.md "Rebates are NEVER
   // auto-computed for display"): earned counts only closed periods,
   // collected counts only rows with a collectionDate set.
+  //
+  // Charles R5.31: earned is scoped to the current calendar year (YTD) so
+  // the list column matches the detail header's "Rebates Earned (YTD)"
+  // card (added in R5.27). Must stay in lockstep with the `rebateEarnedYTD`
+  // computation in `getContract` above.
   const today = new Date()
+  const startOfYear = new Date(today.getFullYear(), 0, 1)
   const withDerived = contracts.map((c) => {
     const rebateEarned = (c.rebates ?? []).reduce(
       (sum, r) =>
-        r.payPeriodEnd && r.payPeriodEnd <= today
+        r.payPeriodEnd &&
+        r.payPeriodEnd <= today &&
+        r.payPeriodEnd >= startOfYear
           ? sum + Number(r.rebateEarned ?? 0)
           : sum,
       0,
@@ -435,11 +443,20 @@ export async function getContractStats(
   // rows for upcoming periods are projections, not earned. When scope is
   // "all" we drop the facility filter so the stats reflect the same
   // contract universe that the list query returns.
+  //
+  // Charles R5.31: the KPI card on the list page is labeled "Total Rebates
+  // Earned (YTD)" to match the list column and the detail header. Apply
+  // the same calendar-year floor (startOfYear ≤ payPeriodEnd ≤ today).
+  const today = new Date()
+  const startOfYear = new Date(today.getFullYear(), 0, 1)
   const rebateResult = await prisma.rebate.aggregate({
     where:
       scope === "all"
-        ? { payPeriodEnd: { lte: new Date() } }
-        : { facilityId: facility.id, payPeriodEnd: { lte: new Date() } },
+        ? { payPeriodEnd: { gte: startOfYear, lte: today } }
+        : {
+            facilityId: facility.id,
+            payPeriodEnd: { gte: startOfYear, lte: today },
+          },
     _sum: { rebateEarned: true },
   })
 
@@ -529,14 +546,18 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
   // contracts where periods rolled up but no per-payment Rebate
   // rows exist yet — and we filter those by periodEnd ≤ today
   // for the same reason.
+  //
+  // Charles R5.31: the list column is labeled "Rebate Earned (YTD)" so
+  // apply the same calendar-year floor used by the detail header.
   const today = new Date()
+  const startOfYear = new Date(today.getFullYear(), 0, 1)
   const [rebateAgg, periodRebateAgg] = await Promise.all([
     prisma.rebate.groupBy({
       by: ["contractId"],
       where: {
         contractId: { in: contractIds },
         facilityId: facility.id,
-        payPeriodEnd: { lte: today },
+        payPeriodEnd: { gte: startOfYear, lte: today },
       },
       _sum: { rebateEarned: true },
     }),
@@ -545,7 +566,7 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
       where: {
         contractId: { in: contractIds },
         facilityId: facility.id,
-        periodEnd: { lte: today },
+        periodEnd: { gte: startOfYear, lte: today },
       },
       _sum: { rebateEarned: true },
     }),

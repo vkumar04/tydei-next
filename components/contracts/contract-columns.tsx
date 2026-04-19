@@ -3,7 +3,14 @@
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Contract, Vendor, ProductCategory, Facility } from "@prisma/client"
-import { ArrowUpDown, MoreHorizontal, Eye, Pencil, Trash2 } from "lucide-react"
+import {
+  ArrowUpDown,
+  HelpCircle,
+  MoreHorizontal,
+  Eye,
+  Pencil,
+  Trash2,
+} from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
@@ -18,6 +25,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 type ContractWithVendor = Contract & {
   vendor: Pick<Vendor, "id" | "name" | "logoUrl">
@@ -53,6 +66,8 @@ function SortableHeader({
   label,
   column,
   align = "left",
+  tooltip,
+  tooltipAriaLabel,
 }: {
   label: string
   column: {
@@ -60,24 +75,52 @@ function SortableHeader({
     toggleSorting: (desc?: boolean) => void
   }
   align?: "left" | "right"
+  /** Optional explanatory tooltip rendered next to the label. */
+  tooltip?: string
+  /** A11y label for the help trigger; defaults to `${label} help`. */
+  tooltipAriaLabel?: string
 }) {
   const sorted = column.getIsSorted()
   return (
-    <button
-      type="button"
-      onClick={() => column.toggleSorting(sorted === "asc")}
-      className={`inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground ${
+    <span
+      className={`inline-flex items-center gap-1 ${
         align === "right" ? "w-full justify-end" : ""
       }`}
-      aria-label={`Sort by ${label}`}
     >
-      {label}
-      <ArrowUpDown
-        className={`h-3 w-3 ${
-          sorted ? "text-foreground" : "text-muted-foreground/50"
-        }`}
-      />
-    </button>
+      <button
+        type="button"
+        onClick={() => column.toggleSorting(sorted === "asc")}
+        className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+        aria-label={`Sort by ${label}`}
+      >
+        {label}
+        <ArrowUpDown
+          className={`h-3 w-3 ${
+            sorted ? "text-foreground" : "text-muted-foreground/50"
+          }`}
+        />
+      </button>
+      {tooltip ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex cursor-help items-center"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <HelpCircle
+                  className="h-3.5 w-3.5 text-muted-foreground"
+                  aria-label={tooltipAriaLabel ?? `${label} help`}
+                />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[320px] p-3 text-xs">
+              <p>{tooltip}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : null}
+    </span>
   )
 }
 
@@ -269,7 +312,13 @@ export function getContractColumns(
       id: "rebateEarned",
       accessorFn: (row) => row.metricsRebate ?? Number(row.rebateEarned ?? 0),
       header: ({ column }) => (
-        <SortableHeader label="Rebate Earned" column={column} align="right" />
+        <SortableHeader
+          label="Rebate Earned (YTD)"
+          column={column}
+          align="right"
+          tooltip="Earned this calendar year — closed rebate periods only. 'Closed' means the period's end date has passed."
+          tooltipAriaLabel="Rebate Earned (YTD) help"
+        />
       ),
       enableSorting: true,
       cell: ({ row }) => {
