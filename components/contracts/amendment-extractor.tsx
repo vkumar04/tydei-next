@@ -49,6 +49,12 @@ interface AmendmentExtractorProps {
   onApplied: () => void
 }
 
+// v0 4-stage amendment flow mapping:
+//   1. upload    -> "upload" (file picker) + "extracting" (progress feedback)
+//   2. review    -> "review" change-diff table (oldValue vs newValue)
+//   3. pricing   -> pricing/term changes rendered inline within "review"
+//   4. confirm   -> validation questions + "Apply Changes" -> "applying"
+// "error" is an out-of-band recovery state, not part of the v0 happy path.
 type Stage = "upload" | "extracting" | "review" | "applying" | "error"
 
 type ConfidenceLevel = "high" | "medium" | "low"
