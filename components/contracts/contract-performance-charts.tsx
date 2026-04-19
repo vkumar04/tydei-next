@@ -36,17 +36,25 @@ export function ContractPerformanceCharts({ contractId }: { contractId: string }
       <Card>
         <CardHeader><CardTitle>Rebate by Quarter</CardTitle></CardHeader>
         <CardContent className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.quarterly}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="quarter" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="rebateEarned" fill="#3b82f6" name="Earned" />
-              <Bar dataKey="rebateCollected" fill="#10b981" name="Collected" />
-            </BarChart>
-          </ResponsiveContainer>
+          {data.quarterly.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
+              No rebate data yet for this contract. Earned rebates appear
+              once a pay period closes; collected rebates appear once a
+              collection date is recorded.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.quarterly}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="quarter" />
+                <YAxis width={80} tickFormatter={formatAxisCurrency} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="rebateEarned" fill="#3b82f6" name="Earned" />
+                <Bar dataKey="rebateCollected" fill="#10b981" name="Collected" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
     </div>

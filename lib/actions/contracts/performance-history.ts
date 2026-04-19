@@ -3,6 +3,10 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import {
+  aggregateRebatesByQuarter,
+  type RebateRowForQuarterly,
+} from "@/lib/contracts/rebate-quarterly"
 
 export interface MonthlyPoint { month: string; spend: number }
 export interface QuarterlyPoint { quarter: string; rebateEarned: number; rebateCollected: number }
@@ -39,20 +43,29 @@ export async function getContractPerformanceHistory(contractId: string): Promise
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([month, spend]) => ({ month, spend }))
 
-  const periods = await prisma.contractPeriod.findMany({
+  // Charles R5.32: The Rebate by Quarter chart was reading from
+  // ContractPeriod rollups which a) aren't deduped per-quarter (one row per
+  // period, not per calendar quarter) and b) can diverge wildly from the
+  // actual Rebate rows that feed the header's "Rebates Earned" card. Source
+  // the chart from Rebate rows instead so it matches the card. Earned is
+  // bucketed by `payPeriodEnd` quarter (only closed periods count); collected
+  // is bucketed by `collectionDate` quarter (only rows with a real
+  // collection date count). See CLAUDE.md "Rebates are NEVER auto-computed
+  // for display" rule — both Rebate rows and ContractPeriod rollups are
+  // valid sources; we pick Rebate rows to stay in sync with the card.
+  const rebates = await prisma.rebate.findMany({
     where: { contractId: contract.id },
-    select: { periodEnd: true, rebateEarned: true, rebateCollected: true },
-    orderBy: { periodEnd: "asc" },
+    select: {
+      payPeriodEnd: true,
+      rebateEarned: true,
+      rebateCollected: true,
+      collectionDate: true,
+    },
   })
-  const quarterly: QuarterlyPoint[] = periods.map((p) => {
-    const y = p.periodEnd.getUTCFullYear()
-    const q = Math.floor(p.periodEnd.getUTCMonth() / 3) + 1
-    return {
-      quarter: `${y} Q${q}`,
-      rebateEarned: Number(p.rebateEarned ?? 0),
-      rebateCollected: Number(p.rebateCollected ?? 0),
-    }
-  })
+  const quarterly = aggregateRebatesByQuarter(
+    rebates as RebateRowForQuarterly[],
+    new Date(),
+  )
 
   return serialize({ monthly, quarterly })
 }
