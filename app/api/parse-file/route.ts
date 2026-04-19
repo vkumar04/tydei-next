@@ -87,6 +87,19 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Parse file error:", error)
+    // ExcelJS throws "Can't find end of central directory" when the file
+    // isn't a valid .xlsx zip — most commonly because a CSV was renamed.
+    // Classify that case so the user knows how to self-correct.
+    const message = error instanceof Error ? error.message : ""
+    if (message.includes("end of central directory")) {
+      return NextResponse.json(
+        {
+          error:
+            "This file doesn't look like a valid .xlsx workbook. If it's a CSV, rename the extension to .csv and re-upload.",
+        },
+        { status: 400 },
+      )
+    }
     return NextResponse.json(
       { error: "Failed to parse file" },
       { status: 500 }
