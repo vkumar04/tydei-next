@@ -155,7 +155,9 @@ export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDispl
                     variant={term.rebateMethod === "marginal" ? "default" : "outline"}
                     className="text-xs"
                   >
-                    {term.rebateMethod === "marginal" ? "Marginal" : "Cumulative"}
+                    {term.rebateMethod === "marginal"
+                      ? "Growth (Marginal)"
+                      : "Dollar 1 (Cumulative)"}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
                     {formatDate(term.effectiveStart)} -{" "}

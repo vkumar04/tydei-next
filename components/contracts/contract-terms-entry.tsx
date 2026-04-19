@@ -13,7 +13,14 @@ import {
   Shield,
   Lock,
   Coins,
+  HelpCircle,
 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -344,7 +351,32 @@ export function ContractTermsEntry({
                     </Field>
                   </div>
 
-                  <Field label="Rebate Calculation Method">
+                  <div className="space-y-2">
+                    <Label className="inline-flex items-center gap-1">
+                      Rebate Calculation Method
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex cursor-help items-center">
+                              <HelpCircle
+                                className="h-3.5 w-3.5 text-muted-foreground"
+                                aria-label="Rebate calculation method help"
+                              />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[320px] p-3 text-xs">
+                            <p>
+                              <span className="font-medium">Dollar 1:</span>{" "}
+                              rebate applies from the first dollar once the
+                              tier is met.{" "}
+                              <span className="font-medium">Growth:</span>{" "}
+                              rebate applies only to dollars above the
+                              baseline.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
                     <Select
                       value={term.rebateMethod ?? "cumulative"}
                       onValueChange={(v) =>
@@ -359,24 +391,24 @@ export function ContractTermsEntry({
                       <SelectContent>
                         <SelectItem value="cumulative">
                           <div className="flex flex-col">
-                            <span className="font-medium">Whole-spend at the highest tier</span>
-                            <span className="text-xs text-muted-foreground">All spend earns the rate of the top tier reached. Example: $750K at tier 3 (3%) → $22,500.</span>
+                            <span className="font-medium">Dollar 1 (Cumulative)</span>
+                            <span className="text-xs text-muted-foreground">Rebate applies from the first dollar once the tier is met. Example: $750K at tier 3 (3%) → $22,500.</span>
                           </div>
                         </SelectItem>
                         <SelectItem value="marginal">
                           <div className="flex flex-col">
-                            <span className="font-medium">Each bracket at its own rate</span>
-                            <span className="text-xs text-muted-foreground">Spend in each bracket earns that bracket&apos;s rate, summed. Example: $500K @ 2% + $250K @ 3% → $17,500.</span>
+                            <span className="font-medium">Growth (Marginal)</span>
+                            <span className="text-xs text-muted-foreground">Rebate applies only to dollars above the baseline. Example: $500K @ 2% + $250K @ 3% → $17,500.</span>
                           </div>
                         </SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       {term.rebateMethod === "marginal"
-                        ? "Each spend bracket earns its own rate."
-                        : "Entire spend earns the highest achieved tier's rate."}
+                        ? "Growth: rebate applies only to dollars above the baseline."
+                        : "Dollar 1: rebate applies from the first dollar once the tier is met."}
                     </p>
-                  </Field>
+                  </div>
 
                   <Field label="Product Scope">
                     <Select
