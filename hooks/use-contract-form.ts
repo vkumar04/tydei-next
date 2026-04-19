@@ -42,6 +42,7 @@ export function useContractForm(options?: UseContractFormOptions) {
       rebatePayPeriod: "quarterly",
       isMultiFacility: false,
       facilityIds: [],
+      additionalFacilityIds: [],
       categoryIds: [],
       ...options?.defaultValues,
     },

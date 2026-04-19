@@ -42,6 +42,7 @@ export const createContractSchema = z.object({
   rebatePayPeriod: PerformancePeriodSchema,
   isMultiFacility: z.boolean(),
   facilityIds: z.array(z.string()),
+  additionalFacilityIds: z.array(z.string()).optional(),
   tieInCapitalValue: z.number().optional(),
   tieInPayoffMonths: z.number().int().optional(),
   tieInCapitalContractId: z.string().optional(),

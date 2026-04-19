@@ -546,6 +546,20 @@ export async function createContract(input: CreateContractInput) {
     },
   })
 
+  // Persist additional facilities selected via the multi-facility picker.
+  // Uses the ContractFacility join table with skipDuplicates so repeat
+  // saves (or overlap with data.facilityIds above) don't violate the
+  // (contractId, facilityId) unique index.
+  if (data.additionalFacilityIds?.length) {
+    await prisma.contractFacility.createMany({
+      data: data.additionalFacilityIds.map((fid) => ({
+        contractId: contract.id,
+        facilityId: fid,
+      })),
+      skipDuplicates: true,
+    })
+  }
+
   await logAudit({
     userId: session.user.id,
     action: "contract.created",

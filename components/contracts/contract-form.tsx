@@ -5,7 +5,9 @@ import type { UseFormReturn } from "react-hook-form"
 import type { CreateContractInput } from "@/lib/validators/contracts"
 import { getVendorCOGSpend } from "@/lib/actions/cog-records"
 import { getContracts } from "@/lib/actions/contracts"
+import { getFacilities } from "@/lib/actions/facilities"
 import { getVendors } from "@/lib/actions/vendors"
+import { FacilityMultiSelect } from "@/components/contracts/facility-multi-select"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { useCreateVendor } from "@/hooks/use-vendor-crud"
@@ -141,6 +143,16 @@ export function ContractFormBasicInfo({
     queryKey: queryKeys.vendors.all,
     queryFn: () => getVendors(),
     initialData: vendors,
+  })
+
+  // Facility list for the multi-facility picker. Only fetched when a
+  // grouped contract with isMultiFacility on is being edited — React
+  // Query handles the cache. Shape is `{ id, name }[]` per
+  // `getFacilities` in lib/actions/facilities.ts.
+  const { data: allFacilities } = useQuery({
+    queryKey: queryKeys.facilities.all,
+    queryFn: getFacilities,
+    enabled: watch("isMultiFacility") === true,
   })
   const liveVendors = useMemo<VendorOption[]>(
     () => (liveVendorsData ?? vendors) as VendorOption[],
@@ -619,9 +631,17 @@ export function ContractFormBasicInfo({
               <Label>Multi-facility contract</Label>
             </div>
             {watch("isMultiFacility") && (
-              <p className="text-sm text-muted-foreground">
-                Facility selection will be available after contract creation.
-              </p>
+              <Field label="Additional facilities">
+                <FacilityMultiSelect
+                  facilities={(allFacilities ?? []).filter(
+                    (f) => f.id !== watch("facilityId"),
+                  )}
+                  selected={watch("additionalFacilityIds") ?? []}
+                  onChange={(ids) =>
+                    setValue("additionalFacilityIds", ids)
+                  }
+                />
+              </Field>
             )}
 
             {/* Additional Participating Vendors */}
