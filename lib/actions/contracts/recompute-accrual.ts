@@ -40,7 +40,11 @@ import type {
   TierLike,
 } from "@/lib/contracts/rebate-method"
 
-export const AUTO_ACCRUAL_PREFIX = "[auto-accrual]"
+// The notes prefix marks rows this action owns so it can rewrite them
+// safely without touching manually-entered rebate rows. Must stay a
+// local (non-exported) const — `"use server"` files can only export
+// async functions per the CLAUDE.md convention.
+const AUTO_ACCRUAL_PREFIX = "[auto-accrual]"
 
 export interface RecomputeAccrualResult {
   deleted: number
