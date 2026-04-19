@@ -161,6 +161,9 @@ export function EditContractClient({
               capitalCost: term.capitalCost,
               interestRate: term.interestRate,
               termMonths: term.termMonths,
+              downPayment: term.downPayment,
+              paymentCadence: term.paymentCadence,
+              minimumPurchaseCommitment: term.minimumPurchaseCommitment,
             })
             await upsertContractTiers(term.id, term.tiers)
           } else {

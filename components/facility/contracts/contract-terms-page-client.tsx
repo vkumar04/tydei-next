@@ -113,6 +113,13 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
       capitalCost: t.capitalCost !== null ? Number(t.capitalCost) : null,
       interestRate: t.interestRate !== null ? Number(t.interestRate) : null,
       termMonths: t.termMonths !== null ? t.termMonths : null,
+      downPayment: t.downPayment !== null ? Number(t.downPayment) : null,
+      paymentCadence:
+        (t.paymentCadence ?? "monthly") as TermFormValues["paymentCadence"],
+      minimumPurchaseCommitment:
+        t.minimumPurchaseCommitment !== null
+          ? Number(t.minimumPurchaseCommitment)
+          : null,
       tiers: t.tiers.map((tier) => ({
         id: tier.id,
         tierNumber: tier.tierNumber,

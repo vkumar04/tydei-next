@@ -499,7 +499,7 @@ export function ContractTermsEntry({
                   )}
 
                   {contractType === "tie_in" && (
-                    <div className="space-y-2 rounded-md border p-3">
+                    <div className="space-y-3 rounded-md border p-3">
                       <p className="text-xs font-medium text-muted-foreground">
                         Tie-In Capital Schedule
                       </p>
@@ -547,6 +547,125 @@ export function ContractTermsEntry({
                             }
                           />
                         </Field>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label className="inline-flex items-center gap-1">
+                            Down Payment ($)
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex cursor-help items-center">
+                                    <HelpCircle
+                                      className="h-3.5 w-3.5 text-muted-foreground"
+                                      aria-label="Down payment help"
+                                    />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-[320px] p-3 text-xs">
+                                  <p>
+                                    Initial payment at contract signing. Reduces
+                                    the starting balance used to compute the
+                                    amortization schedule.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </Label>
+                          <Input
+                            type="number"
+                            value={term.downPayment ?? ""}
+                            onChange={(e) =>
+                              updateTerm(termIdx, {
+                                downPayment:
+                                  e.target.value === ""
+                                    ? null
+                                    : Number(e.target.value),
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="inline-flex items-center gap-1">
+                            Payment Cadence
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex cursor-help items-center">
+                                    <HelpCircle
+                                      className="h-3.5 w-3.5 text-muted-foreground"
+                                      aria-label="Payment cadence help"
+                                    />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-[320px] p-3 text-xs">
+                                  <p>
+                                    How often an amortization payment is
+                                    scheduled. Monthly is standard for financed
+                                    capital; quarterly is common for
+                                    usage-linked paydowns.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </Label>
+                          <Select
+                            value={term.paymentCadence ?? "monthly"}
+                            onValueChange={(v) =>
+                              updateTerm(termIdx, {
+                                paymentCadence:
+                                  v as TermFormValues["paymentCadence"],
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                              <SelectItem value="quarterly">Quarterly</SelectItem>
+                              <SelectItem value="annual">Annual</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="inline-flex items-center gap-1">
+                            Minimum Annual Purchase ($)
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex cursor-help items-center">
+                                    <HelpCircle
+                                      className="h-3.5 w-3.5 text-muted-foreground"
+                                      aria-label="Minimum annual purchase help"
+                                    />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-[320px] p-3 text-xs">
+                                  <p>
+                                    Hospital&apos;s annual consumable spend
+                                    commitment. If actual spend falls short,
+                                    the shortfall-handling policy (see Wave C)
+                                    decides whether the vendor bills the gap or
+                                    carries it forward.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </Label>
+                          <Input
+                            type="number"
+                            value={term.minimumPurchaseCommitment ?? ""}
+                            onChange={(e) =>
+                              updateTerm(termIdx, {
+                                minimumPurchaseCommitment:
+                                  e.target.value === ""
+                                    ? null
+                                    : Number(e.target.value),
+                              })
+                            }
+                          />
+                        </div>
                       </div>
                     </div>
                   )}

@@ -286,6 +286,12 @@ enum TrueUpShortfallHandling {
   carry_forward
 }
 
+enum PaymentCadence {
+  monthly
+  quarterly
+  annual
+}
+
 enum InvoiceDisputeStatus {
   none
   disputed
@@ -672,6 +678,14 @@ model ContractTerm {
   capitalCost              Decimal?        @db.Decimal(14, 2)
   interestRate             Decimal?        @db.Decimal(6, 4)
   termMonths               Int?
+  // Wave B (tie-in parity) — additive fields captured on the usage-side
+  // ContractTerm when contractType === "tie_in". downPayment reduces the
+  // opening balance of the amortization schedule; paymentCadence drives
+  // the engine's period count; minimumPurchaseCommitment is the annual
+  // consumable spend the facility promised to the vendor.
+  downPayment              Decimal?        @db.Decimal(14, 2)
+  paymentCadence           PaymentCadence  @default(monthly)
+  minimumPurchaseCommitment Decimal?       @db.Decimal(14, 2)
   cptCodes                 String[]        @default([])
   groupedReferenceNumbers  String[]        @default([])
   referenceNumbers         String[]        @default([])

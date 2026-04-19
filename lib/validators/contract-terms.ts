@@ -50,6 +50,10 @@ export const createTermSchema = z.object({
   capitalCost: z.number().nullable().optional(),
   interestRate: z.number().nullable().optional(),
   termMonths: z.number().int().nullable().optional(),
+  // Wave B (tie-in parity) — down payment, cadence, min purchase commitment.
+  downPayment: z.number().min(0).nullish(),
+  paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  minimumPurchaseCommitment: z.number().min(0).nullish(),
   tiers: z.array(tierInputSchema).optional().default([]),
 })
 
@@ -87,6 +91,10 @@ export const termFormSchema = z.object({
   capitalCost: z.number().nullable().optional(),
   interestRate: z.number().nullable().optional(),
   termMonths: z.number().int().nullable().optional(),
+  // Wave B (tie-in parity) — down payment, cadence, min purchase commitment.
+  downPayment: z.number().min(0).nullish(),
+  paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  minimumPurchaseCommitment: z.number().min(0).nullish(),
   tiers: z.array(tierInputSchema).default([]),
 })
 
