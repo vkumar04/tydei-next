@@ -207,6 +207,25 @@ export async function recomputeMatchStatusesForVendor(
   let outOfScope = 0
   let unknownVendor = 0
 
+  // ─── Batch update loop (Charles R5.30) ───────────────────────────────
+  // Previously this did `await db.cOGRecord.update(…)` per record
+  // serially. At 20k+ records that's ~20k sequential round-trips which
+  // reliably exceeds the 60s dev-server timeout. We now accumulate 500
+  // update promises per chunk and fire them with Promise.all so Prisma
+  // can pipeline them. 500 is a safe sweet-spot — small enough that
+  // pg's parameter cap (~65k params across the chunk) can't be blown,
+  // large enough to keep the connection pool saturated.
+  const BATCH_SIZE = 500
+  const pendingUpdates: Prisma.PrismaPromise<unknown>[] = []
+  let processedSinceLog = 0
+  let processedTotal = 0
+
+  const flush = async () => {
+    if (pendingUpdates.length === 0) return
+    await Promise.all(pendingUpdates)
+    pendingUpdates.length = 0
+  }
+
   for (const r of records) {
     // Cascade resolver (Task 5): vendorItemNo → vendor+date → fuzzy.
     // The returned `mode` is informational at this layer — we still fall
@@ -274,19 +293,23 @@ export async function recomputeMatchStatusesForVendor(
       cols.savingsAmount = null
     }
 
-    await db.cOGRecord.update({
-      where: { id: r.id },
-      data: {
-        matchStatus: cols.matchStatus,
-        contractId: cols.contractId,
-        contractPrice: cols.contractPrice === null ? null : cols.contractPrice,
-        isOnContract: cols.isOnContract,
-        savingsAmount: cols.savingsAmount === null ? null : cols.savingsAmount,
-        variancePercent: cols.variancePercent === null ? null : cols.variancePercent,
-      },
-    })
+    pendingUpdates.push(
+      db.cOGRecord.update({
+        where: { id: r.id },
+        data: {
+          matchStatus: cols.matchStatus,
+          contractId: cols.contractId,
+          contractPrice: cols.contractPrice === null ? null : cols.contractPrice,
+          isOnContract: cols.isOnContract,
+          savingsAmount: cols.savingsAmount === null ? null : cols.savingsAmount,
+          variancePercent: cols.variancePercent === null ? null : cols.variancePercent,
+        },
+      }),
+    )
 
     updated++
+    processedSinceLog++
+    processedTotal++
     switch (cols.matchStatus) {
       case "on_contract":
         onContract++
@@ -305,6 +328,23 @@ export async function recomputeMatchStatusesForVendor(
         break
       // "pending" is never produced by enrichment (it's the default DB state)
     }
+
+    if (pendingUpdates.length >= BATCH_SIZE) {
+      await flush()
+    }
+    if (processedSinceLog >= 1000) {
+      console.log(
+        `[recompute] vendor=${vendorId} facility=${facilityId} processed=${processedTotal}/${records.length}`,
+      )
+      processedSinceLog = 0
+    }
+  }
+
+  await flush()
+  if (records.length > 0) {
+    console.log(
+      `[recompute] vendor=${vendorId} facility=${facilityId} done — ${updated} updated (on_contract=${onContract}, price_variance=${priceVariance}, off_contract=${offContract}, out_of_scope=${outOfScope}, unknown_vendor=${unknownVendor})`,
+    )
   }
 
   return {

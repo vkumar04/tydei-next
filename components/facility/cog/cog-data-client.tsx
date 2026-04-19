@@ -102,8 +102,20 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   const backfillMutation = useMutation({
     mutationFn: backfillCOGEnrichment,
     onSuccess: (r) => {
+      // Charles R5.30 — show the transition matrix so the user knows
+      // where their records landed after the cascade ran. Order mirrors
+      // the enrichment cascade (on_contract → variance → off → scope → unknown).
+      const parts: string[] = []
+      if (r.onContract) parts.push(`${r.onContract.toLocaleString()} → on_contract`)
+      if (r.priceVariance) parts.push(`${r.priceVariance.toLocaleString()} → price_variance`)
+      if (r.offContract) parts.push(`${r.offContract.toLocaleString()} → off_contract_item`)
+      if (r.outOfScope) parts.push(`${r.outOfScope.toLocaleString()} → out_of_scope`)
+      if (r.unknownVendor) parts.push(`${r.unknownVendor.toLocaleString()} → unknown_vendor`)
+      if (r.pending) parts.push(`${r.pending.toLocaleString()} still pending`)
+      const summary = parts.length > 0 ? parts.join(", ") : "no changes"
       toast.success(
-        `Enriched ${r.enriched} records (${r.pendingAfter} still pending)`,
+        `Enriched ${r.enriched.toLocaleString()} records — ${summary}`,
+        { duration: 8000 },
       )
       refetchStats()
       qc.invalidateQueries({ queryKey: ["cog"] })
@@ -367,7 +379,14 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         </TabsList>
 
         <TabsContent value="cog" className="space-y-4">
-          <COGRecordsTable facilityId={facilityId} dateFrom={dateFrom || undefined} dateTo={dateTo || undefined} />
+          <COGRecordsTable
+            facilityId={facilityId}
+            dateFrom={dateFrom || undefined}
+            dateTo={dateTo || undefined}
+            onRerunMatch={() => backfillMutation.mutate()}
+            isRerunning={backfillMutation.isPending}
+            totalRecords={totalItems}
+          />
         </TabsContent>
 
         <TabsContent value="cogFiles" className="space-y-4">

@@ -44,6 +44,16 @@ interface COGRecordsTableProps {
   facilityId: string
   dateFrom?: string
   dateTo?: string
+  /**
+   * Optional re-run-match handler + pending flag, passed down from
+   * COGDataClient so the "On Contract shows 0" empty-state banner can
+   * offer a one-click CTA without the user scroll-finding the header
+   * "Match Pricing" button. See Charles R5.30.
+   */
+  onRerunMatch?: () => void
+  isRerunning?: boolean
+  /** Total record count used in the "Running matcher on N records…" copy. */
+  totalRecords?: number
 }
 
 type MatchFilterValue = COGMatchStatus | "all" | "variance_only"
@@ -62,7 +72,14 @@ const MATCH_FILTER_OPTIONS: readonly {
   { value: "pending", label: MATCH_STATUS_META.pending.label },
 ] as const
 
-export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTableProps) {
+export function COGRecordsTable({
+  facilityId,
+  dateFrom,
+  dateTo,
+  onRerunMatch,
+  isRerunning,
+  totalRecords,
+}: COGRecordsTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
   const [matchFilter, setMatchFilter] = useState<MatchFilterValue>("all")
   const [page, setPage] = useState(1)
@@ -272,16 +289,42 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
               // is almost always because no ContractPricing rows have been
               // uploaded yet. Point the user at the concrete remediation
               // rather than a generic "adjust your filters".
+              // Charles R5.30 — add an inline primary CTA so the user
+              // doesn't have to scroll up to find the header button.
               <>
                 <p className="font-medium">No COG items are matched to a contract yet.</p>
                 <p>
                   Upload pricing files to your active contracts (Pricing
-                  tab on each contract detail), then click <b>Match
-                  Pricing</b> above to run the matcher. Items whose vendor
+                  tab on each contract detail), then click <b>Run Match
+                  Pricing</b> below to run the matcher. Items whose vendor
                   has a contract but whose SKU isn&apos;t on any pricing
                   file will show as <b>Not Priced</b> — that&apos;s the
                   same underlying signal.
                 </p>
+                {onRerunMatch && (
+                  <div className="pt-2">
+                    {isRerunning ? (
+                      <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>
+                          Running matcher
+                          {typeof totalRecords === "number" && totalRecords > 0
+                            ? ` on ${totalRecords.toLocaleString()} records`
+                            : ""}
+                          {" "}(this may take a minute)…
+                        </span>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={onRerunMatch}
+                        disabled={isRerunning}
+                      >
+                        Run Match Pricing
+                      </Button>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <p>
