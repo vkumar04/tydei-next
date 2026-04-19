@@ -32,7 +32,10 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Field } from "@/components/shared/forms/field"
+import { Label } from "@/components/ui/label"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
+import { DefinitionTooltip as EnumDefinitionTooltip } from "@/components/contracts/definition-tooltip"
+import { TERM_TYPE_DEFINITIONS } from "@/lib/contract-definitions"
 import { ContractTierRow } from "@/components/contracts/contract-tier-row"
 import { getCategories } from "@/lib/actions/categories"
 import { queryKeys } from "@/lib/query-keys"
@@ -223,7 +226,15 @@ export function ContractTermsEntry({
                       />
                     </Field>
 
-                    <Field label="Term Type">
+                    <div className="space-y-2">
+                      <Label className="inline-flex items-center">
+                        Term Type
+                        {term.termType && TERM_TYPE_DEFINITIONS[term.termType] && (
+                          <EnumDefinitionTooltip
+                            definition={TERM_TYPE_DEFINITIONS[term.termType]}
+                          />
+                        )}
+                      </Label>
                       <Select
                         value={term.termType}
                         onValueChange={(v) =>
@@ -251,7 +262,7 @@ export function ContractTermsEntry({
                           ))}
                         </SelectContent>
                       </Select>
-                    </Field>
+                    </div>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">

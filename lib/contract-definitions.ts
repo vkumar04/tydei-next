@@ -1,3 +1,9 @@
+import type {
+  ContractType as PrismaContractType,
+  RebateType as PrismaRebateType,
+  TermType as PrismaTermType,
+} from "@prisma/client"
+
 // ─── Structured definitions for tooltips ────────────────────────
 
 export const contractTypeDefinitions = {
@@ -148,10 +154,10 @@ export const performancePeriodDefinitions = {
   },
 } as const
 
-export type ContractType = keyof typeof contractTypeDefinitions
-export type RebateType = keyof typeof rebateTypeDefinitions
+export type ContractTypeKey = keyof typeof contractTypeDefinitions
+export type RebateTypeKey = keyof typeof rebateTypeDefinitions
 export type TierStructure = keyof typeof tierStructureDefinitions
-export type PerformancePeriod = keyof typeof performancePeriodDefinitions
+export type PerformancePeriodKey = keyof typeof performancePeriodDefinitions
 
 // ─── Flat definition map (legacy / simple tooltips) ─────────────
 
@@ -198,4 +204,129 @@ export const CONTRACT_DEFINITIONS: Record<string, string> = {
     "The estimated total dollar value of the contract over its full term, including projected spend and anticipated rebate earnings.",
   annual_value:
     "The estimated annual dollar value of the contract, used for budgeting and comparing contracts of different durations on a normalized basis.",
+}
+
+// ─── Enum-coverage definitions (Subsystem 9.11) ─────────────────
+// Keyed by the Prisma enum values; compile-time exhaustive via
+// `Record<EnumType, Definition>`. If the Prisma schema changes,
+// the compiler forces this map to stay in sync.
+
+export interface Definition {
+  label: string
+  description: string
+}
+
+export const CONTRACT_TYPE_DEFINITIONS: Record<PrismaContractType, Definition> = {
+  usage: {
+    label: "Usage",
+    description: "Standard contract with spend or volume-based rebates.",
+  },
+  capital: {
+    label: "Capital",
+    description: "Equipment purchase contract with payment schedule.",
+  },
+  service: {
+    label: "Service",
+    description: "Maintenance, support, or consulting service agreement.",
+  },
+  tie_in: {
+    label: "Tie-In",
+    description:
+      "Hybrid contract where capital/service payments are tied to consumable purchases.",
+  },
+  grouped: {
+    label: "Grouped",
+    description:
+      "Contract spanning multiple vendor divisions with combined rebate structure.",
+  },
+  pricing_only: {
+    label: "Pricing Only",
+    description:
+      "Price-only agreement that locks in specific pricing without rebate structure.",
+  },
+}
+
+export const TERM_TYPE_DEFINITIONS: Record<PrismaTermType, Definition> = {
+  spend_rebate: {
+    label: "Spend Rebate",
+    description: "Rebate based on spend thresholds.",
+  },
+  volume_rebate: {
+    label: "Volume Rebate",
+    description: "Rebate based on usage count. Baseline is in $ amounts.",
+  },
+  price_reduction: {
+    label: "Price Reduction",
+    description:
+      "Once spend/volume threshold is met, future purchases receive discounted prices.",
+  },
+  market_share: {
+    label: "Market Share",
+    description: "Rebate based on market share percentage.",
+  },
+  market_share_price_reduction: {
+    label: "Market Share Price Reduction",
+    description:
+      "Once market share target is met, future purchases receive discounted prices.",
+  },
+  capitated_price_reduction: {
+    label: "Capitated Price Reduction",
+    description:
+      "Once procedure spend threshold is met, future procedures receive discounted prices.",
+  },
+  capitated_pricing_rebate: {
+    label: "Capitated Pricing Rebate",
+    description: "Procedure-based ceiling price with rebate.",
+  },
+  po_rebate: {
+    label: "PO Rebate",
+    description: "Per-purchase-order rebate triggered by PO totals.",
+  },
+  carve_out: {
+    label: "Carve Out",
+    description: "Specific items excluded from the broader contract terms.",
+  },
+  payment_rebate: {
+    label: "Payment Rebate",
+    description: "Rebate triggered by payment timing or method.",
+  },
+  growth_rebate: {
+    label: "Growth Rebate",
+    description: "Rebate based on spend growth over baseline.",
+  },
+  compliance_rebate: {
+    label: "Compliance Rebate",
+    description: "Rebate for meeting compliance requirements.",
+  },
+  fixed_fee: {
+    label: "Fixed Fee",
+    description: "Fixed dollar rebate amount.",
+  },
+  locked_pricing: {
+    label: "Locked Pricing",
+    description: "Price locked for contract duration.",
+  },
+  rebate_per_use: {
+    label: "Rebate Per Use",
+    description: "Per-unit rebate tracked by usage count.",
+  },
+}
+
+export const REBATE_TYPE_DEFINITIONS: Record<PrismaRebateType, Definition> = {
+  percent_of_spend: {
+    label: "% of Spend",
+    description: "Tier rebate computed as percent of qualifying spend.",
+  },
+  fixed_rebate: {
+    label: "Flat Rebate",
+    description: "Flat dollar rebate when tier is reached.",
+  },
+  fixed_rebate_per_unit: {
+    label: "Fixed $ per Unit",
+    description: "Fixed dollar rebate per qualifying unit.",
+  },
+  per_procedure_rebate: {
+    label: "Per-Procedure Rebate",
+    description: "Fixed dollar rebate per qualifying procedure.",
+  },
 }
