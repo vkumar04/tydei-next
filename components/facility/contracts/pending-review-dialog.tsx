@@ -34,7 +34,7 @@ export function PendingReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Review: {contract.contractName}
@@ -42,13 +42,20 @@ export function PendingReviewDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs
+          value={tab}
+          onValueChange={setTab}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           <TabsList>
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="action">Action</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="details" className="space-y-3 text-sm">
+          <TabsContent
+            value="details"
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto text-sm"
+          >
             <div className="flex justify-between"><span className="text-muted-foreground">Vendor</span><span>{contract.vendor.name}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Type</span><span className="capitalize">{contract.contractType.replace("_", " ")}</span></div>
             {contract.effectiveDate && (
@@ -68,7 +75,10 @@ export function PendingReviewDialog({
             )}
           </TabsContent>
 
-          <TabsContent value="action" className="space-y-4">
+          <TabsContent
+            value="action"
+            className="min-h-0 flex-1 space-y-4 overflow-y-auto"
+          >
             <Textarea
               placeholder="Review notes (required for reject / revision)"
               value={notes}

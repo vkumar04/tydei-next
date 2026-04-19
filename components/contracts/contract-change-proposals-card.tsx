@@ -112,7 +112,7 @@ export function ContractChangeProposalsCard({
                   {p.vendorMessage}
                 </p>
               ) : null}
-              <pre className="rounded-md bg-muted p-2 text-xs overflow-x-auto">
+              <pre className="max-h-60 overflow-auto rounded-md bg-muted p-2 text-xs">
                 {JSON.stringify(payload, null, 2)}
               </pre>
               <Textarea
