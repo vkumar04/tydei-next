@@ -28,6 +28,7 @@ import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual
 import { ContractPerformanceCharts } from "@/components/contracts/contract-performance-charts"
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
 import { OffContractSpendCard } from "@/components/contracts/off-contract-spend-card"
+import { ContractChangeProposalsCard } from "@/components/contracts/contract-change-proposals-card"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
 import { Badge } from "@/components/ui/badge"
@@ -342,6 +343,8 @@ export function ContractDetailClient({
 
         {/* ── Overview Tab ─────────────────────────────────────── */}
         <TabsContent value="overview" className="mt-6 space-y-6">
+          {/* Pending vendor-submitted change proposals — hidden when none. */}
+          <ContractChangeProposalsCard contractId={contractId} />
           {/* Tie-in bundle card — renders only when this contract is a bundle primary */}
           <ContractTieInCard contractId={contractId} />
           <div className="grid gap-6 lg:grid-cols-2">
