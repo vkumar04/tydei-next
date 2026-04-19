@@ -308,6 +308,162 @@ function monthKeyEndOfMonth(key: string): Date {
   return new Date(Date.UTC(year, month, 0))
 }
 
+// ─── Cadence-aware bucketing (Charles W1.O) ─────────────────────────
+
+/**
+ * Rebate ledger cadence — matches the `PaymentCadence` enum on
+ * `ContractTerm`. Used to group monthly accrual rows into cadence-sized
+ * buckets before writing Rebate rows. `getAccrualTimeline` still returns
+ * monthly rows; only the persisted Rebate ledger honors this bucket.
+ */
+export type PaymentCadence = "monthly" | "quarterly" | "annual"
+
+export interface CadenceBucket {
+  /** Period start at UTC midnight. */
+  periodStart: Date
+  /** Period end at UTC last-moment-of-day. */
+  periodEnd: Date
+  /** Sum of `accruedAmount` across all months in this bucket. */
+  rebateEarned: number
+  /** Sum of `spend` across all months in this bucket. */
+  totalSpend: number
+  /** Label shaped like "Q2 2025" / "May 2025" / "2025" for notes. */
+  label: string
+  /** Representative tier (from the largest-contribution month). */
+  tierAchieved: number
+  /** Representative rebate percent (from the largest-contribution month). */
+  rebatePercent: number
+  /** Distinct term indices that contributed any accrual in this bucket. */
+  termCount: number
+}
+
+function bucketKey(month: string, cadence: PaymentCadence): string {
+  const [year, mm] = month.split("-").map((n) => Number(n))
+  if (cadence === "annual") return `${year}`
+  if (cadence === "quarterly") {
+    const quarter = Math.floor((mm - 1) / 3) + 1
+    return `${year}-Q${quarter}`
+  }
+  return month
+}
+
+function bucketBounds(
+  key: string,
+  cadence: PaymentCadence,
+): { periodStart: Date; periodEnd: Date; label: string } {
+  if (cadence === "annual") {
+    const year = Number(key)
+    return {
+      periodStart: new Date(Date.UTC(year, 0, 1)),
+      periodEnd: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)),
+      label: `${year}`,
+    }
+  }
+  if (cadence === "quarterly") {
+    const [yearStr, qStr] = key.split("-Q")
+    const year = Number(yearStr)
+    const q = Number(qStr)
+    const startMonth = (q - 1) * 3
+    return {
+      // Last day of quarter = day 0 of month after the quarter's last month.
+      periodStart: new Date(Date.UTC(year, startMonth, 1)),
+      periodEnd: new Date(Date.UTC(year, startMonth + 3, 0, 23, 59, 59, 999)),
+      label: `Q${q} ${year}`,
+    }
+  }
+  // Monthly: key is "YYYY-MM".
+  const [year, mm] = key.split("-").map((n) => Number(n))
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ]
+  return {
+    periodStart: new Date(Date.UTC(year, mm - 1, 1)),
+    periodEnd: new Date(Date.UTC(year, mm, 0, 23, 59, 59, 999)),
+    label: `${monthNames[mm - 1]} ${year}`,
+  }
+}
+
+/**
+ * Charles W1.O: collapse the monthly accrual rows produced by
+ * `buildMultiTermMonthlyAccruals` into cadence-sized buckets (monthly,
+ * quarterly, annual) before the caller persists them to the Rebate
+ * ledger. For monthly cadence this is effectively a passthrough — one
+ * bucket per non-zero month. For quarterly, months collapse into
+ * calendar quarters (Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec). For annual,
+ * into calendar years.
+ *
+ * Zero-spend buckets are dropped. Representative tier/percent are
+ * pulled from the month with the largest `accruedAmount` in the bucket
+ * so the notes label reads naturally for single-term contracts; the
+ * notes string itself is shaped by the caller.
+ */
+export function bucketAccrualsByCadence(
+  rows: MultiTermTimelineRow[],
+  cadence: PaymentCadence,
+): CadenceBucket[] {
+  const byKey = new Map<
+    string,
+    {
+      rebateEarned: number
+      totalSpend: number
+      topContribution: number
+      tierAchieved: number
+      rebatePercent: number
+      termIndices: Set<number>
+    }
+  >()
+
+  for (const row of rows) {
+    if (row.accruedAmount <= 0) continue
+    const key = bucketKey(row.month, cadence)
+    let bucket = byKey.get(key)
+    if (!bucket) {
+      bucket = {
+        rebateEarned: 0,
+        totalSpend: 0,
+        topContribution: -1,
+        tierAchieved: 0,
+        rebatePercent: 0,
+        termIndices: new Set<number>(),
+      }
+      byKey.set(key, bucket)
+    }
+    bucket.rebateEarned += row.accruedAmount
+    bucket.totalSpend += row.spend
+    for (const c of row.termContributions) {
+      bucket.termIndices.add(c.termIndex)
+    }
+    // Use the month with the largest per-month accrual as the
+    // "representative" for tier/percent labeling.
+    if (row.accruedAmount > bucket.topContribution) {
+      bucket.topContribution = row.accruedAmount
+      bucket.tierAchieved = row.tierAchieved
+      bucket.rebatePercent = row.rebatePercent
+    }
+  }
+
+  const result: CadenceBucket[] = []
+  // Sort keys chronologically. For "YYYY" or "YYYY-MM" or "YYYY-QN" the
+  // lexicographic order coincides with chronological order.
+  const sortedKeys = Array.from(byKey.keys()).sort()
+  for (const key of sortedKeys) {
+    const bucket = byKey.get(key)!
+    const bounds = bucketBounds(key, cadence)
+    result.push({
+      periodStart: bounds.periodStart,
+      periodEnd: bounds.periodEnd,
+      rebateEarned: bucket.rebateEarned,
+      totalSpend: bucket.totalSpend,
+      label: bounds.label,
+      tierAchieved: bucket.tierAchieved,
+      rebatePercent: bucket.rebatePercent,
+      termCount: bucket.termIndices.size,
+    })
+  }
+  return result
+}
+
 export function buildMultiTermMonthlyAccruals(
   series: MonthlySpend[],
   terms: TermAccrualConfig[],

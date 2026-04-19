@@ -28,9 +28,11 @@
 import { prisma } from "@/lib/db"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 import {
+  bucketAccrualsByCadence,
   buildMultiTermMonthlyAccruals,
   type MonthlySpend,
   type EvaluationPeriod,
+  type PaymentCadence,
   type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
 import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
@@ -129,6 +131,15 @@ async function regenerateOne(contract: ContractRow) {
 
   const rows = buildMultiTermMonthlyAccruals(series, termConfigs)
 
+  // Charles W1.O: write Rebate rows at the term's paymentCadence so a
+  // quarterly contract gets one row per calendar quarter rather than
+  // three monthly rows. Mixed-cadence contracts use the first term's
+  // cadence (primary-term convention). Fall back to monthly when unset.
+  const primaryCadence: PaymentCadence =
+    (termsWithTiers[0].paymentCadence as PaymentCadence | null | undefined) ??
+    "monthly"
+  const buckets = bucketAccrualsByCadence(rows, primaryCadence)
+
   const deleted = await prisma.rebate.deleteMany({
     where: {
       contractId: contract.id,
@@ -136,27 +147,22 @@ async function regenerateOne(contract: ContractRow) {
     },
   })
 
-  const toInsert = rows
-    .filter((r) => r.accruedAmount > 0)
-    .map((r) => {
-      const [year, month] = r.month.split("-").map((n) => Number(n))
-      const periodStart = new Date(Date.UTC(year, month - 1, 1))
-      const periodEnd = new Date(Date.UTC(year, month, 0))
-      const noteBody =
-        r.termContributions.length > 1
-          ? `${r.termContributions.length} terms combined on $${r.spend.toFixed(2)} (${r.month})`
-          : `tier ${r.tierAchieved} @ ${r.rebatePercent}% on $${r.spend.toFixed(2)} (${r.month})`
-      return {
-        contractId: contract.id,
-        facilityId: contract.facilityId,
-        rebateEarned: r.accruedAmount,
-        rebateCollected: 0,
-        payPeriodStart: periodStart,
-        payPeriodEnd: periodEnd,
-        collectionDate: null,
-        notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
-      }
-    })
+  const toInsert = buckets.map((b) => {
+    const noteBody =
+      b.termCount > 1
+        ? `${b.termCount} terms combined on $${b.totalSpend.toFixed(2)} (${b.label})`
+        : `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)}`
+    return {
+      contractId: contract.id,
+      facilityId: contract.facilityId,
+      rebateEarned: b.rebateEarned,
+      rebateCollected: 0,
+      payPeriodStart: b.periodStart,
+      payPeriodEnd: b.periodEnd,
+      collectionDate: null,
+      notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
+    }
+  })
 
   if (toInsert.length === 0) {
     return { skipped: null, inserted: 0, deleted: deleted.count }

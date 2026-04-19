@@ -31,9 +31,11 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
+  bucketAccrualsByCadence,
   buildMultiTermMonthlyAccruals,
   type EvaluationPeriod,
   type MonthlySpend,
+  type PaymentCadence,
   type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
 import type {
@@ -189,34 +191,41 @@ export async function recomputeAccrualForContract(
 
   const rows = buildMultiTermMonthlyAccruals(series, termConfigs)
 
-  // Only persist months with non-zero accrual — a monthly-eval contract
+  // Charles W1.O: collapse monthly accrual rows into buckets sized by
+  // the primary term's `paymentCadence`. Quarterly contracts should
+  // write ONE Rebate row per calendar quarter (spanning ~90 days), not
+  // three monthly rows (~30 days each). If cadence is null/unknown on
+  // all terms, fall back to monthly so existing contracts keep today's
+  // behavior. Mixed-cadence contracts use the FIRST term's cadence —
+  // consistent with the rest of the codebase's "primary term" convention.
+  const primaryCadence: PaymentCadence =
+    (termsWithTiers[0].paymentCadence as PaymentCadence | null | undefined) ??
+    "monthly"
+  const buckets = bucketAccrualsByCadence(rows, primaryCadence)
+
+  // Only persist buckets with non-zero accrual — a monthly-eval contract
   // whose tier 1 spendMin was missed in month N shouldn't pollute the
   // Rebate table with zeros. Aggregations that SUM over Rebate rows
-  // treat missing months as $0 anyway.
-  const toInsert = rows
-    .filter((r) => r.accruedAmount > 0)
-    .map((r) => {
-      const [year, month] = r.month.split("-").map((n) => Number(n))
-      const periodStart = new Date(Date.UTC(year, month - 1, 1))
-      const periodEnd = new Date(Date.UTC(year, month, 0))
-      // Charles R5.29: notes string reflects whether the row is a
-      // single-term or multi-term aggregate. Rebate has no termId column
-      // (see spec); one row per month holds the aggregated earned.
-      const noteBody =
-        r.termContributions.length > 1
-          ? `${r.termContributions.length} terms combined on $${r.spend.toFixed(2)} (${r.month})`
-          : `tier ${r.tierAchieved} @ ${r.rebatePercent}% on $${r.spend.toFixed(2)} (${r.month})`
-      return {
-        contractId,
-        facilityId: facility.id,
-        rebateEarned: r.accruedAmount,
-        rebateCollected: 0,
-        payPeriodStart: periodStart,
-        payPeriodEnd: periodEnd,
-        collectionDate: null,
-        notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
-      }
-    })
+  // treat missing periods as $0 anyway.
+  const toInsert = buckets.map((b) => {
+    // Charles R5.29: notes string reflects whether the row is a
+    // single-term or multi-term aggregate. Rebate has no termId column
+    // (see spec); one row per bucket holds the aggregated earned.
+    const noteBody =
+      b.termCount > 1
+        ? `${b.termCount} terms combined on $${b.totalSpend.toFixed(2)} (${b.label})`
+        : `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)}`
+    return {
+      contractId,
+      facilityId: facility.id,
+      rebateEarned: b.rebateEarned,
+      rebateCollected: 0,
+      payPeriodStart: b.periodStart,
+      payPeriodEnd: b.periodEnd,
+      collectionDate: null,
+      notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
+    }
+  })
 
   if (toInsert.length === 0) {
     return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }
