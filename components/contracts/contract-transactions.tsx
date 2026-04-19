@@ -53,12 +53,9 @@ import {
 } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate } from "@/lib/formatting"
-import {
-  displayedCollected,
-  type PeriodRow,
-} from "@/lib/contracts/transactions-display"
-import { getContractPeriods, getContractRebates } from "@/lib/actions/contract-periods"
+import { getContractRebates } from "@/lib/actions/contract-periods"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
+import { mapRebateRowsToLedger } from "@/components/contracts/contract-transactions-display"
 import { queryKeys } from "@/lib/query-keys"
 import { toast } from "sonner"
 
@@ -66,19 +63,34 @@ interface ContractTransactionsProps {
   contractId: string
 }
 
+// Charles W1.P: the ledger now has a single source (the `Rebate` table).
+// ContractPeriod rollups have been dropped — seed-populated rebateEarned
+// values don't respect current tier config and produced ghost rows
+// (e.g. $0 spend with $76K earned). The Recompute Earned Rebates button
+// is the user's path to regenerate accrual Rebate rows from tier terms.
+interface PeriodRow {
+  id: string
+  periodStart: string
+  periodEnd: string
+  totalSpend: number
+  rebateEarned: number
+  rebateCollected: number
+  tierAchieved: number | null
+  collectionDate?: string | null
+  notes?: string | null
+}
+
 type TransactionType = "rebate" | "credit" | "payment"
 type RebateKind = "earned" | "collected"
 
 function getCollectionStatus(row: PeriodRow): "collected" | "pending" | "overdue" {
-  // Charles W1.N (CLAUDE.md invariant): a rebate is "collected" only when
-  // a Rebate row with a non-null `collectionDate` exists. ContractPeriod
-  // rollups are projections — their `rebateCollected` is seed-synthesized
-  // and does NOT represent actual money received, so they cannot drive the
-  // "Collected" badge here.
-  if (row.source === "rebate" && row.collectionDate) return "collected"
+  // A Rebate row with a collectionDate is, by definition, collected —
+  // it's the same rule the detail page's "Rebates Collected" card uses.
+  if (row.collectionDate) return "collected"
   const now = new Date()
   const end = new Date(row.periodEnd)
-  if (end < now && row.rebateEarned > 0) return "overdue"
+  if (row.rebateCollected >= row.rebateEarned && row.rebateEarned > 0) return "collected"
+  if (end < now && row.rebateCollected < row.rebateEarned) return "overdue"
   return "pending"
 }
 
@@ -503,7 +515,7 @@ function TransactionTable({
                   {formatCurrency(row.rebateEarned)}
                 </TableCell>
                 <TableCell className="text-right text-blue-600">
-                  {formatCurrency(displayedCollected(row))}
+                  {formatCurrency(row.rebateCollected)}
                 </TableCell>
                 <TableCell className="text-center">
                   {row.tierAchieved != null ? (
@@ -533,18 +545,17 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<"all" | TransactionType>("all")
 
-  const { data: periods, isLoading } = useQuery({
-    queryKey: ["contractPeriods", contractId],
-    queryFn: () => getContractPeriods(contractId),
-    enabled: !!contractId,
-  })
+  // Charles W1.P: the ledger's only data source is the `Rebate` table.
+  // Engine-generated accrual rows (via Recompute Earned Rebates) and
+  // user-logged collections / credits / payments both land here, so the
+  // query covers every surface the user expects in the ledger.
   const { data: rebatesData, isLoading: rebatesLoading } = useQuery({
     queryKey: ["contractRebates", contractId],
     queryFn: () => getContractRebates(contractId),
     enabled: !!contractId,
   })
 
-  if (isLoading || rebatesLoading) {
+  if (rebatesLoading) {
     return (
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -557,66 +568,47 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     )
   }
 
-  const periodRows: PeriodRow[] = (periods ?? []).map((p: Record<string, unknown>) => ({
-    id: p.id as string,
-    periodStart: p.periodStart as string,
-    periodEnd: p.periodEnd as string,
-    totalSpend: Number(p.totalSpend ?? 0),
-    rebateEarned: Number(p.rebateEarned ?? 0),
-    rebateCollected: Number(p.rebateCollected ?? 0),
-    tierAchieved: p.tierAchieved != null ? Number(p.tierAchieved) : null,
-    source: "period" as const,
-    collectionDate: null,
-    notes: null,
-  }))
-
-  // Surface explicit Rebate rows the user logged via "Add Transaction"
-  // (or any imported rebate). These feed the detail page's "Rebates Earned"
-  // card directly, so showing them here gives a consistent audit trail.
-  const rebateRows: PeriodRow[] = ((rebatesData ?? []) as Array<Record<string, unknown>>).map((r) => ({
-    id: r.id as string,
-    periodStart: r.payPeriodStart as string,
-    periodEnd: r.payPeriodEnd as string,
-    totalSpend: 0,
-    rebateEarned: Number(r.rebateEarned ?? 0),
-    rebateCollected: Number(r.rebateCollected ?? 0),
-    tierAchieved: null,
-    source: "rebate" as const,
-    collectionDate: (r.collectionDate as string | null) ?? null,
-    notes: (r.notes as string | null) ?? null,
-  }))
-
-  const rows: PeriodRow[] = [...rebateRows, ...periodRows].sort(
-    (a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime(),
+  // Rebate rows are the ledger's single source of truth (Charles W1.P).
+  // Engine-driven accrual rows (Recompute) and manual-entry rows
+  // (Log Collected Rebate, Log Credit / Payment) are both stored in
+  // `Rebate`, so this one query covers every visible transaction. The
+  // mapping + newest-first sort is factored into
+  // `contract-transactions-display.ts` so it can be unit-tested without
+  // spinning up React.
+  const rows: PeriodRow[] = mapRebateRowsToLedger(
+    (rebatesData ?? []) as Array<Record<string, unknown>>,
   )
 
   // Lifetime earned rebates across every CLOSED period on this contract
-  // (Charles R5.27). "Closed" means periodEnd <= today — applied to both
-  // Rebate rows and ContractPeriod rollups so the number matches the
-  // scope advertised in the tooltip below, and stays distinct from the
-  // header's "Rebates Earned (YTD)" card.
+  // (Charles R5.27). "Closed" means payPeriodEnd <= today — applied to
+  // every Rebate row so the number matches the scope advertised in the
+  // tooltip below, and stays distinct from the header's
+  // "Rebates Earned (YTD)" card. Charles W1.P: ContractPeriod rollups
+  // are no longer summed here.
   const today = new Date()
   const totalRebates = rows.reduce((s, r) => {
     if (!r.periodEnd) return s
     return new Date(r.periodEnd) <= today ? s + r.rebateEarned : s
   }, 0)
-  // Charles W1.N: "Total Collected" sums ONLY Rebate rows with a non-null
-  // `collectionDate` — the CLAUDE.md invariant. ContractPeriod rollups
-  // carry a seed-synthesized `rebateCollected` (a projection), but there
-  // is no ContractPeriod.collectionDate column to mark actual receipt, so
-  // those rows never contribute here regardless of their stored value.
-  // This matches the contract detail's "Rebates Collected" card and
-  // R5.27's lifetime aggregate, so Charles sees one consistent number
-  // across every surface.
-  const totalCollected = rows.reduce(
-    (s, r) => s + displayedCollected(r),
-    0,
-  )
+  // Charles R5.34: "Total Collected" sums `rebateCollected` across every
+  // Rebate row that has a collectionDate set. Pure-collection entries
+  // (rebateEarned=0, rebateCollected=amount) contribute here exclusively —
+  // they never inflate `totalRebates` above. The receipt condition is the
+  // CLAUDE.md rule: a collected amount counts only when the originating
+  // row has a `collectionDate` set. Rebate rows written by
+  // `createContractTransaction({rebateKind:"collected"})` set that.
+  const totalCollected = rows.reduce((s, r) => {
+    if (!r.collectionDate) return s
+    return s + r.rebateCollected
+  }, 0)
   const totalPayments = 0
 
   if (rows.length === 0) {
+    // Charles W1.P: empty state. No ledger table; just a muted card
+    // pointing the user to the Recompute button that now lives
+    // alongside this section.
     return (
-      <Card>
+      <Card data-testid="contract-transactions-empty" className="bg-muted/40">
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <Calendar className="h-4 w-4" />
@@ -626,9 +618,9 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No contract period data available yet. Click &quot;Recompute Earned
-            Rebates&quot; to generate accruals from current tier settings, or use
-            the Log buttons to record collected rebates, credits, or payments.
+            No rebate transactions yet. Click{" "}
+            <strong>Recompute Earned Rebates</strong> above to generate
+            rebates from your contract&apos;s terms + COG spend.
           </p>
         </CardContent>
       </Card>
@@ -727,8 +719,8 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
               <TabsTrigger value="credit">Credits (0)</TabsTrigger>
               <TabsTrigger value="payment">Payments (0)</TabsTrigger>
               {/* credit/payment counts stay at 0 until separate transaction
-                  types are first-class; rebate rows cover both Rebate +
-                  ContractPeriod ledger entries. */}
+                  types are first-class; every row in `rows` is sourced
+                  from the Rebate table post W1.P. */}
             </TabsList>
 
             <TabsContent value={activeTab} className="m-0">

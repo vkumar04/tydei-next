@@ -1,99 +1,128 @@
-/**
- * Charles W1.N — Contract Transactions ledger: the per-row "Rebate
- * Collected" column and the top-of-tab "Collected" summary card must
- * honor the CLAUDE.md invariant: a rebate counts as collected ONLY
- * when a `Rebate` row has a non-null `collectionDate`. ContractPeriod
- * rows carry a seed-synthesized `rebateCollected` (a projection), but
- * they have no `collectionDate` column — so they must render $0 here,
- * no matter what their stored value is.
- *
- * Bug report: "Why are rebate collected data being entered auto?" The
- * ledger was pulling thousands-of-dollars "Collected" values from
- * ContractPeriod rollups even though the user never logged a
- * collection. This test locks the fix — `displayedCollected` is the
- * single helper that drives both the table cell and the summary card,
- * so asserting it is equivalent to asserting both surfaces.
- */
 import { describe, it, expect } from "vitest"
 import {
-  displayedCollected,
-  type PeriodRow,
-} from "@/lib/contracts/transactions-display"
+  mapRebateRowsToLedger,
+  shouldRenderEmptyState,
+} from "@/components/contracts/contract-transactions-display"
 
-function periodRow(overrides: Partial<PeriodRow> = {}): PeriodRow {
-  return {
-    id: "p-1",
-    periodStart: "2026-01-01",
-    periodEnd: "2026-03-31",
-    totalSpend: 100000,
-    rebateEarned: 500,
-    rebateCollected: 500,
-    tierAchieved: 1,
-    source: "period",
-    collectionDate: null,
-    notes: null,
-    ...overrides,
-  }
-}
-
-function rebateRow(overrides: Partial<PeriodRow> = {}): PeriodRow {
-  return {
-    id: "r-1",
-    periodStart: "2026-01-01",
-    periodEnd: "2026-03-31",
-    totalSpend: 0,
-    rebateEarned: 0,
-    rebateCollected: 200,
-    tierAchieved: null,
-    source: "rebate",
-    collectionDate: "2026-04-01",
-    notes: null,
-    ...overrides,
-  }
-}
-
-describe("displayedCollected — only Rebate rows with collectionDate contribute", () => {
-  it("period-sourced row renders $0 collected even when stored rebateCollected is large", () => {
-    // Reproduces the bug: seed-synthesized ContractPeriod.rebateCollected
-    // must NOT leak into the ledger's Collected column.
-    expect(displayedCollected(periodRow({ rebateCollected: 6666.67 }))).toBe(0)
-  })
-
-  it("rebate-sourced row with a collectionDate renders the stored collected amount", () => {
-    expect(
-      displayedCollected(
-        rebateRow({ rebateCollected: 200, collectionDate: "2026-04-01" }),
-      ),
-    ).toBe(200)
-  })
-
-  it("rebate-sourced row without a collectionDate renders $0 (pending collection)", () => {
-    expect(
-      displayedCollected(
-        rebateRow({ rebateCollected: 9999, collectionDate: null }),
-      ),
-    ).toBe(0)
-  })
-
-  it("summary total across mixed rows counts ONLY the collected Rebate row", () => {
-    // The exact shape in Charles's report: a ContractPeriod rollup with a
-    // projected collected value, plus a user-logged Rebate with a real
-    // collectionDate. Expected: 200, never 700.
-    const rows: PeriodRow[] = [
-      periodRow({ rebateCollected: 500 }),
-      rebateRow({ rebateCollected: 200, collectionDate: "2026-04-01" }),
+// Charles W1.P: the Transactions ledger's only data source is the
+// `Rebate` table. These tests lock the behavior: ContractPeriod rows
+// never appear, and an empty Rebate set drops the ledger table in
+// favor of a "no rebate transactions yet" Card.
+describe("mapRebateRowsToLedger", () => {
+  it("maps Rebate query rows 1:1 with no ContractPeriod merge", () => {
+    const rebates = [
+      {
+        id: "reb-1",
+        payPeriodStart: "2025-01-01",
+        payPeriodEnd: "2025-03-31",
+        rebateEarned: 12_500,
+        rebateCollected: 0,
+        collectionDate: null,
+        notes: null,
+      },
+      {
+        id: "reb-2",
+        payPeriodStart: "2025-04-01",
+        payPeriodEnd: "2025-06-30",
+        rebateEarned: 0,
+        rebateCollected: 7_500,
+        collectionDate: "2025-07-15",
+        notes: "Q2 2025 rebate check received",
+      },
     ]
-    const total = rows.reduce((s, r) => s + displayedCollected(r), 0)
-    expect(total).toBe(200)
+    const rows = mapRebateRowsToLedger(rebates)
+    expect(rows).toHaveLength(2)
+    // Every row originates from the Rebate query — nothing synthesized
+    // from ContractPeriod (spend is always 0 in the ledger; the
+    // performance chart uses ContractPeriod separately).
+    for (const row of rows) {
+      expect(row.totalSpend).toBe(0)
+      expect(row.tierAchieved).toBeNull()
+    }
+    // Manual-entry collection row preserves collectionDate + notes.
+    const collected = rows.find((r) => r.id === "reb-2")
+    expect(collected?.collectionDate).toBe("2025-07-15")
+    expect(collected?.rebateCollected).toBe(7_500)
+    expect(collected?.rebateEarned).toBe(0)
   })
 
-  it("pending Rebate rows are excluded from the summary (no double-count)", () => {
-    const rows: PeriodRow[] = [
-      periodRow({ rebateCollected: 1000 }),
-      rebateRow({ rebateCollected: 5000, collectionDate: null }),
-      rebateRow({ id: "r-2", rebateCollected: 300, collectionDate: "2026-04-15" }),
+  it("sorts rows newest-first by payPeriodEnd", () => {
+    const rebates = [
+      {
+        id: "old",
+        payPeriodStart: "2024-01-01",
+        payPeriodEnd: "2024-03-31",
+        rebateEarned: 1_000,
+        rebateCollected: 0,
+        collectionDate: null,
+        notes: null,
+      },
+      {
+        id: "new",
+        payPeriodStart: "2025-10-01",
+        payPeriodEnd: "2025-12-31",
+        rebateEarned: 2_000,
+        rebateCollected: 0,
+        collectionDate: null,
+        notes: null,
+      },
+      {
+        id: "mid",
+        payPeriodStart: "2025-04-01",
+        payPeriodEnd: "2025-06-30",
+        rebateEarned: 1_500,
+        rebateCollected: 0,
+        collectionDate: null,
+        notes: null,
+      },
     ]
-    const total = rows.reduce((s, r) => s + displayedCollected(r), 0)
-    expect(total).toBe(300)
+    const rows = mapRebateRowsToLedger(rebates)
+    expect(rows.map((r) => r.id)).toEqual(["new", "mid", "old"])
+  })
+
+  it("returns an empty array when no Rebate rows exist (no ContractPeriod fallback)", () => {
+    // This is the regression guard for Charles W1.P: previously a
+    // contract with zero Rebate rows but seeded ContractPeriods would
+    // still render ledger rows. Post-fix the ledger has zero rows and
+    // the component renders the empty-state Card.
+    expect(mapRebateRowsToLedger([])).toEqual([])
+  })
+
+  it("coerces bigint/string rebate values to Number", () => {
+    const rebates = [
+      {
+        id: "reb-3",
+        payPeriodStart: "2025-01-01",
+        payPeriodEnd: "2025-03-31",
+        rebateEarned: "42.5",
+        rebateCollected: null,
+        collectionDate: null,
+        notes: null,
+      },
+    ]
+    const [row] = mapRebateRowsToLedger(rebates)
+    expect(row.rebateEarned).toBe(42.5)
+    expect(row.rebateCollected).toBe(0)
+  })
+})
+
+describe("shouldRenderEmptyState", () => {
+  it("is true when there are zero Rebate rows", () => {
+    expect(shouldRenderEmptyState([])).toBe(true)
+  })
+
+  it("is false as soon as any Rebate row is present", () => {
+    const rows = mapRebateRowsToLedger([
+      {
+        id: "reb-1",
+        payPeriodStart: "2025-01-01",
+        payPeriodEnd: "2025-03-31",
+        rebateEarned: 100,
+        rebateCollected: 0,
+        collectionDate: null,
+        notes: null,
+      },
+    ])
+    expect(shouldRenderEmptyState(rows)).toBe(false)
   })
 })
