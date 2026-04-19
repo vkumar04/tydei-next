@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation"
 import { requireFacility } from "@/lib/actions/auth"
 import { getContract } from "@/lib/actions/contracts"
 import { computeContractScoreLive } from "@/lib/actions/contracts/scoring"
@@ -15,7 +16,23 @@ export default async function ContractScorePage({
 }) {
   const { id } = await params
   await requireFacility()
-  const contract = await getContract(id)
+
+  // Contract ownership is enforced in `getContract` via
+  // `contractOwnershipWhere` + `findUniqueOrThrow`. When the id is bogus
+  // (stale bookmark, URL hacking, cross-facility link), the Prisma call
+  // throws `P2025` and the page otherwise 500s. Catch the not-found case
+  // and render the standard 404 instead — other errors still bubble up.
+  let contract: Awaited<ReturnType<typeof getContract>> | null = null
+  try {
+    contract = await getContract(id)
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code
+    if (code === "P2025") {
+      notFound()
+    }
+    throw err
+  }
+  if (!contract) notFound()
 
   // Read-only: compute the rule-based components fresh on every page
   // load WITHOUT persisting to Contract.score or writing an audit row.
