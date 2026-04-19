@@ -629,6 +629,7 @@ model Contract {
   tieInBundleMembers   TieInBundleMember[]
   priceVariances       InvoicePriceVariance[]
   accruals             RebateAccrual[]
+  renewalBriefCaches   RenewalBriefCache[]
 
   @@index([vendorId])
   @@index([facilityId])
@@ -1682,4 +1683,28 @@ model RebateInsightFlag {
 
   @@index([facilityId, createdAt])
   @@map("rebate_insight_flag")
+}
+
+// ─── Renewal Brief AI Cache (Tier 4) ────────────────────────────────
+//
+// Per-contract 1-hour cache for generateRenewalBrief. Briefs change less
+// frequently than Tier 1 rebate insights (contract-level history, not
+// daily spend), so a longer TTL is cheaper without hurting freshness.
+// Spec: docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.2
+
+model RenewalBriefCache {
+  id         String   @id @default(cuid())
+  contractId String
+  inputHash  String
+  response   Json
+  model      String
+  costCents  Int?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, expiresAt])
+  @@index([contractId, inputHash])
+  @@map("renewal_brief_cache")
 }

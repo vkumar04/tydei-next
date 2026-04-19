@@ -49,6 +49,7 @@ import { OffContractSpendCard } from "@/components/contracts/off-contract-spend-
 import { ContractChangeProposalsCard } from "@/components/contracts/contract-change-proposals-card"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
+import { RenewalBriefDialog } from "@/components/contracts/renewal-brief-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -87,6 +88,7 @@ export function ContractDetailClient({
   const deleteMutation = useDeleteContract()
   const [showDelete, setShowDelete] = useState(false)
   const [showAmendment, setShowAmendment] = useState(false)
+  const [showRenewalBrief, setShowRenewalBrief] = useState(false)
   const [docDialogOpen, setDocDialogOpen] = useState(false)
 
   async function handleDocUploaded(doc: {
@@ -318,6 +320,20 @@ export function ContractDetailClient({
           <Button variant="outline" onClick={() => setShowAmendment(true)}>
             <Plus className="mr-2 size-4" /> Add Amendment
           </Button>
+          {/*
+           * Renewal Brief (Tier 4 AI) — only surfaced when the contract is
+           * within ~180 days of expiration, since that's when a negotiation
+           * primer is actually useful. The button is lazy-opens the dialog;
+           * the Claude call kicks off inside the modal itself.
+           */}
+          {stats && stats.daysUntilExpiration <= 180 && (
+            <Button
+              variant="outline"
+              onClick={() => setShowRenewalBrief(true)}
+            >
+              <Sparkles className="mr-2 size-4" /> Generate Renewal Brief
+            </Button>
+          )}
           <Button>
             <Download className="mr-2 size-4" /> Export
           </Button>
@@ -1052,6 +1068,13 @@ export function ContractDetailClient({
         open={docDialogOpen}
         onOpenChange={setDocDialogOpen}
         onUploaded={handleDocUploaded}
+      />
+
+      <RenewalBriefDialog
+        contractId={contractId}
+        contractName={contract.name}
+        open={showRenewalBrief}
+        onOpenChange={setShowRenewalBrief}
       />
     </div>
   )
