@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import {
@@ -52,6 +52,13 @@ import {
 import { toast } from "sonner"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 
+export function initialEntryMode(searchParam: string | null): "pdf" | "manual" | "ai" {
+  if (searchParam === "manual" || searchParam === "ai" || searchParam === "pdf") {
+    return searchParam
+  }
+  return "pdf"
+}
+
 interface NewContractClientProps {
   vendors: { id: string; name: string; displayName: string | null }[]
   categories: { id: string; name: string }[]
@@ -62,6 +69,7 @@ export function NewContractClient({
   categories,
 }: NewContractClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
 
   // Dynamically fetch categories so newly-created ones appear without full page refresh
@@ -75,7 +83,9 @@ export function NewContractClient({
     [dynamicCategories, categories],
   )
 
-  const [entryMode, setEntryMode] = useState<"ai" | "manual" | "pdf">("ai")
+  const [entryMode, setEntryMode] = useState<"ai" | "manual" | "pdf">(() =>
+    initialEntryMode(searchParams?.get("mode") ?? null),
+  )
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
   const [extractedReady, setExtractedReady] = useState(false)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
