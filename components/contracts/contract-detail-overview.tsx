@@ -1,3 +1,4 @@
+import { HelpCircle } from "lucide-react"
 import type { getContract } from "@/lib/actions/contracts"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
@@ -5,6 +6,12 @@ import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 type ContractDetail = Awaited<ReturnType<typeof getContract>>
 
@@ -29,10 +36,33 @@ export function ContractDetailOverview({
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Contract Overview</span>
-          <StatusBadge
-            status={contract.status}
-            config={contractStatusConfig}
-          />
+          <span className="inline-flex items-center gap-1.5">
+            <StatusBadge
+              status={contract.status}
+              config={contractStatusConfig}
+            />
+            {contract.status === "pending" && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-help items-center">
+                      <HelpCircle
+                        className="h-3.5 w-3.5 text-muted-foreground"
+                        aria-label="Pending status help"
+                      />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[320px] p-3 text-xs">
+                    <p>
+                      A contract is Pending when it&apos;s been submitted for
+                      review but not yet approved. Active contracts count
+                      toward your rebate totals; Pending contracts do not.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">

@@ -22,7 +22,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { BarChart3 } from "lucide-react"
+import { BarChart3, HelpCircle } from "lucide-react"
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   Radar,
   RadarChart,
@@ -90,6 +96,27 @@ export function ContractScoreRadar({
         <CardTitle className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5" />
           Score by Dimension
+          {benchmark && (
+            <TooltipProvider>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex cursor-help items-center">
+                    <HelpCircle
+                      className="h-3.5 w-3.5 text-muted-foreground"
+                      aria-label="Benchmark source help"
+                    />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[340px] p-3 text-xs">
+                  <p>
+                    Benchmark comparisons use category + contract-type peer
+                    averages from the Tydei market dataset. Hover any axis
+                    for the underlying raw values.
+                  </p>
+                </TooltipContent>
+              </UITooltip>
+            </TooltipProvider>
+          )}
         </CardTitle>
         <CardDescription>
           Rule-based breakdown from commitment, compliance, rebate

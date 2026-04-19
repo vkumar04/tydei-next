@@ -10,6 +10,7 @@ import {
   Calendar,
   DollarSign,
   Download,
+  HelpCircle,
   Pencil,
   Percent,
   Plus,
@@ -17,6 +18,12 @@ import {
   Trash2,
   TrendingUp,
 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
 import { getContractPeriods } from "@/lib/actions/contract-periods"
 import { formatCurrency, formatDate } from "@/lib/formatting"
@@ -213,14 +220,33 @@ export function ContractDetailClient({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() =>
-              router.push(`/dashboard/contracts/${contractId}/score`)
-            }
-          >
-            <Sparkles className="mr-2 size-4" /> AI Score
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    router.push(`/dashboard/contracts/${contractId}/score`)
+                  }
+                >
+                  <Sparkles className="mr-2 size-4" /> AI Score
+                  <HelpCircle
+                    className="ml-1.5 h-3.5 w-3.5 text-muted-foreground"
+                    aria-label="AI Score help"
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[340px] p-3 text-xs">
+                <p>
+                  AI Score grades each contract A–F across six dimensions:
+                  financial value, rebate efficiency, pricing competitiveness,
+                  market-share alignment, compliance likelihood, and
+                  structural risk. D means the contract underperforms on most
+                  dimensions — click the score to open the breakdown.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button
             variant="outline"
             onClick={() =>
@@ -280,7 +306,29 @@ export function ContractDetailClient({
                 <DollarSign className="size-5" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Contract Value</p>
+                <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                  Contract Value
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex cursor-help items-center">
+                          <HelpCircle
+                            className="h-3.5 w-3.5 text-muted-foreground"
+                            aria-label="Contract Value help"
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[320px] p-3 text-xs">
+                        <p>
+                          Contract Value is the total committed spend for this
+                          contract during its term — the value written on the
+                          agreement, not the spend to date. Current Spend
+                          tracks actuals against this commitment.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </p>
                 <p className="text-2xl font-bold">
                   {formatCurrency(stats.totalValue)}
                 </p>
