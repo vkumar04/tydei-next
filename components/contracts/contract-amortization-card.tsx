@@ -98,13 +98,9 @@ export function ContractAmortizationCard({
             value={formatCurrency(data.paidToDate)}
           />
           <SummaryTile
-            label="Projected Payoff"
-            tooltip="Linear projection: today + (remaining balance / average monthly principal from the trailing 90 days of elapsed periods). When no principal has been paid yet, this shows the scheduled payoff date."
-            value={
-              data.projectedPayoff
-                ? formatDate(data.projectedPayoff)
-                : "—"
-            }
+            label="Projected End-of-Term Balance"
+            tooltip="Projected capital balance at the contract's scheduled end date given the trailing rebate-paydown velocity. $0 means the paydown is on track to retire the balance before the term ends."
+            value={formatCurrency(data.projectedEndOfTermBalance ?? data.remainingBalance)}
           />
         </div>
 

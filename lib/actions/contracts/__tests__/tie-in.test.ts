@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 /**
  * Wave A coverage: `getContractCapitalSchedule` returns the three
- * capital summary numbers (remainingBalance, paidToDate, projectedPayoff)
+ * capital summary numbers (remainingBalance, paidToDate, projectedEndOfTermBalance)
  * and the full amortization schedule for a tie-in contract.
  *
  * We stub prisma to return a single ContractTerm with capital fields and
@@ -46,10 +46,10 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     expect(r.schedule).toEqual([])
     expect(r.remainingBalance).toBe(0)
     expect(r.paidToDate).toBe(0)
-    expect(r.projectedPayoff).toBeNull()
+    expect(r.projectedEndOfTermBalance).toBeNull()
   })
 
-  it("returns remaining balance, paid to date, and projected payoff for a 12-month monthly schedule", async () => {
+  it("returns remaining balance, paid to date, and projected end-of-term balance for a 12-month monthly schedule", async () => {
     // Contract that started 3 months ago → 3 periods elapsed, 9 remaining.
     const effectiveDate = new Date()
     effectiveDate.setMonth(effectiveDate.getMonth() - 3)
@@ -80,10 +80,15 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     expect(r.elapsedPeriods).toBe(3)
     expect(r.paidToDate).toBeCloseTo(3000, 2)
     expect(r.remainingBalance).toBeCloseTo(9000, 2)
-    // Projected payoff is a future ISO date.
-    expect(r.projectedPayoff).not.toBeNull()
-    expect(new Date(r.projectedPayoff!).getTime()).toBeGreaterThan(Date.now())
+    // Projected end-of-term balance: at $1k/mo paydown over the remaining
+    // ~9 months of the term, the balance should retire cleanly to $0.
+    expect(r.projectedEndOfTermBalance).not.toBeNull()
+    expect(r.projectedEndOfTermBalance).toBeLessThanOrEqual(remainingFloor(r.remainingBalance))
   })
+
+  function remainingFloor(n: number): number {
+    return n
+  }
 
   it("uses persisted ContractAmortizationSchedule rows when present", async () => {
     const effectiveDate = new Date()

@@ -163,8 +163,15 @@ export interface ContractCapitalScheduleResult {
   elapsedPeriods: number
   remainingBalance: number
   paidToDate: number
-  /** ISO string; null when run-rate is zero (would never payoff). */
-  projectedPayoff: string | null
+  /**
+   * Projected capital balance at the contract's scheduled expiration
+   * given the trailing-rebate paydown velocity. $0 means the paydown is
+   * on track to retire the balance before the term ends. Charles (W1.E
+   * follow-up) — medical tie-in contracts are locked to set term end
+   * dates, so "projected payoff date" isn't meaningful; the useful
+   * question is "will the balance be cleared BY the term end?"
+   */
+  projectedEndOfTermBalance: number | null
 }
 
 function normalizeCadence(
@@ -241,7 +248,7 @@ export async function getContractCapitalSchedule(
     elapsedPeriods: 0,
     remainingBalance: 0,
     paidToDate: 0,
-    projectedPayoff: null,
+    projectedEndOfTermBalance: null,
   }
 
   if (!contract || contract.terms.length === 0) return empty
@@ -307,9 +314,10 @@ export async function getContractCapitalSchedule(
     .reduce((acc, r) => acc + r.principalDue, 0)
   const remainingBalance = Math.max(0, capitalCost - paidToDate)
 
-  // Linear projection: use trailing-90-day average monthly principal from
-  // the elapsed rows. Empty elapsed window → no projection (null).
-  let projectedPayoff: string | null = null
+  // Projected end-of-term balance: how much capital remains at the
+  // contract's scheduled expiration given trailing-90-day principal
+  // velocity. Capped at 0 (paydown retires the balance early).
+  let projectedEndOfTermBalance: number | null = null
   if (remainingBalance > 0 && elapsedPeriods > 0) {
     const ninetyDaysAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000)
     const trailing = schedule
@@ -323,14 +331,25 @@ export async function getContractCapitalSchedule(
       trailing.length > 0
         ? windowPrincipal / (trailing.length * monthsStep)
         : windowPrincipal / monthsStep
-    if (avgMonthlyPrincipal > 0) {
-      const monthsRemaining = remainingBalance / avgMonthlyPrincipal
-      projectedPayoff = addMonths(today, Math.ceil(monthsRemaining)).toISOString()
-    }
+    // Months between today and contract expiration — use the last
+    // schedule row's periodDate as the scheduled term end (engine
+    // already bounds the schedule by termMonths).
+    const lastRow = schedule[schedule.length - 1]
+    const termEndMs = lastRow
+      ? new Date(lastRow.periodDate).getTime()
+      : today.getTime()
+    const monthsRemaining = Math.max(
+      0,
+      (termEndMs - today.getTime()) / (1000 * 60 * 60 * 24 * 30),
+    )
+    const projectedPaydown = avgMonthlyPrincipal * monthsRemaining
+    projectedEndOfTermBalance = Math.max(0, remainingBalance - projectedPaydown)
   } else if (remainingBalance === 0) {
-    // Already paid off — payoff date is the last row's period date.
-    const last = schedule[schedule.length - 1]
-    projectedPayoff = last ? last.periodDate : null
+    projectedEndOfTermBalance = 0
+  } else {
+    // No elapsed periods yet — haven't accrued any rebate-paydown data,
+    // so the best guess is that the full balance remains at term end.
+    projectedEndOfTermBalance = remainingBalance
   }
 
   return {
@@ -343,7 +362,7 @@ export async function getContractCapitalSchedule(
     elapsedPeriods,
     remainingBalance,
     paidToDate,
-    projectedPayoff,
+    projectedEndOfTermBalance,
   }
 }
 
