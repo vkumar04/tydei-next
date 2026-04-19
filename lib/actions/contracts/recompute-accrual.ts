@@ -81,6 +81,21 @@ export async function recomputeAccrualForContract(
     return { deleted: 0, inserted: 0, sumEarned: 0 }
   }
 
+  // Charles W1.Q — Self-heal future-dated auto-accrual rows first.
+  // These are stale artifacts from seed scripts or pre-R5.26 runs that
+  // wrote Rebate rows with `payPeriodEnd > today`. The main delete below
+  // would catch them anyway (same notes prefix), but calling out the
+  // future purge as its own step makes the invariant explicit: no
+  // `[auto-accrual]` row may ever carry `payPeriodEnd > today`.
+  const now = new Date()
+  await prisma.rebate.deleteMany({
+    where: {
+      contractId,
+      notes: { startsWith: AUTO_ACCRUAL_PREFIX },
+      payPeriodEnd: { gt: now },
+    },
+  })
+
   // Always wipe the previous auto-accrual rows first so a term edit
   // that shrinks the accrual window (e.g. fewer months qualify) drops
   // the now-obsolete entries. Manual rebates are preserved by the

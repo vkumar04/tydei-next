@@ -300,8 +300,18 @@ export async function getContractRebates(contractId: string) {
     select: { id: true },
   })
 
+  // Charles W1.Q — ledger shows only closed periods; future-dated
+  // accruals (e.g. from seed data or speculative recompute) are hidden.
+  // Matches CLAUDE.md doctrine: earned = payPeriodEnd <= today. If this
+  // filter reduces visible rows to 0 when the contract HAS future-dated
+  // rows, the empty state (W1.P) explains: "no earned rebates yet —
+  // click Recompute."
+  const today = new Date()
   const rows = await prisma.rebate.findMany({
-    where: { contractId },
+    where: {
+      contractId,
+      payPeriodEnd: { lte: today },
+    },
     orderBy: { payPeriodEnd: "desc" },
     select: {
       id: true,
