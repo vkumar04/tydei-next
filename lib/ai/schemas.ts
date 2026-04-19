@@ -13,6 +13,16 @@ export const extractedContractSchema = z.object({
   expirationDate: z.string().describe("Expiration date in YYYY-MM-DD format"),
   totalValue: z.number().optional().describe("Total contract value in dollars"),
   description: z.string().optional().describe("Brief description of the contract"),
+  productCategory: z
+    .string()
+    .optional()
+    .describe("Primary product category like Ortho Spine, Medical Supplies, etc."),
+  productCategories: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "All product categories covered by this contract - contracts often cover multiple categories like Ortho Spine, Ortho Trauma, Sports Medicine, etc."
+    ),
   terms: z.array(
     z.object({
       termName: z.string().describe("Name of the term/tier structure"),

@@ -43,6 +43,7 @@ export const createTermSchema = z.object({
   growthBaselinePercent: z.number().min(0).max(100).optional(),
   desiredMarketShare: z.number().min(0).max(100).optional(),
   scopedCategoryId: z.string().optional(),
+  scopedCategoryIds: z.array(z.string()).optional(),
   scopedItemNumbers: z.array(z.string()).optional(),
   // Tie-in capital schedule fields (nullable on ContractTerm; only used
   // when contract.contractType === "tie_in").
@@ -79,6 +80,7 @@ export const termFormSchema = z.object({
   growthBaselinePercent: z.number().min(0).max(100).optional(),
   desiredMarketShare: z.number().min(0).max(100).optional(),
   scopedCategoryId: z.string().optional(),
+  scopedCategoryIds: z.array(z.string()).optional(),
   scopedItemNumbers: z.array(z.string()).optional(),
   // Tie-in capital schedule fields (nullable on ContractTerm; only used
   // when contract.contractType === "tie_in").

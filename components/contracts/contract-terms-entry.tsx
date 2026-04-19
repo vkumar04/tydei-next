@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/accordion"
 import { Field } from "@/components/shared/forms/field"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 import { DefinitionTooltip as EnumDefinitionTooltip } from "@/components/contracts/definition-tooltip"
 import { TERM_TYPE_DEFINITIONS } from "@/lib/contract-definitions"
@@ -389,6 +390,10 @@ export function ContractTermsEntry({
                             v === "specific_category"
                               ? term.scopedCategoryId
                               : undefined,
+                          scopedCategoryIds:
+                            v === "specific_category"
+                              ? term.scopedCategoryIds
+                              : undefined,
                         })
                       }
                     >
@@ -403,33 +408,48 @@ export function ContractTermsEntry({
                     </Select>
                   </Field>
 
-                  {/* When a tier is scoped to a specific category, require
-                      the user to pick which category from the contract's
-                      selected categories. */}
+                  {/* When a tier is scoped to a specific category, allow
+                      multi-select from the contract's selected categories.
+                      We write both `scopedCategoryIds` (canonical) and
+                      `scopedCategoryId` (set to the first selected, kept
+                      for back-compat with createContractTerm persistence). */}
                   {term.appliesTo === "specific_category" && (
-                    <Field label="Category" required>
+                    <Field label="Categories" required>
                       {resolvedCategories.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
                           Loading categories…
                         </p>
                       ) : (
-                        <Select
-                          value={term.scopedCategoryId ?? ""}
-                          onValueChange={(v) =>
-                            updateTerm(termIdx, { scopedCategoryId: v })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Pick a category..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {resolvedCategories.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
-                                {c.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="space-y-1 max-h-40 overflow-y-auto rounded-md border p-2">
+                          {resolvedCategories.map((c) => {
+                            const selectedIds = term.scopedCategoryIds ?? []
+                            const checked = selectedIds.includes(c.id)
+                            return (
+                              <label
+                                key={c.id}
+                                className="flex items-center gap-2 cursor-pointer hover:bg-accent rounded px-2 py-1"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(v) => {
+                                    const cur = term.scopedCategoryIds ?? []
+                                    const next = v
+                                      ? Array.from(new Set([...cur, c.id]))
+                                      : cur.filter((id) => id !== c.id)
+                                    updateTerm(termIdx, {
+                                      scopedCategoryIds: next,
+                                      // Keep singular field in sync as the
+                                      // first selected category for
+                                      // back-compat with createContractTerm.
+                                      scopedCategoryId: next[0],
+                                    })
+                                  }}
+                                />
+                                <span className="text-sm">{c.name}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
                       )}
                     </Field>
                   )}
