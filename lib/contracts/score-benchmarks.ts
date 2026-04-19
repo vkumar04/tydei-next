@@ -15,6 +15,8 @@ const PLACEHOLDER_BENCHMARK: ScoreBenchmark = {
   rebateEfficiencyScore: 65,
   timelinessScore: 85,
   varianceScore: 75,
+  // priceCompetitivenessScore — median overcharge typically ≤10pct → ~90
+  priceCompetitivenessScore: 90,
 }
 
 const BENCHMARKS: Partial<Record<ContractType, ScoreBenchmark>> = {
