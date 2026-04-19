@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils"
 import { COGRecordsTable } from "@/components/facility/cog/cog-records-table"
 import { PricingFilesTable } from "@/components/facility/cog/pricing-files-table"
 import { COGUploadHistory } from "@/components/facility/cog/cog-upload-history"
+import { UploadedPricingFilesCard } from "@/components/facility/cog/uploaded-pricing-files-card"
 import { COGImportDialog } from "@/components/facility/cog/cog-import-dialog"
 import { PricingImportDialog } from "@/components/facility/cog/pricing-import-dialog"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
@@ -374,7 +375,10 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         </TabsContent>
 
         <TabsContent value="pricing" className="space-y-4">
-          <COGUploadHistory facilityId={facilityId} variant="pricing" onImport={() => setPricingImportOpen(true)} />
+          <UploadedPricingFilesCard
+            facilityId={facilityId}
+            onImport={() => setPricingImportOpen(true)}
+          />
         </TabsContent>
 
         <TabsContent value="pricingList" className="space-y-4">

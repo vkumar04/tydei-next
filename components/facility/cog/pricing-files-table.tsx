@@ -2,12 +2,25 @@
 
 import { useState, useMemo } from "react"
 import { Download, Plus, List } from "lucide-react"
-import { usePricingFiles } from "@/hooks/use-pricing-files"
+import {
+  useDeletePricingFile,
+  usePricingFiles,
+} from "@/hooks/use-pricing-files"
 import { useVendorList } from "@/hooks/use-vendor-crud"
 import { getPricingColumns } from "@/components/facility/cog/pricing-columns"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   Select,
   SelectContent,
@@ -23,13 +36,24 @@ interface PricingFilesTableProps {
 export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const { data, isLoading } = usePricingFiles(
     facilityId,
     vendorFilter || undefined
   )
   const { data: vendorData } = useVendorList()
-  const columns = useMemo(() => getPricingColumns(), [])
+  const deleteMutation = useDeletePricingFile()
+  const columns = useMemo(
+    () =>
+      getPricingColumns({
+        onDelete: (id) => setPendingDeleteId(id),
+        pendingDeleteId: deleteMutation.isPending
+          ? (deleteMutation.variables ?? null)
+          : null,
+      }),
+    [deleteMutation.isPending, deleteMutation.variables],
+  )
 
   const files = data?.files ?? []
 
@@ -111,6 +135,37 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
           />
         </div>
       </CardContent>
+
+      <AlertDialog
+        open={!!pendingDeleteId}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete pricing row?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the pricing row from this facility.
+              Any contract-pricing entries that reference the same vendor
+              item number will also be cleared. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!pendingDeleteId) return
+                deleteMutation.mutate(pendingDeleteId)
+                setPendingDeleteId(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }

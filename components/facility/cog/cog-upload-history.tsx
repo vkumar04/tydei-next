@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { History, FileSpreadsheet, Upload, FileText, Trash2, Loader2 } from "lucide-react"
+import { History, FileSpreadsheet, Upload, Trash2, Loader2 } from "lucide-react"
 import { useCOGImportHistory, useDeleteCOGFile } from "@/hooks/use-cog"
 import { formatDate, formatCurrency } from "@/lib/formatting"
 import { Badge } from "@/components/ui/badge"
@@ -30,11 +30,10 @@ import {
 
 interface COGUploadHistoryProps {
   facilityId: string
-  variant?: "cog" | "pricing"
   onImport?: () => void
 }
 
-export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGUploadHistoryProps) {
+export function COGUploadHistory({ facilityId, onImport }: COGUploadHistoryProps) {
   const { data, isLoading } = useCOGImportHistory(facilityId)
   const deleteMutation = useDeleteCOGFile()
   const [deleteDate, setDeleteDate] = useState<string | null>(null)
@@ -53,98 +52,14 @@ export function COGUploadHistory({ facilityId, variant = "cog", onImport }: COGU
     return (
       <EmptyState
         icon={History}
-        title={variant === "pricing" ? "No Pricing Files" : "No Uploaded Files"}
-        description={
-          variant === "pricing"
-            ? "Upload vendor pricing files to see them here"
-            : 'No files uploaded yet. Click "Import Data" to upload COG files.'
-        }
+        title="No Uploaded Files"
+        description='No files uploaded yet. Click "Import Data" to upload COG files.'
       />
     )
   }
 
   const totalRecords = data.reduce((sum, f) => sum + f.recordCount, 0)
   const totalSpendImported = data.reduce((sum, f) => sum + (f.totalSpend ?? 0), 0)
-
-  if (variant === "pricing") {
-    return (
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Uploaded Pricing Files</CardTitle>
-            <CardDescription>
-              Vendor pricing files used to match COG data
-            </CardDescription>
-          </div>
-          <Button onClick={onImport}>
-            <Upload className="mr-2 h-4 w-4" />
-            Import Data
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Vendor</TableHead>
-                <TableHead>File Name</TableHead>
-                <TableHead>Linked Contract</TableHead>
-                <TableHead>Upload Date</TableHead>
-                <TableHead>Effective Date</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[50px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((entry, i) => (
-                <TableRow key={i}>
-                  <TableCell className="font-medium">Vendor</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      Pricing Import - {formatDate(entry.date)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                    >
-                      Not Linked
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(entry.date)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(entry.date)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {entry.recordCount.toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
-                      Active
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => setDeleteDate(entry.date)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    )
-  }
 
   return (
     <>

@@ -95,11 +95,150 @@ export async function deletePricingFilesByVendor(
   vendorId: string,
   facilityId: string
 ) {
-  await requireFacility()
+  const { facility, user } = await requireFacility()
 
-  await prisma.pricingFile.deleteMany({
-    where: { vendorId, facilityId },
+  // Enforce facility scope from the session — never trust the caller-passed
+  // facilityId. This prevents a client from deleting pricing rows for
+  // another facility.
+  if (facility.id !== facilityId) {
+    throw new Error("Facility mismatch")
+  }
+
+  // Pricing rows can be referenced from a ContractPricing record (when the
+  // pricing file was imported into a specific contract). Clean those up
+  // first so the PricingFile deletion doesn't violate relational integrity.
+  await prisma.contractPricing.deleteMany({
+    where: {
+      contract: { facilityId: facility.id },
+      vendorItemNo: {
+        in: (
+          await prisma.pricingFile.findMany({
+            where: { vendorId, facilityId: facility.id },
+            select: { vendorItemNo: true },
+          })
+        ).map((p) => p.vendorItemNo),
+      },
+    },
   })
+
+  const { count } = await prisma.pricingFile.deleteMany({
+    where: { vendorId, facilityId: facility.id },
+  })
+
+  await logAudit({
+    userId: user.id,
+    action: "pricing.deleted_by_vendor",
+    entityType: "pricingFile",
+    metadata: { vendorId, deleted: count },
+  })
+
+  return { deleted: count }
+}
+
+// ─── Uploaded Pricing Files (grouped by vendor) ─────────────────
+
+export interface UploadedPricingFileRow {
+  vendorId: string
+  vendorName: string
+  recordCount: number
+  uniqueItems: number
+  latestUploadDate: string
+  earliestEffectiveDate: string | null
+  latestExpirationDate: string | null
+}
+
+/**
+ * Returns one row per vendor with aggregate pricing-file stats for the
+ * current facility. This powers the "Uploaded Pricing Files" list, where
+ * "delete" removes all pricing rows for a vendor at this facility.
+ */
+export async function getUploadedPricingFiles(): Promise<
+  UploadedPricingFileRow[]
+> {
+  const { facility } = await requireFacility()
+
+  const grouped = await prisma.pricingFile.groupBy({
+    by: ["vendorId"],
+    where: { facilityId: facility.id },
+    _count: { _all: true },
+    _max: { createdAt: true, expirationDate: true },
+    _min: { effectiveDate: true },
+  })
+
+  if (grouped.length === 0) return []
+
+  const vendorIds = grouped.map((g) => g.vendorId)
+  const [vendors, uniqueItems] = await Promise.all([
+    prisma.vendor.findMany({
+      where: { id: { in: vendorIds } },
+      select: { id: true, name: true },
+    }),
+    prisma.pricingFile.groupBy({
+      by: ["vendorId", "vendorItemNo"],
+      where: { facilityId: facility.id, vendorId: { in: vendorIds } },
+    }),
+  ])
+  const vendorById = new Map(vendors.map((v) => [v.id, v.name]))
+  const uniqueByVendor = new Map<string, number>()
+  for (const row of uniqueItems) {
+    uniqueByVendor.set(
+      row.vendorId,
+      (uniqueByVendor.get(row.vendorId) ?? 0) + 1,
+    )
+  }
+
+  const rows: UploadedPricingFileRow[] = grouped.map((g) => ({
+    vendorId: g.vendorId,
+    vendorName: vendorById.get(g.vendorId) ?? "Unknown vendor",
+    recordCount: g._count._all,
+    uniqueItems: uniqueByVendor.get(g.vendorId) ?? 0,
+    latestUploadDate: (g._max.createdAt ?? new Date()).toISOString(),
+    earliestEffectiveDate: g._min.effectiveDate
+      ? g._min.effectiveDate.toISOString()
+      : null,
+    latestExpirationDate: g._max.expirationDate
+      ? g._max.expirationDate.toISOString()
+      : null,
+  }))
+
+  rows.sort(
+    (a, b) =>
+      new Date(b.latestUploadDate).getTime() -
+      new Date(a.latestUploadDate).getTime(),
+  )
+  return rows
+}
+
+// ─── Delete a single PricingFile row ────────────────────────────
+
+export async function deletePricingFile(id: string): Promise<{ id: string }> {
+  const { facility, user } = await requireFacility()
+
+  // Facility-scope guard: verify the row belongs to this facility before
+  // deleting.
+  const row = await prisma.pricingFile.findFirst({
+    where: { id, facilityId: facility.id },
+    select: { id: true, vendorId: true, vendorItemNo: true },
+  })
+  if (!row) throw new Error("Pricing row not found")
+
+  await prisma.contractPricing.deleteMany({
+    where: {
+      contract: { facilityId: facility.id },
+      vendorItemNo: row.vendorItemNo,
+    },
+  })
+  await prisma.pricingFile.delete({ where: { id } })
+
+  await logAudit({
+    userId: user.id,
+    action: "pricing.deleted",
+    entityType: "pricingFile",
+    entityId: id,
+    metadata: { vendorId: row.vendorId },
+  })
+
+  return { id }
 }
 
 // ─── Import Contract Pricing (linked to a specific contract) ───

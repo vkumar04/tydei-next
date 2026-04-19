@@ -2,14 +2,24 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 import type { PricingFile } from "@prisma/client"
+import { Loader2, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/formatting"
 
 type PricingFileWithVendor = PricingFile & {
   vendor: { id: string; name: string }
 }
 
-export function getPricingColumns(): ColumnDef<PricingFileWithVendor>[] {
+export interface PricingColumnOptions {
+  onDelete?: (id: string) => void
+  pendingDeleteId?: string | null
+}
+
+export function getPricingColumns(
+  options: PricingColumnOptions = {},
+): ColumnDef<PricingFileWithVendor>[] {
+  const { onDelete, pendingDeleteId } = options
   return [
     {
       accessorKey: "vendorItemNo",
@@ -91,5 +101,35 @@ export function getPricingColumns(): ColumnDef<PricingFileWithVendor>[] {
         </div>
       ),
     },
+    ...(onDelete
+      ? [
+          {
+            id: "actions",
+            header: "",
+            cell: ({ row }) => {
+              const busy = pendingDeleteId === row.original.id
+              return (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Delete pricing row"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete(row.original.id)
+                  }}
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </Button>
+              )
+            },
+          } satisfies ColumnDef<PricingFileWithVendor>,
+        ]
+      : []),
   ]
 }

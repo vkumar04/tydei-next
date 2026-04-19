@@ -5,7 +5,9 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   getPricingFiles,
   bulkImportPricingFiles,
+  deletePricingFile,
   deletePricingFilesByVendor,
+  getUploadedPricingFiles,
 } from "@/lib/actions/pricing-files"
 import type { PricingFilters } from "@/lib/validators/pricing-files"
 import { toast } from "sonner"
@@ -43,10 +45,32 @@ export function useDeletePricingFilesByVendor() {
   return useMutation({
     mutationFn: ({ vendorId, facilityId }: { vendorId: string; facilityId: string }) =>
       deletePricingFilesByVendor(vendorId, facilityId),
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: queryKeys.pricingFiles.all })
-      toast.success("Pricing files deleted")
+      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      toast.success(
+        `Deleted ${result.deleted.toLocaleString()} pricing rows`,
+      )
     },
     onError: (err) => toast.error(err.message || "Failed to delete"),
+  })
+}
+
+export function useDeletePricingFile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => deletePricingFile(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.pricingFiles.all })
+      toast.success("Pricing row deleted")
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete"),
+  })
+}
+
+export function useUploadedPricingFiles() {
+  return useQuery({
+    queryKey: [...queryKeys.pricingFiles.all, "uploaded"] as const,
+    queryFn: () => getUploadedPricingFiles(),
   })
 }
