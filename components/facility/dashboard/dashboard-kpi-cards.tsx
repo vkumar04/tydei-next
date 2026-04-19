@@ -82,7 +82,7 @@ export function DashboardKPICards({
     {
       title: "Total Value",
       value: formatCurrency(totalContractValue),
-      subLabel: "live contract value",
+      subLabel: "across portfolio",
       icon: BanknoteIcon,
       accent: "info",
     },

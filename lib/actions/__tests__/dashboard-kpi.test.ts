@@ -73,16 +73,30 @@ vi.mock("@/lib/db", () => ({
         },
       ),
     },
-    contractPeriod: {
-      aggregate: vi.fn(async ({ _sum }: { _sum?: unknown } = {}) => {
-        void _sum
-        return {
-          _sum: {
-            rebateEarned: rebateAgg.earned,
-            rebateCollected: rebateAgg.collected,
-          },
-        }
-      }),
+    rebate: {
+      aggregate: vi.fn(
+        async ({
+          _sum,
+        }: {
+          _sum?: { rebateEarned?: boolean; rebateCollected?: boolean }
+        } = {}) => {
+          // Two calls: one for earned (payPeriodEnd <= today), one for
+          // collected (collectionDate not null). Route by which _sum
+          // field the caller asked for.
+          if (_sum?.rebateEarned) {
+            return { _sum: { rebateEarned: rebateAgg.earned } }
+          }
+          if (_sum?.rebateCollected) {
+            return { _sum: { rebateCollected: rebateAgg.collected } }
+          }
+          return {
+            _sum: {
+              rebateEarned: rebateAgg.earned,
+              rebateCollected: rebateAgg.collected,
+            },
+          }
+        },
+      ),
     },
     alert: {
       findMany: vi.fn(async () => alertRows),
@@ -162,7 +176,7 @@ describe("getDashboardKPISummary", () => {
     expect(Array.isArray(result.topAlerts)).toBe(true)
   })
 
-  it("sums totalContractValue across the active + expiring portfolio", async () => {
+  it("sums totalContractValue across the full portfolio — Charles R5.37", async () => {
     const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
     contractRows = [
       mkContract({
@@ -175,16 +189,33 @@ describe("getDashboardKPISummary", () => {
         totalValue: 250_000,
         expirationDate: farFuture,
       }),
-      // expired status → excluded by computeDashboardKPIs bucketing.
+      // draft contracts DO count toward portfolio Total Value.
       mkContract({
-        status: "expired",
-        totalValue: 9_999_999,
-        expirationDate: new Date("2020-01-01"),
+        status: "draft",
+        totalValue: 500_000,
+        expirationDate: null,
+      }),
+      mkContract({
+        status: "pending",
+        totalValue: 75_000,
+        expirationDate: null,
       }),
     ]
     const result = await getDashboardKPISummary()
-    expect(result.totalContractValue).toBe(350_000)
+    // 100k + 250k + 500k + 75k = 925k (all portfolio statuses)
+    expect(result.totalContractValue).toBe(925_000)
     expect(result.activeContractsCount).toBe(2)
+  })
+
+  it("aggregates rebates earned from the Rebate table (payPeriodEnd ≤ today), not ContractPeriod — Charles R5.37", async () => {
+    // The dashboard contract row doesn't drive rebates, but we seed one
+    // so the action's contract query returns something benign.
+    contractRows = [mkContract({ status: "draft", totalValue: 0 })]
+    rebateAgg = { earned: 71_603.49, collected: 51_198 }
+    const result = await getDashboardKPISummary()
+    expect(result.totalRebatesEarned).toBe(71_603.49)
+    expect(result.totalRebatesCollected).toBe(51_198)
+    expect(result.rebateCollectionRate).toBeCloseTo(51_198 / 71_603.49, 4)
   })
 
   it("counts contracts expiring within 90 days as pendingAlerts", async () => {
@@ -221,7 +252,7 @@ describe("getDashboardKPISummary", () => {
     expect(result.pendingAlerts).toBe(1)
   })
 
-  it("aggregates rebate totals from contractPeriod", async () => {
+  it("aggregates rebate totals from the Rebate table", async () => {
     rebateAgg = { earned: 50_000, collected: 35_000 }
     const result = await getDashboardKPISummary()
     expect(result.totalRebatesEarned).toBe(50_000)

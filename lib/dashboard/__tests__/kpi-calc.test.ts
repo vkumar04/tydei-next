@@ -38,15 +38,17 @@ describe("computeDashboardKPIs", () => {
     })
   })
 
-  it("sums totalValue across active + expiring only", () => {
+  it("sums totalValue across the full portfolio (everything except expired) — Charles R5.37", () => {
     const contracts: KPIInputContract[] = [
       { status: "active", totalValue: 1000, expirationDate: daysFromRef(365) },
       { status: "expiring", totalValue: 500, expirationDate: daysFromRef(30) },
-      { status: "expired", totalValue: 9999, expirationDate: daysFromRef(-10) },
-      { status: "draft", totalValue: 7777, expirationDate: null },
+      { status: "expired", totalValue: 9999, expirationDate: daysFromRef(-10) }, // excluded
+      { status: "draft", totalValue: 7777, expirationDate: null }, // portfolio
+      { status: "pending", totalValue: 250, expirationDate: null }, // portfolio
     ]
     const k = computeDashboardKPIs(baseInput({ contracts }))
-    expect(k.totalContractValue).toBe(1500)
+    // 1000 + 500 + 7777 + 250 = 9527 (expired 9999 excluded)
+    expect(k.totalContractValue).toBe(9527)
   })
 
   it("buckets an active contract within 90 days as expiring", () => {
@@ -126,8 +128,8 @@ describe("computeDashboardKPIs", () => {
       { status: "active", totalValue: 1000, expirationDate: daysFromRef(365) }, // active
       { status: "active", totalValue: 500, expirationDate: daysFromRef(30) }, // expiring
       { status: "expiring", totalValue: 700, expirationDate: daysFromRef(120) }, // expiring
-      { status: "expired", totalValue: 250, expirationDate: daysFromRef(-30) }, // ignored
-      { status: "draft", totalValue: 999, expirationDate: null }, // ignored
+      { status: "expired", totalValue: 250, expirationDate: daysFromRef(-30) }, // excluded from value
+      { status: "draft", totalValue: 999, expirationDate: null }, // portfolio (R5.37)
     ]
     const k = computeDashboardKPIs(
       baseInput({
@@ -139,8 +141,9 @@ describe("computeDashboardKPIs", () => {
     )
     expect(k.activeContractsCount).toBe(1)
     expect(k.expiringContractsCount).toBe(2)
-    expect(k.totalContractValue).toBe(2200)
-    expect(k.spendProgress).toBeCloseTo(600 / 2200)
+    // Portfolio-wide: 1000 + 500 + 700 + 999 = 3199 (expired 250 excluded)
+    expect(k.totalContractValue).toBe(3199)
+    expect(k.spendProgress).toBeCloseTo(600 / 3199)
     expect(k.rebateCollectionRate).toBeCloseTo(0.5)
     expect(k.pendingAlerts).toBe(3)
   })
@@ -152,7 +155,9 @@ describe("computeDashboardKPIs", () => {
     const k = computeDashboardKPIs(baseInput({ contracts }))
     expect(k.activeContractsCount).toBe(0)
     expect(k.expiringContractsCount).toBe(0)
-    expect(k.totalContractValue).toBe(0)
+    // Still portfolio-value since status !== "expired" (the caller is
+    // responsible for filtering "expired" rows out at the Prisma layer).
+    expect(k.totalContractValue).toBe(1000)
   })
 
   it("defaults referenceDate to now when omitted", () => {

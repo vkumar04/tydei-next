@@ -214,14 +214,26 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
       },
       _sum: { extendedPrice: true },
     }),
-    // Earned/collected count only periods that have actually closed —
-    // pre-recorded rows for upcoming periods are projections, not earned.
-    prisma.contractPeriod.aggregate({
-      where: { facilityId, periodEnd: { lte: referenceDate } },
+    // Rebates come from the explicit `Rebate` table per the codebase
+    // doctrine (never auto-computed from tiers for display). Earned
+    // counts only rows whose pay period has closed (`payPeriodEnd <=
+    // today`) — pre-recorded rows for future periods are projections,
+    // not earned. Collected counts only rows with a `collectionDate`
+    // set. Portfolio-wide (all-time past), not YTD: the dashboard is a
+    // portfolio overview; YTD-scoped rebate metrics live on the
+    // contract detail / list per R5.27/R5.31. Charles R5.37.
+    prisma.rebate.aggregate({
+      where: {
+        contract: { facilityId },
+        payPeriodEnd: { lte: referenceDate },
+      },
       _sum: { rebateEarned: true },
     }),
-    prisma.contractPeriod.aggregate({
-      where: { facilityId, periodEnd: { lte: referenceDate } },
+    prisma.rebate.aggregate({
+      where: {
+        contract: { facilityId },
+        collectionDate: { not: null },
+      },
       _sum: { rebateCollected: true },
     }),
     prisma.alert.findMany({

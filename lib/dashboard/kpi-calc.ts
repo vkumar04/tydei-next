@@ -64,8 +64,11 @@ function clamp01(value: number): number {
  *   - active: status === "active" AND (no expirationDate OR > 90 days out)
  *   - expiring: status === "expiring" OR (active AND within 90 days)
  *
- * totalContractValue sums across active + expiring only (the "live"
- * portfolio), matching spec §3.0.
+ * totalContractValue sums ALL contracts the caller passed in. The caller
+ * is responsible for pre-filtering the input to the "portfolio" set —
+ * i.e., everything except `expired`. This way `draft` and `pending`
+ * contracts contribute to the portfolio value even when they aren't yet
+ * counted as active. Charles R5.37.
  */
 export function computeDashboardKPIs(input: KPIInput): DashboardKPIs {
   const {
@@ -107,7 +110,11 @@ export function computeDashboardKPIs(input: KPIInput): DashboardKPIs {
 
     if (isActive) activeContractsCount += 1
     if (isExpiring) expiringContractsCount += 1
-    if (isActive || isExpiring) {
+
+    // Portfolio-wide total: sum every contract the caller passed in,
+    // regardless of active/expiring bucket. Excludes only `expired` (the
+    // caller filters it out at the Prisma layer).
+    if (c.status !== "expired") {
       totalContractValue += Number.isFinite(c.totalValue) ? c.totalValue : 0
     }
   }
