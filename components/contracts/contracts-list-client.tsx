@@ -52,6 +52,7 @@ import { PendingContractsTab } from "@/components/facility/contracts/pending-con
 import { ScoreBadge } from "@/components/shared/badges/score-badge"
 import { CompareModal } from "./compare-modal"
 import type { CompareContract } from "./compare-row-builder"
+import { buildContractsCSV } from "./contract-export"
 
 /** The 3-way facility scope filter per spec §4.3. */
 type FacilityScope = "this" | "all" | "shared"
@@ -370,10 +371,42 @@ export function ContractsListClient({
                   />
                   <Button
                     variant="outline"
-                    size="icon"
-                    aria-label="Export contracts"
+                    size="sm"
+                    onClick={() => {
+                      const rows = contracts.map((c) => ({
+                        name: c.name,
+                        vendorName: c.vendor.name,
+                        contractType: c.contractType,
+                        status: c.status,
+                        effectiveDate: new Date(c.effectiveDate)
+                          .toISOString()
+                          .slice(0, 10),
+                        expirationDate: new Date(c.expirationDate)
+                          .toISOString()
+                          .slice(0, 10),
+                        totalValue: Number(c.totalValue),
+                        spend: Number(metricsBatch?.[c.id]?.spend ?? 0),
+                        rebateEarned: Number(
+                          metricsBatch?.[c.id]?.rebate ?? 0
+                        ),
+                      }))
+                      const csv = buildContractsCSV(rows)
+                      const blob = new Blob([csv], {
+                        type: "text/csv;charset=utf-8",
+                      })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement("a")
+                      a.href = url
+                      a.download = `contracts-${new Date()
+                        .toISOString()
+                        .slice(0, 10)}.csv`
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                      URL.revokeObjectURL(url)
+                    }}
                   >
-                    <Download className="h-4 w-4" />
+                    <Download className="mr-2 h-4 w-4" /> Download CSV
                   </Button>
                 </div>
               </div>
