@@ -40,17 +40,16 @@ function daysBetween(future: Date, now: Date): number {
 }
 
 /**
- * Recompute + persist Contract.score for a single contract.
- * Loads the contract + its live metrics, calls calculateContractScore,
- * writes score + scoreBand + scoreUpdatedAt back to the row.
+ * Internal: load every metric the scoring engine needs and run it.
+ * Returns both the result and the contract id so callers that want
+ * to persist (recomputeContractScore) can do so without re-querying.
  */
-export async function recomputeContractScore(
+async function loadAndScoreContract(
   contractId: string,
-): Promise<ContractScoreResult> {
-  const { facility, user } = await requireFacility()
-
+  facilityId: string,
+): Promise<{ contractId: string; result: ContractScoreResult }> {
   const contract = await prisma.contract.findUniqueOrThrow({
-    where: contractOwnershipWhere(contractId, facility.id),
+    where: contractOwnershipWhere(contractId, facilityId),
     include: {
       rebates: { select: { rebateEarned: true } },
     },
@@ -84,14 +83,10 @@ export async function recomputeContractScore(
   }
 
   // ─── compliance ───────────────────────────────────────────────
-  // On-contract spend = COGRecord rows flagged isOnContract=true AND
-  // contractId=this.contract. Total spend = vendor-wide COG spend at this
-  // facility (denominator for "how much of the vendor's purchasing ran
-  // through this contract").
   const [onContractAgg, vendorAgg] = await Promise.all([
     prisma.cOGRecord.aggregate({
       where: {
-        facilityId: facility.id,
+        facilityId,
         contractId: contract.id,
         isOnContract: true,
       },
@@ -99,7 +94,7 @@ export async function recomputeContractScore(
     }),
     prisma.cOGRecord.aggregate({
       where: {
-        facilityId: facility.id,
+        facilityId,
         vendorId: contract.vendorId,
       },
       _sum: { extendedPrice: true },
@@ -133,9 +128,41 @@ export async function recomputeContractScore(
     totalVarianceCount,
   })
 
+  return { contractId: contract.id, result }
+}
+
+/**
+ * Read-only score computation. Same metrics as `recomputeContractScore`
+ * but does NOT write Contract.score / scoreBand / scoreUpdatedAt and
+ * does NOT log an audit row. Use this for read-side surfaces (e.g. the
+ * score page radar) where you want a fresh number on every render
+ * without generating writes + audit log spam.
+ */
+export async function computeContractScoreLive(
+  contractId: string,
+): Promise<ContractScoreResult> {
+  const { facility } = await requireFacility()
+  const { result } = await loadAndScoreContract(contractId, facility.id)
+  return result
+}
+
+/**
+ * Recompute + persist Contract.score for a single contract.
+ * Loads the contract + its live metrics, calls calculateContractScore,
+ * writes score + scoreBand + scoreUpdatedAt back to the row.
+ */
+export async function recomputeContractScore(
+  contractId: string,
+): Promise<ContractScoreResult> {
+  const { facility, user } = await requireFacility()
+  const { contractId: id, result } = await loadAndScoreContract(
+    contractId,
+    facility.id,
+  )
+
   const now = new Date()
   await prisma.contract.update({
-    where: { id: contract.id },
+    where: { id },
     data: {
       score: Math.round(result.overallScore),
       scoreBand: result.band,
@@ -147,7 +174,7 @@ export async function recomputeContractScore(
     userId: user.id,
     action: "contract.score_recomputed",
     entityType: "contract",
-    entityId: contract.id,
+    entityId: id,
     metadata: {
       overallScore: result.overallScore,
       band: result.band,

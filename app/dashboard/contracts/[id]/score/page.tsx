@@ -1,6 +1,6 @@
 import { requireFacility } from "@/lib/actions/auth"
 import { getContract } from "@/lib/actions/contracts"
-import { recomputeContractScore } from "@/lib/actions/contracts/scoring"
+import { computeContractScoreLive } from "@/lib/actions/contracts/scoring"
 import { ContractScoreClient } from "@/components/facility/contracts/contract-score-client"
 import type { ContractScoreResult } from "@/lib/contracts/scoring"
 
@@ -13,12 +13,13 @@ export default async function ContractScorePage({
   await requireFacility()
   const contract = await getContract(id)
 
-  // Recompute the rule-based score so the radar always reflects
-  // current commitment / compliance / rebate / timeliness / variance
-  // rollups. Failure must not break the AI-driven page.
+  // Read-only: compute the rule-based components fresh on every page
+  // load WITHOUT persisting to Contract.score or writing an audit row.
+  // Persistence happens via mutations (createContract / updateContract /
+  // explicit "recompute scores" actions), not on every page view.
   let ruleBasedComponents: ContractScoreResult["components"] | undefined
   try {
-    const result = await recomputeContractScore(id)
+    const result = await computeContractScoreLive(id)
     ruleBasedComponents = result.components
   } catch {
     ruleBasedComponents = undefined
