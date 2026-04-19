@@ -26,6 +26,7 @@ describe("calculateContractScore — perfect contract", () => {
       rebateEfficiencyScore: 100,
       timelinessScore: 100,
       varianceScore: 100,
+      priceCompetitivenessScore: 100,
     })
   })
 })
@@ -37,7 +38,7 @@ describe("calculateContractScore — timeliness tiers", () => {
       daysUntilExpiration: -10,
     })
     expect(result.components.timelinessScore).toBe(0)
-    // 100*0.3 + 100*0.25 + 100*0.15 + 0*0.15 + 100*0.15 = 85
+    // 100*0.20 + 100*0.20 + 100*0.20 + 0*0.15 + 100*0.15 + 100*0.10 = 85
     expect(result.overallScore).toBeCloseTo(85, 10)
     expect(result.band).toBe("B")
   })
@@ -168,6 +169,49 @@ describe("calculateContractScore — variance scoring", () => {
   })
 })
 
+describe("calculateContractScore — price competitiveness (6th dim)", () => {
+  it("returns 100 priceCompetitivenessScore when no variance data", () => {
+    const r = calculateContractScore({
+      commitmentMet: 80,
+      complianceRate: 80,
+      rebatesEarned: 1000,
+      totalContractValue: 10000,
+      daysUntilExpiration: 365,
+      majorVarianceCount: 0,
+      totalVarianceCount: 0,
+    })
+    expect(r.components.priceCompetitivenessScore).toBe(100)
+  })
+
+  it("clamps priceCompetitivenessScore to 0-100 even on heavy overcharge", () => {
+    const r = calculateContractScore({
+      commitmentMet: 80,
+      complianceRate: 80,
+      rebatesEarned: 1000,
+      totalContractValue: 10000,
+      daysUntilExpiration: 365,
+      majorVarianceCount: 5,
+      totalVarianceCount: 5,
+      averageVariancePercent: 200,
+    })
+    expect(r.components.priceCompetitivenessScore).toBe(0)
+  })
+
+  it("penalizes proportionally for variance", () => {
+    const r = calculateContractScore({
+      commitmentMet: 80,
+      complianceRate: 80,
+      rebatesEarned: 1000,
+      totalContractValue: 10000,
+      daysUntilExpiration: 365,
+      majorVarianceCount: 1,
+      totalVarianceCount: 3,
+      averageVariancePercent: 25,
+    })
+    expect(r.components.priceCompetitivenessScore).toBe(75)
+  })
+})
+
 describe("calculateContractScore — weighted overall + clamping", () => {
   it("weighted overall equals exact sum of weighted components", () => {
     const input: ContractScoringInput = {
@@ -180,9 +224,9 @@ describe("calculateContractScore — weighted overall + clamping", () => {
       totalVarianceCount: 10, // variance 80
     }
     const result = calculateContractScore(input)
-    // 80*.3 + 70*.25 + 20*.15 + 85*.15 + 80*.15
-    // = 24 + 17.5 + 3 + 12.75 + 12 = 69.25
-    expect(result.overallScore).toBeCloseTo(69.25, 10)
+    // 80*.20 + 70*.20 + 20*.20 + 85*.15 + 80*.15 + 100*.10
+    // = 16 + 14 + 4 + 12.75 + 12 + 10 = 68.75
+    expect(result.overallScore).toBeCloseTo(68.75, 10)
     expect(result.band).toBe("D")
   })
 
@@ -210,6 +254,7 @@ describe("calculateContractScore — weighted overall + clamping", () => {
       daysUntilExpiration: -100,
       majorVarianceCount: 10,
       totalVarianceCount: 10, // varianceScore 0
+      averageVariancePercent: 200, // priceCompetitivenessScore 0
     })
     expect(result.overallScore).toBe(0)
     expect(result.band).toBe("F")
@@ -218,19 +263,27 @@ describe("calculateContractScore — weighted overall + clamping", () => {
 
 describe("calculateContractScore — band boundaries", () => {
   // Band is driven by overallScore alone — we construct inputs to land on
-  // exact targets. We hold rebate/timeliness/variance at 100 (contribution
-  // = 45) and then split the remaining (target - 45) across commitment
-  // (weight 0.3) and compliance (weight 0.25). Both levers clamp to 0-100,
-  // so the helper chooses a split that stays in range for any target in
-  // [45, 100].
+  // exact targets. Hold rebate/timeliness/variance at 100 (contribution =
+  // 20 + 15 + 15 = 50) and fill the remaining (target - 50) from three
+  // arbitrary-precision levers in capacity order: commitment (0.20),
+  // compliance (0.20), priceComp (0.10). Total capacity = 50, so the
+  // helper supports any target in [50, 100]. priceCompetitivenessScore
+  // is derived from averageVariancePercent with full precision, making
+  // it a clean fine-tuner.
   function inputForOverall(target: number): ContractScoringInput {
-    const remaining = target - 45 // must come from commitment + compliance
-    // Prefer to max commitment (capacity 30), then spill into compliance
-    // (capacity 25).
-    const commitmentContrib = Math.min(30, Math.max(0, remaining))
-    const complianceContrib = Math.max(0, remaining - commitmentContrib)
-    const commitmentMet = commitmentContrib / 0.3
-    const complianceRate = complianceContrib / 0.25
+    let remaining = target - 50 // from commit + comp + priceComp
+
+    const commitmentContrib = Math.min(20, Math.max(0, remaining))
+    remaining -= commitmentContrib
+    const complianceContrib = Math.min(20, Math.max(0, remaining))
+    remaining -= complianceContrib
+    const priceCompContrib = Math.min(10, Math.max(0, remaining))
+
+    const commitmentMet = commitmentContrib / 0.2
+    const complianceRate = complianceContrib / 0.2
+    const priceCompScore = priceCompContrib / 0.1 // 0-100 target
+    const averageVariancePercent = 100 - priceCompScore
+
     return {
       commitmentMet,
       complianceRate,
@@ -239,6 +292,7 @@ describe("calculateContractScore — band boundaries", () => {
       daysUntilExpiration: 365,
       majorVarianceCount: 0,
       totalVarianceCount: 0,
+      averageVariancePercent,
     }
   }
 

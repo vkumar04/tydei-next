@@ -107,12 +107,19 @@ async function loadAndScoreContract(
   // ─── variance ─────────────────────────────────────────────────
   const variances = await prisma.invoicePriceVariance.findMany({
     where: { contractId: contract.id },
-    select: { severity: true },
+    select: { severity: true, variancePercent: true },
   })
   const totalVarianceCount = variances.length
   const majorVarianceCount = variances.filter(
     (v) => v.severity === "major",
   ).length
+  const averageVariancePercent =
+    variances.length > 0
+      ? variances.reduce(
+          (sum, v) => sum + Math.abs(Number(v.variancePercent ?? 0)),
+          0,
+        ) / variances.length
+      : null
 
   // ─── timeliness ───────────────────────────────────────────────
   const daysUntilExpiration = daysBetween(contract.expirationDate, new Date())
@@ -126,6 +133,7 @@ async function loadAndScoreContract(
     daysUntilExpiration,
     majorVarianceCount,
     totalVarianceCount,
+    averageVariancePercent,
   })
 
   return { contractId: contract.id, result }
