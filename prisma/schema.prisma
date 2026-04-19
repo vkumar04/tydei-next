@@ -292,6 +292,15 @@ enum PaymentCadence {
   annual
 }
 
+// Wave D — tie-in amortization schedule shape. `symmetrical` uses the
+// engine's PMT formula so every period is the same; `custom` lets the
+// user enter a different amortizationDue for each period, persisted as
+// ContractAmortizationSchedule rows for the owning term.
+enum AmortizationShape {
+  symmetrical
+  custom
+}
+
 enum InvoiceDisputeStatus {
   none
   disputed
@@ -690,6 +699,10 @@ model ContractTerm {
   downPayment              Decimal?        @db.Decimal(14, 2)
   paymentCadence           PaymentCadence  @default(monthly)
   minimumPurchaseCommitment Decimal?       @db.Decimal(14, 2)
+  // Wave D — whether the amortization schedule uses the engine's
+  // uniform-PMT formula (`symmetrical`) or user-entered per-period
+  // amounts persisted as ContractAmortizationSchedule rows (`custom`).
+  amortizationShape        AmortizationShape @default(symmetrical)
   cptCodes                 String[]        @default([])
   groupedReferenceNumbers  String[]        @default([])
   referenceNumbers         String[]        @default([])

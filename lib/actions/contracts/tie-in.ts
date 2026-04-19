@@ -221,6 +221,7 @@ export async function getContractCapitalSchedule(
           interestRate: true,
           termMonths: true,
           paymentTiming: true,
+          amortizationShape: true,
           amortizationRows: {
             orderBy: { periodNumber: "asc" },
           },
@@ -253,9 +254,15 @@ export async function getContractCapitalSchedule(
 
   if (capitalCost <= 0 || termMonths <= 0) return empty
 
-  // Prefer persisted rows; fall back to live engine build.
+  // Wave D — custom-shape terms source rows from the persisted table so
+  // the user-entered values drive the detail-page card; symmetrical
+  // terms always compute live so capital/interest/term edits are
+  // reflected without a write.
   let entries: AmortizationEntry[]
-  if (term.amortizationRows.length > 0) {
+  if (
+    term.amortizationShape === "custom" &&
+    term.amortizationRows.length > 0
+  ) {
     entries = term.amortizationRows.map((r) => ({
       periodNumber: r.periodNumber,
       openingBalance: Number(r.openingBalance),

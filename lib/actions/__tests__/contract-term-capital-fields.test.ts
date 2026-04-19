@@ -38,6 +38,10 @@ vi.mock("@/lib/db", () => ({
       createMany: createManyProductMock,
       deleteMany: deleteManyProductMock,
     },
+    contractAmortizationSchedule: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   },
 }))
 vi.mock("@/lib/actions/auth", () => ({

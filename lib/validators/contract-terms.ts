@@ -59,6 +59,24 @@ export const createTermSchema = z.object({
     .enum(["bill_immediately", "carry_forward"])
     .nullable()
     .optional(),
+  // Wave D — symmetrical (PMT-driven) vs custom (user-entered rows).
+  // Kept `nullish` so existing callers (edit-contract-client, vendor-
+  // submission, tests) compile without threading the new field. The
+  // server action treats missing / null as "symmetrical" and clears
+  // any persisted rows on that path.
+  amortizationShape: z.enum(["symmetrical", "custom"]).nullish(),
+  // Wave D — custom-mode per-period amounts. Only read when
+  // amortizationShape === "custom". Each row's closingBalance is
+  // recomputed server-side from the running opening balance so the
+  // client only needs to POST the user-entered amortizationDue.
+  customAmortizationRows: z
+    .array(
+      z.object({
+        periodNumber: z.number().int().min(1),
+        amortizationDue: z.number().min(0),
+      }),
+    )
+    .optional(),
   tiers: z.array(tierInputSchema).optional().default([]),
 })
 
@@ -104,6 +122,16 @@ export const termFormSchema = z.object({
   shortfallHandling: z
     .enum(["bill_immediately", "carry_forward"])
     .nullable()
+    .optional(),
+  // Wave D — see createTermSchema for semantics.
+  amortizationShape: z.enum(["symmetrical", "custom"]).nullish(),
+  customAmortizationRows: z
+    .array(
+      z.object({
+        periodNumber: z.number().int().min(1),
+        amortizationDue: z.number().min(0),
+      }),
+    )
     .optional(),
   tiers: z.array(tierInputSchema).default([]),
 })

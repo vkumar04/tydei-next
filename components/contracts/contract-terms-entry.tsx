@@ -49,6 +49,8 @@ import { getCategories } from "@/lib/actions/categories"
 import { queryKeys } from "@/lib/query-keys"
 import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
 import { SpecificItemsPicker, type VendorItem } from "./specific-items-picker"
+import { TieInAmortizationPreview } from "./tie-in-amortization-preview"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 interface ContractTermsEntryProps {
   terms: TermFormValues[]
@@ -667,6 +669,80 @@ export function ContractTermsEntry({
                           />
                         </div>
                       </div>
+                      {/* Wave D — payment schedule shape toggle + inline preview */}
+                      <div className="space-y-2">
+                        <Label className="inline-flex items-center gap-1">
+                          Payment Schedule Shape
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                Symmetrical means equal payments every period
+                                (standard PMT amortization). Custom lets you
+                                enter a different amount for each period.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </Label>
+                        <RadioGroup
+                          className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                          value={term.amortizationShape ?? "symmetrical"}
+                          onValueChange={(v) =>
+                            updateTerm(termIdx, {
+                              amortizationShape:
+                                v === "custom" ? "custom" : "symmetrical",
+                              // Clear seeded customRows when returning to
+                              // symmetrical so stale edits don't persist on
+                              // save. (Write path already deletes rows for
+                              // symmetrical but we also drop the in-memory
+                              // form value so the UI stays consistent.)
+                              customAmortizationRows:
+                                v === "custom"
+                                  ? term.customAmortizationRows
+                                  : undefined,
+                            })
+                          }
+                        >
+                          <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2 text-sm">
+                            <RadioGroupItem value="symmetrical" />
+                            <span>
+                              <span className="font-medium">Symmetrical</span>
+                              <span className="block text-xs text-muted-foreground">
+                                Equal payments every period. Auto-computed from
+                                capital cost + interest + term.
+                              </span>
+                            </span>
+                          </label>
+                          <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2 text-sm">
+                            <RadioGroupItem value="custom" />
+                            <span>
+                              <span className="font-medium">Custom</span>
+                              <span className="block text-xs text-muted-foreground">
+                                Enter a different amount for each period.
+                              </span>
+                            </span>
+                          </label>
+                        </RadioGroup>
+                      </div>
+                      <TieInAmortizationPreview
+                        capitalCost={term.capitalCost}
+                        downPayment={term.downPayment}
+                        interestRate={term.interestRate}
+                        termMonths={term.termMonths}
+                        paymentCadence={term.paymentCadence}
+                        effectiveStart={term.effectiveStart}
+                        amortizationShape={
+                          term.amortizationShape ?? "symmetrical"
+                        }
+                        customRows={term.customAmortizationRows}
+                        onCustomRowsChange={(rows) =>
+                          updateTerm(termIdx, {
+                            customAmortizationRows: rows,
+                          })
+                        }
+                      />
                       {/* Wave C — shortfall handling policy select */}
                       <div className="space-y-2">
                         <Label className="inline-flex items-center gap-1">
