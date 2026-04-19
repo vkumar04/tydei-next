@@ -11,6 +11,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
+import { normalizeAIRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import {
   findOrCreateVendorByName,
   toContractType,
@@ -101,17 +102,26 @@ export async function ingestExtractedContracts(
                     ...(term.tiers && term.tiers.length > 0
                       ? {
                           tiers: {
-                            create: term.tiers.map((tier) => ({
-                              tierNumber: tier.tierNumber ?? 1,
-                              spendMin: tier.spendMin ?? 0,
-                              spendMax: tier.spendMax ?? null,
-                              volumeMin: tier.volumeMin ?? null,
-                              volumeMax: tier.volumeMax ?? null,
-                              marketShareMin: tier.marketShareMin ?? null,
-                              marketShareMax: tier.marketShareMax ?? null,
-                              rebateType: toRebateType(tier.rebateType),
-                              rebateValue: tier.rebateValue ?? 0,
-                            })),
+                            create: term.tiers.map((tier) => {
+                              const rebateType = toRebateType(tier.rebateType)
+                              return {
+                                tierNumber: tier.tierNumber ?? 1,
+                                spendMin: tier.spendMin ?? 0,
+                                spendMax: tier.spendMax ?? null,
+                                volumeMin: tier.volumeMin ?? null,
+                                volumeMax: tier.volumeMax ?? null,
+                                marketShareMin: tier.marketShareMin ?? null,
+                                marketShareMax: tier.marketShareMax ?? null,
+                                rebateType,
+                                // Charles R5.25 — AI often returns whole
+                                // percent (3) but the DB stores
+                                // percent_of_spend as a fraction (0.03).
+                                rebateValue: normalizeAIRebateValue(
+                                  rebateType,
+                                  tier.rebateValue,
+                                ),
+                              }
+                            }),
                           },
                         }
                       : {}),

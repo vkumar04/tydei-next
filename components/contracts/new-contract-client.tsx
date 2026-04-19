@@ -27,6 +27,7 @@ import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-
 import { queryKeys } from "@/lib/query-keys"
 import { createVendor } from "@/lib/actions/vendors"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
+import { normalizeAIRebateValue, toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
@@ -450,9 +451,24 @@ export function NewContractClient({
         data.terms.map((t) => {
           const termType = mapTermType(t.termType)
           const baselineType = mapBaselineType(t.termType)
-          // Generate smart term name if generic
-          const minRebate = t.tiers.length > 0 ? Math.min(...t.tiers.map(tr => tr.rebateValue ?? 0)) : 0
-          const maxRebate = t.tiers.length > 0 ? Math.max(...t.tiers.map(tr => tr.rebateValue ?? 0)) : 0
+          // Normalize AI-extracted rebate values (Charles R5.25). AI
+          // models frequently return "3" for 3%; the DB wants 0.03.
+          // Normalize at ingest so downstream math + display are both
+          // correct.
+          const normalizedTiers = t.tiers.map((tier) => ({
+            tierNumber: tier.tierNumber,
+            spendMin: tier.spendMin ?? 0,
+            spendMax: tier.spendMax,
+            rebateType: "percent_of_spend" as const,
+            rebateValue: normalizeAIRebateValue("percent_of_spend", tier.rebateValue),
+          }))
+          // Generate smart term name from the denormalized display
+          // value so the label reads "(3%)" not "(0.03%)".
+          const displayRebates = normalizedTiers.map((tr) =>
+            toDisplayRebateValue(tr.rebateType, tr.rebateValue),
+          )
+          const minRebate = displayRebates.length > 0 ? Math.min(...displayRebates) : 0
+          const maxRebate = displayRebates.length > 0 ? Math.max(...displayRebates) : 0
           const smartName = t.termName || (
             minRebate !== maxRebate
               ? `${termType.replace(/_/g, " ")} (${minRebate}%-${maxRebate}%)`
@@ -468,13 +484,7 @@ export function NewContractClient({
             rebateMethod: "cumulative" as const,
             effectiveStart: data.effectiveDate,
             effectiveEnd: data.expirationDate,
-            tiers: t.tiers.map((tier) => ({
-              tierNumber: tier.tierNumber,
-              spendMin: tier.spendMin ?? 0,
-              spendMax: tier.spendMax,
-              rebateType: "percent_of_spend" as const,
-              rebateValue: tier.rebateValue ?? 0,
-            })),
+            tiers: normalizedTiers,
           }
         })
       )

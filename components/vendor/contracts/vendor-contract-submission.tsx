@@ -8,6 +8,7 @@ import type { CreatePendingContractInput } from "@/lib/validators/pending-contra
 import type { TermFormValues } from "@/lib/validators/contract-terms"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
+import { normalizeAIRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { toast } from "sonner"
 
 import {
@@ -380,7 +381,12 @@ export function VendorContractSubmission({
             spendMin: tier.spendMin ?? 0,
             spendMax: tier.spendMax,
             rebateType: "percent_of_spend" as const,
-            rebateValue: tier.rebateValue ?? 0,
+            // Charles R5.25 — AI often returns "3" for 3%; the DB
+            // stores percent_of_spend as a fraction (0.03).
+            rebateValue: normalizeAIRebateValue(
+              "percent_of_spend",
+              tier.rebateValue,
+            ),
           })),
         }))
       )

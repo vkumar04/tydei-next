@@ -1,6 +1,6 @@
 "use client"
 
-import { Trash2 } from "lucide-react"
+import { HelpCircle, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,7 +10,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type { TierInput } from "@/lib/validators/contract-terms"
+import {
+  fromDisplayRebateValue,
+  isPercentRebateType,
+  toDisplayRebateValue,
+} from "@/lib/contracts/rebate-value-normalize"
 
 interface ContractTierRowProps {
   tier: TierInput
@@ -32,6 +43,16 @@ export function ContractTierRow({
   onChange,
   onRemove,
 }: ContractTierRowProps) {
+  const isPercent = isPercentRebateType(tier.rebateType)
+
+  // The DB stores percent_of_spend as a fraction (0.03 = 3%) but we
+  // want the user to type plain percent. Charles R5.25: typing "3"
+  // here used to save as 3, which the rebate engine treated as 300%
+  // because it scales × 100 at the Prisma boundary. We denormalize on
+  // load and re-normalize on save so the on-wire model stays a
+  // fraction while the input stays percent.
+  const displayValue = toDisplayRebateValue(tier.rebateType, tier.rebateValue)
+
   return (
     <div className="flex flex-wrap items-end gap-2 rounded-md border p-3">
       <span className="flex h-9 items-center text-xs font-medium text-muted-foreground">
@@ -69,9 +90,22 @@ export function ContractTierRow({
         <label className="text-xs text-muted-foreground">Rebate Type</label>
         <Select
           value={tier.rebateType}
-          onValueChange={(v) =>
-            onChange({ ...tier, rebateType: v as TierInput["rebateType"] })
-          }
+          onValueChange={(v) => {
+            const nextType = v as TierInput["rebateType"]
+            // When toggling between percent and dollar modes, re-map
+            // the stored value so the displayed number stays the
+            // user's intent. E.g. switching from "3% of spend" (stored
+            // 0.03) to "fixed $3" should land on 3, not 0.03.
+            const nextStoredValue = fromDisplayRebateValue(
+              nextType,
+              toDisplayRebateValue(tier.rebateType, tier.rebateValue),
+            )
+            onChange({
+              ...tier,
+              rebateType: nextType,
+              rebateValue: nextStoredValue,
+            })
+          }}
         >
           <SelectTrigger className="w-36">
             <SelectValue />
@@ -87,16 +121,48 @@ export function ContractTierRow({
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Rebate Value</label>
-        <Input
-          type="number"
-          step="0.01"
-          className="w-24"
-          value={tier.rebateValue}
-          onChange={(e) =>
-            onChange({ ...tier, rebateValue: Number(e.target.value) })
-          }
-        />
+        <label className="text-xs text-muted-foreground flex items-center gap-1">
+          {isPercent ? "Rebate %" : "Rebate $"}
+          {isPercent && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex cursor-help items-center">
+                    <HelpCircle
+                      className="h-3 w-3 text-muted-foreground"
+                      aria-label="Enter as a percent"
+                    />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[220px] p-2 text-xs">
+                  Enter as a percent (e.g. 2 = 2%).
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </label>
+        <div className="relative w-28">
+          <Input
+            type="number"
+            step={isPercent ? "0.1" : "0.01"}
+            min="0"
+            max={isPercent ? "100" : undefined}
+            className={isPercent ? "pr-6" : undefined}
+            value={displayValue}
+            onChange={(e) => {
+              const raw = Number(e.target.value)
+              onChange({
+                ...tier,
+                rebateValue: fromDisplayRebateValue(tier.rebateType, raw),
+              })
+            }}
+          />
+          {isPercent && (
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+              %
+            </span>
+          )}
+        </div>
       </div>
 
       <Button

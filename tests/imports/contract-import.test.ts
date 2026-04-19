@@ -122,8 +122,10 @@ describe("ingestExtractedContracts — happy path", () => {
       .create
     expect(tiers).toHaveLength(2)
     expect(tiers[0].tierNumber).toBe(1)
-    expect(Number(tiers[0].rebateValue)).toBe(2)
-    expect(Number(tiers[1].rebateValue)).toBe(4)
+    // Charles R5.25 — percent_of_spend is stored as a fraction, so the
+    // AI's "2" (meaning 2%) is normalized to 0.02 on ingest.
+    expect(Number(tiers[0].rebateValue)).toBe(0.02)
+    expect(Number(tiers[1].rebateValue)).toBe(0.04)
   })
 
   it("derives display name from sourceFilename when contractName is missing", async () => {
