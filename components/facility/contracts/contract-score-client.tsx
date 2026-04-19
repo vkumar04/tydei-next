@@ -163,37 +163,37 @@ const DIMENSION_META: Record<
     label: "Pricing Competitiveness",
     icon: DollarSign,
     description:
-      "How competitive the contracted pricing is compared to market rates.",
+      "AI-scored 0-100 from the contract's unit prices and price-reduction terms vs peer-facility benchmarks on the same SKUs. Higher = contract unit prices are below peer median.",
   },
   rebateStructure: {
     label: "Rebate Structure",
     icon: Target,
     description:
-      "Quality and achievability of the rebate tiers and incentive structures.",
+      "AI-scored 0-100 on the rebate program's earning potential at current spend, tier design fairness, and collected-vs-earned payment timeliness. Higher = richer rebate terms being captured.",
   },
   contractFlexibility: {
     label: "Contract Flexibility",
     icon: Scale,
     description:
-      "Flexibility of terms including auto-renewal, termination, and modification clauses.",
+      "Derived as the average of the AI's financial-value and compliance-likelihood sub-scores, used as a proxy for exit terms, termination windows, amendments, and renewal logic. Higher = easier to exit or renegotiate.",
   },
   volumeAlignment: {
     label: "Volume Alignment",
     icon: BarChart3,
     description:
-      "How well committed volumes align with your historical purchasing patterns.",
+      "AI-scored 0-100 (the market-share-alignment sub-score) comparing current spend against contract commitment and projected end-of-term volume. Higher = on track to hit the commitment.",
   },
   marketComparison: {
     label: "Market Comparison",
     icon: TrendingUp,
     description:
-      "Performance relative to similar contracts across the market.",
+      "AI-scored 0-100 (the financial-value sub-score) benchmarking contract terms against the Tydei market dataset for same category, contract type, and peer facilities. Higher = terms beat category averages.",
   },
   riskAssessment: {
     label: "Risk Assessment",
     icon: Shield,
     description:
-      "Overall risk profile including compliance likelihood and market exposure.",
+      "AI-scored 0-100 (the compliance-likelihood sub-score) covering counterparty concentration, SKU exclusivity, price-variance exposure, and renewal uncertainty. Higher = lower risk overall.",
   },
 }
 
@@ -402,11 +402,33 @@ export function ContractScoreClient({
         /* Overall Score Card */
         <Card className="border-2 border-primary/20 bg-gradient-to-br from-card to-primary/5">
         <CardContent className="pt-6">
+          <TooltipProvider>
           <div className="grid gap-6 md:grid-cols-3">
             {/* Main Score */}
             <div className="flex flex-col items-center justify-center text-center">
-              <div className="text-sm font-medium text-muted-foreground mb-2">
-                Overall Contract Score
+              <div className="flex items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground mb-2">
+                <span>Overall Contract Score</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="How the overall score is computed"
+                      className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[320px] p-3">
+                    <p className="font-medium">Overall Contract Score</p>
+                    <p className="mt-1 text-xs">
+                      AI-generated single 0-100 score for the contract. It is
+                      produced by the deal-scoring model alongside the six
+                      sub-dimensions (not a fixed weighted average), and drives
+                      the Strong Accept / Accept / Negotiate / Reject
+                      recommendation.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
               <div
                 className={`text-6xl font-bold ${getScoreColor(overallScore)}`}
@@ -427,7 +449,6 @@ export function ContractScoreClient({
             </div>
 
             {/* Score Breakdown (6 dimensions with progress bars) */}
-            <TooltipProvider>
               <div className="md:col-span-2 grid grid-cols-2 gap-4">
                 {DIMENSION_KEYS.map((key) => {
                   const meta = DIMENSION_META[key]
@@ -461,8 +482,8 @@ export function ContractScoreClient({
                   )
                 })}
               </div>
-            </TooltipProvider>
           </div>
+          </TooltipProvider>
         </CardContent>
         </Card>
       )}
@@ -639,6 +660,7 @@ export function ContractScoreClient({
 
         {/* ── Dimensions Tab ────────────────────────────────────── */}
         <TabsContent value="dimensions" className="mt-6">
+          <TooltipProvider>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {DIMENSION_KEYS.map((key) => {
               const meta = DIMENSION_META[key]
@@ -649,7 +671,25 @@ export function ContractScoreClient({
                   <CardHeader className="pb-2">
                     <CardTitle className="flex items-center gap-2 text-base">
                       <Icon className="h-4 w-4" />
-                      {meta.label}
+                      <span>{meta.label}</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`How ${meta.label} is scored`}
+                            className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                          >
+                            <HelpCircle className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="max-w-[320px] p-3"
+                        >
+                          <p className="font-medium">{meta.label}</p>
+                          <p className="mt-1 text-xs">{meta.description}</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </CardTitle>
                     <CardDescription className="text-xs">
                       {meta.description}
@@ -680,6 +720,7 @@ export function ContractScoreClient({
               )
             })}
           </div>
+          </TooltipProvider>
         </TabsContent>
 
         {/* ── Benchmarks Tab ────────────────────────────────────── */}
