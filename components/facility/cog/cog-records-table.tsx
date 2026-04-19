@@ -223,7 +223,11 @@ export function COGRecordsTable({
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="All vendors" />
                 </SelectTrigger>
-                <SelectContent>
+                {/* Charles W1.L — facilities with many vendors (~100+)
+                    made the dropdown taller than the viewport with no
+                    scroll, cutting off vendors below the fold. Cap the
+                    popover height + enable internal scrolling. */}
+                <SelectContent className="max-h-[320px] overflow-y-auto">
                   <SelectItem value="all">All vendors</SelectItem>
                   {vendorData?.vendors.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
