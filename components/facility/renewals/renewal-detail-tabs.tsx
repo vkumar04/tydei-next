@@ -39,13 +39,13 @@ import { AlertTriangle, CheckCircle2, Clock, Info } from "lucide-react"
 import {
   classifyRenewalStatus,
   generateNegotiationPoints,
-  generateRenewalTasks,
   type PerformanceHistoryRow,
   type RenewalStatus,
 } from "@/lib/renewals/engine"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { RenewalNotesSection } from "./renewal-notes-section"
 import { RenewalAlertSettingsForm } from "./renewal-alert-settings-form"
+import { RenewalTaskChecklist } from "./renewal-task-checklist"
 
 export interface RenewalDetail {
   id: string
@@ -105,11 +105,6 @@ export function RenewalDetailTabs({
   currentUserId,
 }: RenewalDetailTabsProps) {
   const status = classifyRenewalStatus(detail.daysUntilExpiry)
-
-  const tasks = useMemo(
-    () => generateRenewalTasks(detail.commitmentMet ?? 0),
-    [detail.commitmentMet],
-  )
 
   const negotiationPoints = useMemo(
     () =>
@@ -193,28 +188,10 @@ export function RenewalDetailTabs({
 
         <div>
           <h4 className="mb-2 text-sm font-medium">Renewal prep checklist</h4>
-          <ul className="space-y-1.5">
-            {tasks.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 text-sm">
-                {t.completed ? (
-                  <CheckCircle2
-                    className="h-4 w-4 text-green-600 dark:text-green-400"
-                    aria-hidden
-                  />
-                ) : (
-                  <span
-                    className="h-4 w-4 rounded-full border border-muted-foreground/40"
-                    aria-hidden
-                  />
-                )}
-                <span
-                  className={t.completed ? "text-muted-foreground line-through" : ""}
-                >
-                  {t.task}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <RenewalTaskChecklist
+            contractId={detail.id}
+            commitmentMet={detail.commitmentMet ?? 0}
+          />
         </div>
       </TabsContent>
 

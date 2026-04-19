@@ -316,6 +316,7 @@ model User {
   auditLogs        AuditLog[]
   renewalAlertSettings RenewalAlertSettings?
   renewalNotes     RenewalNote[]
+  completedRenewalTasks RenewalTask[] @relation("RenewalTaskCompleter")
 
   @@index([role])
   @@map("user")
@@ -596,6 +597,7 @@ model Contract {
   periods            ContractPeriod[]
   amortizationRows   ContractAmortizationSchedule[]
   renewalNotes       RenewalNote[]
+  renewalTasks       RenewalTask[]
   rebates            Rebate[]
   payments           Payment[]
   creditEntries      Credit[]
@@ -832,6 +834,27 @@ model RenewalNote {
   @@index([createdAt])
   @@index([authorId])
   @@map("renewal_note")
+}
+
+/// Persistent state for the 5-item renewal prep checklist rendered in
+/// the renewal detail drawer. Keyed by stable `taskKey` strings emitted
+/// by `generateRenewalTasks` in `lib/renewals/engine.ts`.
+model RenewalTask {
+  id          String    @id @default(cuid())
+  contractId  String
+  taskKey     String
+  completed   Boolean   @default(false)
+  completedBy String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  contract  Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  completer User?    @relation("RenewalTaskCompleter", fields: [completedBy], references: [id])
+
+  @@unique([contractId, taskKey])
+  @@index([contractId])
+  @@map("renewal_task")
 }
 
 model RenewalAlertSettings {

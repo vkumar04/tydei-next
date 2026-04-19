@@ -194,14 +194,14 @@ describe("generateRenewalTasks", () => {
     expect(tasks.map((t) => t.completed)).toEqual([true, true, false, false, false])
   })
 
-  it("exposes the exact task copy and ids", () => {
+  it("exposes the exact task copy, ids, and stable persistence keys", () => {
     const tasks = generateRenewalTasks(0)
     expect(tasks).toEqual([
-      { id: "task-1", task: "Review current performance data", completed: false },
-      { id: "task-2", task: "Analyze market pricing trends", completed: false },
-      { id: "task-3", task: "Prepare negotiation strategy", completed: false },
-      { id: "task-4", task: "Draft renewal terms", completed: false },
-      { id: "task-5", task: "Schedule renewal meeting", completed: false },
+      { id: "task-1", key: "review-performance", task: "Review current performance data", completed: false },
+      { id: "task-2", key: "analyze-market-pricing", task: "Analyze market pricing trends", completed: false },
+      { id: "task-3", key: "prepare-negotiation-strategy", task: "Prepare negotiation strategy", completed: false },
+      { id: "task-4", key: "draft-renewal-terms", task: "Draft renewal terms", completed: false },
+      { id: "task-5", key: "schedule-renewal-meeting", task: "Schedule renewal meeting", completed: false },
     ])
   })
 })

@@ -102,41 +102,63 @@ export function generateNegotiationPoints(input: NegotiationPointsInput): string
 /** Item in the renewal task checklist. */
 export interface RenewalTask {
   id: string
+  /** Stable key used by persistence (matches `RenewalTask.taskKey` in Prisma). */
+  key: string
   task: string
   completed: boolean
 }
 
 /**
+ * Stable task-key constants. Persisted rows in `renewal_task` reference
+ * these — do NOT rename without a data migration.
+ */
+export const RENEWAL_TASK_KEYS = [
+  "review-performance",
+  "analyze-market-pricing",
+  "prepare-negotiation-strategy",
+  "draft-renewal-terms",
+  "schedule-renewal-meeting",
+] as const
+
+export type RenewalTaskKey = (typeof RENEWAL_TASK_KEYS)[number]
+
+/**
  * Generate the renewal prep checklist (spec §14).
  *
- * 5 tasks. Task 1 auto-completes when `commitmentMet >= 80`; task 2
- * auto-completes when `commitmentMet >= 90`. Tasks 3-5 are manual only —
- * they always start `completed: false`.
+ * 5 tasks with stable `key` strings used for persistence. Task 1 auto-
+ * completes when `commitmentMet >= 80`; task 2 auto-completes when
+ * `commitmentMet >= 90`. Tasks 3-5 are manual only — they always start
+ * `completed: false`.
  */
 export function generateRenewalTasks(commitmentMet: number): RenewalTask[] {
   return [
     {
       id: "task-1",
+      key: "review-performance",
       task: "Review current performance data",
       completed: commitmentMet >= 80,
     },
     {
       id: "task-2",
+      key: "analyze-market-pricing",
       task: "Analyze market pricing trends",
       completed: commitmentMet >= 90,
     },
     {
       id: "task-3",
+      key: "prepare-negotiation-strategy",
       task: "Prepare negotiation strategy",
       completed: false,
     },
     {
       id: "task-4",
+      key: "draft-renewal-terms",
       task: "Draft renewal terms",
       completed: false,
     },
     {
       id: "task-5",
+      key: "schedule-renewal-meeting",
       task: "Schedule renewal meeting",
       completed: false,
     },
