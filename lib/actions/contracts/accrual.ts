@@ -61,21 +61,27 @@ export async function getAccrualTimeline(contractId: string) {
   const end = new Date(
     Math.min(new Date().getTime(), contract.expirationDate.getTime()),
   )
+  // Charles R5.12 — bucket spend by the actual transaction date, not the
+  // DB insertion timestamp. Using `createdAt` collapsed every seeded
+  // record into the single month the seed ran, which made the Accrual
+  // Timeline and Performance Spend-by-Period panels show all activity in
+  // one column and every other month as $0.
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,
       vendorId: contract.vendorId,
-      createdAt: {
+      transactionDate: {
         gte: contract.effectiveDate,
         lte: end,
       },
     },
-    select: { createdAt: true, extendedPrice: true },
+    select: { transactionDate: true, extendedPrice: true },
   })
 
   const byMonth = new Map<string, number>()
   for (const r of cogRecords) {
-    const d = r.createdAt
+    const d = r.transactionDate
+    if (!d) continue
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
     byMonth.set(key, (byMonth.get(key) ?? 0) + Number(r.extendedPrice))
   }

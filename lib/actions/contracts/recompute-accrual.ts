@@ -109,18 +109,25 @@ export async function recomputeAccrualForContract(
     Math.min(new Date().getTime(), contract.expirationDate.getTime()),
   )
 
+  // Charles R5.10/R5.12 — bucket COG spend by `transactionDate` (the
+  // real purchase date), never by `createdAt` (the DB insertion time).
+  // Using `createdAt` made every auto-accrual Rebate row land in the
+  // single month the seed/import ran, pushing `payPeriodEnd` forward to
+  // that month's end — which in turn got filtered out of the contract
+  // detail "Rebates Earned" card (payPeriodEnd > today).
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,
       vendorId: contract.vendorId,
-      createdAt: { gte: contract.effectiveDate, lte: end },
+      transactionDate: { gte: contract.effectiveDate, lte: end },
     },
-    select: { createdAt: true, extendedPrice: true },
+    select: { transactionDate: true, extendedPrice: true },
   })
 
   const byMonth = new Map<string, number>()
   for (const r of cogRecords) {
-    const d = r.createdAt
+    const d = r.transactionDate
+    if (!d) continue
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
     byMonth.set(key, (byMonth.get(key) ?? 0) + Number(r.extendedPrice))
   }
