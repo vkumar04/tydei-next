@@ -27,6 +27,13 @@ interface AIExtractDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onExtracted: (data: ExtractedContractData, s3Key?: string, fileName?: string, pricingItems?: ContractPricingItem[], pricingCategories?: string[]) => void
+  /**
+   * When the dialog opens with an initialFile, extraction kicks off
+   * immediately — the caller already gestured (drop/click) so we skip
+   * the in-dialog "Upload" button. Each new `initialFile` instance
+   * retriggers; pass a fresh `File` each time the user drops.
+   */
+  initialFile?: File | null
 }
 
 type Stage = "upload" | "extracting" | "review" | "error"
@@ -41,6 +48,7 @@ export function AIExtractDialog({
   open,
   onOpenChange,
   onExtracted,
+  initialFile,
 }: AIExtractDialogProps) {
   const [stage, setStage] = useState<Stage>("upload")
   const [progress, setProgress] = useState(0)
@@ -55,6 +63,9 @@ export function AIExtractDialog({
   const [fileSizeWarning, setFileSizeWarning] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Track the last `initialFile` we kicked extraction for so a parent
+  // re-rendering with the same File reference doesn't re-trigger the upload.
+  const processedInitialFileRef = useRef<File | null>(null)
 
   const quickFillExamples = [
     "This is a usage-based rebate contract",
@@ -144,6 +155,27 @@ export function AIExtractDialog({
       setStage("error")
     }
   }
+
+  // Auto-start extraction when opened with an initialFile (e.g. from the
+  // hero drop-zone). We compare against the ref so re-renders with the
+  // same File don't re-trigger. Reset the ref when the dialog closes so
+  // reopening with the same file (after a replace) works.
+  useEffect(() => {
+    if (!open) {
+      processedInitialFileRef.current = null
+      return
+    }
+    if (
+      initialFile &&
+      processedInitialFileRef.current !== initialFile &&
+      stage === "upload"
+    ) {
+      processedInitialFileRef.current = initialFile
+      void handleFile(initialFile)
+    }
+    // handleFile closes over setState only, stable; intentional minimal deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialFile, stage])
 
   function handleAccept(data: ExtractedContractData, pricingItems?: ContractPricingItem[], pricingCategories?: string[]) {
     onExtracted(data, s3Key ?? undefined, fileName || undefined, pricingItems, pricingCategories)
