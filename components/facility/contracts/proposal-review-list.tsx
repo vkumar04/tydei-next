@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { formatDate } from "@/lib/formatting"
 import { reviewChangeProposal } from "@/lib/actions/change-proposals"
 import { queryKeys } from "@/lib/query-keys"
+import { CounterProposeDialog } from "@/components/contracts/counter-propose-dialog"
 
 interface Change {
   field: string
@@ -47,6 +48,7 @@ export function ProposalReviewList({ proposals, facilityId, userId }: ProposalRe
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [action, setAction] = useState<"approve" | "reject" | "revision_requested">("approve")
   const [notes, setNotes] = useState("")
+  const [counterProposalId, setCounterProposalId] = useState<string | null>(null)
 
   const reviewMut = useMutation({
     mutationFn: ({ id, act }: { id: string; act: typeof action }) =>
@@ -96,14 +98,11 @@ export function ProposalReviewList({ proposals, facilityId, userId }: ProposalRe
                   <Button size="sm" variant="outline" onClick={() => { setReviewingId(p.id); setAction("revision_requested") }}>
                     <RotateCcw className="size-3.5" /> Request Revision
                   </Button>
-                  {/*
-                    TODO(W1.3): enable Counter-Propose. The server action
-                    (counterContractChangeProposal) and `countered` status
-                    are wired; this button is stubbed until a counter-terms
-                    dialog lands. reviewChangeProposal also accepts
-                    "counter_propose" → "countered" in its statusMap.
-                  */}
-                  <Button size="sm" variant="outline" disabled title="Counter-propose: coming soon (W1.3 stub)">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCounterProposalId(p.id)}
+                  >
                     <MessageSquareReply className="size-3.5" /> Counter-Propose
                   </Button>
                 </div>
@@ -131,6 +130,15 @@ export function ProposalReviewList({ proposals, facilityId, userId }: ProposalRe
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CounterProposeDialog
+        open={counterProposalId !== null}
+        onOpenChange={(next) => {
+          if (!next) setCounterProposalId(null)
+        }}
+        proposalId={counterProposalId}
+        facilityId={facilityId}
+      />
     </>
   )
 }

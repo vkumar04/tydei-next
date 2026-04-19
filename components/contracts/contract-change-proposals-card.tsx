@@ -15,6 +15,7 @@ import {
   rejectContractChangeProposal,
   requestProposalRevision,
 } from "@/lib/actions/contracts/proposals"
+import { CounterProposeDialog } from "@/components/contracts/counter-propose-dialog"
 
 type ProposalRow = Awaited<
   ReturnType<typeof getPendingProposalsForContract>
@@ -79,6 +80,9 @@ export function ContractChangeProposalsCard({
   })
 
   const [notes, setNotes] = useState<Record<string, string>>({})
+  const [counterProposalId, setCounterProposalId] = useState<string | null>(
+    null,
+  )
 
   if (!proposals || proposals.length === 0) return null
 
@@ -151,18 +155,10 @@ export function ContractChangeProposalsCard({
                 >
                   Reject
                 </Button>
-                {/*
-                  TODO(W1.3): wire up counterContractChangeProposal from
-                  lib/actions/contracts/proposals.ts. Stubbed (disabled)
-                  pending a structured counter-terms dialog. The
-                  `countered` ProposalStatus + server action already
-                  exist; this button just needs a proper UI form.
-                */}
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled
-                  title="Counter-propose: coming soon (W1.3 stub)"
+                  onClick={() => setCounterProposalId(p.id)}
                 >
                   Counter-Propose
                 </Button>
@@ -171,6 +167,14 @@ export function ContractChangeProposalsCard({
           )
         })}
       </CardContent>
+      <CounterProposeDialog
+        open={counterProposalId !== null}
+        onOpenChange={(next) => {
+          if (!next) setCounterProposalId(null)
+        }}
+        proposalId={counterProposalId}
+        contractId={contractId}
+      />
     </Card>
   )
 }
