@@ -28,9 +28,10 @@
 import { prisma } from "@/lib/db"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 import {
-  buildMonthlyAccruals,
+  buildMultiTermMonthlyAccruals,
   type MonthlySpend,
   type EvaluationPeriod,
+  type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
 import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
 
@@ -55,24 +56,32 @@ async function regenerateOne(contract: ContractRow) {
     return { skipped: "pricing_only" as const, inserted: 0, deleted: 0 }
   }
 
-  const firstTerm = contract.terms[0]
-  if (!firstTerm || firstTerm.tiers.length === 0) {
+  // Charles R5.29: iterate ALL terms with tiers, not just terms[0].
+  const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
+  if (termsWithTiers.length === 0) {
     return { skipped: "no_term_or_tiers" as const, inserted: 0, deleted: 0 }
   }
 
-  const tiers: TierLike[] = firstTerm.tiers.map((t) => ({
-    tierNumber: t.tierNumber,
-    spendMin: t.spendMin,
-    spendMax: t.spendMax,
-    rebateValue: t.rebateValue,
-    rebateType: t.rebateType,
-  }))
-
-  const method: RebateMethodName = firstTerm.rebateMethod === "marginal"
-    ? "marginal"
-    : "cumulative"
-  const evaluationPeriod =
-    (firstTerm.evaluationPeriod as EvaluationPeriod | null) ?? "annual"
+  const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
+    const tiers: TierLike[] = term.tiers.map((t) => ({
+      tierNumber: t.tierNumber,
+      spendMin: t.spendMin,
+      spendMax: t.spendMax,
+      rebateValue: t.rebateValue,
+      rebateType: t.rebateType,
+    }))
+    const method: RebateMethodName =
+      term.rebateMethod === "marginal" ? "marginal" : "cumulative"
+    const evaluationPeriod: EvaluationPeriod =
+      (term.evaluationPeriod as EvaluationPeriod | null) ?? "annual"
+    return {
+      tiers,
+      method,
+      evaluationPeriod,
+      effectiveStart: term.effectiveStart ?? null,
+      effectiveEnd: term.effectiveEnd ?? null,
+    }
+  })
 
   // Bound the accrual window by today so future months don't pollute
   // earned aggregates that filter on payPeriodEnd <= today.
@@ -118,7 +127,7 @@ async function regenerateOne(contract: ContractRow) {
     cursor.setUTCMonth(cursor.getUTCMonth() + 1)
   }
 
-  const rows = buildMonthlyAccruals(series, tiers, method, evaluationPeriod)
+  const rows = buildMultiTermMonthlyAccruals(series, termConfigs)
 
   const deleted = await prisma.rebate.deleteMany({
     where: {
@@ -133,6 +142,10 @@ async function regenerateOne(contract: ContractRow) {
       const [year, month] = r.month.split("-").map((n) => Number(n))
       const periodStart = new Date(Date.UTC(year, month - 1, 1))
       const periodEnd = new Date(Date.UTC(year, month, 0))
+      const noteBody =
+        r.termContributions.length > 1
+          ? `${r.termContributions.length} terms combined on $${r.spend.toFixed(2)} (${r.month})`
+          : `tier ${r.tierAchieved} @ ${r.rebatePercent}% on $${r.spend.toFixed(2)} (${r.month})`
       return {
         contractId: contract.id,
         facilityId: contract.facilityId,
@@ -141,7 +154,7 @@ async function regenerateOne(contract: ContractRow) {
         payPeriodStart: periodStart,
         payPeriodEnd: periodEnd,
         collectionDate: null,
-        notes: `${AUTO_ACCRUAL_PREFIX} tier ${r.tierAchieved} @ ${r.rebatePercent}% on $${r.spend.toFixed(2)} (${r.month})`,
+        notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
       }
     })
 

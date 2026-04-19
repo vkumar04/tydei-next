@@ -89,7 +89,14 @@ export async function getContractPeriods(contractId: string) {
     }
   }
 
-  // Apply the contract's first-term tier structure to cumulative spend.
+  // Apply the PRIMARY (first) term's tier structure for the tier-badge
+  // column on the synthetic period rows. Charles R5.29 note: we
+  // intentionally pick a single term here because the tierAchieved
+  // column represents "which tier did this month land in" on the
+  // Performance tab — it's a badge, not a summable metric. The per-
+  // month `totalSpend` is term-agnostic (raw COG), and true multi-term
+  // rebate aggregation happens through persisted Rebate rows written
+  // by `recomputeAccrualForContract`, which DOES iterate all terms.
   const tiers = contract.terms[0]?.tiers ?? []
   // Charles R4.6: honor `evaluationPeriod` — monthly-eval contracts
   // qualify each month's tier from THAT month's spend, not a running

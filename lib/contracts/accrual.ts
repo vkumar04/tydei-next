@@ -249,3 +249,140 @@ export function buildMonthlyAccruals(
 
   return rows
 }
+
+// ─── Multi-term aggregation (Charles R5.29) ─────────────────────────
+
+/**
+ * One term's config, used by `buildMultiTermMonthlyAccruals` to compute
+ * its own accrual series before summing across terms.
+ *
+ * `effectiveStart` / `effectiveEnd` (if provided) bound which months
+ * this term contributes to. A null/undefined bound is treated as open
+ * (−∞ for start, +∞ for end).
+ */
+export interface TermAccrualConfig {
+  tiers: TierLike[]
+  method: RebateMethodName
+  evaluationPeriod: EvaluationPeriod
+  effectiveStart?: Date | null
+  effectiveEnd?: Date | null
+}
+
+/**
+ * Charles R5.29: contracts with multiple terms (e.g. "Qualified Annual
+ * Spend Rebate" + "Distal Extremities Rebate") were under-reporting
+ * because the accrual engine iterated only `contract.terms[0]`. Every
+ * additional term's rebates silently dropped on the floor.
+ *
+ * This helper runs the existing per-term accrual pipeline for EACH
+ * term, then sums the per-month accrued amounts across terms. The
+ * returned rows have:
+ *   - `accruedAmount`: SUM of every contributing term's accrual for
+ *     the month.
+ *   - `tierAchieved` / `rebatePercent`: pulled from the term with the
+ *     largest accrual contribution in that month (primarily for the
+ *     `[auto-accrual]` notes label — aggregates don't rely on these).
+ *   - `termContributions`: which term ids fed the total, used to shape
+ *     the notes string.
+ *
+ * A term only contributes to a month whose `YYYY-MM` falls inside the
+ * term's `[effectiveStart, effectiveEnd]` window (inclusive). Terms
+ * with no bounds contribute to every month in `series`.
+ */
+export interface MultiTermTimelineRow extends TimelineRow {
+  termContributions: {
+    termIndex: number
+    accruedAmount: number
+    tierAchieved: number
+    rebatePercent: number
+  }[]
+}
+
+function monthKeyToDate(key: string): Date {
+  const [year, month] = key.split("-").map((n) => Number(n))
+  return new Date(Date.UTC(year, month - 1, 1))
+}
+
+function monthKeyEndOfMonth(key: string): Date {
+  const [year, month] = key.split("-").map((n) => Number(n))
+  return new Date(Date.UTC(year, month, 0))
+}
+
+export function buildMultiTermMonthlyAccruals(
+  series: MonthlySpend[],
+  terms: TermAccrualConfig[],
+): MultiTermTimelineRow[] {
+  if (terms.length === 0) {
+    return series.map((entry, i) => ({
+      month: entry.month,
+      spend: entry.spend,
+      cumulativeSpend: series
+        .slice(0, i + 1)
+        .reduce((s, e) => s + e.spend, 0),
+      accruedAmount: 0,
+      tierAchieved: 0,
+      rebatePercent: 0,
+      termContributions: [],
+    }))
+  }
+
+  // Compute each term's full accrual series, then index by month for
+  // aggregation. Each term sees the SAME spend series — per-term spend
+  // splits would require product-level attribution we don't track.
+  const perTermRows: TimelineRow[][] = terms.map((t) =>
+    buildMonthlyAccruals(series, t.tiers, t.method, t.evaluationPeriod),
+  )
+
+  let runningCumulative = 0
+  return series.map((entry, i) => {
+    runningCumulative += entry.spend
+
+    const monthStart = monthKeyToDate(entry.month)
+    const monthEnd = monthKeyEndOfMonth(entry.month)
+
+    let total = 0
+    let bestTier = 0
+    let bestPercent = 0
+    let bestContribution = -1
+    const contributions: MultiTermTimelineRow["termContributions"] = []
+
+    for (let t = 0; t < terms.length; t++) {
+      const term = terms[t]
+      // Term window check — treat null bounds as open.
+      const startOk =
+        term.effectiveStart == null || term.effectiveStart <= monthEnd
+      const endOk =
+        term.effectiveEnd == null || term.effectiveEnd >= monthStart
+      if (!startOk || !endOk) continue
+
+      const row = perTermRows[t][i]
+      if (!row || row.accruedAmount <= 0) {
+        // Still record zero-contributions so the caller can see which
+        // terms were considered. Skip for now to keep the list tight.
+        continue
+      }
+      total += row.accruedAmount
+      contributions.push({
+        termIndex: t,
+        accruedAmount: row.accruedAmount,
+        tierAchieved: row.tierAchieved,
+        rebatePercent: row.rebatePercent,
+      })
+      if (row.accruedAmount > bestContribution) {
+        bestContribution = row.accruedAmount
+        bestTier = row.tierAchieved
+        bestPercent = row.rebatePercent
+      }
+    }
+
+    return {
+      month: entry.month,
+      spend: entry.spend,
+      cumulativeSpend: runningCumulative,
+      accruedAmount: total,
+      tierAchieved: bestTier,
+      rebatePercent: bestPercent,
+      termContributions: contributions,
+    }
+  })
+}

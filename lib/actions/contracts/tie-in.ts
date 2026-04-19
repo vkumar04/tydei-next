@@ -29,9 +29,11 @@ export async function getContractTieInBundle(contractId: string) {
           contract: {
             include: {
               vendor: { select: { id: true, name: true } },
+              // Charles R5.29: include ALL terms, not just the first —
+              // multi-term member contracts otherwise under-reported their
+              // currentRebate inside tie-in bundles.
               terms: {
                 include: { tiers: { orderBy: { tierNumber: "asc" } } },
-                take: 1,
                 orderBy: { createdAt: "asc" },
               },
             },
@@ -55,12 +57,17 @@ export async function getContractTieInBundle(contractId: string) {
       _sum: { extendedPrice: true },
     })
     const spend = Number(cogAgg._sum.extendedPrice ?? 0)
+    // Charles R5.29: sum rebate across every term with tiers. Tie-in
+    // member contracts typically have one term, but nothing prevents
+    // two — and when they do, both should contribute.
     let rebate = 0
-    const term = m.contract.terms[0]
-    if (term && term.tiers.length > 0 && spend > 0) {
-      rebate = computeRebateFromPrismaTiers(spend, term.tiers, {
-        method: term.rebateMethod ?? "cumulative",
-      }).rebateEarned
+    if (spend > 0) {
+      for (const term of m.contract.terms) {
+        if (term.tiers.length === 0) continue
+        rebate += computeRebateFromPrismaTiers(spend, term.tiers, {
+          method: term.rebateMethod ?? "cumulative",
+        }).rebateEarned
+      }
     }
     perf.push({
       contractId: m.contractId,

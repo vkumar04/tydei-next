@@ -31,9 +31,10 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
-  buildMonthlyAccruals,
+  buildMultiTermMonthlyAccruals,
   type EvaluationPeriod,
   type MonthlySpend,
+  type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
 import type {
   RebateMethodName,
@@ -84,23 +85,38 @@ export async function recomputeAccrualForContract(
     },
   })
 
-  const term = contract.terms[0]
-  if (!term || term.tiers.length === 0) {
+  // Charles R5.29: iterate ALL terms, not just terms[0]. Multi-term
+  // contracts (e.g. "Qualified Annual Spend Rebate" + "Distal Extremities
+  // Rebate") under-reported because only the first term's math was ever
+  // summed into the ledger. We now compute each term's own accrual
+  // series and sum per-month across terms before writing Rebate rows.
+  const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
+  if (termsWithTiers.length === 0) {
     return { deleted: deleteResult.count, inserted: 0 }
   }
 
-  const tiers: TierLike[] = term.tiers.map((t) => ({
-    tierNumber: t.tierNumber,
-    tierName: t.tierName ?? null,
-    spendMin: Number(t.spendMin),
-    spendMax: t.spendMax ? Number(t.spendMax) : null,
-    rebateValue: Number(t.rebateValue),
-  }))
-  const method: RebateMethodName = term.rebateMethod ?? "cumulative"
-  const evaluationPeriod: EvaluationPeriod =
-    term.evaluationPeriod === "monthly" || term.evaluationPeriod === "quarterly"
-      ? term.evaluationPeriod
-      : "annual"
+  const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
+    const tiers: TierLike[] = term.tiers.map((t) => ({
+      tierNumber: t.tierNumber,
+      tierName: t.tierName ?? null,
+      spendMin: Number(t.spendMin),
+      spendMax: t.spendMax ? Number(t.spendMax) : null,
+      rebateValue: Number(t.rebateValue),
+    }))
+    const method: RebateMethodName = term.rebateMethod ?? "cumulative"
+    const evaluationPeriod: EvaluationPeriod =
+      term.evaluationPeriod === "monthly" ||
+      term.evaluationPeriod === "quarterly"
+        ? term.evaluationPeriod
+        : "annual"
+    return {
+      tiers,
+      method,
+      evaluationPeriod,
+      effectiveStart: term.effectiveStart ?? null,
+      effectiveEnd: term.effectiveEnd ?? null,
+    }
+  })
 
   // Bound the accrual window by today — future months have no actuals
   // and shouldn't emit Rebate rows (those would leak into "earned"
@@ -149,7 +165,7 @@ export async function recomputeAccrualForContract(
     cursor.setUTCMonth(cursor.getUTCMonth() + 1)
   }
 
-  const rows = buildMonthlyAccruals(series, tiers, method, evaluationPeriod)
+  const rows = buildMultiTermMonthlyAccruals(series, termConfigs)
 
   // Only persist months with non-zero accrual — a monthly-eval contract
   // whose tier 1 spendMin was missed in month N shouldn't pollute the
@@ -161,6 +177,13 @@ export async function recomputeAccrualForContract(
       const [year, month] = r.month.split("-").map((n) => Number(n))
       const periodStart = new Date(Date.UTC(year, month - 1, 1))
       const periodEnd = new Date(Date.UTC(year, month, 0))
+      // Charles R5.29: notes string reflects whether the row is a
+      // single-term or multi-term aggregate. Rebate has no termId column
+      // (see spec); one row per month holds the aggregated earned.
+      const noteBody =
+        r.termContributions.length > 1
+          ? `${r.termContributions.length} terms combined on $${r.spend.toFixed(2)} (${r.month})`
+          : `tier ${r.tierAchieved} @ ${r.rebatePercent}% on $${r.spend.toFixed(2)} (${r.month})`
       return {
         contractId,
         facilityId: facility.id,
@@ -169,7 +192,7 @@ export async function recomputeAccrualForContract(
         payPeriodStart: periodStart,
         payPeriodEnd: periodEnd,
         collectionDate: null,
-        notes: `${AUTO_ACCRUAL_PREFIX} tier ${r.tierAchieved} @ ${r.rebatePercent}% on $${r.spend.toFixed(2)} (${r.month})`,
+        notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
       }
     })
 

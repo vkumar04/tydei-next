@@ -9,9 +9,10 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import {
-  buildMonthlyAccruals,
+  buildMultiTermMonthlyAccruals,
   type EvaluationPeriod,
   type MonthlySpend,
+  type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
 import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
@@ -36,27 +37,41 @@ export async function getAccrualTimeline(contractId: string) {
     return serialize({ rows: [], method: "cumulative" as RebateMethodName })
   }
 
-  const term = contract.terms[0]
-  if (!term || term.tiers.length === 0) {
+  // Charles R5.29: iterate all terms and sum per-month accruals so the
+  // timeline matches what `recomputeAccrualForContract` writes to the
+  // Rebate ledger. Pre-fix, multi-term contracts showed only the first
+  // term's accrued values in the Performance tab timeline.
+  const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
+  if (termsWithTiers.length === 0) {
     return serialize({ rows: [], method: "cumulative" as RebateMethodName })
   }
 
-  const tiers: TierLike[] = term.tiers.map((t) => ({
-    tierNumber: t.tierNumber,
-    tierName: t.tierName ?? null,
-    spendMin: Number(t.spendMin),
-    spendMax: t.spendMax ? Number(t.spendMax) : null,
-    rebateValue: Number(t.rebateValue),
-  }))
-  const method: RebateMethodName = term.rebateMethod ?? "cumulative"
-  // Honor ContractTerm.evaluationPeriod — per Charles R4.6, monthly-eval
-  // contracts should qualify tier by THIS MONTH'S spend, not cumulative
-  // annual. Only `monthly` | `quarterly` | `annual` are supported today;
-  // anything else falls through to annual (current behavior).
-  const evaluationPeriod: EvaluationPeriod =
-    term.evaluationPeriod === "monthly" || term.evaluationPeriod === "quarterly"
-      ? term.evaluationPeriod
-      : "annual"
+  const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
+    const tiers: TierLike[] = term.tiers.map((t) => ({
+      tierNumber: t.tierNumber,
+      tierName: t.tierName ?? null,
+      spendMin: Number(t.spendMin),
+      spendMax: t.spendMax ? Number(t.spendMax) : null,
+      rebateValue: Number(t.rebateValue),
+    }))
+    const evaluationPeriod: EvaluationPeriod =
+      term.evaluationPeriod === "monthly" ||
+      term.evaluationPeriod === "quarterly"
+        ? term.evaluationPeriod
+        : "annual"
+    return {
+      tiers,
+      method: (term.rebateMethod ?? "cumulative") as RebateMethodName,
+      evaluationPeriod,
+      effectiveStart: term.effectiveStart ?? null,
+      effectiveEnd: term.effectiveEnd ?? null,
+    }
+  })
+
+  // Method reported alongside `rows` is the primary (first) term's —
+  // used for the "cumulative vs marginal" label on the timeline header.
+  const method: RebateMethodName =
+    (termsWithTiers[0].rebateMethod ?? "cumulative") as RebateMethodName
 
   const end = new Date(
     Math.min(new Date().getTime(), contract.expirationDate.getTime()),
@@ -103,6 +118,6 @@ export async function getAccrualTimeline(contractId: string) {
     cursor.setUTCMonth(cursor.getUTCMonth() + 1)
   }
 
-  const rows = buildMonthlyAccruals(series, tiers, method, evaluationPeriod)
+  const rows = buildMultiTermMonthlyAccruals(series, termConfigs)
   return serialize({ rows, method })
 }

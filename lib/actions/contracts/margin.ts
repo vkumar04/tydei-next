@@ -97,17 +97,28 @@ export async function getContractMarginAnalysis(contractId: string) {
     (s, r) => s + Number(r.rebateEarned),
     0,
   )
-  if (totalRebate === 0 && contract.terms[0]?.tiers.length) {
-    const firstTerm = contract.terms[0]
-    const cogAgg = await prisma.cOGRecord.aggregate({
-      where: { facilityId: facility.id, vendorId: contract.vendorId },
-      _sum: { extendedPrice: true },
-    })
-    const vendorCog = Number(cogAgg._sum.extendedPrice ?? 0)
-    if (vendorCog > 0) {
-      totalRebate = computeRebateFromPrismaTiers(vendorCog, firstTerm.tiers, {
-        method: firstTerm.rebateMethod ?? "cumulative",
-      }).rebateEarned
+  // Charles R5.29: fallback path now SUMS across every term with tiers.
+  // Primary data source is still persisted Rebate rows; this only fires
+  // when the ledger is empty (new contract, pre-recompute). Multi-term
+  // contracts need each term's rebate added, not just terms[0].
+  if (totalRebate === 0) {
+    const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
+    if (termsWithTiers.length > 0) {
+      const cogAgg = await prisma.cOGRecord.aggregate({
+        where: { facilityId: facility.id, vendorId: contract.vendorId },
+        _sum: { extendedPrice: true },
+      })
+      const vendorCog = Number(cogAgg._sum.extendedPrice ?? 0)
+      if (vendorCog > 0) {
+        totalRebate = termsWithTiers.reduce((acc, term) => {
+          return (
+            acc +
+            computeRebateFromPrismaTiers(vendorCog, term.tiers, {
+              method: term.rebateMethod ?? "cumulative",
+            }).rebateEarned
+          )
+        }, 0)
+      }
     }
   }
 
