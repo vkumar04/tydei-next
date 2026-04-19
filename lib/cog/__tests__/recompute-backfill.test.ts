@@ -4,7 +4,10 @@ import { backfillCOGEnrichment } from "@/lib/actions/cog-import/backfill"
 vi.mock("@/lib/db", () => ({
   prisma: {
     contract: { findMany: vi.fn() },
-    cOGRecord: { count: vi.fn() },
+    // `groupBy` was added by R5.30 (backfill reports the post-match
+    // distribution via the transition matrix) — keep it mocked so the
+    // test doesn't fall over on the real Prisma client.
+    cOGRecord: { count: vi.fn(), groupBy: vi.fn() },
   },
 }))
 vi.mock("@/lib/actions/auth", () => ({
@@ -35,6 +38,12 @@ describe("backfillCOGEnrichment", () => {
     ;(prisma.cOGRecord.count as any)
       .mockResolvedValueOnce(571) // before
       .mockResolvedValueOnce(420) // after — fewer pending
+    ;(prisma.cOGRecord.groupBy as any).mockResolvedValue([
+      { matchStatus: "on_contract", _count: 400 },
+      { matchStatus: "off_contract_item", _count: 100 },
+      { matchStatus: "out_of_scope", _count: 50 },
+      { matchStatus: "pending", _count: 420 },
+    ])
     recomputeMock.mockResolvedValue(undefined)
 
     const result = await backfillCOGEnrichment()
@@ -47,12 +56,19 @@ describe("backfillCOGEnrichment", () => {
       pendingBefore: 571,
       pendingAfter: 420,
       enriched: 151,
+      onContract: 400,
+      priceVariance: 0,
+      offContract: 100,
+      outOfScope: 50,
+      unknownVendor: 0,
+      pending: 420,
     })
   })
 
   it("returns zero counts when no active contracts exist", async () => {
     ;(prisma.contract.findMany as any).mockResolvedValue([])
     ;(prisma.cOGRecord.count as any).mockResolvedValue(0)
+    ;(prisma.cOGRecord.groupBy as any).mockResolvedValue([])
 
     const result = await backfillCOGEnrichment()
     expect(result).toEqual({
@@ -60,6 +76,12 @@ describe("backfillCOGEnrichment", () => {
       pendingBefore: 0,
       pendingAfter: 0,
       enriched: 0,
+      onContract: 0,
+      priceVariance: 0,
+      offContract: 0,
+      outOfScope: 0,
+      unknownVendor: 0,
+      pending: 0,
     })
     expect(recomputeMock).not.toHaveBeenCalled()
   })
