@@ -400,34 +400,10 @@ export function ContractScoreClient({
     )
   }
 
-  // ─── Error state ─────────────────────────────────────────────────
-  if (error || !aiScore || !dimensions) {
-    return (
-      <div className="flex flex-col gap-6">
-        <Link href={`/dashboard/contracts/${contractId}`}>
-          <Button variant="ghost" size="sm" className="gap-2 w-fit">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Contract
-          </Button>
-        </Link>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center py-8">
-              <AlertTriangle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h2 className="text-xl font-semibold mb-2">
-                {error ? "Scoring Failed" : "No Score Available"}
-              </h2>
-              <p className="text-muted-foreground">
-                {error
-                  ? "The AI scoring service encountered an error. Please try again."
-                  : "Unable to generate a score for this contract."}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
+  // Rule-based radar + benchmark + margin card are server-computed props;
+  // they should render even when the AI call fails. We localize the AI
+  // failure to an amber banner in place of the AI-driven sections.
+  const aiFailed = !!error || !aiScore || !dimensions
 
   // ─── Main UI matching v0 prototype ───────────────────────────────
   return (
@@ -456,13 +432,35 @@ export function ContractScoreClient({
                 contract.contractType.slice(1)}{" "}
               Contract
             </Badge>
-            <Badge variant={recLabel.variant}>{recLabel.label}</Badge>
+            {!aiFailed && (
+              <Badge variant={recLabel.variant}>{recLabel.label}</Badge>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Overall Score Card */}
-      <Card className="border-2 border-primary/20 bg-gradient-to-br from-card to-primary/5">
+      {/* AI section — render full score card when successful, scoped amber
+          banner when the AI call fails. Rule-based + margin render below
+          regardless. */}
+      {aiFailed ? (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              AI Scoring Unavailable
+            </CardTitle>
+            <CardDescription>
+              {error
+                ? "The AI scoring service is temporarily unavailable."
+                : "Unable to generate an AI score for this contract right now."}{" "}
+              The rule-based dimensions and margin analysis below are still
+              accurate.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : (
+        /* Overall Score Card */
+        <Card className="border-2 border-primary/20 bg-gradient-to-br from-card to-primary/5">
         <CardContent className="pt-6">
           <div className="grid gap-6 md:grid-cols-3">
             {/* Main Score */}
@@ -526,10 +524,11 @@ export function ContractScoreClient({
             </TooltipProvider>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      )}
 
-      {/* Rule-based score dimensions radar (optional — rendered when the
-          server passed the computed components alongside the AI score). */}
+      {/* Rule-based score dimensions radar — server-computed, so it renders
+          regardless of whether the AI call succeeded. */}
       {ruleBasedComponents && (
         <ContractScoreRadar
           components={ruleBasedComponents}
@@ -537,7 +536,14 @@ export function ContractScoreClient({
         />
       )}
 
-      {/* Tabs for detailed analysis */}
+      {/* When the AI call fails we still want the procedure-level margin
+          analysis visible, so hoist the margin card out of the Overview tab
+          in that case. */}
+      {aiFailed && <ContractMarginCard contractId={contractId} />}
+
+      {/* Tabs for detailed analysis — driven by the AI result, so only
+          rendered when the AI call succeeded. */}
+      {!aiFailed && aiScore && dimensions && (
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>
         <TabsList className="grid w-full max-w-2xl grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -921,6 +927,7 @@ export function ContractScoreClient({
           </div>
         </TabsContent>
       </Tabs>
+      )}
     </div>
   )
 }
