@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
@@ -82,6 +82,13 @@ export function ContractsListClient({
   } | null>(null)
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
+
+  // Keep the flat selectedForCompare id list (used by CompareModal + Compare
+  // tab) in sync with the TanStack rowSelection state.
+  useEffect(() => {
+    setSelectedForCompare(Object.keys(rowSelection).filter((k) => rowSelection[k]))
+  }, [rowSelection])
 
   const filters = {
     ...(statusFilter !== "all" && { status: statusFilter }),
@@ -140,14 +147,17 @@ export function ContractsListClient({
 
   const columns = useMemo(
     () =>
-      getContractColumns({
-        onView: (id) => router.push(`/dashboard/contracts/${id}`),
-        onEdit: (id) => router.push(`/dashboard/contracts/${id}/edit`),
-        onDelete: (contract) => {
-          setContractToDelete({ id: contract.id, name: contract.name })
-          setDeleteDialogOpen(true)
+      getContractColumns(
+        {
+          onView: (id) => router.push(`/dashboard/contracts/${id}`),
+          onEdit: (id) => router.push(`/dashboard/contracts/${id}/edit`),
+          onDelete: (contract) => {
+            setContractToDelete({ id: contract.id, name: contract.name })
+            setDeleteDialogOpen(true)
+          },
         },
-      }),
+        { selectable: true }
+      ),
     [router]
   )
 
@@ -468,14 +478,38 @@ export function ContractsListClient({
               </CardContent>
             </Card>
           ) : (
-            <DataTable
-              columns={columns}
-              data={contracts}
-              isLoading={isLoading}
-              onRowClick={(row) =>
-                router.push(`/dashboard/contracts/${row.id}`)
-              }
-            />
+            <>
+              {selectedForCompare.length >= 2 && (
+                <div className="sticky top-0 z-10 flex items-center justify-between rounded-md border bg-card/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+                  <p className="text-sm">
+                    {selectedForCompare.length} contracts selected
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setRowSelection({})}
+                    >
+                      Clear
+                    </Button>
+                    <Button size="sm" onClick={() => setCompareOpen(true)}>
+                      Compare ({selectedForCompare.length})
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <DataTable
+                columns={columns}
+                data={contracts}
+                isLoading={isLoading}
+                onRowClick={(row) =>
+                  router.push(`/dashboard/contracts/${row.id}`)
+                }
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                getRowId={(row) => row.id}
+              />
+            </>
           )}
         </TabsContent>
 

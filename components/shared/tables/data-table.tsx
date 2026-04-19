@@ -5,6 +5,8 @@ import {
   type ColumnDef,
   type SortingState,
   type ColumnFiltersState,
+  type RowSelectionState,
+  type OnChangeFn,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -39,6 +41,11 @@ interface DataTableProps<TData, TValue> {
   pageSize?: number
   onRowClick?: (row: TData) => void
   isLoading?: boolean
+  /** Optional controlled row selection state (TanStack rowSelection API). */
+  rowSelection?: RowSelectionState
+  onRowSelectionChange?: OnChangeFn<RowSelectionState>
+  /** When provided, TanStack keys selection by this id (e.g. row.id). */
+  getRowId?: (row: TData) => string
 }
 
 export function DataTable<TData, TValue>({
@@ -51,6 +58,9 @@ export function DataTable<TData, TValue>({
   pageSize = 20,
   onRowClick,
   isLoading,
+  rowSelection,
+  onRowSelectionChange,
+  getRowId,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -64,7 +74,13 @@ export function DataTable<TData, TValue>({
     getPaginationRowModel: pagination ? getPaginationRowModel() : undefined,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    state: { sorting, columnFilters },
+    onRowSelectionChange,
+    getRowId,
+    state: {
+      sorting,
+      columnFilters,
+      ...(rowSelection !== undefined ? { rowSelection } : {}),
+    },
     initialState: { pagination: { pageSize } },
   })
 

@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { ScoreBadge } from "@/components/shared/badges/score-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,9 +82,36 @@ function SortableHeader({
 }
 
 export function getContractColumns(
-  actions: ColumnActions
+  actions: ColumnActions,
+  options: { selectable?: boolean } = {}
 ): ColumnDef<ContractWithVendor>[] {
-  return [
+  const { selectable = false } = options
+
+  const selectionColumn: ColumnDef<ContractWithVendor> = {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && "indeterminate")
+        }
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  }
+
+  const columns: ColumnDef<ContractWithVendor>[] = [
     {
       accessorKey: "name",
       header: ({ column }) => (
@@ -302,4 +330,6 @@ export function getContractColumns(
       ),
     },
   ]
+
+  return selectable ? [selectionColumn, ...columns] : columns
 }
