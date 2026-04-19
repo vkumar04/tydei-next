@@ -32,6 +32,19 @@ export async function getCOGRecords(input: COGFilters) {
     })
   }
   if (filters.vendorId) conditions.push({ vendorId: filters.vendorId })
+  if (filters.matchStatus) {
+    // "variance_only" is a UI convenience that expands to the set of
+    // rows the user cares about when investigating cost leaks:
+    // off-contract items and price variances. Everything else is a
+    // literal enum value that matches COGMatchStatus.
+    if (filters.matchStatus === "variance_only") {
+      conditions.push({
+        matchStatus: { in: ["off_contract_item", "price_variance"] },
+      })
+    } else {
+      conditions.push({ matchStatus: filters.matchStatus })
+    }
+  }
   if (filters.dateFrom) {
     conditions.push({ transactionDate: { gte: new Date(filters.dateFrom) } })
   }

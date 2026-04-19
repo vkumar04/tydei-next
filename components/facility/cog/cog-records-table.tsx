@@ -76,6 +76,7 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
 
   const filters = {
     ...(vendorFilter && vendorFilter !== "all" && { vendorId: vendorFilter }),
+    ...(matchFilter !== "all" && { matchStatus: matchFilter }),
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
     page,
@@ -83,7 +84,7 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
   }
   const { data, isLoading, refetch } = useCOGRecords(facilityId, filters)
   const total = data?.total ?? 0
-  const totalPages = Math.ceil(total / pageSize)
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const { data: vendorData } = useVendorList()
   const deleteMutation = useDeleteCOGRecord()
   const updateMutation = useUpdateCOGRecord()
@@ -119,22 +120,12 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
     [editForm]
   )
 
-  // Filter by match status client-side. Server-side filtering on
-  // matchStatus lives in a future subsystem; for now the active page
-  // is filtered in-memory which is fine for the 50-row pageSize.
-  const filteredRecords = useMemo(() => {
-    const records = data?.records ?? []
-    if (matchFilter === "all") return records
-    if (matchFilter === "variance_only") {
-      return records.filter((r) => {
-        const s = r.matchStatus as COGMatchStatus | undefined
-        return s === "off_contract_item" || s === "price_variance"
-      })
-    }
-    return records.filter((r) => r.matchStatus === matchFilter)
-  }, [data, matchFilter])
+  // Filtering is now server-side via the `where` clause in
+  // getCOGRecords — the query below returns only the filtered slice
+  // for the current page and `total` reflects the filtered count.
+  const filteredRecords = data?.records ?? []
 
-  const hasAnyRecords = (data?.records?.length ?? 0) > 0
+  const hasAnyRecords = filteredRecords.length > 0
   const hasFilters =
     !!vendorFilter && vendorFilter !== "all"
       ? true
@@ -201,7 +192,13 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
             <>
               <Select
                 value={vendorFilter || "all"}
-                onValueChange={(v) => setVendorFilter(v === "all" ? "" : v)}
+                onValueChange={(v) => {
+                  // Filter changes reset to page 1 so the user sees
+                  // the first page of the new filtered result set
+                  // rather than a potentially-empty page N.
+                  setPage(1)
+                  setVendorFilter(v === "all" ? "" : v)
+                }}
               >
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="All vendors" />
@@ -217,7 +214,10 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
               </Select>
               <Select
                 value={matchFilter}
-                onValueChange={(v) => setMatchFilter(v as MatchFilterValue)}
+                onValueChange={(v) => {
+                  setPage(1)
+                  setMatchFilter(v as MatchFilterValue)
+                }}
               >
                 <SelectTrigger className="w-[220px]">
                   <SelectValue />
@@ -232,7 +232,7 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
               </Select>
               {matchFilter !== "all" && (
                 <Badge variant="outline" className="shrink-0">
-                  {filteredRecords.length} filtered
+                  {total.toLocaleString()} filtered
                 </Badge>
               )}
               <Button
@@ -260,12 +260,12 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
         />
       )}
 
-      {!isLoading && hasAnyRecords && filteredRecords.length === 0 && (
+      {!isLoading && hasFilters && filteredRecords.length === 0 && (
         <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
           <AlertTriangle className="h-5 w-5 text-amber-600" />
           <p className="text-sm text-amber-800 dark:text-amber-200">
-            No records match the current filters on this page. Adjust your
-            filters or navigate pages to see more data.
+            No records match the current filters. Adjust your filters to
+            see more data.
           </p>
         </div>
       )}

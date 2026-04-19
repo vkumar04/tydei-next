@@ -29,10 +29,28 @@ export type CreateCOGRecordInput = z.infer<typeof createCOGRecordSchema>
 
 // ─── COG Filters ────────────────────────────────────────────────
 
+/**
+ * Match status filter values. Includes the six enum values from
+ * COGMatchStatus plus a pseudo-value "variance_only" which expands on
+ * the server to (off_contract_item OR price_variance).
+ */
+export const cogMatchFilterSchema = z.enum([
+  "pending",
+  "on_contract",
+  "off_contract_item",
+  "out_of_scope",
+  "unknown_vendor",
+  "price_variance",
+  "variance_only",
+])
+
+export type COGMatchFilter = z.infer<typeof cogMatchFilterSchema>
+
 export const cogFiltersSchema = z.object({
   facilityId: z.string().optional(),
   search: z.string().optional(),
   vendorId: z.string().optional(),
+  matchStatus: cogMatchFilterSchema.optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   sortBy: z.string().optional(),
