@@ -108,7 +108,7 @@ describe("sortNotesNewestFirst", () => {
     id,
     contractId: "c-1",
     note: "...",
-    authorId: null,
+    authorId: "user-1",
     createdAt,
   })
 

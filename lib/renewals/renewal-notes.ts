@@ -78,7 +78,7 @@ export interface RenewalNote {
   id: string
   contractId: string
   note: string
-  authorId: string | null
+  authorId: string
   createdAt: Date
 }
 

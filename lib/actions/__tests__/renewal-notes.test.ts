@@ -14,7 +14,7 @@ interface NoteRow {
   id: string
   contractId: string
   note: string
-  authorId: string | null
+  authorId: string
   createdAt: Date
 }
 
@@ -45,11 +45,17 @@ vi.mock("@/lib/db", () => ({
       ),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         lastCreateData = data
+        // Mirror the DB NOT NULL constraint — reject null authorId.
+        if (typeof data.authorId !== "string" || data.authorId.length === 0) {
+          throw new Error(
+            "null value in column \"authorId\" violates not-null constraint",
+          )
+        }
         const row: NoteRow = {
           id: "note-new",
           contractId: data.contractId as string,
           note: data.note as string,
-          authorId: (data.authorId as string | null) ?? null,
+          authorId: data.authorId,
           createdAt: new Date("2026-04-18T12:00:00Z"),
         }
         noteRows.push(row)
@@ -192,6 +198,34 @@ describe("createRenewalNote", () => {
     })
 
     expect(lastCreateData?.note).toBe("trimmed note")
+  })
+
+  it("always persists authorId (never null) — mirrors DB NOT NULL", async () => {
+    contractRows = [{ id: "c-1" }]
+
+    await createRenewalNote({
+      contractId: "c-1",
+      note: "hi",
+    })
+
+    // authorId must be a non-empty string, matching the NOT NULL column.
+    expect(typeof lastCreateData?.authorId).toBe("string")
+    expect((lastCreateData?.authorId as string).length).toBeGreaterThan(0)
+    expect(lastCreateData?.authorId).toBe("user-1")
+  })
+
+  it("rejects create when session has no user id (null authorId)", async () => {
+    contractRows = [{ id: "c-1" }]
+    // Simulate a session that somehow has an empty user id. The DB
+    // NOT NULL constraint (mirrored in the prisma mock) must reject.
+    requireFacilityMock.mockResolvedValueOnce({
+      facility: { id: "fac-1" },
+      user: { id: "" },
+    })
+
+    await expect(
+      createRenewalNote({ contractId: "c-1", note: "hi" }),
+    ).rejects.toThrow(/not-null/i)
   })
 })
 

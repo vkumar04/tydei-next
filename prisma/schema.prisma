@@ -314,6 +314,7 @@ model User {
   credits          Credit[]
   auditLogs        AuditLog[]
   renewalAlertSettings RenewalAlertSettings?
+  renewalNotes     RenewalNote[]
 
   @@index([role])
   @@map("user")
@@ -820,13 +821,15 @@ model RenewalNote {
   id         String   @id @default(cuid())
   contractId String
   note       String
-  authorId   String?
+  authorId   String
   createdAt  DateTime @default(now())
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorId], references: [id])
 
   @@index([contractId])
   @@index([createdAt])
+  @@index([authorId])
   @@map("renewal_note")
 }
 
