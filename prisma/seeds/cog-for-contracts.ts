@@ -1,5 +1,6 @@
 import type { PrismaClient, Prisma } from "@prisma/client"
 import { applyTiers, computeRebate } from "@/lib/rebates/calculate"
+import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 
 // Vendor-specific realistic product catalogs used to generate synthetic COG
 // records that match active contracts. These are intentionally scoped to the
@@ -149,6 +150,12 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
       const primaryTerm = contract.terms[0]
       const tiers = primaryTerm?.tiers ?? []
 
+      // Charles R5.6: pricing-only contracts don't accrue rebates even
+      // though they produce COG. Skip ContractPeriod/Rebate writes for
+      // any non-rebate-bearing contract type so the transactions ledger
+      // stays empty the way the user configured it.
+      const accruesRebates = contractTypeEarnsRebates(contract.contractType)
+
       for (let m = 0; m < monthCount; m++) {
         const ps = new Date(start)
         ps.setMonth(ps.getMonth() + m)
@@ -167,7 +174,7 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
           { tierNumber: tierAchieved, spendMin: 0, rebateValue: rebatePercent },
         ])
 
-        if (primaryTerm) {
+        if (primaryTerm && accruesRebates) {
           const period = await prisma.contractPeriod.create({
             data: {
               contractId: contract.id,

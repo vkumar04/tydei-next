@@ -40,7 +40,11 @@ export async function seedContractPeriods(
     { contractId: c.integraDural.id, facilityId: f.lighthouseCommunity.id, spendRange: [8000, 15000], volumeRange: [30, 70], rebateRate: [0.02, 0.04] },
     { contractId: c.medtronicBio.id, facilityId: f.heritageRegional.id, spendRange: [18000, 30000], volumeRange: [40, 90], rebateRate: [0.02, 0.04] },
     { contractId: c.hologicMammo.id, facilityId: f.heritageRegional.id, spendRange: [5000, 8000], volumeRange: [50, 150], rebateRate: [0.02, 0.03] },
-    { contractId: c.strykerPricing.id, facilityId: f.lighthouseCommunity.id, spendRange: [10000, 20000], volumeRange: [30, 60], rebateRate: [0.01, 0.02] },
+    // Charles R5.6: strykerPricing is contractType=pricing_only, which is
+    // a locked-price agreement with no rebate structure. Seeding
+    // ContractPeriod rows against it produces phantom rebate rows in the
+    // transactions ledger. Pricing-only contracts get COG records
+    // (handled in cog-for-contracts.ts) but never accrue rebates.
   ]
 
   const records: Parameters<typeof prisma.contractPeriod.create>[0]["data"][] = []

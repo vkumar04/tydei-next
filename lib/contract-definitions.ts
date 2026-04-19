@@ -330,3 +330,18 @@ export const REBATE_TYPE_DEFINITIONS: Record<PrismaRebateType, Definition> = {
     description: "Fixed dollar rebate per qualifying procedure.",
   },
 }
+
+// ─── Rebate-eligibility predicate ──────────────────────────────────
+//
+// Charles R5.6: "on this pricing only contract it is showing rebates
+// and transactions when none were entered in when creating it." Certain
+// contract types are fundamentally NOT rebate-bearing — they're either
+// flat-price agreements (pricing_only) or lump-sum buys (capital) where
+// tier math and accrual ledgers don't apply. This predicate is the
+// canonical gate used by the accrual engine and seed helpers so phantom
+// rebate rows can't be written against price-only deals.
+export function contractTypeEarnsRebates(
+  contractType: PrismaContractType,
+): boolean {
+  return contractType !== "pricing_only"
+}

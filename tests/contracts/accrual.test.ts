@@ -263,3 +263,33 @@ describe("buildMonthlyAccruals — evaluationPeriod", () => {
     expect(rows[2].accruedAmount).toBe(600)
   })
 })
+
+// ─── Regression: Charles feedback R5.6 ───────────────────────────────
+//
+// Charles R5.6: "on this pricing only contract it is showing rebates
+// and transactions when none were entered in when creating it."
+// Pricing-only contracts are locked-price agreements — they are
+// fundamentally not rebate-bearing. The accrual/seed layers must treat
+// them as ineligible so the transactions ledger stays empty.
+
+import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
+
+describe("contractTypeEarnsRebates — R5.6 pricing-only gate", () => {
+  it("returns false for pricing_only (the fix)", () => {
+    expect(contractTypeEarnsRebates("pricing_only")).toBe(false)
+  })
+
+  it("returns true for usage, service, tie_in, grouped (rebate-bearing types)", () => {
+    expect(contractTypeEarnsRebates("usage")).toBe(true)
+    expect(contractTypeEarnsRebates("service")).toBe(true)
+    expect(contractTypeEarnsRebates("tie_in")).toBe(true)
+    expect(contractTypeEarnsRebates("grouped")).toBe(true)
+  })
+
+  it("returns true for capital (consumable portion of capital contracts can still rebate)", () => {
+    // Intentional: today only pricing_only is hard-excluded. Capital
+    // contracts often carry consumable/service sub-terms that pay
+    // rebates — we don't want to suppress those by blanket-filtering.
+    expect(contractTypeEarnsRebates("capital")).toBe(true)
+  })
+})

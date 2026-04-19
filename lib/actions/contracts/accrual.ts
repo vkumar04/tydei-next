@@ -14,6 +14,7 @@ import {
   type MonthlySpend,
 } from "@/lib/contracts/accrual"
 import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
+import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 import { serialize } from "@/lib/serialize"
 
 export async function getAccrualTimeline(contractId: string) {
@@ -28,6 +29,12 @@ export async function getAccrualTimeline(contractId: string) {
       },
     },
   })
+
+  // Charles R5.6: pricing-only contracts are not rebate-bearing. The
+  // accrual ledger must be empty for them — no phantom rows from COG.
+  if (!contractTypeEarnsRebates(contract.contractType)) {
+    return serialize({ rows: [], method: "cumulative" as RebateMethodName })
+  }
 
   const term = contract.terms[0]
   if (!term || term.tiers.length === 0) {
