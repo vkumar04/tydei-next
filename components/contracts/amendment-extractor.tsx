@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/table"
 import { updateContract } from "@/lib/actions/contracts"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import type { AmendmentChange } from "@/app/api/ai/extract-amendment/route"
 
 interface AmendmentExtractorProps {
@@ -53,9 +54,36 @@ interface AmendmentExtractorProps {
 //   1. upload    -> "upload" (file picker) + "extracting" (progress feedback)
 //   2. review    -> "review" change-diff table (oldValue vs newValue)
 //   3. pricing   -> pricing/term changes rendered inline within "review"
-//   4. confirm   -> validation questions + "Apply Changes" -> "applying"
+//   4. confirm   -> validation questions + "Apply Changes" -> "applying" -> "done"
 // "error" is an out-of-band recovery state, not part of the v0 happy path.
-type Stage = "upload" | "extracting" | "review" | "applying" | "error"
+export type Stage =
+  | "upload"
+  | "extracting"
+  | "review"
+  | "pricing"
+  | "confirm"
+  | "applying"
+  | "done"
+  | "error"
+
+/**
+ * Pure helper: returns the next stage in the v0 amendment flow, or `null` if
+ * `current` is the terminal stage (or not in the ordered flow). The order
+ * mirrors the 4-stage breadcrumb plus the two runtime states that follow
+ * user confirmation: upload → review → pricing → confirm → applying → done.
+ */
+export function nextStage(current: Stage): Stage | null {
+  const order: Stage[] = [
+    "upload",
+    "review",
+    "pricing",
+    "confirm",
+    "applying",
+    "done",
+  ]
+  const i = order.indexOf(current)
+  return i >= 0 && i < order.length - 1 ? order[i + 1] : null
+}
 
 type ConfidenceLevel = "high" | "medium" | "low"
 
@@ -281,6 +309,23 @@ export function AmendmentExtractor({
   const confConfig = confidenceConfig[confidence]
   const ConfIcon = confConfig.icon
 
+  // 4-stage breadcrumb mapping for v0 parity. Internal `extracting` maps to
+  // "upload" (same breadcrumb step), and `review`/`applying`/`done` map to
+  // the corresponding breadcrumb step. `error` is out-of-band.
+  const stages: Array<{ key: string; label: string }> = [
+    { key: "upload", label: "Upload" },
+    { key: "review", label: "Review" },
+    { key: "pricing", label: "Pricing" },
+    { key: "confirm", label: "Confirm" },
+  ]
+  const breadcrumbKey: string =
+    stage === "extracting"
+      ? "upload"
+      : stage === "applying" || stage === "done"
+        ? "confirm"
+        : stage
+  const currentIndex = stages.findIndex((s) => s.key === breadcrumbKey)
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
@@ -293,6 +338,30 @@ export function AmendmentExtractor({
             current contract.
           </DialogDescription>
         </DialogHeader>
+
+        {stage !== "error" && (
+          <div className="flex items-center gap-1 text-xs">
+            {stages.map((s, i) => (
+              <div key={s.key} className="flex items-center gap-1">
+                <span
+                  className={cn(
+                    "rounded-full border px-2 py-0.5",
+                    i < currentIndex &&
+                      "border-emerald-500 text-emerald-700 dark:text-emerald-400",
+                    i === currentIndex &&
+                      "border-foreground bg-foreground text-background",
+                    i > currentIndex && "text-muted-foreground",
+                  )}
+                >
+                  {i + 1}. {s.label}
+                </span>
+                {i < stages.length - 1 && (
+                  <span className="text-muted-foreground">→</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         <input
           ref={inputRef}
