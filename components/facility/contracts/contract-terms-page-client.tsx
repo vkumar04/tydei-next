@@ -12,6 +12,7 @@ import {
   upsertContractTiers,
 } from "@/lib/actions/contract-terms"
 import { getCategories } from "@/lib/actions/categories"
+import { getContractPricing } from "@/lib/actions/pricing-files"
 import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { PageHeader } from "@/components/shared/page-header"
@@ -44,6 +45,23 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
     queryKey: queryKeys.categories.all,
     queryFn: () => getCategories(),
   })
+
+  // Contract's pricing-file items — passed into the SpecificItemsPicker
+  // so users can scope a term to specific vendor item numbers.
+  const { data: pricingItems } = useQuery({
+    queryKey: ["contracts", contractId, "pricing-items"] as const,
+    queryFn: () => getContractPricing(contractId),
+    enabled: !!contractId,
+  })
+
+  const availableItems = useMemo(
+    () =>
+      (pricingItems ?? []).map((p) => ({
+        vendorItemNo: p.vendorItemNo,
+        description: p.description ?? null,
+      })),
+    [pricingItems],
+  )
 
   const availableCategories = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>()
@@ -196,6 +214,7 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
           onChange={setEditTerms}
           availableCategories={availableCategories}
           contractType={contract?.contractType}
+          availableItems={availableItems}
         />
       ) : (
         <ContractTermsDisplay
