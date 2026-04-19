@@ -10,6 +10,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import {
   buildMonthlyAccruals,
+  type EvaluationPeriod,
   type MonthlySpend,
 } from "@/lib/contracts/accrual"
 import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
@@ -41,6 +42,14 @@ export async function getAccrualTimeline(contractId: string) {
     rebateValue: Number(t.rebateValue),
   }))
   const method: RebateMethodName = term.rebateMethod ?? "cumulative"
+  // Honor ContractTerm.evaluationPeriod — per Charles R4.6, monthly-eval
+  // contracts should qualify tier by THIS MONTH'S spend, not cumulative
+  // annual. Only `monthly` | `quarterly` | `annual` are supported today;
+  // anything else falls through to annual (current behavior).
+  const evaluationPeriod: EvaluationPeriod =
+    term.evaluationPeriod === "monthly" || term.evaluationPeriod === "quarterly"
+      ? term.evaluationPeriod
+      : "annual"
 
   const end = new Date(
     Math.min(new Date().getTime(), contract.expirationDate.getTime()),
@@ -81,6 +90,6 @@ export async function getAccrualTimeline(contractId: string) {
     cursor.setUTCMonth(cursor.getUTCMonth() + 1)
   }
 
-  const rows = buildMonthlyAccruals(series, tiers, method)
+  const rows = buildMonthlyAccruals(series, tiers, method, evaluationPeriod)
   return serialize({ rows, method })
 }

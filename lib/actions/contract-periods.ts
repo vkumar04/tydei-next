@@ -3,7 +3,10 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
+import {
+  computeRebateFromPrismaTiers,
+  DEFAULT_COLLECTION_RATE,
+} from "@/lib/rebates/calculate"
 
 /**
  * Fetch all contract periods for a given contract, ordered by periodStart desc.
@@ -34,7 +37,10 @@ export async function getContractPeriods(contractId: string) {
       effectiveDate: true,
       expirationDate: true,
       terms: {
-        include: { tiers: { orderBy: { tierNumber: "asc" } } },
+        select: {
+          evaluationPeriod: true,
+          tiers: { orderBy: { tierNumber: "asc" } },
+        },
         orderBy: { createdAt: "asc" },
         take: 1,
       },
@@ -85,18 +91,33 @@ export async function getContractPeriods(contractId: string) {
 
   // Apply the contract's first-term tier structure to cumulative spend.
   const tiers = contract.terms[0]?.tiers ?? []
+  // Charles R4.6: honor `evaluationPeriod` — monthly-eval contracts
+  // qualify each month's tier from THAT month's spend, not a running
+  // cumulative annual total. Otherwise the ladder's "annual" spendMins
+  // are never reached by a single month.
+  const evaluationPeriod = contract.terms[0]?.evaluationPeriod ?? "annual"
   const sortedKeys = Array.from(monthBuckets.keys()).sort()
   let cumulative = 0
   const synthetic = sortedKeys.map((key, idx) => {
     const bucket = monthBuckets.get(key)!
     cumulative += bucket.spend
 
-    // Tier is determined by CUMULATIVE spend-to-date, but the rebate
-    // amount is earned on THIS month's spend at that tier's rate.
-    const { tierAchieved, rebatePercent } = computeRebateFromPrismaTiers(cumulative, tiers)
-    const { rebateEarned, rebateCollected } = computeRebateFromPrismaTiers(bucket.spend, [
-      { tierNumber: tierAchieved, spendMin: 0, rebateValue: rebatePercent },
-    ] as unknown as Parameters<typeof computeRebateFromPrismaTiers>[1])
+    // Pick the tier-qualification denominator based on evaluationPeriod.
+    // Charles R4.6: monthly-eval contracts should qualify on the month's
+    // own spend, not cumulative year-to-date, otherwise tiers whose
+    // spendMin was sized for annual totals never trigger.
+    const tierSpend =
+      evaluationPeriod === "monthly" ? bucket.spend : cumulative
+    const { tierAchieved, rebatePercent } = computeRebateFromPrismaTiers(
+      tierSpend,
+      tiers,
+    )
+    // Apply the achieved tier's rate to this month's spend directly.
+    // (The earlier version re-invoked computeRebateFromPrismaTiers with a
+    // synthetic tier but lost the rebateType discriminator, silently
+    // returning zero for percent_of_spend terms.)
+    const rebateEarned = (bucket.spend * rebatePercent) / 100
+    const rebateCollected = rebateEarned * DEFAULT_COLLECTION_RATE
 
     return {
       id: `synthetic-${contract.id}-${key}`,
