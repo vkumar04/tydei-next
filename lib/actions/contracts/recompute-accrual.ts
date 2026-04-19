@@ -50,6 +50,13 @@ const AUTO_ACCRUAL_PREFIX = "[auto-accrual]"
 export interface RecomputeAccrualResult {
   deleted: number
   inserted: number
+  // Total earned across all auto-accrual rows AFTER the rewrite. The
+  // caller compares this against a prior total (if they have one) to
+  // report how much the number moved; the action itself does not track
+  // history. Charles W1.K: surfaced so the "Recompute Earned Rebates"
+  // button in the Transactions tab can toast a real $ figure instead of
+  // just row counts.
+  sumEarned: number
 }
 
 export async function recomputeAccrualForContract(
@@ -71,7 +78,7 @@ export async function recomputeAccrualForContract(
   // caller already validated the write. This just means we can't
   // recompute (e.g. cross-facility test fixtures).
   if (!contract) {
-    return { deleted: 0, inserted: 0 }
+    return { deleted: 0, inserted: 0, sumEarned: 0 }
   }
 
   // Always wipe the previous auto-accrual rows first so a term edit
@@ -92,7 +99,7 @@ export async function recomputeAccrualForContract(
   // series and sum per-month across terms before writing Rebate rows.
   const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
   if (termsWithTiers.length === 0) {
-    return { deleted: deleteResult.count, inserted: 0 }
+    return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }
   }
 
   const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
@@ -197,10 +204,26 @@ export async function recomputeAccrualForContract(
     })
 
   if (toInsert.length === 0) {
-    return { deleted: deleteResult.count, inserted: 0 }
+    return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }
   }
 
   const createResult = await prisma.rebate.createMany({ data: toInsert })
 
-  return { deleted: deleteResult.count, inserted: createResult.count }
+  // Re-read the auto-accrual total so the caller can render a real $
+  // figure in a toast. Filtering on the notes prefix matches the same
+  // set we delete/re-create above.
+  const sumAgg = await prisma.rebate.aggregate({
+    where: {
+      contractId,
+      notes: { startsWith: AUTO_ACCRUAL_PREFIX },
+    },
+    _sum: { rebateEarned: true },
+  })
+  const sumEarned = Number(sumAgg._sum.rebateEarned ?? 0)
+
+  return {
+    deleted: deleteResult.count,
+    inserted: createResult.count,
+    sumEarned,
+  }
 }

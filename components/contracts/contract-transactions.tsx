@@ -1,15 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   DollarSign,
   TrendingUp,
   CreditCard,
   Calendar,
   HelpCircle,
-  Plus,
   ArrowUpRight,
+  RefreshCw,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -54,6 +54,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { getContractPeriods, getContractRebates } from "@/lib/actions/contract-periods"
+import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { queryKeys } from "@/lib/query-keys"
 import { toast } from "sonner"
 
@@ -135,25 +136,29 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 // one button into three explicit buttons. Each opens a dialog that
 // hardcodes `mode`, so the user can't pick the wrong one.
 //
-//   - "Log Earned Rebate"    → type=rebate, rebateKind=earned
+// Charles W1.K: the "Log Earned Rebate" manual-entry button was
+// semantically wrong — earned rebates are an ACCRUAL the engine
+// computes from spend × tier rate × closed period, never a
+// human-entered number. That button is gone; its slot is now the
+// "Recompute Earned Rebates" action which invokes
+// `recomputeAccrualForContract`. Dialog machinery still supports the
+// "rebate-earned" kind because `createContractTransaction` still
+// accepts it and other call sites (imports, scripts) may drive it.
+//
 //   - "Log Collected Rebate" → type=rebate, rebateKind=collected
 //   - "Log Credit / Payment" → type=credit | payment (sub-selected)
 //
 // The server action (createContractTransaction) is unchanged.
 type DialogMode =
-  | { kind: "rebate-earned" }
   | { kind: "rebate-collected" }
   | { kind: "credit-or-payment" }
 
 function dialogTitle(mode: DialogMode): string {
-  if (mode.kind === "rebate-earned") return "Log Earned Rebate"
   if (mode.kind === "rebate-collected") return "Log Collected Rebate"
   return "Log Credit or Payment"
 }
 
 function dialogDescription(mode: DialogMode): string {
-  if (mode.kind === "rebate-earned")
-    return "Records an accrual. Adds to Rebates Earned only — use for a closed-period accrual entry."
   if (mode.kind === "rebate-collected")
     return "Records a payment received from the vendor. Adds to Rebates Collected only — does NOT add to Rebates Earned."
   return "Records a credit memo or vendor payment against this contract."
@@ -197,12 +202,12 @@ function TransactionDialog({
       toast.error("Please enter a valid amount")
       return
     }
-    // Quantity is optional, but if present it must parse to a positive number.
-    // Only meaningful for rebate-earned entries (per-unit / per-procedure
-    // tier math). Ignored for credit/payment AND for rebate-collected (a
-    // collection row records money received, not units).
+    // Quantity is optional on rebate-collected entries (R5.16 kept it on
+    // the collected-rebate dialog for per-unit / per-procedure contracts
+    // where the vendor settles with a quantity as well as a dollar
+    // amount). Ignored for credit/payment.
     let parsedQuantity: number | undefined
-    if (mode.kind === "rebate-earned" && quantity.trim() !== "") {
+    if (mode.kind === "rebate-collected" && quantity.trim() !== "") {
       const q = parseFloat(quantity.replace(/[^0-9.]/g, ""))
       if (isNaN(q) || q <= 0) {
         toast.error("Please enter a valid quantity")
@@ -215,10 +220,7 @@ function TransactionDialog({
     // the user clicked fully determines the split.
     let type: TransactionType
     let rebateKind: RebateKind | undefined
-    if (mode.kind === "rebate-earned") {
-      type = "rebate"
-      rebateKind = "earned"
-    } else if (mode.kind === "rebate-collected") {
+    if (mode.kind === "rebate-collected") {
       type = "rebate"
       rebateKind = "collected"
     } else {
@@ -299,7 +301,7 @@ function TransactionDialog({
               />
             </div>
           </div>
-          {mode.kind === "rebate-earned" && (
+          {mode.kind === "rebate-collected" && (
             <div className="space-y-2">
               <Label htmlFor="txn-qty">Quantity</Label>
               <Input
@@ -313,7 +315,7 @@ function TransactionDialog({
                 onChange={(e) => setQuantity(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Optional. Units or procedures this rebate covers (for
+                Optional. Units or procedures this collection covers (for
                 per-unit or per-procedure contract terms).
               </p>
             </div>
@@ -325,9 +327,7 @@ function TransactionDialog({
               placeholder={
                 mode.kind === "rebate-collected"
                   ? "e.g., Q1 2025 rebate check received"
-                  : mode.kind === "rebate-earned"
-                    ? "e.g., Q1 2025 Spend Rebate"
-                    : "e.g., Q1 2025 credit memo"
+                  : "e.g., Q1 2025 credit memo"
               }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -364,35 +364,79 @@ function AddTransactionButtons({
   queryClient: ReturnType<typeof useQueryClient>
 }) {
   const [mode, setMode] = useState<DialogMode | null>(null)
+
+  // Charles W1.K: recompute auto-accrual Rebate rows on demand. The
+  // engine is the single source of truth for earned numbers — this
+  // button just invokes it from the UI and reports the result. We
+  // capture the pre-recompute `sumEarned` via a staged mutationFn so
+  // the toast can describe how far the number moved.
+  const recompute = useMutation({
+    mutationFn: async () => {
+      const result = await recomputeAccrualForContract(contractId)
+      return result
+    },
+    onSuccess: (result) => {
+      const earned = result.sumEarned
+      toast.success(
+        `Regenerated ${result.inserted} auto-accrual ${result.inserted === 1 ? "row" : "rows"} across closed periods — $${earned.toLocaleString(undefined, { maximumFractionDigits: 2 })} earned.`,
+      )
+      queryClient.invalidateQueries({
+        queryKey: ["contract-periods", contractId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["contractPeriods", contractId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["contractRebates", contractId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.detail(contractId),
+      })
+    },
+    onError: () => {
+      toast.error("Failed to recompute earned rebates")
+    },
+  })
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          className="gap-2"
-          onClick={() => setMode({ kind: "rebate-earned" })}
-        >
-          <Plus className="h-4 w-4" />
-          Log Earned Rebate
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          className="gap-2"
-          onClick={() => setMode({ kind: "rebate-collected" })}
-        >
-          <CreditCard className="h-4 w-4" />
-          Log Collected Rebate
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-2"
-          onClick={() => setMode({ kind: "credit-or-payment" })}
-        >
-          <DollarSign className="h-4 w-4" />
-          Log Credit / Payment
-        </Button>
+      <div className="flex flex-col items-start gap-2">
+        <p className="text-xs text-muted-foreground">
+          Earned rebates are computed automatically from spend &times; tier
+          rate each time a rebate period closes. Click Recompute to refresh
+          from current tier settings.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            className="gap-2"
+            onClick={() => recompute.mutate()}
+            disabled={recompute.isPending}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${recompute.isPending ? "animate-spin" : ""}`}
+            />
+            {recompute.isPending ? "Recomputing…" : "Recompute Earned Rebates"}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="gap-2"
+            onClick={() => setMode({ kind: "rebate-collected" })}
+          >
+            <CreditCard className="h-4 w-4" />
+            Log Collected Rebate
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2"
+            onClick={() => setMode({ kind: "credit-or-payment" })}
+          >
+            <DollarSign className="h-4 w-4" />
+            Log Credit / Payment
+          </Button>
+        </div>
       </div>
       {mode !== null && (
         <TransactionDialog
@@ -592,8 +636,9 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No contract period data available yet. Use &quot;Add Transaction&quot; to record
-            rebates, credits, or payments manually.
+            No contract period data available yet. Click &quot;Recompute Earned
+            Rebates&quot; to generate accruals from current tier settings, or use
+            the Log buttons to record collected rebates, credits, or payments.
           </p>
         </CardContent>
       </Card>
