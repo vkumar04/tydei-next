@@ -316,21 +316,38 @@ export async function getContract(
     0,
   )
 
-  // Live spend is still useful for tier-progress / projection surfaces.
-  // Prefer enriched COG rows (contractId set) for this contract; fall back to
-  // un-enriched vendor rows so pre-enrichment data still counts but other
-  // contracts on the same vendor don't leak in.
-  const cogAgg = await prisma.cOGRecord.aggregate({
-    where: {
-      facilityId: facility.id,
-      OR: [
-        { contractId: contract.id },
-        { contractId: null, vendorId: contract.vendorId },
-      ],
-    },
-    _sum: { extendedPrice: true },
-  })
-  const currentSpend = Number(cogAgg._sum.extendedPrice ?? 0)
+  // Spend resolution chain — persisted `ContractPeriod.totalSpend` is the
+  // authoritative source (facility-recorded rollups match the tier/rebate
+  // math and the reports page). Precedence:
+  //   1. Aggregate ContractPeriod.totalSpend WHERE contractId = X
+  //   2. Fall back to COGRecord.extendedPrice WHERE contractId = X
+  //      (only for contracts that haven't recorded periods yet)
+  //   3. Zero
+  // No vendor-wide COG fallback — it leaks spend across contracts on the
+  // same vendor. No tier-engine derivation — spend is a recorded figure.
+  // If a periodId was passed, constrain the ContractPeriod aggregate to
+  // that window so the displayed value matches the period filter.
+  const [cogAgg, periodAgg] = await Promise.all([
+    prisma.cOGRecord.aggregate({
+      where: { facilityId: facility.id, contractId: contract.id },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.contractPeriod.aggregate({
+      where: {
+        contractId: contract.id,
+        ...(period
+          ? {
+              periodStart: { gte: period.periodStart },
+              periodEnd: { lte: period.periodEnd },
+            }
+          : {}),
+      },
+      _sum: { totalSpend: true },
+    }),
+  ])
+  const cogSpend = Number(cogAgg._sum.extendedPrice ?? 0)
+  const periodSpend = Number(periodAgg._sum.totalSpend ?? 0)
+  const currentSpend = periodSpend > 0 ? periodSpend : cogSpend
 
   return serialize({ ...contract, rebateEarned, rebateCollected, currentSpend })
 }

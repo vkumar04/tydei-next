@@ -106,7 +106,9 @@ export function ContractDetailClient({
     // Server already applies the correct temporal filters:
     //   rebateEarned    — sums Rebate rows where payPeriodEnd <= today
     //   rebateCollected — sums rows where collectionDate != null
-    //   currentSpend    — COGRecord aggregate for facility+vendor
+    //   currentSpend    — ContractPeriod.totalSpend rollup for this contract,
+    //                     falling back to COGRecord.extendedPrice (contractId)
+    //                     when no periods are recorded yet
     // (See lib/actions/contracts.ts::getContract.) Trust the server values.
     const rebateEarned = Number(contract.rebateEarned ?? 0)
     const rebateCollected = Number(contract.rebateCollected ?? 0)
