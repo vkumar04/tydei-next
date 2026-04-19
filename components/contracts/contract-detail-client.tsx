@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   ArrowLeft,
   Calendar,
@@ -21,6 +22,9 @@ import { formatCurrency, formatDate } from "@/lib/formatting"
 import { ContractDetailOverview } from "@/components/contracts/contract-detail-overview"
 import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
+import { DocumentUpload } from "@/components/contracts/document-upload"
+import { createContractDocument } from "@/lib/actions/contracts/documents"
+import { queryKeys } from "@/lib/query-keys"
 import { ContractTransactions } from "@/components/contracts/contract-transactions"
 import { ContractPricingTab } from "@/components/contracts/contract-pricing-tab"
 import { ContractInsightsCards } from "@/components/contracts/contract-insights-cards"
@@ -58,6 +62,7 @@ export function ContractDetailClient({
   contractId,
 }: ContractDetailClientProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [periodId, setPeriodId] = useState<string | undefined>(undefined)
   const { data: contract, isLoading } = useContract(contractId, periodId)
   const { data: periods } = useQuery({
@@ -68,6 +73,31 @@ export function ContractDetailClient({
   const deleteMutation = useDeleteContract()
   const [showDelete, setShowDelete] = useState(false)
   const [showAmendment, setShowAmendment] = useState(false)
+  const [docDialogOpen, setDocDialogOpen] = useState(false)
+
+  async function handleDocUploaded(doc: {
+    name: string
+    type: string
+    url: string
+  }) {
+    try {
+      await createContractDocument({
+        contractId,
+        name: doc.name,
+        url: doc.url,
+        type: doc.type,
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.detail(contractId),
+      })
+      toast.success("Document uploaded")
+      setDocDialogOpen(false)
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to upload document",
+      )
+    }
+  }
 
   const stats = useMemo(() => {
     if (!contract) return null
@@ -617,7 +647,11 @@ export function ContractDetailClient({
 
         {/* ── Documents Tab ────────────────────────────────────── */}
         <TabsContent value="documents" className="mt-6">
-          <ContractDocumentsList documents={contract.documents} contractId={contractId} />
+          <ContractDocumentsList
+            documents={contract.documents}
+            contractId={contractId}
+            onUpload={() => setDocDialogOpen(true)}
+          />
         </TabsContent>
       </Tabs>
 
@@ -642,6 +676,13 @@ export function ContractDetailClient({
         onApplied={() => {
           window.location.reload()
         }}
+      />
+
+      <DocumentUpload
+        contractId={contractId}
+        open={docDialogOpen}
+        onOpenChange={setDocDialogOpen}
+        onUploaded={handleDocUploaded}
       />
     </div>
   )
