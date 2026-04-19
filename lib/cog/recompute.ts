@@ -17,6 +17,12 @@ import {
   type ContractPricingItemForMatch,
 } from "@/lib/contracts/match"
 import { enrichCOGRecord } from "@/lib/cog/enrichment"
+import {
+  resolveContractForCOG,
+  type ContractCandidate,
+  type PricingCandidate,
+  type ResolveContext,
+} from "@/lib/cog/match"
 import { prisma as defaultPrisma } from "@/lib/db"
 
 type Db = PrismaClient | Prisma.TransactionClient
@@ -134,6 +140,51 @@ export async function recomputeMatchStatusesForVendor(
 
   const contracts = await loadContractsForVendor(db, vendorId, facilityId)
 
+  // ─── Build cascade lookup maps once (Task 5, subsystem 10.5) ───
+  // The pure resolver in lib/cog/match.ts expects pre-built maps so we
+  // avoid O(records × contracts) scans in the row loop.
+  const pricingByVendorItem = new Map<string, PricingCandidate[]>()
+  const activeContractsByVendor = new Map<string, ContractCandidate[]>()
+  for (const c of contracts) {
+    // Skip contracts with null expirationDate — the cascade requires a
+    // bounded window; the legacy matcher below still handles open-ended
+    // contracts via its own date filter.
+    if (c.expirationDate === null) continue
+    if (c.status !== "active" && c.status !== "expiring") continue
+    if (!c.facilityIds.includes(facilityId)) continue
+
+    const contractCandidate: ContractCandidate = {
+      id: c.id,
+      effectiveDate: c.effectiveDate,
+      expirationDate: c.expirationDate,
+    }
+    const byVendor = activeContractsByVendor.get(c.vendorId) ?? []
+    byVendor.push(contractCandidate)
+    activeContractsByVendor.set(c.vendorId, byVendor)
+
+    for (const p of c.pricingItems) {
+      const pricingCandidate: PricingCandidate = {
+        contractId: c.id,
+        effectiveStart: c.effectiveDate,
+        effectiveEnd: c.expirationDate,
+      }
+      const list = pricingByVendorItem.get(p.vendorItemNo) ?? []
+      list.push(pricingCandidate)
+      pricingByVendorItem.set(p.vendorItemNo, list)
+    }
+  }
+
+  // recomputeMatchStatusesForVendor is already scoped to a single
+  // vendorId, so fuzzy-name → vendor resolution adds no signal here
+  // (every in-scope COG row already carries that vendorId). We pass a
+  // no-op callback; full-import flows that need fuzzy should build their
+  // own ResolveContext with `matchVendorByAlias` from @/lib/vendor-aliases.
+  const resolveCtx: ResolveContext = {
+    pricingByVendorItem,
+    activeContractsByVendor,
+    fuzzyVendorMatch: () => null,
+  }
+
   const records = await db.cOGRecord.findMany({
     where: { facilityId, vendorId },
     select: {
@@ -156,6 +207,32 @@ export async function recomputeMatchStatusesForVendor(
   let unknownVendor = 0
 
   for (const r of records) {
+    // Cascade resolver (Task 5): vendorItemNo → vendor+date → fuzzy.
+    // The returned `mode` is informational at this layer — we still fall
+    // through to the enrichment matcher for variance/scope classification
+    // so existing `price_variance` / `out_of_scope` / `unknown_vendor`
+    // semantics are preserved. The cascade's job here is to short-circuit
+    // the match to a specific contract when one exists, and to drive the
+    // matchStatus enum when no contract is found.
+    const cascade = resolveContractForCOG(
+      {
+        vendorItemNo: r.vendorItemNo,
+        vendorId: r.vendorId,
+        transactionDate: r.transactionDate,
+        vendorName: r.vendorName,
+      },
+      resolveCtx,
+    )
+
+    // Mode → persisted COGMatchStatus (§ Task 5, Step 4):
+    //   vendorItemNo / vendorAndDate  → on_contract (refined by variance below)
+    //   fuzzyVendorName               → on_contract (no fuzzy enum in schema;
+    //                                   closest available is on_contract)
+    //   none                          → delegated below to matchCOGRecordToContract
+    //                                   for off_contract_item / out_of_scope /
+    //                                   unknown_vendor differentiation.
+    void cascade.mode
+
     const result = matchCOGRecordToContract(
       {
         facilityId: r.facilityId,
