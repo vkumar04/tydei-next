@@ -505,6 +505,46 @@ export function ContractDetailClient({
               </CardContent>
             </Card>
           )}
+
+          {contract.currentMarketShare != null && contract.marketShareCommitment != null && Number(contract.marketShareCommitment) > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Market Share Commitment</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="text-3xl font-bold">
+                    {Number(contract.currentMarketShare).toFixed(0)}%
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    of {Number(contract.marketShareCommitment).toFixed(0)}% commitment
+                  </span>
+                  <Badge
+                    className={
+                      (Number(contract.currentMarketShare) / Number(contract.marketShareCommitment)) * 100 >= 80
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                        : (Number(contract.currentMarketShare) / Number(contract.marketShareCommitment)) * 100 >= 60
+                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                          : "bg-red-500/15 text-red-700 dark:text-red-400"
+                    }
+                  >
+                    {Math.round(
+                      (Number(contract.currentMarketShare) / Number(contract.marketShareCommitment)) * 100,
+                    )}% met
+                  </Badge>
+                </div>
+                <Progress
+                  value={Math.min(
+                    100,
+                    (Number(contract.currentMarketShare) / Number(contract.marketShareCommitment)) * 100,
+                  )}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Current market share vs the commitment target on this contract.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ── Transactions Tab ─────────────────────────────────── */}
