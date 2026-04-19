@@ -29,7 +29,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   Select,
@@ -129,17 +128,64 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   upcoming: { label: "Upcoming", variant: "outline" },
 }
 
-function AddTransactionDialog({ contractId, queryClient }: { contractId: string; queryClient: ReturnType<typeof useQueryClient> }) {
-  const [open, setOpen] = useState(false)
-  const [type, setType] = useState<TransactionType>("rebate")
-  // Charles R5.34: for type=rebate, split earned (accrual) vs collected
-  // (payment received). The server writes into distinct Rebate columns so
-  // a collection entry no longer inflates "Rebates Earned".
-  const [rebateKind, setRebateKind] = useState<RebateKind>("earned")
+// Charles R5.34-b: the previous single "Add Transaction" dialog had a
+// kind selector (earned vs collected) tucked inside a second <Select>
+// which defaulted to "earned". That was easy to miss — Charles logged
+// a collection and the amount landed in rebateEarned. Fix: split the
+// one button into three explicit buttons. Each opens a dialog that
+// hardcodes `mode`, so the user can't pick the wrong one.
+//
+//   - "Log Earned Rebate"    → type=rebate, rebateKind=earned
+//   - "Log Collected Rebate" → type=rebate, rebateKind=collected
+//   - "Log Credit / Payment" → type=credit | payment (sub-selected)
+//
+// The server action (createContractTransaction) is unchanged.
+type DialogMode =
+  | { kind: "rebate-earned" }
+  | { kind: "rebate-collected" }
+  | { kind: "credit-or-payment" }
+
+function dialogTitle(mode: DialogMode): string {
+  if (mode.kind === "rebate-earned") return "Log Earned Rebate"
+  if (mode.kind === "rebate-collected") return "Log Collected Rebate"
+  return "Log Credit or Payment"
+}
+
+function dialogDescription(mode: DialogMode): string {
+  if (mode.kind === "rebate-earned")
+    return "Records an accrual. Adds to Rebates Earned only — use for a closed-period accrual entry."
+  if (mode.kind === "rebate-collected")
+    return "Records a payment received from the vendor. Adds to Rebates Collected only — does NOT add to Rebates Earned."
+  return "Records a credit memo or vendor payment against this contract."
+}
+
+function TransactionDialog({
+  contractId,
+  queryClient,
+  mode,
+  open,
+  onOpenChange,
+}: {
+  contractId: string
+  queryClient: ReturnType<typeof useQueryClient>
+  mode: DialogMode
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  // For the credit/payment dialog only, let the user pick which of the two.
+  const [cpType, setCpType] = useState<"credit" | "payment">("credit")
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
   const [date, setDate] = useState("")
   const [quantity, setQuantity] = useState("")
+
+  function reset() {
+    setCpType("credit")
+    setAmount("")
+    setDescription("")
+    setDate("")
+    setQuantity("")
+  }
 
   async function handleSubmit() {
     if (!amount || !description || !date) {
@@ -152,11 +198,11 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
       return
     }
     // Quantity is optional, but if present it must parse to a positive number.
-    // Only meaningful for rebate-type entries tied to per-unit / per-procedure
-    // contract terms; ignored by the server for credit/payment AND for
-    // rebateKind=collected (a collection row records money received, not units).
+    // Only meaningful for rebate-earned entries (per-unit / per-procedure
+    // tier math). Ignored for credit/payment AND for rebate-collected (a
+    // collection row records money received, not units).
     let parsedQuantity: number | undefined
-    if (quantity.trim() !== "") {
+    if (mode.kind === "rebate-earned" && quantity.trim() !== "") {
       const q = parseFloat(quantity.replace(/[^0-9.]/g, ""))
       if (isNaN(q) || q <= 0) {
         toast.error("Please enter a valid quantity")
@@ -164,17 +210,32 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
       }
       parsedQuantity = q
     }
+
+    // Dispatch mode → (type, rebateKind) with NO defaulting — the button
+    // the user clicked fully determines the split.
+    let type: TransactionType
+    let rebateKind: RebateKind | undefined
+    if (mode.kind === "rebate-earned") {
+      type = "rebate"
+      rebateKind = "earned"
+    } else if (mode.kind === "rebate-collected") {
+      type = "rebate"
+      rebateKind = "collected"
+    } else {
+      type = cpType
+      rebateKind = undefined
+    }
+
     try {
       const { createContractTransaction } = await import("@/lib/actions/contract-periods")
       await createContractTransaction({
         contractId,
-        type: type as "rebate" | "credit" | "payment",
+        type,
         amount: parsedAmount,
         description,
         date,
-        rebateKind: type === "rebate" ? rebateKind : undefined,
-        quantity:
-          type === "rebate" && rebateKind === "earned" ? parsedQuantity : undefined,
+        rebateKind,
+        quantity: parsedQuantity,
       })
       toast.success("Transaction recorded")
       // Refetch periods + rebates to surface the new row, and invalidate
@@ -190,68 +251,39 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
     } catch {
       toast.error("Failed to save transaction")
     }
-    setType("rebate")
-    setRebateKind("earned")
-    setAmount("")
-    setDescription("")
-    setDate("")
-    setQuantity("")
-    setOpen(false)
+    reset()
+    onOpenChange(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Transaction
-        </Button>
-      </DialogTrigger>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) reset()
+        onOpenChange(next)
+      }}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add Contract Transaction</DialogTitle>
-          <DialogDescription>
-            Record a rebate, credit, or payment for this contract.
-          </DialogDescription>
+          <DialogTitle>{dialogTitle(mode)}</DialogTitle>
+          <DialogDescription>{dialogDescription(mode)}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Transaction Type</Label>
-            <Select value={type} onValueChange={(v) => setType(v as TransactionType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="rebate">Rebate</SelectItem>
-                <SelectItem value="credit">Credit</SelectItem>
-                <SelectItem value="payment">Payment</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {type === "rebate" && (
+          {mode.kind === "credit-or-payment" && (
             <div className="space-y-2">
-              <Label>Transaction Kind</Label>
+              <Label>Transaction Type</Label>
               <Select
-                value={rebateKind}
-                onValueChange={(v) => setRebateKind(v as RebateKind)}
+                value={cpType}
+                onValueChange={(v) => setCpType(v as "credit" | "payment")}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="earned">
-                    Rebate earned &mdash; accrual for a closed period
-                  </SelectItem>
-                  <SelectItem value="collected">
-                    Rebate collected &mdash; payment received from vendor
-                  </SelectItem>
+                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="payment">Payment</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                {rebateKind === "earned"
-                  ? "Adds to Rebates Earned once the period closes. Use for a manual accrual entry."
-                  : "Adds to Rebates Collected only. Use when the vendor payment lands — does NOT add to Rebates Earned."}
-              </p>
             </div>
           )}
           <div className="space-y-2">
@@ -267,7 +299,7 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
               />
             </div>
           </div>
-          {type === "rebate" && rebateKind === "earned" && (
+          {mode.kind === "rebate-earned" && (
             <div className="space-y-2">
               <Label htmlFor="txn-qty">Quantity</Label>
               <Input
@@ -290,13 +322,21 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
             <Label htmlFor="txn-desc">Description *</Label>
             <Input
               id="txn-desc"
-              placeholder="e.g., Q1 2025 Spend Rebate"
+              placeholder={
+                mode.kind === "rebate-collected"
+                  ? "e.g., Q1 2025 rebate check received"
+                  : mode.kind === "rebate-earned"
+                    ? "e.g., Q1 2025 Spend Rebate"
+                    : "e.g., Q1 2025 credit memo"
+              }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="txn-date">Date *</Label>
+            <Label htmlFor="txn-date">
+              {mode.kind === "rebate-collected" ? "Collection Date *" : "Date *"}
+            </Label>
             <Input
               id="txn-date"
               type="date"
@@ -306,13 +346,66 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={handleSubmit}>Record Transaction</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function AddTransactionButtons({
+  contractId,
+  queryClient,
+}: {
+  contractId: string
+  queryClient: ReturnType<typeof useQueryClient>
+}) {
+  const [mode, setMode] = useState<DialogMode | null>(null)
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          className="gap-2"
+          onClick={() => setMode({ kind: "rebate-earned" })}
+        >
+          <Plus className="h-4 w-4" />
+          Log Earned Rebate
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="gap-2"
+          onClick={() => setMode({ kind: "rebate-collected" })}
+        >
+          <CreditCard className="h-4 w-4" />
+          Log Collected Rebate
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-2"
+          onClick={() => setMode({ kind: "credit-or-payment" })}
+        >
+          <DollarSign className="h-4 w-4" />
+          Log Credit / Payment
+        </Button>
+      </div>
+      {mode !== null && (
+        <TransactionDialog
+          contractId={contractId}
+          queryClient={queryClient}
+          mode={mode}
+          open={mode !== null}
+          onOpenChange={(next) => {
+            if (!next) setMode(null)
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -495,7 +588,7 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
             <Calendar className="h-4 w-4" />
             Transaction Ledger
           </CardTitle>
-          <AddTransactionDialog contractId={contractId} queryClient={queryClient} />
+          <AddTransactionButtons contractId={contractId} queryClient={queryClient} />
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -586,7 +679,7 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
               Rebates, credits, and payments for this contract
             </CardDescription>
           </div>
-          <AddTransactionDialog contractId={contractId} queryClient={queryClient} />
+          <AddTransactionButtons contractId={contractId} queryClient={queryClient} />
         </CardHeader>
         <CardContent>
           <Tabs
