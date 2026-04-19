@@ -3,9 +3,15 @@
 import type { ColumnDef } from "@tanstack/react-table"
 import type { COGRecord, COGMatchStatus } from "@prisma/client"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
-import { Edit, Trash2 } from "lucide-react"
+import { Edit, HelpCircle, Trash2 } from "lucide-react"
 
 type COGRecordWithVendor = COGRecord & {
   vendor: { id: string; name: string } | null
@@ -15,40 +21,61 @@ type COGRecordWithVendor = COGRecord & {
 // Visual vocabulary for the 6 match statuses. Colors align with the
 // three-level severity map (minor / moderate / major) from the
 // canonical spec (§2, §4.12 of platform-data-model reconciliation).
+// `description` is the plain-English explanation surfaced in the
+// column tooltip + header legend so facility users can decode the
+// badge without leaving the page.
 export const MATCH_STATUS_META: Record<
   COGMatchStatus,
-  { label: string; className: string }
+  { label: string; description: string; className: string }
 > = {
   pending: {
     label: "Pending",
+    description: "Not yet analyzed (pre-enrichment).",
     className:
       "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
   },
   on_contract: {
     label: "On Contract",
+    description: "Matches an active contract.",
     className:
       "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   },
   off_contract_item: {
     label: "Off Contract",
+    description:
+      "Vendor is on contract, but this specific item isn't covered.",
     className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   },
   out_of_scope: {
     label: "Out of Scope",
+    description: "Vendor isn't under any contract at all.",
     className:
       "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   },
   unknown_vendor: {
     label: "Unknown Vendor",
+    description: "Vendor name couldn't be resolved to a known vendor.",
     className:
       "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
   },
   price_variance: {
     label: "Price Variance",
+    description:
+      "Matches a contract but the invoice price differs materially from the contract price.",
     className:
       "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
   },
 }
+
+// Ordered list so the header legend renders in a stable, logical order.
+const MATCH_STATUS_ORDER: COGMatchStatus[] = [
+  "on_contract",
+  "price_variance",
+  "off_contract_item",
+  "out_of_scope",
+  "unknown_vendor",
+  "pending",
+]
 
 // Variance severity ramp — matches §4.12 of platform-data-model.
 // 0-2% = minor (muted), 2-10% = moderate (amber), ≥10% = major (red).
@@ -190,27 +217,67 @@ export function getCOGColumns({
     },
     {
       id: "status",
-      header: "Match Status",
+      header: () => (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1 cursor-help">
+                Match Status
+                <HelpCircle
+                  className="h-3.5 w-3.5 text-muted-foreground"
+                  aria-label="Match status legend"
+                />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[320px] space-y-1.5 p-3">
+              <p className="font-medium text-xs">Match status meanings</p>
+              <ul className="space-y-1 text-xs">
+                {MATCH_STATUS_ORDER.map((key) => {
+                  const meta = MATCH_STATUS_META[key]
+                  return (
+                    <li key={key} className="flex gap-2">
+                      <span className="font-medium whitespace-nowrap">
+                        {meta.label}:
+                      </span>
+                      <span className="text-muted-foreground">
+                        {meta.description}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ),
       cell: ({ row }) => {
         const status = row.original.matchStatus as COGMatchStatus | undefined
         // Fall back to legacy on-contract heuristic for rows not yet
         // enriched (e.g. schema-new but matchStatus still `pending`).
+        let resolved: COGMatchStatus
         if (!status || status === "pending") {
           const onContract =
             row.original._onContract ??
             (row.original.category && row.original.category !== "")
-          if (onContract) {
-            const meta = MATCH_STATUS_META.on_contract
-            return <Badge className={meta.className}>{meta.label}</Badge>
-          }
-          return (
-            <Badge className={MATCH_STATUS_META.pending.className}>
-              {MATCH_STATUS_META.pending.label}
-            </Badge>
-          )
+          resolved = onContract ? "on_contract" : "pending"
+        } else {
+          resolved = status
         }
-        const meta = MATCH_STATUS_META[status]
-        return <Badge className={meta.className}>{meta.label}</Badge>
+        const meta = MATCH_STATUS_META[resolved]
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge className={`${meta.className} cursor-help`}>
+                  {meta.label}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[260px]">
+                {meta.description}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
       },
     },
     {
