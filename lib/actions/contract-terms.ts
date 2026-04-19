@@ -20,7 +20,10 @@ export async function getContractTerms(contractId: string) {
 
   const terms = await prisma.contractTerm.findMany({
     where: { contractId },
-    include: { tiers: { orderBy: { tierNumber: "asc" } } },
+    include: {
+      tiers: { orderBy: { tierNumber: "asc" } },
+      products: { select: { vendorItemNo: true } },
+    },
     orderBy: { createdAt: "asc" },
   })
   return serialize(terms)

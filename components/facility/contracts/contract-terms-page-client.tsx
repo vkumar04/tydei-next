@@ -108,6 +108,11 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
       effectiveStart: String(t.effectiveStart).slice(0, 10),
       effectiveEnd: String(t.effectiveEnd).slice(0, 10),
       spendBaseline: t.spendBaseline ? Number(t.spendBaseline) : undefined,
+      scopedCategoryIds: t.categories ?? [],
+      scopedItemNumbers: (t.products ?? []).map((p) => p.vendorItemNo),
+      capitalCost: t.capitalCost !== null ? Number(t.capitalCost) : null,
+      interestRate: t.interestRate !== null ? Number(t.interestRate) : null,
+      termMonths: t.termMonths !== null ? t.termMonths : null,
       tiers: t.tiers.map((tier) => ({
         id: tier.id,
         tierNumber: tier.tierNumber,
