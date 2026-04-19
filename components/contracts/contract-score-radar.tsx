@@ -10,7 +10,9 @@
  *   timelinessScore, varianceScore
  *
  * This chart surfaces those dimensions on the contract score page
- * alongside the AI-driven overall display.
+ * alongside the AI-driven overall display. When an industry peer-median
+ * `benchmark` is supplied, a second translucent slate series is overlaid
+ * so the user can compare their contract to peers at a glance.
  */
 
 import {
@@ -29,25 +31,52 @@ import {
   PolarRadiusAxis,
   ResponsiveContainer,
   Tooltip,
+  Legend,
 } from "recharts"
 import type { ContractScoreResult } from "@/lib/contracts/scoring"
+import type { ScoreBenchmark } from "@/lib/contracts/score-benchmarks"
 
 interface ContractScoreRadarProps {
   components: ContractScoreResult["components"]
+  benchmark?: ScoreBenchmark
 }
 
 interface RadarDatum {
   dim: string
   value: number
+  benchmark?: number
 }
 
-export function ContractScoreRadar({ components }: ContractScoreRadarProps) {
+export function ContractScoreRadar({
+  components,
+  benchmark,
+}: ContractScoreRadarProps) {
   const data: RadarDatum[] = [
-    { dim: "Commitment", value: components.commitmentScore },
-    { dim: "Compliance", value: components.complianceScore },
-    { dim: "Rebate Efficiency", value: components.rebateEfficiencyScore },
-    { dim: "Timeliness", value: components.timelinessScore },
-    { dim: "Variance", value: components.varianceScore },
+    {
+      dim: "Commitment",
+      value: components.commitmentScore,
+      benchmark: benchmark?.commitmentScore,
+    },
+    {
+      dim: "Compliance",
+      value: components.complianceScore,
+      benchmark: benchmark?.complianceScore,
+    },
+    {
+      dim: "Rebate Efficiency",
+      value: components.rebateEfficiencyScore,
+      benchmark: benchmark?.rebateEfficiencyScore,
+    },
+    {
+      dim: "Timeliness",
+      value: components.timelinessScore,
+      benchmark: benchmark?.timelinessScore,
+    },
+    {
+      dim: "Variance",
+      value: components.varianceScore,
+      benchmark: benchmark?.varianceScore,
+    },
   ]
 
   return (
@@ -60,6 +89,9 @@ export function ContractScoreRadar({ components }: ContractScoreRadarProps) {
         <CardDescription>
           Rule-based breakdown from commitment, compliance, rebate
           efficiency, timeliness, and invoice variance.
+          {benchmark
+            ? " Overlaid against peer-median benchmarks for this contract type."
+            : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="h-72">
@@ -73,6 +105,7 @@ export function ContractScoreRadar({ components }: ContractScoreRadarProps) {
               tick={{ fontSize: 10 }}
             />
             <Tooltip />
+            <Legend />
             <Radar
               name="Score"
               dataKey="value"
@@ -80,6 +113,15 @@ export function ContractScoreRadar({ components }: ContractScoreRadarProps) {
               fill="#10b981"
               fillOpacity={0.3}
             />
+            {benchmark && (
+              <Radar
+                name="Industry benchmark"
+                dataKey="benchmark"
+                stroke="#94a3b8"
+                fill="#94a3b8"
+                fillOpacity={0.15}
+              />
+            )}
           </RadarChart>
         </ResponsiveContainer>
       </CardContent>

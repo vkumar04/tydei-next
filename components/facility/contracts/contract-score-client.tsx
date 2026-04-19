@@ -56,6 +56,7 @@ import { chartTooltipStyle } from "@/lib/chart-config"
 import type { DealScoreResult } from "@/lib/ai/schemas"
 import { ContractMarginCard } from "@/components/contracts/contract-margin-card"
 import { ContractScoreRadar } from "@/components/contracts/contract-score-radar"
+import type { ScoreBenchmark } from "@/lib/contracts/score-benchmarks"
 import type { ContractScoreResult } from "@/lib/contracts/scoring"
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,13 @@ interface ContractScoreClientProps {
    * alongside the AI-driven overall display.
    */
   ruleBasedComponents?: ContractScoreResult["components"]
+  /**
+   * Peer-median industry benchmark for the contract's type, sourced from
+   * `lib/contracts/score-benchmarks.ts`. When provided, the radar chart
+   * overlays a second translucent series so the user can see how their
+   * contract compares to peers in the same category.
+   */
+  benchmark?: ScoreBenchmark
 }
 
 /** The six score dimensions displayed in the UI. */
@@ -291,6 +299,7 @@ export function ContractScoreClient({
   contractId,
   contract,
   ruleBasedComponents,
+  benchmark,
 }: ContractScoreClientProps) {
   const [selectedTab, setSelectedTab] = useState("overview")
 
@@ -522,7 +531,10 @@ export function ContractScoreClient({
       {/* Rule-based score dimensions radar (optional — rendered when the
           server passed the computed components alongside the AI score). */}
       {ruleBasedComponents && (
-        <ContractScoreRadar components={ruleBasedComponents} />
+        <ContractScoreRadar
+          components={ruleBasedComponents}
+          benchmark={benchmark}
+        />
       )}
 
       {/* Tabs for detailed analysis */}

@@ -3,6 +3,10 @@ import { getContract } from "@/lib/actions/contracts"
 import { computeContractScoreLive } from "@/lib/actions/contracts/scoring"
 import { ContractScoreClient } from "@/components/facility/contracts/contract-score-client"
 import type { ContractScoreResult } from "@/lib/contracts/scoring"
+import {
+  getScoreBenchmark,
+  type ScoreBenchmark,
+} from "@/lib/contracts/score-benchmarks"
 
 export default async function ContractScorePage({
   params,
@@ -25,11 +29,16 @@ export default async function ContractScorePage({
     ruleBasedComponents = undefined
   }
 
+  const benchmark: ScoreBenchmark | undefined = contract?.contractType
+    ? getScoreBenchmark(contract.contractType)
+    : undefined
+
   return (
     <ContractScoreClient
       contractId={id}
       contract={contract}
       ruleBasedComponents={ruleBasedComponents}
+      benchmark={benchmark}
     />
   )
 }
