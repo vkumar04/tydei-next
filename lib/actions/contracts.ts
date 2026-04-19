@@ -335,16 +335,36 @@ export async function getContract(
   // authoritative source (facility-recorded rollups match the tier/rebate
   // math and the reports page). Precedence:
   //   1. Aggregate ContractPeriod.totalSpend WHERE contractId = X
-  //   2. Fall back to COGRecord.extendedPrice WHERE contractId = X
-  //      (only for contracts that haven't recorded periods yet)
-  //   3. Zero
-  // No vendor-wide COG fallback — it leaks spend across contracts on the
-  // same vendor. No tier-engine derivation — spend is a recorded figure.
+  //   2. COGRecord.extendedPrice WHERE contractId = X (matched records)
+  //   3. COGRecord.extendedPrice WHERE vendorId = X AND transactionDate
+  //      inside the contract's effective window. This mirrors the
+  //      `getContractPeriods` synthetic-periods fallback (Charles R5.24):
+  //      without it the "Current Spend" card reads $0 while the
+  //      transactions ledger below shows vendor activity for the same
+  //      window — an inconsistency Charles called out on a contract whose
+  //      ContractPricing rows hadn't been uploaded yet (so no COG had
+  //      been matched to contractId = X). Leakage risk is bounded by the
+  //      contract's own effective dates, so two overlapping contracts on
+  //      the same vendor will each over-count within the overlap; the
+  //      remediation for that is uploading pricing files so the cascade
+  //      can tag each COG row with the correct contractId.
+  // No tier-engine derivation — spend is a recorded figure.
   // If a periodId was passed, constrain the ContractPeriod aggregate to
   // that window so the displayed value matches the period filter.
-  const [cogAgg, periodAgg] = await Promise.all([
+  const [cogAgg, cogVendorAgg, periodAgg] = await Promise.all([
     prisma.cOGRecord.aggregate({
       where: { facilityId: facility.id, contractId: contract.id },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
+        vendorId: contract.vendorId,
+        transactionDate: {
+          gte: contract.effectiveDate,
+          lte: contract.expirationDate,
+        },
+      },
       _sum: { extendedPrice: true },
     }),
     prisma.contractPeriod.aggregate({
@@ -361,8 +381,10 @@ export async function getContract(
     }),
   ])
   const cogSpend = Number(cogAgg._sum.extendedPrice ?? 0)
+  const cogVendorSpend = Number(cogVendorAgg._sum.extendedPrice ?? 0)
   const periodSpend = Number(periodAgg._sum.totalSpend ?? 0)
-  const currentSpend = periodSpend > 0 ? periodSpend : cogSpend
+  const currentSpend =
+    periodSpend > 0 ? periodSpend : cogSpend > 0 ? cogSpend : cogVendorSpend
 
   return serialize({ ...contract, rebateEarned, rebateCollected, currentSpend })
 }
