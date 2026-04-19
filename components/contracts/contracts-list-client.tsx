@@ -50,6 +50,8 @@ import {
 } from "@/components/ui/dialog"
 import { PendingContractsTab } from "@/components/facility/contracts/pending-contracts-tab"
 import { ScoreBadge } from "@/components/shared/badges/score-badge"
+import { CompareModal } from "./compare-modal"
+import type { CompareContract } from "./compare-row-builder"
 
 /** The 3-way facility scope filter per spec §4.3. */
 type FacilityScope = "this" | "all" | "shared"
@@ -78,6 +80,7 @@ export function ContractsListClient({
     name: string
   } | null>(null)
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([])
+  const [compareOpen, setCompareOpen] = useState(false)
 
   const filters = {
     ...(statusFilter !== "all" && { status: statusFilter }),
@@ -109,6 +112,30 @@ export function ContractsListClient({
       }
     })
   }, [allContracts, metricsBatch])
+
+  // Build the serialized, flat shape the CompareModal expects. Uses the
+  // live metrics batch so Spend/Rebate in the modal match what the list
+  // columns are showing.
+  const compareContracts = useMemo<CompareContract[]>(
+    () =>
+      allContracts
+        .filter((c) => selectedForCompare.includes(c.id))
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          vendorName: c.vendor.name,
+          contractType: c.contractType,
+          status: c.status,
+          effectiveDate: new Date(c.effectiveDate),
+          expirationDate: new Date(c.expirationDate),
+          totalValue: Number(c.totalValue),
+          rebateEarned: Number(metricsBatch?.[c.id]?.rebate ?? 0),
+          spend: Number(metricsBatch?.[c.id]?.spend ?? 0),
+          score: c.score,
+          scoreBand: c.scoreBand,
+        })),
+    [allContracts, selectedForCompare, metricsBatch],
+  )
 
   const columns = useMemo(
     () =>
@@ -423,7 +450,16 @@ export function ContractsListClient({
           <PendingContractsTab facilityId={facilityId} userId={userId ?? ""} />
         </TabsContent>
 
-        <TabsContent value="compare">
+        <TabsContent value="compare" className="space-y-4">
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              disabled={selectedForCompare.length < 2}
+              onClick={() => setCompareOpen(true)}
+            >
+              Compare ({selectedForCompare.length})
+            </Button>
+          </div>
           <CompareTab
             contracts={contracts}
             selected={selectedForCompare}
@@ -438,6 +474,12 @@ export function ContractsListClient({
           />
         </TabsContent>
       </Tabs>
+
+      <CompareModal
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        contracts={compareContracts}
+      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
