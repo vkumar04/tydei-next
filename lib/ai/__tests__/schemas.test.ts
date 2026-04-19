@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { dealScoreSchema } from "@/lib/ai/schemas"
+import { dealScoreSchema, extractedContractSchema } from "@/lib/ai/schemas"
 
 /** Anthropic's Messages API rejects JSON Schema `minimum`/`maximum` on `number`
  * types. Zod .min().max() on numbers compile to those keywords via the AI SDK.
@@ -18,5 +18,33 @@ describe("dealScoreSchema — Anthropic compatibility", () => {
     expect(json).not.toMatch(/"kind":"max"/)
     expect(json).not.toMatch(/"minValue":\s*\d/)
     expect(json).not.toMatch(/"maxValue":\s*\d/)
+  })
+})
+
+function countUnionLeaves(def: unknown): number {
+  const seen = new Set<unknown>()
+  let count = 0
+  function walk(node: unknown) {
+    if (!node || typeof node !== "object" || seen.has(node)) return
+    seen.add(node)
+    const obj = node as Record<string, unknown>
+    // Zod "optional" / "nullable" / "union" types each compile to a union
+    // in JSON Schema.
+    if (
+      obj.typeName === "ZodOptional" ||
+      obj.typeName === "ZodNullable" ||
+      obj.typeName === "ZodUnion"
+    ) {
+      count += 1
+    }
+    for (const v of Object.values(obj)) walk(v)
+  }
+  walk(def)
+  return count
+}
+
+describe("extract schemas — Anthropic tool-input compatibility", () => {
+  it("extractedContractSchema has at most 16 union-typed leaves", () => {
+    expect(countUnionLeaves(extractedContractSchema._def)).toBeLessThanOrEqual(16)
   })
 })

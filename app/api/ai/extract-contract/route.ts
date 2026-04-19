@@ -4,11 +4,8 @@ import { auth } from "@/lib/auth-server"
 import { claudeModel } from "@/lib/ai/config"
 import {
   extractedContractSchema,
-  richContractExtractSchema,
   type ExtractedContractData,
-  type RichContractExtractData,
 } from "@/lib/ai/schemas"
-import { toLegacyExtractedContract } from "@/lib/ai/contract-extract-mapper"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -179,12 +176,15 @@ ${text.trim()}`,
 
     const mediaType: "application/pdf" = "application/pdf"
 
-    // Rich single-shot extraction.
-    let rich: RichContractExtractData | undefined
+    // Route PDF through the simpler legacy schema — the rich schema has
+    // >16 union-typed fields which Anthropic's tool-input JSON Schema
+    // validator rejects. See docs/superpowers/qa/2026-04-19-contracts-sweep.md
+    // bug new-1.
+    let extracted: ExtractedContractData | undefined
     try {
       const result = await generateText({
         model: claudeModel,
-        output: Output.object({ schema: richContractExtractSchema }),
+        output: Output.object({ schema: extractedContractSchema }),
         messages: [
           {
             role: "user",
@@ -209,14 +209,14 @@ ${text.trim()}`,
       })
 
       try {
-        rich = result.output
+        extracted = result.output
       } catch {
         const rawText = result.text ?? ""
         console.error(
           "[extract-contract] Schema validation failed. Raw AI response:",
           rawText.slice(0, 2000)
         )
-        rich = tryParseRich(rawText)
+        extracted = tryParseLegacy(rawText)
       }
     } catch (aiError: unknown) {
       const errorMessage = aiError instanceof Error ? aiError.message : "Unknown error"
@@ -231,7 +231,7 @@ ${text.trim()}`,
       )
     }
 
-    if (!rich) {
+    if (!extracted) {
       return Response.json(
         {
           error: "Could not parse AI response",
@@ -243,16 +243,10 @@ ${text.trim()}`,
       )
     }
 
-    const legacy = toLegacyExtractedContract(rich)
-    // Confidence: how many top-level rich fields were populated.
-    const populated = Object.values(rich).filter((v) => v !== null && v !== undefined).length
-    const confidence = Math.min(0.95, populated / 15)
-
     return Response.json({
       success: true,
-      extracted: legacy,
-      richExtracted: rich,
-      confidence,
+      extracted,
+      confidence: 0.9,
       s3Key,
     })
   } catch (error) {
@@ -291,18 +285,6 @@ function tryParseLegacy(rawText: string): ExtractedContractData | undefined {
   for (const attempt of attempts) {
     try {
       return extractedContractSchema.parse(attempt())
-    } catch {
-      // try next
-    }
-  }
-  return undefined
-}
-
-function tryParseRich(rawText: string): RichContractExtractData | undefined {
-  const attempts = buildParseAttempts(rawText)
-  for (const attempt of attempts) {
-    try {
-      return richContractExtractSchema.parse(attempt())
     } catch {
       // try next
     }
