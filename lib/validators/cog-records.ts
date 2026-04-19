@@ -15,6 +15,7 @@ export const cogRecordInputSchema = z.object({
   quantity: z.number().int().min(1),
   transactionDate: z.string().min(1, "Transaction date is required"),
   category: z.string().optional(),
+  notes: z.string().max(2000, "Notes must be 2000 characters or fewer").optional(),
 })
 
 export type COGRecordInput = z.infer<typeof cogRecordInputSchema>

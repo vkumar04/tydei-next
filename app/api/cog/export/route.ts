@@ -42,6 +42,7 @@ const CSV_HEADERS = [
   "matchStatus",
   "isOnContract",
   "category",
+  "notes",
 ] as const
 
 // RFC 4180 — quote if value contains comma, quote, CR, or LF.
@@ -147,6 +148,7 @@ export async function GET(request: Request) {
       csvEscape(r.matchStatus),
       csvEscape(r.isOnContract ? "true" : "false"),
       csvEscape(r.category),
+      csvEscape(r.notes),
     ]
     lines.push(row.join(","))
   }

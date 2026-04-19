@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { FormDialog } from "@/components/shared/forms/form-dialog"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -97,6 +98,7 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
       quantity: 1,
       vendorName: "",
       vendorItemNo: "",
+      notes: "",
     },
   })
 
@@ -114,6 +116,7 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
             quantity: (r as COGRecordWithVendor & { quantity?: number }).quantity ?? 1,
             vendorName: r.vendorName ?? "",
             vendorItemNo: r.vendorItemNo ?? "",
+            notes: r.notes ?? "",
           })
         },
       }),
@@ -342,6 +345,9 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
         </Field>
         <Field label="Vendor Item No">
           <Input {...editForm.register("vendorItemNo")} />
+        </Field>
+        <Field label="Notes">
+          <Textarea rows={3} {...editForm.register("notes")} />
         </Field>
       </FormDialog>
 

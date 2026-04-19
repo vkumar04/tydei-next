@@ -127,6 +127,7 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
       quantity: data.quantity,
       transactionDate: new Date(data.transactionDate),
       category: data.category,
+      notes: data.notes,
       createdBy: session.user.id,
     },
   })
@@ -255,6 +256,7 @@ export async function updateCOGRecord(
     vendorName?: string
     vendorItemNo?: string
     category?: string
+    notes?: string | null
   }
 ) {
   const { facility } = await requireFacility()

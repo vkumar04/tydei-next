@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/tooltip"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
-import { Edit, HelpCircle, Trash2 } from "lucide-react"
+import { Edit, HelpCircle, StickyNote, Trash2 } from "lucide-react"
 
 type COGRecordWithVendor = COGRecord & {
   vendor: { id: string; name: string } | null
@@ -279,6 +279,33 @@ export function getCOGColumns({
           </TooltipProvider>
         )
       },
+    },
+    {
+      accessorKey: "notes",
+      header: () => <span className="sr-only">Notes</span>,
+      cell: ({ row }) => {
+        const notes = row.original.notes
+        if (!notes) return null
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                  aria-label="View notes"
+                >
+                  <StickyNote className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[320px] whitespace-pre-wrap">
+                {notes}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
+      },
+      size: 40,
     },
     {
       id: "actions",

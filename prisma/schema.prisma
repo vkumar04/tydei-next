@@ -979,6 +979,7 @@ model COGRecord {
   quantity             Int      @default(1)
   transactionDate      DateTime @db.Date
   category             String?
+  notes                String?
   createdBy            String?
   matchStatus          COGMatchStatus @default(pending)
   contractId           String?

@@ -7,6 +7,7 @@ import { useCreateCOGRecord } from "@/hooks/use-cog"
 import { FormDialog } from "@/components/shared/forms/form-dialog"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 
 interface COGManualEntryProps {
   facilityId: string
@@ -73,6 +74,9 @@ export function COGManualEntry({
       </Field>
       <Field label="Vendor Item No">
         <Input {...form.register("vendorItemNo")} />
+      </Field>
+      <Field label="Notes" error={form.formState.errors.notes?.message}>
+        <Textarea rows={3} {...form.register("notes")} />
       </Field>
     </FormDialog>
   )
