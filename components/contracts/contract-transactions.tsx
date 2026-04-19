@@ -53,6 +53,10 @@ import {
 } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate } from "@/lib/formatting"
+import {
+  displayedCollected,
+  type PeriodRow,
+} from "@/lib/contracts/transactions-display"
 import { getContractPeriods, getContractRebates } from "@/lib/actions/contract-periods"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { queryKeys } from "@/lib/query-keys"
@@ -62,33 +66,19 @@ interface ContractTransactionsProps {
   contractId: string
 }
 
-interface PeriodRow {
-  id: string
-  periodStart: string
-  periodEnd: string
-  totalSpend: number
-  rebateEarned: number
-  rebateCollected: number
-  tierAchieved: number | null
-  // Rows sourced from the `Rebate` table (vs synthesized ContractPeriods)
-  // have a collectionDate + notes. Used to label the row in the ledger
-  // and to short-circuit status logic.
-  source: "period" | "rebate"
-  collectionDate?: string | null
-  notes?: string | null
-}
-
 type TransactionType = "rebate" | "credit" | "payment"
 type RebateKind = "earned" | "collected"
 
 function getCollectionStatus(row: PeriodRow): "collected" | "pending" | "overdue" {
-  // A Rebate row with a collectionDate is, by definition, collected —
-  // it's the same rule the detail page's "Rebates Collected" card uses.
+  // Charles W1.N (CLAUDE.md invariant): a rebate is "collected" only when
+  // a Rebate row with a non-null `collectionDate` exists. ContractPeriod
+  // rollups are projections — their `rebateCollected` is seed-synthesized
+  // and does NOT represent actual money received, so they cannot drive the
+  // "Collected" badge here.
   if (row.source === "rebate" && row.collectionDate) return "collected"
   const now = new Date()
   const end = new Date(row.periodEnd)
-  if (row.rebateCollected >= row.rebateEarned && row.rebateEarned > 0) return "collected"
-  if (end < now && row.rebateCollected < row.rebateEarned) return "overdue"
+  if (end < now && row.rebateEarned > 0) return "overdue"
   return "pending"
 }
 
@@ -513,7 +503,7 @@ function TransactionTable({
                   {formatCurrency(row.rebateEarned)}
                 </TableCell>
                 <TableCell className="text-right text-blue-600">
-                  {formatCurrency(row.rebateCollected)}
+                  {formatCurrency(displayedCollected(row))}
                 </TableCell>
                 <TableCell className="text-center">
                   {row.tierAchieved != null ? (
@@ -610,18 +600,18 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     if (!r.periodEnd) return s
     return new Date(r.periodEnd) <= today ? s + r.rebateEarned : s
   }, 0)
-  // Charles R5.34: "Total Collected" sums `rebateCollected` across every
-  // row (both Rebate-sourced and ContractPeriod-sourced). Pure-collection
-  // entries (rebateEarned=0, rebateCollected=amount) contribute here
-  // exclusively — they never inflate `totalRebates` above. The receipt
-  // condition is the CLAUDE.md rule: a collected amount counts only when
-  // the originating row has a `collectionDate` set. Rebate rows written
-  // by `createContractTransaction({rebateKind:"collected"})` set that;
-  // period rollups already carry the same invariant.
-  const totalCollected = rows.reduce((s, r) => {
-    if (r.source === "rebate" && !r.collectionDate) return s
-    return s + r.rebateCollected
-  }, 0)
+  // Charles W1.N: "Total Collected" sums ONLY Rebate rows with a non-null
+  // `collectionDate` — the CLAUDE.md invariant. ContractPeriod rollups
+  // carry a seed-synthesized `rebateCollected` (a projection), but there
+  // is no ContractPeriod.collectionDate column to mark actual receipt, so
+  // those rows never contribute here regardless of their stored value.
+  // This matches the contract detail's "Rebates Collected" card and
+  // R5.27's lifetime aggregate, so Charles sees one consistent number
+  // across every surface.
+  const totalCollected = rows.reduce(
+    (s, r) => s + displayedCollected(r),
+    0,
+  )
   const totalPayments = 0
 
   if (rows.length === 0) {
