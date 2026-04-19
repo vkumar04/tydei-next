@@ -41,9 +41,9 @@ export const MATCH_STATUS_META: Record<
       "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   },
   off_contract_item: {
-    label: "Off Contract",
+    label: "Not Priced",
     description:
-      "Vendor is on contract, but this specific item isn't covered.",
+      "This item is under the contract's vendor but isn't listed in the contract's pricing file. Upload pricing to mark it as On Contract.",
     className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   },
   out_of_scope: {
