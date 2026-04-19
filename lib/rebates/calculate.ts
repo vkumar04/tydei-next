@@ -93,11 +93,29 @@ export function computeRebate(
  * Convenience for callers that have raw Prisma ContractTier rows.
  * Same as computeRebate but accepts the Decimal-typed Prisma shape
  * without requiring each call site to coerce fields.
+ *
+ * Unit convention: `ContractTier.rebateValue` is stored as a FRACTION
+ * (0.02 = 2%) for `percent_of_spend` tiers, but the math engine expects
+ * INTEGER percent (2). Multiply by 100 at this boundary so every caller
+ * reading from Prisma gets consistent results. Mirrors the display-side
+ * convention in `lib/contracts/tier-rebate-label.ts`.
  */
 export function computeRebateFromPrismaTiers(
   spend: number,
-  tiers: Pick<ContractTier, "tierNumber" | "spendMin" | "spendMax" | "rebateValue">[],
+  tiers: Pick<
+    ContractTier,
+    "tierNumber" | "spendMin" | "spendMax" | "rebateValue" | "rebateType"
+  >[],
   opts?: { collectionRate?: number; method?: RebateMethodName },
 ): RebateResult {
-  return computeRebate(spend, tiers as TierInput[], opts)
+  const scaled: TierInput[] = tiers.map((t) => ({
+    tierNumber: t.tierNumber,
+    spendMin: t.spendMin,
+    spendMax: t.spendMax,
+    rebateValue:
+      t.rebateType === "percent_of_spend"
+        ? Number(t.rebateValue) * 100
+        : t.rebateValue,
+  }))
+  return computeRebate(spend, scaled, opts)
 }

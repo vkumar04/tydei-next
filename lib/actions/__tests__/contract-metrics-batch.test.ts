@@ -15,12 +15,19 @@ type GroupByCog = Array<{
 
 type GroupByPeriod = Array<{
   contractId: string
-  _sum: { totalSpend: number }
+  _sum: { totalSpend?: number; rebateEarned?: number }
+}>
+
+type GroupByRebate = Array<{
+  contractId: string
+  _sum: { rebateEarned: number }
 }>
 
 let cogGroupByContract: GroupByCog = []
 let cogGroupByVendor: GroupByCog = []
 let periodGroupByContract: GroupByPeriod = []
+let rebateGroupByContract: GroupByRebate = []
+let periodRebateGroupByContract: GroupByPeriod = []
 let contractRows: Array<{
   id: string
   vendorId: string
@@ -49,7 +56,16 @@ vi.mock("@/lib/db", () => ({
       }),
     },
     contractPeriod: {
-      groupBy: vi.fn(async () => periodGroupByContract),
+      groupBy: vi.fn(async ({ _sum }: { _sum: Record<string, boolean> }) => {
+        // Two distinct calls on contractPeriod.groupBy — one for totalSpend
+        // (spend fallback), one for rebateEarned (rebate fallback). Route
+        // by the _sum selector.
+        if (_sum.rebateEarned) return periodRebateGroupByContract
+        return periodGroupByContract
+      }),
+    },
+    rebate: {
+      groupBy: vi.fn(async () => rebateGroupByContract),
     },
   },
 }))
@@ -68,6 +84,8 @@ beforeEach(() => {
   cogGroupByContract = []
   cogGroupByVendor = []
   periodGroupByContract = []
+  rebateGroupByContract = []
+  periodRebateGroupByContract = []
   contractRows = []
 })
 
@@ -100,10 +118,13 @@ describe("getContractMetricsBatch — resolution chain", () => {
     cogGroupByVendor = [
       { contractId: null, vendorId: "v-1", _sum: { extendedPrice: 80000 } },
     ]
+    // Rebate is recorded, not computed: seed a matching Rebate row.
+    rebateGroupByContract = [
+      { contractId: "c-1", _sum: { rebateEarned: 3000 } },
+    ]
 
     const result = await getContractMetricsBatch(["c-1"])
     expect(result["c-1"].spend).toBe(75000)
-    // Cumulative rebate at $75K, tier 2 (4%) → $3000
     expect(result["c-1"].rebate).toBe(3000)
     expect(result["c-1"].totalValue).toBe(100000)
   })
@@ -161,39 +182,48 @@ describe("getContractMetricsBatch — resolution chain", () => {
   })
 })
 
-describe("getContractMetricsBatch — rebate computation", () => {
-  it("computes rebate from tiers when terms + spend exist", async () => {
+describe("getContractMetricsBatch — rebate (recorded, not computed)", () => {
+  // Rebate is *never* auto-computed from tier engines on the contracts
+  // list. It comes from explicit Rebate rows (preferred) or the
+  // ContractPeriod rollup fallback. See commit 38a2c05 and the
+  // "rebates are never auto-computed for display" rule in
+  // docs/superpowers/specs/2026-04-18-contracts-rewrite.md.
+  it("sums Rebate.rebateEarned for closed periods", async () => {
     contractRows = [
       {
         id: "c-1",
         vendorId: "v-1",
         totalValue: 200000,
-        terms: [
-          {
-            rebateMethod: "cumulative",
-            tiers: [
-              { tierNumber: 1, spendMin: 0, spendMax: 100000, rebateValue: 2 },
-              {
-                tierNumber: 2,
-                spendMin: 100000,
-                spendMax: 500000,
-                rebateValue: 5,
-              },
-            ],
-          },
-        ],
+        terms: [],
       },
     ]
     cogGroupByContract = [
       { contractId: "c-1", _sum: { extendedPrice: 150000 } },
     ]
+    rebateGroupByContract = [
+      { contractId: "c-1", _sum: { rebateEarned: 7500 } },
+    ]
 
     const result = await getContractMetricsBatch(["c-1"])
-    // Cumulative at $150K falls in tier 2 (5% of total $150K = $7500)
     expect(result["c-1"].rebate).toBe(7500)
   })
 
-  it("returns zero rebate when contract has no terms", async () => {
+  it("falls back to ContractPeriod.rebateEarned when no Rebate rows exist", async () => {
+    contractRows = [
+      { id: "c-1", vendorId: "v-1", totalValue: 100000, terms: [] },
+    ]
+    cogGroupByContract = [
+      { contractId: "c-1", _sum: { extendedPrice: 50000 } },
+    ]
+    periodRebateGroupByContract = [
+      { contractId: "c-1", _sum: { rebateEarned: 2500 } },
+    ]
+
+    const result = await getContractMetricsBatch(["c-1"])
+    expect(result["c-1"].rebate).toBe(2500)
+  })
+
+  it("returns zero rebate when no Rebate rows and no ContractPeriod rebate exist", async () => {
     contractRows = [
       { id: "c-1", vendorId: "v-1", totalValue: 100000, terms: [] },
     ]
@@ -204,27 +234,6 @@ describe("getContractMetricsBatch — rebate computation", () => {
     const result = await getContractMetricsBatch(["c-1"])
     expect(result["c-1"].rebate).toBe(0)
     expect(result["c-1"].spend).toBe(50000)
-  })
-
-  it("returns zero rebate when tiers exist but spend is zero", async () => {
-    contractRows = [
-      {
-        id: "c-1",
-        vendorId: "v-1",
-        totalValue: 100000,
-        terms: [
-          {
-            rebateMethod: "cumulative",
-            tiers: [
-              { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 5 },
-            ],
-          },
-        ],
-      },
-    ]
-
-    const result = await getContractMetricsBatch(["c-1"])
-    expect(result["c-1"].rebate).toBe(0)
   })
 })
 
@@ -255,13 +264,16 @@ describe("getContractMetricsBatch — batch behavior", () => {
       { contractId: "c-1", _sum: { extendedPrice: 60000 } },
       { contractId: "c-2", _sum: { extendedPrice: 20000 } },
     ]
+    rebateGroupByContract = [
+      { contractId: "c-1", _sum: { rebateEarned: 1800 } },
+    ]
 
     const result = await getContractMetricsBatch(["c-1", "c-2"])
     expect(Object.keys(result)).toHaveLength(2)
     expect(result["c-1"].spend).toBe(60000)
-    expect(result["c-1"].rebate).toBe(1800) // 60k × 3%
+    expect(result["c-1"].rebate).toBe(1800)
     expect(result["c-2"].spend).toBe(20000)
-    expect(result["c-2"].rebate).toBe(0) // no terms
+    expect(result["c-2"].rebate).toBe(0) // no recorded Rebate rows
   })
 
   it("omits contracts the facility doesn't own", async () => {
