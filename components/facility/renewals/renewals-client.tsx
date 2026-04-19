@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
-import { CalendarRange, Settings2 } from "lucide-react"
+import { Calendar, CalendarRange, Settings2 } from "lucide-react"
+import { toast } from "sonner"
 import { useExpiringContracts } from "@/hooks/use-renewals"
 import type { ExpiringContract } from "@/lib/actions/renewals"
 import { computeRenewalSummary } from "@/lib/renewals/summary-stats"
@@ -106,10 +107,31 @@ export function RenewalsClient({
             Track upcoming renewals and plan negotiations before expiration.
           </p>
         </div>
-        <Button variant="outline" onClick={() => setSettingsOpen(true)}>
-          <Settings2 className="mr-2 h-4 w-4" />
-          Alert Settings
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              try {
+                window.location.href = "/api/renewals/export"
+                toast.success("Calendar exported", {
+                  description:
+                    "Downloading .ics — import into your calendar app",
+                })
+              } catch {
+                toast.error("Export failed", {
+                  description: "Could not generate calendar file",
+                })
+              }
+            }}
+          >
+            <Calendar className="mr-2 h-4 w-4" />
+            Export Calendar
+          </Button>
+          <Button variant="outline" onClick={() => setSettingsOpen(true)}>
+            <Settings2 className="mr-2 h-4 w-4" />
+            Alert Settings
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (

@@ -61,9 +61,16 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
   const { data: contracts, isLoading } = useExpiringContracts(vendorId, 365, "vendor")
 
   const handleExportCalendar = () => {
-    toast.success("Calendar exported", {
-      description: "Renewal dates exported to your calendar",
-    })
+    try {
+      window.location.href = "/api/renewals/export"
+      toast.success("Calendar exported", {
+        description: "Downloading .ics — import into your calendar app",
+      })
+    } catch {
+      toast.error("Export failed", {
+        description: "Could not generate calendar file",
+      })
+    }
   }
 
   // Compute pipeline summary from real data
