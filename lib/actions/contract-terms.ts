@@ -34,13 +34,31 @@ export async function createContractTerm(input: CreateTermInput) {
 
   // scopedItemNumbers doesn't belong on ContractTerm itself — it
   // maps to ContractTermProduct join rows written after the term.
+  // scopedCategoryIds maps to the ContractTerm.categories String[] column.
+  // scopedCategoryId (singular) is back-compat only and has no DB column.
   // capitalCost / interestRate / termMonths are real ContractTerm
   // columns and stay in `termData`.
-  const { tiers, scopedItemNumbers, ...termData } = data
+  const {
+    tiers,
+    scopedItemNumbers,
+    scopedCategoryId: _scopedCategoryId,
+    scopedCategoryIds,
+    ...termData
+  } = data
+  void _scopedCategoryId
+
+  // scopedCategoryIds maps to the ContractTerm.categories String[] column
+  // (already consumed by lib/rebates/from-prisma.ts::buildConfigFromPrismaTerm).
+  // Include it on the term itself when provided.
+  const termDataWithCategories: typeof termData & { categories?: string[] } =
+    { ...termData }
+  if (scopedCategoryIds && scopedCategoryIds.length > 0) {
+    termDataWithCategories.categories = scopedCategoryIds
+  }
 
   const term = await prisma.contractTerm.create({
     data: {
-      ...termData,
+      ...termDataWithCategories,
       effectiveStart: new Date(termData.effectiveStart),
       effectiveEnd: new Date(termData.effectiveEnd),
       ...(tiers.length > 0 && {
@@ -81,7 +99,19 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
   await requireFacility()
   const data = updateTermSchema.parse(input)
 
-  const { tiers, ...termData } = data
+  // Scope fields don't live on ContractTerm itself:
+  //   - scopedItemNumbers → ContractTermProduct join rows (handled below).
+  //   - scopedCategoryIds → ContractTerm.categories String[] column.
+  //   - scopedCategoryId (singular) → back-compat only, no DB column.
+  const {
+    tiers: _tiers,
+    scopedItemNumbers,
+    scopedCategoryId: _scopedCategoryId,
+    scopedCategoryIds,
+    ...termData
+  } = data
+  void _tiers
+  void _scopedCategoryId
 
   const updateData: Record<string, unknown> = { ...termData }
   if (termData.effectiveStart) {
@@ -90,12 +120,30 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
   if (termData.effectiveEnd) {
     updateData.effectiveEnd = new Date(termData.effectiveEnd)
   }
+  if (scopedCategoryIds !== undefined) {
+    updateData.categories = scopedCategoryIds
+  }
 
   const term = await prisma.contractTerm.update({
     where: { id },
     data: updateData,
     include: { tiers: { orderBy: { tierNumber: "asc" } } },
   })
+
+  // Replace ContractTermProduct join rows when scopedItemNumbers is provided
+  // (undefined = don't touch; [] = clear; non-empty = replace).
+  if (scopedItemNumbers !== undefined) {
+    await prisma.contractTermProduct.deleteMany({ where: { termId: id } })
+    if (scopedItemNumbers.length > 0) {
+      await prisma.contractTermProduct.createMany({
+        data: scopedItemNumbers.map((vendorItemNo) => ({
+          termId: id,
+          vendorItemNo,
+        })),
+        skipDuplicates: true,
+      })
+    }
+  }
 
   return serialize(term)
 }
