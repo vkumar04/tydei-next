@@ -102,34 +102,14 @@ export function ContractDetailClient({
   const stats = useMemo(() => {
     if (!contract) return null
 
-    // Sum spend from periods, but also check rebates array for earned/collected
-    const periodSpend = (periods ?? []).reduce(
-      (sum, p) => sum + Number(p.totalSpend),
-      0,
-    )
-    const periodRebateEarned = (periods ?? []).reduce(
-      (sum, p) => sum + Number(p.rebateEarned),
-      0,
-    )
-    const periodRebateCollected = (periods ?? []).reduce(
-      (sum, p) => sum + Number(p.rebateCollected),
-      0,
-    )
-
-    // Also sum from the Rebate model if available
-    const rebateModelEarned = (contract.rebates ?? []).reduce(
-      (sum: number, r: { rebateEarned?: unknown }) => sum + Number(r.rebateEarned ?? 0),
-      0,
-    )
-    const rebateModelCollected = (contract.rebates ?? []).reduce(
-      (sum: number, r: { rebateCollected?: unknown }) => sum + Number(r.rebateCollected ?? 0),
-      0,
-    )
-
-    // Use whichever source has data
-    const totalSpend = periodSpend
-    const rebateEarned = Math.max(periodRebateEarned, rebateModelEarned)
-    const rebateCollected = Math.max(periodRebateCollected, rebateModelCollected)
+    // Server already applies the correct temporal filters:
+    //   rebateEarned    — sums Rebate rows where payPeriodEnd <= today
+    //   rebateCollected — sums rows where collectionDate != null
+    //   currentSpend    — COGRecord aggregate for facility+vendor
+    // (See lib/actions/contracts.ts::getContract.) Trust the server values.
+    const rebateEarned = Number(contract.rebateEarned ?? 0)
+    const rebateCollected = Number(contract.rebateCollected ?? 0)
+    const totalSpend = Number(contract.currentSpend ?? 0)
 
     const totalValue = Number(contract.totalValue)
     const commitmentPct =
@@ -153,7 +133,7 @@ export function ContractDetailClient({
       daysUntilExpiration,
       expirationDate: contract.expirationDate,
     }
-  }, [contract, periods])
+  }, [contract])
 
   // Build a deduped, ordered list of product categories: primary first,
   // then remaining join-table categories alphabetically. Dedupe by id.
