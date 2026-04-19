@@ -36,6 +36,7 @@ import {
   Scale,
   Loader2,
   HelpCircle,
+  Download,
 } from "lucide-react"
 import {
   ResponsiveContainer,
@@ -58,6 +59,10 @@ import { ContractMarginCard } from "@/components/contracts/contract-margin-card"
 import { ContractScoreRadar } from "@/components/contracts/contract-score-radar"
 import type { ScoreBenchmark } from "@/lib/contracts/score-benchmarks"
 import type { ContractScoreResult } from "@/lib/contracts/scoring"
+import {
+  buildDimensions as sharedBuildDimensions,
+  buildRecommendations as sharedBuildRecommendations,
+} from "@/lib/contracts/score-recommendations"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -195,88 +200,23 @@ const DIMENSION_META: Record<
 const DIMENSION_KEYS = Object.keys(DIMENSION_META) as (keyof ScoreDimensions)[]
 
 /**
- * Map the 5 AI dimensions to 6 display dimensions.
- * "contractFlexibility" is derived as the average of financial value and compliance.
+ * Thin wrappers around the shared pure helpers in
+ * `lib/contracts/score-recommendations.ts`, so the recommendations
+ * rendered here match the ones emitted by the CSV export route exactly.
  */
-function buildDimensions(ai: DealScoreResult): ScoreDimensions {
-  return {
-    pricingCompetitiveness: ai.pricingCompetitiveness,
-    rebateStructure: ai.rebateEfficiency,
-    contractFlexibility: Math.round(
-      (ai.financialValue + ai.complianceLikelihood) / 2
-    ),
-    volumeAlignment: ai.marketShareAlignment,
-    marketComparison: ai.financialValue,
-    riskAssessment: ai.complianceLikelihood,
-  }
-}
+const buildDimensions = sharedBuildDimensions
 
 function buildRecommendations(
   dims: ScoreDimensions,
   aiRec: string,
   advice: string[]
 ) {
-  const recs: Array<{
-    type: "success" | "warning" | "danger"
-    title: string
-    description: string
-  }> = []
-
-  // Add AI recommendation first
-  if (aiRec) {
-    recs.push({ type: "success", title: "AI Assessment", description: aiRec })
-  }
-
-  // Dimension-specific recommendations
-  if (dims.pricingCompetitiveness < 60) {
-    recs.push({
-      type: "danger",
-      title: "Pricing Below Market",
-      description:
-        "Contract pricing is not competitive. Consider renegotiating pricing terms or evaluating alternative vendors.",
-    })
-  } else if (dims.pricingCompetitiveness >= 80) {
-    recs.push({
-      type: "success",
-      title: "Strong Pricing Position",
-      description:
-        "Contract pricing is highly competitive. Use this as leverage during renewal discussions.",
-    })
-  }
-
-  if (dims.rebateStructure < 60) {
-    recs.push({
-      type: "warning",
-      title: "Improve Rebate Capture",
-      description:
-        "Rebate structure efficiency is low. Review product mix and ensure all eligible purchases flow through the contract.",
-    })
-  }
-
-  if (dims.volumeAlignment < 60) {
-    recs.push({
-      type: "warning",
-      title: "Volume Misalignment",
-      description:
-        "Committed volumes do not align well with actual purchasing. Consolidate purchases or renegotiate volume tiers.",
-    })
-  }
-
-  if (dims.riskAssessment < 60) {
-    recs.push({
-      type: "danger",
-      title: "Elevated Risk Profile",
-      description:
-        "Compliance and risk indicators are concerning. Review contract terms and establish monitoring processes.",
-    })
-  }
-
-  // Add negotiation advice items
-  advice.forEach((tip) => {
-    recs.push({ type: "warning", title: "Negotiation Tip", description: tip })
-  })
-
-  return recs
+  // Re-map to the existing `type` key used by this component's JSX.
+  return sharedBuildRecommendations(dims, aiRec, advice).map((r) => ({
+    type: r.severity,
+    title: r.title,
+    description: r.description,
+  }))
 }
 
 // ---------------------------------------------------------------------------
@@ -849,13 +789,39 @@ export function ContractScoreClient({
           <div className="grid gap-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Info className="h-5 w-5" />
-                  Recommended Actions
-                </CardTitle>
-                <CardDescription>
-                  AI-generated recommendations to improve contract performance
-                </CardDescription>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Info className="h-5 w-5" />
+                      Recommended Actions
+                    </CardTitle>
+                    <CardDescription>
+                      AI-generated recommendations to improve contract performance
+                    </CardDescription>
+                  </div>
+                  <Button
+                    asChild={recommendations.length > 0}
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 shrink-0"
+                    disabled={recommendations.length === 0}
+                  >
+                    {recommendations.length > 0 ? (
+                      <a
+                        href={`/api/contracts/${contractId}/score/export`}
+                        rel="noopener"
+                      >
+                        <Download className="h-4 w-4" />
+                        Export Recommendations
+                      </a>
+                    ) : (
+                      <span>
+                        <Download className="h-4 w-4" />
+                        Export Recommendations
+                      </span>
+                    )}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {recommendations.map((rec, index) => (
