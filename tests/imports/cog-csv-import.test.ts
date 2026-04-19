@@ -23,6 +23,12 @@ vi.mock("@/lib/db", () => ({
       })),
       findMany: vi.fn(async () => []),
       update: vi.fn(async () => ({})),
+      // Post-import stats aggregation (subsystem 10.1 / Task 5). The
+      // CSV ingest action forwards matched/unmatched/onContractRate
+      // from bulkImportCOGRecords; we don't assert their values here
+      // (covered by lib/actions/__tests__/cog-csv-import.test.ts) — we
+      // just need the call to not throw.
+      count: vi.fn(async () => 0),
     },
     vendor: {
       findMany: vi.fn(async () => []),

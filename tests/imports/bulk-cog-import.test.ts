@@ -35,6 +35,9 @@ vi.mock("@/lib/db", () => ({
           return { id: where.id }
         },
       ),
+      // Post-import stats aggregation (subsystem 10.1). Each test uses
+      // its own mocks via vi.spyOn if it needs specific counts.
+      count: vi.fn(async () => 0),
     },
     $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },

@@ -14,7 +14,13 @@ import {
   type BulkImportInput,
 } from "@/lib/validators/cog-records"
 import { logAudit } from "@/lib/audit"
+import { serialize } from "@/lib/serialize"
 import { resolveVendorIdsBulk } from "@/lib/vendors/resolve"
+
+// How far back (ms) to look when scoping "this import" stats without a
+// FileImport row. Matches the plan's interim approximation — replace with
+// a `fileImportId` filter once Subsystem 1 wires one through.
+const IMPORT_STATS_WINDOW_MS = 60_000
 
 const BATCH_SIZE = 500
 
@@ -210,5 +216,42 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
     }
   }
 
-  return { imported, skipped, errors }
+  // ─── Import completion stats (subsystem 10.1) ────────────────
+  //
+  // Aggregate matched/unmatched/on-contract counts for the rows touched
+  // by THIS import so the import dialog can show a summary card. We
+  // don't have a FileImport row yet (Subsystem 1 still pending), so we
+  // approximate "this import" by windowing on createdAt — the action
+  // just finished inserting, so any COG row in the facility within the
+  // last 60 seconds is effectively part of this batch.
+  const since = new Date(Date.now() - IMPORT_STATS_WINDOW_MS)
+  const facilityId = session.facility.id
+  const [totalForFile, matchedCount, onContractCount] = await Promise.all([
+    prisma.cOGRecord.count({
+      where: { facilityId, createdAt: { gte: since } },
+    }),
+    prisma.cOGRecord.count({
+      where: {
+        facilityId,
+        createdAt: { gte: since },
+        matchStatus: { not: "pending" },
+      },
+    }),
+    prisma.cOGRecord.count({
+      where: {
+        facilityId,
+        createdAt: { gte: since },
+        isOnContract: true,
+      },
+    }),
+  ])
+
+  return serialize({
+    imported,
+    skipped,
+    errors,
+    matched: matchedCount,
+    unmatched: Math.max(0, totalForFile - matchedCount),
+    onContractRate: totalForFile > 0 ? onContractCount / totalForFile : 0,
+  })
 }

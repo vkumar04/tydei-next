@@ -12,6 +12,12 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -80,6 +86,9 @@ export function COGImportDialog({
     imported: number
     skipped: number
     errors: number
+    matched?: number
+    unmatched?: number
+    onContractRate?: number
   } | null>(null)
   // Track whether we already forwarded the current parser.data to importState
   const forwarded = useRef(false)
@@ -588,7 +597,7 @@ export function COGImportDialog({
         )}
 
         {result && (
-          <div className="space-y-3 py-4">
+          <div className="space-y-4 py-4">
             <p className="font-medium">Import Complete</p>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
@@ -609,6 +618,39 @@ export function COGImportDialog({
                 </p>
                 <p className="text-xs text-muted-foreground">Errors</p>
               </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Records imported</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{result.imported}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">
+                    Matched to contracts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{result.matched ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {result.unmatched ?? 0} unmatched
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">On-contract rate</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">
+                    {((result.onContractRate ?? 0) * 100).toFixed(1)}%
+                  </p>
+                </CardContent>
+              </Card>
             </div>
             <div className="flex justify-end">
               <Button onClick={() => handleClose(false)}>Done</Button>

@@ -16,9 +16,24 @@ import { parseCSV, parseMoney, parseDate, mapColumnsWithAI, get } from "./shared
 export async function ingestCOGRecordsCSV(
   csvText: string,
   fileName?: string,
-): Promise<{ imported: number; skipped: number; errors: number }> {
+): Promise<{
+  imported: number
+  skipped: number
+  errors: number
+  matched?: number
+  unmatched?: number
+  onContractRate?: number
+}> {
   const rows = parseCSV(csvText)
-  if (rows.length === 0) return { imported: 0, skipped: 0, errors: 0 }
+  if (rows.length === 0)
+    return {
+      imported: 0,
+      skipped: 0,
+      errors: 0,
+      matched: 0,
+      unmatched: 0,
+      onContractRate: 0,
+    }
 
   const headers = Object.keys(rows[0])
   const mapping = await mapColumnsWithAI(
@@ -82,7 +97,14 @@ export async function ingestCOGRecordsCSV(
     .filter((r): r is NonNullable<typeof r> => r !== null)
 
   if (records.length === 0) {
-    return { imported: 0, skipped: rows.length, errors: 0 }
+    return {
+      imported: 0,
+      skipped: rows.length,
+      errors: 0,
+      matched: 0,
+      unmatched: 0,
+      onContractRate: 0,
+    }
   }
 
   const session = await requireFacility()
