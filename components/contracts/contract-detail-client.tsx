@@ -27,6 +27,7 @@ import { ContractInsightsCards } from "@/components/contracts/contract-insights-
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
 import { ContractPerformanceCharts } from "@/components/contracts/contract-performance-charts"
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
+import { OffContractSpendCard } from "@/components/contracts/off-contract-spend-card"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
 import { Badge } from "@/components/ui/badge"
@@ -545,6 +546,8 @@ export function ContractDetailClient({
               </CardContent>
             </Card>
           )}
+
+          <OffContractSpendCard contractId={contractId} />
         </TabsContent>
 
         {/* ── Transactions Tab ─────────────────────────────────── */}
