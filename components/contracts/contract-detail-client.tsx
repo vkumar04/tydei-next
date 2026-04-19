@@ -34,6 +34,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tabs,
@@ -50,7 +57,8 @@ export function ContractDetailClient({
   contractId,
 }: ContractDetailClientProps) {
   const router = useRouter()
-  const { data: contract, isLoading } = useContract(contractId)
+  const [periodId, setPeriodId] = useState<string | undefined>(undefined)
+  const { data: contract, isLoading } = useContract(contractId, periodId)
   const { data: periods } = useQuery({
     queryKey: ["contract-periods", contractId],
     queryFn: () => getContractPeriods(contractId),
@@ -223,6 +231,31 @@ export function ContractDetailClient({
           </Button>
         </div>
       </div>
+
+      {/* ── Period selector (only when ≥2 periods) ───────────── */}
+      {contract.periods && contract.periods.length >= 2 && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Period:</span>
+          <Select
+            value={periodId ?? "__all__"}
+            onValueChange={(v) =>
+              setPeriodId(v === "__all__" ? undefined : v)
+            }
+          >
+            <SelectTrigger className="w-[280px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All periods</SelectItem>
+              {contract.periods.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {formatDate(p.periodStart)} – {formatDate(p.periodEnd)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* ── Stat Cards ────────────────────────────────────────── */}
       {stats && (

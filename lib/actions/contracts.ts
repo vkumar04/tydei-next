@@ -256,8 +256,22 @@ export async function getMergedContracts(options?: {
 
 // ─── Single Contract ─────────────────────────────────────────────
 
-export async function getContract(id: string) {
+export async function getContract(
+  id: string,
+  options?: { periodId?: string },
+) {
   const { facility } = await requireFacility()
+
+  // When a periodId is provided, resolve the period's date window so we can
+  // narrow the rebate aggregation (and therefore the earned/collected KPIs)
+  // to rows that fall inside that window. The periodId must belong to this
+  // contract — we never trust client input for cross-contract reads.
+  const period = options?.periodId
+    ? await prisma.contractPeriod.findFirst({
+        where: { id: options.periodId, contractId: id },
+        select: { periodStart: true, periodEnd: true },
+      })
+    : null
 
   const contract = await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(id, facility.id),
@@ -279,6 +293,9 @@ export async function getContract(id: string) {
         },
       },
       rebates: {
+        where: period
+          ? { payPeriodEnd: { gte: period.periodStart, lte: period.periodEnd } }
+          : undefined,
         select: {
           id: true,
           rebateEarned: true,
@@ -287,6 +304,7 @@ export async function getContract(id: string) {
           collectionDate: true,
         },
       },
+      periods: { orderBy: { periodStart: "asc" } },
       createdBy: { select: { id: true, name: true } },
     },
   })

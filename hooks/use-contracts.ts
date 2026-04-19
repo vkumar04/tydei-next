@@ -21,10 +21,10 @@ export function useContracts(facilityId: string, filters?: Partial<ContractFilte
   })
 }
 
-export function useContract(id: string) {
+export function useContract(id: string, periodId?: string) {
   return useQuery({
-    queryKey: queryKeys.contracts.detail(id),
-    queryFn: () => getContract(id),
+    queryKey: queryKeys.contracts.detail(id, periodId),
+    queryFn: () => getContract(id, periodId ? { periodId } : undefined),
     enabled: !!id,
   })
 }
