@@ -46,13 +46,26 @@ export async function getAccrualTimeline(contractId: string) {
     return serialize({ rows: [], method: "cumulative" as RebateMethodName })
   }
 
+  // Charles W1.S — scale `rebateValue` by 100 at the Prisma boundary for
+  // `percent_of_spend` tiers. `ContractTier.rebateValue` is stored as a
+  // fraction (0.03 = 3%), but the rebate engine in
+  // `lib/contracts/rebate-method.ts` expects integer percent (3 = 3%).
+  // Without this scaling, the Accrual Timeline's Rate column rendered the
+  // raw fraction (e.g. "0.03%" for a 3% tier) and the Accrued column was
+  // 100× too small. Mirrors the convention in
+  // `lib/rebates/calculate.ts#computeRebateFromPrismaTiers` and
+  // `lib/contracts/tier-rebate-label.ts` — scale at the boundary, not in
+  // the engine. See CLAUDE.md "Rebate engine units" rule.
   const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
     const tiers: TierLike[] = term.tiers.map((t) => ({
       tierNumber: t.tierNumber,
       tierName: t.tierName ?? null,
       spendMin: Number(t.spendMin),
       spendMax: t.spendMax ? Number(t.spendMax) : null,
-      rebateValue: Number(t.rebateValue),
+      rebateValue:
+        t.rebateType === "percent_of_spend"
+          ? Number(t.rebateValue) * 100
+          : Number(t.rebateValue),
     }))
     const evaluationPeriod: EvaluationPeriod =
       term.evaluationPeriod === "monthly" ||
