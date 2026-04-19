@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { useCreateVendor } from "@/hooks/use-vendor-crud"
 import { Link2, X, Plus } from "lucide-react"
+import { GroupedVendorPicker } from "@/components/contracts/grouped-vendor-picker"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -135,7 +136,6 @@ export function ContractFormBasicInfo({
   const [cogAutoFilled, setCogAutoFilled] = useState(false)
   const [linkedContractId, setLinkedContractId] = useState<string>("")
   const [additionalVendorIds, setAdditionalVendorIds] = useState<string[]>([])
-  const [vendorToAdd, setVendorToAdd] = useState<string>("")
 
   // Inline vendor creation
   const queryClient = useQueryClient()
@@ -643,77 +643,41 @@ export function ContractFormBasicInfo({
                 />
               </Field>
             )}
-
-            {/* Additional Participating Vendors */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Additional Participating Vendors</Label>
-              <p className="text-xs text-muted-foreground">
-                The primary vendor is set above. Add other vendors participating in this group contract.
-              </p>
-              {additionalVendorIds.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {additionalVendorIds.map((vid) => {
-                    const vendor = liveVendors.find((v) => v.id === vid)
-                    return (
-                      <Badge key={vid} variant="secondary" className="gap-1 pr-1">
-                        {vendor?.displayName || vendor?.name || vid}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAdditionalVendorIds((prev) =>
-                              prev.filter((id) => id !== vid)
-                            )
-                          }
-                          className="ml-1 rounded-full p-0.5 hover:bg-muted"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )
-                  })}
-                </div>
-              )}
-              <div className="flex gap-2">
-                <Select
-                  value={vendorToAdd}
-                  onValueChange={setVendorToAdd}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select a vendor to add..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {liveVendors
-                      .filter(
-                        (v) =>
-                          v.id !== vendorId &&
-                          !additionalVendorIds.includes(v.id)
-                      )
-                      .map((v) => (
-                        <SelectItem key={v.id} value={v.id}>
-                          {v.displayName || v.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!vendorToAdd}
-                  onClick={() => {
-                    if (vendorToAdd) {
-                      setAdditionalVendorIds((prev) => [...prev, vendorToAdd])
-                      setVendorToAdd("")
-                    }
-                  }}
-                >
-                  Add
-                </Button>
-              </div>
-            </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Grouped Contract (multi-vendor) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Grouped contract (multi-vendor)</CardTitle>
+          <CardDescription>
+            Enable to select additional vendors participating in this group
+            contract.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={watch("isGrouped") ?? false}
+              onCheckedChange={(v) => setValue("isGrouped", v)}
+            />
+            <Label>Grouped contract</Label>
+          </div>
+
+          {watch("isGrouped") && (
+            <Field label="Additional vendors in this group">
+              <GroupedVendorPicker
+                availableVendors={liveVendors.filter(
+                  (v) => v.id !== vendorId,
+                )}
+                selected={additionalVendorIds}
+                onChange={setAdditionalVendorIds}
+              />
+            </Field>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Linked Contract (for Tie-In and Capital types) */}
       {(contractType === "tie_in" || contractType === "capital") && (
