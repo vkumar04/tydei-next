@@ -609,12 +609,12 @@ export function ContractFormBasicInfo({
         </CardContent>
       </Card>
 
-      {/* Group Contract Settings */}
+      {/* Group Contract Settings — only the GPO field is grouped-specific */}
       {watch("contractType") === "grouped" && (
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>
             <CardTitle className="text-sm">Group Contract Settings</CardTitle>
-            <CardDescription>Configure multi-facility participation</CardDescription>
+            <CardDescription>GPO affiliation for this group contract</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Field label="GPO Affiliation">
@@ -623,29 +623,41 @@ export function ContractFormBasicInfo({
                 placeholder="e.g., Vizient, Premier, HealthTrust"
               />
             </Field>
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={watch("isMultiFacility")}
-                onCheckedChange={(v) => setValue("isMultiFacility", v)}
-              />
-              <Label>Multi-facility contract</Label>
-            </div>
-            {watch("isMultiFacility") && (
-              <Field label="Additional facilities">
-                <FacilityMultiSelect
-                  facilities={(allFacilities ?? []).filter(
-                    (f) => f.id !== watch("facilityId"),
-                  )}
-                  selected={watch("additionalFacilityIds") ?? []}
-                  onChange={(ids) =>
-                    setValue("additionalFacilityIds", ids)
-                  }
-                />
-              </Field>
-            )}
           </CardContent>
         </Card>
       )}
+
+      {/* Multi-facility contract (available for any contract type) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Multi-facility contract</CardTitle>
+          <CardDescription>
+            Enable to apply this contract to additional facilities.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={watch("isMultiFacility") ?? false}
+              onCheckedChange={(v) => setValue("isMultiFacility", v)}
+            />
+            <Label>Multi-facility contract</Label>
+          </div>
+          {watch("isMultiFacility") && (
+            <Field label="Additional facilities">
+              <FacilityMultiSelect
+                facilities={(allFacilities ?? []).filter(
+                  (f) => f.id !== watch("facilityId"),
+                )}
+                selected={watch("additionalFacilityIds") ?? []}
+                onChange={(ids) =>
+                  setValue("additionalFacilityIds", ids)
+                }
+              />
+            </Field>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Grouped Contract (multi-vendor) */}
       <Card>
