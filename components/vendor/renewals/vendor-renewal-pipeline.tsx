@@ -41,7 +41,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { formatCurrency, formatDate } from "@/lib/formatting"
-import { useInitiateRenewal } from "@/hooks/use-renewals"
+import { useSubmitRenewalProposal } from "@/hooks/use-renewals"
 import type { ExpiringContract } from "@/lib/actions/renewals"
 
 const statusConfig = {
@@ -69,7 +69,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
   const [proposeTermsOpen, setProposeTermsOpen] = useState(false)
   const [proposalNotes, setProposalNotes] = useState("")
 
-  const initiateRenewal = useInitiateRenewal()
+  const submitProposal = useSubmitRenewalProposal()
 
   // Enrich with status
   const renewals = useMemo(() =>
@@ -111,18 +111,28 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
 
   const handleProposeTerms = () => {
     if (!selectedRenewal) return
-    initiateRenewal.mutate(selectedRenewal.id, {
-      onSuccess: () => {
-        toast.success("Renewal initiated", {
-          description: `Renewal created for ${selectedRenewal.name}`,
-        })
-        setProposeTermsOpen(false)
-        setProposalNotes("")
+    if (proposalNotes.trim().length === 0) {
+      toast.error("Add proposal notes before submitting")
+      return
+    }
+    submitProposal.mutate(
+      {
+        contractId: selectedRenewal.id,
+        notes: proposalNotes.trim(),
       },
-      onError: (e) => {
-        toast.error("Failed to initiate renewal", { description: e.message })
+      {
+        onSuccess: () => {
+          toast.success("Proposal submitted", {
+            description: `Renewal proposal sent to ${selectedRenewal.facilityName ?? "facility"}`,
+          })
+          setProposeTermsOpen(false)
+          setProposalNotes("")
+        },
+        onError: (e) => {
+          toast.error("Failed to submit proposal", { description: e.message })
+        },
       },
-    })
+    )
   }
 
   return (
@@ -461,7 +471,7 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
                   setProposeTermsOpen(true)
                 }}>
                   <Send className="mr-2 h-4 w-4" />
-                  Initiate Renewal
+                  Propose Terms
                 </Button>
               </DialogFooter>
             </>
@@ -473,9 +483,9 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
       <Dialog open={proposeTermsOpen} onOpenChange={setProposeTermsOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Initiate Renewal</DialogTitle>
+            <DialogTitle>Propose Renewal Terms</DialogTitle>
             <DialogDescription>
-              {selectedRenewal && `Create a renewal for ${selectedRenewal.facilityName ?? selectedRenewal.name}`}
+              {selectedRenewal && `Send a renewal proposal to ${selectedRenewal.facilityName ?? selectedRenewal.name}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -489,16 +499,17 @@ export function VendorRenewalPipeline({ contracts }: VendorRenewalPipelineProps)
               />
             </div>
             <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-              This will create a renewal draft contract from the current contract terms. The facility will be notified.
+              This will submit a renewal proposal to the facility for review.
+              They can approve, reject, or request revisions.
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProposeTermsOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleProposeTerms} disabled={initiateRenewal.isPending}>
+            <Button onClick={handleProposeTerms} disabled={submitProposal.isPending}>
               <Send className="mr-2 h-4 w-4" />
-              {initiateRenewal.isPending ? "Creating..." : "Initiate Renewal"}
+              {submitProposal.isPending ? "Submitting..." : "Submit Proposal"}
             </Button>
           </DialogFooter>
         </DialogContent>

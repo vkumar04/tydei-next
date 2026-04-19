@@ -6,8 +6,8 @@ import {
   getContractPerformanceHistory,
   getExpiringContracts,
   getRenewalSummary,
-  initiateRenewal,
 } from "@/lib/actions/renewals"
+import { submitRenewalProposal } from "@/lib/actions/renewals/proposals"
 
 export function useExpiringContracts(
   entityId: string,
@@ -46,11 +46,40 @@ export function useContractPerformanceHistory(contractId: string | null) {
   })
 }
 
-export function useInitiateRenewal() {
+/**
+ * Vendor — submit a renewal proposal.
+ *
+ * Writes a `ContractChangeProposal` (proposalType `contract_edit`,
+ * status `pending`, semantic `kind: "renewal"` in `changes`). Replaces
+ * the legacy `useInitiateRenewal` mutation — see plan W1.4 in
+ * docs/superpowers/plans/2026-04-19-renewals-v0-parity.md.
+ */
+export function useSubmitRenewalProposal() {
   const qc = useQueryClient()
 
   return useMutation({
-    mutationFn: (contractId: string) => initiateRenewal(contractId),
+    mutationFn: (input: {
+      contractId: string
+      notes: string
+      proposedTerms?: {
+        effectiveDate: string | null
+        expirationDate: string | null
+        priceChangePercent: number | null
+        rebateRateChangePercent: number | null
+        narrative: string | null
+      }
+    }) =>
+      submitRenewalProposal({
+        contractId: input.contractId,
+        notes: input.notes,
+        proposedTerms: input.proposedTerms ?? {
+          effectiveDate: null,
+          expirationDate: null,
+          priceChangePercent: null,
+          rebateRateChangePercent: null,
+          narrative: null,
+        },
+      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["renewals"] })
       void qc.invalidateQueries({ queryKey: ["contracts"] })

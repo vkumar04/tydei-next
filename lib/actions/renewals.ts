@@ -209,80 +209,13 @@ export async function getContractPerformanceHistory(
   })
 }
 
-// ─── Initiate Renewal ────────────────────────────────────────────
-
-export async function initiateRenewal(contractId: string) {
-  await requireAuth()
-
-  const original = await prisma.contract.findUniqueOrThrow({
-    where: { id: contractId },
-    include: { terms: { include: { tiers: true } } },
-  })
-
-  const newEffective = new Date(original.expirationDate)
-  newEffective.setDate(newEffective.getDate() + 1)
-  const newExpiration = addDays(newEffective, 365)
-
-  const renewal = await prisma.contract.create({
-    data: {
-      name: `${original.name} (Renewal)`,
-      contractNumber: original.contractNumber
-        ? `${original.contractNumber}-R`
-        : null,
-      vendorId: original.vendorId,
-      facilityId: original.facilityId,
-      productCategoryId: original.productCategoryId,
-      contractType: original.contractType,
-      status: "draft",
-      effectiveDate: newEffective,
-      expirationDate: newExpiration,
-      autoRenewal: original.autoRenewal,
-      terminationNoticeDays: original.terminationNoticeDays,
-      totalValue: original.totalValue,
-      annualValue: original.annualValue,
-      description: original.description,
-      gpoAffiliation: original.gpoAffiliation,
-      performancePeriod: original.performancePeriod,
-      rebatePayPeriod: original.rebatePayPeriod,
-      isGrouped: original.isGrouped,
-      isMultiFacility: original.isMultiFacility,
-    },
-  })
-
-  // Copy terms + tiers
-  for (const term of original.terms) {
-    await prisma.contractTerm.create({
-      data: {
-        contractId: renewal.id,
-        termName: term.termName,
-        termType: term.termType,
-        baselineType: term.baselineType,
-        evaluationPeriod: term.evaluationPeriod,
-        paymentTiming: term.paymentTiming,
-        appliesTo: term.appliesTo,
-        effectiveStart: newEffective,
-        effectiveEnd: newExpiration,
-        volumeType: term.volumeType,
-        spendBaseline: term.spendBaseline,
-        volumeBaseline: term.volumeBaseline,
-        growthBaselinePercent: term.growthBaselinePercent,
-        desiredMarketShare: term.desiredMarketShare,
-        tiers: {
-          create: term.tiers.map((t) => ({
-            tierNumber: t.tierNumber,
-            spendMin: t.spendMin,
-            spendMax: t.spendMax,
-            volumeMin: t.volumeMin,
-            volumeMax: t.volumeMax,
-            marketShareMin: t.marketShareMin,
-            marketShareMax: t.marketShareMax,
-            rebateType: t.rebateType,
-            rebateValue: t.rebateValue,
-          })),
-        },
-      },
-    })
-  }
-
-  return serialize(renewal)
-}
+// ─── Initiate Renewal — REMOVED ──────────────────────────────────
+//
+// The legacy `initiateRenewal(contractId)` action cloned a contract into
+// a new draft row. It was only ever called from the vendor "Propose Terms"
+// dialog, which actually wants to *submit a proposal*, not clone a
+// contract. That flow has been rewired to
+// `lib/actions/renewals/proposals.ts::submitRenewalProposal`, which
+// persists a `ContractChangeProposal` (spec: docs/superpowers/specs/
+// 2026-04-18-renewals-rewrite.md §4.2). See plan entry W1.4 in
+// docs/superpowers/plans/2026-04-19-renewals-v0-parity.md.
