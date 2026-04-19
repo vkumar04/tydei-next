@@ -185,24 +185,24 @@ export type RichContractExtractData = z.infer<typeof richContractExtractSchema>
 // ─── Deal Score Schema ───────────────────────────────────────────
 
 export const dealScoreSchema = z.object({
-  financialValue: z.number().min(0).max(100).describe("Financial value score 0-100"),
-  rebateEfficiency: z.number().min(0).max(100).describe("Rebate efficiency score 0-100"),
+  financialValue: z
+    .number()
+    .describe("Financial value score. Return a number from 0 to 100 inclusive."),
+  rebateEfficiency: z
+    .number()
+    .describe("Rebate efficiency score. Return a number from 0 to 100 inclusive."),
   pricingCompetitiveness: z
     .number()
-    .min(0)
-    .max(100)
-    .describe("Pricing competitiveness score 0-100"),
+    .describe("Pricing competitiveness score. Return a number from 0 to 100 inclusive."),
   marketShareAlignment: z
     .number()
-    .min(0)
-    .max(100)
-    .describe("Market share alignment score 0-100"),
+    .describe("Market share alignment score. Return a number from 0 to 100 inclusive."),
   complianceLikelihood: z
     .number()
-    .min(0)
-    .max(100)
-    .describe("Compliance likelihood score 0-100"),
-  overallScore: z.number().min(0).max(100).describe("Overall deal score 0-100"),
+    .describe("Compliance likelihood score. Return a number from 0 to 100 inclusive."),
+  overallScore: z
+    .number()
+    .describe("Overall deal score. Return a number from 0 to 100 inclusive."),
   recommendation: z.string().describe("Brief recommendation summary"),
   negotiationAdvice: z
     .array(z.string())

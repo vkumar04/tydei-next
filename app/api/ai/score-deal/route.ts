@@ -3,7 +3,7 @@ import { z } from "zod"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { claudeModel } from "@/lib/ai/config"
-import { dealScoreSchema } from "@/lib/ai/schemas"
+import { dealScoreSchema, type DealScoreResult } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
 
 const scoreBodySchema = z.object({
@@ -11,6 +11,10 @@ const scoreBodySchema = z.object({
   cogData: z.record(z.string(), z.unknown()),
   benchmarkData: z.record(z.string(), z.unknown()).optional(),
 })
+
+function clamp01to100(n: number): number {
+  return Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0))
+}
 
 export async function POST(request: Request) {
   try {
@@ -56,9 +60,26 @@ Score each dimension considering:
 Provide an overall score (weighted average), a brief recommendation, and 3-5 actionable negotiation advice points.`,
     })
 
-    return Response.json(result.output)
+    const score: DealScoreResult = result.output
+    const clamped: DealScoreResult = {
+      ...score,
+      financialValue: clamp01to100(score.financialValue),
+      rebateEfficiency: clamp01to100(score.rebateEfficiency),
+      pricingCompetitiveness: clamp01to100(score.pricingCompetitiveness),
+      marketShareAlignment: clamp01to100(score.marketShareAlignment),
+      complianceLikelihood: clamp01to100(score.complianceLikelihood),
+      overallScore: clamp01to100(score.overallScore),
+    }
+    return Response.json(clamped)
   } catch (error) {
     console.error("Deal scoring error:", error)
-    return Response.json({ error: "Scoring failed" }, { status: 500 })
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return Response.json(
+      {
+        error: "Scoring failed",
+        details: process.env.NODE_ENV === "production" ? undefined : message,
+      },
+      { status: 500 }
+    )
   }
 }
