@@ -7,8 +7,12 @@ import { toast } from "sonner"
 import {
   getContractPricing,
   importContractPricing,
+  type ContractPricingItem,
 } from "@/lib/actions/pricing-files"
-import { parsePricingFile } from "@/lib/utils/parse-pricing-file"
+import {
+  parsePricingFile,
+  buildPricingItems,
+} from "@/lib/utils/parse-pricing-file"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -26,6 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatCurrency } from "@/lib/formatting"
+import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 
 interface ContractPricingTabProps {
   contractId: string
@@ -39,28 +44,48 @@ export function ContractPricingTab({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
 
+  // Column-mapper fallback state (mirrors new-contract-client.tsx)
+  const [mapperOpen, setMapperOpen] = useState(false)
+  const [rawHeaders, setRawHeaders] = useState<string[]>([])
+  const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
+  const [autoMapping, setAutoMapping] = useState<Record<string, string>>({})
+  const [pendingFileName, setPendingFileName] = useState<string | null>(null)
+
   const pricingQueryKey = ["contract-pricing", contractId] as const
   const { data: pricing, isLoading } = useQuery({
     queryKey: pricingQueryKey,
     queryFn: () => getContractPricing(contractId),
   })
 
+  async function importItems(items: ContractPricingItem[]) {
+    const result = await importContractPricing({
+      contractId,
+      items,
+    })
+    toast.success(`Imported ${result.imported} pricing records`)
+    await queryClient.invalidateQueries({ queryKey: pricingQueryKey })
+  }
+
   async function handleFile(file: File) {
     setUploading(true)
     try {
       const parsed = await parsePricingFile(file)
-      if (parsed.needsManualMapping || parsed.items.length === 0) {
+      if (parsed.needsManualMapping) {
+        // Open the column mapper dialog so the user can map columns manually.
+        setRawHeaders(parsed.rawHeaders)
+        setRawRows(parsed.rawRows)
+        setAutoMapping(parsed.autoMapping)
+        setPendingFileName(file.name)
+        setMapperOpen(true)
+        return
+      }
+      if (parsed.items.length === 0) {
         toast.error(
-          "Could not auto-detect columns. Please upload a file with vendor_item_no and contract_price columns, or use the New Contract flow for manual mapping.",
+          "No valid pricing items found. Check your file has columns like vendor_item_no and contract_price.",
         )
         return
       }
-      const result = await importContractPricing({
-        contractId,
-        items: parsed.items,
-      })
-      toast.success(`Imported ${result.imported} pricing records`)
-      await queryClient.invalidateQueries({ queryKey: pricingQueryKey })
+      await importItems(parsed.items)
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to upload pricing file",
@@ -68,6 +93,32 @@ export function ContractPricingTab({
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  async function handleMappingApply(mapping: Record<string, string>) {
+    setMapperOpen(false)
+    setUploading(true)
+    try {
+      const dataRows = rawRows.map((row) =>
+        rawHeaders.map((h) => row[h] ?? ""),
+      )
+      const items = buildPricingItems(dataRows, rawHeaders, mapping)
+      if (items.length === 0) {
+        toast.error("No valid pricing items found with the selected mapping.")
+        return
+      }
+      await importItems(items)
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to import pricing file",
+      )
+    } finally {
+      setUploading(false)
+      setPendingFileName(null)
+      setRawHeaders([])
+      setRawRows([])
+      setAutoMapping({})
     }
   }
 
@@ -80,6 +131,7 @@ export function ContractPricingTab({
           <CardTitle>Contract Pricing</CardTitle>
           <CardDescription>
             Pricing items attached to this contract
+            {pendingFileName ? ` — mapping ${pendingFileName}` : ""}
           </CardDescription>
         </div>
         <div>
@@ -151,6 +203,22 @@ export function ContractPricingTab({
           </Table>
         )}
       </CardContent>
+
+      <PricingColumnMapper
+        open={mapperOpen}
+        onOpenChange={(o) => {
+          setMapperOpen(o)
+          if (!o) {
+            // User cancelled — clear pending file state.
+            setUploading(false)
+            setPendingFileName(null)
+          }
+        }}
+        headers={rawHeaders}
+        sampleRows={rawRows}
+        autoMapping={autoMapping}
+        onApply={handleMappingApply}
+      />
     </Card>
   )
 }
