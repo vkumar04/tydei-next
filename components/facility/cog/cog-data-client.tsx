@@ -130,7 +130,13 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   const totalItems = stats?.totalItems ?? 0
   const onContractCount = stats?.onContractCount ?? 0
   const offContractCount = stats?.offContractCount ?? 0
-  const totalSavings = totalSpend * 0.05
+  // Total Savings is the REAL sum of (contractPrice − actualCost) × qty
+  // across matched COG rows, as returned by getCOGStats. We no longer
+  // synthesize it from `totalSpend * 0.05` — that was misleading when
+  // no COG records had been matched (Charles W1.M).
+  const totalSavings = stats?.totalSavings ?? 0
+  const matchedCount = stats?.matchedCount ?? 0
+  const potentialEstimate = stats?.potentialEstimate ?? totalSpend * 0.05
   const minPODate = stats?.minPODate ?? null
   const maxPODate = stats?.maxPODate ?? null
 
@@ -325,7 +331,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm text-muted-foreground">Total Savings</p>
                   <TooltipProvider>
@@ -339,24 +345,58 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
                           <HelpCircle className="h-3.5 w-3.5" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-[300px] text-xs leading-relaxed">
+                      <TooltipContent className="max-w-[320px] text-xs leading-relaxed">
                         <p className="font-medium mb-1">Total Savings</p>
                         <p>
-                          High-level estimate: <span className="font-mono">5% of total COG spend</span>.
-                          Intended as a quick benchmark — the precise figure comes from summing{" "}
-                          <span className="font-mono">(contract price − actual unit cost) × quantity</span>{" "}
-                          across on-contract and price-variance records (see the Savings column
-                          in the COG Data table). Positive means the facility paid below contract.
+                          Sum of actual savings across COG records matched to
+                          contract pricing. Computed per-record as{" "}
+                          <span className="font-mono">
+                            (list price − contract price) × quantity
+                          </span>
+                          ; zero when a record isn&apos;t matched.
+                          {matchedCount === 0 && !statsLoading ? (
+                            <>
+                              {" "}
+                              <strong>Matched = 0</strong> — upload pricing files and
+                              re-run Match Pricing to see a real figure.
+                            </>
+                          ) : null}
                         </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {statsLoading ? <Skeleton className="h-8 w-24" /> : formatCurrency(totalSavings)}
-                </div>
+                {statsLoading ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <div
+                    className={`text-2xl font-bold ${
+                      matchedCount === 0
+                        ? "text-muted-foreground"
+                        : "text-green-600 dark:text-green-400"
+                    }`}
+                  >
+                    {formatCurrency(totalSavings)}
+                  </div>
+                )}
+                {!statsLoading && matchedCount === 0 ? (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Matched COG: 0 — upload pricing to see savings.
+                  </p>
+                ) : null}
+                {!statsLoading && potentialEstimate > 0 ? (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Estimated potential at 5%: {formatCurrency(potentialEstimate)}
+                  </p>
+                ) : null}
               </div>
-              <CheckCircle className="h-8 w-8 text-green-500/50" />
+              <CheckCircle
+                className={`h-8 w-8 ${
+                  matchedCount === 0
+                    ? "text-muted-foreground/40"
+                    : "text-green-500/50"
+                }`}
+              />
             </div>
           </CardContent>
         </Card>

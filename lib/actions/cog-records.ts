@@ -307,20 +307,40 @@ export async function getCOGImportHistory(_facilityId?: string) {
 
 // ─── COG Stats (aggregated server-side) ─────────────────────────
 
+/**
+ * Aggregated stats for the COG Data page.
+ *
+ * Savings reporting (Charles W1.M — fix Apr 2026):
+ *   - `totalSavings` is the real sum of `COGRecord.savingsAmount` across
+ *     matched rows (on_contract + price_variance). It is NEVER a
+ *     synthetic multiplier of total spend. When no rows are matched (or
+ *     enrichment hasn't run), this returns 0.
+ *   - `matchedCount` lets the client distinguish "truly $0 savings" from
+ *     "nothing to compute against yet".
+ *   - `potentialEstimate` = `totalSpend * 0.05` is an illustrative
+ *     benchmark only, surfaced as a muted secondary line. It is never
+ *     presented as the headline Total Savings figure.
+ */
 export async function getCOGStats(facilityId: string) {
   const { facility } = await requireFacility()
 
-  const [totalItems, totalSpendResult, onContractCount, vendorGroups, dateRange] =
-    await Promise.all([
-      prisma.cOGRecord.count({
-        where: { facilityId: facility.id },
-      }),
-      prisma.cOGRecord.aggregate({
-        where: { facilityId: facility.id },
-        _sum: { extendedPrice: true },
-      }),
-      // Count items where the vendor has an active contract at this facility
-      prisma.$queryRaw<[{ count: bigint }]>`
+  const [
+    totalItems,
+    totalSpendResult,
+    onContractCount,
+    matchedAggregate,
+    vendorGroups,
+    dateRange,
+  ] = await Promise.all([
+    prisma.cOGRecord.count({
+      where: { facilityId: facility.id },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: { facilityId: facility.id },
+      _sum: { extendedPrice: true },
+    }),
+    // Count items where the vendor has an active contract at this facility
+    prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(DISTINCT cr.id)::bigint AS count
         FROM cog_record cr
         INNER JOIN contract c ON c."vendorId" = cr."vendorId"
@@ -330,22 +350,34 @@ export async function getCOGStats(facilityId: string) {
         WHERE cr."facilityId" = ${facility.id}
           AND cr."vendorId" IS NOT NULL
       `.then((rows) => Number(rows[0]?.count ?? 0)),
-      prisma.cOGRecord.groupBy({
-        by: ["vendorName"],
-        where: {
-          facilityId: facility.id,
-          vendorName: { not: null },
-          NOT: { vendorName: "" },
-        },
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-      }),
-      prisma.cOGRecord.aggregate({
-        where: { facilityId: facility.id },
-        _min: { transactionDate: true },
-        _max: { transactionDate: true },
-      }),
-    ])
+    // Sum real savings across matched rows. A row is "matched" when the
+    // enrichment pipeline has attached it to contract pricing — i.e.
+    // matchStatus is on_contract or price_variance. Everything else has
+    // null savingsAmount by construction (see lib/cog/enrichment.ts).
+    prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
+        matchStatus: { in: ["on_contract", "price_variance"] },
+      },
+      _sum: { savingsAmount: true },
+      _count: { _all: true },
+    }),
+    prisma.cOGRecord.groupBy({
+      by: ["vendorName"],
+      where: {
+        facilityId: facility.id,
+        vendorName: { not: null },
+        NOT: { vendorName: "" },
+      },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: { facilityId: facility.id },
+      _min: { transactionDate: true },
+      _max: { transactionDate: true },
+    }),
+  ])
 
   const totalSpend = Number(totalSpendResult._sum.extendedPrice ?? 0)
   const offContractCount = totalItems - onContractCount
@@ -354,6 +386,12 @@ export async function getCOGStats(facilityId: string) {
     name: g.vendorName ?? "Unknown",
     count: g._count.id,
   }))
+
+  const matchedCount = matchedAggregate._count._all
+  const totalSavings =
+    matchedCount > 0 ? Number(matchedAggregate._sum.savingsAmount ?? 0) : 0
+  // Illustrative benchmark only — never the headline figure.
+  const potentialEstimate = totalSpend * 0.05
 
   return serialize({
     totalItems,
@@ -364,5 +402,8 @@ export async function getCOGStats(facilityId: string) {
     topVendors,
     minPODate: dateRange._min.transactionDate ?? null,
     maxPODate: dateRange._max.transactionDate ?? null,
+    totalSavings,
+    matchedCount,
+    potentialEstimate,
   })
 }
