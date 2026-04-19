@@ -51,6 +51,10 @@ import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
 import { SpecificItemsPicker, type VendorItem } from "./specific-items-picker"
 import { TieInAmortizationPreview } from "./tie-in-amortization-preview"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
+  toDisplayInterestRate,
+  fromDisplayInterestRate,
+} from "@/lib/contracts/interest-rate-normalize"
 
 interface ContractTermsEntryProps {
   terms: TermFormValues[]
@@ -524,13 +528,22 @@ export function ContractTermsEntry({
                           <Input
                             type="number"
                             step="0.0001"
-                            value={term.interestRate ?? ""}
+                            // Storage is fraction (0.04 = 4%); input shows
+                            // whole percent (4). See lib/contracts/
+                            // interest-rate-normalize.ts (Charles W1.E).
+                            value={
+                              term.interestRate == null
+                                ? ""
+                                : toDisplayInterestRate(term.interestRate)
+                            }
                             onChange={(e) =>
                               updateTerm(termIdx, {
                                 interestRate:
                                   e.target.value === ""
                                     ? null
-                                    : Number(e.target.value),
+                                    : fromDisplayInterestRate(
+                                        Number(e.target.value),
+                                      ),
                               })
                             }
                           />
