@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -482,38 +483,57 @@ export function ContractDetailClient({
             </Card>
           </div>
 
-          {contract.contractType === "tie_in" && contract.terms[0] && (
+          {contract.contractType === "tie_in" && (
             <Card>
               <CardHeader>
                 <CardTitle>Tie-In Capital</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="grid gap-4 sm:grid-cols-3 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Capital Cost</p>
-                    <p className="font-medium">
-                      {contract.terms[0].capitalCost != null
-                        ? formatCurrency(Number(contract.terms[0].capitalCost))
-                        : "—"}
-                    </p>
+                {contract.terms[0] ? (
+                  <div className="grid gap-4 sm:grid-cols-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Capital Cost</p>
+                      <p className="font-medium">
+                        {contract.terms[0].capitalCost != null
+                          ? formatCurrency(
+                              Number(contract.terms[0].capitalCost),
+                            )
+                          : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Interest Rate</p>
+                      <p className="font-medium">
+                        {contract.terms[0].interestRate != null
+                          ? `${(Number(contract.terms[0].interestRate) * 100).toFixed(2)}%`
+                          : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Term</p>
+                      <p className="font-medium">
+                        {contract.terms[0].termMonths != null
+                          ? `${contract.terms[0].termMonths} months`
+                          : "—"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Interest Rate</p>
-                    <p className="font-medium">
-                      {contract.terms[0].interestRate != null
-                        ? `${(Number(contract.terms[0].interestRate) * 100).toFixed(2)}%`
-                        : "—"}
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      This tie-in contract has no terms yet. Add a term to
+                      capture the capital cost, interest rate, and payoff
+                      schedule.
                     </p>
+                    <Button asChild variant="outline" size="sm">
+                      <Link
+                        href={`/dashboard/contracts/${contract.id}/terms`}
+                      >
+                        Add Terms
+                      </Link>
+                    </Button>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Term</p>
-                    <p className="font-medium">
-                      {contract.terms[0].termMonths != null
-                        ? `${contract.terms[0].termMonths} months`
-                        : "—"}
-                    </p>
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           )}
