@@ -444,34 +444,7 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
     spendFromPeriods.set(row.contractId, Number(row._sum.totalSpend ?? 0))
   }
 
-  // Pass 3 — cross-vendor COG spend as final fallback (for vendors
-  // whose COG rows haven't been enriched with contractId yet).
-  const vendorIdToContractIds = new Map<string, string[]>()
-  for (const c of contracts) {
-    const existing = vendorIdToContractIds.get(c.vendorId) ?? []
-    existing.push(c.id)
-    vendorIdToContractIds.set(c.vendorId, existing)
-  }
-  const vendorIds = Array.from(vendorIdToContractIds.keys())
-  const vendorSpendAgg =
-    vendorIds.length > 0
-      ? await prisma.cOGRecord.groupBy({
-          by: ["vendorId"],
-          where: {
-            facilityId: facility.id,
-            vendorId: { in: vendorIds },
-          },
-          _sum: { extendedPrice: true },
-        })
-      : []
-  const spendFromVendor = new Map<string, number>()
-  for (const row of vendorSpendAgg) {
-    if (row.vendorId) {
-      spendFromVendor.set(row.vendorId, Number(row._sum.extendedPrice ?? 0))
-    }
-  }
-
-  // Pass 4 — rebate is *not* computed from tiers. Show what the
+  // Pass 3 — rebate is *not* computed from tiers. Show what the
   // facility has actually recorded (manually entered or imported).
   // Earned counts only Rebate rows whose payPeriodEnd has passed
   // (pre-recorded rows for upcoming periods are projections, not
@@ -485,6 +458,7 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
       by: ["contractId"],
       where: {
         contractId: { in: contractIds },
+        facilityId: facility.id,
         payPeriodEnd: { lte: today },
       },
       _sum: { rebateEarned: true },
@@ -493,6 +467,7 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
       by: ["contractId"],
       where: {
         contractId: { in: contractIds },
+        facilityId: facility.id,
         periodEnd: { lte: today },
       },
       _sum: { rebateEarned: true },
@@ -515,10 +490,11 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
   for (const c of contracts) {
     const cogSpend = spendFromCog.get(c.id) ?? 0
     const periodSpend = spendFromPeriods.get(c.id) ?? 0
-    const vendorSpend = spendFromVendor.get(c.vendorId) ?? 0
 
-    // Precedence: COG (enrichment) → ContractPeriod → Vendor-level COG.
-    const spend = cogSpend > 0 ? cogSpend : periodSpend > 0 ? periodSpend : vendorSpend
+    // Precedence: COG enrichment (contractId) → ContractPeriod rollup → 0.
+    // No vendor-wide fallback — it inflated totals when a vendor had
+    // multiple contracts (QA: list-3).
+    const spend = cogSpend > 0 ? cogSpend : periodSpend
 
     // Precedence: Rebate model (per-payment) → ContractPeriod rollup.
     // No tier-engine fallback — never "estimate" a rebate.

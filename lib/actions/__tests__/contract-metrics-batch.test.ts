@@ -151,7 +151,10 @@ describe("getContractMetricsBatch — resolution chain", () => {
     expect(result["c-1"].spend).toBe(42000)
   })
 
-  it("falls back to vendor-wide COG when passes 1+2 yield zero (pass 3)", async () => {
+  it("does NOT fall back to vendor-wide COG when passes 1+2 yield zero (QA: list-3)", async () => {
+    // Vendor-wide COG as a final fallback inflated totals when a vendor
+    // had multiple contracts on the same facility. Precedence is now
+    // COG enrichment (contractId) → ContractPeriod rollup → 0.
     contractRows = [
       {
         id: "c-1",
@@ -167,7 +170,7 @@ describe("getContractMetricsBatch — resolution chain", () => {
     ]
 
     const result = await getContractMetricsBatch(["c-1"])
-    expect(result["c-1"].spend).toBe(25000)
+    expect(result["c-1"].spend).toBe(0)
   })
 
   it("returns zero spend when every fallback is empty", async () => {
@@ -234,6 +237,50 @@ describe("getContractMetricsBatch — rebate (recorded, not computed)", () => {
     const result = await getContractMetricsBatch(["c-1"])
     expect(result["c-1"].rebate).toBe(0)
     expect(result["c-1"].spend).toBe(50000)
+  })
+})
+
+describe("getContractMetricsBatch — facility scoping (QA: list-2)", () => {
+  it("scopes rebate aggregation by facilityId", async () => {
+    contractRows = [
+      { id: "c-1", vendorId: "v-1", totalValue: 100000, terms: [] },
+    ]
+
+    await getContractMetricsBatch(["c-1"])
+
+    const { prisma } = (await import("@/lib/db")) as unknown as {
+      prisma: {
+        rebate: { groupBy: ReturnType<typeof vi.fn> }
+        contractPeriod: { groupBy: ReturnType<typeof vi.fn> }
+      }
+    }
+    const rebateCall = prisma.rebate.groupBy.mock.calls[0][0] as {
+      where: { facilityId?: string }
+    }
+    expect(rebateCall.where.facilityId).toBe("fac-test")
+  })
+
+  it("scopes contractPeriod rebate rollup by facilityId", async () => {
+    contractRows = [
+      { id: "c-1", vendorId: "v-1", totalValue: 100000, terms: [] },
+    ]
+
+    await getContractMetricsBatch(["c-1"])
+
+    const { prisma } = (await import("@/lib/db")) as unknown as {
+      prisma: {
+        contractPeriod: { groupBy: ReturnType<typeof vi.fn> }
+      }
+    }
+    // Two contractPeriod.groupBy calls happen: one for totalSpend
+    // (spend fallback), one for rebateEarned. The rebate-scoped call
+    // is the one whose _sum selector includes rebateEarned.
+    const calls = prisma.contractPeriod.groupBy.mock.calls as Array<
+      [{ where: { facilityId?: string }; _sum: Record<string, boolean> }]
+    >
+    const rebateCall = calls.find((c) => c[0]._sum?.rebateEarned)
+    expect(rebateCall).toBeDefined()
+    expect(rebateCall![0].where.facilityId).toBe("fac-test")
   })
 })
 
