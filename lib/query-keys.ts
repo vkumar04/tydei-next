@@ -7,7 +7,8 @@ export const queryKeys = {
       ["contracts", "list", facilityId, filters] as const,
     detail: (id: string, periodId?: string) =>
       ["contracts", "detail", id, periodId ?? null] as const,
-    stats: (facilityId: string) => ["contracts", "stats", facilityId] as const,
+    stats: (facilityId: string, scope?: string) =>
+      ["contracts", "stats", facilityId, scope ?? "this"] as const,
   },
   contractTerms: {
     all: ["contractTerms"] as const,

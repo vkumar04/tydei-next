@@ -46,3 +46,30 @@ export function contractsOwnedByFacility(facilityId: string): Prisma.ContractWhe
     ],
   }
 }
+
+// ─── 3-Way Facility Scope (this / all / shared) ─────────────────
+//
+// Subsystem 9.2 — list + stats surfaces honor a URL-param-driven scope.
+// Auth gate (requireFacility) is enforced by callers; this helper only
+// shapes the Prisma `where` clause. Shared between `getContracts` and
+// `getContractStats` so both use identical scoping semantics.
+
+export type FacilityScope = "this" | "all" | "shared"
+
+export function facilityScopeClause(
+  scope: FacilityScope,
+  facilityId: string,
+): Prisma.ContractWhereInput {
+  if (scope === "this") return contractsOwnedByFacility(facilityId)
+  if (scope === "shared") {
+    return {
+      isMultiFacility: true,
+      OR: [
+        { facilityId },
+        { contractFacilities: { some: { facilityId } } },
+      ],
+    }
+  }
+  // scope === "all" — no facility filter (auth still gates the caller).
+  return {}
+}

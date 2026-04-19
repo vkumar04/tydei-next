@@ -19,6 +19,8 @@ import { recomputeContractScore } from "@/lib/actions/contracts/scoring"
 import {
   contractOwnershipWhere,
   contractsOwnedByFacility,
+  facilityScopeClause,
+  type FacilityScope,
 } from "@/lib/actions/contracts-auth"
 
 // ─── List Contracts ──────────────────────────────────────────────
@@ -27,22 +29,8 @@ export async function getContracts(input: ContractFilters) {
   const { facility } = await requireFacility()
   const filters = contractFiltersSchema.parse(input)
 
-  // Subsystem 9.2 — 3-way facility scope (this / all / shared).
-  // Auth gate (requireFacility) is already enforced above in all three modes.
-  const scope = filters.facilityScope ?? "this"
-  let facilityClause: Prisma.ContractWhereInput = {}
-  if (scope === "this") {
-    facilityClause = contractsOwnedByFacility(facility.id)
-  } else if (scope === "shared") {
-    facilityClause = {
-      isMultiFacility: true,
-      OR: [
-        { facilityId: facility.id },
-        { contractFacilities: { some: { facilityId: facility.id } } },
-      ],
-    }
-  }
-  // scope === "all" leaves facilityClause empty ({})
+  const scope: FacilityScope = filters.facilityScope ?? "this"
+  const facilityClause = facilityScopeClause(scope, facility.id)
 
   const conditions: Prisma.ContractWhereInput[] = [facilityClause]
 
@@ -349,10 +337,12 @@ export async function getContract(
 
 // ─── Contract Stats ──────────────────────────────────────────────
 
-export async function getContractStats() {
+export async function getContractStats(
+  input: { facilityScope?: FacilityScope } = {},
+) {
   const { facility } = await requireFacility()
-
-  const where = contractsOwnedByFacility(facility.id)
+  const scope: FacilityScope = input.facilityScope ?? "this"
+  const where = facilityScopeClause(scope, facility.id)
 
   const [totalContracts, aggregates] = await Promise.all([
     prisma.contract.count({ where }),
@@ -363,12 +353,14 @@ export async function getContractStats() {
   ])
 
   // Earned counts only periods that have actually closed — pre-recorded
-  // rows for upcoming periods are projections, not earned.
+  // rows for upcoming periods are projections, not earned. When scope is
+  // "all" we drop the facility filter so the stats reflect the same
+  // contract universe that the list query returns.
   const rebateResult = await prisma.rebate.aggregate({
-    where: {
-      facilityId: facility.id,
-      payPeriodEnd: { lte: new Date() },
-    },
+    where:
+      scope === "all"
+        ? { payPeriodEnd: { lte: new Date() } }
+        : { facilityId: facility.id, payPeriodEnd: { lte: new Date() } },
     _sum: { rebateEarned: true },
   })
 

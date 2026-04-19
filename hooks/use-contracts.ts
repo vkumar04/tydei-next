@@ -12,6 +12,7 @@ import {
   deleteContract,
 } from "@/lib/actions/contracts"
 import type { ContractFilters } from "@/lib/validators/contracts"
+import type { FacilityScope } from "@/lib/actions/contracts-auth"
 import { toast } from "sonner"
 
 export function useContracts(facilityId: string, filters?: Partial<ContractFilters>) {
@@ -29,10 +30,13 @@ export function useContract(id: string, periodId?: string) {
   })
 }
 
-export function useContractStats(facilityId: string) {
+export function useContractStats(
+  facilityId: string,
+  scope: FacilityScope = "this",
+) {
   return useQuery({
-    queryKey: queryKeys.contracts.stats(facilityId),
-    queryFn: () => getContractStats(),
+    queryKey: queryKeys.contracts.stats(facilityId, scope),
+    queryFn: () => getContractStats({ facilityScope: scope }),
   })
 }
 

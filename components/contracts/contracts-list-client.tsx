@@ -53,9 +53,7 @@ import { ScoreBadge } from "@/components/shared/badges/score-badge"
 import { CompareModal } from "./compare-modal"
 import type { CompareContract } from "./compare-row-builder"
 import { buildContractsCSV } from "./contract-export"
-
-/** The 3-way facility scope filter per spec §4.3. */
-type FacilityScope = "this" | "all" | "shared"
+import type { FacilityScope } from "@/lib/actions/contracts-auth"
 
 interface ContractsListClientProps {
   facilityId: string
@@ -115,7 +113,7 @@ export function ContractsListClient({
   }
 
   const { data, isLoading } = useContracts(facilityId, filters)
-  const { data: stats } = useContractStats(facilityId)
+  const { data: stats } = useContractStats(facilityId, facilityScope)
   const deleteMutation = useDeleteContract()
 
   const allContracts = data?.contracts ?? []
