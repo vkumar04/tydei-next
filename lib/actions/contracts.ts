@@ -329,10 +329,16 @@ export async function getContract(
   )
 
   // Live spend is still useful for tier-progress / projection surfaces.
+  // Prefer enriched COG rows (contractId set) for this contract; fall back to
+  // un-enriched vendor rows so pre-enrichment data still counts but other
+  // contracts on the same vendor don't leak in.
   const cogAgg = await prisma.cOGRecord.aggregate({
     where: {
       facilityId: facility.id,
-      vendorId: contract.vendorId,
+      OR: [
+        { contractId: contract.id },
+        { contractId: null, vendorId: contract.vendorId },
+      ],
     },
     _sum: { extendedPrice: true },
   })

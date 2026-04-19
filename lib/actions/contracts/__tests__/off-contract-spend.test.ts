@@ -54,4 +54,30 @@ describe("getOffContractSpend", () => {
     expect(r.offContract).toBe(0)
     expect(r.offContractItems).toEqual([])
   })
+
+  it("filters COG rows by contractId so sibling-contract spend is excluded", async () => {
+    aggregateMock
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 100 } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 50 } })
+    groupByMock.mockResolvedValueOnce([])
+
+    await getOffContractSpend("c-1")
+
+    // Every COG query should restrict to this contract's rows (plus
+    // un-enriched vendor rows) — never plain vendorId-only.
+    const onWhere = aggregateMock.mock.calls[0][0].where
+    const offWhere = aggregateMock.mock.calls[1][0].where
+    const groupWhere = groupByMock.mock.calls[0][0].where
+
+    for (const where of [onWhere, offWhere, groupWhere]) {
+      expect(where.facilityId).toBe("fac-1")
+      expect(where).not.toHaveProperty("vendorId")
+      expect(where.OR).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ contractId: "c-1" }),
+          expect.objectContaining({ contractId: null, vendorId: "v-1" }),
+        ]),
+      )
+    }
+  })
 })

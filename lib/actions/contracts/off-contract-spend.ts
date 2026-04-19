@@ -23,11 +23,17 @@ export async function getOffContractSpend(
     select: { id: true, vendorId: true },
   })
 
+  // Scope to rows enriched for this contract, plus un-enriched rows for the
+  // same vendor (so pre-enrichment data still counts). This prevents spend
+  // from a sibling contract on the same vendor from leaking in.
   const [onAgg, offAgg, offItems] = await Promise.all([
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
-        vendorId: contract.vendorId,
+        OR: [
+          { contractId: contract.id },
+          { contractId: null, vendorId: contract.vendorId },
+        ],
         isOnContract: true,
       },
       _sum: { extendedPrice: true },
@@ -35,7 +41,10 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
-        vendorId: contract.vendorId,
+        OR: [
+          { contractId: contract.id },
+          { contractId: null, vendorId: contract.vendorId },
+        ],
         isOnContract: false,
       },
       _sum: { extendedPrice: true },
@@ -44,7 +53,10 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
-        vendorId: contract.vendorId,
+        OR: [
+          { contractId: contract.id },
+          { contractId: null, vendorId: contract.vendorId },
+        ],
         isOnContract: false,
         vendorItemNo: { not: null },
       },

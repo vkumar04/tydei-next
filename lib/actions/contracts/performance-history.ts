@@ -21,7 +21,10 @@ export async function getContractPerformanceHistory(contractId: string): Promise
   const cog = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,
-      vendorId: contract.vendorId,
+      OR: [
+        { contractId: contract.id },
+        { contractId: null, vendorId: contract.vendorId },
+      ],
       transactionDate: { gte: since },
     },
     select: { transactionDate: true, extendedPrice: true },
