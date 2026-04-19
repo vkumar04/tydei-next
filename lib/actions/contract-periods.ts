@@ -163,6 +163,11 @@ export async function createContractTransaction(input: {
   amount: number
   description: string
   date: string
+  // Optional unit count for per-unit / per-procedure rebate terms. Persisted
+  // into the Rebate row's `notes` as a "Qty: N" suffix so the facility can
+  // audit the basis of the entry without a schema migration. Only applies
+  // when type === "rebate"; ignored for credit/payment.
+  quantity?: number
 }) {
   const { facility } = await requireFacility()
 
@@ -185,6 +190,15 @@ export async function createContractTransaction(input: {
     // filter on `payPeriodEnd <= today` (earned) and `collectionDate != null`
     // (collected) both include it. `payPeriodStart` matches `payPeriodEnd`
     // for a point-in-time entry — the user is logging a realized rebate.
+    // If a quantity was supplied (per-unit / per-procedure terms), append it
+    // to `notes` as "Qty: N" so audit trails preserve the unit count even
+    // though Rebate has no dedicated quantity column.
+    const qty =
+      typeof input.quantity === "number" && Number.isFinite(input.quantity) && input.quantity > 0
+        ? input.quantity
+        : null
+    const notes =
+      qty != null ? `${input.description} (Qty: ${qty})` : input.description
     const rebate = await prisma.rebate.create({
       data: {
         contractId: input.contractId,
@@ -194,7 +208,7 @@ export async function createContractTransaction(input: {
         payPeriodStart: txnDate,
         payPeriodEnd: txnDate,
         collectionDate: txnDate,
-        notes: input.description,
+        notes,
       },
     })
     return serialize({ kind: "rebate" as const, row: rebate })

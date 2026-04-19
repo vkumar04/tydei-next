@@ -127,6 +127,7 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
   const [date, setDate] = useState("")
+  const [quantity, setQuantity] = useState("")
 
   async function handleSubmit() {
     if (!amount || !description || !date) {
@@ -138,6 +139,18 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
       toast.error("Please enter a valid amount")
       return
     }
+    // Quantity is optional, but if present it must parse to a positive number.
+    // Only meaningful for rebate-type entries tied to per-unit / per-procedure
+    // contract terms; ignored by the server for credit/payment.
+    let parsedQuantity: number | undefined
+    if (quantity.trim() !== "") {
+      const q = parseFloat(quantity.replace(/[^0-9.]/g, ""))
+      if (isNaN(q) || q <= 0) {
+        toast.error("Please enter a valid quantity")
+        return
+      }
+      parsedQuantity = q
+    }
     try {
       const { createContractTransaction } = await import("@/lib/actions/contract-periods")
       await createContractTransaction({
@@ -146,6 +159,7 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
         amount: parsedAmount,
         description,
         date,
+        quantity: type === "rebate" ? parsedQuantity : undefined,
       })
       toast.success("Transaction recorded")
       // Refetch periods + rebates to surface the new row, and invalidate
@@ -165,6 +179,7 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
     setAmount("")
     setDescription("")
     setDate("")
+    setQuantity("")
     setOpen(false)
   }
 
@@ -210,6 +225,25 @@ function AddTransactionDialog({ contractId, queryClient }: { contractId: string;
               />
             </div>
           </div>
+          {type === "rebate" && (
+            <div className="space-y-2">
+              <Label htmlFor="txn-qty">Quantity</Label>
+              <Input
+                id="txn-qty"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                placeholder="e.g., 120"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional. Units or procedures this rebate covers (for
+                per-unit or per-procedure contract terms).
+              </p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="txn-desc">Description *</Label>
             <Input
