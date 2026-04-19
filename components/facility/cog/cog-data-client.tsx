@@ -12,7 +12,14 @@ import {
   FileStack,
   Trash2,
   RefreshCw,
+  HelpCircle,
 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -306,7 +313,32 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Savings</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-muted-foreground">Total Savings</p>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="How Total Savings is calculated"
+                          className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                        >
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[300px] text-xs leading-relaxed">
+                        <p className="font-medium mb-1">Total Savings</p>
+                        <p>
+                          High-level estimate: <span className="font-mono">5% of total COG spend</span>.
+                          Intended as a quick benchmark — the precise figure comes from summing{" "}
+                          <span className="font-mono">(contract price − actual unit cost) × quantity</span>{" "}
+                          across on-contract and price-variance records (see the Savings column
+                          in the COG Data table). Positive means the facility paid below contract.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <div className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {statsLoading ? <Skeleton className="h-8 w-24" /> : formatCurrency(totalSavings)}
                 </div>
