@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
-import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
+import {
+  formatTierRebateLabel,
+  formatTierDollarAnnotation,
+} from "@/lib/contracts/tier-rebate-label"
 import type { TierLike } from "@/lib/contracts/rebate-method"
 
 /**
@@ -56,5 +59,79 @@ describe("tier-progress display (Charles R5.22 regression)", () => {
     // Must never return > 100 — a "300%" progress bar is the downstream
     // symptom if this ever regresses.
     expect(progress.progressPercent).toBeLessThanOrEqual(100)
+  })
+})
+
+/**
+ * Charles W1.I: the Rebates & Tiers tab should show the dollar-amount
+ * rebate context on each tier row, not just the percent. Three cases:
+ * (a) dollar-earned inline on the current tier, (b) "$Y to unlock" on
+ * tiers above current, (c) non-percent tiers render per-unit / flat /
+ * per-procedure annotations rather than percent math.
+ */
+describe("tier dollar annotation (Charles W1.I)", () => {
+  it("shows dollar-earned on the current tier for percent_of_spend", () => {
+    const annotation = formatTierDollarAnnotation(
+      { tierNumber: 2, spendMin: 300_000, rebateType: "percent_of_spend", rebateValue: 0.04 },
+      412_000,
+      2,
+      false,
+    )
+    expect(annotation).not.toBeNull()
+    expect(annotation).toContain("earning")
+    // 412,000 * 0.04 = 16,480
+    expect(annotation).toContain("$16,480")
+    expect(annotation).toContain("$412,000")
+  })
+
+  it("shows '$Y to unlock' on tiers above current spend", () => {
+    const annotation = formatTierDollarAnnotation(
+      { tierNumber: 3, spendMin: 500_000, rebateType: "percent_of_spend", rebateValue: 0.06 },
+      412_056,
+      2,
+      false,
+    )
+    expect(annotation).not.toBeNull()
+    // 500,000 - 412,056 = 87,944
+    expect(annotation).toBe("$87,944 to unlock")
+  })
+
+  it("renders non-percent tiers with per-unit / flat / per-procedure annotations", () => {
+    const perUnit = formatTierDollarAnnotation(
+      { tierNumber: 1, spendMin: 0, rebateType: "fixed_rebate_per_unit", rebateValue: 50 },
+      0,
+      1,
+      false,
+    )
+    expect(perUnit).toBe("$50.00 per unit")
+
+    const flat = formatTierDollarAnnotation(
+      { tierNumber: 1, spendMin: 0, rebateType: "fixed_rebate", rebateValue: 10_000 },
+      0,
+      1,
+      false,
+    )
+    expect(flat).toBe("$10,000.00 flat per period")
+
+    const perProc = formatTierDollarAnnotation(
+      { tierNumber: 1, spendMin: 0, rebateType: "per_procedure_rebate", rebateValue: 75 },
+      0,
+      1,
+      false,
+    )
+    expect(perProc).toBe("$75.00 per procedure")
+  })
+
+  it("annotates the top tier reached with 'top rate — currently earning $X'", () => {
+    const annotation = formatTierDollarAnnotation(
+      { tierNumber: 3, spendMin: 1_000_000, rebateType: "percent_of_spend", rebateValue: 0.06 },
+      375_000,
+      3,
+      true,
+    )
+    expect(annotation).not.toBeNull()
+    expect(annotation).toContain("top rate")
+    // 375,000 * 0.06 = 22,500
+    expect(annotation).toContain("$22,500")
   })
 })

@@ -2,7 +2,10 @@
 
 import type { ContractTerm, ContractTier } from "@prisma/client"
 import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
-import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
+import {
+  formatTierRebateLabel,
+  formatTierDollarAnnotation,
+} from "@/lib/contracts/tier-rebate-label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Accordion,
@@ -94,7 +97,17 @@ function TierProgressCard({
   )
 }
 
-function TierDisplay({ tier, currentSpend }: { tier: ContractTier; currentSpend?: number }) {
+function TierDisplay({
+  tier,
+  currentSpend,
+  currentTierNumber,
+  isTopTier,
+}: {
+  tier: ContractTier
+  currentSpend?: number
+  currentTierNumber?: number
+  isTopTier?: boolean
+}) {
   const rebateLabel = formatTierRebateLabel(
     tier.rebateType,
     Number(tier.rebateValue),
@@ -113,6 +126,35 @@ function TierDisplay({ tier, currentSpend }: { tier: ContractTier; currentSpend?
     progress = 100
   }
 
+  // Charles W1.I: show dollar-amount context alongside the rate.
+  // "$Y to unlock" / "earning $X at $spend" / non-percent unit suffix.
+  const annotation =
+    currentSpend !== undefined && currentTierNumber !== undefined
+      ? formatTierDollarAnnotation(
+          {
+            tierNumber: tier.tierNumber,
+            spendMin: Number(tier.spendMin),
+            rebateType: tier.rebateType,
+            rebateValue: Number(tier.rebateValue),
+          },
+          currentSpend,
+          currentTierNumber,
+          Boolean(isTopTier && tier.tierNumber === currentTierNumber),
+        )
+      : tier.rebateType !== "percent_of_spend"
+        ? formatTierDollarAnnotation(
+            {
+              tierNumber: tier.tierNumber,
+              spendMin: Number(tier.spendMin),
+              rebateType: tier.rebateType,
+              rebateValue: Number(tier.rebateValue),
+            },
+            0,
+            -1,
+            false,
+          )
+        : null
+
   return (
     <div className="flex items-center gap-4 rounded-md border p-3">
       <Badge variant="outline" className="shrink-0">
@@ -126,6 +168,11 @@ function TierDisplay({ tier, currentSpend }: { tier: ContractTier; currentSpend?
           </span>
           <span className="font-medium">{rebateLabel}</span>
         </div>
+        {annotation && (
+          <div className="text-xs text-muted-foreground" data-testid="tier-dollar-annotation">
+            {annotation}
+          </div>
+        )}
         <Progress value={progress} className="h-1.5" />
       </div>
     </div>
@@ -213,13 +260,39 @@ export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDispl
                   {currentSpend !== undefined && term.tiers.length > 0 && (
                     <TierProgressCard term={term} currentSpend={currentSpend} />
                   )}
-                  {term.tiers.length > 0 && (
-                    <div className="space-y-2">
-                      {term.tiers.map((tier) => (
-                        <TierDisplay key={tier.id} tier={tier} currentSpend={currentSpend} />
-                      ))}
-                    </div>
-                  )}
+                  {term.tiers.length > 0 && (() => {
+                    // Determine the highest tier whose spendMin is met, so
+                    // each tier row can render its dollar-amount annotation
+                    // (earning/unlock/would-earn) relative to current spend.
+                    const sorted = [...term.tiers].sort(
+                      (a, b) => Number(a.spendMin) - Number(b.spendMin),
+                    )
+                    let currentTierNumber: number | undefined
+                    if (currentSpend !== undefined) {
+                      let idx = 0
+                      for (let i = 0; i < sorted.length; i++) {
+                        if (currentSpend >= Number(sorted[i].spendMin)) idx = i
+                      }
+                      currentTierNumber = sorted[idx].tierNumber
+                    }
+                    const topTierNumber = sorted[sorted.length - 1].tierNumber
+                    const isTopTierReached =
+                      currentTierNumber !== undefined &&
+                      currentTierNumber === topTierNumber
+                    return (
+                      <div className="space-y-2">
+                        {term.tiers.map((tier) => (
+                          <TierDisplay
+                            key={tier.id}
+                            tier={tier}
+                            currentSpend={currentSpend}
+                            currentTierNumber={currentTierNumber}
+                            isTopTier={isTopTierReached}
+                          />
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
               </AccordionContent>
             </AccordionItem>
