@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Upload, Loader2 } from "lucide-react"
+import { Upload, Loader2, Download } from "lucide-react"
 import { toast } from "sonner"
 import {
   getContractPricing,
@@ -134,7 +134,17 @@ export function ContractPricingTab({
             {pendingFileName ? ` — mapping ${pendingFileName}` : ""}
           </CardDescription>
         </div>
-        <div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.location.href = `/api/contracts/${contractId}/pricing/export`
+            }}
+            disabled={rows.length === 0}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
