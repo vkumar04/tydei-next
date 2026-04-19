@@ -317,10 +317,26 @@ export async function getContract(
   // — pre-recorded rows for upcoming periods are projections, not earned.
   // Collected counts only rows with a collectionDate set — a row with
   // rebateCollected=0 and no collectionDate is "pending collection".
+  //
+  // Charles R5.27: The contract detail header card shows YTD (calendar year)
+  // earned rebates to disambiguate from the "Total Rebates (Lifetime)" card
+  // on the Transactions tab. `rebateEarned` stays lifetime-earned (still used
+  // by the collection-ratio widget on the Overview tab); `rebateEarnedYTD`
+  // is the calendar-year slice surfaced in the header stat card.
   const today = new Date()
+  const startOfYear = new Date(today.getFullYear(), 0, 1)
   const rebateEarned = contract.rebates.reduce(
     (sum, r) =>
       r.payPeriodEnd && r.payPeriodEnd <= today
+        ? sum + Number(r.rebateEarned ?? 0)
+        : sum,
+    0,
+  )
+  const rebateEarnedYTD = contract.rebates.reduce(
+    (sum, r) =>
+      r.payPeriodEnd &&
+      r.payPeriodEnd <= today &&
+      r.payPeriodEnd >= startOfYear
         ? sum + Number(r.rebateEarned ?? 0)
         : sum,
     0,
@@ -389,7 +405,13 @@ export async function getContract(
   const currentSpend =
     periodSpend > 0 ? periodSpend : cogSpend > 0 ? cogSpend : cogVendorSpend
 
-  return serialize({ ...contract, rebateEarned, rebateCollected, currentSpend })
+  return serialize({
+    ...contract,
+    rebateEarned,
+    rebateEarnedYTD,
+    rebateCollected,
+    currentSpend,
+  })
 }
 
 // ─── Contract Stats ──────────────────────────────────────────────

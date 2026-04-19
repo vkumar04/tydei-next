@@ -111,13 +111,24 @@ export function ContractDetailClient({
     if (!contract) return null
 
     // Server already applies the correct temporal filters:
-    //   rebateEarned    — sums Rebate rows where payPeriodEnd <= today
+    //   rebateEarned    — sums Rebate rows where payPeriodEnd <= today (lifetime)
+    //   rebateEarnedYTD — same as rebateEarned but only counts closed periods
+    //                     whose payPeriodEnd is within the current calendar year
+    //                     (Charles R5.27: the header card now shows YTD so the
+    //                      "Rebates Earned (YTD)" label disambiguates from the
+    //                      "Total Rebates (Lifetime)" card on the Transactions
+    //                      tab). Lifetime value is still used below for the
+    //                      collection-ratio progress widget.
     //   rebateCollected — sums rows where collectionDate != null
     //   currentSpend    — ContractPeriod.totalSpend rollup for this contract,
     //                     falling back to COGRecord.extendedPrice (contractId)
     //                     when no periods are recorded yet
     // (See lib/actions/contracts.ts::getContract.) Trust the server values.
     const rebateEarned = Number(contract.rebateEarned ?? 0)
+    const rebateEarnedYTD = Number(
+      (contract as { rebateEarnedYTD?: number | string | null })
+        .rebateEarnedYTD ?? 0,
+    )
     const rebateCollected = Number(contract.rebateCollected ?? 0)
     const totalSpend = Number(contract.currentSpend ?? 0)
 
@@ -139,6 +150,7 @@ export function ContractDetailClient({
       totalSpend,
       commitmentPct,
       rebateEarned,
+      rebateEarnedYTD,
       rebateCollected,
       daysUntilExpiration,
       expirationDate: contract.expirationDate,
@@ -381,12 +393,35 @@ export function ContractDetailClient({
                 <Percent className="size-5" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Rebates Earned</p>
+                <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                  Rebates Earned (YTD)
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex cursor-help items-center">
+                          <HelpCircle
+                            className="h-3.5 w-3.5 text-muted-foreground"
+                            aria-label="Rebates Earned (YTD) help"
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[320px] p-3 text-xs">
+                        <p>
+                          Earned this calendar year — closed rebate periods
+                          only. &quot;Closed&quot; means the period&apos;s end
+                          date has passed. See the Transactions tab for the
+                          lifetime total across every closed period on this
+                          contract.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </p>
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(stats.rebateEarned)}
+                  {formatCurrency(stats.rebateEarnedYTD)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(stats.rebateCollected)} collected
+                  {formatCurrency(stats.rebateCollected)} collected (lifetime)
                 </p>
               </div>
             </CardContent>

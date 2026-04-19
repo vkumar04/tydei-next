@@ -7,10 +7,17 @@ import {
   TrendingUp,
   CreditCard,
   Calendar,
+  HelpCircle,
   Plus,
   ArrowUpRight,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -417,17 +424,15 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     (a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime(),
   )
 
-  // Earned mirrors the detail-page card: Rebate rows are only "earned"
-  // once their payPeriodEnd has passed. Period rows fall back to their
-  // stored rebateEarned.
+  // Lifetime earned rebates across every CLOSED period on this contract
+  // (Charles R5.27). "Closed" means periodEnd <= today — applied to both
+  // Rebate rows and ContractPeriod rollups so the number matches the
+  // scope advertised in the tooltip below, and stays distinct from the
+  // header's "Rebates Earned (YTD)" card.
   const today = new Date()
   const totalRebates = rows.reduce((s, r) => {
-    if (r.source === "rebate") {
-      return r.periodEnd && new Date(r.periodEnd) <= today
-        ? s + r.rebateEarned
-        : s
-    }
-    return s + r.rebateEarned
+    if (!r.periodEnd) return s
+    return new Date(r.periodEnd) <= today ? s + r.rebateEarned : s
   }, 0)
   // Credits and payments are 0 for now since we don't have separate transaction types yet
   const totalCredits = 0
@@ -460,7 +465,29 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
         <Card>
           <CardContent className="flex items-center justify-between gap-3 pt-6">
             <div>
-              <p className="text-sm text-muted-foreground">Total Rebates</p>
+              <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                Total Rebates (Lifetime)
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex cursor-help items-center">
+                        <HelpCircle
+                          className="h-3.5 w-3.5 text-muted-foreground"
+                          aria-label="Total Rebates (Lifetime) help"
+                        />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[320px] p-3 text-xs">
+                      <p>
+                        Lifetime earned rebates across every closed period on
+                        this contract. Compare with the &quot;Rebates Earned
+                        (YTD)&quot; stat in the header, which is limited to
+                        closed periods in the current calendar year.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </p>
               <p className="text-2xl font-bold text-emerald-600">
                 {formatCurrency(totalRebates)}
               </p>
