@@ -36,6 +36,7 @@ import { ContractFormReview } from "@/components/contracts/contract-form-review"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { AITextExtract } from "@/components/contracts/ai-text-extract"
 import { ExtractedReviewCard } from "@/components/contracts/extracted-review-card"
+import { TieInCapitalPicker } from "@/components/contracts/tie-in-capital-picker"
 import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -868,6 +869,29 @@ export function NewContractClient({
                   Suggest from COG
                 </Button>
               </div>
+
+              {/* Tie-in capital contract picker */}
+              {form.watch("contractType") === "tie_in" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Tied to Capital Contract</CardTitle>
+                    <CardDescription>
+                      Pick the capital contract this tie-in pays down with rebates.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TieInCapitalPicker
+                      value={form.watch("tieInCapitalContractId") ?? null}
+                      onChange={(v) =>
+                        form.setValue(
+                          "tieInCapitalContractId",
+                          v ?? undefined,
+                        )
+                      }
+                    />
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Contract Terms */}
               {form.watch("contractType") !== "pricing_only" && (

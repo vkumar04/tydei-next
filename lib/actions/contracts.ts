@@ -530,6 +530,7 @@ export async function createContract(input: CreateContractInput) {
       performancePeriod: data.performancePeriod,
       rebatePayPeriod: data.rebatePayPeriod,
       isMultiFacility: data.isMultiFacility,
+      tieInCapitalContractId: data.tieInCapitalContractId,
       createdById: session.user.id,
       ...(data.facilityIds.length > 0 && {
         isMultiFacility: true,

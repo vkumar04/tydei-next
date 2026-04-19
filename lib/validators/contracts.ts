@@ -44,6 +44,7 @@ export const createContractSchema = z.object({
   facilityIds: z.array(z.string()),
   tieInCapitalValue: z.number().optional(),
   tieInPayoffMonths: z.number().int().optional(),
+  tieInCapitalContractId: z.string().optional(),
 })
 
 export type CreateContractInput = z.infer<typeof createContractSchema>
