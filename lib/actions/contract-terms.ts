@@ -12,6 +12,7 @@ import {
 } from "@/lib/validators/contract-terms"
 import { z } from "zod"
 import { serialize } from "@/lib/serialize"
+import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 
 // ─── Get Terms ───────────────────────────────────────────────────
 
@@ -93,6 +94,12 @@ export async function createContractTerm(input: CreateTermInput) {
     })
   }
 
+  // Charles R5.21 — keep auto-generated Rebate rows in sync with the
+  // term's current evaluationPeriod / tier shape. Without this, the
+  // detail-page "Rebates Earned" card continues to show the pre-edit
+  // $0 even though `getAccrualTimeline` would compute a non-zero.
+  await recomputeAccrualForContract(data.contractId)
+
   return serialize(term)
 }
 
@@ -148,6 +155,9 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
     }
   }
 
+  // Charles R5.21 — see createContractTerm for the rationale.
+  await recomputeAccrualForContract(term.contractId)
+
   return serialize(term)
 }
 
@@ -156,7 +166,20 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
 export async function deleteContractTerm(id: string) {
   await requireFacility()
 
+  // Capture contractId before the delete cascades the term row away.
+  const term = await prisma.contractTerm.findUnique({
+    where: { id },
+    select: { contractId: true },
+  })
+
   await prisma.contractTerm.delete({ where: { id } })
+
+  if (term) {
+    // Charles R5.21 — regenerate Rebate rows once the term is gone so
+    // the detail-page aggregate drops to $0 (or reflects the next
+    // remaining term, if any).
+    await recomputeAccrualForContract(term.contractId)
+  }
 }
 
 // ─── Upsert Tiers ────────────────────────────────────────────────
@@ -185,6 +208,16 @@ export async function upsertContractTiers(termId: string, tiers: TierInput[]) {
       })
     )
   )
+
+  // Charles R5.21 — tier edits reshape the accrual curve; regenerate
+  // the Rebate rows so the detail-page aggregate stays in sync.
+  const parentTerm = await prisma.contractTerm.findUnique({
+    where: { id: termId },
+    select: { contractId: true },
+  })
+  if (parentTerm) {
+    await recomputeAccrualForContract(parentTerm.contractId)
+  }
 
   return serialize(created)
 }
