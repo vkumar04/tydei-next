@@ -143,6 +143,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
             <RefreshCw className={`mr-2 h-4 w-4 ${matchMutation.isPending ? "animate-spin" : ""}`} />
             {matchMutation.isPending ? "Matching..." : "Match Pricing"}
           </Button>
+          {/* Re-run match button audit (Subsystem 10.2): confirmed wired 2026-04-19 */}
           <Button
             variant="outline"
             size="sm"
