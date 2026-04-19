@@ -25,6 +25,7 @@ import { importContractPricing, type ContractPricingItem } from "@/lib/actions/p
 import { parsePricingFile, buildPricingItems as buildPricingItemsShared, detectPricingColumnMapping } from "@/lib/utils/parse-pricing-file"
 import { createCategory, getCategories } from "@/lib/actions/categories"
 import { computePricingVsCOG } from "@/lib/actions/cog-records"
+import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-cog"
 import { queryKeys } from "@/lib/query-keys"
 import { createVendor } from "@/lib/actions/vendors"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
@@ -842,6 +843,31 @@ export function NewContractClient({
                 vendors={vendors}
                 categories={liveCategories}
               />
+
+              <div className="flex items-center justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!form.watch("vendorId")}
+                  onClick={async () => {
+                    const vendorId = form.watch("vendorId")
+                    if (!vendorId) return
+                    try {
+                      const r = await deriveContractTotalFromCOG(vendorId)
+                      form.setValue("totalValue", r.totalValue)
+                      form.setValue("annualValue", r.annualValue)
+                      toast.success(
+                        `Filled from ${r.monthsObserved}-month COG aggregate`
+                      )
+                    } catch {
+                      toast.error("Could not derive total from COG")
+                    }
+                  }}
+                >
+                  Suggest from COG
+                </Button>
+              </div>
 
               {/* Contract Terms */}
               {form.watch("contractType") !== "pricing_only" && (
