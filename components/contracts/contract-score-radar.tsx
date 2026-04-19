@@ -77,6 +77,11 @@ export function ContractScoreRadar({
       value: components.varianceScore,
       benchmark: benchmark?.varianceScore,
     },
+    {
+      dim: "Price Competitiveness",
+      value: components.priceCompetitivenessScore ?? 100,
+      benchmark: benchmark?.priceCompetitivenessScore ?? 100,
+    },
   ]
 
   return (
