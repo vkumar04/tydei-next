@@ -50,17 +50,16 @@ interface AmendmentExtractorProps {
   onApplied: () => void
 }
 
-// v0 4-stage amendment flow mapping:
+// v0 3-stage amendment flow mapping:
 //   1. upload    -> "upload" (file picker) + "extracting" (progress feedback)
-//   2. review    -> "review" change-diff table (oldValue vs newValue)
-//   3. pricing   -> pricing/term changes rendered inline within "review"
-//   4. confirm   -> validation questions + "Apply Changes" -> "applying" -> "done"
+//   2. review    -> "review" change-diff table (oldValue vs newValue);
+//                   pricing/term changes render inline here
+//   3. confirm   -> validation questions + "Apply Changes" -> "applying" -> "done"
 // "error" is an out-of-band recovery state, not part of the v0 happy path.
 export type Stage =
   | "upload"
   | "extracting"
   | "review"
-  | "pricing"
   | "confirm"
   | "applying"
   | "done"
@@ -69,14 +68,13 @@ export type Stage =
 /**
  * Pure helper: returns the next stage in the v0 amendment flow, or `null` if
  * `current` is the terminal stage (or not in the ordered flow). The order
- * mirrors the 4-stage breadcrumb plus the two runtime states that follow
- * user confirmation: upload → review → pricing → confirm → applying → done.
+ * mirrors the 3-stage breadcrumb plus the two runtime states that follow
+ * user confirmation: upload → review → confirm → applying → done.
  */
 export function nextStage(current: Stage): Stage | null {
   const order: Stage[] = [
     "upload",
     "review",
-    "pricing",
     "confirm",
     "applying",
     "done",
@@ -309,13 +307,12 @@ export function AmendmentExtractor({
   const confConfig = confidenceConfig[confidence]
   const ConfIcon = confConfig.icon
 
-  // 4-stage breadcrumb mapping for v0 parity. Internal `extracting` maps to
+  // 3-stage breadcrumb mapping for v0 parity. Internal `extracting` maps to
   // "upload" (same breadcrumb step), and `review`/`applying`/`done` map to
   // the corresponding breadcrumb step. `error` is out-of-band.
   const stages: Array<{ key: string; label: string }> = [
     { key: "upload", label: "Upload" },
     { key: "review", label: "Review" },
-    { key: "pricing", label: "Pricing" },
     { key: "confirm", label: "Confirm" },
   ]
   const breadcrumbKey: string =

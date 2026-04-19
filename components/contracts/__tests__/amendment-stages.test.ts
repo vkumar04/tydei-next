@@ -16,7 +16,7 @@ import {
 } from "@/components/contracts/amendment-extractor"
 
 describe("amendment-extractor stage progression", () => {
-  it("advances upload → review → pricing → confirm → applying → done", () => {
+  it("advances upload → review → confirm → applying → done", () => {
     let s: Stage = "upload"
     const seen: Stage[] = [s]
     let next = nextStage(s)
@@ -28,7 +28,6 @@ describe("amendment-extractor stage progression", () => {
     expect(seen).toEqual([
       "upload",
       "review",
-      "pricing",
       "confirm",
       "applying",
       "done",
