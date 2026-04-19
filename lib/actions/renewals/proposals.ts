@@ -9,11 +9,11 @@
  * describes a `proposalType: "renewal"` + `status: "submitted"` shape,
  * but the current Prisma enum vocabulary is narrower
  * (`term_change | new_term | remove_term | contract_edit` and
- * `pending | approved | rejected | revision_requested`). We map:
+ * `pending | approved | rejected | revision_requested | countered`). We map:
  *
  *     spec proposalType "renewal"   → Prisma "contract_edit"
  *     spec status       "submitted" → Prisma "pending"
- *     spec decision     "countered" → Prisma "revision_requested"
+ *     spec decision     "countered" → Prisma "countered"
  *
  * and stash the semantic discriminator (`kind: "renewal"`) inside the
  * `changes` JSON so downstream readers can distinguish renewal proposals
@@ -178,12 +178,13 @@ export async function submitRenewalProposal(input: {
 /** Map the spec-level decision to the Prisma `ProposalStatus` enum. */
 function statusForDecision(
   decision: ProposalDecision,
-): "approved" | "rejected" | "revision_requested" {
+): "approved" | "rejected" | "countered" {
   if (decision === "approved") return "approved"
   if (decision === "rejected") return "rejected"
-  // "countered" doesn't exist in the Prisma enum — revision_requested
-  // is the closest semantic match ("please revise and resubmit").
-  return "revision_requested"
+  // "countered" is its own Prisma enum value. Behaviorally it's
+  // "awaiting vendor response" — filter/aggregation code treats it
+  // like revision_requested (see reviewRenewalProposal callers).
+  return "countered"
 }
 
 export async function reviewRenewalProposal(input: {

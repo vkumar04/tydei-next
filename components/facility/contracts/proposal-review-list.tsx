@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Check, X, RotateCcw } from "lucide-react"
+import { Check, X, RotateCcw, MessageSquareReply } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -95,6 +95,16 @@ export function ProposalReviewList({ proposals, facilityId, userId }: ProposalRe
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => { setReviewingId(p.id); setAction("revision_requested") }}>
                     <RotateCcw className="size-3.5" /> Request Revision
+                  </Button>
+                  {/*
+                    TODO(W1.3): enable Counter-Propose. The server action
+                    (counterContractChangeProposal) and `countered` status
+                    are wired; this button is stubbed until a counter-terms
+                    dialog lands. reviewChangeProposal also accepts
+                    "counter_propose" → "countered" in its statusMap.
+                  */}
+                  <Button size="sm" variant="outline" disabled title="Counter-propose: coming soon (W1.3 stub)">
+                    <MessageSquareReply className="size-3.5" /> Counter-Propose
                   </Button>
                 </div>
               </CardContent>

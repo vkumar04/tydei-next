@@ -165,6 +165,56 @@ export async function requestProposalRevision(
   })
 }
 
+/**
+ * Counter-propose: facility rejects the vendor's terms but offers an
+ * alternative (captured in `notes`, and eventually a structured
+ * counter-terms payload once the full flow is designed — W1.3 stub).
+ *
+ * Behaviorally similar to `requestProposalRevision` (ball is in the
+ * vendor's court), but uses the distinct `countered` enum value so UIs
+ * can render it differently ("Counter-proposed" vs "Revision Requested").
+ */
+export async function counterContractChangeProposal(
+  proposalId: string,
+  notes: string,
+): Promise<void> {
+  const { facility, user } = await requireFacility()
+
+  const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
+    where: { id: proposalId },
+    include: { contract: { select: { facilityId: true } } },
+  })
+  if (proposal.contract.facilityId !== facility.id) {
+    throw new Error("Forbidden: proposal belongs to a different facility")
+  }
+  if (proposal.status !== "pending") {
+    throw new Error(
+      `Cannot counter-propose proposal in status ${proposal.status}`,
+    )
+  }
+  if (notes.trim().length < 10) {
+    throw new Error("Counter-proposal requires a note (min 10 chars)")
+  }
+
+  await prisma.contractChangeProposal.update({
+    where: { id: proposalId },
+    data: {
+      status: "countered",
+      reviewNotes: notes,
+      reviewedAt: new Date(),
+      reviewedBy: user.id,
+    },
+  })
+
+  await logAudit({
+    userId: user.id,
+    action: "contract_change_proposal.countered",
+    entityType: "contract_change_proposal",
+    entityId: proposalId,
+    metadata: { notes },
+  })
+}
+
 // ─── Internals ───────────────────────────────────────────────────
 
 /**

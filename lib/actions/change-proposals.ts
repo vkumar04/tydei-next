@@ -139,6 +139,11 @@ export async function reviewChangeProposal(
     approve: "approved",
     reject: "rejected",
     revision_requested: "revision_requested",
+    // `countered` behaves like revision_requested for filtering/
+    // aggregation (both = awaiting vendor response), but is its own
+    // first-class status so the UI can distinguish facility-initiated
+    // counter-proposals from generic revision requests. See W1.3.
+    counter_propose: "countered",
   } as const
 
   const proposal = await prisma.contractChangeProposal.update({

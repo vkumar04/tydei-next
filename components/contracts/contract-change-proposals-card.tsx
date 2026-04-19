@@ -151,6 +151,21 @@ export function ContractChangeProposalsCard({
                 >
                   Reject
                 </Button>
+                {/*
+                  TODO(W1.3): wire up counterContractChangeProposal from
+                  lib/actions/contracts/proposals.ts. Stubbed (disabled)
+                  pending a structured counter-terms dialog. The
+                  `countered` ProposalStatus + server action already
+                  exist; this button just needs a proper UI form.
+                */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled
+                  title="Counter-propose: coming soon (W1.3 stub)"
+                >
+                  Counter-Propose
+                </Button>
               </div>
             </div>
           )

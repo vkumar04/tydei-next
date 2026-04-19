@@ -4,7 +4,7 @@
  *
  * Exercises vendor ownership scoping, validation delegation, Prisma
  * enum mapping (renewal → contract_edit, submitted → pending,
- * countered → revision_requested), and audit emission.
+ * countered → countered), and audit emission.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -285,7 +285,7 @@ describe("reviewRenewalProposal", () => {
     )
   })
 
-  it("maps 'countered' → Prisma 'revision_requested' and persists note", async () => {
+  it("maps 'countered' → Prisma 'countered' and persists note", async () => {
     seedProposal()
 
     await reviewRenewalProposal({
@@ -294,7 +294,7 @@ describe("reviewRenewalProposal", () => {
       note: "Please lower the expiration by six months",
     })
 
-    expect(lastUpdate?.data.status).toBe("revision_requested")
+    expect(lastUpdate?.data.status).toBe("countered")
     expect(lastUpdate?.data.reviewNotes).toBe(
       "Please lower the expiration by six months",
     )

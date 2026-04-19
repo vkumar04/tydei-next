@@ -86,6 +86,19 @@ export const pendingContractStatusConfig: Record<string, StatusConfig> = {
   withdrawn: { label: "Withdrawn", variant: "outline" },
 }
 
+// ProposalStatus badge config (vendor-submitted ContractChangeProposal).
+// `countered` is a facility-issued counter-proposal awaiting vendor response;
+// for filtering/aggregation purposes it behaves like `revision_requested`
+// (both mean "ball is in the vendor's court"). See W1.3 in
+// docs/superpowers/plans/2026-04-19-renewals-v0-parity.md.
+export const proposalStatusConfig: Record<string, StatusConfig> = {
+  pending: { label: "Pending", variant: "secondary" },
+  approved: { label: "Approved", variant: "default", className: "bg-emerald-600 hover:bg-emerald-600" },
+  rejected: { label: "Rejected", variant: "destructive" },
+  revision_requested: { label: "Revision Requested", variant: "secondary", className: "bg-amber-600 hover:bg-amber-600 text-white" },
+  countered: { label: "Counter-proposed", variant: "secondary", className: "bg-indigo-600 hover:bg-indigo-600 text-white" },
+}
+
 export const invoiceStatusConfig: Record<string, StatusConfig> = {
   pending: { label: "Pending", variant: "secondary" },
   validated: { label: "Validated", variant: "default", className: "bg-emerald-600 hover:bg-emerald-600" },

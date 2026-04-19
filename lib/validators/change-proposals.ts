@@ -19,7 +19,7 @@ export const createChangeProposalSchema = z.object({
 export type CreateChangeProposalInput = z.infer<typeof createChangeProposalSchema>
 
 export const reviewChangeProposalSchema = z.object({
-  action: z.enum(["approve", "reject", "revision_requested"]),
+  action: z.enum(["approve", "reject", "revision_requested", "counter_propose"]),
   reviewedBy: z.string().min(1),
   notes: z.string().optional(),
 })
