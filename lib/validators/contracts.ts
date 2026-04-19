@@ -12,11 +12,12 @@ export const contractFiltersSchema = z.object({
   status: ContractStatusSchema.optional(),
   type: ContractTypeSchema.optional(),
   facilityId: z.string().optional(),
+  facilityScope: z.enum(["this", "all", "shared"]).optional().default("this"),
   page: z.number().int().min(1).optional(),
   pageSize: z.number().int().min(1).max(100).optional(),
 })
 
-export type ContractFilters = z.infer<typeof contractFiltersSchema>
+export type ContractFilters = z.input<typeof contractFiltersSchema>
 
 // ─── Create Contract Schema ──────────────────────────────────────
 

@@ -27,9 +27,24 @@ export async function getContracts(input: ContractFilters) {
   const { facility } = await requireFacility()
   const filters = contractFiltersSchema.parse(input)
 
-  const conditions: Prisma.ContractWhereInput[] = [
-    contractsOwnedByFacility(facility.id),
-  ]
+  // Subsystem 9.2 — 3-way facility scope (this / all / shared).
+  // Auth gate (requireFacility) is already enforced above in all three modes.
+  const scope = filters.facilityScope ?? "this"
+  let facilityClause: Prisma.ContractWhereInput = {}
+  if (scope === "this") {
+    facilityClause = contractsOwnedByFacility(facility.id)
+  } else if (scope === "shared") {
+    facilityClause = {
+      isMultiFacility: true,
+      OR: [
+        { facilityId: facility.id },
+        { contractFacilities: { some: { facilityId: facility.id } } },
+      ],
+    }
+  }
+  // scope === "all" leaves facilityClause empty ({})
+
+  const conditions: Prisma.ContractWhereInput[] = [facilityClause]
 
   if (filters.status) conditions.push({ status: filters.status })
   if (filters.type) conditions.push({ contractType: filters.type })

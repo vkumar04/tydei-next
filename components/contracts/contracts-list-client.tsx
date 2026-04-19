@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useMemo, useEffect, useCallback } from "react"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import Link from "next/link"
 import {
   Plus,
@@ -67,6 +67,8 @@ export function ContractsListClient({
   userId,
 }: ContractsListClientProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState("contracts")
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<ContractStatus | "all">(
@@ -74,7 +76,23 @@ export function ContractsListClient({
   )
   const [typeFilter, setTypeFilter] = useState<ContractType | "all">("all")
   const [facilityFilter, setFacilityFilter] = useState<string>("all")
-  const [facilityScope, setFacilityScope] = useState<FacilityScope>("all")
+  // Subsystem 9.2 — 3-way facility scope persisted in the URL (?scope=...).
+  // Default is "this" (no URL param).
+  const scopeParam = searchParams.get("scope")
+  const facilityScope: FacilityScope =
+    scopeParam === "all" || scopeParam === "shared" ? scopeParam : "this"
+
+  const setFacilityScope = useCallback(
+    (next: FacilityScope) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (next === "this") params.delete("scope")
+      else params.set("scope", next)
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    },
+    [pathname, router, searchParams],
+  )
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [contractToDelete, setContractToDelete] = useState<{
     id: string
@@ -93,6 +111,7 @@ export function ContractsListClient({
   const filters = {
     ...(statusFilter !== "all" && { status: statusFilter }),
     ...(typeFilter !== "all" && { type: typeFilter }),
+    facilityScope,
   }
 
   const { data, isLoading } = useContracts(facilityId, filters)
@@ -173,8 +192,9 @@ export function ContractsListClient({
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
   }, [contractsWithMetrics])
 
-  // Client-side search + facility filter + 3-way scope (server already
-  // applied status/type).
+  // Client-side search + facility filter. The 3-way facility scope is
+  // applied server-side (Subsystem 9.2) via the `facilityScope` filter
+  // passed into useContracts, so TanStack Query re-fetches on change.
   const contracts = useMemo(() => {
     return contractsWithMetrics.filter((contract) => {
       const q = searchQuery.trim().toLowerCase()
@@ -187,28 +207,9 @@ export function ContractsListClient({
       const matchesFacility =
         facilityFilter === "all" || contract.facility?.id === facilityFilter
 
-      // 3-way facility scope:
-      //  - this:   owned by the current facility AND not multi-facility
-      //  - shared: multi-facility contracts (touches more than this facility)
-      //  - all:    no scope narrowing (default)
-      const isMulti = Boolean(contract.isMultiFacility)
-      const ownedByThis = contract.facility?.id === facilityId
-      const matchesScope =
-        facilityScope === "all"
-          ? true
-          : facilityScope === "shared"
-            ? isMulti
-            : ownedByThis && !isMulti
-
-      return matchesSearch && matchesFacility && matchesScope
+      return matchesSearch && matchesFacility
     })
-  }, [
-    contractsWithMetrics,
-    searchQuery,
-    facilityFilter,
-    facilityScope,
-    facilityId,
-  ])
+  }, [contractsWithMetrics, searchQuery, facilityFilter])
 
   const isEmpty = !isLoading && contracts.length === 0
   const hasAnyContracts = !isLoading && allContracts.length > 0
@@ -217,7 +218,7 @@ export function ContractsListClient({
     statusFilter !== "all" ||
     typeFilter !== "all" ||
     facilityFilter !== "all" ||
-    facilityScope !== "all"
+    facilityScope !== "this"
 
   // Derived stats (spec §4.2). getContractStats gives totals; compute the
   // rest from the (already-loaded) contract list so we don't block cards
@@ -453,7 +454,7 @@ export function ContractsListClient({
                           setStatusFilter("all")
                           setTypeFilter("all")
                           setFacilityFilter("all")
-                          setFacilityScope("all")
+                          setFacilityScope("this")
                         }}
                       >
                         Clear all filters
