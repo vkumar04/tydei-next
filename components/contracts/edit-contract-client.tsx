@@ -113,57 +113,81 @@ export function EditContractClient({
     }
 
     const values = form.getValues()
-    await updateMutation.mutateAsync({ id: contractId, data: values })
 
-    // Sync terms: delete removed, create new, update existing tiers
-    if (contract) {
-      const existingIds = contract.terms.map((t) => t.id)
-      const currentIds = terms.filter((t) => t.id).map((t) => t.id as string)
+    // Charles R5.36 P0 — wrap the whole save in a try/catch so a
+    // downstream term/tier op failing doesn't silently abort the flow
+    // after the header update already persisted. Previously the user
+    // would see the "Contract updated successfully" toast (from the
+    // mutation's onSuccess) and land on a page that still showed stale
+    // term/tier values, because the partially-completed save threw
+    // before `router.push` ran and there was no visible error.
+    try {
+      await updateMutation.mutateAsync({ id: contractId, data: values })
 
-      // Delete removed terms
-      for (const existingId of existingIds) {
-        if (!currentIds.includes(existingId)) {
-          await deleteContractTerm(existingId)
+      // Sync terms: delete removed, create new, update existing tiers
+      if (contract) {
+        const existingIds = contract.terms.map((t) => t.id)
+        const currentIds = terms.filter((t) => t.id).map((t) => t.id as string)
+
+        // Delete removed terms
+        for (const existingId of existingIds) {
+          if (!currentIds.includes(existingId)) {
+            await deleteContractTerm(existingId)
+          }
+        }
+
+        // Create new terms and update tiers of existing
+        for (const term of terms) {
+          if (term.id) {
+            // Persist term-level edits in addition to tier changes.
+            await updateContractTerm(term.id, {
+              termName: term.termName,
+              termType: term.termType,
+              baselineType: term.baselineType,
+              evaluationPeriod: term.evaluationPeriod,
+              paymentTiming: term.paymentTiming,
+              appliesTo: term.appliesTo,
+              rebateMethod: term.rebateMethod,
+              effectiveStart: term.effectiveStart,
+              effectiveEnd: term.effectiveEnd,
+              volumeType: term.volumeType,
+              spendBaseline: term.spendBaseline,
+              volumeBaseline: term.volumeBaseline,
+              growthBaselinePercent: term.growthBaselinePercent,
+              desiredMarketShare: term.desiredMarketShare,
+              scopedCategoryId: term.scopedCategoryId,
+              scopedCategoryIds: term.scopedCategoryIds,
+              scopedItemNumbers: term.scopedItemNumbers,
+              capitalCost: term.capitalCost,
+              interestRate: term.interestRate,
+              termMonths: term.termMonths,
+            })
+            await upsertContractTiers(term.id, term.tiers)
+          } else {
+            await createContractTerm({
+              ...term,
+              contractId,
+            })
+          }
         }
       }
 
-      // Create new terms and update tiers of existing
-      for (const term of terms) {
-        if (term.id) {
-          // Persist term-level edits in addition to tier changes.
-          await updateContractTerm(term.id, {
-            termName: term.termName,
-            termType: term.termType,
-            baselineType: term.baselineType,
-            evaluationPeriod: term.evaluationPeriod,
-            paymentTiming: term.paymentTiming,
-            appliesTo: term.appliesTo,
-            rebateMethod: term.rebateMethod,
-            effectiveStart: term.effectiveStart,
-            effectiveEnd: term.effectiveEnd,
-            volumeType: term.volumeType,
-            spendBaseline: term.spendBaseline,
-            volumeBaseline: term.volumeBaseline,
-            growthBaselinePercent: term.growthBaselinePercent,
-            desiredMarketShare: term.desiredMarketShare,
-            scopedCategoryId: term.scopedCategoryId,
-            scopedCategoryIds: term.scopedCategoryIds,
-            scopedItemNumbers: term.scopedItemNumbers,
-            capitalCost: term.capitalCost,
-            interestRate: term.interestRate,
-            termMonths: term.termMonths,
-          })
-          await upsertContractTiers(term.id, term.tiers)
-        } else {
-          await createContractTerm({
-            ...term,
-            contractId,
-          })
-        }
-      }
+      // Invalidate the detail query so the next page read gets fresh
+      // data (term/tier writes bypass useUpdateContract's onSuccess
+      // invalidation, which only covers the contract-level update).
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.detail(contractId),
+      })
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.all,
+      })
+
+      router.push(`/dashboard/contracts/${contractId}`)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save contract changes"
+      toast.error(`Save failed: ${message}`)
     }
-
-    router.push(`/dashboard/contracts/${contractId}`)
   }
 
   if (isLoading) {

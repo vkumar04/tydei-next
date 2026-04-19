@@ -14,6 +14,29 @@ import { z } from "zod"
 import { serialize } from "@/lib/serialize"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 
+/**
+ * Charles R5.36 P0 — invoke the accrual recompute without letting a
+ * failure inside it rollback the term/tier write that just committed.
+ * Previously a bug (missing COG data, malformed tier, etc.) would bubble
+ * out of the server action, the client's term-save loop would abort,
+ * and subsequent tier edits in the same save never ran. The user saw
+ * "Contract updated successfully" (from the basic-info mutation) and
+ * landed on a detail page that still showed the pre-edit tier values.
+ *
+ * Accrual recompute is a downstream/rebuild side-effect — the same
+ * pattern the contract-level `recomputeContractScore` uses.
+ */
+async function recomputeAccrualSafe(contractId: string): Promise<void> {
+  try {
+    await recomputeAccrualForContract(contractId)
+  } catch (err) {
+    console.warn(
+      `[contract-terms] recomputeAccrualForContract(${contractId}) failed:`,
+      err,
+    )
+  }
+}
+
 // ─── Get Terms ───────────────────────────────────────────────────
 
 export async function getContractTerms(contractId: string) {
@@ -98,7 +121,7 @@ export async function createContractTerm(input: CreateTermInput) {
   // term's current evaluationPeriod / tier shape. Without this, the
   // detail-page "Rebates Earned" card continues to show the pre-edit
   // $0 even though `getAccrualTimeline` would compute a non-zero.
-  await recomputeAccrualForContract(data.contractId)
+  await recomputeAccrualSafe(data.contractId)
 
   return serialize(term)
 }
@@ -156,7 +179,7 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
   }
 
   // Charles R5.21 — see createContractTerm for the rationale.
-  await recomputeAccrualForContract(term.contractId)
+  await recomputeAccrualSafe(term.contractId)
 
   return serialize(term)
 }
@@ -178,7 +201,7 @@ export async function deleteContractTerm(id: string) {
     // Charles R5.21 — regenerate Rebate rows once the term is gone so
     // the detail-page aggregate drops to $0 (or reflects the next
     // remaining term, if any).
-    await recomputeAccrualForContract(term.contractId)
+    await recomputeAccrualSafe(term.contractId)
   }
 }
 
@@ -216,7 +239,7 @@ export async function upsertContractTiers(termId: string, tiers: TierInput[]) {
     select: { contractId: true },
   })
   if (parentTerm) {
-    await recomputeAccrualForContract(parentTerm.contractId)
+    await recomputeAccrualSafe(parentTerm.contractId)
   }
 
   return serialize(created)

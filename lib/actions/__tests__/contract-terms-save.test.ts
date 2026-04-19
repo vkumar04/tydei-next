@@ -200,3 +200,52 @@ describe("term save triggers accrual recompute (R5.21)", () => {
     expect(recomputeAccrualMock).toHaveBeenCalledWith("c-1")
   })
 })
+
+// ─── Charles R5.36 P0: accrual recompute is non-fatal ──────────────
+// The edit-contract save flow is:
+//   updateContract → updateContractTerm(s) → upsertContractTiers(s)
+// If any of those server actions threw, the client's sequential await
+// loop aborted and `router.push` never ran — leaving the user on the
+// edit page with a "Contract updated successfully" toast but
+// partially-committed term/tier writes. The most likely throw source
+// is the downstream `recomputeAccrualForContract` rebuild (malformed
+// tier, missing COG, etc.). It must be non-fatal for the user-visible
+// term/tier write, the same way `recomputeContractScore` is wrapped
+// in `.catch(warn)` inside `updateContract`.
+describe("accrual recompute is non-fatal for term writes (R5.36 P0)", () => {
+  it("updateContractTerm still resolves (and persists the update) when the recompute throws", async () => {
+    recomputeAccrualMock.mockRejectedValueOnce(new Error("recompute exploded"))
+    await expect(
+      updateContractTerm("term-1", { termName: "Rename" }),
+    ).resolves.toBeDefined()
+    // The underlying prisma update DID fire — the save was committed
+    // before the recompute was attempted.
+    expect(updateMock).toHaveBeenCalled()
+  })
+
+  it("createContractTerm still resolves when the recompute throws", async () => {
+    recomputeAccrualMock.mockRejectedValueOnce(new Error("recompute exploded"))
+    await expect(
+      createContractTerm({
+        contractId: "c-1",
+        termName: "Test",
+        termType: "spend_rebate",
+        baselineType: "spend_based",
+        evaluationPeriod: "monthly",
+        paymentTiming: "quarterly",
+        rebateMethod: "cumulative",
+        appliesTo: "all_products",
+        effectiveStart: "2026-01-01",
+        effectiveEnd: "2027-01-01",
+        tiers: [],
+      }),
+    ).resolves.toBeDefined()
+    expect(createMock).toHaveBeenCalled()
+  })
+
+  it("deleteContractTerm still resolves when the recompute throws", async () => {
+    recomputeAccrualMock.mockRejectedValueOnce(new Error("recompute exploded"))
+    await expect(deleteContractTerm("term-1")).resolves.toBeUndefined()
+    expect(deleteTermMock).toHaveBeenCalled()
+  })
+})

@@ -109,3 +109,56 @@ describe("updateContract — isGrouped persistence", () => {
     expect(callData.isGrouped).toBeUndefined()
   })
 })
+
+// Charles R5.36 P0 — regression guards that every basic-info field
+// the edit form can touch is actually written to prisma. If any branch
+// in `updateContract` silently drops a field (e.g. forgot to translate
+// from input to `updateData`), the UI "save → reload shows old value"
+// bug recurs.
+describe("updateContract — every input field reaches prisma (R5.36 P0)", () => {
+  it("persists a full basic-info payload into prisma.contract.update", async () => {
+    await updateContract("c-1", {
+      name: "New Name",
+      contractNumber: "CN-42",
+      description: "new description",
+      notes: "new notes",
+      gpoAffiliation: "Vizient",
+      totalValue: 555_000,
+      annualValue: 250_000,
+      autoRenewal: true,
+      terminationNoticeDays: 60,
+      effectiveDate: "2026-05-01",
+      expirationDate: "2028-05-01",
+      performancePeriod: "monthly",
+      rebatePayPeriod: "annual",
+      status: "active",
+      contractType: "usage",
+    })
+    const callData = updateMock.mock.calls[0][0].data
+    expect(callData.name).toBe("New Name")
+    expect(callData.contractNumber).toBe("CN-42")
+    expect(callData.description).toBe("new description")
+    expect(callData.notes).toBe("new notes")
+    expect(callData.gpoAffiliation).toBe("Vizient")
+    expect(callData.totalValue).toBe(555_000)
+    expect(callData.annualValue).toBe(250_000)
+    expect(callData.autoRenewal).toBe(true)
+    expect(callData.terminationNoticeDays).toBe(60)
+    expect(callData.effectiveDate).toEqual(new Date("2026-05-01"))
+    expect(callData.expirationDate).toEqual(new Date("2028-05-01"))
+    expect(callData.performancePeriod).toBe("monthly")
+    expect(callData.rebatePayPeriod).toBe("annual")
+    expect(callData.status).toBe("active")
+    expect(callData.contractType).toBe("usage")
+  })
+
+  it("returns the updated contract so the mutation onSuccess can rely on fresh data", async () => {
+    updateMock.mockResolvedValueOnce({
+      id: "c-1",
+      vendorId: "v-1",
+      description: "persisted",
+    })
+    const out = await updateContract("c-1", { description: "persisted" })
+    expect((out as { description?: string }).description).toBe("persisted")
+  })
+})
