@@ -83,6 +83,40 @@ export function nextStage(current: Stage): Stage | null {
   return i >= 0 && i < order.length - 1 ? order[i + 1] : null
 }
 
+/**
+ * Sanitize a raw string from the AI amendment extractor into a finite number.
+ * Strips `$`, `,`, whitespace, and currency/percent suffixes before parsing.
+ * Throws when the result is NaN or infinite — callers should surface the
+ * error via toast and block the apply rather than silently coercing to 0
+ * (see QA bug detail-5: `"$350,000"` previously parsed to NaN and clobbered
+ * `totalValue` with 0).
+ */
+export function sanitizeNumeric(raw: string): number {
+  if (typeof raw !== "string") {
+    throw new Error(`Expected string, received ${typeof raw}`)
+  }
+  // Strip anything that isn't a digit, decimal point, or leading minus.
+  // This removes `$`, `,`, whitespace, `USD`, `%`, etc.
+  const cleaned = raw.replace(/[^\d.-]/g, "")
+  if (cleaned === "" || cleaned === "-" || cleaned === "." || cleaned === "-.") {
+    throw new Error(`Could not parse "${raw}" as a number`)
+  }
+  const parsed = parseFloat(cleaned)
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Could not parse "${raw}" as a number`)
+  }
+  return parsed
+}
+
+/**
+ * Integer variant of `sanitizeNumeric`. Truncates toward zero after
+ * sanitization. Throws on unparseable input.
+ */
+export function sanitizeInteger(raw: string): number {
+  const n = sanitizeNumeric(raw)
+  return Math.trunc(n)
+}
+
 type ConfidenceLevel = "high" | "medium" | "low"
 
 const STEPS = [
@@ -249,10 +283,30 @@ export function AmendmentExtractor({
             break
           case "totalValue":
           case "annualValue":
-            updatePayload[change.field] = parseFloat(change.newValue) || 0
+            try {
+              updatePayload[change.field] = sanitizeNumeric(change.newValue)
+            } catch (err) {
+              const message =
+                err instanceof Error ? err.message : String(err)
+              toast.error(
+                `Could not parse ${change.label} value "${change.newValue}". ${message}`,
+              )
+              setStage("review")
+              return
+            }
             break
           case "terminationNoticeDays":
-            updatePayload[change.field] = parseInt(change.newValue, 10) || 0
+            try {
+              updatePayload[change.field] = sanitizeInteger(change.newValue)
+            } catch (err) {
+              const message =
+                err instanceof Error ? err.message : String(err)
+              toast.error(
+                `Could not parse ${change.label} value "${change.newValue}". ${message}`,
+              )
+              setStage("review")
+              return
+            }
             break
           case "autoRenewal":
             updatePayload[change.field] =

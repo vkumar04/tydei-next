@@ -12,6 +12,8 @@ vi.mock("sonner", () => ({
 
 import {
   nextStage,
+  sanitizeInteger,
+  sanitizeNumeric,
   type Stage,
 } from "@/components/contracts/amendment-extractor"
 
@@ -36,5 +38,49 @@ describe("amendment-extractor stage progression", () => {
 
   it("returns null at terminal stage", () => {
     expect(nextStage("done")).toBeNull()
+  })
+})
+
+describe("sanitizeNumeric", () => {
+  it("strips $ and commas", () => {
+    expect(sanitizeNumeric("$350,000")).toBe(350000)
+    expect(sanitizeNumeric("1,234.56")).toBe(1234.56)
+  })
+
+  it("strips whitespace and currency suffixes", () => {
+    expect(sanitizeNumeric("  $1,000.00 USD ")).toBe(1000)
+    expect(sanitizeNumeric("500 USD")).toBe(500)
+    expect(sanitizeNumeric("25%")).toBe(25)
+  })
+
+  it("parses plain numbers", () => {
+    expect(sanitizeNumeric("42")).toBe(42)
+    expect(sanitizeNumeric("3.14")).toBe(3.14)
+  })
+
+  it("preserves leading minus", () => {
+    expect(sanitizeNumeric("-250.5")).toBe(-250.5)
+    expect(sanitizeNumeric("-$1,200")).toBe(-1200)
+  })
+
+  it("throws on unparseable input", () => {
+    expect(() => sanitizeNumeric("three hundred")).toThrow()
+    expect(() => sanitizeNumeric("")).toThrow()
+    expect(() => sanitizeNumeric("   ")).toThrow()
+    expect(() => sanitizeNumeric("$")).toThrow()
+    expect(() => sanitizeNumeric("abc")).toThrow()
+  })
+})
+
+describe("sanitizeInteger", () => {
+  it("truncates sanitized numeric values toward zero", () => {
+    expect(sanitizeInteger("42")).toBe(42)
+    expect(sanitizeInteger("42.9")).toBe(42)
+    expect(sanitizeInteger("-3.7")).toBe(-3)
+    expect(sanitizeInteger("$1,234.56")).toBe(1234)
+  })
+
+  it("throws on unparseable input", () => {
+    expect(() => sanitizeInteger("not a number")).toThrow()
   })
 })
