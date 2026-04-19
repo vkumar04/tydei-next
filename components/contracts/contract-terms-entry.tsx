@@ -37,6 +37,7 @@ import { ContractTierRow } from "@/components/contracts/contract-tier-row"
 import { getCategories } from "@/lib/actions/categories"
 import { queryKeys } from "@/lib/query-keys"
 import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
+import { SpecificItemsPicker, type VendorItem } from "./specific-items-picker"
 
 interface ContractTermsEntryProps {
   terms: TermFormValues[]
@@ -46,6 +47,10 @@ interface ContractTermsEntryProps {
    *  falls back to fetching the full platform category list so
    *  Specific-Category tiers can always be scoped. */
   availableCategories?: { id: string; name: string }[]
+  /** Vendor items (typically from the contract's pricing file) available
+   *  for item-level scoping when `term.appliesTo === "specific_items"`.
+   *  Empty array disables the picker with a helpful empty-state hint. */
+  availableItems?: VendorItem[]
 }
 
 const termTypes = [
@@ -100,6 +105,7 @@ export function ContractTermsEntry({
   terms,
   onChange,
   availableCategories = [],
+  availableItems = [],
 }: ContractTermsEntryProps) {
   // Fallback category fetch — runs only when the caller didn't pass any.
   // Every mount point of this component previously had to wire its own
@@ -410,6 +416,18 @@ export function ContractTermsEntry({
                           </SelectContent>
                         </Select>
                       )}
+                    </Field>
+                  )}
+
+                  {term.appliesTo === "specific_items" && (
+                    <Field label="Items">
+                      <SpecificItemsPicker
+                        availableItems={availableItems}
+                        selected={term.scopedItemNumbers ?? []}
+                        onChange={(next) =>
+                          updateTerm(termIdx, { scopedItemNumbers: next })
+                        }
+                      />
                     </Field>
                   )}
 

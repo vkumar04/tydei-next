@@ -32,7 +32,9 @@ export async function createContractTerm(input: CreateTermInput) {
   await requireFacility()
   const data = createTermSchema.parse(input)
 
-  const { tiers, ...termData } = data
+  // scopedItemNumbers doesn't belong on ContractTerm itself — it
+  // maps to ContractTermProduct join rows written after the term.
+  const { tiers, scopedItemNumbers, ...termData } = data
 
   const term = await prisma.contractTerm.create({
     data: {
@@ -57,6 +59,16 @@ export async function createContractTerm(input: CreateTermInput) {
     },
     include: { tiers: { orderBy: { tierNumber: "asc" } } },
   })
+
+  if (scopedItemNumbers && scopedItemNumbers.length > 0) {
+    await prisma.contractTermProduct.createMany({
+      data: scopedItemNumbers.map((vendorItemNo) => ({
+        termId: term.id,
+        vendorItemNo,
+      })),
+      skipDuplicates: true,
+    })
+  }
 
   return serialize(term)
 }
