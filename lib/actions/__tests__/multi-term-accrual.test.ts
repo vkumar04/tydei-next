@@ -36,6 +36,8 @@ vi.mock("@/lib/db", () => ({
     rebate: {
       deleteMany: rebateDeleteManyMock,
       createMany: rebateCreateManyMock,
+      // W1.K added sumEarned to RecomputeAccrualResult — stub returns 0.
+      aggregate: vi.fn().mockResolvedValue({ _sum: { rebateEarned: 0 } }),
     },
   },
 }))
