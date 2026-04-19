@@ -108,15 +108,37 @@ export async function getContractPeriods(contractId: string) {
     // spendMin was sized for annual totals never trigger.
     const tierSpend =
       evaluationPeriod === "monthly" ? bucket.spend : cumulative
-    const { tierAchieved, rebatePercent } = computeRebateFromPrismaTiers(
-      tierSpend,
-      tiers,
-    )
-    // Apply the achieved tier's rate to this month's spend directly.
-    // (The earlier version re-invoked computeRebateFromPrismaTiers with a
-    // synthetic tier but lost the rebateType discriminator, silently
-    // returning zero for percent_of_spend terms.)
-    const rebateEarned = (bucket.spend * rebatePercent) / 100
+    // Charles R5.7: use the facade's `rebateEarned` directly instead of
+    // re-deriving it from `rebatePercent`. The facade is rebateType-aware
+    // — for `percent_of_spend` it returns a percent-of-tierSpend number,
+    // for `fixed_rebate` it returns the flat dollar value, and for
+    // unit-based tiers it short-circuits to 0 (those need
+    // `computeRebateFromPrismaTerm` and unit counts). The old code
+    // multiplied `bucket.spend * rebatePercent / 100` which (a) re-applied
+    // the percent to the bucket instead of the tier-qualification spend,
+    // and (b) zeroed out all non-percent rebate types because
+    // `rebatePercent` is 0 for fixed/per-unit tiers.
+    const facade = computeRebateFromPrismaTiers(tierSpend, tiers)
+    const tierAchieved = facade.tierAchieved
+    // For percent-of-spend the facade's `rebateEarned` is computed from
+    // `tierSpend`. When the contract evaluates cumulatively but we want
+    // this *month's* rebate, re-apply the rate to the month's own spend.
+    const applicableTier = [...tiers]
+      .sort((a, b) => Number(a.spendMin) - Number(b.spendMin))
+      .reduce<(typeof tiers)[number] | null>(
+        (best, t) => (tierSpend >= Number(t.spendMin) ? t : best),
+        null,
+      )
+    let rebateEarned = 0
+    if (applicableTier?.rebateType === "percent_of_spend") {
+      // rebateValue is a fraction (0.03 = 3%); apply to this month's spend.
+      rebateEarned = bucket.spend * Number(applicableTier.rebateValue)
+    } else {
+      // Fixed / per-unit / per-procedure — trust the facade (which
+      // short-circuits unit-based types to 0 since we don't have unit
+      // counts here). Fixed-rebate yields the flat tier value per period.
+      rebateEarned = facade.rebateEarned
+    }
     const rebateCollected = rebateEarned * DEFAULT_COLLECTION_RATE
 
     return {

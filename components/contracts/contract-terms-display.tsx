@@ -52,11 +52,26 @@ function TierProgressCard({
     ? progress.nextTier.tierName ?? `Tier ${progress.nextTier.tierNumber}`
     : null
 
+  // Pull the source Prisma tier (not the engine's pre-scaled view) so we
+  // can route rate-label formatting through the canonical helper. The
+  // progress calculator returns `rebateValue` as the raw fraction (0.03),
+  // but different engines (cumulative vs marginal) historically handed it
+  // back in different units — hand-rolling `* 100` here is how R5.22's
+  // "Current: Tier 1 - 300.0%" bug creeps back in. Formatting via
+  // `formatTierRebateLabel` also correctly handles non-percent tier
+  // types (fixed/per-unit) as currency rather than as "%".
+  const sourceTier = term.tiers.find(
+    (t) => t.tierNumber === progress.currentTier!.tierNumber,
+  )
+  const rebateDisplay = sourceTier
+    ? formatTierRebateLabel(sourceTier.rebateType, Number(sourceTier.rebateValue))
+    : formatPercent(progress.currentTier.rebateValue * 100)
+
   return (
     <div className="space-y-2 rounded-md border bg-muted/30 p-3">
       <div className="flex items-baseline justify-between text-sm">
         <span className="font-medium">
-          Current: {currentLabel} · {formatPercent(progress.currentTier.rebateValue * 100)}
+          Current: {currentLabel} · {rebateDisplay}
         </span>
         {nextLabel ? (
           <span className="text-xs text-muted-foreground">
