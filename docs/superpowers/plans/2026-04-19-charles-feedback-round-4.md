@@ -182,6 +182,61 @@ chart on the contract detail with Y-axis labels like `$800,000` /
   3. Also bump `<AreaChart margin={{ left: 16 }}>` if needed.
   4. Verify on the live page.
 
+### Task 6 (R4.6 + R4.7) — Rebate engine: monthly evaluation period + tier threshold
+
+Charles:
+- R4.6: "I made the evaluation period monthly and still no rebate calculated"
+- R4.7: "I think it is forcing me to get to tier 3 before paying a rebate"
+
+Both point at the rebate calc engine and are likely the same root
+cause — the engine isn't honoring `evaluationPeriod: "monthly"` (so the
+spend denominator stays at annualized amount, never hits tier 1 spendMin)
+AND/OR it's skipping tiers 1 and 2 instead of starting at tier 1.
+
+- **Scope:** `lib/contracts/rebate-method.ts`, `lib/rebates/calculate.ts`,
+  `lib/rebates/engine/*.ts`, and the accrual path
+  `lib/actions/contracts/accrual.ts` + `lib/contracts/accrual.ts`.
+- **Likely root causes:**
+  (a) `evaluationPeriod` isn't threaded through when computing spend per
+      tier — the engine always uses total/annual spend instead of
+      monthly slice.
+  (b) `applyTiers` / `calculateRebate` returns `tierAchieved = 0` and
+      `rebatePercent = 0` when spend < first-tier spendMin because the
+      "highest spendMin ≤ spend" logic has an off-by-one.
+- **Procedure:**
+  1. Pick a contract with a term that has `evaluationPeriod: "monthly"`:
+     ```
+     bun --env-file=.env -e 'import{prisma}from"/Users/vickkumar/code/tydei-next/lib/db";const t=await prisma.contractTerm.findFirst({where:{contract:{facilityId:"cmo4sbr8p0004wthl91ubwfwb"},evaluationPeriod:"monthly"},include:{tiers:true,contract:{select:{id:true,name:true}}}});console.log(JSON.stringify(t,null,2));process.exit(0)'
+     ```
+     If none exists, pick any term + set one to monthly as a test
+     fixture via Prisma.
+  2. Pull its Rebate + ContractPeriod rows for the last 3 months and
+     compare expected rebate vs computed:
+     expected = `spend_month × tier_rate` where tier_rate = tier whose
+     spendMin ≤ monthly spend.
+  3. Trace `lib/actions/contracts/accrual.ts::recomputeAccrual` (or
+     equivalent) to see whether it passes `evaluationPeriod` into the
+     engine. If it just calls `computeRebate(totalSpend, tiers)` without
+     slicing by period, that's R4.6.
+  4. Inspect `calculateRebate` in `lib/contracts/rebate-method.ts` — the
+     cumulative branch should pick the tier whose `spendMin ≤ spend`;
+     the marginal branch should pay `(bracketTop - bracketBottom) ×
+     rate` per completed bracket. Check for the "must hit tier 3 first"
+     bug — likely the tier lookup uses `>=` incorrectly or drops the
+     first tier.
+  5. Write a unit test: `describe("monthly evaluation period", ...)`
+     with two tiers (0-100k=2%, 100k-200k=3%), evaluationPeriod=monthly,
+     spend=50k in one month → expected rebate = 1000 (2% × 50k).
+  6. Fix engine; re-run tests.
+- **Constraints:**
+  - Don't break existing cumulative/marginal tests in
+    `lib/rebates/engine/__tests__/`.
+  - Preserve the CLAUDE.md rule: rebates for display still come from
+    Rebate/ContractPeriod rows; this task fixes the *computation engine*
+    used during accrual recompute, not the display surface.
+
+Commit: `fix(rebates): honor evaluationPeriod + correct tier-1 threshold (Charles R4.6/R4.7)`.
+
 ---
 
 ## Handoff
