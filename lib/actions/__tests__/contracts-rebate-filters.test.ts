@@ -22,6 +22,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 type ContractWithRebates = {
   id: string
+  vendorId?: string
   rebates: Array<{
     rebateEarned: number
     rebateCollected: number
@@ -37,6 +38,16 @@ vi.mock("@/lib/db", () => ({
     contract: {
       findMany: vi.fn(async () => contractRows),
       count: vi.fn(async () => contractRows.length),
+    },
+    // Charles W1.J — `getContracts` now batches trailing-12mo spend
+    // aggregations to populate the SPEND column. Tests in this file
+    // don't exercise currentSpend; stub the groupBy calls as empty so
+    // the rebate-focused assertions still pass.
+    contractPeriod: {
+      groupBy: vi.fn(async () => []),
+    },
+    cOGRecord: {
+      groupBy: vi.fn(async () => []),
     },
   },
 }))

@@ -9,6 +9,15 @@ vi.mock("@/lib/db", () => ({
       ]),
       count: vi.fn().mockResolvedValue(2),
     },
+    // Charles W1.J — `getContracts` now fires three batched aggregations
+    // to populate `currentSpend` per row. Stub them out; this suite only
+    // exercises filter semantics.
+    contractPeriod: {
+      groupBy: vi.fn().mockResolvedValue([]),
+    },
+    cOGRecord: {
+      groupBy: vi.fn().mockResolvedValue([]),
+    },
   },
 }))
 vi.mock("@/lib/actions/auth", () => ({

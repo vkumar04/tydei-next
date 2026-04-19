@@ -83,6 +83,100 @@ export async function getContracts(input: ContractFilters) {
   // computation in `getContract` above.
   const today = new Date()
   const startOfYear = new Date(today.getFullYear(), 0, 1)
+
+  // Charles W1.J — populate `currentSpend` per row using the R5.28
+  // trailing-12-month cascade so the list page's SPEND column matches
+  // the detail page's "Current Spend (Last 12 Months)" card. Previously
+  // this column relied on getContractMetricsBatch (lifetime, no window)
+  // and frequently rendered $0 because the batched fallback chain didn't
+  // include the vendor-wide COG safety net. Three batched aggregations
+  // (periods, COG-by-contractId, COG-by-vendorId) replace per-row queries.
+  // Precedence (same as getContract):
+  //   1. ContractPeriod.totalSpend WHERE contractId AND periodEnd in [today-12mo, today]
+  //   2. COGRecord.extendedPrice  WHERE contractId AND transactionDate in [today-12mo, today]
+  //   3. COGRecord.extendedPrice  WHERE vendorId  AND transactionDate in [today-12mo, today]
+  // Note: tier 3 is fuzzy — when multiple contracts share a vendor, the
+  // vendor-window figure double-counts across those contracts. We accept
+  // this bound (already documented in R5.24) because the alternative is
+  // $0 for any contract that lacks ContractPeriod rollups AND has no
+  // COG rows enriched with its own contractId.
+  const windowEnd = today
+  const windowStart = new Date(today)
+  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const contractIds = contracts.map((c) => c.id)
+  const vendorIds = Array.from(
+    new Set(
+      contracts
+        .map((c) => c.vendorId)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  )
+
+  const [periodSpendAgg, cogByContractAgg, cogByVendorAgg] =
+    contractIds.length === 0
+      ? [[], [], []]
+      : await Promise.all([
+          prisma.contractPeriod.groupBy({
+            by: ["contractId"],
+            where: {
+              contractId: { in: contractIds },
+              periodEnd: { gte: windowStart, lte: windowEnd },
+            },
+            _sum: { totalSpend: true },
+          }),
+          prisma.cOGRecord.groupBy({
+            by: ["contractId"],
+            where: {
+              facilityId: facility.id,
+              contractId: { in: contractIds },
+              transactionDate: { gte: windowStart, lte: windowEnd },
+            },
+            _sum: { extendedPrice: true },
+          }),
+          vendorIds.length === 0
+            ? Promise.resolve(
+                [] as Array<{
+                  vendorId: string | null
+                  _sum: { extendedPrice: Prisma.Decimal | null }
+                }>,
+              )
+            : prisma.cOGRecord.groupBy({
+                by: ["vendorId"],
+                where: {
+                  facilityId: facility.id,
+                  vendorId: { in: vendorIds },
+                  transactionDate: { gte: windowStart, lte: windowEnd },
+                },
+                _sum: { extendedPrice: true },
+              }),
+        ])
+
+  const periodSpendByContract = new Map<string, number>()
+  for (const row of periodSpendAgg) {
+    periodSpendByContract.set(
+      row.contractId,
+      Number(row._sum?.totalSpend ?? 0),
+    )
+  }
+  const cogSpendByContract = new Map<string, number>()
+  for (const row of cogByContractAgg) {
+    if (row.contractId) {
+      cogSpendByContract.set(
+        row.contractId,
+        Number(row._sum?.extendedPrice ?? 0),
+      )
+    }
+  }
+  const cogSpendByVendor = new Map<string, number>()
+  for (const row of cogByVendorAgg) {
+    if (row.vendorId) {
+      cogSpendByVendor.set(
+        row.vendorId,
+        Number(row._sum?.extendedPrice ?? 0),
+      )
+    }
+  }
+
   const withDerived = contracts.map((c) => {
     const rebateEarned = (c.rebates ?? []).reduce(
       (sum, r) =>
@@ -98,7 +192,20 @@ export async function getContracts(input: ContractFilters) {
         r.collectionDate ? sum + Number(r.rebateCollected ?? 0) : sum,
       0,
     )
-    return { ...c, rebateEarned, rebateCollected }
+
+    const periodSpend = periodSpendByContract.get(c.id) ?? 0
+    const cogContractSpend = cogSpendByContract.get(c.id) ?? 0
+    const cogVendorSpend = c.vendorId
+      ? (cogSpendByVendor.get(c.vendorId) ?? 0)
+      : 0
+    const currentSpend =
+      periodSpend > 0
+        ? periodSpend
+        : cogContractSpend > 0
+          ? cogContractSpend
+          : cogVendorSpend
+
+    return { ...c, rebateEarned, rebateCollected, currentSpend }
   })
 
   return serialize({ contracts: withDerived, total })

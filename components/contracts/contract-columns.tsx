@@ -38,6 +38,13 @@ type ContractWithVendor = Contract & {
   facility: Pick<Facility, "id" | "name"> | null
   rebateEarned?: number
   rebateCollected?: number
+  /**
+   * Trailing-12-month spend attached by `getContracts` (Charles W1.J).
+   * Mirrors the R5.28 cascade from `getContract`:
+   *   ContractPeriod → COG-by-contract → COG-by-vendor.
+   * Preferred over `metricsSpend` (which has no time window).
+   */
+  currentSpend?: number
   /** From getContractMetricsBatch (when loaded). */
   metricsSpend?: number
   metricsRebate?: number
@@ -295,18 +302,28 @@ export function getContractColumns(
     },
     {
       id: "metricsSpend",
-      accessorFn: (row) => row.metricsSpend ?? 0,
+      // Prefer trailing-12mo `currentSpend` (set by getContracts per R5.28)
+      // over the legacy lifetime `metricsSpend` (getContractMetricsBatch).
+      // The batch is kept as a fallback only while transitional.
+      accessorFn: (row) => row.currentSpend ?? row.metricsSpend ?? 0,
       header: ({ column }) => (
-        <SortableHeader label="Spend" column={column} align="right" />
+        <SortableHeader
+          label="Spend (Last 12 Months)"
+          column={column}
+          align="right"
+          tooltip="Trailing 12 months of recorded activity. Sourced from ContractPeriod rollups, then COG records tagged to this contract, then COG records for this vendor (fuzzy — contracts sharing a vendor may share the same vendor-window figure)."
+          tooltipAriaLabel="Spend (Last 12 Months) help"
+        />
       ),
       enableSorting: true,
-      cell: ({ row }) => (
-        <div className="text-right font-medium text-muted-foreground">
-          {row.original.metricsSpend !== undefined
-            ? formatCurrency(row.original.metricsSpend)
-            : "—"}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const value = row.original.currentSpend ?? row.original.metricsSpend
+        return (
+          <div className="text-right font-medium text-muted-foreground">
+            {value !== undefined ? formatCurrency(value) : "—"}
+          </div>
+        )
+      },
     },
     {
       id: "rebateEarned",
