@@ -27,6 +27,10 @@ type ContractWithVendor = Contract & {
   /** From getContractMetricsBatch (when loaded). */
   metricsSpend?: number
   metricsRebate?: number
+  /** Optional: when `getContracts` selects `_count.contractFacilities`. */
+  _count?: { contractFacilities?: number }
+  /** Optional: when the join is included directly. */
+  contractFacilities?: { id: string }[]
 }
 
 const typeLabels: Record<string, string> = {
@@ -117,21 +121,35 @@ export function getContractColumns(
       enableSorting: true,
     },
     {
+      id: "scope",
+      header: "Scope",
+      cell: ({ row }) => {
+        const c = row.original
+        const facilityCount =
+          c._count?.contractFacilities ?? c.contractFacilities?.length ?? 0
+        const label = c.isGrouped
+          ? "Grouped"
+          : c.isMultiFacility
+            ? "Multi-facility"
+            : facilityCount > 1
+              ? "Shared"
+              : "Single"
+        const variant: "default" | "secondary" | "outline" =
+          label === "Grouped" || label === "Multi-facility"
+            ? "default"
+            : label === "Shared"
+              ? "secondary"
+              : "outline"
+        return <Badge variant={variant}>{label}</Badge>
+      },
+    },
+    {
       accessorKey: "contractType",
       header: "Type",
       cell: ({ row }) => (
         <Badge variant="outline">
           {typeLabels[row.original.contractType] || "Usage"}
         </Badge>
-      ),
-    },
-    {
-      accessorKey: "isMultiFacility",
-      header: "Scope",
-      cell: ({ row }) => (
-        <span className="capitalize">
-          {row.original.isMultiFacility ? "Multi" : "Single"}
-        </span>
       ),
     },
     {
