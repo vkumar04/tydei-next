@@ -197,7 +197,11 @@ export function EditContractClient({
         </TabsContent>
 
         <TabsContent value="terms" className="mt-6">
-          <ContractTermsEntry terms={terms} onChange={setTerms} />
+          <ContractTermsEntry
+            terms={terms}
+            onChange={setTerms}
+            contractType={contract?.contractType}
+          />
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">

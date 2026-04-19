@@ -904,7 +904,15 @@ export function NewContractClient({
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ContractTermsEntry terms={terms} onChange={setTerms} />
+                    <ContractTermsEntry
+                      terms={terms}
+                      onChange={setTerms}
+                      contractType={form.watch("contractType")}
+                      availableItems={pricingItems.map((p) => ({
+                        vendorItemNo: p.vendorItemNo,
+                        description: p.description ?? null,
+                      }))}
+                    />
                   </CardContent>
                 </Card>
               )}

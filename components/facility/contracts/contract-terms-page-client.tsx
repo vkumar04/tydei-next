@@ -195,6 +195,7 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
           terms={editTerms}
           onChange={setEditTerms}
           availableCategories={availableCategories}
+          contractType={contract?.contractType}
         />
       ) : (
         <ContractTermsDisplay
