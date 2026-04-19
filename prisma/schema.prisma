@@ -332,6 +332,7 @@ model User {
   renewalAlertSettings RenewalAlertSettings?
   renewalNotes     RenewalNote[]
   completedRenewalTasks RenewalTask[] @relation("RenewalTaskCompleter")
+  rebateInsightFlags RebateInsightFlag[]
 
   @@index([role])
   @@map("user")
@@ -485,6 +486,8 @@ model Facility {
   reportSchedules    ReportSchedule[]
   contractFacilities ContractFacility[]
   payorContracts     PayorContract[]
+  rebateInsightCaches RebateInsightCache[]
+  rebateInsightFlags  RebateInsightFlag[]
 
   @@index([status])
   @@map("facility")
@@ -1643,4 +1646,40 @@ model ReportSchedule {
   facility Facility @relation(fields: [facilityId], references: [id])
 
   @@map("report_schedule")
+}
+
+// ─── Rebate Optimizer AI Smart Recommendations ─────────────────────
+
+model RebateInsightCache {
+  id         String   @id @default(cuid())
+  facilityId String
+  inputHash  String
+  response   Json
+  model      String
+  costCents  Int?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, expiresAt])
+  @@index([facilityId, inputHash])
+  @@map("rebate_insight_cache")
+}
+
+model RebateInsightFlag {
+  id         String   @id @default(cuid())
+  facilityId String
+  insightId  String
+  title      String
+  summary    String
+  snapshot   Json
+  flaggedBy  String
+  createdAt  DateTime @default(now())
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [flaggedBy], references: [id])
+
+  @@index([facilityId, createdAt])
+  @@map("rebate_insight_flag")
 }

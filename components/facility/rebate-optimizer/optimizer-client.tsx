@@ -50,6 +50,13 @@ import {
   useSetSpendTarget,
   useRebateOptimizerEngine,
 } from "@/hooks/use-rebate-optimizer"
+import {
+  useRebateInsights,
+  useRegenerateRebateInsights,
+  useFlagRebateInsight,
+  useRebateInsightFlags,
+  useClearRebateInsightFlag,
+} from "@/hooks/use-rebate-insights"
 import { formatCurrency } from "@/lib/formatting"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -61,6 +68,14 @@ import { SensitivityChart } from "./sensitivity-chart"
 import { CompareScenariosTable } from "./compare-scenarios-table"
 import { evaluateScenario } from "./scenario-math"
 import type { SavedScenario } from "./scenario-types"
+import { RebateInsightCard } from "./rebate-insight-card"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { ChevronDown, Loader2, RefreshCw, X } from "lucide-react"
+import type { RebateInsight } from "@/lib/ai/rebate-optimizer-schemas"
 
 interface OptimizerClientProps {
   facilityId: string
@@ -72,6 +87,45 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
   const [selectedContract, setSelectedContract] =
     useState<RebateOpportunity | null>(null)
   const [additionalSpend, setAdditionalSpend] = useState("")
+
+  // ─── AI Smart Recommendations (Tier 1) ──────────────────────────
+  const [insightsOpen, setInsightsOpen] = useState(false)
+  const [insightsEnabled, setInsightsEnabled] = useState(false)
+  const insightsQuery = useRebateInsights(facilityId, { enabled: insightsEnabled })
+  const regenerateInsights = useRegenerateRebateInsights(facilityId)
+  const flagInsight = useFlagRebateInsight(facilityId)
+  const clearFlag = useClearRebateInsightFlag(facilityId)
+  const flagsQuery = useRebateInsightFlags(facilityId)
+
+  const insightsData = insightsQuery.data ?? regenerateInsights.data ?? null
+  const insightsLoading =
+    (insightsEnabled && insightsQuery.isPending && !insightsQuery.data) ||
+    regenerateInsights.isPending
+  const insightsError = insightsQuery.error ?? regenerateInsights.error ?? null
+  const flaggedInsightIds = new Set(
+    (flagsQuery.data ?? []).map((f) => f.insightId),
+  )
+
+  function handleGenerateInsights() {
+    if (!insightsEnabled) {
+      setInsightsEnabled(true)
+      return
+    }
+    regenerateInsights.mutate()
+  }
+
+  function handleFlagInsight(insight: RebateInsight) {
+    flagInsight.mutate(
+      { insightId: insight.id, snapshot: insight },
+      {
+        onSuccess: () => toast.success("Flagged for review"),
+        onError: (err) =>
+          toast.error(
+            err instanceof Error ? err.message : "Could not flag insight",
+          ),
+      },
+    )
+  }
 
   const { data: opportunities, isLoading } = useRebateOpportunities(facilityId)
   const setTarget = useSetSpendTarget()
@@ -244,6 +298,176 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
           </Button>
         </div>
       </div>
+
+      {/* ─── Smart Recommendations (AI) ─────────────────────────── */}
+      <Card className="border-purple-200 bg-gradient-to-br from-purple-50/50 to-transparent dark:border-purple-900/50 dark:from-purple-950/20">
+        <Collapsible open={insightsOpen} onOpenChange={setInsightsOpen}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex flex-1 items-center gap-2 text-left"
+                >
+                  <Sparkles className="h-5 w-5 text-purple-500" />
+                  <div>
+                    <CardTitle className="text-base">
+                      Smart Recommendations (AI)
+                      {flagsQuery.data && flagsQuery.data.length > 0 && (
+                        <Badge variant="secondary" className="ml-2">
+                          {flagsQuery.data.length} flagged
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription className="mt-0.5">
+                      Claude Opus analyzes your portfolio for cross-contract
+                      opportunities — roughly 10 seconds to generate.
+                    </CardDescription>
+                  </div>
+                  <ChevronDown
+                    className={`ml-auto h-4 w-4 text-muted-foreground transition-transform ${
+                      insightsOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+              </CollapsibleTrigger>
+              {insightsOpen && insightsData && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => regenerateInsights.mutate()}
+                  disabled={insightsLoading}
+                  className="gap-1"
+                >
+                  {regenerateInsights.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Regenerate
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
+              {!insightsEnabled && !insightsData && (
+                <div className="flex flex-col items-start gap-3 rounded-md border border-dashed p-6 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="h-6 w-6 text-purple-500" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        Generate AI Smart Recommendations
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Portfolio-level insights with citations back to each
+                        contract. Cached for 15 minutes.
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={handleGenerateInsights} className="gap-1">
+                    <Sparkles className="h-4 w-4" />
+                    Generate Smart Recommendations
+                  </Button>
+                </div>
+              )}
+
+              {insightsLoading && (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-[120px] rounded-xl" />
+                  ))}
+                </div>
+              )}
+
+              {!insightsLoading && insightsError && (
+                <Alert variant="destructive">
+                  <AlertTitle>Could not generate recommendations</AlertTitle>
+                  <AlertDescription>
+                    {insightsError instanceof Error
+                      ? insightsError.message
+                      : "Unknown error"}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {!insightsLoading &&
+                !insightsError &&
+                insightsData &&
+                insightsData.insights.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No actionable recommendations right now. Claude may surface
+                    more once you have additional tier-gap contracts or
+                    recent spend activity.
+                  </p>
+                )}
+
+              {!insightsLoading &&
+                insightsData &&
+                insightsData.insights.length > 0 && (
+                  <div className="space-y-3">
+                    {insightsData.insights.map((insight) => (
+                      <RebateInsightCard
+                        key={insight.id}
+                        insight={insight}
+                        onFlag={handleFlagInsight}
+                        isFlagging={flagInsight.isPending}
+                        isFlagged={flaggedInsightIds.has(insight.id)}
+                      />
+                    ))}
+                    {insightsData.observations &&
+                      insightsData.observations.length > 0 && (
+                        <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+                          <p className="font-medium">Observations</p>
+                          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                            {insightsData.observations.map((obs, i) => (
+                              <li key={i}>{obs}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    <p className="pt-1 text-[10px] text-muted-foreground">
+                      Generated {new Date(insightsData.generatedAt).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+
+              {flagsQuery.data && flagsQuery.data.length > 0 && (
+                <div className="rounded-md border bg-muted/30 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm font-medium">Flagged follow-ups</p>
+                    <Badge variant="secondary">{flagsQuery.data.length}</Badge>
+                  </div>
+                  <ul className="space-y-2">
+                    {flagsQuery.data.map((flag) => (
+                      <li
+                        key={flag.id}
+                        className="flex items-start justify-between gap-2 rounded border bg-background p-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{flag.title}</p>
+                          <p className="truncate text-muted-foreground">
+                            {flag.summary}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => clearFlag.mutate(flag.id)}
+                          disabled={clearFlag.isPending}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
+      </Card>
 
       {/* Scenario Builder — loading, empty, and loaded states */}
       {isEngineLoading ? (
