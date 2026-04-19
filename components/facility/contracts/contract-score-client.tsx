@@ -55,6 +55,8 @@ import {
 import { chartTooltipStyle } from "@/lib/chart-config"
 import type { DealScoreResult } from "@/lib/ai/schemas"
 import { ContractMarginCard } from "@/components/contracts/contract-margin-card"
+import { ContractScoreRadar } from "@/components/contracts/contract-score-radar"
+import type { ContractScoreResult } from "@/lib/contracts/scoring"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,6 +73,13 @@ interface ContractScoreClientProps {
     terms: Array<{ tiers: Array<unknown> }>
     [key: string]: unknown
   }
+  /**
+   * Rule-based score components from lib/contracts/scoring.ts.
+   * When present, a dedicated radar chart visualizes these 5 dimensions
+   * (commitment / compliance / rebate efficiency / timeliness / variance)
+   * alongside the AI-driven overall display.
+   */
+  ruleBasedComponents?: ContractScoreResult["components"]
 }
 
 /** The six score dimensions displayed in the UI. */
@@ -281,6 +290,7 @@ function seededOffset(key: string): number {
 export function ContractScoreClient({
   contractId,
   contract,
+  ruleBasedComponents,
 }: ContractScoreClientProps) {
   const [selectedTab, setSelectedTab] = useState("overview")
 
@@ -508,6 +518,12 @@ export function ContractScoreClient({
           </div>
         </CardContent>
       </Card>
+
+      {/* Rule-based score dimensions radar (optional — rendered when the
+          server passed the computed components alongside the AI score). */}
+      {ruleBasedComponents && (
+        <ContractScoreRadar components={ruleBasedComponents} />
+      )}
 
       {/* Tabs for detailed analysis */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>
