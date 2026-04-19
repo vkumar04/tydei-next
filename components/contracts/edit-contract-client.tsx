@@ -6,7 +6,7 @@ import Link from "next/link"
 import { ArrowLeft, Loader2, Save, X } from "lucide-react"
 import { useContract, useUpdateContract } from "@/hooks/use-contracts"
 import { useContractForm } from "@/hooks/use-contract-form"
-import { upsertContractTiers, createContractTerm, deleteContractTerm } from "@/lib/actions/contract-terms"
+import { upsertContractTiers, createContractTerm, deleteContractTerm, updateContractTerm } from "@/lib/actions/contract-terms"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
@@ -121,6 +121,29 @@ export function EditContractClient({
       // Create new terms and update tiers of existing
       for (const term of terms) {
         if (term.id) {
+          // Persist term-level edits in addition to tier changes.
+          await updateContractTerm(term.id, {
+            termName: term.termName,
+            termType: term.termType,
+            baselineType: term.baselineType,
+            evaluationPeriod: term.evaluationPeriod,
+            paymentTiming: term.paymentTiming,
+            appliesTo: term.appliesTo,
+            rebateMethod: term.rebateMethod,
+            effectiveStart: term.effectiveStart,
+            effectiveEnd: term.effectiveEnd,
+            volumeType: term.volumeType,
+            spendBaseline: term.spendBaseline,
+            volumeBaseline: term.volumeBaseline,
+            growthBaselinePercent: term.growthBaselinePercent,
+            desiredMarketShare: term.desiredMarketShare,
+            scopedCategoryId: term.scopedCategoryId,
+            scopedCategoryIds: term.scopedCategoryIds,
+            scopedItemNumbers: term.scopedItemNumbers,
+            capitalCost: term.capitalCost,
+            interestRate: term.interestRate,
+            termMonths: term.termMonths,
+          })
           await upsertContractTiers(term.id, term.tiers)
         } else {
           await createContractTerm({
