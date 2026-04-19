@@ -51,6 +51,9 @@ interface ContractTermsEntryProps {
    *  for item-level scoping when `term.appliesTo === "specific_items"`.
    *  Empty array disables the picker with a helpful empty-state hint. */
   availableItems?: VendorItem[]
+  /** Contract type from the parent contract — when "tie_in" we render
+   *  per-term capital cost / interest rate / term-months inputs. */
+  contractType?: string
 }
 
 const termTypes = [
@@ -106,6 +109,7 @@ export function ContractTermsEntry({
   onChange,
   availableCategories = [],
   availableItems = [],
+  contractType,
 }: ContractTermsEntryProps) {
   // Fallback category fetch — runs only when the caller didn't pass any.
   // Every mount point of this component previously had to wire its own
@@ -429,6 +433,59 @@ export function ContractTermsEntry({
                         }
                       />
                     </Field>
+                  )}
+
+                  {contractType === "tie_in" && (
+                    <div className="space-y-2 rounded-md border p-3">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Tie-In Capital Schedule
+                      </p>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <Field label="Capital Cost ($)">
+                          <Input
+                            type="number"
+                            value={term.capitalCost ?? ""}
+                            onChange={(e) =>
+                              updateTerm(termIdx, {
+                                capitalCost:
+                                  e.target.value === ""
+                                    ? null
+                                    : Number(e.target.value),
+                              })
+                            }
+                          />
+                        </Field>
+                        <Field label="Interest Rate (%)">
+                          <Input
+                            type="number"
+                            step="0.0001"
+                            value={term.interestRate ?? ""}
+                            onChange={(e) =>
+                              updateTerm(termIdx, {
+                                interestRate:
+                                  e.target.value === ""
+                                    ? null
+                                    : Number(e.target.value),
+                              })
+                            }
+                          />
+                        </Field>
+                        <Field label="Term (months)">
+                          <Input
+                            type="number"
+                            value={term.termMonths ?? ""}
+                            onChange={(e) =>
+                              updateTerm(termIdx, {
+                                termMonths:
+                                  e.target.value === ""
+                                    ? null
+                                    : Number(e.target.value),
+                              })
+                            }
+                          />
+                        </Field>
+                      </div>
+                    </div>
                   )}
 
                   <div className="grid gap-4 sm:grid-cols-2">

@@ -34,6 +34,8 @@ export async function createContractTerm(input: CreateTermInput) {
 
   // scopedItemNumbers doesn't belong on ContractTerm itself — it
   // maps to ContractTermProduct join rows written after the term.
+  // capitalCost / interestRate / termMonths are real ContractTerm
+  // columns and stay in `termData`.
   const { tiers, scopedItemNumbers, ...termData } = data
 
   const term = await prisma.contractTerm.create({

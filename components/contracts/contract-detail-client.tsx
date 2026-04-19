@@ -433,6 +433,42 @@ export function ContractDetailClient({
               </CardContent>
             </Card>
           </div>
+
+          {contract.contractType === "tie_in" && contract.terms[0] && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Tie-In Capital</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-4 sm:grid-cols-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Capital Cost</p>
+                    <p className="font-medium">
+                      {contract.terms[0].capitalCost != null
+                        ? formatCurrency(Number(contract.terms[0].capitalCost))
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Interest Rate</p>
+                    <p className="font-medium">
+                      {contract.terms[0].interestRate != null
+                        ? `${(Number(contract.terms[0].interestRate) * 100).toFixed(2)}%`
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Term</p>
+                    <p className="font-medium">
+                      {contract.terms[0].termMonths != null
+                        ? `${contract.terms[0].termMonths} months`
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ── Transactions Tab ─────────────────────────────────── */}
