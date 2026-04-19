@@ -264,12 +264,32 @@ export function COGRecordsTable({ facilityId, dateFrom, dateTo }: COGRecordsTabl
       )}
 
       {!isLoading && hasFilters && filteredRecords.length === 0 && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-          <AlertTriangle className="h-5 w-5 text-amber-600" />
-          <p className="text-sm text-amber-800 dark:text-amber-200">
-            No records match the current filters. Adjust your filters to
-            see more data.
-          </p>
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+          <div className="space-y-1 text-sm text-amber-800 dark:text-amber-200">
+            {matchFilter === "on_contract" ? (
+              // Charles R5.11 — the "On Contract" filter showing 0 results
+              // is almost always because no ContractPricing rows have been
+              // uploaded yet. Point the user at the concrete remediation
+              // rather than a generic "adjust your filters".
+              <>
+                <p className="font-medium">No COG items are matched to a contract yet.</p>
+                <p>
+                  Upload pricing files to your active contracts (Pricing
+                  tab on each contract detail), then click <b>Match
+                  Pricing</b> above to run the matcher. Items whose vendor
+                  has a contract but whose SKU isn&apos;t on any pricing
+                  file will show as <b>Not Priced</b> — that&apos;s the
+                  same underlying signal.
+                </p>
+              </>
+            ) : (
+              <p>
+                No records match the current filters. Adjust your filters
+                to see more data.
+              </p>
+            )}
+          </div>
         </div>
       )}
 
