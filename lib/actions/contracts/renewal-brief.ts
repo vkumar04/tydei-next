@@ -92,6 +92,35 @@ export async function generateRenewalBrief(
     throw new Error("Contract not found or not owned by this facility")
   }
 
+  // Guard: a contract with no terms has nothing for the model to analyze.
+  // Return a safe fallback synchronous brief rather than spending a round
+  // trip just to have Claude say "no data". The UI still renders.
+  if (contract.terms.length === 0) {
+    const now = new Date()
+    return serialize<RenewalBrief>({
+      contractId: contract.id,
+      generatedAt: now.toISOString(),
+      executiveSummary:
+        "No rebate terms are defined on this contract, so there are no missed tiers or capture-rate history to analyze. Define at least one term (with tiers) before requesting a renewal brief.",
+      performanceSummary: {
+        termMonths: Math.max(
+          0,
+          Math.round(
+            (contract.expirationDate.getTime() -
+              contract.effectiveDate.getTime()) /
+              (1000 * 60 * 60 * 24 * 30),
+          ),
+        ),
+        totalSpend: 0,
+        projectedFullSpend: 0,
+        captureRate: 0,
+        missedTiers: [],
+      },
+      primaryAsks: [],
+      concessionsOnTable: [],
+    })
+  }
+
   // ── 2. Normalize input for hashing + the prompt ────────────────────
   const input: RenewalBriefInput = {
     contract: {
@@ -186,6 +215,7 @@ ${JSON.stringify(input, null, 2)}
 Produce the JSON response exactly matching the schema. Use the rebateHistory + periodHistory to compute capture rate and missed tiers. Cite specific quarters where possible. Do not invent numbers.`
 
   let response: RenewalBrief
+  let rawOutput: unknown
   try {
     const result = await generateText({
       model: claudeModel,
@@ -201,14 +231,30 @@ Produce the JSON response exactly matching the schema. Use the rebateHistory + p
         },
       },
     })
-    const raw = result.output
-    response = renewalBriefSchema.parse(raw)
+    rawOutput = result.output
   } catch (err) {
+    // Anthropic API call itself failed (schema rejected, rate-limit, auth,
+    // context exceeded, etc.). Surface the message — not the stack — so the
+    // toast is readable.
     const message = err instanceof Error ? err.message : "Unknown error"
     throw new Error(
-      `Renewal Brief generation failed: ${message.slice(0, 300)}`,
+      `Renewal brief generation failed (AI request error): ${message.slice(0, 300)}`,
     )
   }
+
+  const parsed = renewalBriefSchema.safeParse(rawOutput)
+  if (!parsed.success) {
+    // Claude returned a payload that doesn't match our schema. Flatten the
+    // first few issue paths so the UI can surface something actionable.
+    const issues = parsed.error.issues.slice(0, 3).map((i) => {
+      const path = i.path.join(".") || "(root)"
+      return `${path}: ${i.message}`
+    })
+    throw new Error(
+      `Renewal brief generation failed (AI returned an invalid payload: ${issues.join("; ")})`,
+    )
+  }
+  response = parsed.data
 
   // ── 5. Persist cache row + return ──────────────────────────────────
   const now = new Date()

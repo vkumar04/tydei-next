@@ -6,10 +6,16 @@ import { z } from "zod"
  * Shape is locked by the spec:
  *   docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.1
  *
- * Notes on constraints: intentionally avoid `.min()`/`.max()` on numeric leaves
- * so the schema stays compatible with Anthropic's Messages API JSON Schema
- * validator (see `lib/ai/__tests__/schemas.test.ts`). We use `.int()` only for
- * `rank`, which maps to `type: "integer"`, not a range constraint.
+ * Notes on constraints: Anthropic's Messages API rejects `minimum`/`maximum`
+ * keywords on numeric leaves. Zod 4's `.int()` emits both `type: "integer"` AND
+ * the safe-integer min/max bounds, so the API 400s with:
+ *
+ *   output_config.format.schema: For 'integer' type, properties maximum,
+ *   minimum are not supported
+ *
+ * We therefore avoid `.int()` entirely; every numeric leaf is plain
+ * `z.number()` and integer semantics live in `.describe(...)`. See
+ * `lib/ai/__tests__/schemas.test.ts` for the drift guard.
  */
 
 export const rebateInsightActionSchema = z.enum([
@@ -34,8 +40,7 @@ export const rebateInsightSchema = z.object({
     ),
   rank: z
     .number()
-    .int()
-    .describe("1-indexed rank; 1 is most actionable"),
+    .describe("Integer rank, 1-indexed; 1 is most actionable"),
   title: z.string().describe("Headline — keep it under ~80 characters"),
   summary: z.string().describe("1-2 sentence pitch the user sees on the card"),
   rationale: z

@@ -58,10 +58,15 @@ describe("renewalBriefAskSchema", () => {
     ).toBe(true)
   })
 
-  it("rejects non-integer rank", () => {
+  it("accepts numeric rank (integer semantics are carried in the description, not runtime checks — Anthropic's JSON Schema validator rejects the `minimum`/`maximum` bounds Zod 4's `.int()` emits, so W1.U-D dropped `.int()` and documents the contract instead)", () => {
+    // Still parses even if the model ever returns 1.5 — the UI treats rank
+    // as a sort key, so a decimal doesn't break anything.
+    expect(
+      renewalBriefAskSchema.safeParse({ ...validAsk, rank: 1 }).success,
+    ).toBe(true)
     expect(
       renewalBriefAskSchema.safeParse({ ...validAsk, rank: 1.5 }).success,
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it("rejects a missing ask headline", () => {
@@ -94,13 +99,19 @@ describe("renewalBriefMissedTierSchema", () => {
     ).toBe(true)
   })
 
-  it("rejects a non-integer tier number", () => {
+  it("accepts a numeric tier number (integer semantics carried in the description; see W1.U-D)", () => {
+    expect(
+      renewalBriefMissedTierSchema.safeParse({
+        ...validMissedTier,
+        tierMissed: 2,
+      }).success,
+    ).toBe(true)
     expect(
       renewalBriefMissedTierSchema.safeParse({
         ...validMissedTier,
         tierMissed: 2.5,
       }).success,
-    ).toBe(false)
+    ).toBe(true)
   })
 })
 

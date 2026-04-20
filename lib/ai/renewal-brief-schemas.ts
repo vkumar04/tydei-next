@@ -6,18 +6,24 @@ import { z } from "zod"
  * Shape is locked by the spec:
  *   docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.2
  *
- * Notes on constraints: as with the Tier 1 schema, we intentionally avoid
- * `.min()`/`.max()` on numeric leaves so the schema stays compatible with
- * Anthropic's JSON Schema validator. Integer constraints use `.int()` only
- * (maps to `type: "integer"`) — no range bounds that would emit
- * `minimum`/`maximum` keywords.
+ * Notes on constraints: Anthropic's JSON Schema validator rejects
+ * `minimum`/`maximum` keywords on numeric leaves. Zod 4's `.int()` emits
+ * `type: "integer"` **together with** `minimum: -2^53+1, maximum: 2^53-1`
+ * (the safe-integer range), which Anthropic refuses with:
+ *
+ *   output_config.format.schema: For 'integer' type, properties maximum,
+ *   minimum are not supported
+ *
+ * So we avoid `.int()` entirely: every numeric leaf is `z.number()` and the
+ * "integer" semantic is documented in `.describe(...)`. Runtime enforcement
+ * happens when we Zod-parse the Claude response (rounding via `Math.trunc`
+ * inside the post-processor if needed). No `.min()`/`.max()` either.
  */
 
 export const renewalBriefAskSchema = z.object({
   rank: z
     .number()
-    .int()
-    .describe("1-indexed rank; 1 is the highest-priority ask"),
+    .describe("Integer rank, 1-indexed; 1 is the highest-priority ask"),
   ask: z
     .string()
     .describe(
@@ -60,7 +66,9 @@ export const renewalBriefMissedTierSchema = z.object({
     .describe(
       "ISO-ish quarter label (e.g., '2025-Q2') derived from the input rebate history",
     ),
-  tierMissed: z.number().int().describe("The tier number that was missed"),
+  tierMissed: z
+    .number()
+    .describe("Integer tier number that was missed"),
   shortfallDollars: z
     .number()
     .describe("Spend shortfall below the tier threshold, in dollars"),
@@ -76,8 +84,7 @@ export type RenewalBriefMissedTier = z.infer<
 export const renewalBriefPerformanceSchema = z.object({
   termMonths: z
     .number()
-    .int()
-    .describe("Total contract term in months (end - start)"),
+    .describe("Integer number of months in the contract term (end - start)"),
   totalSpend: z
     .number()
     .describe("Total facility spend against the contract to date, in dollars"),
@@ -135,7 +142,7 @@ export const renewalBriefInputContractSchema = z.object({
 })
 
 export const renewalBriefInputTierSchema = z.object({
-  tierNumber: z.number().int(),
+  tierNumber: z.number().describe("Integer tier number"),
   tierName: z.string().nullable().optional(),
   spendMin: z.number(),
   spendMax: z.number().nullable().optional(),
@@ -176,7 +183,11 @@ export const renewalBriefInputPeriodSchema = z.object({
   totalSpend: z.number(),
   rebateEarned: z.number(),
   rebateCollected: z.number(),
-  tierAchieved: z.number().int().nullable().optional(),
+  tierAchieved: z
+    .number()
+    .nullable()
+    .optional()
+    .describe("Integer tier achieved, or null"),
 })
 
 export const renewalBriefInputAmendmentSchema = z.object({

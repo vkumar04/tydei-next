@@ -64,9 +64,13 @@ describe("rebateInsightSchema", () => {
     expect(parsed.success).toBe(true)
   })
 
-  it("rejects non-integer rank", () => {
-    const parsed = rebateInsightSchema.safeParse({ ...validInsight, rank: 1.5 })
-    expect(parsed.success).toBe(false)
+  it("accepts numeric rank (integer semantics are documented, not enforced — Anthropic rejects the min/max bounds Zod 4's `.int()` emits, so W1.U-D dropped `.int()`)", () => {
+    expect(
+      rebateInsightSchema.safeParse({ ...validInsight, rank: 1 }).success,
+    ).toBe(true)
+    expect(
+      rebateInsightSchema.safeParse({ ...validInsight, rank: 1.5 }).success,
+    ).toBe(true)
   })
 
   it("rejects a missing citation list", () => {
