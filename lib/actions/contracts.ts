@@ -805,6 +805,26 @@ export async function updateContract(id: string, input: UpdateContractInput) {
     }
   }
 
+  // Charles W1.Y-A — `additionalFacilityIds` is the companion array for
+  // the FacilityMultiSelect picker (contract-form.tsx:790-795). On CREATE
+  // these land in the ContractFacility join table (line 703 in this
+  // file) with skipDuplicates. On UPDATE the handler was missing
+  // entirely, so any facility the user added to a multi-facility
+  // contract via that picker silently reverted to the "beginning" on
+  // reload. Mirror the create path: run after the facilityIds rewrite
+  // above so skipDuplicates protects against a facility appearing in
+  // both arrays (the unique index on (contractId, facilityId) would
+  // otherwise throw).
+  if (data.additionalFacilityIds?.length) {
+    await prisma.contractFacility.createMany({
+      data: data.additionalFacilityIds.map((fid) => ({
+        contractId: id,
+        facilityId: fid,
+      })),
+      skipDuplicates: true,
+    })
+  }
+
   if (data.categoryIds !== undefined) {
     await prisma.contractProductCategory.deleteMany({ where: { contractId: id } })
     if (data.categoryIds.length > 0) {
