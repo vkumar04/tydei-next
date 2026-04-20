@@ -594,6 +594,14 @@ model Contract {
   isGrouped              Boolean           @default(false)
   isMultiFacility        Boolean           @default(false)
   tieInCapitalContractId String?
+  // Charles W1.T — tie-in capital is contract-level. One capital entry
+  // per contract; rebates earned across all terms pay down one balance.
+  capitalCost            Decimal?          @db.Decimal(14, 2)
+  interestRate           Decimal?          @db.Decimal(6, 4)
+  termMonths             Int?
+  downPayment            Decimal?          @db.Decimal(14, 2)
+  paymentCadence         PaymentCadence?
+  amortizationShape      AmortizationShape @default(symmetrical)
   complianceRate         Decimal?          @db.Decimal(5, 2)
   currentMarketShare     Decimal?          @db.Decimal(5, 2)
   marketShareCommitment  Decimal?          @db.Decimal(5, 2)
