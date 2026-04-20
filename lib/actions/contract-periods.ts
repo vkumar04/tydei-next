@@ -1,7 +1,9 @@
 "use server"
 
+import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import {
   computeRebateFromPrismaTiers,
@@ -425,4 +427,61 @@ export async function getContractRebates(contractId: string) {
   })
 
   return serialize(rows)
+}
+
+// ─── Edit / delete a ledger row (Charles W1.X-A) ────────────────
+//
+// Users had no way to correct a logged collection — wrong amount,
+// wrong date — short of hand-editing the DB. `updateContractTransaction`
+// is scoped via the same `requireFacility` + `contractOwnershipWhere`
+// guard as `createContractTransaction`, and only mutates the whitelisted
+// collection fields. `rebateEarned` is engine-owned (CLAUDE.md single-
+// source rule) and is deliberately NOT in the update set. Passing
+// `collectionDate: null` is the explicit "uncollect" path — it clears
+// the stamp while leaving the earned accrual intact.
+interface UpdateContractTransactionInput {
+  id: string
+  contractId: string
+  rebateCollected?: number
+  collectionDate?: string | null // explicit null = uncollect
+  quantity?: number | null
+  notes?: string
+}
+
+export async function updateContractTransaction(
+  input: UpdateContractTransactionInput,
+): Promise<void> {
+  const { facility } = await requireFacility()
+  // Ownership guard: the contract must belong to this facility.
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(input.contractId, facility.id),
+    select: { id: true },
+  })
+  // The Rebate row must also belong to that contract.
+  const rebate = await prisma.rebate.findUniqueOrThrow({
+    where: { id: input.id },
+    select: { contractId: true },
+  })
+  if (rebate.contractId !== input.contractId) {
+    throw new Error("Rebate does not belong to the requested contract")
+  }
+
+  const data: Prisma.RebateUpdateInput = {}
+  if (input.rebateCollected !== undefined) {
+    data.rebateCollected = input.rebateCollected
+  }
+  if (input.collectionDate !== undefined) {
+    data.collectionDate =
+      input.collectionDate === null ? null : new Date(input.collectionDate)
+  }
+  if (input.notes !== undefined) {
+    data.notes = input.notes
+  }
+  // `quantity` is not a first-class Rebate column — the existing
+  // create path folds it into `notes` as a "(Qty: N)" suffix. We
+  // accept it on the input for API symmetry but don't persist it
+  // separately; callers that want to edit the quantity should do so
+  // via the `notes` field.
+
+  await prisma.rebate.update({ where: { id: input.id }, data })
 }
