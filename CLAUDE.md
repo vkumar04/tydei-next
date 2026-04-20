@@ -92,6 +92,14 @@ a new invariant, add a row.
   3. `rm -rf .next && bun run dev` + smoke the surfaces touched today
   4. For any shipped reducer or filter, confirm every surface listed in the
      invariants table calls the canonical helper (grep for ad-hoc reducers).
+- **No dual-source metrics.** `getContractMetricsBatch` was removed in
+  Charles W1.X-D. The single source for list-row metrics
+  (`rebateEarned` YTD, `rebateCollected` lifetime, `currentSpend`
+  trailing 12mo) is `getContracts` via the canonical helpers
+  (`sumEarnedRebatesYTD`, `sumCollectedRebates`, trailing-12mo
+  cascade). The list column accessors MUST NOT fall back to any
+  batch-derived field. Enforced by
+  `lib/actions/__tests__/contracts-list-vs-detail-parity.test.ts`.
 
 ## AI-action error path
 
