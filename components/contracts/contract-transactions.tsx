@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   DollarSign,
@@ -10,6 +10,7 @@ import {
   HelpCircle,
   ArrowUpRight,
   RefreshCw,
+  MoreHorizontal,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -37,6 +38,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Table,
   TableBody,
@@ -504,9 +512,11 @@ function AddTransactionButtons({
 function TransactionTable({
   rows,
   filter,
+  onAction,
 }: {
   rows: PeriodRow[]
   filter: "all" | TransactionType
+  onAction: (action: "edit" | "uncollect" | "delete", row: PeriodRow) => void
 }) {
   // For now all rows are "rebate" type since we derive from period data
   const filtered = filter === "all" || filter === "rebate" ? rows : []
@@ -532,6 +542,7 @@ function TransactionTable({
             <TableHead className="text-right">Collected</TableHead>
             <TableHead className="text-right">Outstanding</TableHead>
             <TableHead className="text-center">Status</TableHead>
+            <TableHead className="w-10" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -575,6 +586,43 @@ function TransactionTable({
                   <Badge variant="outline" className={collConfig.className}>
                     {collConfig.label}
                   </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label="Row actions"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onAction("edit", row)}>
+                        Edit
+                      </DropdownMenuItem>
+                      {row.collectionDate ? (
+                        <DropdownMenuItem
+                          onClick={() => onAction("uncollect", row)}
+                        >
+                          Uncollect
+                        </DropdownMenuItem>
+                      ) : null}
+                      {!row.notes?.includes("[auto-accrual]") ? (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-red-600 dark:text-red-400"
+                            onClick={() => onAction("delete", row)}
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             )
@@ -823,7 +871,13 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
             </TabsList>
 
             <TabsContent value={activeTab} className="m-0">
-              <TransactionTable rows={rows} filter={activeTab} />
+              <TransactionTable
+                rows={rows}
+                filter={activeTab}
+                onAction={() => {
+                  // Handlers wired in Task 4.
+                }}
+              />
             </TabsContent>
           </Tabs>
         </CardContent>
