@@ -700,21 +700,12 @@ model ContractTerm {
   growthOnly               Boolean         @default(false)
   periodCap                Decimal?        @db.Decimal(14, 2)
   fixedRebatePerOccurrence Decimal?        @db.Decimal(12, 2)
-  capitalCost              Decimal?        @db.Decimal(14, 2)
-  interestRate             Decimal?        @db.Decimal(6, 4)
-  termMonths               Int?
-  // Wave B (tie-in parity) — additive fields captured on the usage-side
-  // ContractTerm when contractType === "tie_in". downPayment reduces the
-  // opening balance of the amortization schedule; paymentCadence drives
-  // the engine's period count; minimumPurchaseCommitment is the annual
-  // consumable spend the facility promised to the vendor.
-  downPayment              Decimal?        @db.Decimal(14, 2)
-  paymentCadence           PaymentCadence  @default(monthly)
+  // Charles W1.T — Wave B tie-in capital fields moved to Contract. A
+  // contract-level `minimumPurchaseCommitment` stays on the term because
+  // per-term consumable spend commitments are a real concept (e.g., a
+  // "Qualified Annual Spend Rebate" term has its own minimum purchase
+  // separate from the capital balance).
   minimumPurchaseCommitment Decimal?       @db.Decimal(14, 2)
-  // Wave D — whether the amortization schedule uses the engine's
-  // uniform-PMT formula (`symmetrical`) or user-entered per-period
-  // amounts persisted as ContractAmortizationSchedule rows (`custom`).
-  amortizationShape        AmortizationShape @default(symmetrical)
   cptCodes                 String[]        @default([])
   groupedReferenceNumbers  String[]        @default([])
   referenceNumbers         String[]        @default([])
@@ -728,7 +719,6 @@ model ContractTerm {
   tiers             ContractTier[]
   products          ContractTermProduct[]
   procedures        ContractTermProcedure[]
-  amortizationRows  ContractAmortizationSchedule[]
 
   @@index([contractId])
   @@map("contract_term")
@@ -762,7 +752,6 @@ model ContractTier {
 model ContractAmortizationSchedule {
   id              String   @id @default(cuid())
   contractId      String
-  termId          String
   periodNumber    Int
   openingBalance  Decimal  @db.Decimal(14, 2)
   interestCharge  Decimal  @db.Decimal(14, 2)
@@ -771,10 +760,9 @@ model ContractAmortizationSchedule {
   closingBalance  Decimal  @db.Decimal(14, 2)
   createdAt       DateTime @default(now())
 
-  contract Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  term     ContractTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
-  @@unique([termId, periodNumber])
+  @@unique([contractId, periodNumber])
   @@index([contractId])
   @@map("contract_amortization_schedule")
 }
