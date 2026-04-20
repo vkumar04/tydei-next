@@ -13,7 +13,6 @@ import {
 import { z } from "zod"
 import { serialize } from "@/lib/serialize"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
-import { buildScheduleForTerm } from "@/lib/contracts/tie-in-schedule"
 
 /**
  * Charles R5.36 P0 — invoke the accrual recompute without letting a
@@ -38,87 +37,9 @@ async function recomputeAccrualSafe(contractId: string): Promise<void> {
   }
 }
 
-/**
- * Wave D — persist (or clear) ContractAmortizationSchedule rows for a
- * term. Symmetrical-mode terms always clear the table so reads fall
- * back to the engine's on-the-fly PMT compute. Custom-mode terms
- * replace every row with the user-entered amortizationDue values,
- * rebuilding openingBalance / interestCharge / principalDue /
- * closingBalance from the schedule's running opening balance so the
- * detail-page card (Wave A) stays self-consistent.
- */
-async function persistAmortizationRows(params: {
-  termId: string
-  contractId: string
-  shape: "symmetrical" | "custom"
-  customRows?: { periodNumber: number; amortizationDue: number }[]
-  capitalCost: number | null
-  downPayment: number | null
-  interestRate: number | null
-  termMonths: number | null
-  paymentCadence: "monthly" | "quarterly" | "annual" | null
-}): Promise<void> {
-  const { termId, contractId, shape, customRows } = params
-
-  // Symmetrical → always clear persisted rows so the read path
-  // computes live from the current capital/interest/term inputs.
-  if (shape === "symmetrical") {
-    await prisma.contractAmortizationSchedule.deleteMany({
-      where: { termId },
-    })
-    return
-  }
-
-  if (!customRows || customRows.length === 0) {
-    // Custom mode but the caller didn't hand over rows — leave
-    // whatever's already persisted alone so we don't destroy user
-    // input on unrelated updates (e.g. toggling shortfall handling).
-    return
-  }
-
-  const capitalCost = Number(params.capitalCost ?? 0)
-  const downPayment = Number(params.downPayment ?? 0)
-  const interestRate = Number(params.interestRate ?? 0)
-  const termMonths = Number(params.termMonths ?? 0)
-  const cadence = params.paymentCadence ?? "monthly"
-  const periodsPerYear =
-    cadence === "annual" ? 1 : cadence === "quarterly" ? 4 : 12
-  const r = interestRate / periodsPerYear
-
-  const sorted = [...customRows].sort(
-    (a, b) => a.periodNumber - b.periodNumber,
-  )
-
-  const effectivePrincipal = Math.max(0, capitalCost - downPayment)
-  let opening = effectivePrincipal
-
-  const rows = sorted.map((row) => {
-    const interestCharge = opening * r
-    const amortizationDue = row.amortizationDue
-    const principalDue = amortizationDue - interestCharge
-    const closingBalance = opening - principalDue
-    const built = {
-      contractId,
-      termId,
-      periodNumber: row.periodNumber,
-      openingBalance: opening,
-      interestCharge,
-      principalDue,
-      amortizationDue,
-      closingBalance,
-    }
-    opening = closingBalance
-    return built
-  })
-  void termMonths // silence unused — validated at the schema layer
-
-  await prisma.contractAmortizationSchedule.deleteMany({
-    where: { termId },
-  })
-  if (rows.length > 0) {
-    await prisma.contractAmortizationSchedule.createMany({ data: rows })
-  }
-}
+// Charles W1.T — tie-in capital moved to Contract, so this file no
+// longer persists ContractAmortizationSchedule rows on term save. That
+// lives on the contract update path now (lib/actions/contracts.ts).
 
 // ─── Get Terms ───────────────────────────────────────────────────
 
@@ -146,37 +67,42 @@ export async function createContractTerm(input: CreateTermInput) {
   // maps to ContractTermProduct join rows written after the term.
   // scopedCategoryIds maps to the ContractTerm.categories String[] column.
   // scopedCategoryId (singular) is back-compat only and has no DB column.
-  // capitalCost / interestRate / termMonths are real ContractTerm
-  // columns and stay in `termData`.
+  //
+  // Charles W1.T — capital fields (capitalCost, interestRate, termMonths,
+  // downPayment, paymentCadence, amortizationShape) plus
+  // customAmortizationRows are contract-level now; they're accepted on
+  // the term validator for back-compat but dropped before we hit Prisma.
   const {
     tiers,
     scopedItemNumbers,
     scopedCategoryId: _scopedCategoryId,
     scopedCategoryIds,
-    customAmortizationRows,
+    customAmortizationRows: _customAmortizationRows,
+    capitalCost: _capitalCost,
+    interestRate: _interestRate,
+    termMonths: _termMonths,
+    downPayment: _downPayment,
+    paymentCadence: _paymentCadence,
+    amortizationShape: _amortizationShape,
     ...termData
   } = data
   void _scopedCategoryId
-
-  // Wave D — normalise the nullish validator output to Prisma's
-  // `AmortizationShape | undefined` shape before spreading. `null`
-  // means "unset" and should fall back to the schema default.
-  const { amortizationShape: rawShape, ...termDataSansShape } = termData
-  const shapeForPrisma: "symmetrical" | "custom" | undefined =
-    rawShape === "symmetrical" || rawShape === "custom" ? rawShape : undefined
+  void _customAmortizationRows
+  void _capitalCost
+  void _interestRate
+  void _termMonths
+  void _downPayment
+  void _paymentCadence
+  void _amortizationShape
 
   // scopedCategoryIds maps to the ContractTerm.categories String[] column
   // (already consumed by lib/rebates/from-prisma.ts::buildConfigFromPrismaTerm).
   // Include it on the term itself when provided.
-  const termDataWithCategories: typeof termDataSansShape & {
+  const termDataWithCategories: typeof termData & {
     categories?: string[]
-    amortizationShape?: "symmetrical" | "custom"
-  } = { ...termDataSansShape }
+  } = { ...termData }
   if (scopedCategoryIds && scopedCategoryIds.length > 0) {
     termDataWithCategories.categories = scopedCategoryIds
-  }
-  if (shapeForPrisma) {
-    termDataWithCategories.amortizationShape = shapeForPrisma
   }
 
   const term = await prisma.contractTerm.create({
@@ -213,22 +139,6 @@ export async function createContractTerm(input: CreateTermInput) {
     })
   }
 
-  // Wave D — persist custom-mode rows / clear the table for symmetrical.
-  // Default to symmetrical on create when the caller omits the field so
-  // the table starts clean and reads fall back to the live engine.
-  await persistAmortizationRows({
-    termId: term.id,
-    contractId: data.contractId,
-    shape:
-      termData.amortizationShape === "custom" ? "custom" : "symmetrical",
-    customRows: customAmortizationRows,
-    capitalCost: termData.capitalCost ?? null,
-    downPayment: termData.downPayment ?? null,
-    interestRate: termData.interestRate ?? null,
-    termMonths: termData.termMonths ?? null,
-    paymentCadence: termData.paymentCadence ?? null,
-  })
-
   // Charles R5.21 — keep auto-generated Rebate rows in sync with the
   // term's current evaluationPeriod / tier shape. Without this, the
   // detail-page "Rebates Earned" card continues to show the pre-edit
@@ -248,16 +158,32 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
   //   - scopedItemNumbers → ContractTermProduct join rows (handled below).
   //   - scopedCategoryIds → ContractTerm.categories String[] column.
   //   - scopedCategoryId (singular) → back-compat only, no DB column.
+  //
+  // Charles W1.T — capital fields are contract-level now; strip them
+  // off the term update payload before hitting Prisma.
   const {
     tiers: _tiers,
     scopedItemNumbers,
     scopedCategoryId: _scopedCategoryId,
     scopedCategoryIds,
-    customAmortizationRows,
+    customAmortizationRows: _customAmortizationRows,
+    capitalCost: _capitalCost,
+    interestRate: _interestRate,
+    termMonths: _termMonths,
+    downPayment: _downPayment,
+    paymentCadence: _paymentCadence,
+    amortizationShape: _amortizationShape,
     ...termData
   } = data
   void _tiers
   void _scopedCategoryId
+  void _customAmortizationRows
+  void _capitalCost
+  void _interestRate
+  void _termMonths
+  void _downPayment
+  void _paymentCadence
+  void _amortizationShape
 
   const updateData: Record<string, unknown> = { ...termData }
   if (termData.effectiveStart) {
@@ -268,12 +194,6 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
   }
   if (scopedCategoryIds !== undefined) {
     updateData.categories = scopedCategoryIds
-  }
-  // Wave D — drop null (treat as "not provided") so Prisma keeps the
-  // existing column value instead of trying to assign `null` to an
-  // enum column.
-  if (updateData.amortizationShape == null) {
-    delete updateData.amortizationShape
   }
 
   const term = await prisma.contractTerm.update({
@@ -295,27 +215,6 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
         skipDuplicates: true,
       })
     }
-  }
-
-  // Wave D — only touch ContractAmortizationSchedule when the caller
-  // actually sent the shape field; otherwise downstream updates (tier
-  // shape, product scope, etc.) would clobber previously-persisted
-  // custom rows.
-  if (
-    termData.amortizationShape === "symmetrical" ||
-    termData.amortizationShape === "custom"
-  ) {
-    await persistAmortizationRows({
-      termId: id,
-      contractId: term.contractId,
-      shape: termData.amortizationShape,
-      customRows: customAmortizationRows,
-      capitalCost: termData.capitalCost ?? null,
-      downPayment: termData.downPayment ?? null,
-      interestRate: termData.interestRate ?? null,
-      termMonths: termData.termMonths ?? null,
-      paymentCadence: termData.paymentCadence ?? null,
-    })
   }
 
   // Charles R5.21 — see createContractTerm for the rationale.

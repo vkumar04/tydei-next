@@ -48,6 +48,22 @@ export const createContractSchema = z.object({
   tieInCapitalValue: z.number().optional(),
   tieInPayoffMonths: z.number().int().optional(),
   tieInCapitalContractId: z.string().optional(),
+  // Charles W1.T — tie-in capital is contract-level. These fields live
+  // on Contract directly so all rebate terms pay down one balance.
+  capitalCost: z.number().nullable().optional(),
+  interestRate: z.number().nullable().optional(),
+  termMonths: z.number().int().nullable().optional(),
+  downPayment: z.number().min(0).nullable().optional(),
+  paymentCadence: z.enum(["monthly", "quarterly", "annual"]).nullable().optional(),
+  amortizationShape: z.enum(["symmetrical", "custom"]).optional(),
+  customAmortizationRows: z
+    .array(
+      z.object({
+        periodNumber: z.number().int().min(1),
+        amortizationDue: z.number().min(0),
+      }),
+    )
+    .optional(),
 })
 
 export type CreateContractInput = z.infer<typeof createContractSchema>

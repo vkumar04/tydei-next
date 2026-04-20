@@ -9,16 +9,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+// Charles W1.T — capital lives on the Contract row now.
 type ContractRow = {
   id: string
   effectiveDate: Date
   expirationDate: Date | null
-  terms: Array<{
-    capitalCost: number
-    interestRate: number
-    termMonths: number
-    paymentTiming: string | null
-  }>
+  capitalCost: number | null
+  interestRate: number | null
+  termMonths: number | null
+  paymentCadence: "monthly" | "quarterly" | "annual" | null
 }
 
 let contractRow: ContractRow | null = null
@@ -62,7 +61,10 @@ describe("getContractCapitalProjection", () => {
       id: "c-1",
       effectiveDate: new Date(),
       expirationDate: null,
-      terms: [],
+      capitalCost: null,
+      interestRate: null,
+      termMonths: null,
+      paymentCadence: null,
     }
     const result = await getContractCapitalProjection("c-1")
     expect(result.hasProjection).toBe(false)
@@ -81,14 +83,10 @@ describe("getContractCapitalProjection", () => {
       id: "c-1",
       effectiveDate: effective,
       expirationDate: expiration,
-      terms: [
-        {
-          capitalCost: 1_200_000,
-          interestRate: 0, // zero-interest for clean principal math
-          termMonths: 60,
-          paymentTiming: "monthly",
-        },
-      ],
+      capitalCost: 1_200_000,
+      interestRate: 0, // zero-interest for clean principal math
+      termMonths: 60,
+      paymentCadence: "monthly",
     }
     // $30k rebates over the last 90 days → $10k/month run rate.
     rebateSumTrailing90 = 30_000
@@ -122,14 +120,10 @@ describe("getContractCapitalProjection", () => {
       id: "c-2",
       effectiveDate: effective,
       expirationDate: expiration,
-      terms: [
-        {
-          capitalCost: 500_000,
-          interestRate: 0,
-          termMonths: 24,
-          paymentTiming: "monthly",
-        },
-      ],
+      capitalCost: 500_000,
+      interestRate: 0,
+      termMonths: 24,
+      paymentCadence: "monthly",
     }
     rebateSumTrailing90 = 0
 
@@ -152,14 +146,10 @@ describe("getContractCapitalProjection", () => {
       id: "c-3",
       effectiveDate: effective,
       expirationDate: expiration,
-      terms: [
-        {
-          capitalCost: 120_000,
-          interestRate: 0,
-          termMonths: 24,
-          paymentTiming: "monthly",
-        },
-      ],
+      capitalCost: 120_000,
+      interestRate: 0,
+      termMonths: 24,
+      paymentCadence: "monthly",
     }
     // $300k / 90 days = $100k/month run-rate — vastly exceeds remaining.
     rebateSumTrailing90 = 300_000

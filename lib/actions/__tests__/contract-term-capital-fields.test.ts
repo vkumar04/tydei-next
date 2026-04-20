@@ -74,8 +74,8 @@ beforeEach(() => {
   recomputeAccrualMock.mockResolvedValue({ deleted: 0, inserted: 0 })
 })
 
-describe("createContractTerm — Wave B capital fields", () => {
-  it("persists downPayment / paymentCadence / minimumPurchaseCommitment", async () => {
+describe("createContractTerm — Charles W1.T: capital fields stripped, term-only fields stay", () => {
+  it("keeps minimumPurchaseCommitment on the term (per-term concept)", async () => {
     await createContractTerm({
       contractId: "c-1",
       termName: "Mako tie-in",
@@ -97,13 +97,19 @@ describe("createContractTerm — Wave B capital fields", () => {
     })
 
     const callData = createMock.mock.calls[0][0].data
-    expect(callData.capitalCost).toBe(1_250_000)
-    expect(callData.downPayment).toBe(125_000)
-    expect(callData.paymentCadence).toBe("quarterly")
+    // Charles W1.T — capital fields are contract-level now; they must
+    // not leak into the ContractTerm create payload.
+    expect(callData.capitalCost).toBeUndefined()
+    expect(callData.interestRate).toBeUndefined()
+    expect(callData.termMonths).toBeUndefined()
+    expect(callData.downPayment).toBeUndefined()
+    expect(callData.paymentCadence).toBeUndefined()
+    expect(callData.amortizationShape).toBeUndefined()
+    // Per-term fields stay.
     expect(callData.minimumPurchaseCommitment).toBe(1_320_000)
   })
 
-  it("lets Prisma apply the paymentCadence default when omitted", async () => {
+  it("omits capital fields entirely when the caller doesn't supply them", async () => {
     await createContractTerm({
       contractId: "c-1",
       termName: "Defaults check",
@@ -118,19 +124,14 @@ describe("createContractTerm — Wave B capital fields", () => {
       tiers: [],
     })
 
-    // When the caller omits paymentCadence the server action leaves it
-    // undefined and Prisma falls back to its schema-level default
-    // (`@default(monthly)`). Passing `monthly` explicitly is also fine
-    // but we avoid double-defaulting in the validator to keep existing
-    // call sites (new-contract-client, vendor-submission) working
-    // without forcing them to pass the field.
     const callData = createMock.mock.calls[0][0].data
+    expect(callData.capitalCost).toBeUndefined()
     expect(callData.paymentCadence).toBeUndefined()
   })
 })
 
-describe("updateContractTerm — Wave B capital fields", () => {
-  it("persists downPayment / paymentCadence / minimumPurchaseCommitment", async () => {
+describe("updateContractTerm — Charles W1.T: capital fields stripped from update", () => {
+  it("keeps minimumPurchaseCommitment on the term", async () => {
     await updateContractTerm("term-1", {
       downPayment: 50_000,
       paymentCadence: "annual",
@@ -138,8 +139,10 @@ describe("updateContractTerm — Wave B capital fields", () => {
     })
 
     const callData = updateMock.mock.calls[0][0].data
-    expect(callData.downPayment).toBe(50_000)
-    expect(callData.paymentCadence).toBe("annual")
+    // Capital fields must be stripped from the term-update payload.
+    expect(callData.downPayment).toBeUndefined()
+    expect(callData.paymentCadence).toBeUndefined()
+    // Per-term fields stay.
     expect(callData.minimumPurchaseCommitment).toBe(500_000)
   })
 })

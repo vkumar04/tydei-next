@@ -5,10 +5,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * capital summary numbers (remainingBalance, paidToDate, projectedEndOfTermBalance)
  * and the full amortization schedule for a tie-in contract.
  *
- * We stub prisma to return a single ContractTerm with capital fields and
- * NO persisted amortizationRows, so the action falls back to the engine
- * in lib/rebates/engine/amortization.ts (untouched). That exercises the
- * on-the-fly path, which is the path real tie-in contracts hit today.
+ * Charles W1.T — capital lives on the Contract row now; fixtures stub
+ * `contract.capitalCost / interestRate / termMonths / paymentCadence`
+ * plus `amortizationRows` on the contract directly.
  */
 
 const { findFirstMock } = vi.hoisted(() => ({
@@ -37,7 +36,12 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
       effectiveDate: new Date("2026-01-01"),
-      terms: [],
+      capitalCost: null,
+      interestRate: null,
+      termMonths: null,
+      paymentCadence: null,
+      amortizationShape: "symmetrical",
+      amortizationRows: [],
     })
 
     const r = await getContractCapitalSchedule("c-1")
@@ -57,16 +61,12 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
       effectiveDate,
-      terms: [
-        {
-          id: "t-1",
-          capitalCost: 12_000, // $12k over 12 months, 0% → $1k principal/mo
-          interestRate: 0,
-          termMonths: 12,
-          paymentTiming: "monthly",
-          amortizationRows: [],
-        },
-      ],
+      capitalCost: 12_000, // $12k over 12 months, 0% → $1k principal/mo
+      interestRate: 0,
+      termMonths: 12,
+      paymentCadence: "monthly",
+      amortizationShape: "symmetrical",
+      amortizationRows: [],
     })
 
     const r = await getContractCapitalSchedule("c-1")
@@ -97,31 +97,27 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
       effectiveDate,
-      terms: [
+      capitalCost: 1000,
+      interestRate: 0,
+      termMonths: 2,
+      paymentCadence: "monthly",
+      amortizationShape: "custom",
+      amortizationRows: [
         {
-          id: "t-1",
-          capitalCost: 1000,
-          interestRate: 0,
-          termMonths: 2,
-          paymentTiming: "monthly",
-          amortizationRows: [
-            {
-              periodNumber: 1,
-              openingBalance: 1000,
-              interestCharge: 0,
-              principalDue: 500,
-              amortizationDue: 500,
-              closingBalance: 500,
-            },
-            {
-              periodNumber: 2,
-              openingBalance: 500,
-              interestCharge: 0,
-              principalDue: 500,
-              amortizationDue: 500,
-              closingBalance: 0,
-            },
-          ],
+          periodNumber: 1,
+          openingBalance: 1000,
+          interestCharge: 0,
+          principalDue: 500,
+          amortizationDue: 500,
+          closingBalance: 500,
+        },
+        {
+          periodNumber: 2,
+          openingBalance: 500,
+          interestCharge: 0,
+          principalDue: 500,
+          amortizationDue: 500,
+          closingBalance: 0,
         },
       ],
     })

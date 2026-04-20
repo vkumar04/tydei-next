@@ -210,30 +210,20 @@ export async function getContractCapitalSchedule(
 ): Promise<ContractCapitalScheduleResult> {
   const { facility } = await requireFacility()
 
+  // Charles W1.T — capital now lives on Contract; the amortization
+  // schedule is keyed by contractId alone.
   const contract = await prisma.contract.findFirst({
     where: contractOwnershipWhere(contractId, facility.id),
     select: {
       id: true,
       effectiveDate: true,
-      terms: {
-        where: {
-          capitalCost: { not: null },
-          interestRate: { not: null },
-          termMonths: { not: null },
-        },
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          capitalCost: true,
-          interestRate: true,
-          termMonths: true,
-          paymentTiming: true,
-          amortizationShape: true,
-          amortizationRows: {
-            orderBy: { periodNumber: "asc" },
-          },
-        },
-        take: 1,
+      capitalCost: true,
+      interestRate: true,
+      termMonths: true,
+      paymentCadence: true,
+      amortizationShape: true,
+      amortizationRows: {
+        orderBy: { periodNumber: "asc" },
       },
     },
   })
@@ -251,26 +241,31 @@ export async function getContractCapitalSchedule(
     projectedEndOfTermBalance: null,
   }
 
-  if (!contract || contract.terms.length === 0) return empty
-  const term = contract.terms[0]!
+  if (
+    !contract ||
+    contract.capitalCost == null ||
+    contract.interestRate == null ||
+    contract.termMonths == null
+  ) {
+    return empty
+  }
 
-  const capitalCost = Number(term.capitalCost ?? 0)
-  const interestRate = Number(term.interestRate ?? 0)
-  const termMonths = Number(term.termMonths ?? 0)
-  const period = normalizeCadence(term.paymentTiming)
+  const capitalCost = Number(contract.capitalCost)
+  const interestRate = Number(contract.interestRate)
+  const termMonths = Number(contract.termMonths)
+  const period = normalizeCadence(contract.paymentCadence)
 
   if (capitalCost <= 0 || termMonths <= 0) return empty
 
-  // Wave D — custom-shape terms source rows from the persisted table so
-  // the user-entered values drive the detail-page card; symmetrical
-  // terms always compute live so capital/interest/term edits are
-  // reflected without a write.
+  // Wave D — custom-shape contracts source rows from the persisted
+  // table; symmetrical contracts always compute live so capital /
+  // interest / term edits flow through without a write.
   let entries: AmortizationEntry[]
   if (
-    term.amortizationShape === "custom" &&
-    term.amortizationRows.length > 0
+    contract.amortizationShape === "custom" &&
+    contract.amortizationRows.length > 0
   ) {
-    entries = term.amortizationRows.map((r) => ({
+    entries = contract.amortizationRows.map((r) => ({
       periodNumber: r.periodNumber,
       openingBalance: Number(r.openingBalance),
       interestCharge: Number(r.interestCharge),
@@ -422,27 +417,17 @@ export async function getContractCapitalProjection(
 ): Promise<ContractCapitalProjection> {
   const { facility } = await requireFacility()
 
+  // Charles W1.T — capital read directly from Contract row.
   const contract = await prisma.contract.findFirst({
     where: contractOwnershipWhere(contractId, facility.id),
     select: {
       id: true,
       effectiveDate: true,
       expirationDate: true,
-      terms: {
-        where: {
-          capitalCost: { not: null },
-          interestRate: { not: null },
-          termMonths: { not: null },
-        },
-        orderBy: { createdAt: "asc" },
-        select: {
-          capitalCost: true,
-          interestRate: true,
-          termMonths: true,
-          paymentTiming: true,
-        },
-        take: 1,
-      },
+      capitalCost: true,
+      interestRate: true,
+      termMonths: true,
+      paymentCadence: true,
     },
   })
 
@@ -456,14 +441,20 @@ export async function getContractCapitalProjection(
     remainingBalance: 0,
   }
 
-  if (!contract || contract.terms.length === 0) return empty
-  const term = contract.terms[0]!
-  const capitalCost = Number(term.capitalCost ?? 0)
-  const interestRate = Number(term.interestRate ?? 0)
-  const termMonths = Number(term.termMonths ?? 0)
+  if (
+    !contract ||
+    contract.capitalCost == null ||
+    contract.interestRate == null ||
+    contract.termMonths == null
+  ) {
+    return empty
+  }
+  const capitalCost = Number(contract.capitalCost)
+  const interestRate = Number(contract.interestRate)
+  const termMonths = Number(contract.termMonths)
   if (capitalCost <= 0 || termMonths <= 0) return empty
 
-  const period = normalizeCadenceLocal(term.paymentTiming)
+  const period = normalizeCadenceLocal(contract.paymentCadence)
 
   // Remaining balance — computed the same way as getContractCapitalSchedule
   // so the two surfaces never disagree.

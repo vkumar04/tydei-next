@@ -294,11 +294,13 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
     expirationDate: new Date("2026-12-31T00:00:00Z"),
   }
 
-  const flatTermWithCadence = (cadence: "monthly" | "quarterly" | "annual") => ({
+  // Charles W1.T — paymentCadence is contract-level now. Term factory
+  // drops the cadence field; callers set `paymentCadence` on the contract
+  // mock directly.
+  const flatTerm = () => ({
     id: "term-a",
     rebateMethod: "cumulative" as const,
     evaluationPeriod: "monthly",
-    paymentCadence: cadence,
     effectiveStart: new Date("2025-01-01T00:00:00Z"),
     effectiveEnd: new Date("2026-12-31T00:00:00Z"),
     tiers: [
@@ -315,7 +317,8 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
   it("monthly cadence emits one Rebate row per non-zero month", async () => {
     contractFindUniqueMock.mockResolvedValue({
       ...baseContract,
-      terms: [flatTermWithCadence("monthly")],
+      paymentCadence: "monthly",
+      terms: [flatTerm()],
     })
     cogFindManyMock.mockResolvedValue([
       { transactionDate: new Date("2025-01-15T00:00:00Z"), extendedPrice: 10000 },
@@ -342,7 +345,8 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
   it("quarterly cadence: three non-zero months in same quarter -> ONE row", async () => {
     contractFindUniqueMock.mockResolvedValue({
       ...baseContract,
-      terms: [flatTermWithCadence("quarterly")],
+      paymentCadence: "quarterly",
+      terms: [flatTerm()],
     })
     cogFindManyMock.mockResolvedValue([
       { transactionDate: new Date("2025-01-15T00:00:00Z"), extendedPrice: 10000 },
@@ -375,7 +379,8 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
   it("quarterly cadence spanning 2 quarters -> 2 rows", async () => {
     contractFindUniqueMock.mockResolvedValue({
       ...baseContract,
-      terms: [flatTermWithCadence("quarterly")],
+      paymentCadence: "quarterly",
+      terms: [flatTerm()],
     })
     cogFindManyMock.mockResolvedValue([
       { transactionDate: new Date("2025-02-15T00:00:00Z"), extendedPrice: 10000 }, // Q1
@@ -399,7 +404,8 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
   it("annual cadence: 12 non-zero months -> ONE row per year", async () => {
     contractFindUniqueMock.mockResolvedValue({
       ...baseContract,
-      terms: [flatTermWithCadence("annual")],
+      paymentCadence: "annual",
+      terms: [flatTerm()],
     })
     const cog: Array<{ transactionDate: Date; extendedPrice: number }> = []
     for (let m = 0; m < 12; m++) {

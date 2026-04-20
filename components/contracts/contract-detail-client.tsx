@@ -542,7 +542,7 @@ export function ContractDetailClient({
               contract or carry capital fields on a term themselves. */}
           {contract.contractType === "tie_in" &&
             (contract.tieInCapitalContractId != null ||
-              contract.terms.some((t) => t.capitalCost != null)) && (
+              contract.capitalCost != null) && (
               <ContractAmortizationCard contractId={contractId} />
             )}
           {/* Wave C — shortfall handling banner + run-rate projection
@@ -734,8 +734,9 @@ export function ContractDetailClient({
                                       ? Number(term.minimumPurchaseCommitment)
                                       : null
                                   if (mpc == null || mpc <= 0) return null
+                                  // Charles W1.T — paymentCadence is contract-level now.
                                   const cadence =
-                                    term?.paymentCadence ?? "monthly"
+                                    contract.paymentCadence ?? "monthly"
                                   const cadenceLabel =
                                     cadence === "quarterly"
                                       ? "Quarterly"
@@ -876,31 +877,29 @@ export function ContractDetailClient({
                 <CardTitle>Tie-In Capital</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {contract.terms[0] ? (
+                {contract.capitalCost != null ? (
                   <div className="grid gap-4 sm:grid-cols-3 text-sm">
                     <div>
                       <p className="text-muted-foreground">Capital Cost</p>
                       <p className="font-medium">
-                        {contract.terms[0].capitalCost != null
-                          ? formatCurrency(
-                              Number(contract.terms[0].capitalCost),
-                            )
+                        {contract.capitalCost != null
+                          ? formatCurrency(Number(contract.capitalCost))
                           : "—"}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Interest Rate</p>
                       <p className="font-medium">
-                        {contract.terms[0].interestRate != null
-                          ? `${(Number(contract.terms[0].interestRate) * 100).toFixed(2)}%`
+                        {contract.interestRate != null
+                          ? `${(Number(contract.interestRate) * 100).toFixed(2)}%`
                           : "—"}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Term</p>
                       <p className="font-medium">
-                        {contract.terms[0].termMonths != null
-                          ? `${contract.terms[0].termMonths} months`
+                        {contract.termMonths != null
+                          ? `${contract.termMonths} months`
                           : "—"}
                       </p>
                     </div>
@@ -908,15 +907,15 @@ export function ContractDetailClient({
                 ) : (
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">
-                      This tie-in contract has no terms yet. Add a term to
-                      capture the capital cost, interest rate, and payoff
-                      schedule.
+                      This tie-in contract has no capital entered yet. Add a
+                      capital cost, interest rate, and payoff schedule under
+                      Edit → Terms & Rebates.
                     </p>
                     <Button asChild variant="outline" size="sm">
                       <Link
-                        href={`/dashboard/contracts/${contract.id}/terms`}
+                        href={`/dashboard/contracts/${contract.id}/edit`}
                       >
-                        Add Terms
+                        Edit Contract
                       </Link>
                     </Button>
                   </div>

@@ -742,6 +742,15 @@ export async function createContract(input: CreateContractInput) {
       isMultiFacility: data.isMultiFacility,
       isGrouped: data.isGrouped ?? false,
       tieInCapitalContractId: data.tieInCapitalContractId,
+      // Charles W1.T — tie-in capital lives on Contract now.
+      ...(data.capitalCost != null && { capitalCost: data.capitalCost }),
+      ...(data.interestRate != null && { interestRate: data.interestRate }),
+      ...(data.termMonths != null && { termMonths: data.termMonths }),
+      ...(data.downPayment != null && { downPayment: data.downPayment }),
+      ...(data.paymentCadence != null && { paymentCadence: data.paymentCadence }),
+      ...(data.amortizationShape != null && {
+        amortizationShape: data.amortizationShape,
+      }),
       createdById: session.user.id,
       ...(data.facilityIds.length > 0 && {
         isMultiFacility: true,
@@ -836,6 +845,17 @@ export async function updateContract(id: string, input: UpdateContractInput) {
   if (data.isMultiFacility !== undefined) updateData.isMultiFacility = data.isMultiFacility
   if (data.isGrouped !== undefined) updateData.isGrouped = data.isGrouped
 
+  // Charles W1.T — tie-in capital fields on the Contract row. Pass
+  // through nullable values (explicitly setting to null clears the
+  // capital; undefined leaves it alone).
+  if (data.capitalCost !== undefined) updateData.capitalCost = data.capitalCost
+  if (data.interestRate !== undefined) updateData.interestRate = data.interestRate
+  if (data.termMonths !== undefined) updateData.termMonths = data.termMonths
+  if (data.downPayment !== undefined) updateData.downPayment = data.downPayment
+  if (data.paymentCadence !== undefined) updateData.paymentCadence = data.paymentCadence
+  if (data.amortizationShape !== undefined)
+    updateData.amortizationShape = data.amortizationShape
+
   if (data.facilityIds !== undefined) {
     await prisma.contractFacility.deleteMany({ where: { contractId: id } })
     if (data.facilityIds.length > 0) {
@@ -860,6 +880,62 @@ export async function updateContract(id: string, input: UpdateContractInput) {
     where: { id },
     data: updateData,
   })
+
+  // Charles W1.T — persist (or clear) ContractAmortizationSchedule rows
+  // when the shape field is in the payload. Symmetrical clears the
+  // table so the read path falls back to the live PMT compute; custom
+  // replaces every row with the caller-supplied amortizationDue values,
+  // rebuilding opening/interest/principal/closing from the running
+  // opening balance.
+  if (data.amortizationShape === "symmetrical") {
+    await prisma.contractAmortizationSchedule.deleteMany({
+      where: { contractId: id },
+    })
+  } else if (
+    data.amortizationShape === "custom" &&
+    data.customAmortizationRows &&
+    data.customAmortizationRows.length > 0
+  ) {
+    const capitalCost = Number(data.capitalCost ?? contract.capitalCost ?? 0)
+    const downPayment = Number(data.downPayment ?? contract.downPayment ?? 0)
+    const interestRate = Number(
+      data.interestRate ?? contract.interestRate ?? 0,
+    )
+    const cadence =
+      data.paymentCadence ?? contract.paymentCadence ?? "monthly"
+    const periodsPerYear =
+      cadence === "annual" ? 1 : cadence === "quarterly" ? 4 : 12
+    const r = interestRate / periodsPerYear
+
+    const sorted = [...data.customAmortizationRows].sort(
+      (a, b) => a.periodNumber - b.periodNumber,
+    )
+    const effectivePrincipal = Math.max(0, capitalCost - downPayment)
+    let opening = effectivePrincipal
+    const rows = sorted.map((row) => {
+      const interestCharge = opening * r
+      const amortizationDue = row.amortizationDue
+      const principalDue = amortizationDue - interestCharge
+      const closingBalance = opening - principalDue
+      const built = {
+        contractId: id,
+        periodNumber: row.periodNumber,
+        openingBalance: opening,
+        interestCharge,
+        principalDue,
+        amortizationDue,
+        closingBalance,
+      }
+      opening = closingBalance
+      return built
+    })
+    await prisma.contractAmortizationSchedule.deleteMany({
+      where: { contractId: id },
+    })
+    if (rows.length > 0) {
+      await prisma.contractAmortizationSchedule.createMany({ data: rows })
+    }
+  }
 
   await logAudit({
     userId: session.user.id,

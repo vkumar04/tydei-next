@@ -198,8 +198,11 @@ export async function recomputeAccrualForContract(
   // all terms, fall back to monthly so existing contracts keep today's
   // behavior. Mixed-cadence contracts use the FIRST term's cadence —
   // consistent with the rest of the codebase's "primary term" convention.
+  // Charles W1.T — paymentCadence is contract-level now; read from
+  // Contract directly. Fall back to monthly when the column is unset
+  // (non-tie-in contracts or tie-in contracts without capital entered).
   const primaryCadence: PaymentCadence =
-    (termsWithTiers[0].paymentCadence as PaymentCadence | null | undefined) ??
+    (contract.paymentCadence as PaymentCadence | null | undefined) ??
     "monthly"
   const buckets = bucketAccrualsByCadence(rows, primaryCadence)
 

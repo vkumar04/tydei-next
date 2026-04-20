@@ -110,12 +110,9 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
       spendBaseline: t.spendBaseline ? Number(t.spendBaseline) : undefined,
       scopedCategoryIds: t.categories ?? [],
       scopedItemNumbers: (t.products ?? []).map((p) => p.vendorItemNo),
-      capitalCost: t.capitalCost !== null ? Number(t.capitalCost) : null,
-      interestRate: t.interestRate !== null ? Number(t.interestRate) : null,
-      termMonths: t.termMonths !== null ? t.termMonths : null,
-      downPayment: t.downPayment !== null ? Number(t.downPayment) : null,
-      paymentCadence:
-        (t.paymentCadence ?? "monthly") as TermFormValues["paymentCadence"],
+      // Charles W1.T — capital fields (capitalCost, interestRate,
+      // termMonths, downPayment, paymentCadence, amortizationShape) moved
+      // to the Contract row. Not copied onto the term form anymore.
       minimumPurchaseCommitment:
         t.minimumPurchaseCommitment !== null
           ? Number(t.minimumPurchaseCommitment)
