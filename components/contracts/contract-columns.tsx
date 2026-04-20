@@ -42,12 +42,10 @@ type ContractWithVendor = Contract & {
    * Trailing-12-month spend attached by `getContracts` (Charles W1.J).
    * Mirrors the R5.28 cascade from `getContract`:
    *   ContractPeriod → COG-by-contract → COG-by-vendor.
-   * Preferred over `metricsSpend` (which has no time window).
+   * Charles W1.X-D: this is now the single source for the Spend column
+   * (getContractMetricsBatch's lifetime aggregate was removed).
    */
   currentSpend?: number
-  /** From getContractMetricsBatch (when loaded). */
-  metricsSpend?: number
-  metricsRebate?: number
   /** Optional: when `getContracts` selects `_count.contractFacilities`. */
   _count?: { contractFacilities?: number }
   /** Optional: when the join is included directly. */
@@ -301,11 +299,13 @@ export function getContractColumns(
       ),
     },
     {
-      id: "metricsSpend",
-      // Prefer trailing-12mo `currentSpend` (set by getContracts per R5.28)
-      // over the legacy lifetime `metricsSpend` (getContractMetricsBatch).
-      // The batch is kept as a fallback only while transitional.
-      accessorFn: (row) => row.currentSpend ?? row.metricsSpend ?? 0,
+      id: "currentSpend",
+      // Charles W1.X-D: single source. `currentSpend` is populated by
+      // `getContracts` via the R5.28 trailing-12mo cascade; the old
+      // `?? metricsSpend` fallback (from getContractMetricsBatch) was
+      // shadowing the canonical value and drove the list-vs-detail drift
+      // Charles reported on 2026-04-20.
+      accessorFn: (row) => row.currentSpend ?? 0,
       header: ({ column }) => (
         <SortableHeader
           label="Spend (Last 12 Months)"
@@ -317,7 +317,7 @@ export function getContractColumns(
       ),
       enableSorting: true,
       cell: ({ row }) => {
-        const value = row.original.currentSpend ?? row.original.metricsSpend
+        const value = row.original.currentSpend
         return (
           <div className="text-right font-medium text-muted-foreground">
             {value !== undefined ? formatCurrency(value) : "—"}
@@ -327,7 +327,11 @@ export function getContractColumns(
     },
     {
       id: "rebateEarned",
-      accessorFn: (row) => row.metricsRebate ?? Number(row.rebateEarned ?? 0),
+      // Charles W1.X-D: single source. `rebateEarned` is the canonical
+      // YTD figure from `getContracts` via `sumEarnedRebatesYTD`. The old
+      // `row.metricsRebate ?? ...` fallback was overriding it with the
+      // batch path and silently drifting from the detail header card.
+      accessorFn: (row) => Number(row.rebateEarned ?? 0),
       header: ({ column }) => (
         <SortableHeader
           label="Rebate Earned (YTD)"
@@ -339,11 +343,7 @@ export function getContractColumns(
       ),
       enableSorting: true,
       cell: ({ row }) => {
-        // Prefer the live metrics rebate (from getContractMetricsBatch)
-        // when present; fall back to the rebateEarned aggregate.
-        const value =
-          row.original.metricsRebate ??
-          Number(row.original.rebateEarned ?? 0)
+        const value = Number(row.original.rebateEarned ?? 0)
         return (
           <div className="text-right font-medium text-green-600 dark:text-green-400">
             {formatCurrency(value)}

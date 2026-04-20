@@ -6,7 +6,6 @@ import {
   getContracts,
   getContract,
   getContractStats,
-  getContractMetricsBatch,
   createContract,
   updateContract,
   deleteContract,
@@ -40,18 +39,12 @@ export function useContractStats(
   })
 }
 
-/**
- * Per-row live metrics (spend / rebate / totalValue) for a batch of
- * contract ids. Loaded in parallel with the main contracts list so
- * the UI can render the metrics columns without an extra round-trip.
- */
-export function useContractMetricsBatch(contractIds: string[]) {
-  return useQuery({
-    queryKey: ["contracts", "metricsBatch", contractIds.slice().sort().join(",")],
-    queryFn: () => getContractMetricsBatch(contractIds),
-    enabled: contractIds.length > 0,
-  })
-}
+// Charles W1.X-D: `useContractMetricsBatch` + `getContractMetricsBatch`
+// were removed because they duplicated the canonical reducers already
+// computed in-memory by `getContracts` (rebateEarned, rebateCollected,
+// currentSpend). The dual sources produced list-vs-detail drift; the
+// single source now lives on each contract row returned by
+// `getContracts` via the canonical helpers.
 
 export function useCreateContract() {
   const queryClient = useQueryClient()

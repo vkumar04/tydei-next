@@ -29,7 +29,6 @@ import {
   useContracts,
   useContractStats,
   useDeleteContract,
-  useContractMetricsBatch,
 } from "@/hooks/use-contracts"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { getContractColumns } from "@/components/contracts/contract-columns"
@@ -124,30 +123,16 @@ export function ContractsListClient({
   const deleteMutation = useDeleteContract()
 
   const allContracts = data?.contracts ?? []
-  const contractIds = useMemo(() => allContracts.map((c) => c.id), [
-    allContracts,
-  ])
 
-  // Subsystem 1 — live per-row metrics (spend / rebate / totalValue)
-  const { data: metricsBatch } = useContractMetricsBatch(contractIds)
-
-  // Merge live metrics onto each row so the columns render them.
-  const contractsWithMetrics = useMemo(() => {
-    if (!metricsBatch) return allContracts
-    return allContracts.map((c) => {
-      const m = metricsBatch[c.id]
-      if (!m) return c
-      return {
-        ...c,
-        metricsSpend: m.spend,
-        metricsRebate: m.rebate,
-      }
-    })
-  }, [allContracts, metricsBatch])
+  // Charles W1.X-D: `getContracts` now populates `rebateEarned` (YTD),
+  // `rebateCollected` (lifetime), and `currentSpend` (trailing 12mo) via
+  // the canonical reducers. The previous `useContractMetricsBatch` round
+  // trip was removed because it duplicated those invariants and drifted.
+  const contractsWithMetrics = allContracts
 
   // Build the serialized, flat shape the CompareModal expects. Uses the
-  // live metrics batch so Spend/Rebate in the modal match what the list
-  // columns are showing.
+  // canonical `rebateEarned` / `currentSpend` from `getContracts` so
+  // Spend/Rebate in the modal match what the list columns are showing.
   const compareContracts = useMemo<CompareContract[]>(
     () =>
       allContracts
@@ -161,12 +146,12 @@ export function ContractsListClient({
           effectiveDate: new Date(c.effectiveDate),
           expirationDate: new Date(c.expirationDate),
           totalValue: Number(c.totalValue),
-          rebateEarned: Number(metricsBatch?.[c.id]?.rebate ?? 0),
-          spend: Number(metricsBatch?.[c.id]?.spend ?? 0),
+          rebateEarned: Number(c.rebateEarned ?? 0),
+          spend: Number(c.currentSpend ?? 0),
           score: c.score,
           scoreBand: c.scoreBand,
         })),
-    [allContracts, selectedForCompare, metricsBatch],
+    [allContracts, selectedForCompare],
   )
 
   const columns = useMemo(
@@ -403,10 +388,8 @@ export function ContractsListClient({
                           .toISOString()
                           .slice(0, 10),
                         totalValue: Number(c.totalValue),
-                        spend: Number(metricsBatch?.[c.id]?.spend ?? 0),
-                        rebateEarned: Number(
-                          metricsBatch?.[c.id]?.rebate ?? 0
-                        ),
+                        spend: Number(c.currentSpend ?? 0),
+                        rebateEarned: Number(c.rebateEarned ?? 0),
                       }))
                       const csv = buildContractsCSV(rows)
                       const blob = new Blob([csv], {
@@ -963,7 +946,7 @@ function CompareOverviewCard({ contracts }: { contracts: ContractRow[] }) {
         label="Rebates Earned"
         style={style}
         children={contracts.map((c) => {
-          const v = getMetricsRebate(c) ?? Number(c.rebateEarned ?? 0)
+          const v = getRebateEarned(c)
           return (
             <span
               key={c.id}
@@ -1023,14 +1006,14 @@ function CompareRebateTermsCard({ contracts }: { contracts: ContractRow[] }) {
               <div className="flex items-center justify-between">
                 <span>Current Spend</span>
                 <span className="text-foreground">
-                  {formatCurrency(getMetricsSpend(c) ?? 0)}
+                  {formatCurrency(getCurrentSpend(c) ?? 0)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Earned</span>
                 <span className="font-medium text-green-600 dark:text-green-400">
                   {formatCurrency(
-                    getMetricsRebate(c) ?? Number(c.rebateEarned ?? 0)
+                    getRebateEarned(c)
                   )}
                 </span>
               </div>
@@ -1071,7 +1054,7 @@ function CompareFinancialCard({ contracts }: { contracts: ContractRow[] }) {
         style={style}
         children={contracts.map((c) => (
           <span key={c.id} className="font-medium">
-            {formatCurrency(getMetricsSpend(c) ?? 0)}
+            {formatCurrency(getCurrentSpend(c) ?? 0)}
           </span>
         ))}
       />
@@ -1084,7 +1067,7 @@ function CompareFinancialCard({ contracts }: { contracts: ContractRow[] }) {
             className="font-medium text-green-600 dark:text-green-400"
           >
             {formatCurrency(
-              getMetricsRebate(c) ?? Number(c.rebateEarned ?? 0)
+              getRebateEarned(c)
             )}
           </span>
         ))}
@@ -1100,7 +1083,7 @@ function CompareFinancialCard({ contracts }: { contracts: ContractRow[] }) {
         label="Outstanding"
         style={style}
         children={contracts.map((c) => {
-          const earned = getMetricsRebate(c) ?? Number(c.rebateEarned ?? 0)
+          const earned = getRebateEarned(c)
           const collected = Number(c.rebateCollected ?? 0)
           const outstanding = Math.max(earned - collected, 0)
           return (
@@ -1121,8 +1104,8 @@ function CompareFinancialCard({ contracts }: { contracts: ContractRow[] }) {
         label="Effective Rate"
         style={style}
         children={contracts.map((c) => {
-          const spend = getMetricsSpend(c) ?? 0
-          const earned = getMetricsRebate(c) ?? Number(c.rebateEarned ?? 0)
+          const spend = getCurrentSpend(c) ?? 0
+          const earned = getRebateEarned(c)
           const rate = spend > 0 ? (earned / spend) * 100 : 0
           const cls =
             rate >= 5
@@ -1317,11 +1300,15 @@ function CompareContractTermsCard({ contracts }: { contracts: ContractRow[] }) {
 
 // ─── helpers ───────────────────────────────────────────────────────
 
-function getMetricsSpend(c: ContractRow): number | undefined {
-  return (c as ContractRow & { metricsSpend?: number }).metricsSpend
+// Charles W1.X-D: these were previously `getMetricsSpend` /
+// `getMetricsRebate` returning values from `getContractMetricsBatch`.
+// That batch was dropped — the single source is the canonical
+// `currentSpend` / `rebateEarned` fields set by `getContracts`.
+function getCurrentSpend(c: ContractRow): number | undefined {
+  return c.currentSpend
 }
-function getMetricsRebate(c: ContractRow): number | undefined {
-  return (c as ContractRow & { metricsRebate?: number }).metricsRebate
+function getRebateEarned(c: ContractRow): number {
+  return Number(c.rebateEarned ?? 0)
 }
 
 function monthsBetween(
