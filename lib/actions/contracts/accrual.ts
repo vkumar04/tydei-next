@@ -183,6 +183,13 @@ export async function getAccrualTimeline(contractId: string) {
   const monthsTimeline =
     perTermResults[0]?.series.map((s) => s.month) ?? []
 
+  // Charles W1.X-B — `cumulativeSpend` is a running sum across months so
+  // the Accrual Timeline's Cumulative column carries forward through
+  // zero-spend tail months. Pre-fix it was set to the current month's
+  // `totalSpend`, so the column mirrored Spend and zero-spend rows
+  // showed $0 / —. The accumulator MUST live in the enclosing function
+  // scope — moving it inside the callback resets it per iteration.
+  let runningCumulative = 0
   const rows: MultiTermTimelineRow[] = monthsTimeline.map((month, i) => {
     let totalSpend = 0
     let totalAccrued = 0
@@ -221,10 +228,11 @@ export async function getAccrualTimeline(contractId: string) {
       }
     }
 
+    runningCumulative += totalSpend
     return {
       month,
       spend: totalSpend,
-      cumulativeSpend: totalSpend,
+      cumulativeSpend: runningCumulative,
       accruedAmount: totalAccrued,
       tierAchieved: bestTier,
       rebatePercent: bestPercent,
