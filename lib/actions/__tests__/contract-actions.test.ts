@@ -19,6 +19,10 @@ vi.mock("@/lib/db", () => ({
     contract: {
       create: createMock,
       update: updateMock,
+      // Charles W1.Y-B — soft-dedupe lookup. Default no-match so the
+      // existing createContract/updateContract assertions still reach
+      // prisma.contract.create / prisma.contract.update.
+      findFirst: vi.fn().mockResolvedValue(null),
       findUniqueOrThrow: findUniqueOrThrowMock,
     },
     contractFacility: {

@@ -649,6 +649,33 @@ export async function createContract(input: CreateContractInput) {
     if (cached) return cached
   }
 
+  // Charles W1.Y-B — DB-level soft-dedupe. The in-memory idempotency
+  // map above covers fast double-clicks inside one form session, but
+  // misses (a) TTL-expired re-submits, (b) submit paths that forgot to
+  // thread an idempotency key through, and (c) multi-instance deploys
+  // where the cache is process-local. Before writing, look for a
+  // contract with the same business key `(facility, vendor, name,
+  // effectiveDate)` created in the last 30s; if one exists, return it
+  // instead of writing a duplicate row. The 30s window is short enough
+  // that a user genuinely creating two near-identical contracts a
+  // minute apart still succeeds.
+  const recentDup = await prisma.contract.findFirst({
+    where: {
+      facilityId: session.facility.id,
+      vendorId: data.vendorId,
+      name: data.name,
+      effectiveDate: new Date(data.effectiveDate),
+      createdAt: { gte: new Date(Date.now() - 30_000) },
+    },
+  })
+  if (recentDup) {
+    const replay = serialize(recentDup)
+    if (data.idempotencyKey) {
+      idempotencyPut(idempotencyScope, data.idempotencyKey, replay)
+    }
+    return replay
+  }
+
   const contract = await prisma.contract.create({
     data: {
       name: data.name,

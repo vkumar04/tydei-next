@@ -134,3 +134,73 @@ describe("contract-create dedupe across submit paths (Charles W1.Y-B)", () => {
     },
   )
 })
+
+describe("contract-create DB soft-dedupe fallback (Charles W1.Y-B)", () => {
+  it("Charles iMessage 2026-04-20: double-submit produces exactly one contract", async () => {
+    // No idempotency key — simulates the TTL-expired replay or a second
+    // submit path that forgot to thread the key through. The server
+    // MUST still dedupe based on `(facilityId, vendorId, name,
+    // effectiveDate)` created in the last 30s.
+    const input = buildValidCreateInput()
+
+    // First call: no recent dup, write goes through.
+    findFirstMock.mockResolvedValueOnce(null)
+    const first = await createContract(input)
+
+    // Second call: the freshly-written row is now "recent" per the
+    // 30s window.
+    findFirstMock.mockResolvedValueOnce({
+      id: first.id,
+      facilityId: "fac-1",
+      vendorId: "v-1",
+      name: input.name,
+      effectiveDate: new Date(input.effectiveDate),
+      createdAt: new Date(),
+    })
+    const second = await createContract(input)
+
+    expect(second.id).toBe(first.id)
+    expect(createMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("does NOT dedupe when the earlier contract is older than 30s", async () => {
+    const input = buildValidCreateInput()
+
+    // First call — no recent dup.
+    findFirstMock.mockResolvedValueOnce(null)
+    const first = await createContract(input)
+
+    // Second call — DB lookup returns nothing because the row is
+    // outside the 30s window (the server's `gte` clause filters it
+    // out on the real path; here we just confirm that when the lookup
+    // is empty, we fall through to the create).
+    findFirstMock.mockResolvedValueOnce(null)
+    const second = await createContract(input)
+
+    expect(second.id).not.toBe(first.id)
+    expect(createMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("scopes the lookup to (facility, vendor, name, effectiveDate) and a 30s createdAt window", async () => {
+    const input = buildValidCreateInput()
+
+    findFirstMock.mockResolvedValueOnce(null)
+    const before = Date.now()
+    await createContract(input)
+    const after = Date.now()
+
+    expect(findFirstMock).toHaveBeenCalledTimes(1)
+    const args = findFirstMock.mock.calls[0][0]
+    expect(args.where.facilityId).toBe("fac-1")
+    expect(args.where.vendorId).toBe(input.vendorId)
+    expect(args.where.name).toBe(input.name)
+    expect(args.where.effectiveDate).toEqual(new Date(input.effectiveDate))
+
+    const gte = args.where.createdAt.gte as Date
+    expect(gte).toBeInstanceOf(Date)
+    // gte should be ~30s before now. Allow for a little slop.
+    const delta = before - gte.getTime()
+    expect(delta).toBeGreaterThanOrEqual(29_000)
+    expect(delta).toBeLessThanOrEqual(31_000 + (after - before))
+  })
+})

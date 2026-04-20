@@ -24,6 +24,10 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     contract: {
       create: createMock,
+      // Charles W1.Y-B — soft-dedupe lookup. Default no-match so the
+      // W1.W-E1 idempotency-cache tests below still exercise the
+      // key → cached-replay branch.
+      findFirst: vi.fn().mockResolvedValue(null),
       findUniqueOrThrow: findUniqueOrThrowMock,
     },
     contractFacility: {
