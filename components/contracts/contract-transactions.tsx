@@ -61,7 +61,11 @@ import {
 } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate } from "@/lib/formatting"
-import { getContractRebates } from "@/lib/actions/contract-periods"
+import {
+  getContractRebates,
+  updateContractTransaction,
+  deleteContractTransaction,
+} from "@/lib/actions/contract-periods"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
@@ -647,6 +651,77 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     enabled: !!contractId,
   })
 
+  // Charles W1.X-A: row-level mutations for the actions dropdown.
+  // Invalidate the same four keys as `createContractTransaction` so
+  // the summary cards (Earned / Collected / Outstanding), the ledger
+  // itself, and the contract-detail header refresh atomically after
+  // every edit. Without the explicit invalidate the user would see
+  // stale numbers until the next tab flip.
+  function invalidateLedger() {
+    queryClient.invalidateQueries({
+      queryKey: ["contract-periods", contractId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ["contractPeriods", contractId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: ["contractRebates", contractId],
+    })
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.contracts.detail(contractId),
+    })
+  }
+
+  const uncollect = useMutation({
+    mutationFn: async (row: PeriodRow) => {
+      await updateContractTransaction({
+        id: row.id,
+        contractId,
+        rebateCollected: 0,
+        collectionDate: null,
+      })
+    },
+    onSuccess: () => {
+      toast.success("Collection removed")
+      invalidateLedger()
+    },
+    onError: () => toast.error("Failed to remove collection"),
+  })
+
+  const del = useMutation({
+    mutationFn: async (row: PeriodRow) => {
+      await deleteContractTransaction({ id: row.id, contractId })
+    },
+    onSuccess: () => {
+      toast.success("Row deleted")
+      invalidateLedger()
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to delete"),
+  })
+
+  function handleAction(
+    action: "edit" | "uncollect" | "delete",
+    row: PeriodRow,
+  ) {
+    if (action === "uncollect") {
+      uncollect.mutate(row)
+      return
+    }
+    if (action === "delete") {
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(
+          `Delete ledger row for ${row.periodStart}–${row.periodEnd}?`,
+        )
+      ) {
+        return
+      }
+      del.mutate(row)
+      return
+    }
+    // "edit" wired in Task 5.
+  }
+
   if (rebatesLoading) {
     return (
       <div className="space-y-4">
@@ -874,9 +949,7 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
               <TransactionTable
                 rows={rows}
                 filter={activeTab}
-                onAction={() => {
-                  // Handlers wired in Task 4.
-                }}
+                onAction={handleAction}
               />
             </TabsContent>
           </Tabs>
