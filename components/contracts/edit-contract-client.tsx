@@ -12,6 +12,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
+import {
+  ContractCapitalEntry,
+  type ContractCapital,
+} from "@/components/contracts/contract-capital-entry"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -43,6 +47,17 @@ export function EditContractClient({
 
   const { form, terms, setTerms } = useContractForm()
 
+  // Charles W1.T — contract-level tie-in capital state. Lifted out of
+  // per-term state so all rebate terms pay down one balance.
+  const [capital, setCapital] = useState<ContractCapital>({
+    capitalCost: null,
+    interestRate: null,
+    termMonths: null,
+    downPayment: null,
+    paymentCadence: null,
+    amortizationShape: "symmetrical",
+  })
+
   // Initialize form when contract data loads
   useEffect(() => {
     if (contract && !initialized) {
@@ -68,6 +83,25 @@ export function EditContractClient({
         isMultiFacility: contract.isMultiFacility,
         facilityIds: contract.contractFacilities.map((cf) => cf.facilityId),
         categoryIds: contract.contractCategories?.map((cc: { productCategoryId: string }) => cc.productCategoryId) ?? (contract.productCategoryId ? [contract.productCategoryId] : []),
+      })
+
+      // Charles W1.T — seed capital state from the Contract row.
+      setCapital({
+        capitalCost:
+          contract.capitalCost != null ? Number(contract.capitalCost) : null,
+        interestRate:
+          contract.interestRate != null
+            ? Number(contract.interestRate)
+            : null,
+        termMonths: contract.termMonths ?? null,
+        downPayment:
+          contract.downPayment != null ? Number(contract.downPayment) : null,
+        paymentCadence:
+          (contract.paymentCadence as ContractCapital["paymentCadence"]) ??
+          null,
+        amortizationShape:
+          (contract.amortizationShape as ContractCapital["amortizationShape"]) ??
+          "symmetrical",
       })
 
       setTerms(
@@ -122,7 +156,22 @@ export function EditContractClient({
     // term/tier values, because the partially-completed save threw
     // before `router.push` ran and there was no visible error.
     try {
-      await updateMutation.mutateAsync({ id: contractId, data: values })
+      // Charles W1.T — include tie-in capital in the contract update
+      // payload. updateContract is the one that writes the 6 capital
+      // columns + ContractAmortizationSchedule rows on the contract.
+      await updateMutation.mutateAsync({
+        id: contractId,
+        data: {
+          ...values,
+          capitalCost: capital.capitalCost,
+          interestRate: capital.interestRate,
+          termMonths: capital.termMonths,
+          downPayment: capital.downPayment,
+          paymentCadence: capital.paymentCadence,
+          amortizationShape: capital.amortizationShape,
+          customAmortizationRows: capital.customAmortizationRows,
+        },
+      })
 
       // Sync terms: delete removed, create new, update existing tiers
       if (contract) {
@@ -140,6 +189,8 @@ export function EditContractClient({
         for (const term of terms) {
           if (term.id) {
             // Persist term-level edits in addition to tier changes.
+            // Charles W1.T — capital fields no longer ride with the term
+            // update (they're written on the contract update above).
             await updateContractTerm(term.id, {
               termName: term.termName,
               termType: term.termType,
@@ -158,11 +209,6 @@ export function EditContractClient({
               scopedCategoryId: term.scopedCategoryId,
               scopedCategoryIds: term.scopedCategoryIds,
               scopedItemNumbers: term.scopedItemNumbers,
-              capitalCost: term.capitalCost,
-              interestRate: term.interestRate,
-              termMonths: term.termMonths,
-              downPayment: term.downPayment,
-              paymentCadence: term.paymentCadence,
               minimumPurchaseCommitment: term.minimumPurchaseCommitment,
             })
             await upsertContractTiers(term.id, term.tiers)
@@ -261,7 +307,22 @@ export function EditContractClient({
           />
         </TabsContent>
 
-        <TabsContent value="terms" className="mt-6">
+        <TabsContent value="terms" className="mt-6 space-y-6">
+          {contract?.contractType === "tie_in" && (
+            <ContractCapitalEntry
+              capital={capital}
+              onChange={(patch) =>
+                setCapital((prev) => ({ ...prev, ...patch }))
+              }
+              effectiveDate={
+                contract
+                  ? new Date(contract.effectiveDate)
+                      .toISOString()
+                      .split("T")[0]
+                  : null
+              }
+            />
+          )}
           <ContractTermsEntry
             terms={terms}
             onChange={setTerms}
