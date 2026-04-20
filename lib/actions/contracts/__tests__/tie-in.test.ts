@@ -8,6 +8,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * Charles W1.T — capital lives on the Contract row now; fixtures stub
  * `contract.capitalCost / interestRate / termMonths / paymentCadence`
  * plus `amortizationRows` on the contract directly.
+ *
+ * Charles W1.Y-C — `paidToDate` now reads from collected rebates via
+ * `sumRebateAppliedToCapital` (not the forecast schedule). Fixtures now
+ * include `contractType` and `rebates` rows so the canonical helper has
+ * input to reduce.
  */
 
 const { findFirstMock } = vi.hoisted(() => ({
@@ -35,6 +40,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
   it("returns an empty, well-formed shape when the contract has no capital term", async () => {
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
+      contractType: "tie_in",
       effectiveDate: new Date("2026-01-01"),
       capitalCost: null,
       interestRate: null,
@@ -42,6 +48,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
       paymentCadence: null,
       amortizationShape: "symmetrical",
       amortizationRows: [],
+      rebates: [],
     })
 
     const r = await getContractCapitalSchedule("c-1")
@@ -50,6 +57,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     expect(r.schedule).toEqual([])
     expect(r.remainingBalance).toBe(0)
     expect(r.paidToDate).toBe(0)
+    expect(r.rebateAppliedToCapital).toBe(0)
     expect(r.projectedEndOfTermBalance).toBeNull()
   })
 
@@ -60,6 +68,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
 
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
+      contractType: "tie_in",
       effectiveDate,
       capitalCost: 12_000, // $12k over 12 months, 0% → $1k principal/mo
       interestRate: 0,
@@ -67,18 +76,38 @@ describe("getContractCapitalSchedule (Wave A)", () => {
       paymentCadence: "monthly",
       amortizationShape: "symmetrical",
       amortizationRows: [],
+      // Charles W1.Y-C: `paidToDate` now reads from collected rebates.
+      // Seed 3 collected rows summing to $3,000 so the assertion below
+      // (pre-W1.Y-C had assumed schedule-based paid-to-date) still holds.
+      rebates: [
+        {
+          collectionDate: new Date("2025-01-15"),
+          rebateCollected: 1000,
+        },
+        {
+          collectionDate: new Date("2025-02-15"),
+          rebateCollected: 1000,
+        },
+        {
+          collectionDate: new Date("2025-03-15"),
+          rebateCollected: 1000,
+        },
+      ],
     })
 
     const r = await getContractCapitalSchedule("c-1")
 
     expect(r.hasSchedule).toBe(true)
     expect(r.schedule).toHaveLength(12)
-    // With r=0, every period pays $1,000 principal.
+    // With r=0, every period pays $1,000 principal (forecast schedule).
     expect(r.schedule[0]!.principalDue).toBeCloseTo(1000, 2)
     expect(r.schedule[0]!.amortizationDue).toBeCloseTo(1000, 2)
-    // 3 periods elapsed → paid $3k, remaining $9k.
+    // 3 periods elapsed → schedule forecasts $3k; under W1.Y-C we now
+    // read paid-to-date from collected rebates, which we've seeded to
+    // total $3,000 so the assertion is unchanged.
     expect(r.elapsedPeriods).toBe(3)
     expect(r.paidToDate).toBeCloseTo(3000, 2)
+    expect(r.rebateAppliedToCapital).toBeCloseTo(3000, 2)
     expect(r.remainingBalance).toBeCloseTo(9000, 2)
     // Projected end-of-term balance: at $1k/mo paydown over the remaining
     // ~9 months of the term, the balance should retire cleanly to $0.
@@ -96,6 +125,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
 
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
+      contractType: "tie_in",
       effectiveDate,
       capitalCost: 1000,
       interestRate: 0,
@@ -118,6 +148,13 @@ describe("getContractCapitalSchedule (Wave A)", () => {
           principalDue: 500,
           amortizationDue: 500,
           closingBalance: 0,
+        },
+      ],
+      // Charles W1.Y-C: paid-to-date now reads from collected rebates.
+      rebates: [
+        {
+          collectionDate: new Date("2025-01-15"),
+          rebateCollected: 500,
         },
       ],
     })

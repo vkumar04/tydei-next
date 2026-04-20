@@ -19,6 +19,7 @@ import { buildTieInAmortizationSchedule } from "@/lib/rebates/engine/amortizatio
 import type { AmortizationEntry } from "@/lib/rebates/engine/types"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import { sumRebateAppliedToCapital } from "@/lib/contracts/rebate-capital-filter"
 
 export async function getContractTieInBundle(contractId: string) {
   const { facility } = await requireFacility()
@@ -162,7 +163,23 @@ export interface ContractCapitalScheduleResult {
   /** periodNumber of the last row whose periodDate ≤ today; 0 when none. */
   elapsedPeriods: number
   remainingBalance: number
+  /**
+   * Capital paid down to date.
+   *
+   * Charles W1.Y-C (C2): on tie-in contracts, "Paid to Date" is the sum
+   * of collected rebate (`sumRebateAppliedToCapital`) — not the sum of
+   * scheduled `principalDue` across elapsed periods. The schedule is a
+   * forecast, not a ledger; collected rebate is the only actual paydown.
+   * For non-tie-in contracts this is 0.
+   */
   paidToDate: number
+  /**
+   * Sum of collected rebate that has been applied to the capital balance
+   * (Charles W1.Y-C). Equal to `paidToDate` on tie-in contracts; surfaced
+   * separately so the UI can label the number unambiguously (tie-in
+   * capital retires via rebate, not cash).
+   */
+  rebateAppliedToCapital: number
   /**
    * Projected capital balance at the contract's scheduled expiration
    * given the trailing-rebate paydown velocity. $0 means the paydown is
@@ -212,10 +229,14 @@ export async function getContractCapitalSchedule(
 
   // Charles W1.T — capital now lives on Contract; the amortization
   // schedule is keyed by contractId alone.
+  // Charles W1.Y-C — also pull contractType + rebates so we can route
+  // "Paid to Date" through the canonical `sumRebateAppliedToCapital`
+  // helper instead of the forecast `principalDue` sum.
   const contract = await prisma.contract.findFirst({
     where: contractOwnershipWhere(contractId, facility.id),
     select: {
       id: true,
+      contractType: true,
       effectiveDate: true,
       capitalCost: true,
       interestRate: true,
@@ -224,6 +245,12 @@ export async function getContractCapitalSchedule(
       amortizationShape: true,
       amortizationRows: {
         orderBy: { periodNumber: "asc" },
+      },
+      rebates: {
+        select: {
+          collectionDate: true,
+          rebateCollected: true,
+        },
       },
     },
   })
@@ -238,6 +265,7 @@ export async function getContractCapitalSchedule(
     elapsedPeriods: 0,
     remainingBalance: 0,
     paidToDate: 0,
+    rebateAppliedToCapital: 0,
     projectedEndOfTermBalance: null,
   }
 
@@ -304,9 +332,18 @@ export async function getContractCapitalSchedule(
     (r) => new Date(r.periodDate).getTime() <= today.getTime(),
   ).length
 
-  const paidToDate = schedule
-    .slice(0, elapsedPeriods)
-    .reduce((acc, r) => acc + r.principalDue, 0)
+  // Charles W1.Y-C (C2): "Paid to Date" is the sum of collected rebate
+  // applied to capital, not the schedule's elapsed `principalDue`. The
+  // schedule is a forecast; collected rebate is the actual paydown.
+  // Route through the canonical `sumRebateAppliedToCapital` so the
+  // amortization card, the contract-detail header sublabel, and any
+  // future tie-in dashboard agree on one number. Non-tie-in contracts
+  // return 0 (no capital to retire via rebate).
+  const rebateAppliedToCapital = sumRebateAppliedToCapital(
+    contract.rebates,
+    contract.contractType,
+  )
+  const paidToDate = rebateAppliedToCapital
   const remainingBalance = Math.max(0, capitalCost - paidToDate)
 
   // Projected end-of-term balance: how much capital remains at the
@@ -357,6 +394,7 @@ export async function getContractCapitalSchedule(
     elapsedPeriods,
     remainingBalance,
     paidToDate,
+    rebateAppliedToCapital,
     projectedEndOfTermBalance,
   }
 }

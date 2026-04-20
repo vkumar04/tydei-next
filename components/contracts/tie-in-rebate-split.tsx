@@ -1,27 +1,26 @@
 "use client"
 
 /**
- * Tie-In rebate split widget (Wave A, A3).
+ * Tie-In rebate split widget (Wave A, A3; Charles W1.Y-C revised).
  *
- * Renders `$X applied to capital | $Y cash rebate` beneath the
- * existing "Rebates Earned" card on tie-in contract detail pages.
+ * Renders `$X applied to capital · $Y cash rebate` beneath the existing
+ * "Rebates Earned" card on tie-in contract detail pages.
  *
- * Split semantics mirror `calculateTieInCapital.trueUpAdjustment`
- * in lib/rebates/engine/tie-in-capital.ts: the engine defines
+ * Charles's rule (iMessage 2026-04-20): on tie-in deals, 100% of
+ * COLLECTED rebate retires the capital balance. Earned-but-uncollected
+ * does not count as paid-down — only actually-collected dollars reduce
+ * the balance. This widget now routes through the canonical
+ * `sumRebateAppliedToCapital` helper
+ * (`lib/contracts/rebate-capital-filter.ts`) via
+ * `getContractCapitalSchedule.rebateAppliedToCapital` so the number here
+ * matches the Capital Amortization card's "Rebates Applied (lifetime)".
  *
- *   scheduledDue    = amortizationDue + carriedForwardShortfall
- *   trueUpAdjustment = scheduledDue - rebateEarned
- *     > 0 → facility short of scheduled paydown; the ENTIRE rebate
- *           applied to capital and there is still a shortfall
- *     < 0 → facility over-accrued; the excess becomes cash rebate
- *
- * Aggregated across elapsed periods this collapses to:
- *   appliedToCapital = min(rebateEarned, cumulativeScheduledDue)
- *   cashRebate       = max(0, rebateEarned - cumulativeScheduledDue)
- *
- * We reuse the already-computed schedule from getContractCapitalSchedule
- * (A1/A2) rather than re-running the engine — scheduledDue per period is
- * just amortizationDue from the schedule, and we have the elapsed count.
+ * "Cash rebate" here is the portion of earned-not-yet-collected rebate
+ * that would have exceeded the term's cumulative scheduled paydown —
+ * i.e., the amount the facility might expect as cash once collected
+ * above the retire-the-capital threshold. In practice under Charles's
+ * 100%-to-capital rule this is typically $0 until the capital is
+ * retired.
  */
 
 import { useQuery } from "@tanstack/react-query"
@@ -53,12 +52,14 @@ export function TieInRebateSplit({
   // non-capital tie-in contracts keep their existing display.
   if (!data || !data.hasSchedule) return null
 
-  const cumulativeScheduledDue = data.schedule
-    .slice(0, data.elapsedPeriods)
-    .reduce((acc, r) => acc + r.amortizationDue, 0)
-
-  const appliedToCapital = Math.min(rebateEarned, cumulativeScheduledDue)
-  const cashRebate = Math.max(0, rebateEarned - cumulativeScheduledDue)
+  // Charles W1.Y-C (C2): `appliedToCapital` now comes from the canonical
+  // helper (via the server action) — collected rebate applied to the
+  // capital balance. The cash-rebate piece is anything earned above the
+  // total capital cost (i.e., once capital is fully retired). Under the
+  // 100%-to-capital rule this is typically $0 while there is still a
+  // balance due.
+  const appliedToCapital = data.rebateAppliedToCapital
+  const cashRebate = Math.max(0, rebateEarned - data.capitalCost)
 
   return (
     <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -79,10 +80,10 @@ export function TieInRebateSplit({
           </TooltipTrigger>
           <TooltipContent className="max-w-xs">
             <p className="text-xs">
-              Tie-in rebate is applied against the capital balance first
-              (up to the scheduled amortization due across elapsed
-              periods). Anything earned above that schedule flows through
-              to the facility as a cash rebate.
+              Tie-in deals retire the capital balance first: 100% of
+              collected rebate is applied to capital until the balance is
+              fully paid down. Anything earned above that flows through to
+              the facility as a cash rebate.
             </p>
           </TooltipContent>
         </Tooltip>
