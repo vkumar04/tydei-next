@@ -485,3 +485,32 @@ export async function updateContractTransaction(
 
   await prisma.rebate.update({ where: { id: input.id }, data })
 }
+
+// `deleteContractTransaction` removes a user-logged Rebate row.
+// Engine-generated accrual rows (notes contains `[auto-accrual]`) are
+// refused — users should clear the collection via updateContractTransaction
+// with `collectionDate: null`, or re-run Recompute Earned Rebates which
+// will overwrite stale auto-accrual rows deterministically.
+export async function deleteContractTransaction(input: {
+  id: string
+  contractId: string
+}): Promise<void> {
+  const { facility } = await requireFacility()
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(input.contractId, facility.id),
+    select: { id: true },
+  })
+  const rebate = await prisma.rebate.findUniqueOrThrow({
+    where: { id: input.id },
+    select: { contractId: true, notes: true },
+  })
+  if (rebate.contractId !== input.contractId) {
+    throw new Error("Rebate does not belong to the requested contract")
+  }
+  if (rebate.notes && rebate.notes.includes("[auto-accrual]")) {
+    throw new Error(
+      "Cannot delete an auto-accrual row. Uncollect instead, or run Recompute Earned Rebates.",
+    )
+  }
+  await prisma.rebate.delete({ where: { id: input.id } })
+}

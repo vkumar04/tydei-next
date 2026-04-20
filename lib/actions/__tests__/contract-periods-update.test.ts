@@ -153,7 +153,10 @@ vi.mock("@/lib/serialize", () => ({
   serialize: <T,>(x: T) => x,
 }))
 
-import { updateContractTransaction } from "@/lib/actions/contract-periods"
+import {
+  updateContractTransaction,
+  deleteContractTransaction,
+} from "@/lib/actions/contract-periods"
 
 // ─── Inline fixture helper (plan: inline if not in tests/helpers) ─────
 //
@@ -257,6 +260,44 @@ describe("updateContractTransaction", () => {
         contractId,
         rebateCollected: 100,
       }),
+    ).rejects.toThrow()
+  })
+})
+
+describe("deleteContractTransaction", () => {
+  it("removes a user-logged Rebate row", async () => {
+    const { contractId, rebateId } = await seedCollectedRebate({
+      earned: 300,
+      collected: 300,
+      collectionDate: "2025-02-10",
+      notes: "Manually logged by Charles",
+    })
+    await deleteContractTransaction({ id: rebateId, contractId })
+    const row = rebates.find((r) => r.id === rebateId) ?? null
+    expect(row).toBeNull()
+  })
+
+  it("refuses to delete engine-generated [auto-accrual] rows", async () => {
+    const { contractId, rebateId } = await seedCollectedRebate({
+      earned: 500,
+      collected: 0,
+      notes: "[auto-accrual] Q1 2025",
+    })
+    await expect(
+      deleteContractTransaction({ id: rebateId, contractId }),
+    ).rejects.toThrow(/auto-accrual/i)
+    const stillThere = rebates.find((r) => r.id === rebateId)
+    expect(stillThere).toBeDefined()
+  })
+
+  it("rejects deletes from other facilities", async () => {
+    const { rebateId, contractId } = await seedCollectedRebate({
+      facility: "other",
+      earned: 500,
+      collected: 0,
+    })
+    await expect(
+      deleteContractTransaction({ id: rebateId, contractId }),
     ).rejects.toThrow()
   })
 })
