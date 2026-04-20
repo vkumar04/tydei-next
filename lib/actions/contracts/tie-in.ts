@@ -189,6 +189,25 @@ export interface ContractCapitalScheduleResult {
    * question is "will the balance be cleared BY the term end?"
    */
   projectedEndOfTermBalance: number | null
+  /** Charles W1.Y-D — contract type, so the card can conditionally render
+   * the tie-in-only Minimum Annual Purchase + retirement block. */
+  contractType: string
+  /** Charles W1.Y-D — minimum annual purchase floor, sourced from the
+   * largest `minimumPurchaseCommitment` across the contract's terms (the
+   * tie-in term typically carries this). Null when no term has one. */
+  minAnnualPurchase: number | null
+  /** Charles W1.Y-D — trailing-12mo spend, computed via the same cascade
+   * as `getContract` (ContractPeriod → COG contract-scoped → COG
+   * vendor-scoped). Feeds `computeMinAnnualShortfall`. */
+  rolling12Spend: number
+  /** Charles W1.Y-D — current tier rate as integer percent (5 = 5%),
+   * derived from the contract's first tiered term at `rolling12Spend`.
+   * Zero when no tiered term / tiers exist. */
+  currentTierPercent: number
+  /** Charles W1.Y-D — remaining periods on the amortization schedule
+   * (total − elapsed) expressed in MONTHS. Feeds
+   * `computeCapitalRetirementNeeded`. */
+  monthsRemaining: number
 }
 
 function normalizeCadence(
@@ -232,11 +251,16 @@ export async function getContractCapitalSchedule(
   // Charles W1.Y-C — also pull contractType + rebates so we can route
   // "Paid to Date" through the canonical `sumRebateAppliedToCapital`
   // helper instead of the forecast `principalDue` sum.
+  // Charles W1.Y-D — also pull vendorId + terms/tiers +
+  // `minimumPurchaseCommitment` so the card can render the tie-in-only
+  // Minimum Annual Purchase shortfall + "Annual Spend Needed to Retire
+  // Capital" block at the current tier rate.
   const contract = await prisma.contract.findFirst({
     where: contractOwnershipWhere(contractId, facility.id),
     select: {
       id: true,
       contractType: true,
+      vendorId: true,
       effectiveDate: true,
       capitalCost: true,
       interestRate: true,
@@ -251,6 +275,23 @@ export async function getContractCapitalSchedule(
           collectionDate: true,
           rebateCollected: true,
         },
+      },
+      terms: {
+        select: {
+          minimumPurchaseCommitment: true,
+          rebateMethod: true,
+          tiers: {
+            select: {
+              tierNumber: true,
+              spendMin: true,
+              spendMax: true,
+              rebateValue: true,
+              rebateType: true,
+            },
+            orderBy: { tierNumber: "asc" },
+          },
+        },
+        orderBy: { createdAt: "asc" },
       },
     },
   })
@@ -267,6 +308,11 @@ export async function getContractCapitalSchedule(
     paidToDate: 0,
     rebateAppliedToCapital: 0,
     projectedEndOfTermBalance: null,
+    contractType: contract?.contractType ?? "usage",
+    minAnnualPurchase: null,
+    rolling12Spend: 0,
+    currentTierPercent: 0,
+    monthsRemaining: 0,
   }
 
   if (
@@ -384,6 +430,82 @@ export async function getContractCapitalSchedule(
     projectedEndOfTermBalance = remainingBalance
   }
 
+  // Charles W1.Y-D — enrichments used by the amortization card to render
+  // the tie-in Minimum Annual Purchase + "Annual Spend Needed to Retire
+  // Capital" block. These are derived here so the card stays a thin
+  // renderer and the math lives alongside the schedule read.
+
+  // minAnnualPurchase: largest `minimumPurchaseCommitment` across terms.
+  // A tie-in contract's capital term typically carries this; picking the
+  // max avoids surfacing a second term's smaller per-term commitment.
+  let minAnnualPurchase: number | null = null
+  for (const t of contract.terms) {
+    if (t.minimumPurchaseCommitment == null) continue
+    const n = Number(t.minimumPurchaseCommitment)
+    if (!Number.isFinite(n) || n <= 0) continue
+    if (minAnnualPurchase == null || n > minAnnualPurchase) {
+      minAnnualPurchase = n
+    }
+  }
+
+  // Rolling-12 spend cascade (mirrors `getContract` in lib/actions/
+  // contracts.ts so the card agrees with the detail header).
+  const windowEnd = new Date()
+  const windowStart = new Date(windowEnd)
+  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const [cogAgg, cogVendorAgg, periodAgg] = await Promise.all([
+    prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
+        contractId: contract.id,
+        transactionDate: { gte: windowStart, lte: windowEnd },
+      },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
+        vendorId: contract.vendorId,
+        transactionDate: { gte: windowStart, lte: windowEnd },
+      },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.contractPeriod.aggregate({
+      where: {
+        contractId: contract.id,
+        periodStart: { gte: windowStart },
+        periodEnd: { lte: windowEnd },
+      },
+      _sum: { totalSpend: true },
+    }),
+  ])
+  const cogSpend = Number(cogAgg._sum.extendedPrice ?? 0)
+  const cogVendorSpend = Number(cogVendorAgg._sum.extendedPrice ?? 0)
+  const periodSpend = Number(periodAgg._sum.totalSpend ?? 0)
+  const rolling12Spend =
+    periodSpend > 0 ? periodSpend : cogSpend > 0 ? cogSpend : cogVendorSpend
+
+  // Current tier percent: first term with tiers, evaluated at rolling-12
+  // spend. `computeRebateFromPrismaTiers` handles the FRACTION→INTEGER
+  // percent scaling (see rebate-units note in calculate.ts).
+  let currentTierPercent = 0
+  for (const t of contract.terms) {
+    if (t.tiers.length === 0) continue
+    const { rebatePercent } = computeRebateFromPrismaTiers(
+      rolling12Spend,
+      t.tiers,
+      { method: t.rebateMethod ?? "cumulative" },
+    )
+    currentTierPercent = rebatePercent
+    break
+  }
+
+  // Months remaining: unelapsed periods × months/period.
+  const monthsRemaining = Math.max(
+    0,
+    (schedule.length - elapsedPeriods) * monthsStep,
+  )
+
   return {
     hasSchedule: true,
     capitalCost,
@@ -396,6 +518,11 @@ export async function getContractCapitalSchedule(
     paidToDate,
     rebateAppliedToCapital,
     projectedEndOfTermBalance,
+    contractType: contract.contractType,
+    minAnnualPurchase,
+    rolling12Spend,
+    currentTierPercent,
+    monthsRemaining,
   }
 }
 

@@ -29,7 +29,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { formatCurrency, formatDate } from "@/lib/formatting"
-import { getContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
+import {
+  getContractCapitalSchedule,
+  type ContractCapitalScheduleResult,
+} from "@/lib/actions/contracts/tie-in"
+import { Badge } from "@/components/ui/badge"
+import { computeMinAnnualShortfall } from "@/lib/contracts/min-annual-shortfall"
+import { computeCapitalRetirementNeeded } from "@/lib/contracts/capital-retirement-needed"
 
 interface ContractAmortizationCardProps {
   contractId: string
@@ -136,6 +142,19 @@ export function ContractAmortizationCard({
           </div>
         </div>
 
+        {/* ── Minimum Annual Purchase + Annual Spend Needed (W1.Y-D) ──
+            Charles iMessage 2026-04-20: "If there is a floor on this the
+            math needs to run the rolling 12 so that it can see the rebate
+            that is needed based on the terms to pay the Amortization off."
+            Tie-in only — `minAnnualPurchase` stays reference-only on
+            other contract types (see form help text in contract-terms-
+            entry.tsx). Math is delegated to the canonical
+            `computeMinAnnualShortfall` and `computeCapitalRetirementNeeded`
+            reducers so this surface cannot drift from peer surfaces. */}
+        {data.contractType === "tie_in" ? (
+          <TieInMinPurchaseBlock data={data} />
+        ) : null}
+
         {/* ── Schedule table (A1) ──────────────────────────────────── */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -198,6 +217,86 @@ export function ContractAmortizationCard({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function TieInMinPurchaseBlock({
+  data,
+}: {
+  data: ContractCapitalScheduleResult
+}) {
+  const shortfall = computeMinAnnualShortfall(
+    data.rolling12Spend,
+    data.minAnnualPurchase,
+  )
+  const retirement = computeCapitalRetirementNeeded({
+    capitalAmount: data.capitalCost,
+    rebatesApplied: data.rebateAppliedToCapital,
+    monthsRemaining: data.monthsRemaining,
+    rebatePercent: data.currentTierPercent,
+  })
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="rounded-md border bg-card p-3">
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-muted-foreground">
+            Minimum Annual Purchase
+          </p>
+          {shortfall.floor != null ? (
+            <Badge
+              variant={shortfall.met ? "outline" : "destructive"}
+              className="text-[10px]"
+            >
+              {shortfall.met
+                ? "Met"
+                : `short ${formatCurrency(shortfall.gap)}`}
+            </Badge>
+          ) : null}
+        </div>
+        <p className="mt-1 text-xl font-semibold tabular-nums">
+          {shortfall.floor == null ? "—" : formatCurrency(shortfall.floor)}
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Rolling-12 spend: {formatCurrency(shortfall.spend)}
+        </p>
+      </div>
+      <div className="rounded-md border bg-card p-3">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span>Annual Spend Needed to Retire Capital</span>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="What is Annual Spend Needed to Retire Capital?"
+                  className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-xs">
+                  At your current tier rebate (
+                  {data.currentTierPercent.toFixed(2)}%), this much annual
+                  spend over the remaining {data.monthsRemaining} month
+                  {data.monthsRemaining === 1 ? "" : "s"} will close the
+                  amortization balance.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <p className="mt-1 text-xl font-semibold tabular-nums">
+          {retirement.annualSpendNeeded == null
+            ? "—"
+            : formatCurrency(retirement.annualSpendNeeded)}
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Remaining capital: {formatCurrency(retirement.remainingCapital)}
+        </p>
+      </div>
+    </div>
   )
 }
 
