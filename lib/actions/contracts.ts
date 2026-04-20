@@ -611,150 +611,22 @@ export async function getContractStats(
   })
 }
 
-// ─── Per-row Metrics Batch (contracts-list-closure §4.1) ─────────
+// ─── Per-row Metrics Batch — REMOVED (Charles W1.X-D) ────────────
 //
-// Returns { [contractId]: { spend, rebate, totalValue } } for a batch
-// of contracts, letting the list page render per-row metrics without
-// N round-trips. Resolution chain per contract:
-//   1. Aggregate COGRecord.extendedPrice WHERE contractId = X (fastest
-//      once COG enrichment has populated the contractId FK)
-//   2. Fall back to ContractPeriod.totalSpend sum
-//   3. Final fallback: contract-level stored `totalValue` (passthrough)
+// `getContractMetricsBatch` used to compute per-row spend + rebate for
+// the contracts list via Prisma-side aggregates that were "kept in sync"
+// with the canonical in-memory reducers. In practice the two paths
+// drifted (Charles iMessage 2026-04-20): the list column accessor's
+// `?? metricsRebate` / `?? metricsSpend` fallback shadowed the
+// canonical value whenever the batch path differed.
 //
-// Rebate is always computed live from `firstTerm.tiers` using the
-// shared rebate calculator (ensures alignment with the detail page).
-
-export async function getContractMetricsBatch(contractIds: string[]): Promise<
-  Record<
-    string,
-    {
-      spend: number
-      rebate: number
-      totalValue: number
-    }
-  >
-> {
-  const { facility } = await requireFacility()
-  if (contractIds.length === 0) return {}
-
-  // Load contract shells with terms (for rebate computation) + totalValue.
-  const contracts = await prisma.contract.findMany({
-    where: {
-      id: { in: contractIds },
-      ...contractsOwnedByFacility(facility.id),
-    },
-    select: {
-      id: true,
-      vendorId: true,
-      totalValue: true,
-      terms: {
-        include: { tiers: { orderBy: { tierNumber: "asc" } } },
-        orderBy: { createdAt: "asc" },
-        take: 1,
-      },
-    },
-  })
-
-  // Pass 1 — aggregate COG spend by contractId (fast: one query).
-  const cogByContract = await prisma.cOGRecord.groupBy({
-    by: ["contractId"],
-    where: {
-      facilityId: facility.id,
-      contractId: { in: contractIds },
-    },
-    _sum: { extendedPrice: true },
-  })
-  const spendFromCog = new Map<string, number>()
-  for (const row of cogByContract) {
-    if (row.contractId) {
-      spendFromCog.set(row.contractId, Number(row._sum.extendedPrice ?? 0))
-    }
-  }
-
-  // Pass 2 — ContractPeriod fallback for rows where COG pass yielded zero.
-  const periodByContract = await prisma.contractPeriod.groupBy({
-    by: ["contractId"],
-    where: { contractId: { in: contractIds } },
-    _sum: { totalSpend: true },
-  })
-  const spendFromPeriods = new Map<string, number>()
-  for (const row of periodByContract) {
-    spendFromPeriods.set(row.contractId, Number(row._sum.totalSpend ?? 0))
-  }
-
-  // Pass 3 — rebate is *not* computed from tiers. Show what the
-  // facility has actually recorded (manually entered or imported).
-  // Earned counts only Rebate rows whose payPeriodEnd has passed
-  // (pre-recorded rows for upcoming periods are projections, not
-  // earned). ContractPeriod.rebateEarned is the fallback for
-  // contracts where periods rolled up but no per-payment Rebate
-  // rows exist yet — and we filter those by periodEnd ≤ today
-  // for the same reason.
-  //
-  // Charles R5.31: the list column is labeled "Rebate Earned (YTD)" so
-  // apply the same calendar-year floor used by the detail header.
-  // These DB-side aggregations are the Prisma equivalents of the
-  // in-memory `sumEarnedRebatesYTD` helper — keep them in sync (W1.U-B).
-  const today = new Date()
-  const startOfYear = new Date(today.getFullYear(), 0, 1)
-  const [rebateAgg, periodRebateAgg] = await Promise.all([
-    prisma.rebate.groupBy({
-      by: ["contractId"],
-      where: {
-        contractId: { in: contractIds },
-        facilityId: facility.id,
-        payPeriodEnd: { gte: startOfYear, lte: today },
-      },
-      _sum: { rebateEarned: true },
-    }),
-    prisma.contractPeriod.groupBy({
-      by: ["contractId"],
-      where: {
-        contractId: { in: contractIds },
-        facilityId: facility.id,
-        periodEnd: { gte: startOfYear, lte: today },
-      },
-      _sum: { rebateEarned: true },
-    }),
-  ])
-  const rebateFromTable = new Map<string, number>()
-  for (const row of rebateAgg) {
-    rebateFromTable.set(row.contractId, Number(row._sum.rebateEarned ?? 0))
-  }
-  const rebateFromPeriods = new Map<string, number>()
-  for (const row of periodRebateAgg) {
-    rebateFromPeriods.set(row.contractId, Number(row._sum.rebateEarned ?? 0))
-  }
-
-  // Combine into per-contract result.
-  const result: Record<
-    string,
-    { spend: number; rebate: number; totalValue: number }
-  > = {}
-  for (const c of contracts) {
-    const cogSpend = spendFromCog.get(c.id) ?? 0
-    const periodSpend = spendFromPeriods.get(c.id) ?? 0
-
-    // Precedence: COG enrichment (contractId) → ContractPeriod rollup → 0.
-    // No vendor-wide fallback — it inflated totals when a vendor had
-    // multiple contracts (QA: list-3).
-    const spend = cogSpend > 0 ? cogSpend : periodSpend
-
-    // Precedence: Rebate model (per-payment) → ContractPeriod rollup.
-    // No tier-engine fallback — never "estimate" a rebate.
-    const directRebate = rebateFromTable.get(c.id) ?? 0
-    const periodRebate = rebateFromPeriods.get(c.id) ?? 0
-    const rebate = directRebate > 0 ? directRebate : periodRebate
-
-    result[c.id] = {
-      spend,
-      rebate,
-      totalValue: Number(c.totalValue),
-    }
-  }
-
-  return result
-}
+// The single source for list-row metrics is now `getContracts`, which
+// computes `rebateEarned` (YTD), `rebateCollected` (lifetime), and
+// `currentSpend` (trailing 12mo) via the canonical helpers
+// `sumEarnedRebatesYTD`, `sumCollectedRebates`, and the trailing-12mo
+// cascade. See
+// `lib/actions/__tests__/contracts-list-vs-detail-parity.test.ts`
+// for the CI drift guard that enforces list vs detail parity.
 
 // ─── Create Contract ─────────────────────────────────────────────
 
