@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo, useRef } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
@@ -104,9 +104,7 @@ export function NewContractClient({
   } = useContractForm()
   const createMutation = useCreateContract()
 
-  // Charles W1.W-D3 — contract-level tie-in capital state for the new-
-  // contract form. Lifted from the edit flow so tie-in contracts can
-  // land with capital filled in, instead of the W1.T orphan-null shape.
+  // Charles W1.W-D3 — contract-level tie-in capital state.
   const [capital, setCapital] = useState<ContractCapital>({
     capitalCost: null,
     interestRate: null,
@@ -116,15 +114,50 @@ export function NewContractClient({
     amortizationShape: "symmetrical",
   })
 
-  // Charles W1.W-E1 — one idempotency key per form session. Both the
-  // "Create Contract" button and "Save as Draft" attach this key to the
-  // server action payload. Server returns the already-created contract
-  // on replay instead of writing a second row.
+  // Charles W1.W-E1 — one idempotency key per form session.
   const idempotencyKeyRef = useRef<string>(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `new-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   )
+
+  // Charles W1.W-A3a: auto-run "Suggest from COG" on vendor change
+  // (and again if effective/expiration change). Only fills when both
+  // totalValue and annualValue are still at empty defaults so we never
+  // clobber numbers the user typed in.
+  const watchedVendorId = form.watch("vendorId")
+  const watchedEffective = form.watch("effectiveDate")
+  const watchedExpiration = form.watch("expirationDate")
+  const lastDerivedVendorRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!watchedVendorId) return
+    const currentTotal = form.getValues("totalValue") ?? 0
+    const currentAnnual = form.getValues("annualValue") ?? 0
+    if (currentTotal !== 0 && currentAnnual !== 0) return
+    if (lastDerivedVendorRef.current === watchedVendorId && currentTotal !== 0) return
+    lastDerivedVendorRef.current = watchedVendorId
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await deriveContractTotalFromCOG(watchedVendorId, {
+          effectiveDate: watchedEffective || null,
+          expirationDate: watchedExpiration || null,
+        })
+        if (cancelled) return
+        if (r.totalValue > 0 && currentTotal === 0) {
+          form.setValue("totalValue", r.totalValue)
+        }
+        if (r.annualValue > 0 && currentAnnual === 0) {
+          form.setValue("annualValue", r.annualValue)
+        }
+      } catch {
+        // Silent — manual "Suggest from COG" button remains as fallback.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [watchedVendorId, watchedEffective, watchedExpiration, form])
 
   const handlePricingUpload = useCallback(async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase()
@@ -724,11 +757,16 @@ export function NewContractClient({
               const vendorId = form.watch("vendorId")
               if (!vendorId) return
               try {
-                const r = await deriveContractTotalFromCOG(vendorId)
+                const r = await deriveContractTotalFromCOG(vendorId, {
+                  effectiveDate: form.getValues("effectiveDate") || null,
+                  expirationDate: form.getValues("expirationDate") || null,
+                })
                 form.setValue("totalValue", r.totalValue)
                 form.setValue("annualValue", r.annualValue)
                 toast.success(
-                  `Filled from ${r.monthsObserved}-month COG aggregate`
+                  r.windowMonthsObserved
+                    ? `Filled: annual = trailing ${r.monthsObserved}mo, total over ${Math.round(r.windowMonthsObserved)}mo window`
+                    : `Filled from ${r.monthsObserved}-month COG aggregate`
                 )
               } catch {
                 toast.error("Could not derive total from COG")

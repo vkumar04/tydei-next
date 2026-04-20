@@ -27,12 +27,29 @@ export type CogRecordForMatch = {
   unitCost: number
   quantity: number
   transactionDate: Date
+  /** COG row's category — used for category-scope matching (W1.W-C4). Optional for backward compat. */
+  category?: string | null
 }
 
 export type ContractPricingItemForMatch = {
   vendorItemNo: string
   unitPrice: number
   listPrice: number | null
+}
+
+/**
+ * Category-scope info from the contract's terms (Charles W1.W-C4).
+ *
+ * When a term's `appliesTo === "specific_category"`, only COG rows whose
+ * `category` matches one of `categories` are on-contract under that
+ * term. We aggregate across all terms: if ANY term is broadly-scoped
+ * (`all_products` or scope unset) the contract covers every category;
+ * otherwise the contract's covered-category set is the union of all
+ * specific-category term lists.
+ */
+export interface ContractTermScopeForMatch {
+  appliesTo?: string | null
+  categories?: string[]
 }
 
 export type ContractForMatch = {
@@ -43,6 +60,12 @@ export type ContractForMatch = {
   expirationDate: Date | null
   facilityIds: string[]
   pricingItems: ContractPricingItemForMatch[]
+  /**
+   * Optional — when omitted the matcher falls back to pre-W1.W
+   * behavior (no category scoping). See
+   * docs/superpowers/plans/2026-04-20-charles-w1w-bug-cluster.md C4.
+   */
+  terms?: ContractTermScopeForMatch[]
 }
 
 export type MatchResult =
@@ -61,6 +84,30 @@ export type MatchResult =
       contractPrice: number
       variancePercent: number
     }
+
+/**
+ * Returns true when the COG row's category is covered by the contract's
+ * terms. When the contract has no terms, or any term is
+ * broadly-scoped, returns true (no narrowing). When every term is
+ * `specific_category`, requires `cogCategory` to be in the union.
+ * A COG row with a null category is treated as out-of-scope for
+ * category-locked contracts — we can't prove coverage without a name.
+ */
+export function cogCategoryCoveredByContract(
+  cogCategory: string | null,
+  terms: readonly ContractTermScopeForMatch[] | undefined,
+): boolean {
+  if (!terms || terms.length === 0) return true
+  const covered = new Set<string>()
+  for (const t of terms) {
+    const scope = t.appliesTo ?? null
+    if (scope !== "specific_category") return true
+    for (const c of t.categories ?? []) covered.add(c)
+  }
+  if (covered.size === 0) return true
+  if (!cogCategory) return false
+  return covered.has(cogCategory)
+}
 
 /**
  * Returns a MatchResult describing how a COG record relates to a set of
@@ -104,6 +151,20 @@ export function matchCOGRecordToContract(
     return { status: "out_of_scope", reason: "no contract covers this date" }
   }
 
+  // 4b. Category scope (Charles W1.W-C4): if a contract's terms
+  //     restrict it to specific categories, only COG rows whose
+  //     category is in that set belong on the contract. Contracts
+  //     with no terms (or any broadly-scoped term) skip this filter.
+  const byCategory = byDate.filter((c) =>
+    cogCategoryCoveredByContract(record.category ?? null, c.terms),
+  )
+  if (byCategory.length === 0) {
+    return {
+      status: "out_of_scope",
+      reason: "no contract covers this COG row's category",
+    }
+  }
+
   // 5. Item lookup across candidate contracts
   const itemNoLower = record.vendorItemNo?.toLowerCase() ?? null
   if (!itemNoLower) {
@@ -113,7 +174,7 @@ export function matchCOGRecordToContract(
     }
   }
 
-  for (const contract of byDate) {
+  for (const contract of byCategory) {
     const item = contract.pricingItems.find(
       (p) => p.vendorItemNo.toLowerCase() === itemNoLower,
     )

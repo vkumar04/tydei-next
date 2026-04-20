@@ -1,13 +1,14 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, Loader2, Save, X } from "lucide-react"
 import { useContract, useUpdateContract } from "@/hooks/use-contracts"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { upsertContractTiers, createContractTerm, deleteContractTerm, updateContractTerm } from "@/lib/actions/contract-terms"
 import { createCategory, getCategories } from "@/lib/actions/categories"
+import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-cog"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
@@ -138,6 +139,45 @@ export function EditContractClient({
       setInitialized(true)
     }
   }, [contract, initialized, form, setTerms])
+
+  // Charles W1.W-A3a: auto-run "Suggest from COG" when the vendor
+  // changes on an existing contract AND totalValue/annualValue are
+  // still empty. Initialization above seeds both from the stored
+  // contract, so this only fires on a deliberate vendor-change flow
+  // where the user has first zeroed out the value fields.
+  const watchedVendorId = form.watch("vendorId")
+  const watchedEffective = form.watch("effectiveDate")
+  const watchedExpiration = form.watch("expirationDate")
+  const lastDerivedVendorRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!initialized || !watchedVendorId) return
+    const currentTotal = form.getValues("totalValue") ?? 0
+    const currentAnnual = form.getValues("annualValue") ?? 0
+    if (currentTotal !== 0 && currentAnnual !== 0) return
+    if (lastDerivedVendorRef.current === watchedVendorId && currentTotal !== 0) return
+    lastDerivedVendorRef.current = watchedVendorId
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await deriveContractTotalFromCOG(watchedVendorId, {
+          effectiveDate: watchedEffective || null,
+          expirationDate: watchedExpiration || null,
+        })
+        if (cancelled) return
+        if (r.totalValue > 0 && currentTotal === 0) {
+          form.setValue("totalValue", r.totalValue)
+        }
+        if (r.annualValue > 0 && currentAnnual === 0) {
+          form.setValue("annualValue", r.annualValue)
+        }
+      } catch {
+        // Silent — user can manually re-enter values.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [initialized, watchedVendorId, watchedEffective, watchedExpiration, form])
 
   async function handleSave() {
     const isValid = await form.trigger()

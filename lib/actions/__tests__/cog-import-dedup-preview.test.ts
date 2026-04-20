@@ -4,6 +4,9 @@
  * the facility's existing COG rows, feeds them into the pure
  * `detectDuplicates` helper, and returns the resulting report without
  * writing anything. All dependencies are mocked.
+ *
+ * Updated for Charles W1.W-A2 (full-key rule): every compared column
+ * must match for rows to be flagged as dupes.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -15,6 +18,7 @@ type CogRow = {
   transactionDate: Date
   unitCost: number
   quantity: number
+  extendedPrice: number | null
   vendorName: string | null
 }
 
@@ -70,6 +74,7 @@ describe("previewCOGImportDuplicates", () => {
         transactionDate: new Date("2026-01-01T00:00:00Z"),
         unitCost: 10,
         quantity: 1,
+        extendedPrice: 10,
         vendorName: "Acme",
       },
       {
@@ -80,6 +85,7 @@ describe("previewCOGImportDuplicates", () => {
         transactionDate: new Date("2026-01-01T00:00:00Z"),
         unitCost: 10,
         quantity: 1,
+        extendedPrice: 10,
         vendorName: "Acme",
       },
     ]
@@ -92,6 +98,7 @@ describe("previewCOGImportDuplicates", () => {
           transactionDate: "2026-01-01T00:00:00Z",
           unitCost: 10,
           quantity: 1,
+          extendedPrice: 10,
           vendorName: "Acme",
         },
       ],
@@ -117,18 +124,21 @@ describe("previewCOGImportDuplicates", () => {
         transactionDate: new Date("2026-02-15T00:00:00Z"),
         unitCost: 10,
         quantity: 1,
+        extendedPrice: 10,
         vendorName: "Acme",
       },
     ]
 
+    // Full-key rule: unitCost/qty/extendedPrice MUST match across both rows.
     const report = await previewCOGImportDuplicates({
       records: [
         {
           inventoryNumber: "INV-9",
           vendorItemNo: "VIN-9",
           transactionDate: "2026-02-15T00:00:00Z",
-          unitCost: 12,
+          unitCost: 10,
           quantity: 1,
+          extendedPrice: 10,
         },
       ],
     })
@@ -141,16 +151,17 @@ describe("previewCOGImportDuplicates", () => {
     expect(report.partialMatchCount).toBe(0)
   })
 
-  it("detects partial inventory_number matches when vendorItemNo differs", async () => {
+  it("does NOT flag rows as duplicates when unitCost differs (full-key rule)", async () => {
     existingRows = [
       {
         id: "e-1",
         facilityId: "fac-1",
         inventoryNumber: "INV-7",
-        vendorItemNo: "VIN-A",
+        vendorItemNo: "VIN-7",
         transactionDate: new Date("2026-03-01T00:00:00Z"),
         unitCost: 10,
         quantity: 1,
+        extendedPrice: 10,
         vendorName: null,
       },
     ]
@@ -159,18 +170,17 @@ describe("previewCOGImportDuplicates", () => {
       records: [
         {
           inventoryNumber: "INV-7",
-          vendorItemNo: "VIN-B",
+          vendorItemNo: "VIN-7",
           transactionDate: "2026-03-01T00:00:00Z",
-          unitCost: 10,
+          unitCost: 12,
           quantity: 1,
+          extendedPrice: 12,
         },
       ],
     })
 
-    expect(report.groups).toHaveLength(1)
-    expect(report.groups[0]?.matchKey).toBe("inventory_number")
-    expect(report.groups[0]?.isExactMatch).toBe(false)
-    expect(report.partialMatchCount).toBe(2)
+    expect(report.groups).toHaveLength(0)
+    expect(report.partialMatchCount).toBe(0)
     expect(report.exactMatchCount).toBe(0)
   })
 
@@ -185,6 +195,7 @@ describe("previewCOGImportDuplicates", () => {
           transactionDate: "2026-04-01T00:00:00Z",
           unitCost: 5,
           quantity: 1,
+          extendedPrice: 5,
         },
         {
           inventoryNumber: "X-1",
@@ -192,6 +203,7 @@ describe("previewCOGImportDuplicates", () => {
           transactionDate: "2026-04-01T00:00:00Z",
           unitCost: 5,
           quantity: 1,
+          extendedPrice: 5,
         },
       ],
     })
@@ -212,12 +224,11 @@ describe("previewCOGImportDuplicates", () => {
         transactionDate: new Date("2026-05-15T00:00:00Z"),
         unitCost: 10,
         quantity: 1,
+        extendedPrice: 10,
         vendorName: null,
       },
     ]
 
-    // Different time-of-day on same calendar date (UTC) — still an exact
-    // match since dedup normalizes to YYYY-MM-DD.
     const report = await previewCOGImportDuplicates({
       records: [
         {
@@ -226,6 +237,7 @@ describe("previewCOGImportDuplicates", () => {
           transactionDate: "2026-05-15T12:30:00Z",
           unitCost: 10,
           quantity: 1,
+          extendedPrice: 10,
         },
       ],
     })
@@ -244,6 +256,7 @@ describe("previewCOGImportDuplicates", () => {
         transactionDate: new Date("2026-01-01T00:00:00Z"),
         unitCost: 1,
         quantity: 1,
+        extendedPrice: 1,
         vendorName: null,
       },
     ]
@@ -256,12 +269,11 @@ describe("previewCOGImportDuplicates", () => {
           transactionDate: "2026-01-01T00:00:00Z",
           unitCost: 1,
           quantity: 1,
+          extendedPrice: 1,
         },
       ],
     })
 
-    // The mocked prisma only exposes findMany — but we assert it was
-    // the only method invoked by checking call count.
     expect(cogFindMany).toHaveBeenCalledTimes(1)
   })
 })

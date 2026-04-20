@@ -62,6 +62,14 @@ export async function loadContractsForVendor(
           listPrice: true,
         },
       },
+      // Charles W1.W-C4: load term scope so the matcher can enforce
+      // category filters on `specific_category` terms.
+      terms: {
+        select: {
+          appliesTo: true,
+          categories: true,
+        },
+      },
     },
   })
 
@@ -83,6 +91,13 @@ export async function loadContractsForVendor(
       expirationDate: c.expirationDate,
       facilityIds,
       pricingItems,
+      // Charles W1.W-C4: `terms` may be undefined when mocked (e.g.
+      // older recompute tests); default to an empty array so the
+      // matcher treats the contract as broadly-scoped.
+      terms: (c.terms ?? []).map((t) => ({
+        appliesTo: t.appliesTo,
+        categories: t.categories,
+      })),
     }
   })
 }
@@ -197,6 +212,9 @@ export async function recomputeMatchStatusesForVendor(
       unitCost: true,
       quantity: true,
       transactionDate: true,
+      // Charles W1.W-C4: thread category into the matcher so
+      // `specific_category` terms can enforce scope.
+      category: true,
     },
   })
 
@@ -260,6 +278,8 @@ export async function recomputeMatchStatusesForVendor(
         unitCost: Number(r.unitCost),
         quantity: r.quantity,
         transactionDate: r.transactionDate,
+        // W1.W-C4: include category so specific_category terms are respected.
+        category: r.category,
       },
       contracts,
     )

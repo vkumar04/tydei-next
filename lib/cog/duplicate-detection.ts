@@ -1,36 +1,32 @@
 /**
- * COG duplicate detection.
+ * COG duplicate detection — FULL-KEY rule (Charles W1.W-A2).
  *
- * Pure function — groups `COGRecordForDedup` records into duplicate groups
- * using a two-dimensional match: (`inventoryNumber`, `vendorItemNo`, date)
- * for EXACT matches ("both") and either identifier individually (paired with
- * date) for PARTIAL matches.
+ * Pure function — groups `COGRecordForDedup` records into duplicate groups.
+ * A row is a duplicate of another ONLY when EVERY business-relevant column
+ * is identical. The comparison key is:
  *
- * Aligns with canonical COG doc §7 and spec
- * `docs/superpowers/specs/2026-04-18-cog-data-rewrite.md` §4.4 (Subsystem 4).
+ *   inventoryNumber
+ *   vendorItemNo        (null compared as its own "bucket")
+ *   transactionDate     (day precision, UTC)
+ *   quantity
+ *   unitCost
+ *   extendedPrice       (null compared as its own "bucket")
  *
- * Algorithm:
- *   1. Bucket every record by `(inventoryNumber, vendorItemNo, date-only)`.
- *      Any bucket with 2+ records is an EXACT ("both") duplicate group.
- *      Every record in a "both" group is removed from further consideration.
- *   2. For the remaining records:
- *      a. Bucket by `(inventoryNumber, date-only)` → `inventory_number` partial.
- *      b. Bucket by `(vendorItemNo, date-only)` → `vendor_item_no` partial.
- *         Records with `vendorItemNo === null` are skipped in step (b).
- *   3. A record participates in at most one group. When step (2a) and step
- *      (2b) would both claim a record, step (2a) (inventory_number) wins;
- *      the "both" group from step (1) always wins over either partial.
+ * Rationale: Charles W1.W-A flagged the prior algorithm (which treated
+ * same-day + same-invNo as a partial match even when qty/price differed)
+ * as far too aggressive — routine POs for the same item across a day
+ * were being flagged. The new rule collapses to a single match key:
+ * `both`. If every compared column matches exactly, the rows are dupes;
+ * otherwise they aren't, full stop.
  *
- * Output:
- *   - `groups` — sorted by record count desc, then `groupKey` alphabetical.
- *   - `exactMatchCount` — total records across all "both" groups.
- *   - `partialMatchCount` — total records across all `inventory_number` and
- *     `vendor_item_no` groups.
+ * The `DuplicateMatchKey` / `isExactMatch` / `partialMatchCount` shape
+ * is preserved so callers (duplicate-validator dialog, import preview,
+ * dedup-advisor card) keep working. Under the new rule
+ * `partialMatchCount` is always zero and every group has
+ * `matchKey === "both"` and `isExactMatch === true`.
  *
- * NOTE: This module is consumed by `components/facility/cog/duplicate-validator.tsx`
- * (audit + refine per subsystem 4) and by the import pipeline's pre-persist
- * duplicate pass. It has no side effects and no Prisma dependency so it is
- * trivially unit-testable.
+ * Aligns with canonical COG doc §7 and the W1.W bug-cluster plan
+ * `docs/superpowers/plans/2026-04-20-charles-w1w-bug-cluster.md`.
  */
 
 export interface COGRecordForDedup {
@@ -41,9 +37,16 @@ export interface COGRecordForDedup {
   transactionDate: Date
   unitCost: number
   quantity: number
+  /** Optional; null treated as its own key bucket. */
+  extendedPrice?: number | null
   vendorName?: string | null
 }
 
+/**
+ * Retained for backward compatibility with consumers that branch on
+ * match key (`lib/actions/cog-import/dedup-preview.ts`, UI badges). Under
+ * the full-key rule only `"both"` is ever emitted.
+ */
 export type DuplicateMatchKey = "inventory_number" | "vendor_item_no" | "both"
 
 export interface DuplicateGroup {
@@ -52,8 +55,8 @@ export interface DuplicateGroup {
   matchKey: DuplicateMatchKey
   records: COGRecordForDedup[]
   /**
-   * True when EVERY field matches exactly (full dup); false when only one
-   * of `inventoryNumber` / `vendorItemNo` matched.
+   * True when EVERY compared field matches. Under the full-key rule this
+   * is always true (we don't emit partial groups anymore).
    */
   isExactMatch: boolean
 }
@@ -61,6 +64,10 @@ export interface DuplicateGroup {
 export interface DuplicateDetectionReport {
   groups: DuplicateGroup[]
   exactMatchCount: number
+  /**
+   * Retained for backward compat. Always `0` under the full-key rule —
+   * there's no "partial" tier anymore.
+   */
   partialMatchCount: number
 }
 
@@ -69,30 +76,25 @@ function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
-/** Stable per-record identity for tracking "already claimed" without `id`. */
-function recordIdentity(
-  record: COGRecordForDedup,
-  index: number,
-): string {
-  return record.id ?? `__idx_${index}`
-}
-
-function bucketBy<T>(
-  items: readonly T[],
-  keyFn: (item: T) => string | null,
-): Map<string, T[]> {
-  const buckets = new Map<string, T[]>()
-  for (const item of items) {
-    const key = keyFn(item)
-    if (key === null) continue
-    let bucket = buckets.get(key)
-    if (!bucket) {
-      bucket = []
-      buckets.set(key, bucket)
-    }
-    bucket.push(item)
-  }
-  return buckets
+/**
+ * Canonical comparison key — every business-relevant column joined with
+ * `|`. Null columns collapse to the sentinel `__null__` so they bucket
+ * with each other (two rows both missing `vendorItemNo` on the same day
+ * with identical qty/price/etc are still duplicates).
+ */
+function fullKey(record: COGRecordForDedup): string {
+  const ext =
+    record.extendedPrice === null || record.extendedPrice === undefined
+      ? "__null__"
+      : String(record.extendedPrice)
+  return [
+    record.inventoryNumber,
+    record.vendorItemNo ?? "__null__",
+    dateKey(record.transactionDate),
+    String(record.quantity),
+    String(record.unitCost),
+    ext,
+  ].join("|")
 }
 
 function sortGroups(groups: DuplicateGroup[]): DuplicateGroup[] {
@@ -111,88 +113,31 @@ export function detectDuplicates(
     return { groups: [], exactMatchCount: 0, partialMatchCount: 0 }
   }
 
-  // Tag each record with a stable identity so we can track group membership
-  // without mutating the input.
-  const tagged = records.map((record, index) => ({
-    record,
-    identity: recordIdentity(record, index),
-  }))
+  const buckets = new Map<string, COGRecordForDedup[]>()
+  for (const record of records) {
+    const key = fullKey(record)
+    const bucket = buckets.get(key) ?? []
+    bucket.push(record)
+    buckets.set(key, bucket)
+  }
 
-  const claimed = new Set<string>()
   const groups: DuplicateGroup[] = []
-
-  // 1. EXACT ("both") groups — (inventoryNumber, vendorItemNo, date)
-  const exactBuckets = bucketBy(tagged, ({ record }) => {
-    return [
-      record.inventoryNumber,
-      record.vendorItemNo ?? "__null__",
-      dateKey(record.transactionDate),
-    ].join("|")
-  })
-
-  for (const [groupKey, bucket] of exactBuckets) {
+  for (const [groupKey, bucket] of buckets) {
     if (bucket.length < 2) continue
     groups.push({
       groupKey,
       matchKey: "both",
-      records: bucket.map((t) => t.record),
+      records: bucket,
       isExactMatch: true,
     })
-    for (const t of bucket) claimed.add(t.identity)
-  }
-
-  const remaining = tagged.filter((t) => !claimed.has(t.identity))
-
-  // 2a. Partial groups — (inventoryNumber, date)
-  const invBuckets = bucketBy(remaining, ({ record }) => {
-    return [record.inventoryNumber, dateKey(record.transactionDate)].join("|")
-  })
-
-  for (const [groupKey, bucket] of invBuckets) {
-    if (bucket.length < 2) continue
-    groups.push({
-      groupKey,
-      matchKey: "inventory_number",
-      records: bucket.map((t) => t.record),
-      isExactMatch: false,
-    })
-    for (const t of bucket) claimed.add(t.identity)
-  }
-
-  const stillRemaining = remaining.filter((t) => !claimed.has(t.identity))
-
-  // 2b. Partial groups — (vendorItemNo, date); skip null vendorItemNo.
-  const vinBuckets = bucketBy(stillRemaining, ({ record }) => {
-    if (record.vendorItemNo === null) return null
-    return [record.vendorItemNo, dateKey(record.transactionDate)].join("|")
-  })
-
-  for (const [groupKey, bucket] of vinBuckets) {
-    if (bucket.length < 2) continue
-    groups.push({
-      groupKey,
-      matchKey: "vendor_item_no",
-      records: bucket.map((t) => t.record),
-      isExactMatch: false,
-    })
-    for (const t of bucket) claimed.add(t.identity)
   }
 
   const sorted = sortGroups(groups)
-
-  let exactMatchCount = 0
-  let partialMatchCount = 0
-  for (const group of sorted) {
-    if (group.matchKey === "both") {
-      exactMatchCount += group.records.length
-    } else {
-      partialMatchCount += group.records.length
-    }
-  }
+  const exactMatchCount = sorted.reduce((sum, g) => sum + g.records.length, 0)
 
   return {
     groups: sorted,
     exactMatchCount,
-    partialMatchCount,
+    partialMatchCount: 0,
   }
 }

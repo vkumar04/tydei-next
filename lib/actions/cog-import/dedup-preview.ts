@@ -29,6 +29,8 @@ export interface PreviewCOGImportDuplicatesInput {
     transactionDate: string
     unitCost: number
     quantity: number
+    /** Full-key rule (Charles W1.W-A2) compares extendedPrice too. */
+    extendedPrice?: number | null
     vendorName?: string | null
   }>
 }
@@ -53,6 +55,7 @@ export async function previewCOGImportDuplicates(
       transactionDate: true,
       unitCost: true,
       quantity: true,
+      extendedPrice: true,
       vendorName: true,
     },
   })
@@ -65,6 +68,8 @@ export async function previewCOGImportDuplicates(
       transactionDate: r.transactionDate,
       unitCost: Number(r.unitCost),
       quantity: r.quantity,
+      extendedPrice:
+        r.extendedPrice === null ? null : Number(r.extendedPrice),
       vendorName: r.vendorName,
     })),
     ...input.records.map((r) => ({
@@ -73,6 +78,7 @@ export async function previewCOGImportDuplicates(
       transactionDate: new Date(r.transactionDate),
       unitCost: r.unitCost,
       quantity: r.quantity,
+      extendedPrice: r.extendedPrice ?? r.unitCost * r.quantity,
       vendorName: r.vendorName ?? null,
     })),
   ]

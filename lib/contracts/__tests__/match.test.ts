@@ -128,4 +128,66 @@ describe("matchCOGRecordToContract", () => {
   it("exports PRICE_VARIANCE_THRESHOLD as 2", () => {
     expect(PRICE_VARIANCE_THRESHOLD).toBe(2)
   })
+
+  // ─── Charles W1.W-C4: category-scope filter ──────────────────────
+  describe("category scope (W1.W-C4)", () => {
+    it("returns out_of_scope when a specific_category term doesn't cover the COG row", () => {
+      const r: CogRecordForMatch = { ...baseRecord, category: "Arthroscopy" }
+      const result = matchCOGRecordToContract(r, [
+        baseContract({
+          terms: [
+            {
+              appliesTo: "specific_category",
+              categories: ["Spine", "Joint Replacement"],
+            },
+          ],
+        }),
+      ])
+      expect(result.status).toBe("out_of_scope")
+    })
+
+    it("matches on_contract when the COG row's category is in the term's list", () => {
+      const r: CogRecordForMatch = { ...baseRecord, category: "Spine" }
+      const result = matchCOGRecordToContract(r, [
+        baseContract({
+          terms: [
+            {
+              appliesTo: "specific_category",
+              categories: ["Spine", "Joint Replacement"],
+            },
+          ],
+        }),
+      ])
+      expect(result.status).toBe("on_contract")
+    })
+
+    it("ignores category when ANY term is broadly scoped (all_products)", () => {
+      const r: CogRecordForMatch = { ...baseRecord, category: "SomethingElse" }
+      const result = matchCOGRecordToContract(r, [
+        baseContract({
+          terms: [
+            { appliesTo: "specific_category", categories: ["Spine"] },
+            { appliesTo: "all_products", categories: [] },
+          ],
+        }),
+      ])
+      expect(result.status).toBe("on_contract")
+    })
+
+    it("treats a contract with no terms as covering everything (pre-W1.W behavior)", () => {
+      const r: CogRecordForMatch = { ...baseRecord, category: "WhateverCat" }
+      const result = matchCOGRecordToContract(r, [baseContract({ terms: [] })])
+      expect(result.status).toBe("on_contract")
+    })
+
+    it("treats a null COG category as out-of-scope against a category-locked contract", () => {
+      const r: CogRecordForMatch = { ...baseRecord, category: null }
+      const result = matchCOGRecordToContract(r, [
+        baseContract({
+          terms: [{ appliesTo: "specific_category", categories: ["Spine"] }],
+        }),
+      ])
+      expect(result.status).toBe("out_of_scope")
+    })
+  })
 })

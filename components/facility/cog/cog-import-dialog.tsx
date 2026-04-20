@@ -196,10 +196,18 @@ export function COGImportDialog({
     setDuplicates([])
     setExcludedIndices(new Set())
 
+    // Full-key duplicate check (Charles W1.W-A2): pass every
+    // business-relevant column so an existing row only flags when it's
+    // byte-for-byte identical. Quantity / unitCost / extendedPrice were
+    // missing here previously, which made "same invNo + same day"
+    // enough to trip the detector and mask legitimate reorders.
     const keys = importState.mappedRecords.map((r) => ({
       inventoryNumber: r.inventoryNumber,
       vendorItemNo: r.vendorItemNo ?? undefined,
       transactionDate: r.transactionDate,
+      quantity: r.quantity,
+      unitCost: r.unitCost,
+      extendedPrice: r.extendedPrice ?? r.unitCost * r.quantity,
     }))
 
     checkCOGDuplicates({ facilityId, keys })

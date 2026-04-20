@@ -161,6 +161,29 @@ export function getCOGColumns({
       ),
     },
     {
+      // Charles W1.W-A (A1): Multiplier column — extendedPrice / (unitCost * qty).
+      id: "multiplier",
+      header: "Multiplier",
+      cell: ({ row }) => {
+        const r = row.original
+        const unit = Number(r.unitCost)
+        const qty = (r as COGRecordWithVendor & { quantity?: number }).quantity ?? 1
+        const ext = r.extendedPrice === null || r.extendedPrice === undefined
+          ? null
+          : Number(r.extendedPrice)
+        if (ext === null || unit === 0 || qty === 0) {
+          return <span className="text-muted-foreground text-right">—</span>
+        }
+        const mult = ext / (unit * qty)
+        const isOne = Math.abs(mult - 1) < 0.001
+        return (
+          <span className={`text-right tabular-nums ${isOne ? "text-muted-foreground" : "font-medium"}`}>
+            {isOne ? "1.00×" : `${mult.toFixed(2)}×`}
+          </span>
+        )
+      },
+    },
+    {
       accessorKey: "extendedPrice",
       header: "Extended",
       cell: ({ row }) => (
