@@ -15,7 +15,10 @@
     "qa:dom-diff": "bun run scripts/dual-app-dom-diff.ts",
     "qa:workflows": "bun run tests/workflows/run-all.ts",
     "qa:v0-ledger": "bun run scripts/build-v0-feature-ledger.ts",
-    "qa:v0-ledger-check": "bun run scripts/build-v0-feature-ledger.ts --check"
+    "qa:v0-ledger-check": "bun run scripts/build-v0-feature-ledger.ts --check",
+    "smoke": "bun run scripts/pre-ship-smoke.ts",
+    "lint:ai": "bun run scripts/lint-ai-action-error-paths.ts",
+    "lint:ai-schema": "bun run scripts/lint-ai-schema-describe.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

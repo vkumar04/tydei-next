@@ -186,6 +186,12 @@ Produce the JSON response exactly matching the schema. Include observations only
     const raw = result.output
     response = rebateInsightsResponseSchema.parse(raw)
   } catch (err) {
+    // Per CLAUDE.md "AI-action error path": log the raw exception server-side
+    // so prod digests still have a debug trail. Client only sees the sliced
+    // message below.
+    console.error("[getRebateOptimizerInsights]", err, {
+      facilityId,
+    })
     const message = err instanceof Error ? err.message : "Unknown error"
     throw new Error(`AI Smart Recommendations generation failed: ${message.slice(0, 300)}`)
   }

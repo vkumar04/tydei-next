@@ -236,6 +236,12 @@ Produce the JSON response exactly matching the schema. Use the rebateHistory + p
     // Anthropic API call itself failed (schema rejected, rate-limit, auth,
     // context exceeded, etc.). Surface the message — not the stack — so the
     // toast is readable.
+    // Per CLAUDE.md "AI-action error path": log the raw exception server-side
+    // before re-throwing, so prod digests still have a debug trail.
+    console.error("[generateRenewalBrief]", err, {
+      facilityId: session.facility.id,
+      contractId,
+    })
     const message = err instanceof Error ? err.message : "Unknown error"
     throw new Error(
       `Renewal brief generation failed (AI request error): ${message.slice(0, 300)}`,
@@ -249,6 +255,12 @@ Produce the JSON response exactly matching the schema. Use the rebateHistory + p
     const issues = parsed.error.issues.slice(0, 3).map((i) => {
       const path = i.path.join(".") || "(root)"
       return `${path}: ${i.message}`
+    })
+    // Log the full Zod error server-side — the toast only gets the first few
+    // paths, but the server log sees everything.
+    console.error("[generateRenewalBrief]", parsed.error, {
+      facilityId: session.facility.id,
+      contractId,
     })
     throw new Error(
       `Renewal brief generation failed (AI returned an invalid payload: ${issues.join("; ")})`,

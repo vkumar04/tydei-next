@@ -106,6 +106,14 @@ export async function generateReportFromPrompt(input: {
       notes: output.notes ?? null,
     })
   } catch (err) {
+    // Per CLAUDE.md "AI-action error path": log the raw exception server-side
+    // before we degrade to a placeholder report, so prod still has a debug
+    // trail (the user-facing path hides this failure in the "notes" field).
+    console.error("[generateReportFromPrompt]", err, {
+      userId: session.user.id,
+      reportType,
+      promptLength: input.prompt.length,
+    })
     // Degrade gracefully — return an empty report with an error note
     // so the UI can show something instead of throwing.
     const generatedAt = new Date().toISOString()

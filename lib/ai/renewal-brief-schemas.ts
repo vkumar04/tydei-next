@@ -105,22 +105,26 @@ export type RenewalBriefPerformance = z.infer<
   typeof renewalBriefPerformanceSchema
 >
 
-export const renewalBriefSchema = z.object({
-  contractId: z.string(),
-  generatedAt: z.string().describe("ISO-8601 timestamp"),
-  executiveSummary: z
-    .string()
-    .describe(
-      "2-3 sentence plain-English summary of the renewal posture",
-    ),
-  performanceSummary: renewalBriefPerformanceSchema,
-  primaryAsks: z
-    .array(renewalBriefAskSchema)
-    .describe("3-6 ranked asks the facility should bring to the negotiation"),
-  concessionsOnTable: z
-    .array(renewalBriefConcessionSchema)
-    .describe("2-4 concessions the facility could offer if needed"),
-})
+export const renewalBriefSchema = z
+  .object({
+    contractId: z.string(),
+    generatedAt: z.string().describe("ISO-8601 timestamp"),
+    executiveSummary: z
+      .string()
+      .describe(
+        "2-3 sentence plain-English summary of the renewal posture",
+      ),
+    performanceSummary: renewalBriefPerformanceSchema,
+    primaryAsks: z
+      .array(renewalBriefAskSchema)
+      .describe("3-6 ranked asks the facility should bring to the negotiation"),
+    concessionsOnTable: z
+      .array(renewalBriefConcessionSchema)
+      .describe("2-4 concessions the facility could offer if needed"),
+  })
+  .describe(
+    "AI-authored renewal brief: executive summary, performance summary, ranked asks, and suggested concessions.",
+  )
 
 export type RenewalBrief = z.infer<typeof renewalBriefSchema>
 
@@ -199,12 +203,16 @@ export const renewalBriefInputAmendmentSchema = z.object({
   vendorMessage: z.string().nullable().optional(),
 })
 
-export const renewalBriefInputSchema = z.object({
-  contract: renewalBriefInputContractSchema,
-  terms: z.array(renewalBriefInputTermSchema),
-  rebateHistory: z.array(renewalBriefInputRebateSchema),
-  periodHistory: z.array(renewalBriefInputPeriodSchema),
-  amendmentHistory: z.array(renewalBriefInputAmendmentSchema),
-})
+export const renewalBriefInputSchema = z
+  .object({
+    contract: renewalBriefInputContractSchema,
+    terms: z.array(renewalBriefInputTermSchema),
+    rebateHistory: z.array(renewalBriefInputRebateSchema),
+    periodHistory: z.array(renewalBriefInputPeriodSchema),
+    amendmentHistory: z.array(renewalBriefInputAmendmentSchema),
+  })
+  .describe(
+    "Input payload fed to the Renewal Brief Claude prompt: contract metadata, all terms/tiers, rebate history, period rollups, and amendment history.",
+  )
 
 export type RenewalBriefInput = z.infer<typeof renewalBriefInputSchema>
