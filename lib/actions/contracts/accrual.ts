@@ -22,6 +22,7 @@ import {
   buildCategoryWhereClause,
   buildUnionCategoryWhereClause,
 } from "@/lib/contracts/cog-category-filter"
+import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 
 export async function getAccrualTimeline(contractId: string) {
   const { facility } = await requireFacility()
@@ -67,10 +68,7 @@ export async function getAccrualTimeline(contractId: string) {
       tierName: t.tierName ?? null,
       spendMin: Number(t.spendMin),
       spendMax: t.spendMax ? Number(t.spendMax) : null,
-      rebateValue:
-        t.rebateType === "percent_of_spend"
-          ? Number(t.rebateValue) * 100
-          : Number(t.rebateValue),
+      rebateValue: scaleRebateValueForEngine(t.rebateValue, t.rebateType),
     }))
     const evaluationPeriod: EvaluationPeriod =
       term.evaluationPeriod === "monthly" ||

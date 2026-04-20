@@ -47,6 +47,7 @@ import {
   buildCategoryWhereClause,
   buildUnionCategoryWhereClause,
 } from "@/lib/contracts/cog-category-filter"
+import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 
 // The notes prefix marks rows this action owns so it can rewrite them
 // safely without touching manually-entered rebate rows. Must stay a
@@ -143,13 +144,21 @@ export async function recomputeAccrualForContract(
   }))
   const unionCategoryWhere = buildUnionCategoryWhereClause(termScopes)
 
+  // Charles W1.V — scale `rebateValue` by 100 at the Prisma boundary for
+  // `percent_of_spend` tiers (same convention as `getAccrualTimeline`
+  // from W1.S and `computeRebateFromPrismaTiers`). Pre-fix this boundary
+  // fed raw fractions (0.03) into the engine, which expects integer
+  // percent (3), so every persisted Rebate row's `rebateEarned` landed
+  // 100× too small. Routes through `scaleRebateValueForEngine` so the
+  // unit convention is owned by a single helper. See CLAUDE.md "Rebate
+  // engine units" rule.
   const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
     const tiers: TierLike[] = term.tiers.map((t) => ({
       tierNumber: t.tierNumber,
       tierName: t.tierName ?? null,
       spendMin: Number(t.spendMin),
       spendMax: t.spendMax ? Number(t.spendMax) : null,
-      rebateValue: Number(t.rebateValue),
+      rebateValue: scaleRebateValueForEngine(t.rebateValue, t.rebateType),
     }))
     const method: RebateMethodName = term.rebateMethod ?? "cumulative"
     const evaluationPeriod: EvaluationPeriod =

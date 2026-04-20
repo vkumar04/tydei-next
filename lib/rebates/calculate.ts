@@ -12,7 +12,7 @@
  * disagreed depending on which page you were on. Keep this the single
  * choke point.
  */
-import type { ContractTier } from "@prisma/client"
+import type { ContractTier, RebateType } from "@prisma/client"
 import {
   calculateRebate,
   type RebateMethodName,
@@ -41,6 +41,35 @@ export interface RebateResult {
 // TODO: move to per-contract paymentTiming config once that column is
 // wired into the UI everywhere.
 export const DEFAULT_COLLECTION_RATE = 0.8
+
+// ─── Prisma→engine unit scaling ─────────────────────────────────
+
+/**
+ * Scale `ContractTier.rebateValue` from its storage form (a fraction,
+ * `0.03` = 3%) to the integer-percent shape the rebate engine in
+ * `lib/contracts/rebate-method.ts` expects. Non-percent tier types are
+ * returned unchanged — their stored value is already a dollar amount and
+ * the engine never applies percentage math to them.
+ *
+ * Why this helper exists: every caller that feeds raw Prisma tier rows
+ * into the engine MUST scale at this boundary (CLAUDE.md "Rebate engine
+ * units" rule). Historical bugs (Charles W1.S, W1.V) were caused by
+ * callers forgetting this and writing 100×-too-small rebates. Route all
+ * scaling through this function so a single place owns the convention.
+ *
+ * Used by:
+ *  - `computeRebateFromPrismaTiers` (this file)
+ *  - `lib/actions/contracts/accrual.ts` → `getAccrualTimeline` (display)
+ *  - `lib/actions/contracts/recompute-accrual.ts` → `recomputeAccrualForContract` (persistence)
+ *  - `scripts/regen-all-accruals.ts` (bulk backfill)
+ */
+export function scaleRebateValueForEngine(
+  rebateValue: number | string | { toString(): string },
+  rebateType: RebateType,
+): number {
+  const raw = Number(rebateValue)
+  return rebateType === "percent_of_spend" ? raw * 100 : raw
+}
 
 // ─── Tier lookup ────────────────────────────────────────────────
 
@@ -153,13 +182,15 @@ export function computeRebateFromPrismaTiers(
     case "percent_of_spend": {
       // Existing percent-of-spend path — scale fractional .02 to 2% for
       // the math engine (mirrors lib/contracts/tier-rebate-label.ts).
+      // Routes through `scaleRebateValueForEngine` to keep the unit
+      // convention owned by one helper (CLAUDE.md "Rebate engine units").
       const scaled: TierInput[] = sortedTiers.map((t) => ({
         tierNumber: t.tierNumber,
         spendMin: t.spendMin,
         spendMax: t.spendMax,
         rebateValue:
           t.rebateType === "percent_of_spend"
-            ? Number(t.rebateValue) * 100
+            ? scaleRebateValueForEngine(t.rebateValue, t.rebateType)
             : 0,
       }))
       return computeRebate(spend, scaled, opts)
