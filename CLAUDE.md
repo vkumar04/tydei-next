@@ -45,6 +45,12 @@ skip brainstorming and ship directly. Use judgment — when in doubt, brainstorm
   only rows with a `collectionDate` set. See:
   - `docs/superpowers/specs/2026-04-18-contracts-rewrite.md` (cross-cutting rule)
   - `docs/superpowers/specs/2026-04-18-contracts-list-closure.md` Subsystem 1
+- **Canonical "Collected" aggregate:** every surface that renders a "Rebates
+  Collected" number (contracts list, contract detail header card, contract
+  Transactions tab summary card, dashboard, reports) MUST go through
+  `sumCollectedRebates` in `lib/contracts/rebate-collected-filter.ts`. Do not
+  hand-roll a `r.collectionDate ? ... : ...` reducer — the helper is the one
+  place the filter lives so surfaces cannot drift. See Charles W1.R.
 - **Rebate engine units:** `ContractTier.rebateValue` is stored as a fraction
   (0.02 = 2%). The math engine in `lib/contracts/rebate-method.ts` expects integer
   percent. `computeRebateFromPrismaTiers` and `lib/contracts/tier-rebate-label.ts`

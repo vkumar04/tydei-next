@@ -471,11 +471,13 @@ export function ContractDetailClient({
                       </TooltipTrigger>
                       <TooltipContent className="max-w-[320px] p-3 text-xs">
                         <p>
-                          Earned this calendar year — closed rebate periods
-                          only. &quot;Closed&quot; means the period&apos;s end
-                          date has passed. See the Transactions tab for the
-                          lifetime total across every closed period on this
-                          contract.
+                          <span className="font-semibold">YTD only:</span>{" "}
+                          sums closed rebate periods whose end date falls
+                          between Jan&nbsp;1 of this year and today.
+                          &quot;Closed&quot; means the period&apos;s end date
+                          has passed. The Transactions tab below shows the
+                          full lifetime ledger, so individual rows there can
+                          be larger than this YTD total.
                         </p>
                       </TooltipContent>
                     </Tooltip>

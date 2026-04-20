@@ -22,6 +22,7 @@ import {
   facilityScopeClause,
   type FacilityScope,
 } from "@/lib/actions/contracts-auth"
+import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -187,11 +188,9 @@ export async function getContracts(input: ContractFilters) {
           : sum,
       0,
     )
-    const rebateCollected = (c.rebates ?? []).reduce(
-      (sum, r) =>
-        r.collectionDate ? sum + Number(r.rebateCollected ?? 0) : sum,
-      0,
-    )
+    // Charles W1.R: canonical "collected" aggregate — single helper so the
+    // list row, detail header card, and Transactions tab cannot drift.
+    const rebateCollected = sumCollectedRebates(c.rebates ?? [])
 
     const periodSpend = periodSpendByContract.get(c.id) ?? 0
     const cogContractSpend = cogSpendByContract.get(c.id) ?? 0
@@ -456,11 +455,8 @@ export async function getContract(
         : sum,
     0,
   )
-  const rebateCollected = contract.rebates.reduce(
-    (sum, r) =>
-      r.collectionDate ? sum + Number(r.rebateCollected ?? 0) : sum,
-    0,
-  )
+  // Charles W1.R: canonical helper — see lib/contracts/rebate-collected-filter.
+  const rebateCollected = sumCollectedRebates(contract.rebates)
 
   // Spend resolution chain — Charles R5.28: "Current Spend" is the
   // trailing 12 calendar months of activity, NOT lifetime and NOT the

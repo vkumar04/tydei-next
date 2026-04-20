@@ -54,6 +54,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { getContractRebates } from "@/lib/actions/contract-periods"
+import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { mapRebateRowsToLedger } from "@/components/contracts/contract-transactions-display"
 import { queryKeys } from "@/lib/query-keys"
@@ -590,17 +591,12 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
     if (!r.periodEnd) return s
     return new Date(r.periodEnd) <= today ? s + r.rebateEarned : s
   }, 0)
-  // Charles R5.34: "Total Collected" sums `rebateCollected` across every
-  // Rebate row that has a collectionDate set. Pure-collection entries
-  // (rebateEarned=0, rebateCollected=amount) contribute here exclusively —
-  // they never inflate `totalRebates` above. The receipt condition is the
-  // CLAUDE.md rule: a collected amount counts only when the originating
-  // row has a `collectionDate` set. Rebate rows written by
-  // `createContractTransaction({rebateKind:"collected"})` set that.
-  const totalCollected = rows.reduce((s, r) => {
-    if (!r.collectionDate) return s
-    return s + r.rebateCollected
-  }, 0)
+  // Charles W1.N / W1.R: "Total Collected" delegates to the canonical
+  // `sumCollectedRebates` helper — the same filter powers the contract
+  // detail header card and the contracts list row, so these surfaces
+  // can never drift. After W1.P every ledger row is a Rebate row, so
+  // we can call the base helper directly.
+  const totalCollected = sumCollectedRebates(rows)
   const totalPayments = 0
 
   if (rows.length === 0) {
