@@ -411,6 +411,117 @@ function TransactionDialog({
   )
 }
 
+// Charles W1.X-A: edit dialog seeded from an existing ledger row. Only
+// the collection side (amount / date / notes) is editable — rebateEarned
+// is engine-owned and never touched from the UI. The dialog narrows to
+// PeriodRow | null so we can render a single instance at the component
+// root and drive its open state with a selected row.
+function EditTransactionDialog({
+  contractId,
+  queryClient,
+  row,
+  open,
+  onOpenChange,
+}: {
+  contractId: string
+  queryClient: ReturnType<typeof useQueryClient>
+  row: PeriodRow | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const [amount, setAmount] = useState("")
+  const [date, setDate] = useState("")
+  const [notes, setNotes] = useState("")
+
+  useEffect(() => {
+    if (!row) return
+    setAmount(String(row.rebateCollected ?? 0))
+    setDate(row.collectionDate ? row.collectionDate.slice(0, 10) : "")
+    setNotes(row.notes ?? "")
+  }, [row])
+
+  async function handleSubmit() {
+    if (!row) return
+    const parsedAmount = parseFloat(amount.replace(/[^0-9.]/g, ""))
+    if (isNaN(parsedAmount) || parsedAmount < 0) {
+      toast.error("Enter a valid amount")
+      return
+    }
+    try {
+      await updateContractTransaction({
+        id: row.id,
+        contractId,
+        rebateCollected: parsedAmount,
+        collectionDate: date || null,
+        notes,
+      })
+      toast.success("Row updated")
+      queryClient.invalidateQueries({
+        queryKey: ["contract-periods", contractId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["contractPeriods", contractId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["contractRebates", contractId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.detail(contractId),
+      })
+      onOpenChange(false)
+    } catch {
+      toast.error("Failed to update row")
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Ledger Row</DialogTitle>
+          <DialogDescription>
+            Update amount, collection date, or notes. Earned amount is
+            engine-owned and cannot be edited here.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-amount">Collected Amount</Label>
+            <Input
+              id="edit-amount"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-date">Collection Date</Label>
+            <Input
+              id="edit-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-notes">Notes</Label>
+            <Input
+              id="edit-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit}>Save Changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function AddTransactionButtons({
   contractId,
   queryClient,
@@ -640,6 +751,8 @@ function TransactionTable({
 export function ContractTransactions({ contractId }: ContractTransactionsProps) {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<"all" | TransactionType>("all")
+  // Charles W1.X-A: selected row for the Edit dialog. `null` = closed.
+  const [editRow, setEditRow] = useState<PeriodRow | null>(null)
 
   // Charles W1.P: the ledger's only data source is the `Rebate` table.
   // Engine-generated accrual rows (via Recompute Earned Rebates) and
@@ -719,7 +832,10 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
       del.mutate(row)
       return
     }
-    // "edit" wired in Task 5.
+    if (action === "edit") {
+      setEditRow(row)
+      return
+    }
   }
 
   if (rebatesLoading) {
@@ -955,6 +1071,15 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
           </Tabs>
         </CardContent>
       </Card>
+      <EditTransactionDialog
+        contractId={contractId}
+        queryClient={queryClient}
+        row={editRow}
+        open={editRow !== null}
+        onOpenChange={(next) => {
+          if (!next) setEditRow(null)
+        }}
+      />
     </div>
   )
 }
