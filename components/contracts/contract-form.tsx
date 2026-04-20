@@ -77,21 +77,45 @@ interface ContractFormProps {
   onCreateCategory?: (name: string) => Promise<{ id: string; name: string }>
 }
 
+// Charles W1.W-D2 — contract-type taxonomy.
+//
+// Charles's rule (2026-04-20): "if a capital contract has the same terms
+// as a usage contract it shouldn't be *called* capital. Tie-in should
+// include both capital + usage terms."
+//
+// That gives us the following distinctions. Descriptions are the user's
+// first line of guidance between the two overlapping types (capital vs
+// tie_in), so they spell out the difference:
+//
+//   - capital  → stand-alone capital equipment purchase with NO rebate
+//                or usage terms on the same contract. Pure asset +
+//                payment plan. Pick this only when there are no
+//                consumables.
+//   - tie_in   → capital + consumable/usage rebate terms on the SAME
+//                contract. One capital balance, paid down by rebates
+//                earned across every rebate term on the contract. This
+//                is the right pick whenever the contract mixes the two.
+//
+// Future revisit may hide `capital` from the picker entirely — v0 only
+// models tie-in — but removing it today would orphan seeded `capital`
+// rows and break existing reports. Descriptions first, taxonomy change
+// later if it's still confusing.
 const contractTypes = [
   {
     value: "usage",
     label: "Usage-Based",
-    description: "Rebates on spend",
+    description: "Rebates on spend (no capital equipment)",
   },
   {
     value: "pricing_only",
     label: "Pricing Only",
-    description: "Discounted prices",
+    description: "Discounted prices, no rebate terms",
   },
   {
     value: "capital",
     label: "Capital Equipment",
-    description: "Equipment + service",
+    description:
+      "Stand-alone equipment purchase, no rebate terms. If this contract mixes capital + consumables, pick Tie-In instead.",
   },
   {
     value: "grouped",
@@ -101,7 +125,7 @@ const contractTypes = [
   {
     value: "tie_in",
     label: "Tie-In",
-    description: "Bundled products",
+    description: "Capital equipment + rebate terms on one contract",
   },
   {
     value: "service",
