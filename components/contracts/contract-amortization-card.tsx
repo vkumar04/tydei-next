@@ -89,12 +89,12 @@ export function ContractAmortizationCard({
         <div className="grid gap-4 sm:grid-cols-3">
           <SummaryTile
             label="Remaining Balance"
-            tooltip="Capital cost minus the sum of principal paid across every period whose scheduled date has already passed."
+            tooltip="Capital cost minus the rebate that has been collected and applied to the balance."
             value={formatCurrency(data.remainingBalance)}
           />
           <SummaryTile
             label="Paid To Date"
-            tooltip="Sum of principal due across elapsed periods. Interest charges are not counted here — only principal reduces the capital balance."
+            tooltip="Collected rebate that has been applied to the capital balance. On tie-in contracts, 100% of collected rebate retires capital."
             value={formatCurrency(data.paidToDate)}
           />
           <SummaryTile
@@ -102,6 +102,38 @@ export function ContractAmortizationCard({
             tooltip="Projected capital balance at the contract's scheduled end date given the trailing rebate-paydown velocity. $0 means the paydown is on track to retire the balance before the term ends."
             value={formatCurrency(data.projectedEndOfTermBalance ?? data.remainingBalance)}
           />
+        </div>
+
+        {/* ── Rebate applied + balance due (W1.Y-C, C3) ─────────────
+            Charles iMessage 2026-04-20: "Maybe here it should show the
+            rebate they earned and if there is a balance on what is due
+            as well." Reads `rebateAppliedToCapital` from the canonical
+            `sumRebateAppliedToCapital` helper (via getContractCapitalSchedule)
+            so this row and the header "applied to capital" sublabel
+            cannot drift. */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-md border bg-card p-3">
+            <p className="text-xs text-muted-foreground">
+              Rebates Applied (lifetime)
+            </p>
+            <p className="mt-1 text-xl font-semibold tabular-nums text-blue-600 dark:text-blue-400">
+              {formatCurrency(data.rebateAppliedToCapital)}
+            </p>
+          </div>
+          <div className="rounded-md border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Balance Due</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              {formatCurrency(
+                Math.max(data.capitalCost - data.rebateAppliedToCapital, 0),
+              )}
+            </p>
+          </div>
+          <div className="rounded-md border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Capital Cost</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              {formatCurrency(data.capitalCost)}
+            </p>
+          </div>
         </div>
 
         {/* ── Schedule table (A1) ──────────────────────────────────── */}
