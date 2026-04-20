@@ -101,6 +101,9 @@ export async function recomputeAccrualForContract(
       contractId,
       notes: { startsWith: AUTO_ACCRUAL_PREFIX },
       payPeriodEnd: { gt: now },
+      // Charles W1.W-C1: never wipe a row the user has already marked
+      // collected — that stamp is the only record of money received.
+      collectionDate: null,
     },
   })
 
@@ -108,10 +111,16 @@ export async function recomputeAccrualForContract(
   // that shrinks the accrual window (e.g. fewer months qualify) drops
   // the now-obsolete entries. Manual rebates are preserved by the
   // `notes` prefix filter.
+  //
+  // Charles W1.W-C1: also preserve rows that have been collected. Once
+  // the user logs a collection, the row carries `collectionDate != null`
+  // and must survive future recomputes — otherwise Recompute Earned
+  // Rebates would silently erase the payment-received stamp.
   const deleteResult = await prisma.rebate.deleteMany({
     where: {
       contractId,
       notes: { startsWith: AUTO_ACCRUAL_PREFIX },
+      collectionDate: null,
     },
   })
 
@@ -344,29 +353,56 @@ export async function recomputeAccrualForContract(
     "monthly"
   const buckets = bucketAccrualsByCadence(multiRows, primaryCadence)
 
+  // Charles W1.W-C1: preserved collected rows from a prior accrual run
+  // now live in the Rebate table with `collectionDate != null`. Skip
+  // any bucket whose period already has such a row — re-inserting would
+  // double-count the earned accrual. The collected row already carries
+  // the accrual (rebateEarned is preserved in-place when the user logs
+  // a collection), so we trust it as the final ledger entry for that
+  // period.
+  const preservedCollected = await prisma.rebate.findMany({
+    where: {
+      contractId,
+      collectionDate: { not: null },
+      notes: { startsWith: AUTO_ACCRUAL_PREFIX },
+    },
+    select: { payPeriodStart: true, payPeriodEnd: true },
+  })
+  const preservedKeys = new Set(
+    preservedCollected.map(
+      (r) =>
+        `${new Date(r.payPeriodStart).toISOString()}|${new Date(r.payPeriodEnd).toISOString()}`,
+    ),
+  )
+
   // Only persist buckets with non-zero accrual — a monthly-eval contract
   // whose tier 1 spendMin was missed in month N shouldn't pollute the
   // Rebate table with zeros. Aggregations that SUM over Rebate rows
   // treat missing periods as $0 anyway.
-  const toInsert = buckets.map((b) => {
-    // Charles R5.29: notes string reflects whether the row is a
-    // single-term or multi-term aggregate. Rebate has no termId column
-    // (see spec); one row per bucket holds the aggregated earned.
-    const noteBody =
-      b.termCount > 1
-        ? `${b.termCount} terms combined on $${b.totalSpend.toFixed(2)} (${b.label})`
-        : `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)}`
-    return {
-      contractId,
-      facilityId: facility.id,
-      rebateEarned: b.rebateEarned,
-      rebateCollected: 0,
-      payPeriodStart: b.periodStart,
-      payPeriodEnd: b.periodEnd,
-      collectionDate: null,
-      notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
-    }
-  })
+  const toInsert = buckets
+    .filter((b) => {
+      const key = `${new Date(b.periodStart).toISOString()}|${new Date(b.periodEnd).toISOString()}`
+      return !preservedKeys.has(key)
+    })
+    .map((b) => {
+      // Charles R5.29: notes string reflects whether the row is a
+      // single-term or multi-term aggregate. Rebate has no termId column
+      // (see spec); one row per bucket holds the aggregated earned.
+      const noteBody =
+        b.termCount > 1
+          ? `${b.termCount} terms combined on $${b.totalSpend.toFixed(2)} (${b.label})`
+          : `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)}`
+      return {
+        contractId,
+        facilityId: facility.id,
+        rebateEarned: b.rebateEarned,
+        rebateCollected: 0,
+        payPeriodStart: b.periodStart,
+        payPeriodEnd: b.periodEnd,
+        collectionDate: null,
+        notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
+      }
+    })
 
   if (toInsert.length === 0) {
     return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }

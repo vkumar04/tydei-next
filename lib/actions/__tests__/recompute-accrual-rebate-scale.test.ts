@@ -40,6 +40,10 @@ vi.mock("@/lib/db", () => ({
       deleteMany: rebateDeleteManyMock,
       createMany: rebateCreateManyMock,
       aggregate: vi.fn().mockResolvedValue({ _sum: { rebateEarned: 0 } }),
+      // Charles W1.W-C1: recompute now reads collected rows to skip
+      // their periods. Default to empty so this test's buckets all
+      // insert as before.
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }))

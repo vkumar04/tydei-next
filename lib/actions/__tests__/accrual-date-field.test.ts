@@ -53,6 +53,8 @@ vi.mock("@/lib/db", () => ({
       createMany: rebateCreateManyMock,
       // W1.K added sumEarned to RecomputeAccrualResult — stub returns 0.
       aggregate: vi.fn().mockResolvedValue({ _sum: { rebateEarned: 0 } }),
+      // Charles W1.W-C1: recompute reads collected rows to skip them.
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }))

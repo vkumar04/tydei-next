@@ -182,10 +182,17 @@ export async function getContractPeriods(contractId: string) {
  *     period. Writes `rebateEarned=amount, rebateCollected=0, collectionDate=null`
  *     so only the "Rebates Earned" aggregate picks it up.
  *   - `"collected"`: the facility is logging a payment *received* from the
- *     vendor. Writes `rebateEarned=0, rebateCollected=amount, collectionDate=txnDate`
- *     so only the "Rebates Collected" aggregate picks it up. The Rebate Earned
- *     column stays at $0 for this row — a pure-collection entry must not
- *     double-count into the earned total (Charles R5.34).
+ *     vendor. Charles W1.W-C1: this path UPDATES an existing earned
+ *     (un-collected) Rebate row in place — stamping `collectionDate` and
+ *     `rebateCollected` onto the same row — instead of creating a second
+ *     row. That makes the ledger render as Earned / Collected / Outstanding
+ *     per period on a single line. If `rebateId` is provided the caller
+ *     has picked which earned row this collection pays down; otherwise we
+ *     auto-match the oldest earned row on this contract that has
+ *     `rebateEarned > 0 AND collectionDate IS NULL`. If no earned row is
+ *     found, we fall back to creating a pure-collection row
+ *     (`rebateEarned=0`) so out-of-band payments still land in the ledger
+ *     (e.g. a rebate check the user didn't see accrue yet).
  *
  * Manual rebates never carry the `[auto-accrual]` notes prefix — that prefix
  * is reserved for rows emitted by `recomputeAccrualForContract`.
@@ -208,6 +215,12 @@ export async function createContractTransaction(input: {
   // audit the basis of the entry without a schema migration. Only applies
   // when type === "rebate" && rebateKind === "earned"; ignored otherwise.
   quantity?: number
+  // Charles W1.W-C1: when rebateKind === "collected", the user may have
+  // picked a specific earned Rebate row from the "Log Collected Rebate"
+  // dialog's period dropdown. If set, we update THAT row in place. If
+  // omitted we auto-match the oldest earned-uncollected row on the
+  // contract. Ignored for all other code paths.
+  rebateId?: string
 }) {
   const { facility } = await requireFacility()
 
@@ -245,18 +258,104 @@ export async function createContractTransaction(input: {
     const notes =
       qty != null ? `${descriptionForNotes} (Qty: ${qty})` : descriptionForNotes
 
-    // Split earned vs collected at the Prisma boundary. A collected row has
-    // rebateEarned=0 so it does NOT roll up into the "Rebates Earned"
-    // aggregate (which sums rebateEarned where payPeriodEnd <= today).
+    // ── Charles W1.W-C1: collection → update existing earned row in place.
+    //
+    // Logging a collection against an earned period must NOT create a
+    // parallel row; it should stamp `collectionDate` + `rebateCollected`
+    // on the SAME row so the ledger can render Earned / Collected /
+    // Outstanding on a single line per period. If the caller passed a
+    // specific rebateId from the period dropdown, we update that row;
+    // otherwise we auto-match the oldest earned-uncollected row on this
+    // contract so the most-delinquent period pays down first. Only when
+    // no earned row is available do we fall back to the R5.34 pure-
+    // collection row (`rebateEarned=0`).
+    if (kind === "collected") {
+      const target = input.rebateId
+        ? await prisma.rebate.findFirst({
+            where: {
+              id: input.rebateId,
+              contractId: input.contractId,
+            },
+            select: {
+              id: true,
+              rebateEarned: true,
+              rebateCollected: true,
+              collectionDate: true,
+              notes: true,
+            },
+          })
+        : await prisma.rebate.findFirst({
+            where: {
+              contractId: input.contractId,
+              collectionDate: null,
+              rebateEarned: { gt: 0 },
+            },
+            orderBy: { payPeriodEnd: "asc" },
+            select: {
+              id: true,
+              rebateEarned: true,
+              rebateCollected: true,
+              collectionDate: true,
+              notes: true,
+            },
+          })
+
+      if (target) {
+        const priorCollected = Number(target.rebateCollected ?? 0)
+        const nextCollected = priorCollected + input.amount
+        // Preserve the original accrual notes so the audit trail survives.
+        // We append the collection event so the ledger shows both sides on
+        // one row. Strip the `[auto-accrual]` prefix only if the combined
+        // row is now fully collected — that way future `recomputeAccrualForContract`
+        // runs (which delete rows still matching the prefix AND
+        // `collectionDate IS NULL`) can't wipe a collection the user just
+        // logged.
+        const mergedNotes = [
+          target.notes ?? "",
+          `Collected ${txnDate.toDateString()}: ${descriptionForNotes}`,
+        ]
+          .filter((s) => s.length > 0)
+          .join(" — ")
+        const updated = await prisma.rebate.update({
+          where: { id: target.id },
+          data: {
+            rebateCollected: nextCollected,
+            collectionDate: txnDate,
+            notes: mergedNotes,
+          },
+        })
+        return serialize({ kind: "rebate" as const, row: updated })
+      }
+      // Fallback: no earned row available (out-of-band collection). Create
+      // a pure-collection row so the payment still shows in the ledger,
+      // and annotate so the user knows why it isn't paired with an earned
+      // accrual.
+      const orphanNotes = `[out-of-band] ${descriptionForNotes}`
+      const rebate = await prisma.rebate.create({
+        data: {
+          contractId: input.contractId,
+          facilityId: facility.id,
+          rebateEarned: 0,
+          rebateCollected: input.amount,
+          payPeriodStart: txnDate,
+          payPeriodEnd: txnDate,
+          collectionDate: txnDate,
+          notes: orphanNotes,
+        },
+      })
+      return serialize({ kind: "rebate" as const, row: rebate })
+    }
+
+    // Earned path (unchanged from R5.34 semantics).
     const rebate = await prisma.rebate.create({
       data: {
         contractId: input.contractId,
         facilityId: facility.id,
-        rebateEarned: kind === "earned" ? input.amount : 0,
-        rebateCollected: kind === "collected" ? input.amount : 0,
+        rebateEarned: input.amount,
+        rebateCollected: 0,
         payPeriodStart: txnDate,
         payPeriodEnd: txnDate,
-        collectionDate: kind === "collected" ? txnDate : null,
+        collectionDate: null,
         notes,
       },
     })

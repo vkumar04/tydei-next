@@ -298,14 +298,39 @@ export function ContractDetailClient({
                   />
                 </Button>
               </TooltipTrigger>
+              {/*
+               * Charles W1.W-C3: the letter score showed up on the
+               * contract page without enough context. The tooltip now
+               * explains what the grade represents, what each letter
+               * means, and points the user at the breakdown page.
+               */}
               <TooltipContent className="max-w-[340px] p-3 text-xs">
-                <p>
-                  AI Score grades each contract A–F across six dimensions:
-                  financial value, rebate efficiency, pricing competitiveness,
-                  market-share alignment, compliance likelihood, and
-                  structural risk. D means the contract underperforms on most
-                  dimensions — click the score to open the breakdown.
+                <p className="font-medium">Tydei AI Score</p>
+                <p className="mt-1">
+                  AI confidence + performance score based on extraction
+                  quality and six contract dimensions: financial value,
+                  rebate efficiency, pricing competitiveness, market-share
+                  alignment, compliance likelihood, and structural risk.
                 </p>
+                <ul className="mt-2 space-y-0.5">
+                  <li>
+                    <span className="font-medium">A</span> — all fields
+                    extracted cleanly; strong performance across the board.
+                  </li>
+                  <li>
+                    <span className="font-medium">B</span> — solid contract;
+                    one or two dimensions worth reviewing.
+                  </li>
+                  <li>
+                    <span className="font-medium">C</span> — mixed; several
+                    dimensions below benchmark.
+                  </li>
+                  <li>
+                    <span className="font-medium">D / F</span> — manual review
+                    recommended; extraction gaps or weak terms.
+                  </li>
+                </ul>
+                <p className="mt-2">Click to open the full breakdown.</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -1157,37 +1182,80 @@ function PerformanceSummary({
       new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime(),
   )
 
+  // Charles W1.W-C2: chart labels — the bare "Spend by Period" title
+  // wasn't specific enough. Users asked "spend of what?". Now the
+  // subtitle clarifies the scope (this contract only, last N periods),
+  // the bar value shows the dollar amount alongside the "% of contract
+  // value" used to size the bar, and hovering the bar reveals a
+  // tooltip that names the biggest number (max spend period).
+  const maxSpend = sorted.reduce(
+    (m, p) => Math.max(m, Number(p.totalSpend)),
+    0,
+  )
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Spend Trend */}
       <Card>
         <CardHeader>
           <CardTitle>Spend by Period</CardTitle>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Monthly spend on this contract (last {sorted.length}{" "}
+            {sorted.length === 1 ? "period" : "periods"}). Bar length is % of
+            total contract value; dollar amount is actual spend this period.
+          </p>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {sorted.map((p) => {
-              const spend = Number(p.totalSpend)
-              const pct =
-                totalValue > 0
-                  ? Math.min(Math.round((spend / totalValue) * 100), 100)
-                  : 0
-              return (
-                <div key={p.id} className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {formatDate(p.periodStart)} &ndash;{" "}
-                      {formatDate(p.periodEnd)}
-                    </span>
-                    <span className="font-medium">
-                      {formatCurrency(spend)}
-                    </span>
-                  </div>
-                  <Progress value={pct} className="h-1.5" />
-                </div>
-              )
-            })}
-          </div>
+          <TooltipProvider>
+            <div className="space-y-3">
+              {sorted.map((p) => {
+                const spend = Number(p.totalSpend)
+                const pct =
+                  totalValue > 0
+                    ? Math.min(Math.round((spend / totalValue) * 100), 100)
+                    : 0
+                const isMax = maxSpend > 0 && spend === maxSpend
+                return (
+                  <Tooltip key={p.id}>
+                    <TooltipTrigger asChild>
+                      <div className="cursor-help space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            {formatDate(p.periodStart)} &ndash;{" "}
+                            {formatDate(p.periodEnd)}
+                          </span>
+                          <span className="font-medium">
+                            {formatCurrency(spend)}
+                          </span>
+                        </div>
+                        <Progress value={pct} className="h-1.5" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[280px] p-3 text-xs">
+                      <p className="font-medium">
+                        {formatDate(p.periodStart)} – {formatDate(p.periodEnd)}
+                      </p>
+                      <p className="mt-1">
+                        Spend on this contract only: {formatCurrency(spend)}
+                        {totalValue > 0 && (
+                          <>
+                            {" "}
+                            ({pct}% of contract total{" "}
+                            {formatCurrency(totalValue)})
+                          </>
+                        )}
+                      </p>
+                      {isMax && sorted.length > 1 && (
+                        <p className="mt-1 text-emerald-600">
+                          Highest-spend period in view.
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                )
+              })}
+            </div>
+          </TooltipProvider>
         </CardContent>
       </Card>
 

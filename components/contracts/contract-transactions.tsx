@@ -117,21 +117,11 @@ const collectionStatusConfig: Record<
   },
 }
 
-function getPeriodStatus(periodEnd: string): "completed" | "active" | "upcoming" {
-  const now = new Date()
-  const end = new Date(periodEnd)
-  const start = new Date(periodEnd)
-  start.setMonth(start.getMonth() - 3)
-  if (end < now) return "completed"
-  if (start <= now && end >= now) return "active"
-  return "upcoming"
-}
-
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
-  completed: { label: "Completed", variant: "secondary" },
-  active: { label: "Active", variant: "default" },
-  upcoming: { label: "Upcoming", variant: "outline" },
-}
+// Charles W1.W-C1: `getPeriodStatus` + `statusConfig` removed — the
+// ledger's "Status" column now shows the collection status (Collected /
+// Pending / Overdue) only. "Completed / Active / Upcoming" referred to
+// the period window relative to today, which duplicated information
+// already carried by the period dates.
 
 // Charles R5.34-b: the previous single "Add Transaction" dialog had a
 // kind selector (earned vs collected) tucked inside a second <Select>
@@ -174,12 +164,17 @@ function TransactionDialog({
   mode,
   open,
   onOpenChange,
+  earnedRows,
 }: {
   contractId: string
   queryClient: ReturnType<typeof useQueryClient>
   mode: DialogMode
   open: boolean
   onOpenChange: (open: boolean) => void
+  // Charles W1.W-C1: earned-uncollected rows shown in the period
+  // dropdown so the user picks WHICH earned period this collection
+  // pays down. Empty → out-of-band fallback path on the server.
+  earnedRows: PeriodRow[]
 }) {
   // For the credit/payment dialog only, let the user pick which of the two.
   const [cpType, setCpType] = useState<"credit" | "payment">("credit")
@@ -187,6 +182,10 @@ function TransactionDialog({
   const [description, setDescription] = useState("")
   const [date, setDate] = useState("")
   const [quantity, setQuantity] = useState("")
+  // Charles W1.W-C1: "auto" = let the server auto-match the oldest
+  // uncollected earned row. Otherwise carries the Rebate row id the
+  // user picked.
+  const [rebateId, setRebateId] = useState<string>("auto")
 
   function reset() {
     setCpType("credit")
@@ -194,6 +193,7 @@ function TransactionDialog({
     setDescription("")
     setDate("")
     setQuantity("")
+    setRebateId("auto")
   }
 
   async function handleSubmit() {
@@ -242,6 +242,13 @@ function TransactionDialog({
         date,
         rebateKind,
         quantity: parsedQuantity,
+        // Charles W1.W-C1: on a rebate-collected dialog, pass the picked
+        // earned row (or undefined for "auto" → server auto-matches
+        // oldest earned-uncollected).
+        rebateId:
+          mode.kind === "rebate-collected" && rebateId !== "auto"
+            ? rebateId
+            : undefined,
       })
       toast.success("Transaction recorded")
       // Refetch periods + rebates to surface the new row, and invalidate
@@ -290,6 +297,38 @@ function TransactionDialog({
                   <SelectItem value="payment">Payment</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          )}
+          {mode.kind === "rebate-collected" && (
+            <div className="space-y-2">
+              <Label htmlFor="txn-period">Earned Period *</Label>
+              <Select value={rebateId} onValueChange={setRebateId}>
+                <SelectTrigger id="txn-period">
+                  <SelectValue placeholder="Pick the period this payment covers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">
+                    Auto-match oldest uncollected earned period
+                  </SelectItem>
+                  {earnedRows.map((r) => {
+                    const outstanding = Math.max(
+                      r.rebateEarned - r.rebateCollected,
+                      0,
+                    )
+                    return (
+                      <SelectItem key={r.id} value={r.id}>
+                        {formatDate(r.periodStart)} – {formatDate(r.periodEnd)}{" "}
+                        · earned {formatCurrency(r.rebateEarned)} · outstanding{" "}
+                        {formatCurrency(outstanding)}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Picks the earned Rebate row to stamp collected. If no earned
+                row matches, the collection is logged as an out-of-band entry.
+              </p>
             </div>
           )}
           <div className="space-y-2">
@@ -363,9 +402,13 @@ function TransactionDialog({
 function AddTransactionButtons({
   contractId,
   queryClient,
+  earnedRows,
 }: {
   contractId: string
   queryClient: ReturnType<typeof useQueryClient>
+  // Charles W1.W-C1: used by the Log-Collected-Rebate dialog's period
+  // dropdown so the user can pick the earned row to stamp collected.
+  earnedRows: PeriodRow[]
 }) {
   const [mode, setMode] = useState<DialogMode | null>(null)
 
@@ -451,6 +494,7 @@ function AddTransactionButtons({
           onOpenChange={(next) => {
             if (!next) setMode(null)
           }}
+          earnedRows={earnedRows}
         />
       )}
     </>
@@ -484,18 +528,22 @@ function TransactionTable({
           <TableRow>
             <TableHead>Period</TableHead>
             <TableHead>Type</TableHead>
-            <TableHead className="text-right">Spend</TableHead>
-            <TableHead className="text-right">Rebate Earned</TableHead>
-            <TableHead className="text-right">Rebate Collected</TableHead>
-            <TableHead className="text-center">Tier</TableHead>
+            <TableHead className="text-right">Earned</TableHead>
+            <TableHead className="text-right">Collected</TableHead>
+            <TableHead className="text-right">Outstanding</TableHead>
             <TableHead className="text-center">Status</TableHead>
-            <TableHead className="text-center">Collection</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {filtered.map((row) => {
-            const status = getPeriodStatus(row.periodEnd)
-            const config = statusConfig[status]
+            // Charles W1.W-C1: Outstanding = max(Earned − Collected, 0)
+            // on a single ledger row. Collections update the existing
+            // earned row in place (see `createContractTransaction`), so
+            // these three columns describe one period's full state.
+            const outstanding = Math.max(
+              row.rebateEarned - row.rebateCollected,
+              0,
+            )
             const collection = getCollectionStatus(row)
             const collConfig = collectionStatusConfig[collection]
             return (
@@ -510,24 +558,18 @@ function TransactionTable({
                     Rebate
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
-                  {formatCurrency(row.totalSpend)}
-                </TableCell>
                 <TableCell className="text-right text-emerald-600">
                   {formatCurrency(row.rebateEarned)}
                 </TableCell>
                 <TableCell className="text-right text-blue-600">
                   {formatCurrency(row.rebateCollected)}
                 </TableCell>
-                <TableCell className="text-center">
-                  {row.tierAchieved != null ? (
-                    <Badge variant="outline">Tier {row.tierAchieved}</Badge>
-                  ) : (
-                    <span className="text-muted-foreground">&mdash;</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-center">
-                  <Badge variant={config.variant}>{config.label}</Badge>
+                <TableCell
+                  className={`text-right ${
+                    outstanding > 0 ? "text-amber-600" : "text-muted-foreground"
+                  }`}
+                >
+                  {formatCurrency(outstanding)}
                 </TableCell>
                 <TableCell className="text-center">
                   <Badge variant="outline" className={collConfig.className}>
@@ -606,7 +648,25 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
       rebateCollected: r.rebateCollected,
     })),
   )
-  const totalPayments = 0
+  // Charles W1.W-C1: Outstanding = sum(max(Earned − Collected, 0))
+  // across all ledger rows. The summary card mirrors the table column
+  // and replaces the old "Total Payments" card (which was hardcoded $0
+  // post-W1.P and now lives in the credit/payment ledger, out of scope
+  // for this card).
+  const totalOutstanding = rows.reduce(
+    (acc, r) => acc + Math.max(r.rebateEarned - r.rebateCollected, 0),
+    0,
+  )
+
+  // Charles W1.W-C1: earned-uncollected rows fed to the Log-Collected-
+  // Rebate dialog's period dropdown. Ordered oldest-first so the user
+  // sees the most-delinquent period at the top of the dropdown.
+  const earnedRows = rows
+    .filter((r) => r.rebateEarned > 0 && !r.collectionDate)
+    .slice()
+    .sort(
+      (a, b) => new Date(a.periodEnd).getTime() - new Date(b.periodEnd).getTime(),
+    )
 
   if (rows.length === 0) {
     // Charles W1.P: empty state. No ledger table; just a muted card
@@ -619,7 +679,11 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
             <Calendar className="h-4 w-4" />
             Transaction Ledger
           </CardTitle>
-          <AddTransactionButtons contractId={contractId} queryClient={queryClient} />
+          <AddTransactionButtons
+            contractId={contractId}
+            queryClient={queryClient}
+            earnedRows={earnedRows}
+          />
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -684,12 +748,38 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
             </div>
           </CardContent>
         </Card>
+        {/* Charles W1.W-C1: Outstanding card replaces the legacy
+            "Total Payments" card (which was hardcoded to $0 post-W1.P).
+            Outstanding = Earned − Collected, summed across every ledger
+            row — the single number that tells the user how much rebate
+            money is still owed by the vendor. */}
         <Card>
           <CardContent className="flex items-center justify-between gap-3 pt-6">
             <div>
-              <p className="text-sm text-muted-foreground">Total Payments</p>
+              <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                Outstanding
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex cursor-help items-center">
+                        <HelpCircle
+                          className="h-3.5 w-3.5 text-muted-foreground"
+                          aria-label="Outstanding help"
+                        />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[320px] p-3 text-xs">
+                      <p>
+                        Earned rebate that has not yet been collected from
+                        the vendor. Computed per period as Earned − Collected
+                        and summed across every ledger row.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </p>
               <p className="text-2xl font-bold text-amber-600">
-                {formatCurrency(totalPayments)}
+                {formatCurrency(totalOutstanding)}
               </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30">
@@ -711,7 +801,11 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
               Rebates, credits, and payments for this contract
             </CardDescription>
           </div>
-          <AddTransactionButtons contractId={contractId} queryClient={queryClient} />
+          <AddTransactionButtons
+            contractId={contractId}
+            queryClient={queryClient}
+            earnedRows={earnedRows}
+          />
         </CardHeader>
         <CardContent>
           <Tabs
