@@ -23,6 +23,7 @@ import {
   type FacilityScope,
 } from "@/lib/actions/contracts-auth"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
+import { buildUnionCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -63,6 +64,15 @@ export async function getContracts(input: ContractFilters) {
             payPeriodEnd: true,
             collectionDate: true,
           },
+        },
+        // Charles W1.U-A — pull `appliesTo` + `categories` so the
+        // trailing-12mo spend cascade (below) can narrow the vendor-wide
+        // COG aggregate to the categories the contract's terms are
+        // actually scoped to. Without this join, a contract whose only
+        // term is scoped to ["Extremities & Trauma"] would show every
+        // vendor dollar in its "Current Spend (Last 12 Months)" column.
+        terms: {
+          select: { appliesTo: true, categories: true, tiers: { select: { id: true } } },
         },
       },
       orderBy: { updatedAt: "desc" },
@@ -178,6 +188,39 @@ export async function getContracts(input: ContractFilters) {
     }
   }
 
+  // Charles W1.U-A — per-contract category-scoped fallback aggregate.
+  // The vendor-wide aggregate above is shared across every contract for
+  // a vendor (an intentional fuzziness documented in the block comment
+  // above). For contracts whose terms are ALL scoped to specific
+  // categories we want the tier-3 fallback to reflect only that slice.
+  // One extra batched aggregate per category-scoped contract — only
+  // when the outer `contract_id`-tier returned $0.
+  const perContractCategorySpend = new Map<string, number>()
+  await Promise.all(
+    contracts.map(async (c) => {
+      if (!c.vendorId) return
+      const termScopes = (c.terms ?? []).map((t) => ({
+        appliesTo: t.appliesTo,
+        categories: t.categories,
+      }))
+      const unionWhere = buildUnionCategoryWhereClause(termScopes)
+      if (!unionWhere.category) return
+      const agg = await prisma.cOGRecord.aggregate({
+        where: {
+          facilityId: facility.id,
+          vendorId: c.vendorId,
+          transactionDate: { gte: windowStart, lte: windowEnd },
+          ...unionWhere,
+        },
+        _sum: { extendedPrice: true },
+      })
+      perContractCategorySpend.set(
+        c.id,
+        Number(agg._sum?.extendedPrice ?? 0),
+      )
+    }),
+  )
+
   const withDerived = contracts.map((c) => {
     const rebateEarned = (c.rebates ?? []).reduce(
       (sum, r) =>
@@ -194,8 +237,13 @@ export async function getContracts(input: ContractFilters) {
 
     const periodSpend = periodSpendByContract.get(c.id) ?? 0
     const cogContractSpend = cogSpendByContract.get(c.id) ?? 0
+    // Charles W1.U-A — prefer the category-scoped fallback over the
+    // raw vendor-wide aggregate when the contract's terms are narrowed
+    // to specific categories.
     const cogVendorSpend = c.vendorId
-      ? (cogSpendByVendor.get(c.vendorId) ?? 0)
+      ? (perContractCategorySpend.get(c.id) ??
+          cogSpendByVendor.get(c.vendorId) ??
+          0)
       : 0
     const currentSpend =
       periodSpend > 0

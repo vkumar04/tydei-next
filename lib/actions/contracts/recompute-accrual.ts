@@ -32,9 +32,10 @@ import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   bucketAccrualsByCadence,
-  buildMultiTermMonthlyAccruals,
+  buildMonthlyAccruals,
   type EvaluationPeriod,
   type MonthlySpend,
+  type MultiTermTimelineRow,
   type PaymentCadence,
   type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
@@ -42,6 +43,10 @@ import type {
   RebateMethodName,
   TierLike,
 } from "@/lib/contracts/rebate-method"
+import {
+  buildCategoryWhereClause,
+  buildUnionCategoryWhereClause,
+} from "@/lib/contracts/cog-category-filter"
 
 // The notes prefix marks rows this action owns so it can rewrite them
 // safely without touching manually-entered rebate rows. Must stay a
@@ -119,6 +124,25 @@ export async function recomputeAccrualForContract(
     return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }
   }
 
+  // Charles W1.U-A: each term may be scoped to a specific set of product
+  // categories (`ContractTerm.appliesTo === "specific_category"` with
+  // `categories: ["Spine", ...]`). Pre-W1.U the engine pulled COG by
+  // vendorId only and fed the vendor's entire spend through every term,
+  // which over-reported rebates on narrow terms and under-reported when
+  // tier thresholds needed isolated category spend.
+  //
+  // Strategy: query COG once over the UNION of every term's categories
+  // (or unfiltered when any term is all-products), then partition the
+  // rows per-term in memory and run the engine per-term with its own
+  // spend series. The per-term accrual rows are then summed per month
+  // into a synthetic `MultiTermTimelineRow[]` that the existing cadence
+  // bucketer consumes unchanged.
+  const termScopes = termsWithTiers.map((term) => ({
+    appliesTo: term.appliesTo,
+    categories: term.categories,
+  }))
+  const unionCategoryWhere = buildUnionCategoryWhereClause(termScopes)
+
   const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
     const tiers: TierLike[] = term.tiers.map((t) => ({
       tierNumber: t.tierNumber,
@@ -155,41 +179,146 @@ export async function recomputeAccrualForContract(
   // single month the seed/import ran, pushing `payPeriodEnd` forward to
   // that month's end — which in turn got filtered out of the contract
   // detail "Rebates Earned" card (payPeriodEnd > today).
+  //
+  // Charles W1.U-A — spread `unionCategoryWhere` so the narrow set of
+  // COG rows we ever need to consider is fetched in one round-trip;
+  // per-term filtering happens below, in memory.
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,
       vendorId: contract.vendorId,
       transactionDate: { gte: contract.effectiveDate, lte: end },
+      ...unionCategoryWhere,
     },
-    select: { transactionDate: true, extendedPrice: true },
+    select: {
+      transactionDate: true,
+      extendedPrice: true,
+      category: true,
+    },
   })
 
-  const byMonth = new Map<string, number>()
-  for (const r of cogRecords) {
-    const d = r.transactionDate
-    if (!d) continue
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
-    byMonth.set(key, (byMonth.get(key) ?? 0) + Number(r.extendedPrice))
+  // Helper: build a YYYY-MM-keyed monthly spend series from a subset of
+  // COG rows. We run it once per term with the term's category filter
+  // applied so each term's tier math sees only the slice it is scoped to.
+  const buildSeries = (
+    rows: typeof cogRecords,
+    categoryFilter: ReturnType<typeof buildCategoryWhereClause>,
+  ): MonthlySpend[] => {
+    const categoryIn = categoryFilter.category?.in ?? null
+    const categorySet = categoryIn ? new Set(categoryIn) : null
+
+    const byMonth = new Map<string, number>()
+    for (const r of rows) {
+      const d = r.transactionDate
+      if (!d) continue
+      if (categorySet && !categorySet.has(r.category ?? "")) continue
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+      byMonth.set(key, (byMonth.get(key) ?? 0) + Number(r.extendedPrice))
+    }
+
+    const series: MonthlySpend[] = []
+    const cursor = new Date(
+      Date.UTC(
+        contract.effectiveDate.getUTCFullYear(),
+        contract.effectiveDate.getUTCMonth(),
+        1,
+      ),
+    )
+    const lastMonth = new Date(
+      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1),
+    )
+    while (cursor <= lastMonth) {
+      const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`
+      series.push({ month: key, spend: byMonth.get(key) ?? 0 })
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+    }
+    return series
   }
 
-  const series: MonthlySpend[] = []
-  const cursor = new Date(
-    Date.UTC(
-      contract.effectiveDate.getUTCFullYear(),
-      contract.effectiveDate.getUTCMonth(),
-      1,
-    ),
-  )
-  const lastMonth = new Date(
-    Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1),
-  )
-  while (cursor <= lastMonth) {
-    const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`
-    series.push({ month: key, spend: byMonth.get(key) ?? 0 })
-    cursor.setUTCMonth(cursor.getUTCMonth() + 1)
-  }
+  // Per-term accrual series. We compute each term against its own
+  // category-filtered spend (W1.U-A) instead of feeding one vendor-wide
+  // series through `buildMultiTermMonthlyAccruals`. Shape the per-term
+  // TimelineRows into a synthetic MultiTermTimelineRow[] aligned to the
+  // longest series so the existing cadence bucketer can run unchanged.
+  const perTermResults = termsWithTiers.map((term, idx) => {
+    const termScope = { appliesTo: term.appliesTo, categories: term.categories }
+    const termCategoryWhere = buildCategoryWhereClause(termScope)
+    const series = buildSeries(cogRecords, termCategoryWhere)
+    const rows = buildMonthlyAccruals(
+      series,
+      termConfigs[idx].tiers,
+      termConfigs[idx].method,
+      termConfigs[idx].evaluationPeriod,
+    )
+    return { termIndex: idx, series, rows, config: termConfigs[idx] }
+  })
 
-  const rows = buildMultiTermMonthlyAccruals(series, termConfigs)
+  // Align every term's rows on the same month index. All series share
+  // the same effectiveDate→end window via `buildSeries`, so they already
+  // line up — but we walk the first term's months as the canonical
+  // timeline and gather each term's contribution.
+  const monthsTimeline =
+    perTermResults[0]?.series.map((s) => s.month) ?? []
+
+  const multiRows: MultiTermTimelineRow[] = monthsTimeline.map((month, i) => {
+    let totalSpend = 0
+    let totalAccrued = 0
+    let bestTier = 0
+    let bestPercent = 0
+    let bestContribution = -1
+    const contributions: MultiTermTimelineRow["termContributions"] = []
+
+    const monthStart = monthKeyToDate(month)
+    const monthEnd = monthKeyEndOfMonth(month)
+
+    for (const { termIndex, rows, config, series } of perTermResults) {
+      // Per-term effective-window gate (mirrors the gate in
+      // buildMultiTermMonthlyAccruals — terms outside their window don't
+      // contribute to this month).
+      const startOk =
+        config.effectiveStart == null || config.effectiveStart <= monthEnd
+      const endOk =
+        config.effectiveEnd == null || config.effectiveEnd >= monthStart
+      if (!startOk || !endOk) continue
+
+      const row = rows[i]
+      const entry = series[i]
+      if (!row || !entry) continue
+
+      // spend displayed on the bucket = union of contributing terms'
+      // per-term spend for the month (dedup via max vs sum is a choice;
+      // we sum here because different category terms see disjoint slices).
+      totalSpend += entry.spend
+
+      if (row.accruedAmount <= 0) continue
+      totalAccrued += row.accruedAmount
+      contributions.push({
+        termIndex,
+        accruedAmount: row.accruedAmount,
+        tierAchieved: row.tierAchieved,
+        rebatePercent: row.rebatePercent,
+      })
+      if (row.accruedAmount > bestContribution) {
+        bestContribution = row.accruedAmount
+        bestTier = row.tierAchieved
+        bestPercent = row.rebatePercent
+      }
+    }
+
+    return {
+      month,
+      spend: totalSpend,
+      // cumulative across terms is a fuzzy concept when terms are
+      // category-scoped; the bucketer ignores this field for persistence
+      // (only `spend` and `accruedAmount` are written), so keeping the
+      // per-month sum here is safe.
+      cumulativeSpend: totalSpend,
+      accruedAmount: totalAccrued,
+      tierAchieved: bestTier,
+      rebatePercent: bestPercent,
+      termContributions: contributions,
+    }
+  })
 
   // Charles W1.O: collapse monthly accrual rows into buckets sized by
   // the primary term's `paymentCadence`. Quarterly contracts should
@@ -204,7 +333,7 @@ export async function recomputeAccrualForContract(
   const primaryCadence: PaymentCadence =
     (contract.paymentCadence as PaymentCadence | null | undefined) ??
     "monthly"
-  const buckets = bucketAccrualsByCadence(rows, primaryCadence)
+  const buckets = bucketAccrualsByCadence(multiRows, primaryCadence)
 
   // Only persist buckets with non-zero accrual — a monthly-eval contract
   // whose tier 1 spendMin was missed in month N shouldn't pollute the
@@ -253,4 +382,16 @@ export async function recomputeAccrualForContract(
     inserted: createResult.count,
     sumEarned,
   }
+}
+
+// Local month-key helpers duplicated from `lib/contracts/accrual.ts` —
+// the originals are not exported. Keep identical semantics (UTC-safe).
+function monthKeyToDate(key: string): Date {
+  const [year, month] = key.split("-").map((n) => Number(n))
+  return new Date(Date.UTC(year, month - 1, 1))
+}
+
+function monthKeyEndOfMonth(key: string): Date {
+  const [year, month] = key.split("-").map((n) => Number(n))
+  return new Date(Date.UTC(year, month, 0))
 }
