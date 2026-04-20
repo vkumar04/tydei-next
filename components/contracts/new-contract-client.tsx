@@ -35,6 +35,10 @@ import { ContractFormReview } from "@/components/contracts/contract-form-review"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { ContractPdfDropZone } from "@/components/contracts/contract-pdf-drop-zone"
 import { TieInCapitalPicker } from "@/components/contracts/tie-in-capital-picker"
+import {
+  ContractCapitalEntry,
+  type ContractCapital,
+} from "@/components/contracts/contract-capital-entry"
 import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
 import {
   Accordion,
@@ -99,6 +103,21 @@ export function NewContractClient({
     setTerms,
   } = useContractForm()
   const createMutation = useCreateContract()
+
+  // Charles W1.W-D3 — contract-level tie-in capital state for the new-
+  // contract form. Lifted from the edit flow (edit-contract-client.tsx)
+  // so tie-in contracts can land with capital filled in, instead of the
+  // W1.T orphan-null shape that forced users to open Edit right after
+  // Create just to add capital. Submitted alongside values into the
+  // createContract action, which already accepts the six fields.
+  const [capital, setCapital] = useState<ContractCapital>({
+    capitalCost: null,
+    interestRate: null,
+    termMonths: null,
+    downPayment: null,
+    paymentCadence: null,
+    amortizationShape: "symmetrical",
+  })
 
   const handlePricingUpload = useCallback(async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase()
@@ -508,7 +527,20 @@ export function NewContractClient({
     }
 
     const values = form.getValues()
-    const contract = await createMutation.mutateAsync(values)
+    // Charles W1.W-D3 — include tie-in capital fields in the create
+    // payload. createContract reads all six off `data` and writes them
+    // to the Contract row (see lib/actions/contracts.ts around line
+    // 788). Non-tie-in contracts leave capital null; createContract
+    // already guards on `!= null`.
+    const contract = await createMutation.mutateAsync({
+      ...values,
+      capitalCost: capital.capitalCost,
+      interestRate: capital.interestRate,
+      termMonths: capital.termMonths,
+      downPayment: capital.downPayment,
+      paymentCadence: capital.paymentCadence,
+      amortizationShape: capital.amortizationShape,
+    })
 
     // Create terms for the new contract
     for (const term of terms) {
@@ -556,7 +588,18 @@ export function NewContractClient({
       return
     }
 
-    const contract = await createMutation.mutateAsync(values)
+    // Charles W1.W-D3 — carry capital fields on the draft path too,
+    // otherwise a user who saves as draft and returns later sees the
+    // D1 empty-state card even though they filled the inputs.
+    const contract = await createMutation.mutateAsync({
+      ...values,
+      capitalCost: capital.capitalCost,
+      interestRate: capital.interestRate,
+      termMonths: capital.termMonths,
+      downPayment: capital.downPayment,
+      paymentCadence: capital.paymentCadence,
+      amortizationShape: capital.amortizationShape,
+    })
 
     // Create terms for the new contract
     for (const term of terms) {
@@ -699,6 +742,33 @@ export function NewContractClient({
                     v ?? undefined,
                   )
                 }
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Charles W1.W-D3 — capital-entry card on create.
+            W1.T moved capital to the Contract row but only wired the
+            entry card into the edit flow, so every new tie-in was
+            born with null capital. This card lets the user fill all
+            six fields at creation so the detail page's capital
+            block isn't blank post-save. */}
+        {form.watch("contractType") === "tie_in" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Capital Equipment</CardTitle>
+              <CardDescription>
+                Enter the capital cost, interest rate, and payoff schedule
+                — rebates from the terms below will pay down this balance.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ContractCapitalEntry
+                capital={capital}
+                onChange={(patch) =>
+                  setCapital((prev) => ({ ...prev, ...patch }))
+                }
+                effectiveDate={form.watch("effectiveDate") || null}
               />
             </CardContent>
           </Card>
