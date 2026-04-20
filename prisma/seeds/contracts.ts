@@ -157,7 +157,10 @@ export async function seedContracts(
     },
   })
   await addTerm(prisma, contracts.snSports.id, {
+    // W1.U retro B2: exercise `paymentTiming: "semi_annual"` in the demo
+    // seed (matches the contract-level rebatePayPeriod set above).
     termName: "Market Share Pricing", termType: "market_share", baselineType: "spend_based",
+    paymentTiming: "semi_annual",
     effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow, desiredMarketShare: 65,
   }, [
     { tierNumber: 1, marketShareMin: 0, marketShareMax: 50, rebateType: "percent_of_spend", rebateValue: 0.01 },
@@ -189,7 +192,12 @@ export async function seedContracts(
     },
   })
   await addTerm(prisma, contracts.arthrexLighthouse.id, {
+    // W1.U retro B2: exercise `appliesTo: "specific_items"` scope in the
+    // demo seed so QA-sanity coverage asserts at least one term binds to
+    // a literal item list (via referenceNumbers).
     termName: "Spend Rebate", termType: "spend_rebate", baselineType: "spend_based",
+    appliesTo: "specific_items",
+    referenceNumbers: ["ART-FW2-001", "ART-SL55-001", "ART-TRT-001"],
     effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow, spendBaseline: 150000,
   }, [
     { tierNumber: 1, spendMin: 0, spendMax: 150000, rebateType: "percent_of_spend", rebateValue: 0.015 },
@@ -221,7 +229,10 @@ export async function seedContracts(
     },
   })
   await addTerm(prisma, contracts.depuyTrauma.id, {
+    // W1.U retro B2: exercise `evaluationPeriod: "quarterly"` and
+    // `paymentTiming: "annual"` in the demo seed.
     termName: "Compliance Rebate", termType: "compliance_rebate", baselineType: "spend_based",
+    evaluationPeriod: "quarterly", paymentTiming: "annual",
     effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow, spendBaseline: 300000,
   }, [
     { tierNumber: 1, spendMin: 0, spendMax: 300000, rebateType: "percent_of_spend", rebateValue: 0.02 },
@@ -321,7 +332,43 @@ export async function seedContracts(
     },
   })
 
-  console.log("  Contracts: 18 (12 active, 2 expiring, 2 expired/draft, 2 draft)")
+  // 19. Medtronic Spine — Category-Scoped Rebate (Lighthouse Surgical)
+  // W1.U retro B2: seed a specific_category-scoped term at the demo
+  // facility so:
+  //   (a) QA-sanity coverage sees at least one `appliesTo: "specific_category"`
+  //       contract with populated `categories`, and
+  //   (b) `recomputeAccrualForContract` can be exercised end-to-end to
+  //       prove the W1.U-A category-scope fix is honored in real seed data.
+  // Medtronic's vendor catalog in seedCOGForContracts is Spine-only, so
+  // the synthetic COG generated for this contract will automatically land
+  // in the "Spine" category — giving the term a meaningful earned rebate
+  // to compute. Uses `evaluationPeriod: "monthly"`, `paymentTiming:
+  // "monthly"`, and `rebateMethod: "marginal"` to round out QA-sanity
+  // enum-coverage for those fields.
+  contracts.medtronicSpineSurgical = await prisma.contract.create({
+    data: {
+      contractNumber: "MDT-2025-SPSURG", name: "Medtronic Spine Category Rebate - Lighthouse Surgical",
+      vendorId: v.medtronic.id, facilityId: f.lighthouseSurgical.id, productCategoryId: c.spine.id,
+      contractType: "usage", status: "active", effectiveDate: oneYearAgo, expirationDate: twoYearsFromNow,
+      totalValue: 900000, annualValue: 450000,
+      performancePeriod: "monthly", rebatePayPeriod: "monthly",
+      paymentCadence: "monthly",
+      description: "Category-scoped (Spine) marginal-tier rebate agreement with monthly evaluation and monthly payment cadence",
+    },
+  })
+  await addTerm(prisma, contracts.medtronicSpineSurgical.id, {
+    termName: "Spine Category Spend Rebate", termType: "spend_rebate", baselineType: "spend_based",
+    evaluationPeriod: "monthly", paymentTiming: "monthly",
+    appliesTo: "specific_category", categories: ["Spine"],
+    rebateMethod: "marginal",
+    effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow, spendBaseline: 200000,
+  }, [
+    { tierNumber: 1, spendMin: 0, spendMax: 200000, rebateType: "percent_of_spend", rebateValue: 0.02 },
+    { tierNumber: 2, spendMin: 200000, spendMax: 400000, rebateType: "percent_of_spend", rebateValue: 0.035 },
+    { tierNumber: 3, spendMin: 400000, rebateType: "percent_of_spend", rebateValue: 0.05 },
+  ])
+
+  console.log("  Contracts: 19 (13 active, 2 expiring, 2 expired/draft, 2 draft)")
 
   return { contracts }
 }

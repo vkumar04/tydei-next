@@ -13,6 +13,10 @@
  */
 
 import { prisma } from "../lib/db"
+import {
+  ContractTypeSchema,
+  RebateMethodSchema,
+} from "../lib/generated/zod"
 
 type Invariant = {
   name: string
@@ -37,6 +41,68 @@ async function getDemoFacility() {
     )
   }
   return facility
+}
+
+// ─── W1.U retro Fix 2: seed-coverage enum domains ────────────────
+//
+// `ContractTerm.appliesTo`, `.evaluationPeriod`, and `.paymentTiming` are
+// plain `String` columns in the schema (not Prisma enums) — the valid
+// value set lives in UI selects + validators. Source-of-truth references:
+//   - appliesTo       → components/contracts/contract-terms-entry.tsx
+//                       (SelectItem values)
+//   - evaluationPeriod → lib/contracts/accrual.ts (type EvaluationPeriod)
+//   - paymentTiming   → components/contracts/contract-terms-entry.tsx
+// `ContractTerm.rebateMethod` IS a real Prisma enum (`RebateMethod`) and
+// `Contract.contractType` is a real Prisma enum (`ContractType`); both
+// are derived from the runtime DMMF below rather than hardcoded here.
+//
+// If a new enum value is added to the schema (or UI), update the
+// corresponding constant OR trust the DMMF path (for real enums).
+const APPLIES_TO_DOMAIN = [
+  "all_products",
+  "specific_category",
+  "specific_items",
+] as const
+const EVALUATION_PERIOD_DOMAIN = ["annual", "monthly", "quarterly"] as const
+const PAYMENT_TIMING_DOMAIN = [
+  "monthly",
+  "quarterly",
+  "semi_annual",
+  "annual",
+] as const
+
+// We derive the enum domains from the generated Zod schemas (produced by
+// `zod-prisma-types` directly off `prisma/schema.prisma`). This keeps the
+// qa-sanity assertions in lock-step with the schema: adding an enum value
+// to prisma/schema.prisma regenerates the zod export on the next
+// `prisma generate`, and this script will then require seed coverage of
+// the new value. Prisma 7 ships its runtime DMMF without enum metadata,
+// so poking `_runtimeDataModel.enums` is not a reliable alternative.
+const SCHEMA_ENUMS = {
+  RebateMethod: RebateMethodSchema.options,
+  ContractType: ContractTypeSchema.options,
+} as const
+
+function schemaEnumValues(enumName: keyof typeof SCHEMA_ENUMS): readonly string[] {
+  const values = SCHEMA_ENUMS[enumName]
+  if (!values) {
+    throw new Error(`No Zod schema registered for enum "${enumName}"`)
+  }
+  return values
+}
+
+function coverageTable(
+  label: string,
+  expected: readonly string[],
+  seen: Set<string>,
+): { ok: true } | { ok: false; detail: string } {
+  const missing = expected.filter((v) => !seen.has(v))
+  if (missing.length === 0) return { ok: true }
+  const lines: string[] = []
+  lines.push(`${label} is missing: ${missing.join(", ")}`)
+  lines.push(`  expected: ${expected.join(", ")}`)
+  lines.push(`  seen:     ${[...seen].sort().join(", ") || "(none)"}`)
+  return { ok: false, detail: lines.join("\n    ") }
 }
 
 const invariants: Invariant[] = [
@@ -350,6 +416,127 @@ const invariants: Invariant[] = [
     },
   },
 
+  // ─── W1.U retro Fix 2 — seed-coverage invariants ───────────────
+  // Every ContractTerm and Contract enum-shaped field MUST have at least
+  // one row hitting every value in its domain. Without this, category-
+  // scoped rebate bugs (W1.U-A), cadence-drift bugs, and method-specific
+  // math bugs can live undetected in demo data for weeks.
+
+  {
+    name: "coverage-contract-term-appliesTo",
+    describe: "ContractTerm.appliesTo covers all_products, specific_category (with categories), and specific_items",
+    async check() {
+      const terms = await prisma.contractTerm.findMany({
+        select: { appliesTo: true, categories: true, referenceNumbers: true, products: { select: { id: true } } },
+      })
+      const seen = new Set<string>()
+      for (const t of terms) {
+        seen.add(t.appliesTo)
+      }
+      const base = coverageTable(
+        "ContractTerm.appliesTo",
+        APPLIES_TO_DOMAIN,
+        seen,
+      )
+      if (!base.ok) return base
+
+      // Extra: specific_category rows must have at least one category.
+      const specificCatWithList = terms.filter(
+        (t) => t.appliesTo === "specific_category" && t.categories.length >= 1,
+      )
+      if (specificCatWithList.length === 0) {
+        return {
+          ok: false,
+          detail:
+            "Found `specific_category` term(s) but none have `categories.length >= 1`. Category-scope math can't exercise.",
+        }
+      }
+      // Extra: specific_items rows should bind to at least one product
+      // pointer — either via referenceNumbers or ContractTermProduct rows.
+      const specificItems = terms.filter((t) => t.appliesTo === "specific_items")
+      if (specificItems.length === 0) {
+        return {
+          ok: false,
+          detail:
+            "No `specific_items` terms seeded — covered by domain but not by concrete rows.",
+        }
+      }
+      const itemBound = specificItems.filter(
+        (t) => t.referenceNumbers.length > 0 || t.products.length > 0,
+      )
+      if (itemBound.length === 0) {
+        return {
+          ok: false,
+          detail:
+            "Found `specific_items` term(s) but none have `referenceNumbers` or ContractTermProduct rows to bind to.",
+        }
+      }
+      return { ok: true }
+    },
+  },
+
+  {
+    name: "coverage-contract-term-evaluationPeriod",
+    describe: `ContractTerm.evaluationPeriod covers ${EVALUATION_PERIOD_DOMAIN.join(", ")}`,
+    async check() {
+      const groups = await prisma.contractTerm.groupBy({
+        by: ["evaluationPeriod"],
+        _count: { _all: true },
+      })
+      const seen = new Set(groups.map((g) => g.evaluationPeriod))
+      return coverageTable(
+        "ContractTerm.evaluationPeriod",
+        EVALUATION_PERIOD_DOMAIN,
+        seen,
+      )
+    },
+  },
+
+  {
+    name: "coverage-contract-term-paymentTiming",
+    describe: `ContractTerm.paymentTiming covers ${PAYMENT_TIMING_DOMAIN.join(", ")}`,
+    async check() {
+      const groups = await prisma.contractTerm.groupBy({
+        by: ["paymentTiming"],
+        _count: { _all: true },
+      })
+      const seen = new Set(groups.map((g) => g.paymentTiming))
+      return coverageTable(
+        "ContractTerm.paymentTiming",
+        PAYMENT_TIMING_DOMAIN,
+        seen,
+      )
+    },
+  },
+
+  {
+    name: "coverage-contract-term-rebateMethod",
+    describe: `ContractTerm.rebateMethod covers every RebateMethod enum value (${schemaEnumValues("RebateMethod").join(", ")})`,
+    async check() {
+      const expected = schemaEnumValues("RebateMethod")
+      const groups = await prisma.contractTerm.groupBy({
+        by: ["rebateMethod"],
+        _count: { _all: true },
+      })
+      const seen = new Set(groups.map((g) => String(g.rebateMethod)))
+      return coverageTable("ContractTerm.rebateMethod", expected, seen)
+    },
+  },
+
+  {
+    name: "coverage-contract-contractType",
+    describe: `Contract.contractType covers every ContractType enum value (${schemaEnumValues("ContractType").join(", ")})`,
+    async check() {
+      const expected = schemaEnumValues("ContractType")
+      const groups = await prisma.contract.groupBy({
+        by: ["contractType"],
+        _count: { _all: true },
+      })
+      const seen = new Set(groups.map((g) => String(g.contractType)))
+      return coverageTable("Contract.contractType", expected, seen)
+    },
+  },
+
   {
     name: "active-contracts-resolve-rebates-at-read-time",
     describe: "every active contract with tiers can compute non-zero spend OR rebates at read time",
@@ -462,6 +649,31 @@ async function main() {
     await prisma.$disconnect()
     process.exit(1)
   }
+
+  // W1.U retro Fix 2: on pass, print a compact coverage matrix so a
+  // human eyeballing seed state can see the distribution across the
+  // tracked enum-shaped ContractTerm and Contract fields.
+  const [appliesGroups, evalGroups, payGroups, methodGroups, typeGroups] = await Promise.all([
+    prisma.contractTerm.groupBy({ by: ["appliesTo"], _count: { _all: true } }),
+    prisma.contractTerm.groupBy({ by: ["evaluationPeriod"], _count: { _all: true } }),
+    prisma.contractTerm.groupBy({ by: ["paymentTiming"], _count: { _all: true } }),
+    prisma.contractTerm.groupBy({ by: ["rebateMethod"], _count: { _all: true } }),
+    prisma.contract.groupBy({ by: ["contractType"], _count: { _all: true } }),
+  ])
+  const renderRow = (label: string, rows: { _count: { _all: number }; [k: string]: unknown }[], key: string) => {
+    const cells = rows
+      .map((r) => `${String(r[key])}=${r._count._all}`)
+      .sort()
+      .join("  ")
+    return `  ${label.padEnd(32)} ${cells}`
+  }
+  console.log(`${DIM}seed-coverage matrix:${RESET}`)
+  console.log(renderRow("ContractTerm.appliesTo", appliesGroups, "appliesTo"))
+  console.log(renderRow("ContractTerm.evaluationPeriod", evalGroups, "evaluationPeriod"))
+  console.log(renderRow("ContractTerm.paymentTiming", payGroups, "paymentTiming"))
+  console.log(renderRow("ContractTerm.rebateMethod", methodGroups, "rebateMethod"))
+  console.log(renderRow("Contract.contractType", typeGroups, "contractType"))
+  console.log()
 
   console.log(`${GREEN}qa-sanity OK${RESET}\n`)
   await prisma.$disconnect()

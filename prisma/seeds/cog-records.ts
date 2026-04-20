@@ -33,6 +33,13 @@ export async function seedCOGRecords(
     { facilityId: f.heritageRegional.id, vendorId: v.medtronic.id, vendorName: "Medtronic", inventoryNumber: "INV-006", inventoryDescription: "CD HORIZON SOLERA Voyager System", vendorItemNo: "MDT-SVY-001", unitCost: 9200, quantity: 1, transactionDate: txDate(1, 5), category: "Spine" },
     { facilityId: f.heritageRegional.id, vendorId: v.medtronic.id, vendorName: "Medtronic", inventoryNumber: "INV-016", inventoryDescription: "INFUSE Bone Graft Small Kit", vendorItemNo: "MDT-IBG-SM", unitCost: 1800, quantity: 3, transactionDate: txDate(0, 12), category: "Biologics" },
     { facilityId: f.heritageRegional.id, vendorId: v.medtronic.id, vendorName: "Medtronic", inventoryNumber: "INV-017", inventoryDescription: "RestoreUltra SCS System", vendorItemNo: "MDT-RUS-001", unitCost: 15000, quantity: 1, transactionDate: txDate(1, 22), category: "Neurosurgery" },
+    // W1.U retro B2: deliberately-off-scope Medtronic rows at Lighthouse
+    // Surgical so the specific_category rebate contract's accrual diverges
+    // from a naive "vendor-entire" spend. These rows must NOT contribute
+    // to the Spine-scoped rebate calculation; the W1.U-A fix proves it.
+    { facilityId: f.lighthouseSurgical.id, vendorId: v.medtronic.id, vendorName: "Medtronic", inventoryNumber: "INV-101", inventoryDescription: "Medtronic Biologics – INFUSE Bone Graft (off-Spine scope)", vendorItemNo: "MDT-IBG-LG", unitCost: 3400, quantity: 6, transactionDate: txDate(2, 11), category: "Biologics" },
+    { facilityId: f.lighthouseSurgical.id, vendorId: v.medtronic.id, vendorName: "Medtronic", inventoryNumber: "INV-102", inventoryDescription: "Medtronic Neuro SCS Generator (off-Spine scope)", vendorItemNo: "MDT-SCG-001", unitCost: 12800, quantity: 1, transactionDate: txDate(1, 9), category: "Neurosurgery" },
+    { facilityId: f.lighthouseSurgical.id, vendorId: v.medtronic.id, vendorName: "Medtronic", inventoryNumber: "INV-103", inventoryDescription: "Medtronic Cardiac Rhythm Pacemaker (off-Spine scope)", vendorItemNo: "MDT-PAC-001", unitCost: 9500, quantity: 2, transactionDate: txDate(0, 14), category: "Cardiac Rhythm" },
 
     // --- Smith & Nephew ---
     { facilityId: f.lighthouseSurgical.id, vendorId: v.smithNephew.id, vendorName: "Smith & Nephew", inventoryNumber: "INV-003", inventoryDescription: "FAST-FIX 360 Meniscal Repair", vendorItemNo: "SN-FF360-001", unitCost: 650, quantity: 8, transactionDate: txDate(1, 20), category: "Sports Medicine" },
