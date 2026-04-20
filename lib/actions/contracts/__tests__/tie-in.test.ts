@@ -15,12 +15,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * input to reduce.
  */
 
-const { findFirstMock } = vi.hoisted(() => ({
+const { findFirstMock, cogAggMock, periodAggMock } = vi.hoisted(() => ({
   findFirstMock: vi.fn(),
+  cogAggMock: vi.fn(async () => ({ _sum: { extendedPrice: 0 } })),
+  periodAggMock: vi.fn(async () => ({ _sum: { totalSpend: 0 } })),
 }))
 
 vi.mock("@/lib/db", () => ({
-  prisma: { contract: { findFirst: findFirstMock } },
+  prisma: {
+    contract: { findFirst: findFirstMock },
+    cOGRecord: { aggregate: cogAggMock },
+    contractPeriod: { aggregate: periodAggMock },
+  },
 }))
 
 vi.mock("@/lib/actions/auth", () => ({
@@ -41,6 +47,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
       contractType: "tie_in",
+      vendorId: "v-1",
       effectiveDate: new Date("2026-01-01"),
       capitalCost: null,
       interestRate: null,
@@ -49,6 +56,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
       amortizationShape: "symmetrical",
       amortizationRows: [],
       rebates: [],
+      terms: [],
     })
 
     const r = await getContractCapitalSchedule("c-1")
@@ -69,6 +77,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
       contractType: "tie_in",
+      vendorId: "v-1",
       effectiveDate,
       capitalCost: 12_000, // $12k over 12 months, 0% → $1k principal/mo
       interestRate: 0,
@@ -93,6 +102,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
           rebateCollected: 1000,
         },
       ],
+      terms: [],
     })
 
     const r = await getContractCapitalSchedule("c-1")
@@ -126,6 +136,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
       contractType: "tie_in",
+      vendorId: "v-1",
       effectiveDate,
       capitalCost: 1000,
       interestRate: 0,
@@ -157,6 +168,7 @@ describe("getContractCapitalSchedule (Wave A)", () => {
           rebateCollected: 500,
         },
       ],
+      terms: [],
     })
 
     const r = await getContractCapitalSchedule("c-1")
