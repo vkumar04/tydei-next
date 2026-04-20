@@ -32,7 +32,52 @@ KEY THINGS TO EXTRACT:
 - For pricing_only contracts: locked pricing details and any price protection clauses
 - Procedure codes or catalog numbers if listed
 
-Be thorough - extract every tier, product, and condition mentioned. Use null for fields not found in the document.`
+Be thorough - extract every tier, product, and condition mentioned. Use null for fields not found in the document.
+
+── TIER EXTRACTION (CRITICAL) ──
+Usage contracts ALMOST ALWAYS have rebate tiers. If the document mentions
+ANY of the following, you MUST emit one row in terms[].tiers[] per tier:
+- "X% on the first $Y, Z% above $Y"
+- "X% rebate at spend $A–$B"
+- "tier 1 … tier 2 … tier 3"
+- "volume rebate: N units → X%"
+- "market share Y% → rebate Z%"
+- any table with thresholds and rebate percentages
+
+For each tier:
+- tierNumber: 1 = lowest threshold, counting up.
+- spendMin / spendMax: the dollar thresholds. The first tier is spendMin=0.
+  Open-ended top tiers have spendMax=null.
+- volumeMin / volumeMax: unit thresholds for volume-based rebates.
+- marketShareMin / marketShareMax: percentages (0-100) for market-share tiers.
+- rebateType: "percent_of_spend" for % rebates, "fixed_rebate" for flat $,
+  "fixed_rebate_per_unit" for $/unit, "per_procedure_rebate" for case-based.
+- rebateValue: the percentage (e.g. 3 for 3%) or dollar amount.
+
+Do NOT return an empty tiers array for a usage contract that clearly has a
+tier structure. If the document is ambiguous, still emit your best-guess tiers
+with rebateType="percent_of_spend" rather than dropping them entirely.
+
+── LEGACY FALLBACK SHAPE ──
+If the rich schema validation fails, respond with the legacy shape instead:
+{
+  "contractName": "...",
+  "vendorName": "...",
+  "contractType": "usage" | "capital" | ...,
+  "effectiveDate": "YYYY-MM-DD",
+  "expirationDate": "YYYY-MM-DD",
+  "terms": [
+    {
+      "termName": "...",
+      "termType": "spend_rebate",
+      "tiers": [
+        { "tierNumber": 1, "spendMin": 0, "spendMax": 750000, "rebateType": "percent_of_spend", "rebateValue": 3 },
+        { "tierNumber": 2, "spendMin": 750000, "rebateType": "percent_of_spend", "rebateValue": 5 }
+      ]
+    }
+  ]
+}
+Keep the tiers array NON-EMPTY whenever the contract has rebate structures.`
 
 const MAX_BYTES = 10 * 1024 * 1024
 
@@ -86,6 +131,16 @@ CONTRACT TYPE RULES (choose the most specific match):
 - "tie_in" = bundled deals linking equipment purchase to supply commitments
 - "grouped" = GPO/group purchasing organization contracts covering multiple vendors
 - "pricing_only" = ONLY use this if the document is purely a price list with NO rebates
+
+TIER EXTRACTION (CRITICAL): usage contracts ALMOST ALWAYS have tiered rebates.
+If the text mentions phrases like "X% on the first $Y", "Z% above $Y", "tier 1/2/3",
+"volume rebate: N units → X%", or any table of spend thresholds with percentages,
+you MUST emit one row per tier inside terms[].tiers[]:
+- tierNumber: 1 for the lowest, counting up.
+- spendMin / spendMax: dollar thresholds (spendMin=0 on tier 1, spendMax may be null on the top tier).
+- rebateType: "percent_of_spend" for percentages, "fixed_rebate" for flat $ amounts.
+- rebateValue: the percentage number (3 for 3%) or the dollar amount.
+Do NOT return an empty tiers array for a usage contract that clearly has a tier structure.
 
 Return valid JSON only — no markdown fences.
 

@@ -64,6 +64,11 @@ export const createContractSchema = z.object({
       }),
     )
     .optional(),
+  // Charles W1.W-E1 — optional client-generated idempotency key. The
+  // server keeps a 30s TTL map of (key → contractId) so a double-click
+  // on "Create Contract" returns the original contract instead of
+  // writing a duplicate row. Clients generate one cuid per form session.
+  idempotencyKey: z.string().min(1).optional(),
 })
 
 export type CreateContractInput = z.infer<typeof createContractSchema>

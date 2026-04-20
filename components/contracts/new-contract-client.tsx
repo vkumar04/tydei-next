@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
@@ -105,11 +105,8 @@ export function NewContractClient({
   const createMutation = useCreateContract()
 
   // Charles W1.W-D3 — contract-level tie-in capital state for the new-
-  // contract form. Lifted from the edit flow (edit-contract-client.tsx)
-  // so tie-in contracts can land with capital filled in, instead of the
-  // W1.T orphan-null shape that forced users to open Edit right after
-  // Create just to add capital. Submitted alongside values into the
-  // createContract action, which already accepts the six fields.
+  // contract form. Lifted from the edit flow so tie-in contracts can
+  // land with capital filled in, instead of the W1.T orphan-null shape.
   const [capital, setCapital] = useState<ContractCapital>({
     capitalCost: null,
     interestRate: null,
@@ -118,6 +115,16 @@ export function NewContractClient({
     paymentCadence: null,
     amortizationShape: "symmetrical",
   })
+
+  // Charles W1.W-E1 — one idempotency key per form session. Both the
+  // "Create Contract" button and "Save as Draft" attach this key to the
+  // server action payload. Server returns the already-created contract
+  // on replay instead of writing a second row.
+  const idempotencyKeyRef = useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `new-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  )
 
   const handlePricingUpload = useCallback(async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase()
@@ -520,6 +527,12 @@ export function NewContractClient({
   }
 
   async function handleSubmit() {
+    // Charles W1.W-E1 — client-side double-submit guard. The button is
+    // already `disabled={createMutation.isPending}` but we also no-op
+    // here so a programmatic double-invocation (e.g. Enter-key + click)
+    // can't race through.
+    if (createMutation.isPending) return
+
     const isValid = await form.trigger()
     if (!isValid) {
       toast.error("Please fix the form errors")
@@ -527,13 +540,13 @@ export function NewContractClient({
     }
 
     const values = form.getValues()
-    // Charles W1.W-D3 — include tie-in capital fields in the create
-    // payload. createContract reads all six off `data` and writes them
-    // to the Contract row (see lib/actions/contracts.ts around line
-    // 788). Non-tie-in contracts leave capital null; createContract
-    // already guards on `!= null`.
+    // Charles W1.W-D3 + W1.W-E1 — include tie-in capital fields alongside
+    // the idempotency key. createContract reads all six off `data` and
+    // writes them to the Contract row; non-tie-in contracts leave
+    // capital null.
     const contract = await createMutation.mutateAsync({
       ...values,
+      idempotencyKey: idempotencyKeyRef.current,
       capitalCost: capital.capitalCost,
       interestRate: capital.interestRate,
       termMonths: capital.termMonths,
@@ -578,6 +591,9 @@ export function NewContractClient({
   }
 
   async function handleSaveAsDraft() {
+    // Charles W1.W-E1 — same guard as handleSubmit.
+    if (createMutation.isPending) return
+
     // Set status to draft regardless of validation
     form.setValue("status", "draft")
 
@@ -588,11 +604,10 @@ export function NewContractClient({
       return
     }
 
-    // Charles W1.W-D3 — carry capital fields on the draft path too,
-    // otherwise a user who saves as draft and returns later sees the
-    // D1 empty-state card even though they filled the inputs.
+    // Carry capital fields AND idempotency on the draft path too.
     const contract = await createMutation.mutateAsync({
       ...values,
+      idempotencyKey: idempotencyKeyRef.current,
       capitalCost: capital.capitalCost,
       interestRate: capital.interestRate,
       termMonths: capital.termMonths,

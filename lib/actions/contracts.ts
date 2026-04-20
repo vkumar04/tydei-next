@@ -14,6 +14,7 @@ import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
+import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeContractScore } from "@/lib/actions/contracts/scoring"
 import {
@@ -761,6 +762,21 @@ export async function createContract(input: CreateContractInput) {
   const session = await requireFacility()
   const data = createContractSchema.parse(input)
 
+  // Charles W1.W-E1 — idempotency. When the client supplies a key we
+  // hold a 30s cache of (key → created contract). A second call within
+  // the window (double-click, network retry, HMR race) returns the
+  // original contract instead of writing a duplicate row. Scope the
+  // cache by user+facility so two users can't collide.
+  type CachedContract = Awaited<ReturnType<typeof prisma.contract.create>>
+  const idempotencyScope = `create-contract:${session.user.id}:${session.facility.id}`
+  if (data.idempotencyKey) {
+    const cached = idempotencyGet<CachedContract>(
+      idempotencyScope,
+      data.idempotencyKey,
+    )
+    if (cached) return cached
+  }
+
   const contract = await prisma.contract.create({
     data: {
       name: data.name,
@@ -849,7 +865,16 @@ export async function createContract(input: CreateContractInput) {
   revalidatePath("/dashboard/contracts")
   revalidatePath("/dashboard")
 
-  return serialize(contract)
+  const result = serialize(contract)
+
+  // Charles W1.W-E1 — cache the serialized result under the client's
+  // idempotency key so a concurrent double-submit returns this contract
+  // rather than writing another row.
+  if (data.idempotencyKey) {
+    idempotencyPut(idempotencyScope, data.idempotencyKey, result)
+  }
+
+  return result
 }
 
 // ─── Update Contract ─────────────────────────────────────────────

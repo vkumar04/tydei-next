@@ -146,6 +146,41 @@ export function EditContractClient({
       return
     }
 
+    // Charles W1.W-E3 — pre-validate terms BEFORE we kick off the
+    // contract-level update. Previously an invalid term (blank dates,
+    // missing term name) would throw inside the save loop, the outer
+    // try/catch would surface "Save failed", but by then the
+    // contract-type change had already committed. The user saw their
+    // type change persist and their new rebate tier vanish. Fail fast
+    // instead so neither half half-commits.
+    //
+    // Seed blank date fields from the contract's own dates so a user
+    // who added a term mid-type-change isn't blocked on typing dates
+    // they almost always copy verbatim from the header.
+    const contractStart = contract
+      ? new Date(contract.effectiveDate).toISOString().split("T")[0]
+      : ""
+    const contractEnd = contract
+      ? new Date(contract.expirationDate).toISOString().split("T")[0]
+      : ""
+    const seededTerms = terms.map((t) => ({
+      ...t,
+      effectiveStart: t.effectiveStart || contractStart,
+      effectiveEnd: t.effectiveEnd || contractEnd,
+      termName:
+        t.termName ||
+        (t.termType ? `${t.termType.replace(/_/g, " ")} term` : "Rebate term"),
+    }))
+    const invalidTerm = seededTerms.find(
+      (t) => !t.termName || !t.effectiveStart || !t.effectiveEnd,
+    )
+    if (invalidTerm) {
+      toast.error(
+        "Each term needs a name and effective/expiration dates — check the Terms tab",
+      )
+      return
+    }
+
     const values = form.getValues()
 
     // Charles R5.36 P0 — wrap the whole save in a try/catch so a
@@ -176,7 +211,9 @@ export function EditContractClient({
       // Sync terms: delete removed, create new, update existing tiers
       if (contract) {
         const existingIds = contract.terms.map((t) => t.id)
-        const currentIds = terms.filter((t) => t.id).map((t) => t.id as string)
+        const currentIds = seededTerms
+          .filter((t) => t.id)
+          .map((t) => t.id as string)
 
         // Delete removed terms
         for (const existingId of existingIds) {
@@ -186,7 +223,7 @@ export function EditContractClient({
         }
 
         // Create new terms and update tiers of existing
-        for (const term of terms) {
+        for (const term of seededTerms) {
           if (term.id) {
             // Persist term-level edits in addition to tier changes.
             // Charles W1.T — capital fields no longer ride with the term
@@ -308,7 +345,15 @@ export function EditContractClient({
         </TabsContent>
 
         <TabsContent value="terms" className="mt-6 space-y-6">
-          {contract?.contractType === "tie_in" && (
+          {/* Charles W1.W-E3 — drive capital-card visibility and the
+              terms-entry type-change defaults off the LIVE form state,
+              not the DB-loaded `contract.contractType`. Without this,
+              changing the type mid-edit (e.g. pricing_only → usage or
+              tie_in) doesn't propagate into ContractTermsEntry's
+              contractType prop, so the tie-in capital auto-fill effect
+              (and any future contractType-dependent behavior) sees a
+              stale value. */}
+          {form.watch("contractType") === "tie_in" && (
             <ContractCapitalEntry
               capital={capital}
               onChange={(patch) =>
@@ -326,7 +371,7 @@ export function EditContractClient({
           <ContractTermsEntry
             terms={terms}
             onChange={setTerms}
-            contractType={contract?.contractType}
+            contractType={form.watch("contractType")}
           />
         </TabsContent>
 
