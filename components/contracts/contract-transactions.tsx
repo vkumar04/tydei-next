@@ -596,7 +596,12 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
   // detail header card and the contracts list row, so these surfaces
   // can never drift. After W1.P every ledger row is a Rebate row, so
   // we can call the base helper directly.
-  const totalCollected = sumCollectedRebates(rows)
+  const totalCollected = sumCollectedRebates(
+    rows.map((r) => ({
+      collectionDate: r.collectionDate ?? null,
+      rebateCollected: r.rebateCollected,
+    })),
+  )
   const totalPayments = 0
 
   if (rows.length === 0) {
