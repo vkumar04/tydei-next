@@ -606,8 +606,9 @@ export function ContractTermsEntry({
                               }
                             />
                             <p className="text-[11px] text-muted-foreground">
-                              e.g. $1,320,000 — the annual consumable spend the
-                              facility commits to
+                              {contractType === "tie_in"
+                                ? "Floor. If 12-month spend falls below this, the contract will not retire its capital on schedule. Drives the at-risk badge on the Capital Amortization card."
+                                : "Reference only — not enforced in rebate math today."}
                             </p>
                             {(term.minimumPurchaseCommitment == null ||
                               term.minimumPurchaseCommitment === 0) && (
