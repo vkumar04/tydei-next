@@ -1,58 +1,26 @@
 /**
- * Unified rebate engine — dispatcher.
+ * Unified rebate engine — type barrel only.
  *
- * `calculateRebate(config, periodData, options)` is the single entry
- * point. All 8 type-specific engines are LIVE as of subsystem 8.
+ * Historically this file exported a `calculateRebate(config, periodData,
+ * options)` dispatcher that fanned out to 8 per-type engines. As of the
+ * resolution to the 2026-04-19 engine-parameter coverage audit
+ * (docs/superpowers/audits/2026-04-19-engine-param-coverage.md), the
+ * dispatcher was removed: no server action or component ever called it,
+ * and only two of its eight `RebateType` branches were even reachable
+ * from the Prisma-to-engine bridge. Display-path code uses
+ * `lib/contracts/rebate-accrual-schedule.ts` and
+ * `lib/rebates/calculate.ts#computeRebateFromPrismaTiers` directly.
+ *
+ * Per-type engine calculators (`spend-rebate.ts`, `volume-rebate.ts`,
+ * `tier-price-reduction.ts`, etc.) remain exported from their own
+ * modules — callers that want one should import it by path, not through
+ * this barrel. This file now exists only to re-export the shared
+ * configuration/result types so downstream code doesn't need to know
+ * which file each type lives in.
  */
-import type {
+export type {
   EngineOptions,
   PeriodData,
   RebateConfig,
   RebateResult,
 } from "./types"
-import { zeroResult } from "./types"
-import { calculateSpendRebate } from "./spend-rebate"
-import { calculateVolumeRebate } from "./volume-rebate"
-import { calculateTierPriceReduction } from "./tier-price-reduction"
-import { calculateMarketSharePriceReduction } from "./market-share-price-reduction"
-import { calculateMarketShareRebate } from "./market-share-rebate"
-import { calculateCarveOut } from "./carve-out"
-import { calculateCapitated } from "./capitated"
-import { calculateTieInCapital } from "./tie-in-capital"
-
-export type { RebateConfig, RebateResult, PeriodData, EngineOptions } from "./types"
-
-export function calculateRebate(
-  config: RebateConfig,
-  periodData: PeriodData,
-  options?: EngineOptions,
-): RebateResult {
-  const periodLabel = options?.periodLabel ?? null
-
-  switch (config.type) {
-    case "SPEND_REBATE":
-      return calculateSpendRebate(config, periodData, options)
-    case "VOLUME_REBATE":
-      return calculateVolumeRebate(config, periodData, options)
-    case "TIER_PRICE_REDUCTION":
-      return calculateTierPriceReduction(config, periodData, options)
-    case "MARKET_SHARE_PRICE_REDUCTION":
-      return calculateMarketSharePriceReduction(config, periodData, options)
-    case "CARVE_OUT":
-      return calculateCarveOut(config, periodData, options)
-    case "MARKET_SHARE_REBATE":
-      return calculateMarketShareRebate(config, periodData, options)
-    case "CAPITATED":
-      return calculateCapitated(config, periodData, options)
-    case "TIE_IN_CAPITAL":
-      return calculateTieInCapital(config, periodData, options)
-    default: {
-      // Exhaustiveness check — should be unreachable with typed input.
-      const fallback = zeroResult("SPEND_REBATE", periodLabel)
-      fallback.errors.push(
-        `Unknown config type: ${(config as { type?: string }).type ?? "undefined"}`,
-      )
-      return fallback
-    }
-  }
-}

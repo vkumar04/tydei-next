@@ -23,16 +23,22 @@
  * ─── Coverage status codes ──────────────────────────────────
  *   - "wired"      — at least one action test covers the full
  *                    Prisma-to-engine path for this function.
- *   - "dispatched" — reached only via `calculateRebate(config, ...)`;
- *                    not directly imported by any action.
  *   - "unwired"    — engine exists but no display-facing action reaches
  *                    it. See `docs/superpowers/audits/2026-04-19-engine-param-coverage.md`.
+ *                    (Per the audit resolution, the `calculateRebate`
+ *                    dispatcher and `buildConfigFromPrismaTerm` bridge
+ *                    were removed — so "dispatched" is no longer a
+ *                    valid status. Every engine calculator is either
+ *                    directly invoked by an action ("wired"),
+ *                    structurally unreachable from production
+ *                    ("unwired"), or composed by another engine
+ *                    ("internal").)
  *   - "internal"   — consumed by other engines (capitated, tie-in-capital)
  *                    rather than by actions directly.
  */
 import { describe, it, expect } from "vitest"
 
-type WiringStatus = "wired" | "dispatched" | "unwired" | "internal"
+type WiringStatus = "wired" | "unwired" | "internal"
 
 interface EngineWiring {
   /** Exported name from `lib/rebates/engine/<file>.ts`. */
@@ -56,8 +62,8 @@ const MANIFEST: EngineWiring[] = [
   {
     fn: "calculateCapitated",
     source: "lib/rebates/engine/capitated.ts",
-    status: "dispatched",
-    note: "Reachable through calculateRebate dispatcher; no action directly constructs CAPITATED config today — see engine-param-coverage audit row for groupedReferenceNumbers/periodCap.",
+    status: "unwired",
+    note: "No action constructs CAPITATED config today. The calculateRebate dispatcher was removed as part of the 2026-04-19 engine-param-coverage audit resolution; the per-type calculator is still exported but unreachable from the display path until a future action adopts it.",
   },
   {
     fn: "calculateCarveOut",
@@ -80,8 +86,8 @@ const MANIFEST: EngineWiring[] = [
   {
     fn: "calculateSpendRebate",
     source: "lib/rebates/engine/spend-rebate.ts",
-    status: "dispatched",
-    note: "Dispatched via computeRebateFromPrismaTerm in from-prisma.ts (tests: rebates/__tests__/from-prisma.test.ts). Display surfaces use accrual-schedule shared utilities instead.",
+    status: "unwired",
+    note: "No server action imports calculateSpendRebate directly. Display surfaces use lib/contracts/rebate-accrual-schedule.ts and lib/rebates/calculate.ts#computeRebateFromPrismaTiers. The old dispatcher bridge (computeRebateFromPrismaTerm / buildConfigFromPrismaTerm) was removed per the 2026-04-19 engine-param-coverage audit resolution.",
   },
   {
     fn: "calculateTieInCapital",
@@ -98,8 +104,8 @@ const MANIFEST: EngineWiring[] = [
   {
     fn: "calculateVolumeRebate",
     source: "lib/rebates/engine/volume-rebate.ts",
-    status: "dispatched",
-    note: "Dispatched via computeRebateFromPrismaTerm when ContractTerm.termType = 'volume_rebate'. No action-level wiring test exercises the full path; see audit.",
+    status: "unwired",
+    note: "No action constructs VolumeRebateConfig directly. The old dispatcher path via computeRebateFromPrismaTerm was removed per the 2026-04-19 engine-param-coverage audit resolution; volume-rebate accrual still flows through lib/contracts/rebate-accrual-schedule.ts.",
   },
 ]
 
@@ -117,7 +123,7 @@ describe("engine-wiring manifest", () => {
     ({ fn, source, status, note }) => {
       expect(fn).toMatch(/^[a-zA-Z][\w]*$/)
       expect(source).toMatch(/^lib\/rebates\/engine\//)
-      expect(["wired", "dispatched", "unwired", "internal"]).toContain(status)
+      expect(["wired", "unwired", "internal"]).toContain(status)
       expect(note.length).toBeGreaterThan(10)
     },
   )

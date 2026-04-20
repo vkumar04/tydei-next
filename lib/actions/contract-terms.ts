@@ -95,8 +95,10 @@ export async function createContractTerm(input: CreateTermInput) {
   void _paymentCadence
   void _amortizationShape
 
-  // scopedCategoryIds maps to the ContractTerm.categories String[] column
-  // (already consumed by lib/rebates/from-prisma.ts::buildConfigFromPrismaTerm).
+  // scopedCategoryIds maps to the ContractTerm.categories String[] column.
+  // (Formerly consumed by lib/rebates/from-prisma.ts::buildConfigFromPrismaTerm,
+  // removed in the 2026-04-19 engine-param-coverage audit resolution — the
+  // column is still read by the accrual/display path and by AI extraction.)
   // Include it on the term itself when provided.
   const termDataWithCategories: typeof termData & {
     categories?: string[]

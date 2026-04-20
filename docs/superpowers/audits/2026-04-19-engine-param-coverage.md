@@ -241,3 +241,91 @@ bridge:
 Either direction collapses the "engine parameters set but unreached"
 surface to zero. Leaving both paths live indefinitely is the W1.U-A
 bug class on a larger scale.
+
+## Resolution (2026-04-19)
+
+**Direction chosen:** Option 2 — shrink the unreachable surface.
+
+Rationale: every production display path already routes through
+`lib/contracts/rebate-accrual-schedule.ts` or
+`lib/rebates/calculate.ts#computeRebateFromPrismaTiers`. No server
+action, component, or loader invoked the unified-engine dispatcher, and
+6 of its 8 `RebateType` branches had no Prisma bridge at all. Keeping
+the orchestrator alive would have required either building 6 new
+Prisma-to-engine bridges to close the HIGH rows above, or accepting
+permanent dead code. Adopting the engine wholesale was not on the near
+roadmap, so the shrink is the correct reduction.
+
+### What was deleted
+
+- `lib/rebates/engine/index.ts` — removed the `calculateRebate(config,
+  periodData, options)` dispatcher and its per-case fanout to all 8
+  engine types. The file now only re-exports the shared
+  `RebateConfig` / `PeriodData` / `RebateResult` / `EngineOptions`
+  types so downstream code that needs those shapes keeps working.
+- `lib/rebates/from-prisma.ts` — removed entirely. This file housed
+  `buildConfigFromPrismaTerm(term)` (the Prisma-to-engine bridge) and
+  `computeRebateFromPrismaTerm(term, periodData, options)` (the thin
+  wrapper that called the dispatcher). Neither function had a live
+  caller outside its own test file.
+- `lib/rebates/__tests__/from-prisma.test.ts` — removed. Every test in
+  this file exercised only the deleted bridge.
+- `lib/rebates/engine/__tests__/dispatcher.test.ts` — removed. Every
+  test in this file exercised only the deleted dispatcher.
+
+### What was kept
+
+- **All per-type calculator modules** remain exported from their own
+  files (`spend-rebate.ts`, `volume-rebate.ts`,
+  `tier-price-reduction.ts`, `market-share-rebate.ts`,
+  `market-share-price-reduction.ts`, `capitated.ts`, `carve-out.ts`,
+  `tie-in-capital.ts`, `amortization.ts`) along with their test
+  suites. The audit shows these are imported directly in places
+  (e.g., `capitated.ts` composes `spend-rebate.ts` and
+  `volume-rebate.ts`; `tie-in-capital.ts` wraps
+  `buildTieInAmortizationSchedule`); deleting them would regress
+  those internal compositions.
+- **The `RebateType` union in `lib/rebates/engine/types.ts`** (and the
+  mirrored Prisma enum) stays intact. `TIER_PRICE_REDUCTION`,
+  `MARKET_SHARE_REBATE`, `MARKET_SHARE_PRICE_REDUCTION`, `CAPITATED`,
+  `CARVE_OUT`, and `TIE_IN_CAPITAL` are data-model term types that
+  facilities already create through the contract-terms UI and AI
+  extraction pipeline; the schema still needs them. What's gone is
+  the claim that the unified dispatcher can compute a rebate from
+  them without a matching Prisma bridge.
+- **Shared tier primitives** (`determineTier`,
+  `calculateCumulativeRebate`, `calculateMarginalRebate`, etc. under
+  `lib/rebates/engine/shared/`) remain — these are the primitives the
+  production accrual schedule uses directly.
+- **`lib/rebates/calculate.ts#computeRebateFromPrismaTiers`** remains
+  (this is the older, spend-based facade actually used in production).
+
+### Why per-type calculators stayed
+
+The `lib/actions/__tests__/engine-wiring-manifest.test.ts` manifest
+was updated to drop the `"dispatched"` status (the dispatcher no
+longer exists) and now classifies every per-type calculator as either
+`"wired"`, `"unwired"`, or `"internal"`. Unwired calculators still
+pass the `engine-wiring-parity.test.ts` tripwire because the manifest
+names them — they're documented as unreachable from production rather
+than deleted outright. That leaves a clean re-adoption path if the
+product direction changes: wire a new server action to the existing
+calculator and flip the status to `"wired"`.
+
+### HIGH-risk row outcomes
+
+- **H1 (`SpendRebate.purchases`), H2 (`VolumeRebate.cptCode/caseId`),
+  H7 (`priorYearActualSpend`)** — no longer tracked as gaps. The
+  engine paths those parameters live on are unreachable from Prisma
+  by design; re-opening the parameters requires a full re-adoption
+  effort that would ship its own plan.
+- **H3 (MarketShare bridge), H4 (CarveOut bridge), H5 (Capitated
+  bridge), H8 (TierPriceReduction bridge)** — closed by deletion, not
+  by wiring. The bridge no longer exists, so "bridge doesn't cover
+  type X" is now vacuously true. If a future subsystem adopts the
+  unified engine, it will need to build bridges from scratch against
+  the Prisma schema at that time.
+- **H6 (TieInCapital.shortfallHandling)** — still a gap when the
+  future tie-in accrual job lands. The calculator is preserved; the
+  shortfallHandling column is preserved on `ContractTerm`. Wiring is
+  the open work item.
