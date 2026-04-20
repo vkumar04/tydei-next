@@ -222,6 +222,12 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
     // set. Portfolio-wide (all-time past), not YTD: the dashboard is a
     // portfolio overview; YTD-scoped rebate metrics live on the
     // contract detail / list per R5.27/R5.31. Charles R5.37.
+    //
+    // The DB-side `payPeriodEnd: { lte: referenceDate }` filter here
+    // is the Prisma-aggregate equivalent of the in-memory
+    // `sumEarnedRebatesLifetime` helper in
+    // `lib/contracts/rebate-earned-filter.ts` — keep both in sync
+    // (Charles W1.U-B).
     prisma.rebate.aggregate({
       where: {
         contract: { facilityId },

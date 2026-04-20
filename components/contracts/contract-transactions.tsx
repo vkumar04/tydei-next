@@ -55,6 +55,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { getContractRebates } from "@/lib/actions/contract-periods"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { mapRebateRowsToLedger } from "@/components/contracts/contract-transactions-display"
 import { queryKeys } from "@/lib/query-keys"
@@ -585,12 +586,15 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
   // every Rebate row so the number matches the scope advertised in the
   // tooltip below, and stays distinct from the header's
   // "Rebates Earned (YTD)" card. Charles W1.P: ContractPeriod rollups
-  // are no longer summed here.
-  const today = new Date()
-  const totalRebates = rows.reduce((s, r) => {
-    if (!r.periodEnd) return s
-    return new Date(r.periodEnd) <= today ? s + r.rebateEarned : s
-  }, 0)
+  // are no longer summed here. Charles W1.U-B: delegated to the
+  // canonical `sumEarnedRebatesLifetime` helper so this surface and
+  // the detail header card are guaranteed to apply the same rule.
+  const totalRebates = sumEarnedRebatesLifetime(
+    rows.map((r) => ({
+      payPeriodEnd: r.periodEnd,
+      rebateEarned: r.rebateEarned,
+    })),
+  )
   // Charles W1.N / W1.R: "Total Collected" delegates to the canonical
   // `sumCollectedRebates` helper — the same filter powers the contract
   // detail header card and the contracts list row, so these surfaces

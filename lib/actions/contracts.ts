@@ -23,6 +23,10 @@ import {
   type FacilityScope,
 } from "@/lib/actions/contracts-auth"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
+import {
+  sumEarnedRebatesLifetime,
+  sumEarnedRebatesYTD,
+} from "@/lib/contracts/rebate-earned-filter"
 import { buildUnionCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
 
 // ─── List Contracts ──────────────────────────────────────────────
@@ -91,9 +95,10 @@ export async function getContracts(input: ContractFilters) {
   // Charles R5.31: earned is scoped to the current calendar year (YTD) so
   // the list column matches the detail header's "Rebates Earned (YTD)"
   // card (added in R5.27). Must stay in lockstep with the `rebateEarnedYTD`
-  // computation in `getContract` above.
+  // computation in `getContract` above. Charles W1.U-B: routed through
+  // the canonical `sumEarnedRebatesYTD` helper so the list column, detail
+  // header card, and Transactions tab cannot drift apart.
   const today = new Date()
-  const startOfYear = new Date(today.getFullYear(), 0, 1)
 
   // Charles W1.J — populate `currentSpend` per row using the R5.28
   // trailing-12-month cascade so the list page's SPEND column matches
@@ -222,15 +227,9 @@ export async function getContracts(input: ContractFilters) {
   )
 
   const withDerived = contracts.map((c) => {
-    const rebateEarned = (c.rebates ?? []).reduce(
-      (sum, r) =>
-        r.payPeriodEnd &&
-        r.payPeriodEnd <= today &&
-        r.payPeriodEnd >= startOfYear
-          ? sum + Number(r.rebateEarned ?? 0)
-          : sum,
-      0,
-    )
+    // Charles W1.U-B: canonical YTD helper — matches the detail header
+    // card so the list column and header can never drift.
+    const rebateEarned = sumEarnedRebatesYTD(c.rebates ?? [], today)
     // Charles W1.R: canonical "collected" aggregate — single helper so the
     // list row, detail header card, and Transactions tab cannot drift.
     const rebateCollected = sumCollectedRebates(c.rebates ?? [])
@@ -485,24 +484,15 @@ export async function getContract(
   // on the Transactions tab. `rebateEarned` stays lifetime-earned (still used
   // by the collection-ratio widget on the Overview tab); `rebateEarnedYTD`
   // is the calendar-year slice surfaced in the header stat card.
+  // Charles W1.U-B: canonical helpers — see lib/contracts/rebate-earned-filter.
+  // `rebateEarned` is the lifetime closed-period aggregate (still used by
+  // the collection-ratio widget on the Overview tab); `rebateEarnedYTD` is
+  // the calendar-year slice surfaced in the header stat card. Both share
+  // the `payPeriodEnd <= today` rule — the YTD variant just layers a
+  // `>= Jan 1 of today's year` floor on top.
   const today = new Date()
-  const startOfYear = new Date(today.getFullYear(), 0, 1)
-  const rebateEarned = contract.rebates.reduce(
-    (sum, r) =>
-      r.payPeriodEnd && r.payPeriodEnd <= today
-        ? sum + Number(r.rebateEarned ?? 0)
-        : sum,
-    0,
-  )
-  const rebateEarnedYTD = contract.rebates.reduce(
-    (sum, r) =>
-      r.payPeriodEnd &&
-      r.payPeriodEnd <= today &&
-      r.payPeriodEnd >= startOfYear
-        ? sum + Number(r.rebateEarned ?? 0)
-        : sum,
-    0,
-  )
+  const rebateEarned = sumEarnedRebatesLifetime(contract.rebates, today)
+  const rebateEarnedYTD = sumEarnedRebatesYTD(contract.rebates, today)
   // Charles W1.R: canonical helper — see lib/contracts/rebate-collected-filter.
   const rebateCollected = sumCollectedRebates(contract.rebates)
 
@@ -598,6 +588,8 @@ export async function getContractStats(
   // Charles R5.31: the KPI card on the list page is labeled "Total Rebates
   // Earned (YTD)" to match the list column and the detail header. Apply
   // the same calendar-year floor (startOfYear ≤ payPeriodEnd ≤ today).
+  // The DB-side aggregation below is the Prisma equivalent of the
+  // in-memory `sumEarnedRebatesYTD` helper — keep them in sync (W1.U-B).
   const today = new Date()
   const startOfYear = new Date(today.getFullYear(), 0, 1)
   const rebateResult = await prisma.rebate.aggregate({
@@ -700,6 +692,8 @@ export async function getContractMetricsBatch(contractIds: string[]): Promise<
   //
   // Charles R5.31: the list column is labeled "Rebate Earned (YTD)" so
   // apply the same calendar-year floor used by the detail header.
+  // These DB-side aggregations are the Prisma equivalents of the
+  // in-memory `sumEarnedRebatesYTD` helper — keep them in sync (W1.U-B).
   const today = new Date()
   const startOfYear = new Date(today.getFullYear(), 0, 1)
   const [rebateAgg, periodRebateAgg] = await Promise.all([

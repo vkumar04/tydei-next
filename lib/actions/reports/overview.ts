@@ -29,6 +29,7 @@ import {
   type SpendRecord,
   type RebateRecord,
 } from "@/lib/reports/monthly-trend"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 
 export interface ReportsOverviewPayload {
   lifecycle: LifecycleDistribution
@@ -125,7 +126,18 @@ export async function getReportsOverview(input?: {
     referenceDate,
   })
 
-  const totalRebates = rebates.reduce((sum, r) => sum + r.rebateEarned, 0)
+  // Charles W1.U-B: route through the canonical helper so reports'
+  // "Total Rebates" stat applies the same `payPeriodEnd <= today`
+  // closed-period rule as every other Earned surface. The date-range
+  // filter above already narrows the query; the helper adds the
+  // future-period safety net for unbounded callers.
+  const totalRebates = sumEarnedRebatesLifetime(
+    rebateRows.map((r) => ({
+      payPeriodEnd: r.payPeriodEnd,
+      rebateEarned: r.rebateEarned,
+    })),
+    referenceDate,
+  )
 
   return serialize({
     lifecycle,
