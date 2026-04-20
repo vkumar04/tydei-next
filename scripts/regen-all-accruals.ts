@@ -29,6 +29,7 @@ import { prisma } from "@/lib/db"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 import {
   bucketAccrualsByCadence,
+  buildEvaluationPeriodAccruals,
   buildMultiTermMonthlyAccruals,
   type MonthlySpend,
   type EvaluationPeriod,
@@ -78,8 +79,14 @@ async function regenerateOne(contract: ContractRow) {
     }))
     const method: RebateMethodName =
       term.rebateMethod === "marginal" ? "marginal" : "cumulative"
+    const ep = term.evaluationPeriod
     const evaluationPeriod: EvaluationPeriod =
-      (term.evaluationPeriod as EvaluationPeriod | null) ?? "annual"
+      ep === "monthly" ||
+      ep === "quarterly" ||
+      ep === "semi_annual" ||
+      ep === "annual"
+        ? ep
+        : "annual"
     return {
       tiers,
       method,
@@ -133,16 +140,24 @@ async function regenerateOne(contract: ContractRow) {
     cursor.setUTCMonth(cursor.getUTCMonth() + 1)
   }
 
-  const rows = buildMultiTermMonthlyAccruals(series, termConfigs)
+  // Charles W1.W-B1: split terms by evaluation period. Monthly-eval
+  // terms flow through the existing monthly→paymentCadence bucketer.
+  // Annual / semi-annual / quarterly-eval terms emit ONE row per
+  // completed evaluation window — no partial-period accrual.
+  const monthlyEvalIdx: number[] = []
+  const periodEvalIdx: number[] = []
+  termConfigs.forEach((cfg, i) => {
+    if (cfg.evaluationPeriod === "monthly") monthlyEvalIdx.push(i)
+    else periodEvalIdx.push(i)
+  })
 
-  // Charles W1.O: write Rebate rows at the term's paymentCadence so a
-  // quarterly contract gets one row per calendar quarter rather than
-  // three monthly rows. Mixed-cadence contracts use the first term's
-  // cadence (primary-term convention). Fall back to monthly when unset.
+  const monthlyTermConfigs = monthlyEvalIdx.map((i) => termConfigs[i])
+  const rows = buildMultiTermMonthlyAccruals(series, monthlyTermConfigs)
+
   const primaryCadence: PaymentCadence =
     (termsWithTiers[0].paymentCadence as PaymentCadence | null | undefined) ??
     "monthly"
-  const buckets = bucketAccrualsByCadence(rows, primaryCadence)
+  const cadenceBuckets = bucketAccrualsByCadence(rows, primaryCadence)
 
   const deleted = await prisma.rebate.deleteMany({
     where: {
@@ -151,7 +166,16 @@ async function regenerateOne(contract: ContractRow) {
     },
   })
 
-  const toInsert = buckets.map((b) => {
+  const toInsert: {
+    contractId: string
+    facilityId: string
+    rebateEarned: number
+    rebateCollected: number
+    payPeriodStart: Date
+    payPeriodEnd: Date
+    collectionDate: null
+    notes: string
+  }[] = cadenceBuckets.map((b) => {
     const noteBody =
       b.termCount > 1
         ? `${b.termCount} terms combined on $${b.totalSpend.toFixed(2)} (${b.label})`
@@ -167,6 +191,40 @@ async function regenerateOne(contract: ContractRow) {
       notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
     }
   })
+
+  // Period-eval terms: one row per completed evaluation window.
+  for (const origIdx of periodEvalIdx) {
+    const term = termsWithTiers[origIdx]
+    const cfg = termConfigs[origIdx]
+    const anchor = term.effectiveStart ?? contract.effectiveDate
+    const boundedUntil = term.effectiveEnd
+      ? new Date(
+          Math.min(today.getTime(), term.effectiveEnd.getTime(), end.getTime()),
+        )
+      : new Date(Math.min(today.getTime(), end.getTime()))
+    const periodBuckets = buildEvaluationPeriodAccruals(
+      series,
+      cfg.tiers,
+      cfg.method,
+      cfg.evaluationPeriod,
+      anchor,
+      { boundedUntil },
+    )
+    for (const b of periodBuckets) {
+      if (b.rebateEarned <= 0 && b.totalSpend <= 0) continue
+      const noteBody = `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)} (${cfg.evaluationPeriod}-eval)`
+      toInsert.push({
+        contractId: contract.id,
+        facilityId: contract.facilityId,
+        rebateEarned: b.rebateEarned,
+        rebateCollected: 0,
+        payPeriodStart: b.periodStart,
+        payPeriodEnd: b.periodEnd,
+        collectionDate: null,
+        notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
+      })
+    }
+  }
 
   if (toInsert.length === 0) {
     return { skipped: null, inserted: 0, deleted: deleted.count }

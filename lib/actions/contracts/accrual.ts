@@ -72,7 +72,8 @@ export async function getAccrualTimeline(contractId: string) {
     }))
     const evaluationPeriod: EvaluationPeriod =
       term.evaluationPeriod === "monthly" ||
-      term.evaluationPeriod === "quarterly"
+      term.evaluationPeriod === "quarterly" ||
+      term.evaluationPeriod === "semi_annual"
         ? term.evaluationPeriod
         : "annual"
     return {

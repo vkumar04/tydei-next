@@ -53,13 +53,37 @@ export function calculateCumulative(
     return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
   }
 
-  const sorted = sortedByMin(tiers)
-  // Default to the lowest tier (spend >= its min, which is usually 0).
-  let applicable = sorted[0]
+  // Sort by spendMin asc, then tierNumber asc as tiebreaker. The
+  // tieBreaker matters when the seed / import is malformed and every
+  // tier shares `spendMin = 0` — without it the promotion loop below
+  // walks the array order and silently picks the highest-rebate tier
+  // regardless of spend (Charles W1.W-B2 audit: "cumulative not
+  // working"; BUG-terms-6 from the 2026-04-19 sweep). See the regression
+  // test at `__tests__/cumulative-method.test.ts`.
+  const sorted = [...tiers].sort((a, b) => {
+    const minDiff = numericValue(a.spendMin) - numericValue(b.spendMin)
+    if (minDiff !== 0) return minDiff
+    return a.tierNumber - b.tierNumber
+  })
 
-  for (const tier of sorted) {
-    if (spend >= numericValue(tier.spendMin)) {
+  // Walk in spendMin order and only PROMOTE to a tier whose spendMin is
+  // strictly greater than the previously-applicable tier's spendMin OR
+  // is zero and matches today's spend (the first tier's normal case).
+  // Tiers that share a spendMin with an earlier tier are ignored — math
+  // has no way to pick between them, so we defer to the lowest
+  // tierNumber (from the tiebreaker above).
+  let applicable = sorted[0]
+  let appliedMin = numericValue(sorted[0].spendMin)
+  for (let i = 1; i < sorted.length; i++) {
+    const tier = sorted[i]
+    const tMin = numericValue(tier.spendMin)
+    // Skip malformed duplicates — same spendMin as an already-applied
+    // tier. Only promote when the tier's spendMin is strictly greater
+    // than the currently-applicable tier's, AND the spend meets it.
+    if (tMin <= appliedMin) continue
+    if (spend >= tMin) {
       applicable = tier
+      appliedMin = tMin
     }
   }
 

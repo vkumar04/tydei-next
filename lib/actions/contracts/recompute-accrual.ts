@@ -32,6 +32,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   bucketAccrualsByCadence,
+  buildEvaluationPeriodAccruals,
   buildMonthlyAccruals,
   type EvaluationPeriod,
   type MonthlySpend,
@@ -172,7 +173,8 @@ export async function recomputeAccrualForContract(
     const method: RebateMethodName = term.rebateMethod ?? "cumulative"
     const evaluationPeriod: EvaluationPeriod =
       term.evaluationPeriod === "monthly" ||
-      term.evaluationPeriod === "quarterly"
+      term.evaluationPeriod === "quarterly" ||
+      term.evaluationPeriod === "semi_annual"
         ? term.evaluationPeriod
         : "annual"
     return {
@@ -253,30 +255,39 @@ export async function recomputeAccrualForContract(
     return series
   }
 
-  // Per-term accrual series. We compute each term against its own
-  // category-filtered spend (W1.U-A) instead of feeding one vendor-wide
-  // series through `buildMultiTermMonthlyAccruals`. Shape the per-term
-  // TimelineRows into a synthetic MultiTermTimelineRow[] aligned to the
-  // longest series so the existing cadence bucketer can run unchanged.
-  const perTermResults = termsWithTiers.map((term, idx) => {
+  // Charles W1.W-B1 — split terms by evaluation period. Terms whose
+  // `evaluationPeriod` is longer than monthly (annual, semi-annual,
+  // quarterly) must emit ONE Rebate row per completed evaluation window
+  // — not monthly rows that accrete before the period closes. Monthly-
+  // eval terms continue through the legacy per-month accrual + payment-
+  // cadence bucketer so per-month rebate reporting still works.
+  const monthlyEvalIdx: number[] = []
+  const periodEvalIdx: number[] = []
+  termsWithTiers.forEach((_, idx) => {
+    if (termConfigs[idx].evaluationPeriod === "monthly") {
+      monthlyEvalIdx.push(idx)
+    } else {
+      periodEvalIdx.push(idx)
+    }
+  })
+
+  // ─── Monthly-eval terms: existing monthly → cadence-bucket flow ───
+  const monthlyPerTermResults = monthlyEvalIdx.map((origIdx) => {
+    const term = termsWithTiers[origIdx]
     const termScope = { appliesTo: term.appliesTo, categories: term.categories }
     const termCategoryWhere = buildCategoryWhereClause(termScope)
     const series = buildSeries(cogRecords, termCategoryWhere)
     const rows = buildMonthlyAccruals(
       series,
-      termConfigs[idx].tiers,
-      termConfigs[idx].method,
-      termConfigs[idx].evaluationPeriod,
+      termConfigs[origIdx].tiers,
+      termConfigs[origIdx].method,
+      termConfigs[origIdx].evaluationPeriod,
     )
-    return { termIndex: idx, series, rows, config: termConfigs[idx] }
+    return { termIndex: origIdx, series, rows, config: termConfigs[origIdx] }
   })
 
-  // Align every term's rows on the same month index. All series share
-  // the same effectiveDate→end window via `buildSeries`, so they already
-  // line up — but we walk the first term's months as the canonical
-  // timeline and gather each term's contribution.
   const monthsTimeline =
-    perTermResults[0]?.series.map((s) => s.month) ?? []
+    monthlyPerTermResults[0]?.series.map((s) => s.month) ?? []
 
   const multiRows: MultiTermTimelineRow[] = monthsTimeline.map((month, i) => {
     let totalSpend = 0
@@ -289,10 +300,7 @@ export async function recomputeAccrualForContract(
     const monthStart = monthKeyToDate(month)
     const monthEnd = monthKeyEndOfMonth(month)
 
-    for (const { termIndex, rows, config, series } of perTermResults) {
-      // Per-term effective-window gate (mirrors the gate in
-      // buildMultiTermMonthlyAccruals — terms outside their window don't
-      // contribute to this month).
+    for (const { termIndex, rows, config, series } of monthlyPerTermResults) {
       const startOk =
         config.effectiveStart == null || config.effectiveStart <= monthEnd
       const endOk =
@@ -303,9 +311,6 @@ export async function recomputeAccrualForContract(
       const entry = series[i]
       if (!row || !entry) continue
 
-      // spend displayed on the bucket = union of contributing terms'
-      // per-term spend for the month (dedup via max vs sum is a choice;
-      // we sum here because different category terms see disjoint slices).
       totalSpend += entry.spend
 
       if (row.accruedAmount <= 0) continue
@@ -326,10 +331,6 @@ export async function recomputeAccrualForContract(
     return {
       month,
       spend: totalSpend,
-      // cumulative across terms is a fuzzy concept when terms are
-      // category-scoped; the bucketer ignores this field for persistence
-      // (only `spend` and `accruedAmount` are written), so keeping the
-      // per-month sum here is safe.
       cumulativeSpend: totalSpend,
       accruedAmount: totalAccrued,
       tierAchieved: bestTier,
@@ -338,20 +339,12 @@ export async function recomputeAccrualForContract(
     }
   })
 
-  // Charles W1.O: collapse monthly accrual rows into buckets sized by
-  // the primary term's `paymentCadence`. Quarterly contracts should
-  // write ONE Rebate row per calendar quarter (spanning ~90 days), not
-  // three monthly rows (~30 days each). If cadence is null/unknown on
-  // all terms, fall back to monthly so existing contracts keep today's
-  // behavior. Mixed-cadence contracts use the FIRST term's cadence —
-  // consistent with the rest of the codebase's "primary term" convention.
-  // Charles W1.T — paymentCadence is contract-level now; read from
-  // Contract directly. Fall back to monthly when the column is unset
-  // (non-tie-in contracts or tie-in contracts without capital entered).
+  // Charles W1.O: collapse monthly-eval accrual rows into the contract's
+  // `paymentCadence`. Fall back to monthly when unset.
   const primaryCadence: PaymentCadence =
     (contract.paymentCadence as PaymentCadence | null | undefined) ??
     "monthly"
-  const buckets = bucketAccrualsByCadence(multiRows, primaryCadence)
+  const cadenceBuckets = bucketAccrualsByCadence(multiRows, primaryCadence)
 
   // Charles W1.W-C1: preserved collected rows from a prior accrual run
   // now live in the Rebate table with `collectionDate != null`. Skip
@@ -374,20 +367,23 @@ export async function recomputeAccrualForContract(
         `${new Date(r.payPeriodStart).toISOString()}|${new Date(r.payPeriodEnd).toISOString()}`,
     ),
   )
+  const periodKey = (start: Date, end: Date): string =>
+    `${new Date(start).toISOString()}|${new Date(end).toISOString()}`
 
-  // Only persist buckets with non-zero accrual — a monthly-eval contract
-  // whose tier 1 spendMin was missed in month N shouldn't pollute the
-  // Rebate table with zeros. Aggregations that SUM over Rebate rows
-  // treat missing periods as $0 anyway.
-  const toInsert = buckets
-    .filter((b) => {
-      const key = `${new Date(b.periodStart).toISOString()}|${new Date(b.periodEnd).toISOString()}`
-      return !preservedKeys.has(key)
-    })
+  // Monthly-eval path (from W1.W-B): cadence-bucketed rows. Skip any
+  // bucket whose period already has a preserved collected row.
+  const toInsert: {
+    contractId: string
+    facilityId: string
+    rebateEarned: number
+    rebateCollected: number
+    payPeriodStart: Date
+    payPeriodEnd: Date
+    collectionDate: null
+    notes: string
+  }[] = cadenceBuckets
+    .filter((b) => !preservedKeys.has(periodKey(b.periodStart, b.periodEnd)))
     .map((b) => {
-      // Charles R5.29: notes string reflects whether the row is a
-      // single-term or multi-term aggregate. Rebate has no termId column
-      // (see spec); one row per bucket holds the aggregated earned.
       const noteBody =
         b.termCount > 1
           ? `${b.termCount} terms combined on $${b.totalSpend.toFixed(2)} (${b.label})`
@@ -403,6 +399,53 @@ export async function recomputeAccrualForContract(
         notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
       }
     })
+
+  // ─── Period-eval terms: ONE row per completed window (W1.W-B1) ───
+  // Each annual/semi-annual/quarterly-eval term is bucketed on its own.
+  // Windows align to the term's `effectiveStart` (fallback:
+  // contract.effectiveDate). Incomplete windows (periodEnd > today) are
+  // dropped so the "earned ≤ today" ledger filter stays honest.
+  // `now` is already declared above (future-row purge, W1.Q).
+  for (const origIdx of periodEvalIdx) {
+    const term = termsWithTiers[origIdx]
+    const config = termConfigs[origIdx]
+    const termScope = { appliesTo: term.appliesTo, categories: term.categories }
+    const termCategoryWhere = buildCategoryWhereClause(termScope)
+    const series = buildSeries(cogRecords, termCategoryWhere)
+
+    const windowAnchor = term.effectiveStart ?? contract.effectiveDate
+    const termWindowEnd = term.effectiveEnd
+      ? new Date(
+          Math.min(now.getTime(), term.effectiveEnd.getTime(), end.getTime()),
+        )
+      : new Date(Math.min(now.getTime(), end.getTime()))
+
+    const periodBuckets = buildEvaluationPeriodAccruals(
+      series,
+      config.tiers,
+      config.method,
+      config.evaluationPeriod,
+      windowAnchor,
+      { boundedUntil: termWindowEnd },
+    )
+
+    for (const b of periodBuckets) {
+      if (b.rebateEarned <= 0 && b.totalSpend <= 0) continue
+      // Charles W1.W-C1: skip if a collected row already exists for this window.
+      if (preservedKeys.has(periodKey(b.periodStart, b.periodEnd))) continue
+      const noteBody = `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)} (${config.evaluationPeriod}-eval)`
+      toInsert.push({
+        contractId,
+        facilityId: facility.id,
+        rebateEarned: b.rebateEarned,
+        rebateCollected: 0,
+        payPeriodStart: b.periodStart,
+        payPeriodEnd: b.periodEnd,
+        collectionDate: null,
+        notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
+      })
+    }
+  }
 
   if (toInsert.length === 0) {
     return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }

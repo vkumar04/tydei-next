@@ -689,17 +689,50 @@ export function ContractDetailClient({
                                   ),
                                 )
                               : formatPercent(currentTier.rebateValue * 100)
-                            const barPct = atTop
-                              ? 100
-                              : Math.round(tp.progressPercent)
+                            // Charles W1.W-B3: bar denominator is BASELINE —
+                            // the first tier threshold that starts earning a
+                            // rebate. Past baseline, flip to "Past baseline ·
+                            // N% to next tier" and use the next-tier threshold
+                            // for the secondary bar. Contract Value is still
+                            // a separate metric on the header card.
+                            const firstTermWithTiers = contract.terms?.find(
+                              (t) => t.tiers.length > 0,
+                            )
+                            const sortedTiers = firstTermWithTiers
+                              ? [...firstTermWithTiers.tiers].sort(
+                                  (a, b) =>
+                                    Number(a.spendMin) - Number(b.spendMin),
+                                )
+                              : []
+                            const baselineSpend = sortedTiers.length
+                              ? Number(sortedTiers[0].spendMin)
+                              : 0
+                            const pastBaseline =
+                              stats.totalSpend >= baselineSpend
+                            const baselinePercent = baselineSpend > 0
+                              ? Math.min(
+                                  100,
+                                  Math.max(
+                                    0,
+                                    (stats.totalSpend / baselineSpend) * 100,
+                                  ),
+                                )
+                              : 100
+                            const barPct = !pastBaseline
+                              ? Math.round(baselinePercent)
+                              : atTop
+                                ? 100
+                                : Math.round(tp.progressPercent)
                             const nextThreshold = nextTier?.spendMin ?? 0
                             return (
                               <>
                                 <div className="flex items-center justify-between text-sm">
                                   <span className="inline-flex items-center gap-1 text-muted-foreground">
-                                    {atTop
-                                      ? "Top Tier Achieved"
-                                      : `Spend Progress to ${nextLabel}`}
+                                    {!pastBaseline
+                                      ? "Spend Progress to Baseline"
+                                      : atTop
+                                        ? "Past baseline · Top Tier Achieved"
+                                        : `Past baseline · ${Math.round(tp.progressPercent)}% to ${nextLabel}`}
                                     <TooltipProvider>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
@@ -712,13 +745,13 @@ export function ContractDetailClient({
                                         </TooltipTrigger>
                                         <TooltipContent className="max-w-[320px] p-3 text-xs">
                                           <p>
-                                            Progress toward the next rebate
-                                            tier. The denominator is the spend
-                                            threshold that unlocks a higher
-                                            rate — hitting it moves you from
-                                            Tier N to Tier N+1. Contract Value
-                                            is a separate metric shown on the
-                                            header card.
+                                            Progress toward the BASELINE — the
+                                            first tier threshold that starts
+                                            earning a rebate. Once baseline is
+                                            met the bar flips to measure
+                                            progress toward the next tier.
+                                            Contract Value is a separate
+                                            metric shown on the header card.
                                           </p>
                                         </TooltipContent>
                                       </Tooltip>
@@ -734,7 +767,13 @@ export function ContractDetailClient({
                                       : "h-2"
                                   }
                                 />
-                                {atTop ? (
+                                {!pastBaseline ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatCurrency(stats.totalSpend)} of{" "}
+                                    {formatCurrency(baselineSpend)} to unlock
+                                    the first rebate tier ({currentLabel})
+                                  </p>
+                                ) : atTop ? (
                                   <p className="text-xs text-muted-foreground">
                                     {currentLabel} rebate rate: {rateDisplay}.
                                     Keep spending to maximize rebate.

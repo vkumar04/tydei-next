@@ -41,7 +41,11 @@ function engine(method: RebateMethodName) {
  * spendMin=$300k and monthly spend of $30k never qualified for any
  * rebate even though each individual month was supposed to stand alone.
  */
-export type EvaluationPeriod = "annual" | "monthly" | "quarterly"
+export type EvaluationPeriod =
+  | "annual"
+  | "monthly"
+  | "quarterly"
+  | "semi_annual"
 
 // ─── Monthly accrual ────────────────────────────────────────────────
 
@@ -462,6 +466,162 @@ export function bucketAccrualsByCadence(
     })
   }
   return result
+}
+
+// ─── Evaluation-period aggregation (Charles W1.W-B1) ────────────────
+
+/**
+ * Number of months in one evaluation-period window. Annual = 12,
+ * semi-annual = 6, quarterly = 3, monthly = 1. Anything outside the
+ * known enum values falls back to annual (safest: one big bucket).
+ */
+function monthsInEvaluationPeriod(evaluationPeriod: EvaluationPeriod): number {
+  if (evaluationPeriod === "monthly") return 1
+  if (evaluationPeriod === "quarterly") return 3
+  if (evaluationPeriod === "semi_annual") return 6
+  return 12
+}
+
+export interface EvaluationPeriodBucket {
+  /** Period start at UTC midnight (aligned to `effectiveStart`'s month). */
+  periodStart: Date
+  /** Period end at UTC last-moment-of-day. periodStart + N months − 1 day. */
+  periodEnd: Date
+  /** Aggregate COG spend across every month in this window. */
+  totalSpend: number
+  /** Aggregate rebate earned: engine run once on `totalSpend`. */
+  rebateEarned: number
+  /** Tier hit by `totalSpend`. */
+  tierAchieved: number
+  /** Rate at the achieved tier. */
+  rebatePercent: number
+  /** "2025" / "Q2 2025" / "H1 2025" / "May 2025" — for notes. */
+  label: string
+}
+
+function addMonthsUTC(d: Date, months: number): Date {
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, d.getUTCDate()),
+  )
+}
+
+function monthKey(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+}
+
+function formatPeriodLabel(
+  start: Date,
+  evaluationPeriod: EvaluationPeriod,
+): string {
+  const year = start.getUTCFullYear()
+  const month = start.getUTCMonth() // 0-indexed
+  if (evaluationPeriod === "annual") {
+    return `${year}`
+  }
+  if (evaluationPeriod === "semi_annual") {
+    const half = month < 6 ? 1 : 2
+    return `H${half} ${year}`
+  }
+  if (evaluationPeriod === "quarterly") {
+    const q = Math.floor(month / 3) + 1
+    return `Q${q} ${year}`
+  }
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ]
+  return `${monthNames[month]} ${year}`
+}
+
+/**
+ * Charles W1.W-B1: for terms whose `evaluationPeriod` is longer than a
+ * month (annual / semi-annual / quarterly), tier qualification is
+ * determined by AGGREGATE spend over the full evaluation window, not by
+ * per-month deltas. The ledger must emit ONE Rebate row at period-end,
+ * carrying the full-period spend and the full-period earned value.
+ *
+ * Prior to this helper the recompute pipeline iterated monthly rows and
+ * accrued a sliver every month, which Charles reported as "annual-eval
+ * contracts accruing monthly with $0 spend and non-zero earned" — the
+ * per-month accruals clocked in as scattered non-zero rows instead of
+ * one clean year-end row.
+ *
+ * Semantics:
+ *   - Windows are ALIGNED to `effectiveStart.month`: an annual term
+ *     starting 2025-03-15 produces windows 2025-03-01→2026-02-28,
+ *     2026-03-01→2027-02-28, etc. Windows align to month boundaries so
+ *     YYYY-MM spend buckets fall cleanly in/out.
+ *   - A window is only emitted when its LAST day ≤ `boundedUntil`
+ *     (defaults to the last month of the series). Windows whose
+ *     period-end has not yet completed are DROPPED — the "earned ≤
+ *     today" ledger filter expects no auto-accrual rows past today, and
+ *     a 2025-01-01 annual term on 2025-06-12 should not show a year-end
+ *     $0 row yet.
+ *   - For `monthly` evaluation period, this helper is a passthrough —
+ *     one bucket per input month (no aggregation). The caller should
+ *     continue to use `bucketAccrualsByCadence` for monthly-eval
+ *     contracts, which honors the contract's paymentCadence.
+ */
+export function buildEvaluationPeriodAccruals(
+  series: MonthlySpend[],
+  tiers: TierLike[],
+  method: RebateMethodName,
+  evaluationPeriod: EvaluationPeriod,
+  effectiveStart: Date,
+  options?: { boundedUntil?: Date },
+): EvaluationPeriodBucket[] {
+  if (series.length === 0 || tiers.length === 0) return []
+
+  const width = monthsInEvaluationPeriod(evaluationPeriod)
+  const fn = engine(method)
+
+  const byMonth = new Map<string, number>()
+  for (const s of series) byMonth.set(s.month, s.spend)
+
+  const firstWindowStart = new Date(
+    Date.UTC(
+      effectiveStart.getUTCFullYear(),
+      effectiveStart.getUTCMonth(),
+      1,
+    ),
+  )
+  const lastSeriesMonthKey = series[series.length - 1].month
+  const [lsY, lsM] = lastSeriesMonthKey.split("-").map((n) => Number(n))
+  const seriesLastMonthEnd = new Date(Date.UTC(lsY, lsM, 0, 23, 59, 59, 999))
+  const boundedUntil = options?.boundedUntil ?? seriesLastMonthEnd
+
+  const buckets: EvaluationPeriodBucket[] = []
+  let cursorStart = firstWindowStart
+  const maxIterations = 40 * (12 / width)
+  for (let iter = 0; iter < maxIterations; iter++) {
+    const nextStart = addMonthsUTC(cursorStart, width)
+    const periodEnd = new Date(nextStart.getTime() - 1)
+
+    if (periodEnd.getTime() > boundedUntil.getTime()) break
+
+    let totalSpend = 0
+    const monthCursor = new Date(cursorStart)
+    while (monthCursor.getTime() < nextStart.getTime()) {
+      const key = monthKey(monthCursor)
+      totalSpend += byMonth.get(key) ?? 0
+      monthCursor.setUTCMonth(monthCursor.getUTCMonth() + 1)
+    }
+
+    const result = fn(totalSpend, tiers)
+    buckets.push({
+      periodStart: cursorStart,
+      periodEnd,
+      totalSpend,
+      rebateEarned: result.rebateEarned,
+      tierAchieved: result.tierAchieved,
+      rebatePercent: result.rebatePercent,
+      label: formatPeriodLabel(cursorStart, evaluationPeriod),
+    })
+
+    cursorStart = nextStart
+  }
+
+  return buckets
 }
 
 export function buildMultiTermMonthlyAccruals(

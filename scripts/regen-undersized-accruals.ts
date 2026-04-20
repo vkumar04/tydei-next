@@ -91,8 +91,14 @@ async function regenerateOne(contract: ContractRow) {
     }))
     const method: RebateMethodName =
       term.rebateMethod === "marginal" ? "marginal" : "cumulative"
+    const ep = term.evaluationPeriod
     const evaluationPeriod: EvaluationPeriod =
-      (term.evaluationPeriod as EvaluationPeriod | null) ?? "annual"
+      ep === "monthly" ||
+      ep === "quarterly" ||
+      ep === "semi_annual" ||
+      ep === "annual"
+        ? ep
+        : "annual"
     return {
       tiers,
       method,

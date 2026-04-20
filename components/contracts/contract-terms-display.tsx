@@ -70,28 +70,58 @@ function TierProgressCard({
     ? formatTierRebateLabel(sourceTier.rebateType, Number(sourceTier.rebateValue))
     : formatPercent(progress.currentTier.rebateValue * 100)
 
+  // Charles W1.W-B3: the progress bar's primary denominator is the
+  // BASELINE — the spendMin of the first tier that starts earning a
+  // rebate. When the facility is already past baseline, label the card
+  // "Past baseline — N% to next tier" and use the next-tier threshold
+  // as the denominator for the secondary bar. If tier 1 has
+  // spendMin=$0 the baseline is trivially met.
+  const sortedTiers = [...tiersForEngine].sort(
+    (a, b) => Number(a.spendMin) - Number(b.spendMin),
+  )
+  const baselineSpend = Number(sortedTiers[0].spendMin)
+  const pastBaseline = currentSpend >= baselineSpend
+  const baselinePercent =
+    baselineSpend > 0
+      ? Math.min(100, Math.max(0, (currentSpend / baselineSpend) * 100))
+      : 100
+
   return (
     <div className="space-y-2 rounded-md border bg-muted/30 p-3">
       <div className="flex items-baseline justify-between text-sm">
         <span className="font-medium">
           Current: {currentLabel} · {rebateDisplay}
         </span>
-        {nextLabel ? (
+        {!pastBaseline ? (
           <span className="text-xs text-muted-foreground">
-            {formatCurrency(progress.amountToNextTier)} to {nextLabel}
+            {formatCurrency(Math.max(0, baselineSpend - currentSpend))} to baseline
+          </span>
+        ) : nextLabel ? (
+          <span className="text-xs text-muted-foreground">
+            Past baseline · {formatCurrency(progress.amountToNextTier)} to {nextLabel}
           </span>
         ) : (
           <span className="text-xs text-muted-foreground">Top tier achieved</span>
         )}
       </div>
-      <Progress value={progress.progressPercent} className="h-2" />
-      {progress.nextTier && progress.projectedAdditionalRebate > 0 && (
+      <Progress
+        value={pastBaseline ? progress.progressPercent : baselinePercent}
+        className="h-2"
+      />
+      {!pastBaseline ? (
         <div className="text-xs text-muted-foreground">
-          Projected additional rebate at {nextLabel}:{" "}
-          <span className="font-medium text-foreground">
-            {formatCurrency(progress.projectedAdditionalRebate)}
-          </span>
+          {Math.round(baselinePercent)}% to baseline · no rebate earned until{" "}
+          {formatCurrency(baselineSpend)}
         </div>
+      ) : (
+        progress.nextTier && progress.projectedAdditionalRebate > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Projected additional rebate at {nextLabel}:{" "}
+            <span className="font-medium text-foreground">
+              {formatCurrency(progress.projectedAdditionalRebate)}
+            </span>
+          </div>
+        )
       )}
     </div>
   )
