@@ -72,6 +72,7 @@ const EXPECTED_APPLIED_TO_CAPITAL = 195_124
 let contractRow: {
   id: string
   contractType: string
+  vendorId: string
   effectiveDate: Date
   capitalCost: number
   interestRate: number
@@ -83,12 +84,29 @@ let contractRow: {
     collectionDate: Date | null
     rebateCollected: number
   }>
+  terms: Array<{
+    minimumPurchaseCommitment: number | null
+    rebateMethod: string
+    tiers: Array<{
+      tierNumber: number
+      spendMin: number
+      spendMax: number | null
+      rebateValue: number
+      rebateType: string
+    }>
+  }>
 } | null = null
 
 vi.mock("@/lib/db", () => ({
   prisma: {
     contract: {
       findFirst: vi.fn(async () => contractRow),
+    },
+    cOGRecord: {
+      aggregate: vi.fn(async () => ({ _sum: { extendedPrice: 0 } })),
+    },
+    contractPeriod: {
+      aggregate: vi.fn(async () => ({ _sum: { totalSpend: 0 } })),
     },
   },
 }))
@@ -143,6 +161,8 @@ describe("tie-in capital-applied parity (W1.Y-C)", () => {
         collectionDate: r.collectionDate,
         rebateCollected: r.rebateCollected,
       })),
+      vendorId: "v-test",
+      terms: [],
     }
 
     const { getContractCapitalSchedule } = await import(
@@ -176,6 +196,8 @@ describe("tie-in capital-applied parity (W1.Y-C)", () => {
         collectionDate: r.collectionDate,
         rebateCollected: r.rebateCollected,
       })),
+      vendorId: "v-test",
+      terms: [],
     }
 
     const { getContractCapitalSchedule } = await import(
