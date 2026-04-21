@@ -298,15 +298,36 @@ export function EditContractClient({
         }
       }
 
-      // Invalidate the detail query so the next page read gets fresh
-      // data (term/tier writes bypass useUpdateContract's onSuccess
-      // invalidation, which only covers the contract-level update).
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.contracts.detail(contractId),
-      })
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.contracts.all,
-      })
+      // Invalidate every consumer of tier-derived math (Charles
+      // iMessage 2026-04-20 R3/N16: term-type and tier edits now
+      // trigger recompute server-side but the client was caching stale
+      // ledger/detail queries, so the UI looked frozen after save).
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.contracts.detail(contractId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.contracts.all,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.contractTerms.list(contractId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contractRebates", contractId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contract-periods", contractId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contractPeriods", contractId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contract-accrual-timeline", contractId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contract-capital-schedule", contractId],
+        }),
+      ])
 
       router.push(`/dashboard/contracts/${contractId}`)
     } catch (err) {

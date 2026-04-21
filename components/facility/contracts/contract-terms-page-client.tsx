@@ -166,7 +166,38 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
         }
       }
 
-      await queryClient.invalidateQueries({ queryKey: queryKeys.contractTerms.list(contractId) })
+      // Charles iMessage 2026-04-20 R3 / N16: before this, only the
+      // contractTerms list query was invalidated. Term/tier edits DO
+      // trigger `recomputeAccrualForContract` server-side (see
+      // lib/actions/contract-terms.ts::recomputeAccrualSafe), so the
+      // Rebate ledger IS rewritten — but the client kept serving the
+      // stale detail/rebate queries. Users saw the save toast and
+      // nothing else move, which Charles described as "makes all
+      // testing almost not possible." Invalidate every consumer of
+      // tier-derived math so the UI reflects the new rebate rows.
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.contractTerms.list(contractId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.contracts.detail(contractId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contractRebates", contractId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contract-periods", contractId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contractPeriods", contractId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contract-accrual-timeline", contractId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["contract-capital-schedule", contractId],
+        }),
+      ])
       toast.success("Terms saved successfully")
       setEditing(false)
     } catch (error) {
