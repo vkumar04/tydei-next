@@ -813,6 +813,12 @@ model ContractPricing {
   // Charles iMessage 2026-04-20 N17: per-SKU carve-out rate as a
   // fraction (0.03 = 3%). Drives the CARVE_OUT engine when wired.
   carveOutPercent    Decimal?  @db.Decimal(5, 4)
+  // Roadmap track 10 (2026-04-20): annual price-escalator rate.
+  // Stored as a fraction (0.03 = 3% annual increase). Null = fixed
+  // price for the contract term. Applied by `escalatePrice()` in
+  // lib/contracts/price-escalator.ts so display + variance math see
+  // the time-adjusted contract price instead of the base unitPrice.
+  escalatorPercent   Decimal?  @db.Decimal(5, 4)
   effectiveDate      DateTime? @db.Date
   expirationDate     DateTime? @db.Date
   createdAt          DateTime  @default(now())
