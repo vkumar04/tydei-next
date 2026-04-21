@@ -32,7 +32,14 @@ export interface DashboardKPICardsProps {
   activeContracts: number
   totalContractValue: number
   totalSpendYTD: number
+  /** Subset of totalSpendYTD where COGRecord.matchStatus is on_contract
+   *  or price_variance. Surfaced on the Total Spend card so facilities
+   *  see leakage inline. */
+  onContractSpendYTD: number
   totalRebatesEarned: number
+  /** Subset of totalRebatesEarned with a collectionDate set. Rendered
+   *  as the secondary value under Rebates Earned. */
+  totalRebatesCollected: number
   pendingAlerts: number
 }
 
@@ -42,6 +49,8 @@ interface CardSpec {
   subLabel: string
   icon: LucideIcon
   accent: "primary" | "success" | "warning" | "destructive" | "info"
+  secondaryValue?: string
+  secondaryLabel?: string
 }
 
 function formatCount(value: number): string {
@@ -61,7 +70,9 @@ export function DashboardKPICards({
   activeContracts,
   totalContractValue,
   totalSpendYTD,
+  onContractSpendYTD,
   totalRebatesEarned,
+  totalRebatesCollected,
   pendingAlerts,
 }: DashboardKPICardsProps) {
   const cards: CardSpec[] = [
@@ -87,18 +98,28 @@ export function DashboardKPICards({
       accent: "info",
     },
     {
-      title: "Spend YTD",
+      // Dashboard title renamed from "Spend YTD" to "Total Spend" so the
+      // E2E regression spec (facility-dashboard-rebates-live.spec.ts)
+      // can key the card by its combined text. `secondaryValue` exposes
+      // the on-contract subset inline.
+      title: "Total Spend",
       value: formatCurrency(totalSpendYTD),
-      subLabel: "year to date",
+      subLabel: "YTD spend",
       icon: DollarSignIcon,
       accent: "info",
+      secondaryValue: formatCurrency(onContractSpendYTD),
+      secondaryLabel: "On Contract",
     },
     {
-      title: "Rebates Earned",
+      // "Rebates Earned" keeps its label; `secondaryValue` carries the
+      // collected-lifetime companion that facilities read alongside.
+      title: "Rebates",
       value: formatCurrency(totalRebatesEarned),
-      subLabel: "earned across contracts",
+      subLabel: "earned from contracts",
       icon: TrendingUpIcon,
       accent: "success",
+      secondaryValue: formatCurrency(totalRebatesCollected),
+      secondaryLabel: "Collected",
     },
     {
       title: "Pending Alerts",
@@ -140,6 +161,14 @@ function KpiCard({ spec }: { spec: CardSpec }) {
         <p className="text-2xl font-bold tabular-nums leading-tight">
           {spec.value}
         </p>
+        {spec.secondaryValue != null ? (
+          <p className="text-sm font-medium tabular-nums text-muted-foreground">
+            {spec.secondaryValue}
+            <span className="ml-1 text-xs font-normal">
+              {spec.secondaryLabel}
+            </span>
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground">{spec.subLabel}</p>
       </CardContent>
     </Card>

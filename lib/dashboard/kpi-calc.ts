@@ -13,6 +13,10 @@
 export interface DashboardKPIs {
   totalContractValue: number
   totalSpendYTD: number
+  /** Subset of totalSpendYTD where COGRecord.matchStatus is on_contract
+   *  or price_variance. Surfaced on the Total Spend card so facilities
+   *  see leakage inline (Charles qa1 bug 6 — dashboard rebates-live E2E). */
+  onContractSpendYTD: number
   /** 0-1 ratio of YTD spend / total contract value (clamped). */
   spendProgress: number
   totalRebatesEarned: number
@@ -34,6 +38,8 @@ export interface KPIInput {
   contracts: KPIInputContract[]
   /** YTD spend across all these contracts (pre-aggregated). */
   totalSpendYTD: number
+  /** Subset of totalSpendYTD scoped to matchStatus IN (on_contract, price_variance). */
+  onContractSpendYTD: number
   rebateAgg: {
     earned: number
     collected: number
@@ -74,6 +80,7 @@ export function computeDashboardKPIs(input: KPIInput): DashboardKPIs {
   const {
     contracts,
     totalSpendYTD,
+    onContractSpendYTD,
     rebateAgg,
     pendingAlerts,
     referenceDate = new Date(),
@@ -132,6 +139,7 @@ export function computeDashboardKPIs(input: KPIInput): DashboardKPIs {
   return {
     totalContractValue,
     totalSpendYTD,
+    onContractSpendYTD,
     spendProgress,
     totalRebatesEarned: rebateAgg.earned,
     totalRebatesCollected: rebateAgg.collected,

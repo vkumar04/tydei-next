@@ -16,6 +16,7 @@ const daysFromRef = (days: number): Date => {
 const baseInput = (overrides: Partial<KPIInput> = {}): KPIInput => ({
   contracts: [],
   totalSpendYTD: 0,
+  onContractSpendYTD: 0,
   rebateAgg: { earned: 0, collected: 0 },
   pendingAlerts: 0,
   referenceDate: ref,
@@ -28,6 +29,7 @@ describe("computeDashboardKPIs", () => {
     expect(k).toEqual({
       totalContractValue: 0,
       totalSpendYTD: 0,
+      onContractSpendYTD: 0,
       spendProgress: 0,
       totalRebatesEarned: 0,
       totalRebatesCollected: 0,
@@ -172,6 +174,7 @@ describe("computeDashboardKPIs", () => {
     const k = computeDashboardKPIs({
       contracts,
       totalSpendYTD: 0,
+      onContractSpendYTD: 0,
       rebateAgg: { earned: 0, collected: 0 },
       pendingAlerts: 0,
     })

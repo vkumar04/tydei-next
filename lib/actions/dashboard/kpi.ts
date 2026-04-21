@@ -184,6 +184,7 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
   const [
     contractRows,
     totalSpendYTDAgg,
+    onContractSpendYTDAgg,
     currentMonthSpendAgg,
     rebateEarnedAgg,
     rebateCollectedAgg,
@@ -204,6 +205,17 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
       where: {
         facilityId,
         transactionDate: { gte: ytdStart, lte: referenceDate },
+      },
+      _sum: { extendedPrice: true },
+    }),
+    // On-contract YTD spend: same window as totalSpendYTD but narrowed
+    // to rows the matcher has stamped as on_contract or price_variance.
+    // Drives the "On Contract" secondary on the Total Spend KPI card.
+    prisma.cOGRecord.aggregate({
+      where: {
+        facilityId,
+        transactionDate: { gte: ytdStart, lte: referenceDate },
+        matchStatus: { in: ["on_contract", "price_variance"] },
       },
       _sum: { extendedPrice: true },
     }),
@@ -283,6 +295,7 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
   const kpis = computeDashboardKPIs({
     contracts: kpiContracts,
     totalSpendYTD: Number(totalSpendYTDAgg._sum.extendedPrice ?? 0),
+    onContractSpendYTD: Number(onContractSpendYTDAgg._sum.extendedPrice ?? 0),
     rebateAgg: {
       earned: Number(rebateEarnedAgg._sum.rebateEarned ?? 0),
       collected: Number(rebateCollectedAgg._sum.rebateCollected ?? 0),

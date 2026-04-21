@@ -127,7 +127,9 @@ export function DashboardClient({
         activeContracts={kpi.activeContractsCount}
         totalContractValue={kpi.totalContractValue}
         totalSpendYTD={kpi.totalSpendYTD}
+        onContractSpendYTD={kpi.onContractSpendYTD}
         totalRebatesEarned={kpi.totalRebatesEarned}
+        totalRebatesCollected={kpi.totalRebatesCollected}
         pendingAlerts={kpi.pendingAlerts}
       />
 
