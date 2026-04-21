@@ -44,4 +44,37 @@ describe("computeProjectedRebate (Charles N14)", () => {
     expect(r.projectedRemaining).toBe(0)
     expect(r.projectedTotalAtYearEnd).toBe(0)
   })
+
+  it("confidence band attaches when a spend history is provided", () => {
+    // Noisy history → low r², forecaster should return a non-trivial band.
+    const history = [
+      { date: new Date(Date.UTC(2025, 0, 1)), value: 30_000 },
+      { date: new Date(Date.UTC(2025, 1, 1)), value: 60_000 },
+      { date: new Date(Date.UTC(2025, 2, 1)), value: 20_000 },
+      { date: new Date(Date.UTC(2025, 3, 1)), value: 80_000 },
+      { date: new Date(Date.UTC(2025, 4, 1)), value: 40_000 },
+      { date: new Date(Date.UTC(2025, 5, 1)), value: 70_000 },
+    ]
+    const r = computeProjectedRebate({
+      rolling12Spend: 500_000,
+      rebateEarnedYTD: 5_000,
+      tiers: ladder,
+      spendHistory: history,
+    })
+    expect(r.confidence).not.toBeNull()
+    if (r.confidence) {
+      expect(r.confidence.low).toBeLessThanOrEqual(r.confidence.high)
+      expect(r.confidence.r2).toBeGreaterThanOrEqual(0)
+      expect(r.confidence.r2).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it("no spend history → confidence is null", () => {
+    const r = computeProjectedRebate({
+      rolling12Spend: 500_000,
+      rebateEarnedYTD: 5_000,
+      tiers: ladder,
+    })
+    expect(r.confidence).toBeNull()
+  })
 })

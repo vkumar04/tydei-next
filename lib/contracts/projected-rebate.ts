@@ -27,6 +27,11 @@ import {
   type RebateMethodName,
   type TierLike,
 } from "@/lib/rebates/calculate"
+import {
+  forecastAnnualSpend,
+  type AnnualSpendForecast,
+} from "@/lib/forecasting/annualize-spend"
+import type { SeasonalPoint } from "@/lib/forecasting/seasonal-factors"
 
 export interface ProjectedRebateInput {
   /** Spend over the trailing 12 months. Serves as a pace estimate. */
@@ -35,6 +40,13 @@ export interface ProjectedRebateInput {
   rebateEarnedYTD: number
   tiers: TierLike[]
   method?: RebateMethodName
+  /**
+   * Optional monthly-spend history. When supplied, engine runs on the
+   * forecaster's (point, low, high) bands instead of just rolling-12
+   * as a single number — gives the UI confidence to show a range when
+   * the trend is noisy (low r²).
+   */
+  spendHistory?: readonly SeasonalPoint[]
 }
 
 export interface ProjectedRebateResult {
@@ -44,6 +56,18 @@ export interface ProjectedRebateResult {
   projectedRemaining: number
   /** Sum of YTD earned + projected-remaining. Handy one-tile summary. */
   projectedTotalAtYearEnd: number
+  /**
+   * When spendHistory is provided: 95% confidence band on the
+   * full-year projection. Null when no history given OR when the fit
+   * is effectively a point (flat data, r² = 0).
+   */
+  confidence?: {
+    low: number
+    high: number
+    r2: number
+    trend: AnnualSpendForecast["trend"]
+    growthRatePercent: number
+  } | null
 }
 
 export function computeProjectedRebate(
@@ -59,9 +83,34 @@ export function computeProjectedRebate(
     0,
     projectedFullYear - input.rebateEarnedYTD,
   )
+
+  // Confidence band: when a spend history is available, run the
+  // forecaster across the history, then re-run the engine on the low /
+  // high ends of the forecast to get bounds on the rebate projection.
+  // Skipped when no history or when the forecast has zero uncertainty.
+  let confidence: ProjectedRebateResult["confidence"] = null
+  if (input.spendHistory && input.spendHistory.length > 0) {
+    const forecast = forecastAnnualSpend({ series: input.spendHistory })
+    const rebateLow = engine(Math.max(0, forecast.low), input.tiers).rebateEarned
+    const rebateHigh = engine(
+      Math.max(0, forecast.high),
+      input.tiers,
+    ).rebateEarned
+    if (rebateLow !== rebateHigh) {
+      confidence = {
+        low: rebateLow,
+        high: rebateHigh,
+        r2: forecast.r2,
+        trend: forecast.trend,
+        growthRatePercent: forecast.growthRatePercent,
+      }
+    }
+  }
+
   return {
     projectedFullYear,
     projectedRemaining,
     projectedTotalAtYearEnd: input.rebateEarnedYTD + projectedRemaining,
+    confidence,
   }
 }
