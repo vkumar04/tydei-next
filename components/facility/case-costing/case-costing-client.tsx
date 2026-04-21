@@ -21,6 +21,7 @@ import { Upload, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CaseImportDialog } from "./case-import-dialog"
 import { CaseCostingTabs } from "./case-costing-tabs"
+import { PayorContractMarginCard } from "./payor-contract-margin-card"
 import {
   getCasesForFacility,
   getSurgeonsForFacility,
@@ -111,6 +112,8 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
           </Button>
         </div>
       </div>
+
+      <PayorContractMarginCard />
 
       <CaseCostingTabs
         cases={{
