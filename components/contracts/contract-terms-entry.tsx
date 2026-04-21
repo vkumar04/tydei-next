@@ -346,20 +346,57 @@ export function ContractTermsEntry({
                       </Select>
                     </Field>
 
-                    <Field label="Spend Baseline ($)">
-                      <Input
-                        type="number"
-                        value={term.spendBaseline ?? ""}
-                        onChange={(e) =>
-                          updateTerm(termIdx, {
-                            spendBaseline: e.target.value
-                              ? Number(e.target.value)
-                              : undefined,
-                          })
-                        }
-                        placeholder="0"
-                      />
-                    </Field>
+                    {term.baselineType === "spend_based" && (
+                      <Field label="Spend Baseline ($)">
+                        <Input
+                          type="number"
+                          value={term.spendBaseline ?? ""}
+                          onChange={(e) =>
+                            updateTerm(termIdx, {
+                              spendBaseline: e.target.value
+                                ? Number(e.target.value)
+                                : undefined,
+                            })
+                          }
+                          placeholder="0"
+                        />
+                      </Field>
+                    )}
+                    {term.baselineType === "volume_based" && (
+                      <Field label="Volume Baseline (units)">
+                        <Input
+                          type="number"
+                          value={term.volumeBaseline ?? ""}
+                          onChange={(e) =>
+                            updateTerm(termIdx, {
+                              volumeBaseline: e.target.value
+                                ? Number(e.target.value)
+                                : undefined,
+                            })
+                          }
+                          placeholder="0"
+                        />
+                      </Field>
+                    )}
+                    {term.baselineType === "growth_based" && (
+                      <Field label="Growth Baseline (%)">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          value={term.growthBaselinePercent ?? ""}
+                          onChange={(e) =>
+                            updateTerm(termIdx, {
+                              growthBaselinePercent: e.target.value
+                                ? Number(e.target.value)
+                                : undefined,
+                            })
+                          }
+                          placeholder="e.g. 5 for 5% growth"
+                        />
+                      </Field>
+                    )}
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
