@@ -706,6 +706,13 @@ model ContractTerm {
   // "Qualified Annual Spend Rebate" term has its own minimum purchase
   // separate from the capital balance).
   minimumPurchaseCommitment Decimal?       @db.Decimal(14, 2)
+  // Roadmap track 4 (2026-04-20): GPO admin fee taken off the top of
+  // rebate earnings. Stored as a fraction (0.03 = 3%). Null = no admin
+  // fee on this term. Drives `computeNetRebate(gross, adminFee)` which
+  // every rebate-display surface routes through so "net rebate" is
+  // consistent with "gross rebate − admin fee". See
+  // `lib/contracts/admin-fee.ts`.
+  adminFeePercent          Decimal?        @db.Decimal(5, 4)
   cptCodes                 String[]        @default([])
   groupedReferenceNumbers  String[]        @default([])
   referenceNumbers         String[]        @default([])
