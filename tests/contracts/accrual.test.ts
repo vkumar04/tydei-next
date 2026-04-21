@@ -239,10 +239,10 @@ describe("buildMonthlyAccruals — evaluationPeriod", () => {
     expect(withAnnual).toEqual(withoutParam)
   })
 
-  it("quarterly eval tier-qualifies on rolling 3-month window", () => {
-    // 3 months at $20K each = $60K trailing window by month 3 → tier 2
-    // (3%) under ladder [(0,50k=2%), (50k,100k=3%)]. January's rebate
-    // uses January alone ($20K) → tier 1 (2%) → $400.
+  it("quarterly eval accumulates within a calendar quarter", () => {
+    // Vick rule (2026-04-20): each evaluation period is standalone;
+    // spend resets to $0 at the start of every new period. Within Q1
+    // (Jan-Mar), the window accumulates.
     const series: MonthlySpend[] = [
       { month: "2026-01", spend: 20_000 },
       { month: "2026-02", spend: 20_000 },
@@ -257,15 +257,67 @@ describe("buildMonthlyAccruals — evaluationPeriod", () => {
       "cumulative",
       "quarterly",
     )
-    // Jan window: $20K → tier 1 (2%) → $20K × 2% = $400.
+    // Jan: in-Q1 window = $20K → tier 1 → $400.
     expect(rows[0].tierAchieved).toBe(1)
     expect(rows[0].accruedAmount).toBe(400)
-    // Feb window: $40K → tier 1 (2%) → $20K × 2% = $400.
+    // Feb: in-Q1 window = $40K → tier 1 → $400.
     expect(rows[1].tierAchieved).toBe(1)
     expect(rows[1].accruedAmount).toBe(400)
-    // Mar window: $60K → tier 2 (3%) → $20K × 3% = $600.
+    // Mar: in-Q1 window = $60K → tier 2 → $600.
     expect(rows[2].tierAchieved).toBe(2)
     expect(rows[2].accruedAmount).toBe(600)
+  })
+
+  it("quarterly eval RESETS at the calendar-quarter boundary (Vick rule 2026-04-20)", () => {
+    // Vick's exact example: tiers 0-100 / 101-200. Q1 spend $150 →
+    // tier 2. Q2 spend $50 → MUST NOT carry the Q1 $150 forward; a
+    // $50-only window → tier 1. Pre-fix this test used rolling
+    // 3-month window and Q2's April would see Feb+Mar+Apr = $150+$50
+    // = $200 → still tier 2.
+    const series: MonthlySpend[] = [
+      // Q1: single spike in March → $150 total
+      { month: "2026-01", spend: 0 },
+      { month: "2026-02", spend: 0 },
+      { month: "2026-03", spend: 150 },
+      // Q2: single spike in April → $50 (RESET, not $150+$50)
+      { month: "2026-04", spend: 50 },
+      { month: "2026-05", spend: 0 },
+      { month: "2026-06", spend: 0 },
+    ]
+    const rows = buildMonthlyAccruals(
+      series,
+      [
+        { tierNumber: 1, spendMin: 0, spendMax: 100, rebateValue: 5 },
+        { tierNumber: 2, spendMin: 101, spendMax: 200, rebateValue: 10 },
+      ],
+      "cumulative",
+      "quarterly",
+    )
+    // March: Q1 window $150 → tier 2 (10%). March spend alone @ tier 2 = $15.
+    expect(rows[2].tierAchieved).toBe(2)
+    // April: NEW quarter. Q2 window = $50 only → tier 1 (5%). April @ tier 1 = $2.50.
+    expect(rows[3].tierAchieved).toBe(1)
+    expect(rows[3].accruedAmount).toBeCloseTo(2.5, 2)
+  })
+
+  it("annual eval resets at the calendar-year boundary", () => {
+    // Ladder: [(0,500=2%), (500,null=5%)]. Year 1 accumulates to $600
+    // by Dec → tier 2. Year 2 starts fresh: Jan spend $200 → tier 1.
+    const series: MonthlySpend[] = [
+      { month: "2026-01", spend: 600 }, // Jan 2026 alone exceeds tier 1
+      { month: "2027-01", spend: 200 }, // Jan 2027 — fresh year, $200 < $500 floor
+    ]
+    const rows = buildMonthlyAccruals(
+      series,
+      [
+        { tierNumber: 1, spendMin: 0, spendMax: 500, rebateValue: 2 },
+        { tierNumber: 2, spendMin: 500, spendMax: null, rebateValue: 5 },
+      ],
+      "cumulative",
+      "annual",
+    )
+    expect(rows[0].tierAchieved).toBe(2) // 2026: cumulative = $600 → tier 2
+    expect(rows[1].tierAchieved).toBe(1) // 2027: cumulative RESETS, $200 → tier 1
   })
 })
 

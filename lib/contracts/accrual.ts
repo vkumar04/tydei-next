@@ -98,11 +98,14 @@ export function calculateMonthlyAccrual(
     }
   }
 
-  // ─── Quarterly evaluation period ─────────────────────────────────
-  // Tier is determined by a rolling 3-month window; rebate accrues on
-  // THIS month's spend at that tier's rate. Callers supply the
-  // rolling-window total so this function stays pure.
-  if (evaluationPeriod === "quarterly") {
+  // ─── Quarterly + semi-annual evaluation period ───────────────────
+  // Vick rule (2026-04-20): tier qualification resets at every
+  // evaluation-period boundary. The caller
+  // (`buildMonthlyAccruals` / callers that do their own windowing)
+  // supplies the accumulated in-period spend via `rollingWindowSpend`
+  // so this function stays pure; the engine just runs the engine on
+  // that window and attributes THIS month's slice of the rebate.
+  if (evaluationPeriod === "quarterly" || evaluationPeriod === "semi_annual") {
     const windowSpend = rollingWindowSpend ?? monthlySpend
     if (method === "marginal") {
       const prior = Math.max(0, windowSpend - monthlySpend)
@@ -220,22 +223,70 @@ export function buildMonthlyAccruals(
   method: RebateMethodName = "cumulative",
   evaluationPeriod: EvaluationPeriod = "annual",
 ): TimelineRow[] {
-  let cumulative = 0
   const rows: TimelineRow[] = []
 
-  for (let i = 0; i < series.length; i++) {
-    const entry = series[i]
-    cumulative += entry.spend
-    // 3-month trailing sum for quarterly eval period (inclusive of current).
+  // Vick rule (2026-04-20): tier qualification RESETS at every
+  // evaluation-period boundary. If the contract evaluates quarterly
+  // and tiers are 0-100 / 101-200, Q1 spend of $150 qualifies tier 2,
+  // then Q2 starts fresh at $0 — a Q2 spend of $50 qualifies tier 1,
+  // not a tier-2 holdover from Q1.
+  //
+  // `cumulative` therefore resets at the start of each period:
+  //   monthly    — resets every month (= this month's spend only)
+  //   quarterly  — resets at calendar quarters (Jan-Mar, Apr-Jun, …)
+  //   semi_annual— resets at H1/H2 (Jan-Jun, Jul-Dec)
+  //   annual     — resets at calendar-year boundaries (Jan 1)
+  //
+  // Previously this function ran a lifetime cumulative across the
+  // whole series AND used a rolling-3-month window for quarterly,
+  // both of which carried spend across periods and violated the rule.
+  function periodKeyFor(month: string): string {
+    const [y, m] = month.split("-").map((n) => Number(n))
+    if (evaluationPeriod === "monthly") return month
+    if (evaluationPeriod === "quarterly") {
+      const q = Math.floor((m - 1) / 3) + 1
+      return `${y}-Q${q}`
+    }
+    if (evaluationPeriod === "semi_annual") {
+      const h = m <= 6 ? 1 : 2
+      return `${y}-H${h}`
+    }
+    return `${y}`
+  }
+
+  // Two trackers:
+  //   `windowSpend` — period-scoped, RESETS at each period boundary.
+  //      Feeds the rebate engine (tier qualification per Vick rule).
+  //   `displayCumulative` — lifetime running total across the whole
+  //      series. Feeds the timeline `cumulativeSpend` column so the UI
+  //      shows a clean running line (Charles W1.X-B).
+  let currentPeriod: string | null = null
+  let windowSpend = 0
+  let displayCumulative = 0
+
+  for (const entry of series) {
+    const periodKey = periodKeyFor(entry.month)
+    if (periodKey !== currentPeriod) {
+      currentPeriod = periodKey
+      windowSpend = 0
+    }
+    windowSpend += entry.spend
+    displayCumulative += entry.spend
+
+    // For calculateMonthlyAccrual:
+    //   - quarterly/semi-annual branches read `rollingWindowSpend` —
+    //     pass the current period's accumulated spend so the engine
+    //     evaluates against the reset window.
+    //   - annual branch reads `cumulativeSpendEndOfMonth` — pass the
+    //     in-year window (resets Jan 1 via periodKeyFor).
     const rollingWindowSpend =
-      evaluationPeriod === "quarterly"
-        ? series
-            .slice(Math.max(0, i - 2), i + 1)
-            .reduce((sum, e) => sum + e.spend, 0)
+      evaluationPeriod === "quarterly" || evaluationPeriod === "semi_annual"
+        ? windowSpend
         : undefined
+
     const accrual = calculateMonthlyAccrual(
       entry.spend,
-      cumulative,
+      windowSpend, // in-period cumulative, NOT lifetime
       tiers,
       method,
       evaluationPeriod,
@@ -244,7 +295,7 @@ export function buildMonthlyAccruals(
     rows.push({
       month: entry.month,
       spend: entry.spend,
-      cumulativeSpend: cumulative,
+      cumulativeSpend: displayCumulative,
       accruedAmount: accrual.accruedAmount,
       tierAchieved: accrual.tierAchieved,
       rebatePercent: accrual.rebatePercent,
