@@ -86,10 +86,14 @@ describe("getContracts — rebate earned/collected filters (R4.3/R4.4/R5.31)", (
     vi.useRealTimers()
   })
 
-  it("earned sums ONLY Rebate rows within the current calendar year and <= today (YTD, R5.31)", async () => {
-    const thisYear1 = new Date("2026-01-31") // YTD — counts
-    const thisYear2 = new Date("2026-05-31") // YTD — counts
-    const lastYear = new Date("2025-12-31") // prior year — excluded
+  it("earned sums every closed Rebate row (Lifetime, Charles iMessage 2026-04-20 N13)", async () => {
+    // N13 changed the list's rebateEarned from YTD → Lifetime. Any Rebate
+    // whose payPeriodEnd <= today counts, including prior calendar years.
+    // Future periods remain excluded (they're projections, not earned).
+    // Clock: FIXED_NOW = 2026-06-15
+    const thisYear1 = new Date("2026-01-31") // closed — counts
+    const thisYear2 = new Date("2026-05-31") // closed — counts
+    const lastYear = new Date("2025-12-31") // closed prior year — counts (Lifetime, not YTD)
     const future = new Date("2099-12-31") // projection — excluded
 
     contractRows = [
@@ -106,13 +110,21 @@ describe("getContracts — rebate earned/collected filters (R4.3/R4.4/R5.31)", (
 
     const result = await getContracts({ facilityId: "fac-test" })
     const c = result.contracts[0] as unknown as { rebateEarned: number; rebateCollected: number }
-    expect(c.rebateEarned).toBe(3500) // 1000 + 2500; prior-year + future excluded
+    // 1000 (Jan 2026, closed) + 2500 (May 2026, closed) + 4242 (Dec 2025,
+    // closed prior year — now counted under Lifetime) = 7742. Future 2099
+    // row excluded.
+    expect(c.rebateEarned).toBe(7742)
     expect(c.rebateCollected).toBe(0) // no collectionDate on any row
   })
 
-  it("excludes a prior-calendar-year rebate row (Charles R5.31 regression)", async () => {
-    // Mirrors Charles's $672 case: contract's only rebate was in a prior
-    // calendar year. Detail page shows $0 YTD; the list column must agree.
+  it("counts prior-calendar-year rebate rows under Lifetime (Charles iMessage 2026-04-20 N13)", async () => {
+    // Inverts R5.31's YTD rule: Charles's $672 case had its only Rebate
+    // row in a prior calendar year. Under the pre-N13 YTD semantics the
+    // list showed $0 to match the detail's YTD card. N13 moved the list
+    // to Lifetime — the contract detail still has its YTD card for
+    // compliance, but the list column now surfaces the whole-contract
+    // earned number so small contracts with seasonal rebates don't look
+    // empty. The $672 IS real earned rebate from a closed period.
     contractRows = [
       {
         id: "c-charles",
@@ -128,7 +140,7 @@ describe("getContracts — rebate earned/collected filters (R4.3/R4.4/R5.31)", (
     ]
     const result = await getContracts({ facilityId: "fac-test" })
     const c = result.contracts[0] as unknown as { rebateEarned: number }
-    expect(c.rebateEarned).toBe(0)
+    expect(c.rebateEarned).toBe(672)
   })
 
   it("collected sums ONLY Rebate rows where collectionDate is set (semantics unchanged)", async () => {
