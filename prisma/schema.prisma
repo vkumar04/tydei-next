@@ -1298,6 +1298,19 @@ model Rebate {
   payPeriodEnd    DateTime  @db.Date
   collectionDate  DateTime? @db.Date
   notes           String?
+  // Roadmap track 2: engine version stamping. Rebate rows written by
+  // the accrual engine carry the engine version that computed them —
+  // when the engine's math changes (e.g. 2026-04-20's below-baseline
+  // fix), old rows stay stamped with the old version so a targeted
+  // recompute can upgrade them deterministically. Null = manual-entry
+  // row or pre-2026-04-20 row that predates version tracking.
+  engineVersion   String?
+  // Roadmap track 2: warnings channel. When the canonical engine
+  // returns `warnings[]` on a RebateResult (e.g. "PRIOR_YEAR_ACTUAL
+  // baseline missing, defaulted to 0"), the recompute pipeline
+  // serializes them into this column as a newline-joined string.
+  // Surfaced on the ledger UI as a yellow banner.
+  engineWarnings  String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

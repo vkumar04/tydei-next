@@ -49,6 +49,7 @@ import {
   buildUnionCategoryWhereClause,
 } from "@/lib/contracts/cog-category-filter"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
+import { ENGINE_VERSION } from "@/lib/rebates/engine-version"
 
 // The notes prefix marks rows this action owns so it can rewrite them
 // safely without touching manually-entered rebate rows. Must stay a
@@ -372,6 +373,9 @@ export async function recomputeAccrualForContract(
 
   // Monthly-eval path (from W1.W-B): cadence-bucketed rows. Skip any
   // bucket whose period already has a preserved collected row.
+  // Roadmap track 2: every auto-accrual row carries the engine version
+  // that computed it; stamp here so future targeted-recompute runs can
+  // identify rows that predate a math change.
   const toInsert: {
     contractId: string
     facilityId: string
@@ -381,6 +385,8 @@ export async function recomputeAccrualForContract(
     payPeriodEnd: Date
     collectionDate: null
     notes: string
+    engineVersion: string
+    engineWarnings: string | null
   }[] = cadenceBuckets
     .filter((b) => !preservedKeys.has(periodKey(b.periodStart, b.periodEnd)))
     .map((b) => {
@@ -397,6 +403,8 @@ export async function recomputeAccrualForContract(
         payPeriodEnd: b.periodEnd,
         collectionDate: null,
         notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
+        engineVersion: ENGINE_VERSION,
+        engineWarnings: null,
       }
     })
 
@@ -443,6 +451,8 @@ export async function recomputeAccrualForContract(
         payPeriodEnd: b.periodEnd,
         collectionDate: null,
         notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
+        engineVersion: ENGINE_VERSION,
+        engineWarnings: null,
       })
     }
   }
