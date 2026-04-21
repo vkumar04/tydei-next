@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Plus,
@@ -98,6 +98,65 @@ const baselineTypes = [
   { value: "volume_based", label: "Volume Based" },
   { value: "growth_based", label: "Growth Based" },
 ] as const
+
+/** Charles W1.X-A6 — Comma/whitespace-separated CPT code entry with chip
+ *  display. CPT codes are short alphanumerics (5 chars usually), so a
+ *  lightweight picker without a live catalog is acceptable here. */
+function CptCodeList({
+  values,
+  onChange,
+}: {
+  values: string[]
+  onChange: (next: string[]) => void
+}) {
+  const [draft, setDraft] = useState("")
+  function commit(raw: string) {
+    const tokens = raw
+      .split(/[\s,]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean)
+    if (tokens.length === 0) return
+    const next = [...values]
+    for (const t of tokens) if (!next.includes(t)) next.push(t)
+    onChange(next)
+    setDraft("")
+  }
+  return (
+    <div className="space-y-2">
+      <Input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault()
+            commit(draft)
+          }
+        }}
+        onBlur={() => {
+          if (draft.trim()) commit(draft)
+        }}
+        placeholder="e.g. 27447, 27130 (Enter to add)"
+      />
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {values.map((code) => (
+            <Badge key={code} variant="secondary" className="pr-1">
+              <span className="text-xs font-mono">{code}</span>
+              <button
+                type="button"
+                className="ml-1 rounded hover:bg-accent px-1"
+                aria-label={`Remove ${code}`}
+                onClick={() => onChange(values.filter((c) => c !== code))}
+              >
+                ×
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function createEmptyTerm(): TermFormValues {
   return {
@@ -629,6 +688,40 @@ export function ContractTermsEntry({
                       />
                     </Field>
                   )}
+
+                  {/* Charles W1.X-A6 — Per-Procedure rebate tiers need CPT
+                      codes to match case-costing records. Show the CPT code
+                      list whenever any tier on this term uses
+                      per_procedure_rebate. Stored as ContractTerm.cptCodes[]. */}
+                  {(term.tiers ?? []).some(
+                    (t) => t.rebateType === "per_procedure_rebate",
+                  ) && (
+                    <Field label="CPT Codes">
+                      <CptCodeList
+                        values={term.cptCodes ?? []}
+                        onChange={(next) =>
+                          updateTerm(termIdx, { cptCodes: next })
+                        }
+                      />
+                    </Field>
+                  )}
+
+                  {/* Charles W1.X-A6 — Per-Unit rebate tiers pay per item, so
+                      the term MUST be scoped to specific items with REF
+                      numbers. Nudge the user when that pairing is missing. */}
+                  {(term.tiers ?? []).some(
+                    (t) => t.rebateType === "fixed_rebate_per_unit",
+                  ) &&
+                    (term.appliesTo !== "specific_items" ||
+                      (term.scopedItemNumbers ?? []).length === 0) && (
+                      <p className="inline-flex items-start gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        <span>
+                          Per-Unit rebate tiers require a Specific Items scope
+                          with at least one REF number selected.
+                        </span>
+                      </p>
+                    )}
 
                   {contractType === "tie_in" && (
                     <div className="space-y-5 rounded-md border p-4">

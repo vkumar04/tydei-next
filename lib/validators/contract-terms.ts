@@ -45,6 +45,10 @@ export const createTermSchema = z.object({
   scopedCategoryId: z.string().optional(),
   scopedCategoryIds: z.array(z.string()).optional(),
   scopedItemNumbers: z.array(z.string()).optional(),
+  // Charles W1.X-A6 — CPT codes live on ContractTerm (String[]). Used
+  // when any tier has rebateType === "per_procedure_rebate": each code
+  // is matched against case-costing records to count procedures.
+  cptCodes: z.array(z.string()).optional(),
   // Tie-in capital schedule fields (nullable on ContractTerm; only used
   // when contract.contractType === "tie_in").
   capitalCost: z.number().nullable().optional(),
@@ -109,6 +113,8 @@ export const termFormSchema = z.object({
   scopedCategoryId: z.string().optional(),
   scopedCategoryIds: z.array(z.string()).optional(),
   scopedItemNumbers: z.array(z.string()).optional(),
+  // Charles W1.X-A6 — CPT codes (see createTermSchema above).
+  cptCodes: z.array(z.string()).optional(),
   // Tie-in capital schedule fields (nullable on ContractTerm; only used
   // when contract.contractType === "tie_in").
   capitalCost: z.number().nullable().optional(),
