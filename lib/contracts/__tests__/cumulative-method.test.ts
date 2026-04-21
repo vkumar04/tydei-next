@@ -115,4 +115,51 @@ describe("Charles W1.W-B2 — cumulative audit", () => {
       expect(r.rebateEarned).toBe(52_500) // 750K × 7%
     })
   })
+
+  describe("below-baseline behavior (Charles iMessage 2026-04-20)", () => {
+    // Charles's Qualified Annual Spend Rebate contract: Tier 1 starts at
+    // $5.3M. At $1,559,528 spend the Terms card claimed "earning $46,786"
+    // — computed naively as spend × tier-1-rate (3%) = $46,786. That is
+    // wrong: if the baseline (tier 1 spendMin) hasn't been met, NO tier
+    // qualifies and NO rebate earns. The engine was defaulting to
+    // `applicable = sorted[0]` regardless, and then paying the tier-1 rate
+    // on the full spend.
+    //
+    // Correct cumulative semantics for a non-zero tier-1 floor:
+    //   spend < tier1.spendMin      → tierAchieved=0, rebateEarned=0
+    //   spend >= tier1.spendMin     → tier 1 rate on full spend
+    //   spend >= tier2.spendMin     → tier 2 rate on full spend
+    //   etc.
+    const qualifiedAnnual: TierLike[] = [
+      { tierNumber: 1, spendMin: 5_300_000, spendMax: 5_500_000, rebateValue: 3 },
+      { tierNumber: 2, spendMin: 5_500_000, spendMax: 6_000_000, rebateValue: 4 },
+      { tierNumber: 3, spendMin: 6_000_000, spendMax: 99_999_999, rebateValue: 5 },
+    ]
+
+    it("spend below tier-1 spendMin earns zero rebate (Charles $1.5M / $5.3M case)", () => {
+      const r = calculateCumulative(1_559_528, qualifiedAnnual)
+      expect(r.tierAchieved).toBe(0)
+      expect(r.rebatePercent).toBe(0)
+      expect(r.rebateEarned).toBe(0)
+    })
+
+    it("zero spend with a non-zero tier-1 floor also earns zero", () => {
+      const r = calculateCumulative(0, qualifiedAnnual)
+      expect(r.tierAchieved).toBe(0)
+      expect(r.rebateEarned).toBe(0)
+    })
+
+    it("spend at exactly tier-1 spendMin qualifies for tier 1", () => {
+      const r = calculateCumulative(5_300_000, qualifiedAnnual)
+      expect(r.tierAchieved).toBe(1)
+      expect(r.rebatePercent).toBe(3)
+      expect(r.rebateEarned).toBe(159_000) // 5.3M × 3%
+    })
+
+    it("spend between tier 1 and tier 2 stays on tier 1", () => {
+      const r = calculateCumulative(5_400_000, qualifiedAnnual)
+      expect(r.tierAchieved).toBe(1)
+      expect(r.rebateEarned).toBe(162_000) // 5.4M × 3%
+    })
+  })
 })

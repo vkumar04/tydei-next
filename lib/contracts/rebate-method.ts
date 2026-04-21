@@ -66,6 +66,18 @@ export function calculateCumulative(
     return a.tierNumber - b.tierNumber
   })
 
+  // Charles iMessage 2026-04-20: when tier 1 has a non-zero spendMin
+  // (e.g. "Qualified Annual Spend Rebate" with tier 1 @ \$5.3M floor) and
+  // spend is BELOW that floor, NO tier qualifies and NO rebate earns.
+  // The previous code always defaulted `applicable = sorted[0]` and
+  // returned `spend × tier-1-rate`, so a contract at \$1.5M spend showed
+  // "\$46,786 earned" against a \$5.3M baseline. Early-return zeros when
+  // spend hasn't crossed the lowest tier's spendMin.
+  const lowestMin = numericValue(sorted[0].spendMin)
+  if (spend < lowestMin) {
+    return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
+  }
+
   // Walk in spendMin order and only PROMOTE to a tier whose spendMin is
   // strictly greater than the previously-applicable tier's spendMin OR
   // is zero and matches today's spend (the first tier's normal case).
@@ -73,7 +85,7 @@ export function calculateCumulative(
   // has no way to pick between them, so we defer to the lowest
   // tierNumber (from the tiebreaker above).
   let applicable = sorted[0]
-  let appliedMin = numericValue(sorted[0].spendMin)
+  let appliedMin = lowestMin
   for (let i = 1; i < sorted.length; i++) {
     const tier = sorted[i]
     const tMin = numericValue(tier.spendMin)

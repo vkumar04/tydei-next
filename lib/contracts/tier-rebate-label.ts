@@ -82,6 +82,16 @@ export function formatTierDollarAnnotation(
       : null
   }
 
+  // Below baseline: currentTierNumber === 0 means spend hasn't crossed
+  // the lowest tier's spendMin yet (Charles iMessage 2026-04-20). Every
+  // tier should read as "unlocks at $X" — never a projection, because
+  // no rebate will earn at all until spend reaches tier 1's floor.
+  if (currentTierNumber === 0) {
+    const delta = Math.max(0, tier.spendMin - currentSpend)
+    if (delta === 0) return null
+    return `${formatCurrency(delta)} to unlock`
+  }
+
   // percent_of_spend. The tier-progress annotation is an engine
   // PROJECTION (spend × rate) — it is NOT the ledger-based earned
   // amount. Charles iMessage 2026-04-20 N10: label used to read

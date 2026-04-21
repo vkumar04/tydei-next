@@ -69,6 +69,27 @@ export function calculateTierProgress(
 
   const sorted = [...tiers].sort((a, b) => n(a.spendMin) - n(b.spendMin))
 
+  // Charles iMessage 2026-04-20: when spend hasn't reached tier 1's
+  // spendMin, NO tier is current (the contract is "below baseline").
+  // The tier-progress card must reflect that — previously it defaulted
+  // to tier 1 as current, which paired with the dollar-annotation
+  // helper to show a bogus "earning $X" label at e.g. $1.5M against a
+  // $5.3M baseline.
+  const lowestMin = n(sorted[0].spendMin)
+  if (currentSpend < lowestMin) {
+    const firstTier = toInfo(sorted[0])
+    return {
+      currentTier: null,
+      nextTier: firstTier,
+      progressPercent:
+        lowestMin > 0
+          ? Math.min(100, (currentSpend / lowestMin) * 100)
+          : 0,
+      amountToNextTier: Math.max(0, lowestMin - currentSpend),
+      projectedAdditionalRebate: 0,
+    }
+  }
+
   // Find highest tier whose spendMin is met.
   let currentIdx = 0
   for (let i = 0; i < sorted.length; i++) {
