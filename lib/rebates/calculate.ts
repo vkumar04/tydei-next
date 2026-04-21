@@ -116,6 +116,14 @@ export function calculateCumulative(
 /**
  * Marginal tier rebate: each bracket earns at its own rate, summed.
  * Below-baseline → all zeros.
+ *
+ * Below-baseline guard: the canonical `calculateMarginalRebate` treats
+ * the first tier as starting at 0 and accumulates brackets from the
+ * first dollar — incorrect semantics for contracts where tier 1 has a
+ * non-zero spendMin (e.g. Charles's Qualified Annual Spend Rebate with
+ * tier 1 at \$5.3M). Engine-invariant property tests caught this. The
+ * shim zeros out below baseline before delegating so marginal agrees
+ * with cumulative at the "no tier qualified" boundary.
  */
 export function calculateMarginal(
   spend: number,
@@ -124,9 +132,17 @@ export function calculateMarginal(
   if (tiers.length === 0) {
     return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
   }
+  const deduped = dedupTiers(tiers)
+  if (deduped.length === 0) {
+    return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
+  }
+  const lowestMin = deduped[0]!.thresholdMin
+  if (spend < lowestMin) {
+    return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
+  }
   const { totalRebate, brackets } = calculateMarginalRebate(
     spend,
-    dedupTiers(tiers),
+    deduped,
     "EXCLUSIVE",
   )
   if (brackets.length === 0) {

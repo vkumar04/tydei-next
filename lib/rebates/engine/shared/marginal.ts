@@ -39,8 +39,6 @@ export function calculateMarginalRebate(
   }
 
   const sorted = sortTiersAscending(tiers)
-  let remaining = eligibleAmount
-  let cursor = 0
   let total = 0
   const brackets: Array<{
     tierNumber: number
@@ -49,23 +47,38 @@ export function calculateMarginalRebate(
     bracketRebate: number
   }> = []
 
+  // Each tier occupies the range [tier.thresholdMin, nextTier.thresholdMin).
+  // bracketSpend is the amount of eligibleAmount that falls INSIDE that
+  // range — clamped to zero below thresholdMin and capped at upperBound.
+  //
+  // 2026-04-20 property-test catch: the pre-fix implementation treated
+  // `remaining = eligibleAmount` as "total to distribute starting from
+  // zero" and decremented it per bracket. That silently over-allocated
+  // to upper tiers whenever tier 1's thresholdMin was nonzero (e.g.
+  // Charles's Qualified Annual Spend Rebate with tier 1 @ \$5.3M: spend
+  // of \$200k above the floor was attributed across multiple brackets
+  // even though the user was clearly IN tier 1). The corrected
+  // implementation reads bracket spend directly from eligibleAmount
+  // using the tier's own min/max boundaries, matching the intent of
+  // marginal-bracket math in real tier ladders.
   for (let i = 0; i < sorted.length; i++) {
     const tier = sorted[i]!
     const nextTier = sorted[i + 1]
-
-    // Bracket capacity = (next tier's thresholdMin - this tier's thresholdMin).
-    // Under EXCLUSIVE, the next tier starts AT nextTier.thresholdMin so the
-    // capacity is (nextMin - currentMin) strictly. Under INCLUSIVE, the next
-    // tier starts ABOVE nextMin so capacity is same from the lower tier's POV.
-    // The difference is in which tier the boundary dollar is COUNTED in —
-    // determineTier handles that; here we just stack brackets in order.
-    const effectiveCap =
+    const upperBound =
       nextTier === null || nextTier === undefined
         ? Infinity
-        : nextTier.thresholdMin - tier.thresholdMin
+        : nextTier.thresholdMin
 
-    const bracketSpend = Math.min(remaining, effectiveCap)
-    if (bracketSpend <= 0) break
+    const bracketSpend = Math.max(
+      0,
+      Math.min(eligibleAmount, upperBound) - tier.thresholdMin,
+    )
+    if (bracketSpend <= 0) {
+      // Either spend hasn't reached this tier, or an earlier malformed
+      // tier ordering produced a negative bracket — skip without
+      // contributing.
+      continue
+    }
 
     // When a fixed-rebate amount is set on the tier, switch to fixed dollars
     // for this bracket (used for flat-rebate tier structures).
@@ -82,16 +95,10 @@ export function calculateMarginalRebate(
       bracketRebate,
     })
 
-    remaining -= bracketSpend
-    cursor += bracketSpend
-
-    // Under EXCLUSIVE, once we've filled a bracket exactly to its cap,
-    // the next dollar spills into the NEXT tier (handled by the loop).
-    // Under INCLUSIVE, same behavior at this math level — determineTier
-    // distinguishes "value exactly at boundary" which is a separate concern.
-    if (remaining <= 0) break
-    void boundaryRule // boundary semantics are encoded in capacity above
-    void cursor // retained for potential debug / logging
+    // boundaryRule semantics (EXCLUSIVE vs INCLUSIVE) are resolved by
+    // determineTier when callers need to classify the boundary dollar;
+    // here we just stack brackets by range.
+    void boundaryRule
   }
 
   return { totalRebate: total, brackets }
