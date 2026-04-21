@@ -79,20 +79,15 @@ export function calculateMonthlyAccrual(
 
   // ─── Monthly evaluation period (Charles R4.6) ────────────────────
   // Tier is determined by THIS month's spend alone — each month stands
-  // on its own. For marginal, bracket math is scoped to monthly spend
-  // rather than cumulative spend, so the full earned amount is returned.
+  // on its own. Use the engine's rebateEarned directly for both
+  // cumulative and marginal methods. Charles 2026-04-21: previously
+  // the cumulative branch recomputed accruedAmount as (spend × percent
+  // / 100), which zeroes fixed_rebate tiers (their rebatePercent is 0
+  // but rebateEarned is the flat dollar amount). Trust the engine.
   if (evaluationPeriod === "monthly") {
-    if (method === "marginal") {
-      const end = fn(monthlySpend, tiers)
-      return {
-        accruedAmount: end.rebateEarned,
-        tierAchieved: end.tierAchieved,
-        rebatePercent: end.rebatePercent,
-      }
-    }
     const result = fn(monthlySpend, tiers)
     return {
-      accruedAmount: (monthlySpend * result.rebatePercent) / 100,
+      accruedAmount: result.rebateEarned,
       tierAchieved: result.tierAchieved,
       rebatePercent: result.rebatePercent,
     }
@@ -117,15 +112,26 @@ export function calculateMonthlyAccrual(
         rebatePercent: end.rebatePercent,
       }
     }
+    // Cumulative: attribute THIS month's slice of the period's rebate.
+    // For percent-of-spend tiers: (monthlySpend × percent / 100) is
+    // exactly the slice. For fixed_rebate tiers: rebatePercent is 0 but
+    // the flat amount was already earned at qualification — prefer the
+    // engine's rebateEarned, and attribute the slice proportional to
+    // how much of the window this month represents.
     const result = fn(windowSpend, tiers)
+    const percentSlice = (monthlySpend * result.rebatePercent) / 100
+    const windowShare = windowSpend > 0 ? monthlySpend / windowSpend : 0
+    const fixedSlice = percentSlice === 0
+      ? result.rebateEarned * windowShare
+      : 0
     return {
-      accruedAmount: (monthlySpend * result.rebatePercent) / 100,
+      accruedAmount: percentSlice + fixedSlice,
       tierAchieved: result.tierAchieved,
       rebatePercent: result.rebatePercent,
     }
   }
 
-  // ─── Annual evaluation period (default, unchanged) ───────────────
+  // ─── Annual evaluation period (default) ──────────────────────────
   if (method === "marginal") {
     const prior = Math.max(0, cumulativeSpendEndOfMonth - monthlySpend)
     const end = fn(cumulativeSpendEndOfMonth, tiers)
@@ -138,9 +144,18 @@ export function calculateMonthlyAccrual(
   }
 
   // Cumulative: month's spend earns the end-of-month tier rate.
+  // Mirrors the quarterly/semi-annual branch: percent math is the
+  // month × percent slice; fixed_rebate tiers have rebatePercent = 0
+  // but rebateEarned holds the flat dollars — attribute
+  // proportionally to the month's share of in-period spend.
   const result = fn(cumulativeSpendEndOfMonth, tiers)
+  const percentSlice = (monthlySpend * result.rebatePercent) / 100
+  const windowShare =
+    cumulativeSpendEndOfMonth > 0 ? monthlySpend / cumulativeSpendEndOfMonth : 0
+  const fixedSlice =
+    percentSlice === 0 ? result.rebateEarned * windowShare : 0
   return {
-    accruedAmount: (monthlySpend * result.rebatePercent) / 100,
+    accruedAmount: percentSlice + fixedSlice,
     tierAchieved: result.tierAchieved,
     rebatePercent: result.rebatePercent,
   }

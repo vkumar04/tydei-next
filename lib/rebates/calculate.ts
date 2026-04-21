@@ -36,6 +36,19 @@ export interface TierLike {
   spendMin: number | string | { toString(): string }
   spendMax?: number | string | { toString(): string } | null
   rebateValue: number | string | { toString(): string }
+  /**
+   * Flat-dollar rebate at this tier. When set, overrides `rebateValue`:
+   * tier qualifies → facility earns exactly this amount, ignoring
+   * spend. Use when `ContractTier.rebateType === "fixed_rebate"`.
+   * Null/undefined = percent-of-spend math via rebateValue.
+   *
+   * Charles iMessage 2026-04-21: accrual pipeline previously ignored
+   * rebateType and treated every tier as percent_of_spend, so a
+   * "Fixed Rebate \$30,000" tier computed as 30000% × spend. This
+   * field is the plumbing that lets the canonical engine short-circuit
+   * to flat-dollar math per tier.
+   */
+  fixedRebateAmount?: number | null
 }
 
 export interface RebateEngineResult {
@@ -58,6 +71,10 @@ function toRebateTier(t: TierLike): RebateTier {
         ? null
         : asNumber(t.spendMax),
     rebateValue: asNumber(t.rebateValue),
+    fixedRebateAmount:
+      t.fixedRebateAmount === null || t.fixedRebateAmount === undefined
+        ? null
+        : Number(t.fixedRebateAmount),
   }
 }
 

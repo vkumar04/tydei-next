@@ -176,15 +176,17 @@ describe("recomputeAccrualForContract — rebateValue unit scaling (Charles W1.V
 
     await recomputeAccrualForContract("c-1")
 
-    // The accrual engine in this code path treats the tier's rebateValue
-    // as an integer-percent rate regardless of rebateType — so with
-    // rebateValue=5000, yield = (10000 × 5000) / 100 = $500,000. That's
-    // a pre-existing engine limitation we're not fixing here; what this
-    // test guards against is DOUBLE scaling (5000 × 100 → 500,000 → math
-    // → $50,000,000). The scaler must be a no-op for non-percent types.
-    const args = rebateCreateManyMock.mock.calls[0][0] as {
-      data: Array<{ rebateEarned: number }>
-    }
-    expect(args.data[0].rebateEarned).toBeLessThan(1_000_000)
+    // Charles iMessage 2026-04-21: the accrual pipeline now fully
+    // supports fixed_rebate — it sets `fixedRebateAmount` on the
+    // TierLike and zeroes rebateValue so the canonical engine short-
+    // circuits to the flat dollar amount. $10,000 of spend against a
+    // $5,000 fixed rebate earns exactly $5,000 (tier qualifies, flat
+    // amount applies once). The old buggy behavior (treating 5000 as
+    // a percent → $500,000 earned) is gone.
+    const args = rebateCreateManyMock.mock.calls[0]?.[0] as
+      | { data: Array<{ rebateEarned: number }> }
+      | undefined
+    expect(args).toBeDefined()
+    expect(args!.data[0]!.rebateEarned).toBe(5_000)
   })
 })

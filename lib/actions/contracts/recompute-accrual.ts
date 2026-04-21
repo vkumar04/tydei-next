@@ -164,13 +164,29 @@ export async function recomputeAccrualForContract(
   // unit convention is owned by a single helper. See CLAUDE.md "Rebate
   // engine units" rule.
   const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
-    const tiers: TierLike[] = term.tiers.map((t) => ({
-      tierNumber: t.tierNumber,
-      tierName: t.tierName ?? null,
-      spendMin: Number(t.spendMin),
-      spendMax: t.spendMax ? Number(t.spendMax) : null,
-      rebateValue: scaleRebateValueForEngine(t.rebateValue, t.rebateType),
-    }))
+    // Charles iMessage 2026-04-21: "Fixed Rebate" tiers (rebateType =
+    // fixed_rebate) were being treated as percent_of_spend — a \$30,000
+    // fixed rebate was computed as 30000% × spend. Thread fixedRebateAmount
+    // through so the canonical engine's cumulative/marginal helpers
+    // short-circuit to the flat dollar amount on tier qualification.
+    const tiers: TierLike[] = term.tiers.map((t) => {
+      const isFixedRebate = t.rebateType === "fixed_rebate"
+      return {
+        tierNumber: t.tierNumber,
+        tierName: t.tierName ?? null,
+        spendMin: Number(t.spendMin),
+        spendMax: t.spendMax ? Number(t.spendMax) : null,
+        // For fixed_rebate tiers the rebateValue column stores dollars,
+        // not a percent. Set rebateValue to 0 here so any code path
+        // that multiplies by spend × value cleanly returns 0; the
+        // canonical engine reads fixedRebateAmount first and returns
+        // the flat dollars before falling through to the percent math.
+        rebateValue: isFixedRebate
+          ? 0
+          : scaleRebateValueForEngine(t.rebateValue, t.rebateType),
+        fixedRebateAmount: isFixedRebate ? Number(t.rebateValue) : null,
+      }
+    })
     const method: RebateMethodName = term.rebateMethod ?? "cumulative"
     const evaluationPeriod: EvaluationPeriod =
       term.evaluationPeriod === "monthly" ||
