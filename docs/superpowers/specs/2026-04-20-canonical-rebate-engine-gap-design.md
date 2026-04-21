@@ -6,20 +6,41 @@
 
 ## Executive summary
 
-The reference engine defines **8 rebate types + 2 margin types** with ~10 audited fixes already baked in (A1–A10). Tydei-next currently implements **1 of the 8 well** (spend-rebate cumulative/marginal, after today's below-baseline fix) and has **partial coverage** of tie-in capital. The remaining **6 rebate types and several margin/true-up niceties are missing**. Three of Charles's open backlog items map directly into the reference (N17 carve-out, N14 projected, true-up shortfall handling).
+The reference engine defines **8 rebate types + 2 margin types** with ~10 audited fixes already baked in (A1–A10). **Second-pass audit finding (2026-04-20 pm):** tydei already has the full canonical engine ported at `lib/rebates/engine/` (2321 LOC across 11 files, 106 Vitest tests passing). It covers all 8 rebate types, includes every audit fix, and exposes a clean `RebateConfig | PeriodData → RebateResult` API.
 
-## Rebate types: reference vs tydei
+**What's actually missing is the wiring**, not the math:
+1. `lib/rebates/engine/index.ts` removed the dispatcher because no server action called it. Only 2 of 8 RebateType branches were reachable from the Prisma bridge.
+2. `computeRebateFromPrismaTiers` (in `lib/rebates/calculate.ts`) still routes through the **legacy** `lib/contracts/rebate-method.ts` engine (cumulative/marginal only; no boundary-rule config; no growth-baseline).
+3. The Prisma adapter layer needs one function per canonical type that maps `ContractTerm + ContractTier + tier metadata → RebateConfig` so the new engine can be invoked from display / recompute paths.
 
-| # | Reference type | Tydei status | Maps to Charles backlog |
-|---|---|---|---|
-| 1 | **SPEND_REBATE** (cumulative/marginal, dollar-one or growth, ALL/REFERENCE/CATEGORY/MULTI_CATEGORY basis) | **Partial.** Cumulative + marginal ✓. Basis scoping via `appliesTo`/`categories` ✓. **Missing: growth-only + baseline resolver** (PRIOR_YEAR_ACTUAL vs NEGOTIATED_FIXED) | — |
-| 2 | **VOLUME_REBATE** (CPT-occurrence tiers, fixed-per-occurrence option, dedup by caseId+cptCode) | **Not implemented.** `ContractTier.rebateType = per_procedure_rebate` / `fixed_rebate_per_unit` enums exist in schema but the engine routes them to $0 return. | — |
-| 3 | **TIER_PRICE_REDUCTION** (spend triggers unit-price drop, RETROACTIVE vs FORWARD_ONLY) | **Not implemented.** | — |
-| 4 | **MARKET_SHARE_REBATE** (vendor share of category spend triggers rebate) | **Not implemented** as a rebate config. `Contract.marketShareCommitment` + `currentMarketShare` scalar fields exist but only feed the scoring/commitment heuristic. | — |
-| 5 | **MARKET_SHARE_PRICE_REDUCTION** | **Not implemented.** | — |
-| 6 | **CAPITATED** (grouped ref# dollar cap + optional inner rebate/reduction) | **Not implemented.** | — |
-| 7 | **CARVE_OUT** (per-ref-number custom rate from pricing file) | **Not implemented.** | **N17** — "carve out is something that requires a column to be on the price file that shows the carve out %" |
-| 8 | **TIE_IN_CAPITAL** (capital cost + amortization + rebate-stream paydown + shortfall true-up) | **Partial.** Amortization schedule ✓, `sumRebateAppliedToCapital` ✓ (Charles W1.Y-C), `computeCapitalRetirementNeeded` ✓ (W1.Y-D). **Missing: carried-forward shortfall**, **BILL_IMMEDIATELY vs CARRY_FORWARD** semantics, cumulative-rebate tracking across periods. | — |
+Three of Charles's open backlog items map directly to types that are already implemented in `lib/rebates/engine/`:
+
+- **N17 carve-out** → `lib/rebates/engine/carve-out.ts` (148 LOC, tested). Needs: `CarveOutConfig` adapter from the contract's pricing-file carve-out column + UI to render `RebateResult.carveOutLines`.
+- **N14 projected/trending rebate** → `lib/rebates/engine/spend-rebate.ts` with `growthOnly: true` + `PRIOR_YEAR_ACTUAL` baseline. Needs: historic-spend series feeder + projection card.
+- **Tie-in shortfall handling** → `lib/rebates/engine/tie-in-capital.ts` with `BILL_IMMEDIATELY | CARRY_FORWARD`. Needs: integration with the existing amortization card + a new shortfall tile.
+
+## Rebate types: reference vs tydei (second-pass audit)
+
+All 8 types have a tested pure-engine implementation at `lib/rebates/engine/`. "Wired" below = invoked from a server action on a display surface. "Dormant" = code exists but no caller.
+
+| # | Type | Engine file | LOC | Tests | Wired? | Charles backlog |
+|---|---|---|---:|---:|---|---|
+| 1 | **SPEND_REBATE** | `spend-rebate.ts` | 229 | ✓ | **No** (legacy `lib/contracts/rebate-method.ts` used instead via `computeRebateFromPrismaTiers`) | — |
+| 2 | **VOLUME_REBATE** | `volume-rebate.ts` | 292 | ✓ | Dormant | — |
+| 3 | **TIER_PRICE_REDUCTION** | `tier-price-reduction.ts` | 152 | ✓ | Dormant | — |
+| 4 | **MARKET_SHARE_REBATE** | `market-share-rebate.ts` | 268 | ✓ | Dormant | — |
+| 5 | **MARKET_SHARE_PRICE_REDUCTION** | `market-share-price-reduction.ts` | 145 | ✓ | Dormant | — |
+| 6 | **CAPITATED** | `capitated.ts` | 212 | ✓ | Dormant | — |
+| 7 | **CARVE_OUT** | `carve-out.ts` | 148 | ✓ | **Dormant** | **N17** — carve-out column in pricing file |
+| 8 | **TIE_IN_CAPITAL** | `tie-in-capital.ts` | 154 | ✓ | **Partial** — amortization schedule + Paid-to-Date are wired via `sumRebateAppliedToCapital` (W1.Y-C), but `BILL_IMMEDIATELY` / `CARRY_FORWARD` shortfall tracking is dormant | Tie-in shortfall UX |
+
+Shared building blocks (all dormant-friendly, no wiring changes needed):
+- `shared/determine-tier.ts` — handles EXCLUSIVE + INCLUSIVE boundary rules (A1)
+- `shared/cumulative.ts` — returns null when no tier qualifies (matches today's `eec04c4` fix in the legacy engine)
+- `shared/marginal.ts` — returns bracket breakdown + null on no-qualify (A2/A3)
+- `shared/price-reduction-lines.ts` — per-purchase line breakdown (A7)
+- `shared/sort-tiers.ts` — canonical sort
+- `amortization.ts` — PMT formula (already wired via `buildTieInAmortizationSchedule`)
 
 ## Audit fixes (A1–A10) — already in the reference, check against tydei
 
@@ -68,17 +89,17 @@ Tydei has a separate `components/facility/rebate-optimizer/` and `lib/rebate-opt
 | **Market-share commitment math** (alluded to in N11 commitment tooltip) | Add `MARKET_SHARE_REBATE` type + `MarketShareRebateConfig`. `marketSharePercent = vendorSpend / totalCategorySpend × 100`. |
 | **Volume / per-procedure rebates** | Schema already has `per_procedure_rebate` enum — port `calculateVolumeRebate` to make it real. Dedup by `caseId+cptCode`. |
 
-## Recommended subsystem split (W1.Z cluster)
+## Recommended subsystem split (W1.Z cluster — second-pass scope)
 
-Each a focused ship, TDD + E2E regression guard:
+Rescoped to **wire existing engines**, not port them. Each subsystem is a Prisma adapter + UI integration.
 
-- **W1.Z-A** — Port `calculateCarveOut` + add `carveOutPercent` column to pricing file. Closes N17. (~2 hrs, single reducer + UI column + parser.)
-- **W1.Z-B** — Port `PRIOR_YEAR_ACTUAL` / `NEGOTIATED_FIXED` baseline + growth-only mode on `SpendRebateConfig`. Closes N14 as a projection surface on the contract detail card. (~3 hrs, engine extension + Rebate-row shape + display.)
-- **W1.Z-C** — Port `calculateVolumeRebate` including dedup. Schema add `caseId` + `cptCode` to COGRecord (or route via `CaseSupply`). (~4 hrs, schema + engine + tests.)
-- **W1.Z-D** — Port tie-in shortfall handling (`CARRY_FORWARD` + `BILL_IMMEDIATELY`). Surface on amortization card as a new tile. (~3 hrs, state-carry across Rebate rows + UI.)
-- **W1.Z-E** — Port `calculateMarketShareRebate` + `MARKET_SHARE_PRICE_REDUCTION`. (~5 hrs, totalCategorySpend ingest + tier eval + proportional marginal.)
-- **W1.Z-F** — Port `calculateCapitated` + `calculateTierPriceReduction`. (~5 hrs, each is fairly contained once the pattern is set.)
-- **W1.Z-G** — True-margin gains `priceReductionAllocation` + `totalContractBenefit` (matches reference `TrueMarginResult`). (~1 hr.)
+- **W1.Z-A — Wire CARVE_OUT (N17).** Add `carveOutPercent` column to the pricing-file import schema; write `toCarveOutConfig(contract, pricingFile) → CarveOutConfig`; route display through `lib/rebates/engine/carve-out.ts::calculateCarveOut`. UI: render `RebateResult.carveOutLines` under the Rebates & Tiers tab. Effort: **~2 hrs.**
+- **W1.Z-B — Wire SPEND_REBATE with growth baseline (N14).** Extend `toSpendRebateConfig` adapter to read `ContractTerm.baselineType` + `priorYearActualSpend` from a new column or imported COG cohort. Swap `computeRebateFromPrismaTiers` to call `lib/rebates/engine/spend-rebate.ts::calculateSpendRebate`. Add "Projected" card alongside the YTD earned card. Effort: **~4 hrs** (the schema + adapter + UI).
+- **W1.Z-C — Wire VOLUME_REBATE.** Add `cptCode` + `caseId` to `COGRecord` (or route via `CaseSupply` join). Adapter `toVolumeRebateConfig`. Call `calculateVolumeRebate`. Effort: **~3 hrs.**
+- **W1.Z-D — Wire tie-in shortfall carry-forward.** Current code routes `paidToDate` through `sumRebateAppliedToCapital`; extend to stamp a `shortfall` + `carriedForwardShortfall` onto each `Rebate` row when `BILL_IMMEDIATELY | CARRY_FORWARD` is set on the contract. UI: new tile on the Capital Amortization card. Effort: **~3 hrs.**
+- **W1.Z-E — Wire MARKET_SHARE_REBATE + price reduction.** Requires a `totalCategorySpend` feeder — tydei already has `FacilityCategorySpend` (needs verification); adapter `toMarketShareRebateConfig`. Effort: **~4 hrs.**
+- **W1.Z-F — Wire CAPITATED + TIER_PRICE_REDUCTION.** Both have existing engines; each gets a small adapter + a per-contract-type UI branch. Effort: **~3 hrs each.**
+- **W1.Z-G — Migrate `computeRebateFromPrismaTiers` off the legacy engine.** Low-risk once A/B/C are proven — delete `lib/contracts/rebate-method.ts` and redirect callers to `lib/rebates/engine/spend-rebate.ts`. Removes the unit-convention scaling boundary (reference uses decimal throughout). Effort: **~2 hrs** if the adapters are in place; blocked by A/B.
 
 ## Non-goals (preserved)
 
