@@ -1,6 +1,6 @@
 /**
  * Regression: rebate values are stored as a FRACTION on ContractTier
- * (0.02 = 2%), but the legacy math engine (`lib/contracts/rebate-method.ts`)
+ * (0.02 = 2%), but the legacy math engine (`lib/rebates/calculate.ts`)
  * expects INTEGER PERCENT values and does `(spend * rebateValue) / 100`
  * internally. The Prisma-to-engine bridges must scale by 100 for
  * `percent_of_spend` tiers or every computed rebate is 100× too small.

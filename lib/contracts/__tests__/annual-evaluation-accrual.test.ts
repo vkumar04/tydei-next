@@ -17,7 +17,7 @@ import {
   buildEvaluationPeriodAccruals,
   type MonthlySpend,
 } from "@/lib/contracts/accrual"
-import type { TierLike } from "@/lib/contracts/rebate-method"
+import type { TierLike } from "@/lib/rebates/calculate"
 
 const TIERS_3PCT: TierLike[] = [
   // rebateValue is fed in the engine's unit (integer percent) — callers

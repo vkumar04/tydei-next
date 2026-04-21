@@ -1,10 +1,19 @@
 /**
  * Shared rebate calculation facade.
  *
- * All callers compute rebates through this module so tier logic stays
- * consistent. The actual engine lives in `lib/contracts/rebate-method.ts`
- * — this facade adds the DEFAULT_COLLECTION_RATE concept and a
- * Prisma-shaped convenience wrapper.
+ * Single chokepoint for rebate math across the app. Two layers:
+ *
+ *  1. `TierLike` / `RebateMethodName` / `calculateCumulative` /
+ *     `calculateMarginal` / `calculateRebate` — the flat-tier API.
+ *     These are thin adapters over the canonical engine at
+ *     `lib/rebates/engine/shared/*` (the previously-legacy
+ *     `lib/contracts/rebate-method.ts` was deleted 2026-04-20).
+ *
+ *  2. `computeRebate` / `computeRebateFromPrismaTiers` — Prisma-shape
+ *     wrappers that additionally handle the rebate-units scaling
+ *     (Prisma stores `ContractTier.rebateValue` as a fraction; the
+ *     engine expects integer percent) and the `DEFAULT_COLLECTION_RATE`
+ *     concept.
  *
  * Previous bug pattern: each caller re-implemented the tier lookup
  * slightly differently (e.g. some used `>=` on spendMin, one used `>`,
@@ -13,11 +22,133 @@
  * choke point.
  */
 import type { ContractTier, RebateType } from "@prisma/client"
-import {
-  calculateRebate,
-  type RebateMethodName,
-  type TierLike,
-} from "@/lib/contracts/rebate-method"
+import { calculateCumulativeRebate } from "@/lib/rebates/engine/shared/cumulative"
+import { calculateMarginalRebate } from "@/lib/rebates/engine/shared/marginal"
+import type { RebateTier } from "@/lib/rebates/engine/types"
+
+// ─── Flat-tier public API (legacy shape, canonical math) ────────
+
+export type RebateMethodName = "cumulative" | "marginal"
+
+export interface TierLike {
+  tierNumber: number
+  tierName?: string | null
+  spendMin: number | string | { toString(): string }
+  spendMax?: number | string | { toString(): string } | null
+  rebateValue: number | string | { toString(): string }
+}
+
+export interface RebateEngineResult {
+  tierAchieved: number
+  rebatePercent: number
+  rebateEarned: number
+}
+
+function asNumber(v: unknown): number {
+  return typeof v === "number" ? v : Number(v)
+}
+
+function toRebateTier(t: TierLike): RebateTier {
+  return {
+    tierNumber: t.tierNumber,
+    tierName: t.tierName ?? null,
+    thresholdMin: asNumber(t.spendMin),
+    thresholdMax:
+      t.spendMax === null || t.spendMax === undefined
+        ? null
+        : asNumber(t.spendMax),
+    rebateValue: asNumber(t.rebateValue),
+  }
+}
+
+/**
+ * Charles W1.W-B2 dedup: when a malformed seed has multiple tiers
+ * sharing spendMin, keep the lowest tierNumber. The canonical engine's
+ * `determineTier` returns the HIGHEST qualifying tier by design
+ * (audit [A1]); this dedup at the boundary preserves the defensive
+ * posture that protected us against that class of silent-wrong-number
+ * bug on real data.
+ */
+function dedupTiers(tiers: TierLike[]): RebateTier[] {
+  const converted = tiers
+    .map(toRebateTier)
+    .sort((a, b) => {
+      const d = a.thresholdMin - b.thresholdMin
+      if (d !== 0) return d
+      return a.tierNumber - b.tierNumber
+    })
+  const out: RebateTier[] = []
+  let lastMin: number | null = null
+  for (const t of converted) {
+    if (lastMin !== null && t.thresholdMin === lastMin) continue
+    out.push(t)
+    lastMin = t.thresholdMin
+  }
+  return out
+}
+
+/**
+ * Cumulative tier rebate: whole spend earns the top-qualifying tier's
+ * rate. Below-baseline → all zeros.
+ */
+export function calculateCumulative(
+  spend: number,
+  tiers: TierLike[],
+): RebateEngineResult {
+  if (tiers.length === 0) {
+    return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
+  }
+  const { rebate, tier } = calculateCumulativeRebate(
+    spend,
+    dedupTiers(tiers),
+    "EXCLUSIVE",
+  )
+  if (!tier) {
+    return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
+  }
+  return {
+    tierAchieved: tier.tierNumber,
+    rebatePercent: tier.rebateValue,
+    rebateEarned: rebate,
+  }
+}
+
+/**
+ * Marginal tier rebate: each bracket earns at its own rate, summed.
+ * Below-baseline → all zeros.
+ */
+export function calculateMarginal(
+  spend: number,
+  tiers: TierLike[],
+): RebateEngineResult {
+  if (tiers.length === 0) {
+    return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
+  }
+  const { totalRebate, brackets } = calculateMarginalRebate(
+    spend,
+    dedupTiers(tiers),
+    "EXCLUSIVE",
+  )
+  if (brackets.length === 0) {
+    return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
+  }
+  const last = brackets[brackets.length - 1]!
+  return {
+    tierAchieved: last.tierNumber,
+    rebatePercent: last.bracketRate,
+    rebateEarned: totalRebate,
+  }
+}
+
+export function calculateRebate(
+  spend: number,
+  tiers: TierLike[],
+  method: RebateMethodName = "cumulative",
+): RebateEngineResult {
+  return method === "marginal"
+    ? calculateMarginal(spend, tiers)
+    : calculateCumulative(spend, tiers)
+}
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -47,7 +178,7 @@ export const DEFAULT_COLLECTION_RATE = 0.8
 /**
  * Scale `ContractTier.rebateValue` from its storage form (a fraction,
  * `0.03` = 3%) to the integer-percent shape the rebate engine in
- * `lib/contracts/rebate-method.ts` expects. Non-percent tier types are
+ * `lib/rebates/calculate.ts` expects. Non-percent tier types are
  * returned unchanged — their stored value is already a dollar amount and
  * the engine never applies percentage math to them.
  *

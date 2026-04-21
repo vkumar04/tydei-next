@@ -27,7 +27,7 @@ import {
   type PaymentCadence,
   type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
-import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
+import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 
 const AUTO_ACCRUAL_PREFIX = "[auto-accrual]"

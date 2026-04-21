@@ -43,7 +43,7 @@ import {
 import type {
   RebateMethodName,
   TierLike,
-} from "@/lib/contracts/rebate-method"
+} from "@/lib/rebates/calculate"
 import {
   buildCategoryWhereClause,
   buildUnionCategoryWhereClause,

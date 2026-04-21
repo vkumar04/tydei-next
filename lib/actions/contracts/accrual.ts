@@ -15,7 +15,7 @@ import {
   type MultiTermTimelineRow,
   type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
-import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
+import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 import { serialize } from "@/lib/serialize"
 import {
@@ -55,7 +55,7 @@ export async function getAccrualTimeline(contractId: string) {
   // Charles W1.S — scale `rebateValue` by 100 at the Prisma boundary for
   // `percent_of_spend` tiers. `ContractTier.rebateValue` is stored as a
   // fraction (0.03 = 3%), but the rebate engine in
-  // `lib/contracts/rebate-method.ts` expects integer percent (3 = 3%).
+  // `lib/rebates/calculate.ts` expects integer percent (3 = 3%).
   // Without this scaling, the Accrual Timeline's Rate column rendered the
   // raw fraction (e.g. "0.03%" for a 3% tier) and the Accrued column was
   // 100× too small. Mirrors the convention in

@@ -12,7 +12,7 @@ import {
   calculateMarginal,
   type TierLike,
   type RebateMethodName,
-} from "@/lib/contracts/rebate-method"
+} from "@/lib/rebates/calculate"
 
 export interface TierProgressTierInfo {
   tierNumber: number

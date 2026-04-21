@@ -4,7 +4,7 @@ import {
   calculateMarginal,
   calculateRebate,
   type TierLike,
-} from "@/lib/contracts/rebate-method"
+} from "@/lib/rebates/calculate"
 
 // Spec example tier structure — sections 2.1.1 and 2.1.2 of
 // docs/contract-calculations.md

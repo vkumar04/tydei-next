@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
-import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
+import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
 
 type ContractTermWithTiers = ContractTerm & { tiers: ContractTier[] }
 

@@ -3,7 +3,7 @@
  *
  * Root cause: `getAccrualTimeline` passed `ContractTier.rebateValue`
  * directly to the rebate engine. `rebateValue` is stored as a fraction
- * (0.03 = 3%), but the engine in `lib/contracts/rebate-method.ts`
+ * (0.03 = 3%), but the engine in `lib/rebates/calculate.ts`
  * expects integer percent (3 = 3%). Without the scale at the Prisma
  * boundary the Accrual Timeline's Rate column rendered "0.03%" (raw
  * fraction) and the Accrued column computed `spend × 0.03 / 100`, which

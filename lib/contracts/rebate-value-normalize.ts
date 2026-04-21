@@ -3,7 +3,7 @@
  *
  * Context: `ContractTier.rebateValue` is stored as a FRACTION for
  * percent-of-spend tiers (0.02 = 2%). The canonical rebate engine in
- * `lib/contracts/rebate-method.ts` expects INTEGER PERCENT (2 = 2%);
+ * `lib/rebates/calculate.ts` expects INTEGER PERCENT (2 = 2%);
  * `computeRebateFromPrismaTiers` bridges that by multiplying × 100 at
  * the Prisma boundary. Non-percent rebate types (`fixed_rebate`,
  * `fixed_rebate_per_unit`, `per_procedure_rebate`) store plain dollar

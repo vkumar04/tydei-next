@@ -26,7 +26,7 @@ import {
   calculateMarginal,
   type RebateMethodName,
   type TierLike,
-} from "@/lib/contracts/rebate-method"
+} from "@/lib/rebates/calculate"
 
 export interface ProjectedRebateInput {
   /** Spend over the trailing 12 months. Serves as a pace estimate. */

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { computeProjectedRebate } from "@/lib/contracts/projected-rebate"
-import type { TierLike } from "@/lib/contracts/rebate-method"
+import type { TierLike } from "@/lib/rebates/calculate"
 
 const ladder: TierLike[] = [
   { tierNumber: 1, spendMin: 100_000, spendMax: 300_000, rebateValue: 3 },

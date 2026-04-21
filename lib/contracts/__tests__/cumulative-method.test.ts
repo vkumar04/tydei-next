@@ -42,8 +42,8 @@ import { describe, it, expect } from "vitest"
 import {
   calculateCumulative,
   calculateMarginal,
-} from "@/lib/contracts/rebate-method"
-import type { TierLike } from "@/lib/contracts/rebate-method"
+} from "@/lib/rebates/calculate"
+import type { TierLike } from "@/lib/rebates/calculate"
 
 describe("Charles W1.W-B2 — cumulative audit", () => {
   it("'3% × $100K + 5% × $20K = $4,000' is MARGINAL math (documentation)", () => {

@@ -16,7 +16,7 @@ import {
   calculateMarginal,
   type TierLike,
   type RebateMethodName,
-} from "@/lib/contracts/rebate-method"
+} from "@/lib/rebates/calculate"
 
 function engine(method: RebateMethodName) {
   return method === "marginal" ? calculateMarginal : calculateCumulative

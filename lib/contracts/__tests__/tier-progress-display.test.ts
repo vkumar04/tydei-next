@@ -4,7 +4,7 @@ import {
   formatTierRebateLabel,
   formatTierDollarAnnotation,
 } from "@/lib/contracts/tier-rebate-label"
-import type { TierLike } from "@/lib/contracts/rebate-method"
+import type { TierLike } from "@/lib/rebates/calculate"
 
 /**
  * Charles R5.22 regression: the contract Terms tab rendered

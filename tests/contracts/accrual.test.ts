@@ -6,7 +6,7 @@ import {
   buildMonthlyAccruals,
   type MonthlySpend,
 } from "@/lib/contracts/accrual"
-import type { TierLike } from "@/lib/contracts/rebate-method"
+import type { TierLike } from "@/lib/rebates/calculate"
 
 const TIERS: TierLike[] = [
   { tierNumber: 1, spendMin: 0, spendMax: 50_000, rebateValue: 2 },
