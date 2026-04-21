@@ -69,8 +69,8 @@ describe("tier-progress display (Charles R5.22 regression)", () => {
  * tiers above current, (c) non-percent tiers render per-unit / flat /
  * per-procedure annotations rather than percent math.
  */
-describe("tier dollar annotation (Charles W1.I)", () => {
-  it("shows dollar-earned on the current tier for percent_of_spend", () => {
+describe("tier dollar annotation (Charles W1.I / N10 re-label)", () => {
+  it("shows projection, clearly labeled, on the current tier (Charles iMessage 2026-04-20 N10)", () => {
     const annotation = formatTierDollarAnnotation(
       { tierNumber: 2, spendMin: 300_000, rebateType: "percent_of_spend", rebateValue: 0.04 },
       412_000,
@@ -78,7 +78,10 @@ describe("tier dollar annotation (Charles W1.I)", () => {
       false,
     )
     expect(annotation).not.toBeNull()
-    expect(annotation).toContain("earning")
+    // Must be a clearly-labeled PROJECTION — never read as actual earned.
+    // See CLAUDE.md "Rebates are NEVER auto-computed for display".
+    expect(annotation).toContain("projects")
+    expect(annotation).not.toContain("earning ")
     // 412,000 * 0.04 = 16,480
     expect(annotation).toContain("$16,480")
     expect(annotation).toContain("$412,000")

@@ -82,20 +82,28 @@ export function formatTierDollarAnnotation(
       : null
   }
 
-  // percent_of_spend
+  // percent_of_spend. The tier-progress annotation is an engine
+  // PROJECTION (spend × rate) — it is NOT the ledger-based earned
+  // amount. Charles iMessage 2026-04-20 N10: label used to read
+  // "currently earning $X" which users read as an actual earned value
+  // while the canonical "Rebates Earned (YTD)" card showed $0 (no
+  // Rebate rows yet). Per CLAUDE.md "Rebates are NEVER auto-computed
+  // for display" — projections are fine when CLEARLY labeled as such.
+  // Rewording to `projects $X at this rate` makes the projection
+  // explicit so it cannot be mistaken for the ledger total.
   if (tier.tierNumber === currentTierNumber) {
-    const earned = Math.max(0, currentSpend) * tier.rebateValue
+    const projected = Math.max(0, currentSpend) * tier.rebateValue
     if (isTopTier) {
-      return `top rate — currently earning ${formatCurrency(earned)}`
+      return `top rate — projects ${formatCurrency(projected)} at current spend`
     }
-    return `earning ${formatCurrency(earned)} at ${formatCurrency(currentSpend)} spend`
+    return `projects ${formatCurrency(projected)} at ${formatCurrency(currentSpend)} spend`
   }
 
   if (tier.tierNumber < currentTierNumber) {
     // Tier below current — already unlocked. Show what it WOULD earn
     // at this tier's rate for the current spend as a reference point.
     const would = Math.max(0, currentSpend) * tier.rebateValue
-    return `would earn ${formatCurrency(would)} at current spend`
+    return `projects ${formatCurrency(would)} at this tier's rate`
   }
 
   // Above current: unlock distance
