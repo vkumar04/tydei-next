@@ -10,14 +10,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 // Charles W1.T — capital lives on the Contract row now.
+// Charles iMessage 2026-04-20 math audit: `getContractCapitalProjection`
+// now routes `paidToDate` through the canonical `sumRebateAppliedToCapital`
+// helper (reads collected rebates), so the mock must include `contractType`
+// + a `rebates` relation.
+type RebateRow = {
+  collectionDate: Date | string | null
+  rebateCollected: number
+}
 type ContractRow = {
   id: string
+  contractType: string
   effectiveDate: Date
   expirationDate: Date | null
   capitalCost: number | null
   interestRate: number | null
   termMonths: number | null
   paymentCadence: "monthly" | "quarterly" | "annual" | null
+  rebates: RebateRow[]
 }
 
 let contractRow: ContractRow | null = null
@@ -59,12 +69,14 @@ describe("getContractCapitalProjection", () => {
   it("returns hasProjection=false when the contract has no tie-in term", async () => {
     contractRow = {
       id: "c-1",
+      contractType: "tie_in",
       effectiveDate: new Date(),
       expirationDate: null,
       capitalCost: null,
       interestRate: null,
       termMonths: null,
       paymentCadence: null,
+      rebates: [],
     }
     const result = await getContractCapitalProjection("c-1")
     expect(result.hasProjection).toBe(false)
@@ -81,12 +93,23 @@ describe("getContractCapitalProjection", () => {
 
     contractRow = {
       id: "c-1",
+      contractType: "tie_in",
       effectiveDate: effective,
       expirationDate: expiration,
       capitalCost: 1_200_000,
       interestRate: 0, // zero-interest for clean principal math
       termMonths: 60,
       paymentCadence: "monthly",
+      // Charles iMessage 2026-04-20 math audit: remainingBalance now
+      // reflects ACTUAL collected-rebate paydown (not the forecast
+      // principalDue schedule). Seed $600k of collected rebate so the
+      // test's remaining-balance expectation can stay at \$600k.
+      rebates: [
+        {
+          collectionDate: new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000),
+          rebateCollected: 600_000,
+        },
+      ],
     }
     // $30k rebates over the last 90 days → $10k/month run rate.
     rebateSumTrailing90 = 30_000
@@ -97,8 +120,8 @@ describe("getContractCapitalProjection", () => {
     // monthlyPaydownRun = 30000 / 90 * 30 = 10_000
     expect(result.monthlyPaydownRun).toBeCloseTo(10_000, 2)
 
-    // 60-month, $1.2M, 0% → $20k principal/month. 30 elapsed monthly
-    // periods → $600k paid, remaining $600k.
+    // Canonical paidToDate = sumRebateAppliedToCapital = $600k.
+    // remaining = capitalCost - paidToDate = $600k.
     expect(result.remainingBalance).toBeCloseTo(600_000, 0)
 
     // 600_000 / 10_000 = 60 months (ceil).
@@ -118,12 +141,14 @@ describe("getContractCapitalProjection", () => {
 
     contractRow = {
       id: "c-2",
+      contractType: "tie_in",
       effectiveDate: effective,
       expirationDate: expiration,
       capitalCost: 500_000,
       interestRate: 0,
       termMonths: 24,
       paymentCadence: "monthly",
+      rebates: [],
     }
     rebateSumTrailing90 = 0
 
@@ -144,12 +169,14 @@ describe("getContractCapitalProjection", () => {
 
     contractRow = {
       id: "c-3",
+      contractType: "tie_in",
       effectiveDate: effective,
       expirationDate: expiration,
       capitalCost: 120_000,
       interestRate: 0,
       termMonths: 24,
       paymentCadence: "monthly",
+      rebates: [],
     }
     // $300k / 90 days = $100k/month run-rate — vastly exceeds remaining.
     rebateSumTrailing90 = 300_000

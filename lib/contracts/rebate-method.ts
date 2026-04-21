@@ -120,6 +120,18 @@ export function calculateMarginal(
   }
 
   const sorted = sortedByMin(tiers)
+
+  // Below baseline: mirror calculateCumulative. If spend hasn't crossed
+  // the lowest tier's spendMin, no tier qualifies and nothing earns.
+  // The existing loop already returned $0 rebate here (the `spend <=
+  // tierMin` break took care of it) but `tierAchieved` still defaulted
+  // to tier 1 — inconsistent with cumulative, which caused display
+  // surfaces to light up tier 1 before the user actually qualified.
+  const lowestMin = numericValue(sorted[0].spendMin)
+  if (spend < lowestMin) {
+    return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
+  }
+
   let totalRebate = 0
   let tierAchieved = sorted[0].tierNumber
   let topRate = numericValue(sorted[0].rebateValue)

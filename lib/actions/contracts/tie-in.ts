@@ -583,16 +583,28 @@ export async function getContractCapitalProjection(
   const { facility } = await requireFacility()
 
   // Charles W1.T — capital read directly from Contract row.
+  // Charles iMessage 2026-04-20 math audit: also pull contractType +
+  // rebates so the projection's `remainingBalance` can route through
+  // the canonical `sumRebateAppliedToCapital` helper — matching what
+  // getContractCapitalSchedule does. Previously this function computed
+  // paidToDate as a forecast sum of elapsed `principalDue` rows, which
+  // under-estimated remainingBalance for brand-new contracts and
+  // produced artificially-short projectedMonthsToPayoff on the Capital
+  // Payoff Projection card.
   const contract = await prisma.contract.findFirst({
     where: contractOwnershipWhere(contractId, facility.id),
     select: {
       id: true,
+      contractType: true,
       effectiveDate: true,
       expirationDate: true,
       capitalCost: true,
       interestRate: true,
       termMonths: true,
       paymentCadence: true,
+      rebates: {
+        select: { collectionDate: true, rebateCollected: true },
+      },
     },
   })
 
@@ -639,9 +651,15 @@ export async function getContractCapitalProjection(
   const elapsedPeriods = scheduleDates.filter(
     (r) => r.periodDate.getTime() <= today.getTime(),
   ).length
-  const paidToDate = scheduleDates
-    .slice(0, elapsedPeriods)
-    .reduce((acc, r) => acc + r.principalDue, 0)
+  // Charles iMessage 2026-04-20 math audit: paidToDate routes through
+  // the canonical `sumRebateAppliedToCapital` so this projection agrees
+  // with `getContractCapitalSchedule`. Legacy behavior summed elapsed
+  // `principalDue` (forecast), which was inconsistent with the
+  // user-facing amortization card.
+  const paidToDate = sumRebateAppliedToCapital(
+    contract.rebates,
+    contract.contractType,
+  )
   const remainingBalance = Math.max(0, capitalCost - paidToDate)
 
   // Trailing 90-day rebate velocity.

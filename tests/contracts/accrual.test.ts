@@ -143,13 +143,19 @@ describe("buildMonthlyAccruals — evaluationPeriod", () => {
 
   it("monthly eval qualifies tier from this month's spend — not cumulative annual", () => {
     // Ladder designed for annual totals: tier 1 requires $300K, tier 2
-    // requires $600K. Monthly facility spend of $50K × 12 = $600K would
-    // clear tier 2 under ANNUAL evaluation, but under MONTHLY evaluation
-    // the tier should be determined by each month's $50K — below tier 1,
-    // so the engine never promotes past tier 1 rate (every month stays
-    // at tier 1's 2%). Annual-eval behavior (the bug Charles hit) would
-    // by December see $600K cumulative and pay tier 2 rate on the final
-    // month's spend; monthly-eval produces a flat per-month accrual.
+    // requires $600K. Monthly spend = $50K.
+    //
+    // Under MONTHLY eval: each month's $50K is BELOW tier 1's spendMin,
+    // so the engine now (Charles iMessage 2026-04-20 below-baseline fix
+    // to calculateCumulative) correctly returns tierAchieved=0,
+    // rebatePercent=0, accruedAmount=0 — rebate only earns once a month
+    // actually clears $300K. A facility can spend at a steady pace all
+    // year and legitimately earn $0 in rebate under monthly eval with
+    // this ladder; that's the whole point of evaluation-period choice.
+    //
+    // The contrast against annual eval (below) is what matters: annual
+    // CUMULATIVE reaches $600K by December and promotes to tier 2,
+    // monthly does NOT because no single month crosses even tier 1.
     const annualLadder: TierLike[] = [
       { tierNumber: 1, spendMin: 300_000, spendMax: 600_000, rebateValue: 2 },
       { tierNumber: 2, spendMin: 600_000, spendMax: null, rebateValue: 4 },
@@ -164,13 +170,12 @@ describe("buildMonthlyAccruals — evaluationPeriod", () => {
       "cumulative",
       "monthly",
     )
-    // Every month: $50K qualifies for tier 1 default (2% rate under the
-    // current engine semantics when spend < lowest spendMin).
-    // Importantly, no month ever promotes to tier 2 — the tier is stable.
+    // Every month: $50K is below tier 1's $300K baseline → no rebate.
+    // Importantly, no month promotes to tier 2 — the tier is stable.
     for (const row of monthly) {
-      expect(row.tierAchieved).toBe(1)
-      expect(row.rebatePercent).toBe(2)
-      expect(row.accruedAmount).toBe(1_000)
+      expect(row.tierAchieved).toBe(0)
+      expect(row.rebatePercent).toBe(0)
+      expect(row.accruedAmount).toBe(0)
     }
 
     // Contrast: annual eval on the same data DOES promote at month 12.
