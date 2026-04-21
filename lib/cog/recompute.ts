@@ -60,6 +60,12 @@ export async function loadContractsForVendor(
           vendorItemNo: true,
           unitPrice: true,
           listPrice: true,
+          // Charles iMessage 2026-04-20 N15: "category from that
+          // pricing file needs to map to the COG data." When a COG
+          // row matches a ContractPricing row, the COG's category is
+          // filled from the pricing row if empty. Driven here to keep
+          // the select consistent with what the matcher returns.
+          category: true,
         },
       },
       // Charles W1.W-C4: load term scope so the matcher can enforce
@@ -82,6 +88,7 @@ export async function loadContractsForVendor(
       vendorItemNo: p.vendorItemNo,
       unitPrice: Number(p.unitPrice),
       listPrice: p.listPrice === null ? null : Number(p.listPrice),
+      category: (p as { category?: string | null }).category ?? null,
     }))
     return {
       id: c.id,
@@ -313,6 +320,22 @@ export async function recomputeMatchStatusesForVendor(
       cols.savingsAmount = null
     }
 
+    // Charles iMessage 2026-04-20 N15: "category from that pricing
+    // file needs to map to the COG data." When we match a COG row to
+    // a pricing row AND the COG row has no category of its own, copy
+    // the pricing row's category across. Never OVERWRITE a COG-supplied
+    // category — source-of-truth preference is: COG-imported value >
+    // pricing-file fallback.
+    const matchedCategory =
+      (effectiveResult.status === "on_contract" ||
+        effectiveResult.status === "price_variance") &&
+      (effectiveResult as { matchedCategory?: string | null })
+        .matchedCategory
+    const shouldFillCategory =
+      (r.category == null || r.category === "") &&
+      typeof matchedCategory === "string" &&
+      matchedCategory.length > 0
+
     pendingUpdates.push(
       db.cOGRecord.update({
         where: { id: r.id },
@@ -323,6 +346,7 @@ export async function recomputeMatchStatusesForVendor(
           isOnContract: cols.isOnContract,
           savingsAmount: cols.savingsAmount === null ? null : cols.savingsAmount,
           variancePercent: cols.variancePercent === null ? null : cols.variancePercent,
+          ...(shouldFillCategory ? { category: matchedCategory } : {}),
         },
       }),
     )

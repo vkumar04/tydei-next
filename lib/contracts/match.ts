@@ -35,6 +35,12 @@ export type ContractPricingItemForMatch = {
   vendorItemNo: string
   unitPrice: number
   listPrice: number | null
+  /**
+   * Charles iMessage 2026-04-20 N15 — category on the pricing-file row.
+   * When a COG row matches, recompute-cog fills the COG row's category
+   * from this field if the COG row's own category is empty.
+   */
+  category?: string | null
 }
 
 /**
@@ -77,12 +83,15 @@ export type MatchResult =
       contractId: string
       contractPrice: number
       savings: number
+      /** Charles iMessage 2026-04-20 N15 — category from the matched pricing row. */
+      matchedCategory?: string | null
     }
   | {
       status: "price_variance"
       contractId: string
       contractPrice: number
       variancePercent: number
+      matchedCategory?: string | null
     }
 
 /**
@@ -192,6 +201,7 @@ export function matchCOGRecordToContract(
         contractId: contract.id,
         contractPrice: item.unitPrice,
         variancePercent,
+        matchedCategory: item.category ?? null,
       }
     }
 
@@ -206,6 +216,7 @@ export function matchCOGRecordToContract(
       contractId: contract.id,
       contractPrice: item.unitPrice,
       savings,
+      matchedCategory: item.category ?? null,
     }
   }
 

@@ -90,6 +90,22 @@ describe("matchCOGRecordToContract", () => {
     }
   })
 
+  it("surfaces matchedCategory from the pricing item (Charles N15)", () => {
+    // Charles iMessage 2026-04-20 N15: "category from that pricing
+    // file needs to map to the COG data." The matcher returns the
+    // pricing-row's category on the result so recompute-cog can copy
+    // it onto COG rows that came in without their own category.
+    const result = matchCOGRecordToContract(baseRecord, [
+      baseContract({
+        pricingItems: [
+          onContractItem({ unitPrice: 100, category: "Ortho-Trauma" }),
+        ],
+      }),
+    ])
+    if (result.status !== "on_contract") throw new Error("expected on_contract")
+    expect(result.matchedCategory).toBe("Ortho-Trauma")
+  })
+
   it("returns price_variance when actual is >2% above contract price", () => {
     const r = { ...baseRecord, unitCost: 110 } // 10% overpay
     const result = matchCOGRecordToContract(r, [baseContract()])
