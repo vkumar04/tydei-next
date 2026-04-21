@@ -32,6 +32,11 @@ export interface KPIInputContract {
   status: string
   totalValue: number
   expirationDate: Date | null
+  /** Contract start date — used with expirationDate to promote draft /
+   *  pending contracts whose dates are already in force to the "active"
+   *  bucket for display KPIs (Charles W1.X-A2). Status never auto-promotes
+   *  (approval flow owns that) but the ACTIVE card is a display heuristic. */
+  effectiveDate?: Date | null
 }
 
 export interface KPIInput {
@@ -103,9 +108,23 @@ export function computeDashboardKPIs(input: KPIInput): DashboardKPIs {
     let isActive = false
     let isExpiring = false
 
+    // Charles W1.X-A2 — mirror lifecycle chart: status="active" AND
+    // date-live draft/pending bucket together. The facility's ACTIVE card
+    // was showing 0 because the 5 contracts had live effective dates but
+    // status=draft/pending. Approval flow still owns the status column;
+    // the KPI display heuristic is "is this contract in force today".
+    const effMs = c.effectiveDate ? c.effectiveDate.getTime() : null
+    const dateLive =
+      effMs !== null &&
+      effMs <= refMs &&
+      (expMs === null || expMs >= refMs)
+    const liveByIntent =
+      c.status === "active" ||
+      ((c.status === "draft" || c.status === "pending") && dateLive)
+
     if (c.status === "expiring") {
       isExpiring = true
-    } else if (c.status === "active") {
+    } else if (liveByIntent) {
       if (isPastExpiration) {
         // Past expirationDate — neither active nor expiring for KPI purposes.
       } else if (withinExpiringWindow) {

@@ -196,6 +196,7 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
       select: {
         status: true,
         totalValue: true,
+        effectiveDate: true,
         expirationDate: true,
         marketShareCommitment: true,
         currentMarketShare: true,
@@ -278,6 +279,7 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
   const kpiContracts: KPIInputContract[] = contractRows.map((c) => ({
     status: c.status,
     totalValue: Number(c.totalValue ?? 0),
+    effectiveDate: c.effectiveDate ?? null,
     expirationDate: c.expirationDate ?? null,
   }))
 
