@@ -11,6 +11,7 @@
  *   critical → red, warning → yellow, upcoming → blue, ok → green.
  */
 
+import { HelpCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -22,6 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { EmptyState } from "@/components/shared/empty-state"
 import { FileText, Eye } from "lucide-react"
 import type { RenewalStatus } from "@/lib/renewals/engine"
@@ -83,7 +90,34 @@ export function RenewalsList({ rows, selectedId, onSelect }: RenewalsListProps) 
             <TableHead>Vendor</TableHead>
             <TableHead className="text-right">Expires</TableHead>
             <TableHead className="text-right">Days Left</TableHead>
-            <TableHead className="w-[180px]">Commitment</TableHead>
+            <TableHead className="w-[180px]">
+              <span className="inline-flex items-center gap-1">
+                Commitment
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Commitment help"
+                        className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-xs">
+                        How close the contract is to its promised pace, as a
+                        percent. Uses (current market share ÷ market-share
+                        commitment) × 100 when the contract tracks market
+                        share; otherwise (rebates earned ÷ total contract
+                        value) × 100. ≥ 100 means the contract is on or
+                        ahead of pace.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </span>
+            </TableHead>
             <TableHead className="w-[110px] text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
