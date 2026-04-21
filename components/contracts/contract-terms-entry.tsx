@@ -490,11 +490,16 @@ export function ContractTermsEntry({
                     </Select>
                   </Field>
 
-                  {/* When a tier is scoped to a specific category, allow
-                      multi-select from the contract's selected categories.
-                      We write both `scopedCategoryIds` (canonical) and
-                      `scopedCategoryId` (set to the first selected, kept
-                      for back-compat with createContractTerm persistence). */}
+                  {/* When a tier is scoped to a specific category, render a
+                      combobox picker ("Pick a category") + chip list of
+                      selected categories. Chips have a ✕ to remove.
+                      E2E regression spec
+                      (facility-contract-with-new-vendor-category-rebate.spec.ts)
+                      asserts this combobox exists after selecting Specific
+                      Category — keep the placeholder text canonical. We write
+                      both `scopedCategoryIds` (canonical) and `scopedCategoryId`
+                      (set to the first selected, kept for back-compat with
+                      createContractTerm persistence). */}
                   {term.appliesTo === "specific_category" && (
                     <Field label="Categories" required>
                       {resolvedCategories.length === 0 ? (
@@ -502,35 +507,75 @@ export function ContractTermsEntry({
                           Loading categories…
                         </p>
                       ) : (
-                        <div className="space-y-1 max-h-40 overflow-y-auto rounded-md border p-2">
-                          {resolvedCategories.map((c) => {
-                            const selectedIds = term.scopedCategoryIds ?? []
-                            const checked = selectedIds.includes(c.id)
-                            return (
-                              <label
-                                key={c.id}
-                                className="flex items-center gap-2 cursor-pointer hover:bg-accent rounded px-2 py-1"
-                              >
-                                <Checkbox
-                                  checked={checked}
-                                  onCheckedChange={(v) => {
-                                    const cur = term.scopedCategoryIds ?? []
-                                    const next = v
-                                      ? Array.from(new Set([...cur, c.id]))
-                                      : cur.filter((id) => id !== c.id)
-                                    updateTerm(termIdx, {
-                                      scopedCategoryIds: next,
-                                      // Keep singular field in sync as the
-                                      // first selected category for
-                                      // back-compat with createContractTerm.
-                                      scopedCategoryId: next[0],
-                                    })
-                                  }}
-                                />
-                                <span className="text-sm">{c.name}</span>
-                              </label>
-                            )
-                          })}
+                        <div className="space-y-2">
+                          <Select
+                            value=""
+                            onValueChange={(categoryId) => {
+                              if (!categoryId) return
+                              const cur = term.scopedCategoryIds ?? []
+                              if (cur.includes(categoryId)) return
+                              const next = [...cur, categoryId]
+                              updateTerm(termIdx, {
+                                scopedCategoryIds: next,
+                                scopedCategoryId: next[0],
+                              })
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Pick a category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {resolvedCategories.map((c) => {
+                                const selectedIds = term.scopedCategoryIds ?? []
+                                const alreadyPicked = selectedIds.includes(c.id)
+                                return (
+                                  <SelectItem
+                                    key={c.id}
+                                    value={c.id}
+                                    disabled={alreadyPicked}
+                                  >
+                                    {c.name}
+                                    {alreadyPicked ? " (added)" : ""}
+                                  </SelectItem>
+                                )
+                              })}
+                            </SelectContent>
+                          </Select>
+                          {(term.scopedCategoryIds ?? []).length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {(term.scopedCategoryIds ?? []).map((id) => {
+                                const c = resolvedCategories.find(
+                                  (r) => r.id === id,
+                                )
+                                if (!c) return null
+                                return (
+                                  <Badge
+                                    key={id}
+                                    variant="secondary"
+                                    className="pr-1"
+                                  >
+                                    <span className="text-xs">{c.name}</span>
+                                    <button
+                                      type="button"
+                                      className="ml-1 rounded hover:bg-accent px-1"
+                                      aria-label={`Remove ${c.name}`}
+                                      onClick={() => {
+                                        const next = (
+                                          term.scopedCategoryIds ?? []
+                                        ).filter((x) => x !== id)
+                                        updateTerm(termIdx, {
+                                          scopedCategoryIds: next,
+                                          scopedCategoryId: next[0],
+                                        })
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  </Badge>
+                                )
+                              })}
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </Field>

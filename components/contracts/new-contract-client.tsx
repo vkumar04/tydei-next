@@ -56,6 +56,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 
@@ -721,18 +722,37 @@ export function NewContractClient({
           onApply={handleMappingApply}
         />
 
-        {/* Hero: drop a PDF to extract */}
-        <ContractPdfDropZone
-          onFileSelected={(file) => {
-            setDroppedFile(file)
-            setAiExtractOpen(true)
-          }}
-          extractedFileName={contractFileName}
-          onReplace={() => {
-            setContractFileName(null)
-            setContractS3Key(null)
-          }}
-        />
+        {/* Entry-mode tabs — E2E regression spec
+            (facility-contract-with-new-vendor-category-rebate.spec.ts)
+            clicks the Manual Entry tab first. Default tab is "manual" so
+            procurement teams who aren't uploading a PDF land on the form
+            directly. "PDF / AI Extract" tab holds the drop zone. Form
+            state is shared — extracting a PDF pre-fills the same form. */}
+        <Tabs defaultValue="manual" className="w-full">
+          <TabsList>
+            <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+            <TabsTrigger value="pdf">PDF / AI Extract</TabsTrigger>
+          </TabsList>
+          <TabsContent value="pdf" className="mt-4">
+            <ContractPdfDropZone
+              onFileSelected={(file) => {
+                setDroppedFile(file)
+                setAiExtractOpen(true)
+              }}
+              extractedFileName={contractFileName}
+              onReplace={() => {
+                setContractFileName(null)
+                setContractS3Key(null)
+              }}
+            />
+          </TabsContent>
+          <TabsContent value="manual" className="mt-4 space-y-6">
+            <p className="text-sm text-muted-foreground">
+              Fill in the form below. Switch to PDF / AI Extract to upload a
+              contract PDF and auto-populate these fields.
+            </p>
+          </TabsContent>
+        </Tabs>
 
         {/* Contract Details form */}
         <ContractFormBasicInfo
