@@ -11,6 +11,8 @@ export const queryKeys = {
       ["contracts", "stats", facilityId, scope ?? "this"] as const,
     renewalBrief: (id: string) =>
       ["contracts", "renewalBrief", id] as const,
+    pricing: (id: string) =>
+      ["contracts", "pricing", id] as const,
   },
   contractTerms: {
     all: ["contractTerms"] as const,

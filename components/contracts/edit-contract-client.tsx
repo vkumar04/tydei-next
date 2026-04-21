@@ -8,6 +8,7 @@ import { useContract, useUpdateContract } from "@/hooks/use-contracts"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { upsertContractTiers, createContractTerm, deleteContractTerm, updateContractTerm } from "@/lib/actions/contract-terms"
 import { createCategory, getCategories } from "@/lib/actions/categories"
+import { getContractPricing } from "@/lib/actions/pricing-files"
 import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-cog"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
@@ -45,6 +46,21 @@ export function EditContractClient({
     queryFn: () => getCategories(),
     initialData: categories,
   })
+
+  // Charles W1.X-A4 — Specific Items picker in the term form needs the
+  // contract's pricing catalog so the user can select REF numbers. The
+  // new-contract path has this in local state (uploaded CSV); on edit
+  // we fetch from the DB so existing contracts with imported pricing
+  // files can be re-scoped to specific items.
+  const { data: pricingItems } = useQuery({
+    queryKey: queryKeys.contracts.pricing(contractId),
+    queryFn: () => getContractPricing(contractId),
+    enabled: !!contractId,
+  })
+  const availableItems = (pricingItems ?? []).map((p) => ({
+    vendorItemNo: p.vendorItemNo,
+    description: p.description ?? null,
+  }))
 
   const { form, terms, setTerms } = useContractForm()
 
@@ -433,6 +449,7 @@ export function EditContractClient({
             terms={terms}
             onChange={setTerms}
             contractType={form.watch("contractType")}
+            availableItems={availableItems}
           />
         </TabsContent>
 
