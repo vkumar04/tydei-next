@@ -25,8 +25,20 @@ const TARGET_FIELDS = [
   { key: "unitCost", label: "Unit Cost", required: true },
   { key: "extendedPrice", label: "Extended Price", required: false },
   { key: "quantity", label: "Quantity", required: false },
+  // Charles iMessage 2026-04-20 N6: "The multiplier is not in the
+  // mapping screens and everything is x1 when I know on the COGs many
+  // are not just x1." When mapped, the parser multiplies extendedPrice
+  // by this value — the COG table's Multiplier column (which computes
+  // extended / (unitCost × quantity)) then renders the real multiplier
+  // instead of always-1.00×.
+  { key: "multiplier", label: "Multiplier (case pack / units per line)", required: false },
   { key: "transactionDate", label: "Transaction Date", required: true },
   { key: "category", label: "Category", required: false },
+  // Charles iMessage 2026-04-20 N9: "PO number needs to be a part of
+  // the mapping columns here as well when the file is loading." The
+  // backend parser already accepts poNumber and the COGRecord row has
+  // the column — just wasn't exposed in the UI.
+  { key: "poNumber", label: "Purchase Order Number", required: false },
 ] as const
 
 export type TargetField = (typeof TARGET_FIELDS)[number]

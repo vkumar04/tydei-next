@@ -63,6 +63,18 @@ export async function ingestCOGRecordsCSV(
         required: false,
       },
       { key: "poNumber", label: "Purchase Order Number", required: false },
+      // Charles iMessage 2026-04-20 N6: "The multiplier is not in the
+      // mapping screens and everything is x1 when I know on the COGs
+      // many are not just x1." When mapped, the parser multiplies the
+      // extended-price computation by this value so the COG table's
+      // Multiplier column (which computes extended / (unitCost × qty))
+      // renders the real multiplier. No schema change needed; lives in
+      // extendedPrice.
+      {
+        key: "multiplier",
+        label: "Multiplier / Case Pack / Units per Line",
+        required: false,
+      },
     ],
     rows,
   )
@@ -77,8 +89,19 @@ export async function ingestCOGRecordsCSV(
       const refNumber = get(row, mapping, "refNumber")
       const quantity = parseInt(get(row, mapping, "quantity") || "1", 10) || 1
       const unitCost = parseMoney(get(row, mapping, "unitCost"))
+      // Charles N6: apply multiplier when the source file has one. If
+      // the file ALSO has an explicit Extended column, the explicit
+      // value wins (already a multiplier-inclusive total from the
+      // source). Otherwise extended = unitCost × quantity × multiplier.
+      const rawMultiplier = get(row, mapping, "multiplier")
+      const multiplier = rawMultiplier
+        ? parseFloat(rawMultiplier.replace(/[^0-9.]/g, "")) || 1
+        : 1
+      const explicitExtended = parseMoney(get(row, mapping, "extended"))
       const extended =
-        parseMoney(get(row, mapping, "extended")) || unitCost * quantity
+        explicitExtended > 0
+          ? explicitExtended
+          : unitCost * quantity * multiplier
 
       const poNumber = get(row, mapping, "poNumber") || undefined
 
