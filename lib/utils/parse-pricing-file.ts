@@ -90,10 +90,23 @@ export function buildPricingItems(
   const idxList = indexOf("listPrice")
   const idxCat = indexOf("category")
   const idxUom = indexOf("uom")
+  // Charles iMessage 2026-04-20 N17: carve-out % column. Stored as a
+  // fraction on PricingFile.carveOutPercent. Source can provide either
+  // "3", "3%", or "0.03" — normalize by dropping non-numerics and
+  // dividing by 100 when the value is > 1.
+  const idxCarve = indexOf("carveOutPercent")
 
   return dataRows
     .map((vals) => {
       const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
+      const rawCarve = g(idxCarve).replace(/[^0-9.-]/g, "")
+      let carveOutPercent: number | undefined
+      if (rawCarve) {
+        const n = parseFloat(rawCarve)
+        if (Number.isFinite(n) && n > 0) {
+          carveOutPercent = n > 1 ? n / 100 : n
+        }
+      }
       return {
         vendorItemNo: g(idxItem),
         description: g(idxDesc) || undefined,
@@ -102,6 +115,7 @@ export function buildPricingItems(
           parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
         category: g(idxCat) || undefined,
         uom: g(idxUom) || "EA",
+        carveOutPercent,
       }
     })
     .filter((i) => i.vendorItemNo)

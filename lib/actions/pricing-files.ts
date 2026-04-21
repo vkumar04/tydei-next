@@ -252,6 +252,8 @@ export interface ContractPricingItem {
   uom?: string
   effectiveDate?: string
   expirationDate?: string
+  /** Charles iMessage 2026-04-20 N17 — per-SKU carve-out rate (fraction, 0.03 = 3%). */
+  carveOutPercent?: number
 }
 
 export async function importContractPricing(input: {
@@ -276,6 +278,7 @@ export async function importContractPricing(input: {
         unitPrice: item.unitPrice,
         listPrice: item.listPrice,
         uom: item.uom ?? "EA",
+        carveOutPercent: item.carveOutPercent ?? null,
         effectiveDate: item.effectiveDate ? new Date(item.effectiveDate) : null,
         expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
       })),

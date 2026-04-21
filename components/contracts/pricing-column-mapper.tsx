@@ -37,6 +37,10 @@ const TARGET_FIELDS = [
   { key: "listPrice", label: "List Price", required: false },
   { key: "category", label: "Category", required: false },
   { key: "uom", label: "UOM", required: false },
+  // Charles iMessage 2026-04-20 N17: carve-out % per SKU, feeds the
+  // CARVE_OUT rebate engine (lib/rebates/engine/carve-out.ts). Stored
+  // on the PricingFile row as `carveOutPercent` (fraction).
+  { key: "carveOutPercent", label: "Carve-Out %", required: false },
 ] as const
 
 interface PricingColumnMapperProps {

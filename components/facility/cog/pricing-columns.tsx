@@ -93,6 +93,24 @@ export function getPricingColumns(
       },
     },
     {
+      // Charles iMessage 2026-04-20 N17: per-SKU carve-out %. Rendered
+      // as the stored fraction × 100 for readability (0.03 → "3.00%").
+      // Empty when null (no carve-out for this SKU).
+      id: "carveOutPercent",
+      header: "Carve-Out",
+      cell: ({ row }) => {
+        const raw = (row.original as { carveOutPercent?: number | string | null })
+          .carveOutPercent
+        if (raw == null) return <span className="text-muted-foreground">{"\u2014"}</span>
+        const pct = Number(raw) * 100
+        return (
+          <span className="text-right font-medium text-blue-600 dark:text-blue-400">
+            {pct.toFixed(2)}%
+          </span>
+        )
+      },
+    },
+    {
       id: "source",
       header: "Source",
       cell: () => (

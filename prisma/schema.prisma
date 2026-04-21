@@ -803,6 +803,9 @@ model ContractPricing {
   uom                String    @default("EA")
   listPrice          Decimal?  @db.Decimal(12, 2)
   discountPercentage Decimal?  @db.Decimal(5, 2)
+  // Charles iMessage 2026-04-20 N17: per-SKU carve-out rate as a
+  // fraction (0.03 = 3%). Drives the CARVE_OUT engine when wired.
+  carveOutPercent    Decimal?  @db.Decimal(5, 4)
   effectiveDate      DateTime? @db.Date
   expirationDate     DateTime? @db.Date
   createdAt          DateTime  @default(now())
@@ -1074,6 +1077,12 @@ model PricingFile {
   productDescription String
   listPrice          Decimal?  @db.Decimal(12, 2)
   contractPrice      Decimal?  @db.Decimal(12, 2)
+  // Charles iMessage 2026-04-20 N17: "Carve out is something that
+  // requires a column to be on the price file that shows the carve
+  // out %." Stored as a fraction (0.03 = 3%). Feeds the existing
+  // CARVE_OUT engine at lib/rebates/engine/carve-out.ts when wired.
+  // Null = no carve-out rate for this SKU.
+  carveOutPercent    Decimal?  @db.Decimal(5, 4)
   effectiveDate      DateTime  @db.Date
   expirationDate     DateTime? @db.Date
   category           String?
