@@ -28,6 +28,7 @@ import { useContract, useDeleteContract } from "@/hooks/use-contracts"
 import { getContractPeriods } from "@/lib/actions/contract-periods"
 import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
+import { computeProjectedRebate } from "@/lib/contracts/projected-rebate"
 import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
 import type { TierLike, RebateMethodName } from "@/lib/contracts/rebate-method"
 import { ContractDetailOverview } from "@/components/contracts/contract-detail-overview"
@@ -204,6 +205,31 @@ export function ContractDetailClient({
       currentTierSourceTier,
       atTopTier,
       hasTiers: !!tierProgress,
+      // Charles iMessage 2026-04-20 N14: "Rebate earned YTD does not
+      // make sense a lot because many rebates are earned on the last
+      // day of the year — it should be the projected rebate there.
+      // Should be the rebate they are trending toward based on historic
+      // spend." Uses trailing-12-month spend × current tier rate as the
+      // year-end projection. CLAUDE.md projection-vs-ledger rule: this
+      // number is labeled "Projected" so it can't be mistaken for the
+      // actual ledger YTD value shown above it.
+      projectedYearEnd:
+        firstTermWithTiers && tiersForEngine && tiersForEngine.length > 0
+          ? computeProjectedRebate({
+              rolling12Spend: totalSpend,
+              rebateEarnedYTD,
+              tiers: tiersForEngine.map((t) => ({
+                ...t,
+                rebateValue:
+                  firstTermWithTiers.tiers.find(
+                    (src) => src.tierNumber === t.tierNumber,
+                  )?.rebateType === "percent_of_spend"
+                    ? Number(t.rebateValue) * 100
+                    : Number(t.rebateValue),
+              })),
+              method: tierMethod,
+            })
+          : null,
     }
   }, [contract])
 
@@ -514,6 +540,17 @@ export function ContractDetailClient({
                 <p className="text-xs text-muted-foreground">
                   {formatCurrency(stats.rebateCollected)} collected (lifetime)
                 </p>
+                {stats.projectedYearEnd != null &&
+                  stats.projectedYearEnd.projectedFullYear > 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                        {formatCurrency(
+                          stats.projectedYearEnd.projectedFullYear,
+                        )}
+                      </span>{" "}
+                      projected year-end at current pace
+                    </p>
+                  )}
                 {contract.contractType === "tie_in" && (
                   <TieInRebateSplit
                     contractId={contractId}
