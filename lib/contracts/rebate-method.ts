@@ -1,14 +1,29 @@
 /**
- * Rebate calculation engines for cumulative and marginal tier methods.
+ * Legacy rebate-method API — BACK-COMPAT SHIM.
  *
- * - Cumulative (most common): the entire spend receives the rate of the
- *   highest tier achieved. Spec section 2.1.1 of contract-calculations.md.
- * - Marginal (bracket): each spend bracket receives its own rate.
- *   Spec section 2.1.2.
+ * The math here used to live inline. As of 2026-04-20 it is a thin
+ * delegation layer over `lib/rebates/engine/shared/*` — the canonical
+ * engine that was previously dormant (see
+ * `docs/superpowers/specs/2026-04-20-canonical-rebate-engine-gap-design.md`
+ * and `docs/superpowers/specs/2026-04-20-engine-improvement-roadmap.md`
+ * track 1). Keeping the legacy exports + shapes so the 17 call sites
+ * don't have to change; the math behind them now matches the tested
+ * engine (A1-A10 audit fixes, EXCLUSIVE boundary by default, clean
+ * bracket sums, below-baseline zero-return).
  *
- * Tiers are sorted by spendMin ascending inside each function, so callers
- * don't have to pre-sort.
+ * Next step in the roadmap: migrate call sites to import directly from
+ * `lib/rebates/engine/` and delete this file. Done once those imports
+ * stop referencing `TierLike` / `RebateMethodName`.
  */
+import {
+  calculateCumulativeRebate,
+} from "@/lib/rebates/engine/shared/cumulative"
+import {
+  calculateMarginalRebate,
+} from "@/lib/rebates/engine/shared/marginal"
+import type { RebateTier } from "@/lib/rebates/engine/types"
+
+// ─── Legacy public API ──────────────────────────────────────────────
 
 export type RebateMethodName = "cumulative" | "marginal"
 
@@ -26,25 +41,68 @@ export interface RebateEngineResult {
   rebateEarned: number
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────
+// ─── Adapters ───────────────────────────────────────────────────────
 
-function numericValue(v: TierLike["spendMin"]): number {
+function asNumber(v: unknown): number {
   return typeof v === "number" ? v : Number(v)
 }
 
-function nullableNumeric(v: TierLike["spendMax"]): number | null {
-  if (v === null || v === undefined) return null
-  return typeof v === "number" ? v : Number(v)
+/**
+ * Convert the legacy `TierLike` shape (spendMin/spendMax) into the new
+ * engine's `RebateTier` shape (thresholdMin/thresholdMax). Number
+ * coercion happens here so the engine's pure helpers get clean
+ * numerics regardless of whether the caller passed Prisma Decimals,
+ * numeric strings, or JS numbers.
+ */
+function toRebateTier(t: TierLike): RebateTier {
+  return {
+    tierNumber: t.tierNumber,
+    tierName: t.tierName ?? null,
+    thresholdMin: asNumber(t.spendMin),
+    thresholdMax:
+      t.spendMax === null || t.spendMax === undefined
+        ? null
+        : asNumber(t.spendMax),
+    rebateValue: asNumber(t.rebateValue),
+  }
 }
 
-function sortedByMin(tiers: TierLike[]): TierLike[] {
-  return [...tiers].sort(
-    (a, b) => numericValue(a.spendMin) - numericValue(b.spendMin),
-  )
+/**
+ * Charles W1.W-B2 dedup (legacy defensive behavior): malformed seed
+ * data with multiple tiers sharing the same spendMin previously
+ * caused a silent wrong-number bug — the legacy engine's scan-and-
+ * promote loop picked the lowest tierNumber via a tiebreaker + strict-
+ * greater promotion. The new engine's `determineTier` scans to the end
+ * and returns the HIGHEST qualifying tier, which would jump straight
+ * to tier N on a contract where every tier says spendMin=0. Preserve
+ * the defensive behavior at the shim boundary: drop duplicate-
+ * thresholdMin tiers, keeping the lowest tierNumber.
+ */
+function dedupTiers(tiers: TierLike[]): RebateTier[] {
+  const converted = tiers
+    .map(toRebateTier)
+    .sort((a, b) => {
+      const d = a.thresholdMin - b.thresholdMin
+      if (d !== 0) return d
+      return a.tierNumber - b.tierNumber
+    })
+  const out: RebateTier[] = []
+  let lastMin: number | null = null
+  for (const t of converted) {
+    if (lastMin !== null && t.thresholdMin === lastMin) continue
+    out.push(t)
+    lastMin = t.thresholdMin
+  }
+  return out
 }
 
-// ─── Cumulative ─────────────────────────────────────────────────────
+// ─── Public functions (signatures preserved) ────────────────────────
 
+/**
+ * Cumulative tier rebate: whole spend earns the top-qualifying tier's
+ * rate. Below-baseline (spend < lowest threshold) returns all zeros.
+ * Delegates to `calculateCumulativeRebate` in the canonical engine.
+ */
 export function calculateCumulative(
   spend: number,
   tiers: TierLike[],
@@ -52,65 +110,27 @@ export function calculateCumulative(
   if (tiers.length === 0) {
     return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
   }
-
-  // Sort by spendMin asc, then tierNumber asc as tiebreaker. The
-  // tieBreaker matters when the seed / import is malformed and every
-  // tier shares `spendMin = 0` — without it the promotion loop below
-  // walks the array order and silently picks the highest-rebate tier
-  // regardless of spend (Charles W1.W-B2 audit: "cumulative not
-  // working"; BUG-terms-6 from the 2026-04-19 sweep). See the regression
-  // test at `__tests__/cumulative-method.test.ts`.
-  const sorted = [...tiers].sort((a, b) => {
-    const minDiff = numericValue(a.spendMin) - numericValue(b.spendMin)
-    if (minDiff !== 0) return minDiff
-    return a.tierNumber - b.tierNumber
-  })
-
-  // Charles iMessage 2026-04-20: when tier 1 has a non-zero spendMin
-  // (e.g. "Qualified Annual Spend Rebate" with tier 1 @ \$5.3M floor) and
-  // spend is BELOW that floor, NO tier qualifies and NO rebate earns.
-  // The previous code always defaulted `applicable = sorted[0]` and
-  // returned `spend × tier-1-rate`, so a contract at \$1.5M spend showed
-  // "\$46,786 earned" against a \$5.3M baseline. Early-return zeros when
-  // spend hasn't crossed the lowest tier's spendMin.
-  const lowestMin = numericValue(sorted[0].spendMin)
-  if (spend < lowestMin) {
+  const converted = dedupTiers(tiers)
+  const { rebate, tier } = calculateCumulativeRebate(
+    spend,
+    converted,
+    "EXCLUSIVE",
+  )
+  if (!tier) {
     return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
   }
-
-  // Walk in spendMin order and only PROMOTE to a tier whose spendMin is
-  // strictly greater than the previously-applicable tier's spendMin OR
-  // is zero and matches today's spend (the first tier's normal case).
-  // Tiers that share a spendMin with an earlier tier are ignored — math
-  // has no way to pick between them, so we defer to the lowest
-  // tierNumber (from the tiebreaker above).
-  let applicable = sorted[0]
-  let appliedMin = lowestMin
-  for (let i = 1; i < sorted.length; i++) {
-    const tier = sorted[i]
-    const tMin = numericValue(tier.spendMin)
-    // Skip malformed duplicates — same spendMin as an already-applied
-    // tier. Only promote when the tier's spendMin is strictly greater
-    // than the currently-applicable tier's, AND the spend meets it.
-    if (tMin <= appliedMin) continue
-    if (spend >= tMin) {
-      applicable = tier
-      appliedMin = tMin
-    }
-  }
-
-  const rebatePercent = numericValue(applicable.rebateValue)
-  const rebateEarned = (spend * rebatePercent) / 100
-
   return {
-    tierAchieved: applicable.tierNumber,
-    rebatePercent,
-    rebateEarned,
+    tierAchieved: tier.tierNumber,
+    rebatePercent: tier.rebateValue,
+    rebateEarned: rebate,
   }
 }
 
-// ─── Marginal ───────────────────────────────────────────────────────
-
+/**
+ * Marginal tier rebate: each bracket earns at its own rate; sum across
+ * all brackets up to the qualifying tier. Below-baseline returns zeros.
+ * Delegates to `calculateMarginalRebate` in the canonical engine.
+ */
 export function calculateMarginal(
   spend: number,
   tiers: TierLike[],
@@ -118,67 +138,24 @@ export function calculateMarginal(
   if (tiers.length === 0) {
     return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
   }
-
-  const sorted = sortedByMin(tiers)
-
-  // Below baseline: mirror calculateCumulative. If spend hasn't crossed
-  // the lowest tier's spendMin, no tier qualifies and nothing earns.
-  // The existing loop already returned $0 rebate here (the `spend <=
-  // tierMin` break took care of it) but `tierAchieved` still defaulted
-  // to tier 1 — inconsistent with cumulative, which caused display
-  // surfaces to light up tier 1 before the user actually qualified.
-  const lowestMin = numericValue(sorted[0].spendMin)
-  if (spend < lowestMin) {
+  const converted = dedupTiers(tiers)
+  const { totalRebate, brackets } = calculateMarginalRebate(
+    spend,
+    converted,
+    "EXCLUSIVE",
+  )
+  if (brackets.length === 0) {
     return { tierAchieved: 0, rebatePercent: 0, rebateEarned: 0 }
   }
-
-  let totalRebate = 0
-  let tierAchieved = sorted[0].tierNumber
-  let topRate = numericValue(sorted[0].rebateValue)
-
-  for (let i = 0; i < sorted.length; i++) {
-    const tier = sorted[i]
-    const tierMin = numericValue(tier.spendMin)
-    const tierMax = nullableNumeric(tier.spendMax)
-    const nextMin =
-      i + 1 < sorted.length ? numericValue(sorted[i + 1].spendMin) : null
-
-    // Non-final tier without an upper bound (no spendMax AND no
-    // meaningful nextMin) is ambiguous — we can't compute the bracket width.
-    const isFinal = i === sorted.length - 1
-    if (!isFinal && tierMax === null && (nextMin === null || nextMin <= tierMin)) {
-      throw new Error(
-        `Marginal method requires spendMax on non-final tier (tier ${tier.tierNumber})`,
-      )
-    }
-
-    // Upper bound of this bracket: prefer explicit spendMax, fall back to
-    // next tier's spendMin, fall back to infinity (only valid on final tier).
-    const upperBound = tierMax ?? nextMin ?? Infinity
-
-    if (spend <= tierMin) break
-
-    const spendInBracket = Math.min(spend, upperBound) - tierMin
-    if (spendInBracket <= 0) continue
-
-    const rate = numericValue(tier.rebateValue)
-    totalRebate += (spendInBracket * rate) / 100
-
-    tierAchieved = tier.tierNumber
-    topRate = rate
-
-    if (spend <= upperBound) break
-  }
-
+  const last = brackets[brackets.length - 1]!
   return {
-    tierAchieved,
-    rebatePercent: topRate,
+    tierAchieved: last.tierNumber,
+    rebatePercent: last.bracketRate,
     rebateEarned: totalRebate,
   }
 }
 
-// ─── Dispatcher ─────────────────────────────────────────────────────
-
+/** Dispatcher kept for back-compat. */
 export function calculateRebate(
   spend: number,
   tiers: TierLike[],

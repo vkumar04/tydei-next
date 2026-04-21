@@ -80,10 +80,14 @@ describe("calculateMarginal", () => {
     expect(result.tierAchieved).toBe(1)
   })
 
-  it("$0 spend returns 0 rebate, tier 1", () => {
+  it("$0 spend returns 0 rebate, tier 0 (no tier qualifies)", () => {
+    // 2026-04-20 engine migration: legacy reported tier 1 at zero spend
+    // (a default sentinel), new engine correctly reports "no tier
+    // qualified" → tier 0 / 0% / \$0. Aligns with the below-baseline
+    // semantics now shared across cumulative + marginal.
     const result = calculateMarginal(0, TIERS)
     expect(result.rebateEarned).toBe(0)
-    expect(result.tierAchieved).toBe(1)
+    expect(result.tierAchieved).toBe(0)
   })
 
   it("spend exactly at tier-2 boundary stays tier 1 (no spend is above it)", () => {
@@ -99,23 +103,28 @@ describe("calculateMarginal", () => {
     expect(calculateMarginal(10_000, oneTier).rebateEarned).toBe(250)
   })
 
-  it("marginal with non-final tier missing spendMax throws", () => {
+  it("marginal handles malformed tiers without throwing", () => {
+    // 2026-04-20 engine migration: legacy threw on ambiguous-bracket
+    // configurations (non-final tier with no spendMax AND no
+    // meaningful nextMin). The new canonical engine does NOT throw —
+    // it treats ambiguous brackets as zero-width and returns whatever
+    // brackets DID accumulate. The shim's dedup also drops duplicate-
+    // spendMin tiers, so the "two tiers both at spendMin=0" case now
+    // collapses to a single tier rather than throwing.
     const bad: TierLike[] = [
       { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 2 },
       { tierNumber: 2, spendMin: 50_000, spendMax: null, rebateValue: 3 },
     ]
-    // The bad tier is non-final AND has no spendMax AND next tier's min is defined,
-    // so we derive the upper bound from next tier's spendMin. This should NOT throw —
-    // the throw only fires when both spendMax and nextMin are unknown. Test a truly
-    // ambiguous case instead.
     expect(() => calculateMarginal(60_000, bad)).not.toThrow()
 
-    const trulyBad: TierLike[] = [
+    const duplicateMin: TierLike[] = [
       { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 2 },
-      { tierNumber: 2, spendMin: 0, spendMax: null, rebateValue: 3 }, // same min as tier 1
+      { tierNumber: 2, spendMin: 0, spendMax: null, rebateValue: 3 }, // same min
     ]
-    // Here tier 1 has no spendMax and tier 2's spendMin (0) is not greater → ambiguous
-    expect(() => calculateMarginal(60_000, trulyBad)).toThrow()
+    // Shim dedups to tier 1 only; engine evaluates without throwing.
+    expect(() => calculateMarginal(60_000, duplicateMin)).not.toThrow()
+    const r = calculateMarginal(60_000, duplicateMin)
+    expect(r.tierAchieved).toBe(1) // dedup keeps lowest tierNumber
   })
 })
 
