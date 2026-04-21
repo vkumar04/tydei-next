@@ -49,6 +49,7 @@ export async function getDashboardCharts(options?: {
       where: contractsOwnedByFacility(facility.id),
       select: {
         status: true,
+        effectiveDate: true,
         expirationDate: true,
       },
     }),
@@ -77,6 +78,7 @@ export async function getDashboardCharts(options?: {
   const lifecycle = computeContractLifecycleDistribution(
     contracts.map((c) => ({
       status: c.status,
+      effectiveDate: c.effectiveDate,
       expirationDate: c.expirationDate,
     })),
     referenceDate,

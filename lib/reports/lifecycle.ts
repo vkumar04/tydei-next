@@ -11,6 +11,9 @@
 export interface ContractForLifecycle {
   status: "active" | "expired" | "expiring" | "draft" | "pending"
   expirationDate: Date | null
+  /** Date the contract starts — used as a fallback signal when status
+   *  stays "draft" / "pending" but the contract is actually in force. */
+  effectiveDate?: Date | null
 }
 
 export interface LifecycleDistribution {
@@ -32,7 +35,15 @@ const EXPIRING_WINDOW_DAYS = 90
  *   - status === "expiring"             → expiring
  *   - active AND within 90 days         → expiring
  *   - active AND > 90 days remaining    → active
- *   - anything else (draft/pending)     → other
+ *   - draft/pending BUT dates are live   → active (with expiring-window)
+ *   - anything else (pre-effective etc.) → other
+ *
+ * Charles iMessage 2026-04-21: dashboard showed 100% Draft/Pending
+ * for 5 contracts whose effective dates had passed. The status column
+ * never auto-promotes (that's an approval-flow concern), but the
+ * lifecycle chart is a DISPLAY heuristic — if the contract is live
+ * by date, show it as active so the chart reflects what's actually
+ * in force.
  */
 export function computeContractLifecycleDistribution(
   contracts: ContractForLifecycle[],
@@ -59,7 +70,16 @@ export function computeContractLifecycleDistribution(
       expiring++
       continue
     }
-    if (c.status === "active") {
+    // Treat status="active" AND date-live draft/pending identically —
+    // both are "in force today" from the facility's point of view.
+    const dateLive =
+      c.effectiveDate != null &&
+      c.effectiveDate.getTime() <= refMs &&
+      (c.expirationDate == null || c.expirationDate.getTime() >= refMs)
+    const liveByIntent =
+      c.status === "active" ||
+      ((c.status === "draft" || c.status === "pending") && dateLive)
+    if (liveByIntent) {
       if (
         c.expirationDate &&
         c.expirationDate.getTime() - refMs <= windowMs
