@@ -328,17 +328,20 @@ export function getContractColumns(
     {
       id: "rebateEarned",
       // Charles W1.X-D: single source. `rebateEarned` is the canonical
-      // YTD figure from `getContracts` via `sumEarnedRebatesYTD`. The old
-      // `row.metricsRebate ?? ...` fallback was overriding it with the
-      // batch path and silently drifting from the detail header card.
+      // figure from `getContracts`. Charles iMessage 2026-04-20 N13:
+      // the list column now reads LIFETIME (via `sumEarnedRebatesLifetime`
+      // in lib/actions/contracts.ts) because many rebates earn on the
+      // last day of the year and a YTD column underrepresented small
+      // contracts. Contract detail still carries a YTD card for
+      // compliance reporting.
       accessorFn: (row) => Number(row.rebateEarned ?? 0),
       header: ({ column }) => (
         <SortableHeader
-          label="Rebate Earned (YTD)"
+          label="Rebate Earned (Lifetime)"
           column={column}
           align="right"
-          tooltip="Earned this calendar year — closed rebate periods only. 'Closed' means the period's end date has passed."
-          tooltipAriaLabel="Rebate Earned (YTD) help"
+          tooltip="Earned across every closed rebate period on this contract (Charles iMessage 2026-04-20 N13). 'Closed' means the period's end date has passed. Contract detail still shows a YTD card for compliance."
+          tooltipAriaLabel="Rebate Earned (Lifetime) help"
         />
       ),
       enableSorting: true,

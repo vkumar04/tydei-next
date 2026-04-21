@@ -230,7 +230,12 @@ export async function getContracts(input: ContractFilters) {
   const withDerived = contracts.map((c) => {
     // Charles W1.U-B: canonical YTD helper — matches the detail header
     // card so the list column and header can never drift.
-    const rebateEarned = sumEarnedRebatesYTD(c.rebates ?? [], today)
+    // Charles iMessage 2026-04-20 N13: "Make that lifetime rebates
+    // earned for each contract." Many rebates earn on the last day of
+    // the year; YTD underrepresents the contract. Lifetime is the
+    // canonical number for list-row scoring. Detail header still has
+    // its own YTD card for compliance reporting.
+    const rebateEarned = sumEarnedRebatesLifetime(c.rebates ?? [], today)
     // Charles W1.R: canonical "collected" aggregate — single helper so the
     // list row, detail header card, and Transactions tab cannot drift.
     const rebateCollected = sumCollectedRebates(c.rebates ?? [])
