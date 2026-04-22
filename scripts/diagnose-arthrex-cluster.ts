@@ -141,6 +141,61 @@ async function main() {
     console.log()
   }
 
+  // ─── Section 5: COG rows by matchStatus (lifetime) ────────────────
+  const scopeOR = [
+    { contractId: contract.id },
+    { contractId: null, vendorId: contract.vendorId },
+  ]
+  const cogWhere = {
+    facilityId: contract.facilityId ?? undefined,
+    OR: scopeOR,
+  }
+
+  const cogByStatus = await prisma.cOGRecord.groupBy({
+    by: ["matchStatus"],
+    where: cogWhere,
+    _sum: { extendedPrice: true },
+    _count: { _all: true },
+  })
+
+  console.log(`## 5. COG rows in contract+same-vendor scope (lifetime)\n`)
+  console.log("| matchStatus | count | sum extendedPrice |")
+  console.log("|---|---:|---:|")
+  for (const b of cogByStatus) {
+    console.log(
+      `| ${b.matchStatus ?? "(null)"} | ${b._count._all} | ${Number(b._sum?.extendedPrice ?? 0).toFixed(2)} |`,
+    )
+  }
+  console.log()
+
+  const top = await prisma.cOGRecord.findMany({
+    where: cogWhere,
+    orderBy: { extendedPrice: "desc" },
+    take: 15,
+    select: {
+      id: true,
+      vendorItemNo: true,
+      inventoryDescription: true,
+      extendedPrice: true,
+      matchStatus: true,
+      transactionDate: true,
+      contractId: true,
+      vendorId: true,
+    },
+  })
+
+  console.log(`### Top 15 rows by extendedPrice\n`)
+  console.log(
+    "| vendorItem | desc (40ch) | contractId | matchStatus | spend | txnDate |",
+  )
+  console.log("|---|---|---|---|---:|---|")
+  for (const r of top) {
+    console.log(
+      `| ${r.vendorItemNo ?? ""} | ${(r.inventoryDescription ?? "").slice(0, 40)} | ${r.contractId ? r.contractId.slice(0, 8) + "…" : "(null)"} | ${r.matchStatus} | ${Number(r.extendedPrice ?? 0).toFixed(2)} | ${r.transactionDate?.toISOString().slice(0, 10) ?? ""} |`,
+    )
+  }
+  console.log()
+
   await prisma.$disconnect()
 }
 
