@@ -21,6 +21,11 @@
  * Community Hospital) — CLAUDE.md's cmo4sbr8p0004wthl91ubwfwb is stale.
  */
 import { prisma } from "@/lib/db"
+import {
+  sumEarnedRebatesLifetime,
+  sumEarnedRebatesYTD,
+} from "@/lib/contracts/rebate-earned-filter"
+import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 
 const DEMO_FACILITY_ID = "cmo6j6fx70004achlf8fr82h2"
 const DEFAULT_CONTRACT_ID = "cmo6j6g34002sachllckth77b"
@@ -217,6 +222,23 @@ async function main() {
       `| ${b.matchStatus ?? "(null)"} | ${b._count._all} | ${Number(b._sum?.extendedPrice ?? 0).toFixed(2)} |`,
     )
   }
+  console.log()
+
+  // ─── Section 7: Canonical-helper readouts ─────────────────────────
+  console.log(`## 7. Canonical-helper readouts (Prisma-direct)\n`)
+  const earnedYTD = sumEarnedRebatesYTD(rebates)
+  const earnedLifetime = sumEarnedRebatesLifetime(rebates)
+  const collectedLifetime = sumCollectedRebates(rebates)
+
+  console.log("| metric | value |")
+  console.log("|---|---:|")
+  console.log(`| sumEarnedRebatesYTD(rebates) | ${earnedYTD.toFixed(2)} |`)
+  console.log(
+    `| sumEarnedRebatesLifetime(rebates) | ${earnedLifetime.toFixed(2)} |`,
+  )
+  console.log(
+    `| sumCollectedRebates(rebates) | ${collectedLifetime.toFixed(2)} |`,
+  )
   console.log()
 
   await prisma.$disconnect()
