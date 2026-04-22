@@ -119,6 +119,28 @@ async function main() {
   }
   console.log()
 
+  // ─── Section 4: ContractPeriod rollups ────────────────────────────
+  const periods = await prisma.contractPeriod.findMany({
+    where: { contractId },
+    orderBy: { periodStart: "asc" },
+  })
+
+  console.log(`## 4. ContractPeriod rollups (${periods.length})\n`)
+  if (periods.length === 0) {
+    console.log("_(none)_\n")
+  } else {
+    console.log(
+      "| periodStart | periodEnd | totalSpend | rebateEarned | rebateCollected | tierAchieved |",
+    )
+    console.log("|---|---|---:|---:|---:|---:|")
+    for (const p of periods) {
+      console.log(
+        `| ${p.periodStart?.toISOString().slice(0, 10) ?? "—"} | ${p.periodEnd?.toISOString().slice(0, 10) ?? "—"} | ${Number(p.totalSpend ?? 0).toFixed(2)} | ${Number(p.rebateEarned ?? 0).toFixed(2)} | ${Number(p.rebateCollected ?? 0).toFixed(2)} | ${p.tierAchieved ?? "—"} |`,
+      )
+    }
+    console.log()
+  }
+
   await prisma.$disconnect()
 }
 
