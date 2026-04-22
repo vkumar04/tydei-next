@@ -196,6 +196,29 @@ async function main() {
   }
   console.log()
 
+  // ─── Section 6: COG trailing-12-months slice ──────────────────────
+  const trailingStart = new Date()
+  trailingStart.setFullYear(trailingStart.getFullYear() - 1)
+
+  const cogByStatus12mo = await prisma.cOGRecord.groupBy({
+    by: ["matchStatus"],
+    where: { ...cogWhere, transactionDate: { gte: trailingStart } },
+    _sum: { extendedPrice: true },
+    _count: { _all: true },
+  })
+
+  console.log(
+    `## 6. COG trailing-12-months (since ${trailingStart.toISOString().slice(0, 10)})\n`,
+  )
+  console.log("| matchStatus | count | sum extendedPrice |")
+  console.log("|---|---:|---:|")
+  for (const b of cogByStatus12mo) {
+    console.log(
+      `| ${b.matchStatus ?? "(null)"} | ${b._count._all} | ${Number(b._sum?.extendedPrice ?? 0).toFixed(2)} |`,
+    )
+  }
+  console.log()
+
   await prisma.$disconnect()
 }
 
