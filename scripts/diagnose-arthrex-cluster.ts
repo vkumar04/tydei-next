@@ -52,7 +52,54 @@ async function main() {
   console.log(`# Arthrex cluster diagnostic — ${contractId}\n`)
   console.log(`_Generated: ${new Date().toISOString()}_\n`)
 
-  // Sections 1–8 land here in subsequent tasks.
+  // ─── Section 1: Contract row ──────────────────────────────────────
+  const contract = await prisma.contract.findUniqueOrThrow({
+    where: { id: contractId },
+    include: {
+      vendor: { select: { id: true, name: true } },
+      terms: { include: { tiers: true } },
+    },
+  })
+
+  console.log(`## 1. Contract row\n`)
+  console.log("| field | value |")
+  console.log("|---|---|")
+  for (const [k, v] of Object.entries(contract)) {
+    if (k === "terms" || k === "vendor") continue
+    const display =
+      v instanceof Date
+        ? v.toISOString()
+        : typeof v === "object" && v !== null
+          ? JSON.stringify(v)
+          : String(v)
+    console.log(`| ${k} | ${display} |`)
+  }
+  console.log(
+    `| vendor | ${contract.vendor?.name ?? "(null)"} (${contract.vendor?.id ?? "(null)"}) |`,
+  )
+  console.log()
+
+  // ─── Section 2: Tiers (flattened across terms) ────────────────────
+  const tiers = contract.terms.flatMap((term) =>
+    term.tiers.map((tier) => ({
+      termId: term.id,
+      termName: term.termName,
+      ...tier,
+    })),
+  )
+
+  console.log(`## 2. Tiers (${tiers.length}) across ${contract.terms.length} term(s)\n`)
+  console.log(
+    "| termName | tierNumber | spendMin | spendMax | rebateType | rebateValue (raw) | rebateValue (×100 %) |",
+  )
+  console.log("|---|---:|---:|---:|---|---:|---:|")
+  for (const t of tiers) {
+    const raw = Number(t.rebateValue ?? 0)
+    console.log(
+      `| ${t.termName} | ${t.tierNumber} | ${Number(t.spendMin ?? 0)} | ${t.spendMax == null ? "—" : Number(t.spendMax)} | ${t.rebateType} | ${raw} | ${(raw * 100).toFixed(4)} |`,
+    )
+  }
+  console.log()
 
   await prisma.$disconnect()
 }
