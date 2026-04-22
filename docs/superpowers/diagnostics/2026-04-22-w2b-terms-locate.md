@@ -120,3 +120,43 @@ no obvious class D candidate.** If the Task-2 test fails against the
 products-include, class C stands. If it passes, the fix implementer
 should (a) still add the orderBy as preventative, and (b) dig into the
 other tab surfaces with Vick before declaring victory.
+
+## 5. Task-2 test run — "could not reproduce" branch
+
+The determinism test landed at
+`lib/actions/__tests__/terms-determinism.test.ts`. Run against a fresh
+local DB (5 seeded `ContractTermProduct` rows, non-sorted insert
+sequence), the test **passes** — both `getContractTerms` calls return
+the same serialized payload:
+
+```
+$ DATABASE_URL=postgresql://tydei:tydei_dev_password@localhost:5432/tydei \
+    bunx vitest run lib/actions/__tests__/terms-determinism.test.ts --reporter=verbose
+ ✓ terms content determinism (Charles W2.B) > returns byte-identical content … 21ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+```
+
+Per the plan's Task 2 Step 2 branch: this is case (a) "the drift
+doesn't reproduce in a vitest runner." Postgres heap-order for a small
+result set under no concurrency happens to be stable insert-order in
+practice; the hazard only manifests when MVCC visibility shifts,
+VACUUM moves rows, or the result set gets large enough for the planner
+to parallelise.
+
+**Recommendation for the fix implementer (next dispatch):**
+
+1. Still apply the class-C fix (add `orderBy: { vendorItemNo: "asc" }`
+   to the `products` include in `getContractTerms`, and the mirroring
+   `terms.products` include in `getContract` — both are drift hazards).
+2. Keep the test in place as a locked-in guard. Its seeded rows are
+   named `W2B-DET-ITEM-{A..E}` so sorting by `vendorItemNo` will
+   produce a stable canonical order.
+3. Separately confirm with Charles whether he was on `/terms`, on the
+   Rebates & Tiers tab, or somewhere else when he saw "different
+   results." If the answer is another surface, the real class may be
+   different and this fix won't close his report.
+4. Vick's call whether to also pivot to a Playwright reload-and-diff
+   spec under `tests/workflows/`. The existing `*.spec.ts` files in
+   that folder are bun-script style (not `@playwright/test`), so that
+   would need new scaffolding rather than a one-file add.
