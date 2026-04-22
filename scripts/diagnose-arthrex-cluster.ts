@@ -101,6 +101,24 @@ async function main() {
   }
   console.log()
 
+  // ─── Section 3: Rebate rows ───────────────────────────────────────
+  const rebates = await prisma.rebate.findMany({
+    where: { contractId },
+    orderBy: [{ payPeriodStart: "asc" }, { createdAt: "asc" }],
+  })
+
+  console.log(`## 3. Rebate rows (${rebates.length})\n`)
+  console.log(
+    "| payPeriodStart | payPeriodEnd | rebateEarned | rebateCollected | collectionDate | engineVersion | createdAt |",
+  )
+  console.log("|---|---|---:|---:|---|---|---|")
+  for (const r of rebates) {
+    console.log(
+      `| ${r.payPeriodStart?.toISOString().slice(0, 10) ?? "—"} | ${r.payPeriodEnd?.toISOString().slice(0, 10) ?? "—"} | ${Number(r.rebateEarned ?? 0).toFixed(2)} | ${Number(r.rebateCollected ?? 0).toFixed(2)} | ${r.collectionDate?.toISOString().slice(0, 10) ?? "—"} | ${r.engineVersion ?? "—"} | ${r.createdAt.toISOString().slice(0, 10)} |`,
+    )
+  }
+  console.log()
+
   await prisma.$disconnect()
 }
 
