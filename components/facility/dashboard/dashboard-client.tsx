@@ -34,6 +34,7 @@ import { DashboardHero } from "./dashboard-hero"
 import { DashboardLifecyclePie } from "./dashboard-lifecycle-pie"
 import { DashboardSpendTrendChart } from "./dashboard-spend-trend-chart"
 import { DashboardTopAlerts } from "./dashboard-top-alerts"
+import { DashboardBundleShortfallsCard } from "./dashboard-bundle-shortfalls-card"
 import { DashboardSpendProjection } from "./dashboard-spend-projection"
 
 export interface DashboardInitialData {
@@ -160,7 +161,8 @@ export function DashboardClient({
           <DashboardSpendSummaryStrip kpi={kpi} />
         </TabsContent>
 
-        <TabsContent value="alerts" className="mt-4">
+        <TabsContent value="alerts" className="mt-4 space-y-6">
+          <DashboardBundleShortfallsCard />
           <DashboardTopAlerts
             alerts={kpi.topAlerts}
             totalUnresolved={kpi.alertSummary.totalUnresolved}
