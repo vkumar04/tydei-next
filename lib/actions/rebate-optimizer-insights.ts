@@ -90,7 +90,7 @@ export async function getRebateOptimizerInsights(
     where: {
       facilityId,
       vendorId: { not: null },
-      orderDate: { gte: since },
+      transactionDate: { gte: since },
     },
     _sum: { extendedPrice: true },
   })
