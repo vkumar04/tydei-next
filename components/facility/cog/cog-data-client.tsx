@@ -1,36 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import {
-  FileText,
-  Upload,
-  CheckCircle,
-  AlertTriangle,
-  Plus,
-  CalendarIcon,
-  FileStack,
-  Trash2,
-  RefreshCw,
-  HelpCircle,
-} from "lucide-react"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { format, parseISO } from "date-fns"
-import { cn } from "@/lib/utils"
 import { COGRecordsTable } from "@/components/facility/cog/cog-records-table"
 import { PricingFilesTable } from "@/components/facility/cog/pricing-files-table"
 import { COGUploadHistory } from "@/components/facility/cog/cog-upload-history"
@@ -40,6 +12,8 @@ import { PricingImportDialog } from "@/components/facility/cog/pricing-import-di
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { CogEnrichmentStatsPanel } from "@/components/facility/cog/cog-enrichment-stats-panel"
 import { PricingImportHistoryCard } from "@/components/facility/cog/pricing-import-history-card"
+import { CogHero } from "@/components/facility/cog/cog-hero"
+import { CogControlBar } from "@/components/facility/cog/cog-control-bar"
 import { MassUpload } from "@/components/import/mass-upload"
 import { toast } from "sonner"
 import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
@@ -56,8 +30,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { formatCurrency } from "@/lib/formatting"
-import { Skeleton } from "@/components/ui/skeleton"
 
 interface COGDataClientProps {
   facilityId: string
@@ -81,7 +53,8 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   const [clearAllOpen, setClearAllOpen] = useState(false)
 
   // Fetch aggregated stats from server (not from paginated records)
-  const { data: stats, isPending: statsLoading, refetch: refetchStats } = useCOGStats(facilityId)
+  const { data: stats, isPending: statsLoading, refetch: refetchStats } =
+    useCOGStats(facilityId)
   const clearAllMutation = useClearAllCOGRecords()
   const qc = useQueryClient()
   const matchMutation = useMutation({
@@ -89,8 +62,8 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
     onSuccess: (result) => {
       toast.success(
         `Matched ${result.recordsUpdated.toLocaleString()} records to vendors. ` +
-        `${result.onContractAfter.toLocaleString()} now on-contract. ` +
-        `${result.vendorsUnmatched} vendor(s) unmatched.`
+          `${result.onContractAfter.toLocaleString()} now on-contract. ` +
+          `${result.vendorsUnmatched} vendor(s) unmatched.`,
       )
       refetchStats()
       qc.invalidateQueries({ queryKey: ["cog-records"] })
@@ -103,14 +76,17 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
     mutationFn: backfillCOGEnrichment,
     onSuccess: (r) => {
       // Charles R5.30 — show the transition matrix so the user knows
-      // where their records landed after the cascade ran. Order mirrors
-      // the enrichment cascade (on_contract → variance → off → scope → unknown).
+      // where their records landed after the cascade ran.
       const parts: string[] = []
       if (r.onContract) parts.push(`${r.onContract.toLocaleString()} → on_contract`)
-      if (r.priceVariance) parts.push(`${r.priceVariance.toLocaleString()} → price_variance`)
-      if (r.offContract) parts.push(`${r.offContract.toLocaleString()} → off_contract_item`)
-      if (r.outOfScope) parts.push(`${r.outOfScope.toLocaleString()} → out_of_scope`)
-      if (r.unknownVendor) parts.push(`${r.unknownVendor.toLocaleString()} → unknown_vendor`)
+      if (r.priceVariance)
+        parts.push(`${r.priceVariance.toLocaleString()} → price_variance`)
+      if (r.offContract)
+        parts.push(`${r.offContract.toLocaleString()} → off_contract_item`)
+      if (r.outOfScope)
+        parts.push(`${r.outOfScope.toLocaleString()} → out_of_scope`)
+      if (r.unknownVendor)
+        parts.push(`${r.unknownVendor.toLocaleString()} → unknown_vendor`)
       if (r.pending) parts.push(`${r.pending.toLocaleString()} still pending`)
       const summary = parts.length > 0 ? parts.join(", ") : "no changes"
       toast.success(
@@ -130,277 +106,38 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   const totalItems = stats?.totalItems ?? 0
   const onContractCount = stats?.onContractCount ?? 0
   const offContractCount = stats?.offContractCount ?? 0
-  // Total Savings is the REAL sum of (contractPrice − actualCost) × qty
-  // across matched COG rows, as returned by getCOGStats. We no longer
-  // synthesize it from `totalSpend * 0.05` — that was misleading when
-  // no COG records had been matched (Charles W1.M).
-  const totalSavings = stats?.totalSavings ?? 0
-  const matchedCount = stats?.matchedCount ?? 0
-  const potentialEstimate = stats?.potentialEstimate ?? totalSpend * 0.05
   const minPODate = stats?.minPODate ?? null
   const maxPODate = stats?.maxPODate ?? null
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-balance">COG Data</h1>
-          <p className="text-muted-foreground">
-            Manage your Cost of Goods data and vendor pricing files
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="destructive" onClick={() => setClearAllOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Clear All Data
-          </Button>
-          <Button variant="outline" onClick={() => setMassUploadOpen(true)}>
-            <FileStack className="mr-2 h-4 w-4" />
-            Mass Upload
-          </Button>
-          <Button
-            variant="outline"
-            disabled={matchMutation.isPending}
-            onClick={() => {
-              toast.info("Matching COG items to contracts...")
-              matchMutation.mutate()
-            }}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${matchMutation.isPending ? "animate-spin" : ""}`} />
-            {matchMutation.isPending ? "Matching..." : "Match Pricing"}
-          </Button>
-          {/* Re-run match button audit (Subsystem 10.2): confirmed wired 2026-04-19 */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => backfillMutation.mutate()}
-            disabled={backfillMutation.isPending}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${backfillMutation.isPending ? "animate-spin" : ""}`} />
-            Re-run match
-          </Button>
-          <Button variant="outline" onClick={() => setCogImportOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Import Data
-          </Button>
-          <Button onClick={() => setManualEntryOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add COG Entry
-          </Button>
-        </div>
-      </div>
+      <CogHero
+        totalSpend={totalSpend}
+        totalItems={totalItems}
+        onContractCount={onContractCount}
+        offContractCount={offContractCount}
+        minPODate={minPODate}
+        maxPODate={maxPODate}
+        isLoading={statsLoading}
+      />
 
-      {/* Data Date Range Card */}
-      <Card className="mb-4">
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Data Date Range</p>
-                <p className="text-sm text-muted-foreground">
-                  {minPODate && maxPODate
-                    ? `${format(new Date(minPODate), "MM/dd/yyyy")} - ${format(new Date(maxPODate), "MM/dd/yyyy")}`
-                    : "No data loaded"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Filter:</span>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "w-[130px] justify-start text-left font-normal",
-                      !dateFrom && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateFrom ? format(parseISO(dateFrom), "MM/dd/yyyy") : "From"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dateFrom ? parseISO(dateFrom) : undefined}
-                    onSelect={(date) =>
-                      setDateFrom(date ? format(date, "yyyy-MM-dd") : "")
-                    }
-                  />
-                </PopoverContent>
-              </Popover>
-              <span className="text-muted-foreground">-</span>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "w-[130px] justify-start text-left font-normal",
-                      !dateTo && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateTo ? format(parseISO(dateTo), "MM/dd/yyyy") : "To"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dateTo ? parseISO(dateTo) : undefined}
-                    onSelect={(date) =>
-                      setDateTo(date ? format(date, "yyyy-MM-dd") : "")
-                    }
-                  />
-                </PopoverContent>
-              </Popover>
-              {(dateFrom || dateTo) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setDateFrom("")
-                    setDateTo("")
-                  }}
-                >
-                  Clear
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Summary stats */}
-      <div className="grid gap-4 sm:grid-cols-5">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Spend</p>
-                <div className="text-2xl font-bold">
-                  {statsLoading ? <Skeleton className="h-8 w-24" /> : formatCurrency(totalSpend)}
-                </div>
-              </div>
-              <FileText className="h-8 w-8 text-muted-foreground/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Items</p>
-                <div className="text-2xl font-bold">
-                  {statsLoading ? <Skeleton className="h-8 w-24" /> : totalItems.toLocaleString()}
-                </div>
-              </div>
-              <FileText className="h-8 w-8 text-muted-foreground/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">On Contract</p>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {statsLoading ? <Skeleton className="h-8 w-24" /> : onContractCount}
-                </div>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Off Contract</p>
-                <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                  {statsLoading ? <Skeleton className="h-8 w-24" /> : offContractCount}
-                </div>
-              </div>
-              <AlertTriangle className="h-8 w-8 text-red-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm text-muted-foreground">Total Savings</p>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="How Total Savings is calculated"
-                          className="inline-flex items-center text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                        >
-                          <HelpCircle className="h-3.5 w-3.5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-[320px] text-xs leading-relaxed">
-                        <p className="font-medium mb-1">Total Savings</p>
-                        <p>
-                          Sum of actual savings across COG records matched to
-                          contract pricing. Computed per-record as{" "}
-                          <span className="font-mono">
-                            (list price − contract price) × quantity
-                          </span>
-                          ; zero when a record isn&apos;t matched.
-                          {matchedCount === 0 && !statsLoading ? (
-                            <>
-                              {" "}
-                              <strong>Matched = 0</strong> — upload pricing files and
-                              re-run Match Pricing to see a real figure.
-                            </>
-                          ) : null}
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                {statsLoading ? (
-                  <Skeleton className="h-8 w-24" />
-                ) : (
-                  <div
-                    className={`text-2xl font-bold ${
-                      matchedCount === 0
-                        ? "text-muted-foreground"
-                        : "text-green-600 dark:text-green-400"
-                    }`}
-                  >
-                    {formatCurrency(totalSavings)}
-                  </div>
-                )}
-                {!statsLoading && matchedCount === 0 ? (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Matched COG: 0 — upload pricing to see savings.
-                  </p>
-                ) : null}
-                {!statsLoading && potentialEstimate > 0 ? (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Estimated potential at 5%: {formatCurrency(potentialEstimate)}
-                  </p>
-                ) : null}
-              </div>
-              <CheckCircle
-                className={`h-8 w-8 ${
-                  matchedCount === 0
-                    ? "text-muted-foreground/40"
-                    : "text-green-500/50"
-                }`}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <CogControlBar
+        dateFrom={dateFrom}
+        onDateFromChange={setDateFrom}
+        dateTo={dateTo}
+        onDateToChange={setDateTo}
+        onMassUpload={() => setMassUploadOpen(true)}
+        onMatchPricing={() => {
+          toast.info("Matching COG items to contracts...")
+          matchMutation.mutate()
+        }}
+        matchPending={matchMutation.isPending}
+        onRerunMatch={() => backfillMutation.mutate()}
+        rerunPending={backfillMutation.isPending}
+        onImport={() => setCogImportOpen(true)}
+        onManualEntry={() => setManualEntryOpen(true)}
+        onClearAll={() => setClearAllOpen(true)}
+      />
 
       {/* Enrichment stats panel — rows total / matched / unmatched /
           on-contract%. See COG data rewrite spec §6. */}
@@ -409,7 +146,6 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
       {/* Pricing-file import history (Subsystem 10.3) */}
       <PricingImportHistoryCard />
 
-      {/* Tabs */}
       <Tabs defaultValue="cog" className="space-y-4">
         <TabsList>
           <TabsTrigger value="cog">COG Data</TabsTrigger>
@@ -430,7 +166,10 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         </TabsContent>
 
         <TabsContent value="cogFiles" className="space-y-4">
-          <COGUploadHistory facilityId={facilityId} onImport={() => setCogImportOpen(true)} />
+          <COGUploadHistory
+            facilityId={facilityId}
+            onImport={() => setCogImportOpen(true)}
+          />
         </TabsContent>
 
         <TabsContent value="pricing" className="space-y-4">
