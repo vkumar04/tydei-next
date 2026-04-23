@@ -1,25 +1,29 @@
 "use client"
 
 /**
- * Case Costing — client orchestrator (≤200 lines).
+ * Case Costing — client orchestrator (≤250 lines).
  *
  * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4 subsystems 1-5.
  *
- * This file is a thin composition layer. It owns:
- *   - The top-level TanStack Query wiring for each tab's data.
- *   - Header rendering (title + actions + legacy import dialog).
- *   - The {@link CaseCostingTabs} wrapper which dispatches to the four tab views.
+ * Renders the "hero + tabs" pattern (matching Analysis, Rebate Optimizer,
+ * Contracts, Dashboard):
+ *   - CaseCostingHero: 4 KPIs sourced from facility averages + compliance
+ *     summary (no extra server round-trips — reuses the data the tabs already
+ *     fetch).
+ *   - Action strip (Reports / Upload).
+ *   - PayorContractMarginCard.
+ *   - CaseCostingTabs.
  *
  * All data fetching lives in `@/lib/actions/case-costing/*` server actions;
  * filter / sort / derivation logic lives in `@/lib/case-costing/*` pure helpers.
- * Neither of those is touched here.
  */
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { Upload, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CaseImportDialog } from "./case-import-dialog"
+import { CaseCostingHero } from "./case-costing-hero"
 import { CaseCostingTabs } from "./case-costing-tabs"
 import { PayorContractMarginCard } from "./payor-contract-margin-card"
 import {
@@ -38,9 +42,13 @@ import type { CaseRow } from "./case-costing-types"
 
 interface CaseCostingClientProps {
   facilityId: string
+  facilityName: string
 }
 
-export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
+export function CaseCostingClient({
+  facilityId,
+  facilityName,
+}: CaseCostingClientProps) {
   const [importOpen, setImportOpen] = useState(false)
 
   // Cases list tab — filters live here so both the filters bar and the table
@@ -87,30 +95,44 @@ export function CaseCostingClient({ facilityId }: CaseCostingClientProps) {
     queryFn: () => getFacilityPayorMix(),
   })
 
+  const heroStats = useMemo(() => {
+    const totalCases = complianceQuery.data?.perCase.length ?? 0
+    const averages = averagesQuery.data
+    const summary = complianceQuery.data?.summary
+    return {
+      totalCases,
+      avgCostPerCase: averages?.avgCaseCost ?? 0,
+      avgMarginPct: averages?.avgMarginPct ?? 0,
+      onContractPct: summary?.compliancePercent ?? 0,
+      lowComplianceCases: summary?.casesWithLowCompliance ?? 0,
+    }
+  }, [averagesQuery.data, complianceQuery.data])
+
+  const heroLoading = averagesQuery.isLoading || complianceQuery.isLoading
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Case Costing &amp; Surgeon Performance
-          </h1>
-          <p className="text-muted-foreground">
-            Real case margins, surgeon scorecards, payor mix, and contract
-            compliance — all scoped to the active facility.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/dashboard/case-costing/reports">
-            <Button variant="outline">
-              <BarChart3 className="mr-2 h-4 w-4" />
-              Reports
-            </Button>
-          </Link>
-          <Button onClick={() => setImportOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Upload Data
+      <CaseCostingHero
+        totalCases={heroStats.totalCases}
+        avgCostPerCase={heroStats.avgCostPerCase}
+        avgMarginPct={heroStats.avgMarginPct}
+        onContractPct={heroStats.onContractPct}
+        lowComplianceCases={heroStats.lowComplianceCases}
+        scopeLabel={facilityName}
+        isLoading={heroLoading}
+      />
+
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Link href="/dashboard/case-costing/reports">
+          <Button variant="outline">
+            <BarChart3 className="mr-2 h-4 w-4" />
+            Reports
           </Button>
-        </div>
+        </Link>
+        <Button onClick={() => setImportOpen(true)}>
+          <Upload className="mr-2 h-4 w-4" />
+          Upload Data
+        </Button>
       </div>
 
       <PayorContractMarginCard />
