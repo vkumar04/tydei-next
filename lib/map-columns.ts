@@ -96,7 +96,7 @@ const ALIASES: Record<string, string[]> = {
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
 
-function localMapColumns(
+export function localMapColumns(
   headers: string[],
   targetFields: TargetField[]
 ): Record<string, string> {
