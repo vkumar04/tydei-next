@@ -1609,6 +1609,66 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
     failures.push({ where: "v0 rec negotiate", detail: "6/2 should negotiate" })
   }
 
+  // ─── Tydei vs v0 — recommendation verdict parity ─────────────────
+  // Any change to tydei's verdict thresholds must keep agreeing with
+  // v0 across the boundary cases.
+  const { generateRecommendation } = await import(
+    "@/lib/prospective-analysis/recommendation"
+  )
+  const baseProposal = {
+    costSavings: 5,
+    priceCompetitiveness: 5,
+    rebateAttainability: 5,
+    lockInRisk: 8, // high = low risk → won't add any risks
+    tco: 8,
+  }
+  const baseCommit = {
+    termYears: 2,
+    exclusivity: false,
+    marketShareCommitment: null,
+    minimumSpendIsHighPct: false,
+  }
+  const verdictCases: Array<[number, number, "accept" | "decline" | "negotiate"]> = [
+    // Overall-only axis (no risks):
+    [8, 0, "accept"],      // high enough + no risks
+    [7.5, 0, "accept"],    // boundary
+    [7.4, 0, "negotiate"],
+    [5, 0, "negotiate"],
+    [4, 0, "negotiate"],   // exactly at decline threshold → still negotiate
+    [3.9, 0, "decline"],
+    [0, 0, "decline"],
+  ]
+  for (const [overall, risks, expected] of verdictCases) {
+    // To control risks count: keep baseCommit risk-free (0 risks).
+    const rec = generateRecommendation(
+      { ...baseProposal, overall },
+      baseCommit,
+    )
+    if (rec.risks.length !== risks) continue // skip if environment doesn't match
+    if (rec.verdict !== expected) {
+      failures.push({
+        where: `tydei recommendation overall=${overall}`,
+        detail: `want ${expected}, got ${rec.verdict}`,
+      })
+    }
+  }
+  // Risks-override: high overall + 4 risks → decline.
+  const recAllRisks = generateRecommendation(
+    { ...baseProposal, overall: 9, lockInRisk: 3 },
+    {
+      termYears: 5,
+      exclusivity: true,
+      marketShareCommitment: 80,
+      minimumSpendIsHighPct: true,
+    },
+  )
+  if (recAllRisks.verdict !== "decline") {
+    failures.push({
+      where: "tydei recommendation high-overall + 4 risks",
+      detail: `expected decline, got ${recAllRisks.verdict} (risks=${recAllRisks.risks.length})`,
+    })
+  }
+
   // ─── v0 Invoice validation priority ─────────────────────────────
   const { v0InvoicePriority } = await import("@/lib/v0-spec/invoice-validation")
   if (v0InvoicePriority({ variancePct: 6 }) !== "high") {

@@ -90,7 +90,7 @@ describe("generateRecommendation — verdict thresholds", () => {
     )
   })
 
-  it("overall = 5 exactly → negotiate (boundary)", () => {
+  it("overall = 5 with no risks → negotiate", () => {
     const rec = generateRecommendation(
       baseScores({ overall: 5 }),
       baseCommitments(),
@@ -98,12 +98,54 @@ describe("generateRecommendation — verdict thresholds", () => {
     expect(rec.verdict).toBe("negotiate")
   })
 
-  it("overall < 5 → decline", () => {
+  it("overall = 4 exactly with no risks → negotiate (boundary)", () => {
+    // v0 spec: decline when overall < 4. At exactly 4 we stay in
+    // negotiate unless risks hit the 4-or-more threshold.
+    const rec = generateRecommendation(
+      baseScores({ overall: 4 }),
+      baseCommitments(),
+    )
+    expect(rec.verdict).toBe("negotiate")
+  })
+
+  it("overall < 4 → decline (v0 threshold)", () => {
     const rec = generateRecommendation(
       baseScores({ overall: 3 }),
       baseCommitments(),
     )
     expect(rec.verdict).toBe("decline")
+  })
+
+  it("strong overall (8) but ≥4 risks → decline (risks override)", () => {
+    // v0 spec: decline if risks ≥ 4 regardless of overall.
+    // Trigger all 4 lock-in risks with low lockInRisk score.
+    const rec = generateRecommendation(
+      baseScores({ overall: 8, lockInRisk: 3 }),
+      {
+        termYears: 5,
+        exclusivity: true,
+        marketShareCommitment: 80,
+        minimumSpendIsHighPct: true,
+      },
+    )
+    expect(rec.risks.length).toBeGreaterThanOrEqual(4)
+    expect(rec.verdict).toBe("decline")
+  })
+
+  it("overall ≥ 7.5 with 2 risks → negotiate (risks cap accept at 1)", () => {
+    // v0 spec: accept requires risks ≤ 1. With 2 risks we fall to
+    // negotiate even though overall clears the 7.5 bar.
+    const rec = generateRecommendation(
+      baseScores({ overall: 8, lockInRisk: 3 }),
+      {
+        termYears: 5,
+        exclusivity: true,
+        marketShareCommitment: null,
+        minimumSpendIsHighPct: false,
+      },
+    )
+    expect(rec.risks.length).toBe(2)
+    expect(rec.verdict).toBe("negotiate")
   })
 })
 

@@ -5,10 +5,15 @@
  * PURE FUNCTION: takes scores + commitment flags, returns verdict +
  * negotiation points + risks. No IO, no prisma imports.
  *
- * Verdict thresholds:
- *   overall >= 7.5 → accept
- *   overall >= 5   → negotiate
- *   else           → decline
+ * Verdict thresholds (Charles 2026-04-23, aligned to v0 spec at
+ * docs/contract-calculations.md §subsystem-proposal-scoring):
+ *   accept    if overall >= 7.5 AND risks.length <= 1
+ *   decline   if overall <  4   OR  risks.length >= 4
+ *   negotiate otherwise
+ *
+ * Pre-alignment decline threshold was 5 and accept had no risks guard,
+ * which produced false-accept verdicts on high-overall-but-risky deals
+ * and false-decline verdicts on mid-range overall scores with no risks.
  *
  * Negotiation / risk rules inferred from which dimensions scored low
  * and which lock-in penalties applied.
@@ -32,7 +37,11 @@ export interface RecommendationCommitments {
 // Thresholds for verdicts and for which low scores trigger specific
 // advice; exported so tests can assert against canonical values.
 export const VERDICT_ACCEPT_THRESHOLD = 7.5
-export const VERDICT_NEGOTIATE_THRESHOLD = 5
+/** v0 spec: decline when overall < 4 OR risks ≥ 4. */
+export const VERDICT_DECLINE_THRESHOLD = 4
+/** v0 spec: accept requires risks ≤ 1; decline triggers at risks ≥ 4. */
+export const VERDICT_ACCEPT_MAX_RISKS = 1
+export const VERDICT_DECLINE_MIN_RISKS = 4
 export const LOW_SCORE_THRESHOLD = 5 // costSavings / rebate / lockIn
 export const TCO_LOW_THRESHOLD = 7
 export const HIGH_MARKET_SHARE_THRESHOLD = 70
@@ -94,13 +103,22 @@ export function generateRecommendation(
     }
   }
 
+  // v0-aligned verdict: overall score AND risks-count both gate the
+  // outcome. Accept only when strong on both axes; decline when either
+  // axis looks bad.
   let verdict: Recommendation["verdict"]
-  if (scores.overall >= VERDICT_ACCEPT_THRESHOLD) {
+  if (
+    scores.overall >= VERDICT_ACCEPT_THRESHOLD &&
+    risks.length <= VERDICT_ACCEPT_MAX_RISKS
+  ) {
     verdict = "accept"
-  } else if (scores.overall >= VERDICT_NEGOTIATE_THRESHOLD) {
-    verdict = "negotiate"
-  } else {
+  } else if (
+    scores.overall < VERDICT_DECLINE_THRESHOLD ||
+    risks.length >= VERDICT_DECLINE_MIN_RISKS
+  ) {
     verdict = "decline"
+  } else {
+    verdict = "negotiate"
   }
 
   return { verdict, negotiationPoints, risks }
