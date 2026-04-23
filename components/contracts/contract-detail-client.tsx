@@ -45,6 +45,7 @@ import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual
 import { ContractPerformanceCharts } from "@/components/contracts/contract-performance-charts"
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
 import { ContractBundleMembershipsCard } from "@/components/contracts/contract-bundle-memberships-card"
+import { ContractPerformanceCard } from "@/components/contracts/contract-performance-card"
 import { ContractCapitalProjectionCard } from "@/components/contracts/contract-capital-projection-card"
 import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
@@ -617,6 +618,8 @@ export function ContractDetailClient({
           <ContractTieInCard contractId={contractId} />
           {/* v0 bundled-multi-product tie-in memberships card. */}
           <ContractBundleMembershipsCard contractId={contractId} />
+          {/* v0 §9 performance card — rebate utilization + renewal risk. */}
+          <ContractPerformanceCard contractId={contractId} />
           {/* Wave A: tie-in amortization + capital summary.
               Shows only for tie-in contracts that either link to a capital
               contract or carry capital fields on a term themselves. */}
