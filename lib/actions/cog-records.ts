@@ -131,6 +131,31 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
       createdBy: session.user.id,
     },
   })
+
+  // ─── W2.A.1 H-G — post-insert recompute ─────────────────────────
+  // Without this, the just-inserted row sits at matchStatus=pending
+  // forever (schema default) even if the vendor has an active
+  // contract with a matching vendorItemNo. Mirrors the pattern used by
+  // cog-import.ts: dynamic import to keep "use server" module graph
+  // clean, scoped to this row's vendor+facility. Skipped when vendorId
+  // is absent (nothing to recompute against).
+  if (record.vendorId) {
+    const { recomputeMatchStatusesForVendor } = await import(
+      "@/lib/cog/recompute"
+    )
+    try {
+      await recomputeMatchStatusesForVendor(prisma, {
+        vendorId: record.vendorId,
+        facilityId: record.facilityId,
+      })
+    } catch (err) {
+      console.warn(
+        `[createCOGRecord] recompute failed for vendor ${record.vendorId}`,
+        err,
+      )
+    }
+  }
+
   return serialize(record)
 }
 
