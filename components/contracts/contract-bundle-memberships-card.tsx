@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Layers } from "lucide-react"
-import { listBundles } from "@/lib/actions/bundles"
+import { getBundleMembershipsForContract } from "@/lib/actions/bundles"
 
 /**
  * Bundle-memberships card for the contract detail page. Shows every
@@ -29,18 +29,13 @@ export function ContractBundleMembershipsCard({
   contractId: string
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["bundles", contractId],
-    queryFn: () => listBundles(),
+    queryKey: ["bundle-memberships", contractId],
+    queryFn: () => getBundleMembershipsForContract(contractId),
   })
 
   if (isLoading || !data) return null
-  // Filter to bundles where this contract is primary OR a member.
-  // listBundles returns `_count.members` but not the member list, so
-  // this checks primary-contract only. Phase 2 can switch to a
-  // dedicated `getBundleMembershipsForContract` to cover the
-  // member-but-not-primary case; for now the common case is primary.
-  const matches = data.filter((b) => b.primaryContract.id === contractId)
-  if (matches.length === 0) return null
+  if (data.length === 0) return null
+  const matches = data
 
   return (
     <Card>
@@ -65,6 +60,12 @@ export function ContractBundleMembershipsCard({
                 </span>
                 <Badge variant="outline" className="text-xs">
                   {b.complianceMode}
+                </Badge>
+                <Badge
+                  variant={b.role === "primary" ? "default" : "secondary"}
+                  className="text-xs"
+                >
+                  {b.role === "primary" ? "primary" : "member"}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">

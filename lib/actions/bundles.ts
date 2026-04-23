@@ -105,6 +105,53 @@ export async function getBundle(bundleId: string) {
   }
 }
 
+/**
+ * All bundles the given contract participates in, flagged as
+ * primary-vs-member. Used by the contract-detail memberships card so
+ * member-but-not-primary relationships are surfaced (cross-vendor
+ * bundles especially — where the contract isn't the primary).
+ */
+export async function getBundleMembershipsForContract(contractId: string) {
+  try {
+    const { facility } = await requireFacility()
+    const bundles = await prisma.tieInBundle.findMany({
+      where: {
+        OR: [
+          { primaryContractId: contractId },
+          { members: { some: { contractId } } },
+        ],
+        primaryContract: {
+          OR: [
+            { facilityId: facility.id },
+            { contractFacilities: { some: { facilityId: facility.id } } },
+          ],
+        },
+      },
+      include: {
+        primaryContract: {
+          select: {
+            id: true,
+            name: true,
+            vendor: { select: { id: true, name: true } },
+          },
+        },
+        _count: { select: { members: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    })
+    const rows = bundles.map((b) => ({
+      ...b,
+      role: (b.primaryContractId === contractId ? "primary" : "member") as
+        | "primary"
+        | "member",
+    }))
+    return serialize(rows)
+  } catch (err) {
+    console.error("[getBundleMembershipsForContract]", err, { contractId })
+    throw err
+  }
+}
+
 // ─── Writes ────────────────────────────────────────────────────────
 
 export async function createBundle(input: CreateBundleInput) {
