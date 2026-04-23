@@ -135,11 +135,13 @@ function TierDisplay({
   currentSpend,
   currentTierNumber,
   isTopTier,
+  rebateMethod = "cumulative",
 }: {
   tier: ContractTier
   currentSpend?: number
   currentTierNumber?: number
   isTopTier?: boolean
+  rebateMethod?: "cumulative" | "marginal"
 }) {
   const rebateLabel = formatTierRebateLabel(
     tier.rebateType,
@@ -167,24 +169,28 @@ function TierDisplay({
           {
             tierNumber: tier.tierNumber,
             spendMin: Number(tier.spendMin),
+            spendMax: tier.spendMax ? Number(tier.spendMax) : null,
             rebateType: tier.rebateType,
             rebateValue: Number(tier.rebateValue),
           },
           currentSpend,
           currentTierNumber,
           Boolean(isTopTier && tier.tierNumber === currentTierNumber),
+          rebateMethod,
         )
       : tier.rebateType !== "percent_of_spend"
         ? formatTierDollarAnnotation(
             {
               tierNumber: tier.tierNumber,
               spendMin: Number(tier.spendMin),
+              spendMax: tier.spendMax ? Number(tier.spendMax) : null,
               rebateType: tier.rebateType,
               rebateValue: Number(tier.rebateValue),
             },
             0,
             -1,
             false,
+            rebateMethod,
           )
         : null
 
@@ -321,6 +327,7 @@ export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDispl
                             currentSpend={currentSpend}
                             currentTierNumber={currentTierNumber}
                             isTopTier={isTopTierReached}
+                            rebateMethod={(term.rebateMethod ?? "cumulative") as "cumulative" | "marginal"}
                           />
                         ))}
                       </div>

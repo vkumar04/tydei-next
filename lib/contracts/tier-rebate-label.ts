@@ -65,6 +65,7 @@ export function formatTierRebateUnitSuffix(rebateType: RebateType): string {
 export interface TierDollarAnnotationTier {
   tierNumber: number
   spendMin: number
+  spendMax?: number | null
   rebateType: RebateType
   rebateValue: number
 }
@@ -74,6 +75,7 @@ export function formatTierDollarAnnotation(
   currentSpend: number,
   currentTierNumber: number,
   isTopTier: boolean,
+  rebateMethod: "cumulative" | "marginal" = "cumulative",
 ): string | null {
   if (tier.rebateType !== "percent_of_spend") {
     const suffix = formatTierRebateUnitSuffix(tier.rebateType)
@@ -110,10 +112,26 @@ export function formatTierDollarAnnotation(
   }
 
   if (tier.tierNumber < currentTierNumber) {
-    // Tier below current — already unlocked. Show what it WOULD earn
-    // at this tier's rate for the current spend as a reference point.
-    const would = Math.max(0, currentSpend) * tier.rebateValue
-    return `projects ${formatCurrency(would)} at this tier's rate`
+    // Tier below current — already unlocked. Label differs by rebate
+    // method because the tier's actual contribution to earnings does.
+    //
+    // CUMULATIVE: once a higher tier is achieved, the whole spend earns
+    // the higher tier's rate — this tier is a threshold that was
+    // crossed, not an ongoing contributor. Label accordingly so users
+    // don't read it as "still earning $X at 5%" when they're actually
+    // earning at the higher tier's rate on the whole spend.
+    //
+    // MARGINAL: each tier earns its rate on its own spend slice. Show
+    // the slice's actual contribution: (min(spend, spendMax) - spendMin)
+    // × rate. That's the real dollar amount this tier produces.
+    if (rebateMethod === "marginal") {
+      const sliceMax = tier.spendMax ?? Number.POSITIVE_INFINITY
+      const sliceTop = Math.min(Math.max(0, currentSpend), sliceMax)
+      const sliceAmount = Math.max(0, sliceTop - tier.spendMin)
+      const earned = sliceAmount * tier.rebateValue
+      return `earned ${formatCurrency(earned)} on this slice`
+    }
+    return `achieved — superseded by tier ${currentTierNumber} rate`
   }
 
   // Above current: unlock distance

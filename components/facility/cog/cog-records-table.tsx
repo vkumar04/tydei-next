@@ -82,6 +82,7 @@ export function COGRecordsTable({
 }: COGRecordsTableProps) {
   const [vendorFilter, setVendorFilter] = useState<string>("")
   const [matchFilter, setMatchFilter] = useState<MatchFilterValue>("all")
+  const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
   const pageSize = 50
   const [manualOpen, setManualOpen] = useState(false)
@@ -97,6 +98,7 @@ export function COGRecordsTable({
     ...(matchFilter !== "all" && { matchStatus: matchFilter }),
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
+    ...(search.trim() && { search: search.trim() }),
     page,
     pageSize,
   }
@@ -204,12 +206,23 @@ export function COGRecordsTable({
         <DataTable
           columns={columns}
           data={filteredRecords}
-          searchKey="inventoryDescription"
-          searchPlaceholder="Search by description, vendor item, or inventory number..."
           isLoading={isLoading}
           pagination={false}
           filterComponent={
             <>
+              {/* Server-side search — hits all records, not just the
+                  current page. Previously used DataTable's `searchKey`
+                  which is client-side and only filtered the visible
+                  page, misleading users on large datasets. */}
+              <Input
+                placeholder="Search description, vendor item, or inventory #..."
+                value={search}
+                onChange={(e) => {
+                  setPage(1)
+                  setSearch(e.target.value)
+                }}
+                className="w-[320px]"
+              />
               <Select
                 value={vendorFilter || "all"}
                 onValueChange={(v) => {

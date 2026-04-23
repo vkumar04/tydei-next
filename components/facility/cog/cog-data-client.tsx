@@ -69,6 +69,11 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
       )
       refetchStats()
       qc.invalidateQueries({ queryKey: ["cog-records"] })
+      // Rematch flips matchStatus on COGRecord rows, which changes the
+      // contract-detail "On vs Off Contract Spend" aggregates. Without
+      // this invalidation the contract page keeps serving cached $0
+      // even after the COG page shows rows correctly classified.
+      qc.invalidateQueries({ queryKey: ["contracts"] })
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Matching failed")
@@ -98,6 +103,9 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
       refetchStats()
       qc.invalidateQueries({ queryKey: ["cog"] })
       qc.invalidateQueries({ queryKey: ["cog-records"] })
+      // Backfill enrichment also flips matchStatus and contractId on
+      // COG rows, which the contract-detail aggregates depend on.
+      qc.invalidateQueries({ queryKey: ["contracts"] })
     },
     onError: (e) => {
       toast.error(e instanceof Error ? e.message : "Backfill failed")

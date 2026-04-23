@@ -21,7 +21,10 @@ export type ContractFilters = z.input<typeof contractFiltersSchema>
 
 // ─── Create Contract Schema ──────────────────────────────────────
 
-export const createContractSchema = z.object({
+// Base fields — factored out so `.partial()` for updateContractSchema
+// works (zod refines block .partial()). Keep the refine on the create
+// schema only; updates can legitimately ship a partial payload.
+const createContractBase = z.object({
   name: z.string().min(1, "Contract name is required"),
   contractNumber: z.string().optional(),
   vendorId: z.string().min(1, "Vendor is required"),
@@ -76,10 +79,27 @@ export const createContractSchema = z.object({
   idempotencyKey: z.string().min(1).optional(),
 })
 
+export const createContractSchema = createContractBase.refine(
+  // Contract Total is the lifetime ceiling; Annual Value is at most
+  // one year of that ceiling. A multi-year contract has
+  // totalValue = annualValue × years, so annual > total is
+  // definitionally impossible. Catches stale auto-compute that
+  // doesn't re-fire after the user manually edits one of the two.
+  (v) => v.annualValue <= v.totalValue + 0.01,
+  {
+    message: "Annual Value cannot exceed Contract Total. For a multi-year contract, Contract Total should be Annual × years.",
+    path: ["annualValue"],
+  },
+)
+
 export type CreateContractInput = z.infer<typeof createContractSchema>
 
 // ─── Update Contract Schema ──────────────────────────────────────
 
-export const updateContractSchema = createContractSchema.partial()
+// Reason for base+refine split: zod forbids .partial() on schemas with
+// refinements. Update path therefore uses the unrefined base — callers
+// that need the annual≤total rule should pass the full object through
+// createContractSchema.
+export const updateContractSchema = createContractBase.partial()
 
 export type UpdateContractInput = z.infer<typeof updateContractSchema>
