@@ -1019,13 +1019,22 @@ export function NewContractClient({
           >
             Save as Draft
           </Button>
-          <Button onClick={handleSubmit} disabled={createMutation.isPending}>
+          <Button
+            onClick={handleSubmit}
+            disabled={createMutation.isPending}
+            className="min-w-[10rem]"
+          >
             {createMutation.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
             ) : (
-              <Save className="mr-2 h-4 w-4" />
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Create Contract
+              </>
             )}
-            {createMutation.isPending ? "Creating..." : "Create Contract"}
           </Button>
         </div>
       </div>
