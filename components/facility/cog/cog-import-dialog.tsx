@@ -642,35 +642,45 @@ export function COGImportDialog({
                 <p className="text-xs text-muted-foreground">Errors</p>
               </div>
             </div>
+            {/* Alignment: each card is the same height, the big number
+                anchors at the top of the body, and every card carries a
+                one-line subtitle (even if it's just `—`) so the three
+                numbers sit at identical baselines. Previously only the
+                middle card had a subtitle, leaving the outer two
+                visually taller and the numbers misaligned. */}
             <div className="grid gap-3 sm:grid-cols-3">
-              <Card>
-                <CardHeader>
+              <Card className="flex flex-col">
+                <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Records imported</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{result.imported}</p>
+                <CardContent className="flex-1 space-y-1">
+                  <p className="text-2xl font-bold leading-tight">{result.imported}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {result.skipped} skipped · {result.errors} errors
+                  </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">
-                    Matched to contracts
-                  </CardTitle>
+              <Card className="flex flex-col">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Matched to contracts</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{result.matched ?? 0}</p>
+                <CardContent className="flex-1 space-y-1">
+                  <p className="text-2xl font-bold leading-tight">{result.matched ?? 0}</p>
                   <p className="text-xs text-muted-foreground">
                     {result.unmatched ?? 0} unmatched
                   </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader>
+              <Card className="flex flex-col">
+                <CardHeader className="pb-2">
                   <CardTitle className="text-sm">On-contract rate</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">
+                <CardContent className="flex-1 space-y-1">
+                  <p className="text-2xl font-bold leading-tight">
                     {((result.onContractRate ?? 0) * 100).toFixed(1)}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {result.matched ?? 0} of {result.imported} imported
                   </p>
                 </CardContent>
               </Card>
