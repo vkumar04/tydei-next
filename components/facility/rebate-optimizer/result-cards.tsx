@@ -54,15 +54,15 @@ export function ResultCards({
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {/* Projected Rebate */}
-      <Card className="border-l-4 border-l-emerald-500">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
             Projected Rebate
-            <DollarSign className="h-4 w-4 text-emerald-500/60" />
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+          <p className="text-2xl font-semibold tabular-nums">
             {formatCurrency(projectedRebate)}
           </p>
           {rebateDelta > 0 ? (
@@ -78,15 +78,15 @@ export function ResultCards({
       </Card>
 
       {/* Current Tier */}
-      <Card className="border-l-4 border-l-blue-500">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
             Current Tier
-            <Layers className="h-4 w-4 text-blue-500/60" />
+            <Layers className="h-4 w-4 text-muted-foreground" />
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-bold">
+          <p className="text-2xl font-semibold">
             {currentTierNumber !== null ? `Tier ${currentTierNumber}` : "Below Tier 1"}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
@@ -107,15 +107,15 @@ export function ResultCards({
       </Card>
 
       {/* Gap to Next Tier */}
-      <Card className="border-l-4 border-l-amber-500">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
             Gap to Next Tier
-            <Target className="h-4 w-4 text-amber-500/60" />
+            <Target className="h-4 w-4 text-muted-foreground" />
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-bold">{formatCurrency(gap)}</p>
+          <p className="text-2xl font-semibold tabular-nums">{formatCurrency(gap)}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {reachesNextTier
               ? "Scenario reaches next tier"
@@ -127,11 +127,11 @@ export function ResultCards({
       </Card>
 
       {/* Optimal Scenario */}
-      <Card className="border-l-4 border-l-purple-500">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
             Optimal Scenario
-            <Sparkles className="h-4 w-4 text-purple-500/60" />
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
           </CardTitle>
         </CardHeader>
         <CardContent>
