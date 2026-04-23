@@ -70,13 +70,23 @@ export function enrichCOGRecord(
       // savingsAmount for a variance record: (contract - actual) × quantity.
       // If facility overpaid (variancePercent > 0), savings will be negative.
       const savings = (result.contractPrice - record.unitCost) * record.quantity
+      // Clamp to the `Decimal(6,2)` range the schema allows. Real-world data
+      // occasionally has extreme mismatches (placeholder $0 contract prices,
+      // wildly stale XLSX prices, etc.) that compute to millions-of-percent
+      // variance — the field overflows and the whole pipeline fails. Clamping
+      // preserves the signal ("very far off") without crashing the recompute.
+      const VARIANCE_CLAMP = 9999.99
+      const clampedVariance = Math.max(
+        -VARIANCE_CLAMP,
+        Math.min(VARIANCE_CLAMP, result.variancePercent),
+      )
       return {
         matchStatus: "price_variance",
         contractId: result.contractId,
         contractPrice: result.contractPrice,
         isOnContract: false, // variance means NOT on contract cleanly
         savingsAmount: savings,
-        variancePercent: result.variancePercent,
+        variancePercent: clampedVariance,
       }
     }
   }
