@@ -157,7 +157,20 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
             ),
           )
           imported += toOverwrite.length
-        } catch {
+        } catch (err) {
+          // Charles W2.C-B: never swallow the Prisma exception. The
+          // error counter is visible to the user; the server log is
+          // the only place ops can learn what actually broke.
+          console.error("[bulkImportCOGRecords] batch update failed", {
+            error: err,
+            batchSize: toOverwrite.length,
+            sample: toOverwrite.slice(0, 2).map(({ record }) => ({
+              vendorName: record.vendorName,
+              vendorItemNo: record.vendorItemNo,
+              inventoryNumber: record.inventoryNumber,
+              transactionDate: record.transactionDate,
+            })),
+          })
           errors += toOverwrite.length
         }
       }
@@ -169,7 +182,19 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
         })
         imported += result.count
       }
-    } catch {
+    } catch (err) {
+      // Charles W2.C-B: see note above. Surface the actual failure so
+      // ops can debug '144 errors, 0 imported' without guessing.
+      console.error("[bulkImportCOGRecords] batch failed", {
+        error: err,
+        batchSize: batch.length,
+        sample: batch.slice(0, 2).map((record) => ({
+          vendorName: record.vendorName,
+          vendorItemNo: record.vendorItemNo,
+          inventoryNumber: record.inventoryNumber,
+          transactionDate: record.transactionDate,
+        })),
+      })
       errors += batch.length
     }
   }
