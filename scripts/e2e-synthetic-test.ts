@@ -1910,6 +1910,35 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
     failures.push({ where: "v0 SLA penalty", detail: JSON.stringify(sla) })
   }
 
+  // ─── Tydei vs v0 — expiration severity parity ────────────────────
+  // Tydei's synthesizer previously used 30/60 thresholds; now aligned
+  // to v0's 7/14/30 bands (collapsed to tydei's 3-level severity).
+  const { classifyExpirationSeverity } = await import(
+    "@/lib/alerts/synthesizer"
+  )
+  const expirationCases: Array<[number, "high" | "medium" | "low"]> = [
+    [0, "high"],    // expires today
+    [5, "high"],    // v0 critical band
+    [7, "high"],
+    [10, "high"],   // v0 high band
+    [14, "high"],
+    [15, "medium"], // v0 warning band
+    [25, "medium"],
+    [30, "medium"],
+    [31, "low"],    // outside v0 critical/high/warning
+    [60, "low"],
+    [90, "low"],
+  ]
+  for (const [days, expected] of expirationCases) {
+    const got = classifyExpirationSeverity(days)
+    if (got !== expected) {
+      failures.push({
+        where: "tydei vs v0 expiration severity",
+        detail: `${days} days → want ${expected}, got ${got}`,
+      })
+    }
+  }
+
   // ─── v0 Alerts ──────────────────────────────────────────────────
   const {
     v0ExpirationSeverity,

@@ -294,6 +294,28 @@ function synthOffContract(input: SynthInput): {
 
 // ─── Rule 2: expiring_contract ───────────────────────────────────
 
+/**
+ * Classify an expiring-contract alert's severity by days remaining.
+ *
+ * Aligned to v0 spec (docs/contract-calculations.md §10
+ * `CONTRACT_EXPIRING`):
+ *   v0 critical ≤ 7   → tydei "high"
+ *   v0 high     ≤ 14  → tydei "high" (tydei has no "critical" level)
+ *   v0 warning  ≤ 30  → tydei "medium"
+ *   v0 none     > 30  → tydei "low" (within the 90-day alert window)
+ *
+ * Pre-2026-04-23 this bucket used 30/60 thresholds ("high" up to 30,
+ * "medium" up to 60) which disagreed with v0 and over-weighted mid-
+ * range alerts. Oracle parity check in e2e-synthetic-test.ts pins this.
+ */
+export function classifyExpirationSeverity(
+  daysRemaining: number,
+): SynthAlert["severity"] {
+  if (daysRemaining <= 14) return "high"
+  if (daysRemaining <= 30) return "medium"
+  return "low"
+}
+
 function synthExpiringContract(input: SynthInput, now: Date): {
   create: SynthAlert[]
   keepKeys: Set<string>
@@ -310,8 +332,7 @@ function synthExpiringContract(input: SynthInput, now: Date): {
     keepKeys.add(dedupeKey)
     if (findExistingByDedupe(input.existingAlerts, dedupeKey)) continue
 
-    const severity: SynthAlert["severity"] =
-      days <= 30 ? "high" : days <= 60 ? "medium" : "low"
+    const severity = classifyExpirationSeverity(days)
 
     const meta: ExpiringContractMeta & { dedupeKey: string } = {
       contract_name: c.name,
