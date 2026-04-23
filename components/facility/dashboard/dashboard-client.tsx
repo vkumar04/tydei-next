@@ -3,14 +3,18 @@
 /**
  * Facility dashboard — client orchestrator.
  *
- * The server component (`app/dashboard/page.tsx`) fetches initial data in
- * parallel via the new dashboard-rewrite actions and passes it down.
- * This client component hydrates the three payloads into TanStack Query
- * so the rest of the app's mutation `onSuccess` handlers can invalidate
- * and refetch just the dashboard slices they touched.
+ * 2026-04-22 redesign — Pattern 1 (hero + tabbed details), matching the
+ * Analysis, Rebate Optimizer, AI Assistant, and Contracts pages:
  *
- * Keep this orchestrator ≤200 lines — presentation lives in the per-
- * section components.
+ *   1. Page header (title + subtitle).
+ *   2. DashboardHero — elevated panel with 4 big numbers
+ *      (Active / Total Spend / Rebates / Pending Alerts).
+ *   3. Tabs — Overview, Spend, Alerts. One coherent panel at a time
+ *      instead of 8+ cards simultaneously.
+ *
+ * The server component (`app/dashboard/page.tsx`) fetches initial data
+ * in parallel and passes it down; hooks below seed TanStack Query so
+ * mutation `onSuccess` handlers can invalidate specific slices.
  */
 
 import { useQuery, type QueryClient, useQueryClient } from "@tanstack/react-query"
@@ -25,7 +29,8 @@ import {
   type DashboardChartsPayload,
 } from "@/lib/actions/dashboard/lifecycle"
 import { getContractStats } from "@/lib/actions/contracts"
-import { DashboardKPICards } from "./dashboard-kpi-cards"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DashboardHero } from "./dashboard-hero"
 import { DashboardLifecyclePie } from "./dashboard-lifecycle-pie"
 import { DashboardSpendTrendChart } from "./dashboard-spend-trend-chart"
 import { DashboardTopAlerts } from "./dashboard-top-alerts"
@@ -49,9 +54,6 @@ interface DashboardClientProps {
   chartMonths: number
 }
 
-/** Seed the React Query cache with the server-rendered payload so the
- *  initial render is a cache hit (no loading flash) and subsequent
- *  refetches / invalidations work via queryClient. */
 function seedCache(
   queryClient: QueryClient,
   facilityId: string,
@@ -79,13 +81,8 @@ export function DashboardClient({
 }: DashboardClientProps) {
   const queryClient = useQueryClient()
 
-  // Seed once per mount so server-rendered data hydrates the cache
-  // before any hook reads it. Effect ordering is fine — the hooks
-  // below pass `initialData` themselves too, belt-and-braces.
   useEffect(() => {
     seedCache(queryClient, facilityId, chartMonths, initialData)
-    // We intentionally only want this to run on initial mount — the
-    // initialData is snapshot data for this render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -122,7 +119,7 @@ export function DashboardClient({
         </p>
       </div>
 
-      <DashboardKPICards
+      <DashboardHero
         totalContracts={stats.totalContracts}
         activeContracts={kpi.activeContractsCount}
         totalContractValue={kpi.totalContractValue}
@@ -133,20 +130,38 @@ export function DashboardClient({
         pendingAlerts={kpi.pendingAlerts}
       />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <DashboardSpendTrendChart data={charts.monthlyTrend} />
-        </div>
-        <DashboardSpendProjection projection={kpi.spendProjection} />
-      </div>
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="spend">Spend</TabsTrigger>
+          <TabsTrigger value="alerts">Alerts</TabsTrigger>
+        </TabsList>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <DashboardLifecyclePie lifecycle={charts.lifecycle} />
-        <DashboardTopAlerts
-          alerts={kpi.topAlerts}
-          totalUnresolved={kpi.alertSummary.totalUnresolved}
-        />
-      </div>
+        <TabsContent value="overview" className="mt-4">
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <DashboardSpendTrendChart data={charts.monthlyTrend} />
+            </div>
+            <DashboardLifecyclePie lifecycle={charts.lifecycle} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="spend" className="mt-4">
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <DashboardSpendTrendChart data={charts.monthlyTrend} />
+            </div>
+            <DashboardSpendProjection projection={kpi.spendProjection} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="alerts" className="mt-4">
+          <DashboardTopAlerts
+            alerts={kpi.topAlerts}
+            totalUnresolved={kpi.alertSummary.totalUnresolved}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
