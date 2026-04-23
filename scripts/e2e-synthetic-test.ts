@@ -1263,6 +1263,42 @@ async function tieInAndCollectionDateCheck(
     }
   }
 
+  // ─── Bug 16 — Greedy column mapping, no double-assignment ───
+  // Charles's 21,377 imported COG rows all had vendorItemNo set to the
+  // vendor NAME ("ARTHREX INC") because the old first-match mapper let
+  // the single-word "Vendor" header serve both `vendorName` AND
+  // `refNumber` (which has label "Catalog / Product Reference / Vendor
+  // Item Number"). Result: 0 on-contract matches by item number.
+  // Guard by asserting both targets resolve to the correct headers.
+  const cogMappingTargets = [
+    { key: "vendorName", label: "Vendor / Supplier Name", required: true },
+    {
+      key: "refNumber",
+      label: "Catalog / Product Reference / Vendor Item Number",
+      required: false,
+    },
+  ]
+  const realWorldHeaders = [
+    "Purchase Order Number",
+    "Vendor",
+    "Vendor Item Number",
+    "Inventory Description",
+    "Date Ordered",
+  ]
+  const resolved = localFallbackMap(realWorldHeaders, cogMappingTargets)
+  if (resolved.vendorName !== "Vendor") {
+    failures.push({
+      where: "cog-csv greedy mapping",
+      detail: `vendorName should map to "Vendor", got ${resolved.vendorName}`,
+    })
+  }
+  if (resolved.refNumber !== "Vendor Item Number") {
+    failures.push({
+      where: "cog-csv greedy mapping",
+      detail: `refNumber should map to "Vendor Item Number", got ${resolved.refNumber}`,
+    })
+  }
+
   // Cleanup — these rows are under the E2E_<runId>_ prefix through the
   // parent contract, so the main cleanup sweep picks them up, but we
   // nuke them explicitly here so a mid-run crash still tidies.

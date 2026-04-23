@@ -66,6 +66,7 @@ interface CogReport {
   imported: number
   skipped: number
   multiplierVariance: number
+  withVendorItemNo: number
   sampleRow?: unknown
 }
 
@@ -93,6 +94,7 @@ function cogCsv(path: string): CogReport {
       imported: 0,
       skipped: 0,
       multiplierVariance: 0,
+      withVendorItemNo: 0,
     }
   }
   const text = readFileSync(path, "utf8")
@@ -106,6 +108,7 @@ function cogCsv(path: string): CogReport {
   let imported = 0
   let skipped = 0
   let multiplierVariance = 0
+  let withVendorItemNo = 0
   let sampleRow: unknown = undefined
   for (const row of rows) {
     const vendorName = get(row, mapping, "vendorName")
@@ -123,10 +126,16 @@ function cogCsv(path: string): CogReport {
     const unitCost = parseMoney(get(row, mapping, "unitCost"))
     const explicit = parseMoney(get(row, mapping, "extended"))
     const extended = explicit > 0 ? explicit : unitCost * quantity * multiplier
+    // Mirror cog-csv-import.ts line 119: vendorItemNo = refNumber || undefined.
+    // Tracking this count flags the class of zero-match bugs we saw on
+    // Lighthouse Surgical Center (21,377 rows, 0 vendorItemNo populated).
+    const refNumber = get(row, mapping, "refNumber")
+    if (refNumber) withVendorItemNo++
     if (!sampleRow) {
       sampleRow = {
         vendor: vendorName,
         date: transactionDate.toISOString().slice(0, 10),
+        vendorItemNo: refNumber || null,
         qty: quantity,
         multiplier,
         unitCost,
@@ -145,6 +154,7 @@ function cogCsv(path: string): CogReport {
     imported,
     skipped,
     multiplierVariance,
+    withVendorItemNo,
     sampleRow,
   }
 }
@@ -229,6 +239,14 @@ async function main() {
       console.log(
         `  multiplier !=1 on ${r.multiplierVariance}/${r.imported} rows`,
       )
+      console.log(
+        `  vendorItemNo populated on ${r.withVendorItemNo}/${r.imported} rows`,
+      )
+      if (r.withVendorItemNo === 0 && r.imported > 0) {
+        console.log(
+          `  ⚠ NO vendorItemNo values — on-contract matching by item number will fail.`,
+        )
+      }
       if (r.sampleRow) console.log(`  sample:`, r.sampleRow)
     } else {
       console.log(`  rows=${r.rows} itemsBuilt=${r.imported}`)
@@ -249,7 +267,11 @@ async function main() {
   }
 
   const anyFailure = reports.some(
-    (r) => r.exists && r.kind === "cog" && r.unmappedRequired.length > 0,
+    (r) =>
+      r.exists &&
+      r.kind === "cog" &&
+      (r.unmappedRequired.length > 0 ||
+        (r.imported > 0 && r.withVendorItemNo === 0)),
   )
   if (anyFailure) {
     console.log("RESULT: FAIL")

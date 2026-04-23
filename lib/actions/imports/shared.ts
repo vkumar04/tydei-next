@@ -88,32 +88,88 @@ export async function mapColumnsWithAI(
 
 const NORM = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
 
+/**
+ * Score a header against a target. Higher = better.
+ *  3 — exact normalized match with key or label
+ *  2 — label contains the normalized header (e.g. header "Vendor" fits
+ *      the label "Vendor / Supplier Name"), or vice versa
+ *  1 — key substring (key is usually a terser identifier)
+ *  0 — no match
+ */
+function scoreHeaderAgainstField(
+  normalizedHeader: string,
+  normalizedKey: string,
+  normalizedLabel: string,
+): number {
+  if (normalizedHeader === normalizedKey) return 3
+  if (normalizedHeader === normalizedLabel) return 3
+  if (
+    normalizedHeader.length >= 3 &&
+    (normalizedLabel.includes(normalizedHeader) ||
+      normalizedHeader.includes(normalizedLabel))
+  ) {
+    return 2
+  }
+  if (
+    normalizedKey.length >= 3 &&
+    (normalizedHeader.includes(normalizedKey) ||
+      normalizedKey.includes(normalizedHeader))
+  ) {
+    return 1
+  }
+  return 0
+}
+
 export function localFallbackMap(
   headers: string[],
   targetFields: TargetField[],
 ): Record<string, string> {
-  const mapping: Record<string, string> = {}
-  for (const field of targetFields) {
+  // Charles 2026-04-23 — the prior mapper used `headers.find()` per
+  // target independently. That let a short, ambiguous header like
+  // "Vendor" match BOTH `vendorName` (label "Vendor / Supplier Name")
+  // AND `refNumber` (label "Catalog / Product Reference / Vendor Item
+  // Number") because "vendor" is a substring of each label. First-
+  // defined target won its header, BUT the later target's .find()
+  // didn't know the header was taken — so it happily matched the
+  // SAME header a second time. Result: vendorItemNo landed in
+  // refNumber too, clobbering the real Vendor Item Number column.
+  // We saw this on Lighthouse Surgical Center: 21,377 imported COG
+  // rows all had vendorItemNo = vendor name, 0 on-contract matches.
+  //
+  // Fix: score every (field, header) pair, then greedily pick the
+  // highest-score pairs first, marking used headers so no target
+  // double-consumes. Ties break by earlier-declared target.
+  interface Candidate {
+    fieldKey: string
+    header: string
+    score: number
+    fieldOrder: number
+  }
+  const candidates: Candidate[] = []
+  for (let i = 0; i < targetFields.length; i++) {
+    const field = targetFields[i]
     const k = NORM(field.key)
     const l = NORM(field.label)
-    const match = headers.find((h) => {
-      const n = NORM(h)
-      // Charles W2.C-C: the match must be symmetric. When a header is
-      // SHORT ("Vendor", "Date Ordered") and the target label is a
-      // LONG superset ("Vendor / Supplier Name", "Catalog / Product
-      // Reference / Vendor Item Number"), the header doesn't contain
-      // the label — but the label does contain the header. Check both
-      // directions so real-world CSVs don't silently drop columns.
-      return (
-        n === k ||
-        n === l ||
-        n.includes(k) ||
-        n.includes(l) ||
-        k.includes(n) ||
-        l.includes(n)
-      )
-    })
-    if (match) mapping[field.key] = match
+    for (const header of headers) {
+      const n = NORM(header)
+      const score = scoreHeaderAgainstField(n, k, l)
+      if (score > 0) {
+        candidates.push({ fieldKey: field.key, header, score, fieldOrder: i })
+      }
+    }
+  }
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.fieldOrder - b.fieldOrder
+  })
+
+  const mapping: Record<string, string> = {}
+  const usedHeaders = new Set<string>()
+  for (const c of candidates) {
+    if (mapping[c.fieldKey]) continue
+    if (usedHeaders.has(c.header)) continue
+    mapping[c.fieldKey] = c.header
+    usedHeaders.add(c.header)
   }
   return mapping
 }
