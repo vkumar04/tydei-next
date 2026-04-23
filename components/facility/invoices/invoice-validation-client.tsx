@@ -1,74 +1,40 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import {
-  AlertTriangle,
-  DollarSign,
-  Flag,
-  TrendingUp,
-  Plus,
-  Download,
-  Search,
-  Package,
-  Filter,
-  FileText,
-  Eye,
-  Check,
-  CheckCircle2,
-  ClipboardEdit,
-  X,
-  Upload,
-} from "lucide-react"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useMemo, useState } from "react"
+import { Flag } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { useInvoiceSummary, useInvoices } from "@/hooks/use-invoices"
+import { toast } from "sonner"
 import { InvoiceImportDialog } from "./invoice-import-dialog"
 import { InvoiceDisputeDialog } from "./invoice-dispute-dialog"
-import { useInvoiceSummary, useInvoices } from "@/hooks/use-invoices"
-import { formatCurrency, formatDate } from "@/lib/formatting"
-import { toast } from "sonner"
+import { InvoiceDetailsDialog } from "./invoice-details-dialog"
+import {
+  InvoiceValidationHero,
+  type InvoiceValidationHeroStats,
+} from "./invoice-validation-hero"
+import { InvoiceValidationControlBar } from "./invoice-validation-control-bar"
+import {
+  InvoiceDiscrepancyTable,
+  type InvoiceRow,
+} from "./invoice-discrepancy-table"
 
+/**
+ * Invoice Validation page orchestrator — hero + tabbed details.
+ *
+ * Layout (2026-04-22 redesign, mirrors the Rebate Optimizer / Financial
+ * Analysis pages):
+ *
+ *   1. Hero — four big-number KPIs (Total Invoices, Awaiting Review,
+ *      Flagged Variance, Recovered YTD) with a headline + status pill.
+ *   2. ControlBar — search, vendor filter, dispute-only toggle, and
+ *      Upload/Export CTAs. Tabs below own the status axis.
+ *   3. Tabs — Awaiting Review / Flagged Variances / Approved / Disputed
+ *      / All. Each tab renders the `InvoiceDiscrepancyTable`.
+ *
+ * Replaces the four `border-l-4 border-l-<color>` KPI cards +
+ * Monthly Recovery progress card + filter row + inline table.
+ */
 interface Vendor {
   id: string
   name: string
@@ -79,38 +45,7 @@ interface InvoiceValidationClientProps {
   vendors: Vendor[]
 }
 
-type DisputeStatus = "none" | "disputed" | "resolved" | "rejected"
-
-type InvoiceRow = {
-  id: string
-  invoiceNumber: string
-  vendor: { name: string }
-  invoiceDate: Date | string
-  totalInvoiceCost: number | string | null
-  totalContractCost: number
-  variance: number
-  variancePercent: number
-  status: string
-  flaggedCount: number
-  lineItemCount: number
-  disputeStatus?: DisputeStatus
-  disputeNote?: string | null
-}
-
-const statusColors: Record<string, string> = {
-  pending:
-    "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-  disputed:
-    "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-  resolved:
-    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-  verified:
-    "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
-  flagged:
-    "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-  validated:
-    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-}
+type TabValue = "awaiting" | "flagged" | "approved" | "disputed" | "all"
 
 export function InvoiceValidationClient({
   facilityId,
@@ -119,26 +54,15 @@ export function InvoiceValidationClient({
   const [importOpen, setImportOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [vendorFilter, setVendorFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
   const [disputeFilter, setDisputeFilter] = useState<"all" | "disputed">("all")
+  const [activeTab, setActiveTab] = useState<TabValue>("awaiting")
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([])
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(
-    null
+    null,
   )
   const [disputeDialogInvoice, setDisputeDialogInvoice] =
     useState<InvoiceRow | null>(null)
-  const [manualEntryOpen, setManualEntryOpen] = useState(false)
-  const [manualForm, setManualForm] = useState({
-    invoiceNumber: "",
-    vendorId: "",
-    facilityName: "",
-    amount: "",
-    paymentTerms: "NET30",
-    notes: "",
-    lineItems: [] as { description: string; quantity: number; unitPrice: number }[],
-    currentItem: { description: "", quantity: 1, unitPrice: 0 },
-  })
 
   const { data: summary, isLoading: summaryLoading } =
     useInvoiceSummary(facilityId)
@@ -146,15 +70,15 @@ export function InvoiceValidationClient({
   const { data, isLoading: tableLoading } = useInvoices(facilityId, {
     facilityId,
     vendorId: vendorFilter === "all" ? undefined : vendorFilter,
-    status: statusFilter === "all" ? undefined : statusFilter,
   })
+
+  const invoices = (data?.invoices ?? []) as InvoiceRow[]
 
   const totalVariance = summary?.totalVariance ?? 0
   const variancePercent = summary?.variancePercent ?? 0
 
-  const invoices = (data?.invoices ?? []) as InvoiceRow[]
-
-  const filteredInvoices = useMemo(() => {
+  // ─── Base filter (search + dispute toggle) ─────────────────────
+  const searchFiltered = useMemo(() => {
     return invoices.filter((inv) => {
       const q = searchQuery.toLowerCase()
       const matchesSearch =
@@ -167,14 +91,49 @@ export function InvoiceValidationClient({
     })
   }, [invoices, searchQuery, disputeFilter])
 
-  const activeDisputeCount = useMemo(
-    () => invoices.filter((i) => i.disputeStatus === "disputed").length,
-    [invoices]
+  // ─── Per-tab slicing ──────────────────────────────────────────
+  const awaitingInvoices = useMemo(
+    () => searchFiltered.filter((i) => i.status === "pending"),
+    [searchFiltered],
+  )
+  const flaggedInvoices = useMemo(
+    () => searchFiltered.filter((i) => Math.abs(i.variance) > 0.01),
+    [searchFiltered],
+  )
+  const approvedInvoices = useMemo(
+    () =>
+      searchFiltered.filter(
+        (i) => i.status === "verified" || i.status === "validated",
+      ),
+    [searchFiltered],
+  )
+  const disputedInvoices = useMemo(
+    () =>
+      searchFiltered.filter(
+        (i) => i.disputeStatus === "disputed" || i.status === "disputed",
+      ),
+    [searchFiltered],
   )
 
+  // ─── Hero stats ───────────────────────────────────────────────
+  const heroStats = useMemo<InvoiceValidationHeroStats>(() => {
+    const flaggedVariance = invoices.reduce(
+      (sum, inv) => (inv.variance > 0 ? sum + inv.variance : sum),
+      0,
+    )
+    return {
+      totalInvoices: invoices.length,
+      awaitingReview: invoices.filter((i) => i.status === "pending").length,
+      flaggedVariance: flaggedVariance || totalVariance,
+      recoveredYTD: totalVariance > 0 ? totalVariance : 0,
+      variancePercent,
+    }
+  }, [invoices, totalVariance, variancePercent])
+
+  // ─── Action handlers ──────────────────────────────────────────
   const toggleSelectInvoice = (id: string) => {
     setSelectedInvoices((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     )
   }
 
@@ -200,570 +159,115 @@ export function InvoiceValidationClient({
     setSelectedInvoices([])
   }
 
-  const handleAddManualLineItem = () => {
-    const item = manualForm.currentItem
-    if (item.description && item.unitPrice > 0) {
-      setManualForm((prev) => ({
-        ...prev,
-        lineItems: [...prev.lineItems, { ...item }],
-        currentItem: { description: "", quantity: 1, unitPrice: 0 },
-        amount: (
-          [...prev.lineItems, item].reduce(
-            (sum, li) => sum + li.quantity * li.unitPrice,
-            0
-          )
-        ).toFixed(2),
-      }))
+  const handleToggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedInvoices(awaitingInvoices.map((i) => i.id))
+    } else {
+      setSelectedInvoices([])
     }
   }
 
-  const handleRemoveManualLineItem = (idx: number) => {
-    setManualForm((prev) => {
-      const newItems = prev.lineItems.filter((_, i) => i !== idx)
-      return {
-        ...prev,
-        lineItems: newItems,
-        amount: newItems
-          .reduce((sum, li) => sum + li.quantity * li.unitPrice, 0)
-          .toFixed(2),
-      }
-    })
-  }
-
-  const handleManualEntrySubmit = () => {
-    if (!manualForm.invoiceNumber || !manualForm.vendorId) {
-      toast.error("Please fill in required fields (invoice number and vendor)")
-      return
-    }
-    toast.success("Invoice submitted for validation", {
-      description: `Invoice ${manualForm.invoiceNumber} will be compared against contract pricing`,
-    })
-    setManualEntryOpen(false)
-    setManualForm({
-      invoiceNumber: "",
-      vendorId: "",
-      facilityName: "",
-      amount: "",
-      paymentTerms: "NET30",
-      notes: "",
-      lineItems: [],
-      currentItem: { description: "", quantity: 1, unitPrice: 0 },
-    })
-  }
-
-  const pendingInvoices = filteredInvoices.filter(
-    (i) => i.status === "pending"
+  const renderTable = (
+    rows: InvoiceRow[],
+    opts: { selectable?: boolean; emptyMessage?: string } = {},
+  ) => (
+    <InvoiceDiscrepancyTable
+      rows={rows}
+      loading={tableLoading}
+      selectable={opts.selectable ?? false}
+      selectedIds={selectedInvoices}
+      onToggleSelect={toggleSelectInvoice}
+      onToggleSelectAll={handleToggleSelectAll}
+      selectableRows={awaitingInvoices}
+      onViewDetails={handleViewDetails}
+      onDispute={handleDisputeInvoice}
+      onApprove={handleApproveInvoice}
+      emptyMessage={opts.emptyMessage}
+    />
   )
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Invoice Price Validation
-          </h1>
-          <p className="text-muted-foreground">
-            Automatically detect and recover pricing discrepancies
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Invoices
+      <InvoiceValidationHero stats={heroStats} loading={summaryLoading} />
+
+      <InvoiceValidationControlBar
+        vendors={vendors}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        vendorFilter={vendorFilter}
+        onVendorFilterChange={setVendorFilter}
+        disputeFilter={disputeFilter}
+        onDisputeFilterChange={setDisputeFilter}
+        onImportClick={() => setImportOpen(true)}
+        onExportClick={() => toast.info("Export coming soon")}
+      />
+
+      {selectedInvoices.length > 0 && (
+        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2">
+          <span className="text-sm text-muted-foreground">
+            {selectedInvoices.length} selected
+          </span>
+          <Button size="sm" onClick={handleBulkDispute}>
+            <Flag className="mr-2 h-4 w-4" />
+            Dispute Selected
           </Button>
-          <Button onClick={() => toast.info("Export coming soon")}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Report
-          </Button>
         </div>
-      </div>
+      )}
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="border-l-4 border-l-yellow-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Pending Review</p>
-                {summaryLoading ? (
-                  <Skeleton className="mt-1 h-7 w-16" />
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold">
-                      {pendingInvoices.length}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      invoices with discrepancies
-                    </p>
-                  </>
-                )}
-              </div>
-              <AlertTriangle className="h-8 w-8 text-yellow-500/50" />
-            </div>
-          </CardContent>
-        </Card>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as TabValue)}
+      >
+        <TabsList>
+          <TabsTrigger value="awaiting">
+            Awaiting Review ({awaitingInvoices.length})
+          </TabsTrigger>
+          <TabsTrigger value="flagged">
+            Flagged Variances ({flaggedInvoices.length})
+          </TabsTrigger>
+          <TabsTrigger value="approved">
+            Approved ({approvedInvoices.length})
+          </TabsTrigger>
+          <TabsTrigger value="disputed">
+            Disputed ({disputedInvoices.length})
+          </TabsTrigger>
+          <TabsTrigger value="all">All ({searchFiltered.length})</TabsTrigger>
+        </TabsList>
+        <TabsContent value="awaiting" className="mt-4">
+          {renderTable(awaitingInvoices, {
+            selectable: true,
+            emptyMessage: "No invoices awaiting review.",
+          })}
+        </TabsContent>
+        <TabsContent value="flagged" className="mt-4">
+          {renderTable(flaggedInvoices, {
+            emptyMessage: "No flagged variances.",
+          })}
+        </TabsContent>
+        <TabsContent value="approved" className="mt-4">
+          {renderTable(approvedInvoices, {
+            emptyMessage: "No approved invoices.",
+          })}
+        </TabsContent>
+        <TabsContent value="disputed" className="mt-4">
+          {renderTable(disputedInvoices, {
+            emptyMessage: "No disputed invoices.",
+          })}
+        </TabsContent>
+        <TabsContent value="all" className="mt-4">
+          {renderTable(searchFiltered, {
+            emptyMessage: "No invoices found.",
+          })}
+        </TabsContent>
+      </Tabs>
 
-        <Card className="border-l-4 border-l-red-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Variance</p>
-                {summaryLoading ? (
-                  <Skeleton className="mt-1 h-7 w-24" />
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                      {formatCurrency(totalVariance)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      avg {variancePercent.toFixed(1)}% over contract
-                    </p>
-                  </>
-                )}
-              </div>
-              <DollarSign className="h-8 w-8 text-red-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Active Disputes
-                </p>
-                {tableLoading ? (
-                  <Skeleton className="mt-1 h-7 w-16" />
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold">{activeDisputeCount}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      awaiting vendor response
-                    </p>
-                  </>
-                )}
-              </div>
-              <Flag className="h-8 w-8 text-blue-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-green-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Recovered YTD</p>
-                {summaryLoading ? (
-                  <Skeleton className="mt-1 h-7 w-24" />
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {formatCurrency(totalVariance > 0 ? totalVariance : 0)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      from resolved cases
-                    </p>
-                  </>
-                )}
-              </div>
-              <TrendingUp className="h-8 w-8 text-green-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="space-y-6">
-
-      {/* Recovery Progress */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">
-            Monthly Recovery Progress
-          </CardTitle>
-          <CardDescription>
-            Track your invoice validation performance
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-sm">
-              <span>Monthly Recovery Goal: $50,000</span>
-              <span className="font-medium">
-                {formatCurrency(totalVariance > 0 ? totalVariance : 0)}{" "}
-                recovered (
-                {totalVariance > 0
-                  ? Math.min(
-                      100,
-                      Math.round((totalVariance / 50000) * 100)
-                    )
-                  : 0}
-                %)
-              </span>
-            </div>
-            <Progress
-              value={
-                totalVariance > 0
-                  ? Math.min(100, (totalVariance / 50000) * 100)
-                  : 0
-              }
-              className="h-3"
-            />
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-green-500" />
-                <span>
-                  Recovered:{" "}
-                  {formatCurrency(totalVariance > 0 ? totalVariance : 0)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                <span>Pending: {formatCurrency(totalVariance)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-muted" />
-                <span>
-                  Remaining:{" "}
-                  {formatCurrency(
-                    Math.max(
-                      0,
-                      50000 - (totalVariance > 0 ? totalVariance * 2 : 0)
-                    )
-                  )}
-                </span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Filters and Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Invoice Discrepancies</CardTitle>
-            {selectedInvoices.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {selectedInvoices.length} selected
-                </span>
-                <Button size="sm" onClick={handleBulkDispute}>
-                  <Flag className="mr-2 h-4 w-4" />
-                  Dispute Selected
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Filters */}
-          <div className="flex flex-wrap gap-4 mb-6">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search invoices..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Select value={vendorFilter} onValueChange={setVendorFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Package className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Vendor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Vendors</SelectItem>
-                {vendors.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    {v.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="disputed">Disputed</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-                <SelectItem value="verified">Verified</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={disputeFilter}
-              onValueChange={(v) =>
-                setDisputeFilter(v as "all" | "disputed")
-              }
-            >
-              <SelectTrigger className="w-[180px]">
-                <Flag className="mr-2 h-4 w-4" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Invoices</SelectItem>
-                <SelectItem value="disputed">Disputed Only</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Table */}
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={
-                        pendingInvoices.length > 0 &&
-                        selectedInvoices.length === pendingInvoices.length
-                      }
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedInvoices(
-                            pendingInvoices.map((i) => i.id)
-                          )
-                        } else {
-                          setSelectedInvoices([])
-                        }
-                      }}
-                    />
-                  </TableHead>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Invoiced</TableHead>
-                  <TableHead className="text-right">Contract</TableHead>
-                  <TableHead className="text-right">Variance</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableLoading
-                  ? Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>
-                        {Array.from({ length: 9 }).map((_, j) => (
-                          <TableCell key={j}>
-                            <Skeleton className="h-4 w-full" />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  : filteredInvoices.length > 0
-                    ? filteredInvoices.map((invoice) => (
-                        <TableRow key={invoice.id}>
-                          <TableCell>
-                            {invoice.status === "pending" && (
-                              <Checkbox
-                                checked={selectedInvoices.includes(invoice.id)}
-                                onCheckedChange={() =>
-                                  toggleSelectInvoice(invoice.id)
-                                }
-                              />
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-medium">
-                                {invoice.invoiceNumber}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{invoice.vendor.name}</TableCell>
-                          <TableCell>
-                            {formatDate(invoice.invoiceDate)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatCurrency(
-                              Number(invoice.totalInvoiceCost ?? 0)
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatCurrency(invoice.totalContractCost)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {invoice.variance > 0.01 ? (
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="text-red-600 dark:text-red-400 font-medium">
-                                  +{formatCurrency(invoice.variance)}
-                                </span>
-                                <Badge variant="outline" className="text-xs">
-                                  +{invoice.variancePercent.toFixed(1)}%
-                                </Badge>
-                              </div>
-                            ) : invoice.variance < -0.01 ? (
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="text-green-600 dark:text-green-400 font-medium">
-                                  {formatCurrency(invoice.variance)}
-                                </span>
-                                <Badge variant="outline" className="text-xs">
-                                  {invoice.variancePercent.toFixed(1)}%
-                                </Badge>
-                              </div>
-                            ) : (
-                              <span className="text-green-600 dark:text-green-400">Match</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={statusColors[invoice.status] ?? "bg-muted text-muted-foreground"}>
-                              {invoice.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleViewDetails(invoice)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title={
-                                  invoice.disputeStatus === "disputed"
-                                    ? "Resolve dispute"
-                                    : "Flag as disputed"
-                                }
-                                onClick={() => handleDisputeInvoice(invoice)}
-                              >
-                                <Flag
-                                  className={
-                                    invoice.disputeStatus === "disputed"
-                                      ? "h-4 w-4 text-red-600 dark:text-red-400"
-                                      : "h-4 w-4"
-                                  }
-                                />
-                              </Button>
-                              {invoice.status === "pending" && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    handleApproveInvoice(invoice.id)
-                                  }
-                                >
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    : (
-                        <TableRow>
-                          <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                            No invoices found.
-                          </TableCell>
-                        </TableRow>
-                      )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      </div>
-
-      {/* Invoice Details Dialog */}
-      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Invoice {selectedInvoice?.invoiceNumber}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedInvoice?.vendor.name} -{" "}
-              {selectedInvoice
-                ? formatDate(selectedInvoice.invoiceDate)
-                : ""}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedInvoice && (
-            <div className="space-y-6">
-              {/* Summary */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">
-                    Total Invoiced
-                  </p>
-                  <p className="text-xl font-bold">
-                    {formatCurrency(
-                      Number(selectedInvoice.totalInvoiceCost ?? 0)
-                    )}
-                  </p>
-                </div>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">
-                    Contract Price
-                  </p>
-                  <p className="text-xl font-bold">
-                    {formatCurrency(selectedInvoice.totalContractCost)}
-                  </p>
-                </div>
-                <div className="p-4 rounded-lg bg-red-50 dark:bg-red-950/30">
-                  <p className="text-sm text-muted-foreground">Variance</p>
-                  <p className="text-xl font-bold text-red-600 dark:text-red-400">
-                    {selectedInvoice.variance > 0 ? "+" : ""}
-                    {formatCurrency(selectedInvoice.variance)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Line items info */}
-              <div className="text-sm text-muted-foreground">
-                {selectedInvoice.lineItemCount} line items |{" "}
-                {selectedInvoice.flaggedCount} flagged
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDetailsDialogOpen(false)}
-            >
-              Close
-            </Button>
-            {selectedInvoice?.status === "pending" && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  handleApproveInvoice(selectedInvoice.id)
-                  setDetailsDialogOpen(false)
-                }}
-              >
-                <Check className="mr-2 h-4 w-4" />
-                Approve
-              </Button>
-            )}
-            {selectedInvoice && (
-              <Button
-                onClick={() => {
-                  handleDisputeInvoice(selectedInvoice)
-                  setDetailsDialogOpen(false)
-                }}
-              >
-                <Flag className="mr-2 h-4 w-4" />
-                {selectedInvoice.disputeStatus === "disputed"
-                  ? "Resolve Dispute"
-                  : "Flag as Disputed"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <InvoiceDetailsDialog
+        open={detailsDialogOpen}
+        onOpenChange={setDetailsDialogOpen}
+        invoice={selectedInvoice}
+        onApprove={handleApproveInvoice}
+        onDispute={handleDisputeInvoice}
+      />
 
       {disputeDialogInvoice && (
         <InvoiceDisputeDialog
