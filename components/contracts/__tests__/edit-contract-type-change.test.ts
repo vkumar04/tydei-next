@@ -32,6 +32,12 @@ vi.mock("@/lib/db", () => ({
     contract: {
       update: updateContractMock,
       findUniqueOrThrow: findUniqueOrThrowMock,
+      // W2.A.1 H-B: updateContract re-reads the contract after update
+      // to build the multi-facility recompute set.
+      findUnique: vi.fn().mockResolvedValue({
+        facilityId: "fac-1",
+        contractFacilities: [],
+      }),
     },
     contractFacility: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),

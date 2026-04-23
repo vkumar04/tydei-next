@@ -103,9 +103,7 @@ describe("seedCOGRecords — post-seed recompute (W2.A.1 H-F)", () => {
     // @ts-expect-error — fake prisma shape is narrower than PrismaClient
     // but covers every call the seed actually makes.
     await seedCOGRecords(prisma, {
-      // @ts-expect-error — fake facility/vendor shapes
       facilities: f,
-      // @ts-expect-error — fake facility/vendor shapes
       vendors: v,
     })
 
