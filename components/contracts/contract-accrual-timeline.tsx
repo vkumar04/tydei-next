@@ -49,6 +49,21 @@ export function ContractAccrualTimeline({
   const latest = data.rows[data.rows.length - 1]
   const termLabels = data.termLabels ?? []
   const isMultiTerm = termLabels.length > 1
+  // Charles 2026-04-23 — column header advertises the reset cadence so
+  // users don't misread a quarterly-eval contract's cumulative as
+  // lifetime. `cumulativeReset` is undefined on empty-rows early returns
+  // and "lifetime" for multi-term contracts.
+  const resetLabel: Record<string, string> = {
+    monthly: "month-to-date",
+    quarterly: "quarter-to-date",
+    semi_annual: "half-to-date",
+    annual: "year-to-date",
+    lifetime: "lifetime",
+  }
+  const cumulativeHeader =
+    "cumulativeReset" in data && data.cumulativeReset
+      ? `Cumulative (${resetLabel[data.cumulativeReset] ?? "lifetime"})`
+      : "Cumulative"
 
   return (
     <Card>
@@ -77,7 +92,7 @@ export function ContractAccrualTimeline({
               <tr className="border-b">
                 <th className="py-2 text-left font-medium">Month</th>
                 <th className="py-2 text-right font-medium">Spend</th>
-                <th className="py-2 text-right font-medium">Cumulative</th>
+                <th className="py-2 text-right font-medium">{cumulativeHeader}</th>
                 <th className="py-2 text-center font-medium">Tier</th>
                 <th className="py-2 text-right font-medium">Rate</th>
                 <th className="py-2 text-right font-medium">Accrued</th>

@@ -199,13 +199,42 @@ export async function getAccrualTimeline(contractId: string) {
   const monthsTimeline =
     perTermResults[0]?.series.map((s) => s.month) ?? []
 
-  // Charles W1.X-B — `cumulativeSpend` is a running sum across months so
-  // the Accrual Timeline's Cumulative column carries forward through
-  // zero-spend tail months. Pre-fix it was set to the current month's
-  // `totalSpend`, so the column mirrored Spend and zero-spend rows
-  // showed $0 / —. The accumulator MUST live in the enclosing function
-  // scope — moving it inside the callback resets it per iteration.
+  // Charles 2026-04-23 — the Cumulative column previously ran a
+  // lifetime running sum across all months, which made a quarterly-
+  // eval contract look like tier qualification was using lifetime
+  // spend even though the engine's `windowSpend` already resets at
+  // each period boundary. Users (Charles, Preferred Supplier-Provider
+  // Rebate Agreement) flagged this as a math bug: "the spend resets
+  // it is not based on the cumulative at that point. So after the
+  // quarter they have to spend 200K to get to the next year."
+  //
+  // Fix the display to match the math: for single-term contracts we
+  // reset the cumulative at the same period boundaries the engine
+  // uses (monthly → every month; quarterly → at each calendar
+  // quarter; semi_annual → at H1/H2; annual → at year start). For
+  // multi-term contracts we keep the lifetime cumulative, since each
+  // term may run on a different cadence and there's no single correct
+  // reset point.
+  const primaryEval =
+    termsWithTiers.length === 1
+      ? termConfigs[0].evaluationPeriod
+      : ("lifetime" as const)
+  function periodKeyFor(month: string): string {
+    const [y, m] = month.split("-").map((n) => Number(n))
+    if (primaryEval === "monthly") return month
+    if (primaryEval === "quarterly") {
+      const q = Math.floor((m - 1) / 3) + 1
+      return `${y}-Q${q}`
+    }
+    if (primaryEval === "semi_annual") {
+      const h = m <= 6 ? 1 : 2
+      return `${y}-H${h}`
+    }
+    if (primaryEval === "annual") return `${y}`
+    return "lifetime"
+  }
   let runningCumulative = 0
+  let currentPeriodKey: string | null = null
   const rows: MultiTermTimelineRow[] = monthsTimeline.map((month, i) => {
     let totalSpend = 0
     let totalAccrued = 0
@@ -244,6 +273,11 @@ export async function getAccrualTimeline(contractId: string) {
       }
     }
 
+    const pKey = periodKeyFor(month)
+    if (pKey !== currentPeriodKey) {
+      currentPeriodKey = pKey
+      runningCumulative = 0
+    }
     runningCumulative += totalSpend
     return {
       month,
@@ -256,6 +290,15 @@ export async function getAccrualTimeline(contractId: string) {
     }
   })
 
+  // Tell the UI what reset cadence the Cumulative column uses so the
+  // header can label it "Cumulative (quarter-to-date)" etc.
+  const cumulativeReset:
+    | "monthly"
+    | "quarterly"
+    | "semi_annual"
+    | "annual"
+    | "lifetime" = primaryEval
+
   // Per-term labels so the Accrual Timeline UI can render each term's
   // contribution on multi-term contracts instead of collapsing to the
   // "best" term. Without this, a contract with a spend rebate + a
@@ -267,7 +310,7 @@ export async function getAccrualTimeline(contractId: string) {
     evaluationPeriod: t.evaluationPeriod ?? "annual",
   }))
 
-  return serialize({ rows, method, termLabels })
+  return serialize({ rows, method, termLabels, cumulativeReset })
 }
 
 // Local month-key helpers duplicated from `lib/contracts/accrual.ts` —

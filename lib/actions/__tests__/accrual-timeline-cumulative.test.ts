@@ -1,21 +1,26 @@
 /**
- * Charles W1.X-B — Accrual Timeline cumulative column.
+ * Charles W1.X-B + 2026-04-23 refinement — Accrual Timeline Cumulative
+ * column semantics.
  *
- * Pins the "Cumulative" column semantics on two surfaces:
+ * History:
+ *   W1.X-B: fixed a bug where `cumulativeSpend` was set to the current
+ *   month's spend so zero-spend tail months showed $0 instead of
+ *   carrying the running total.
+ *   2026-04-23: Charles flagged that for a quarterly-eval contract, the
+ *   display carrying a LIFETIME cumulative misleadingly suggests the
+ *   tier math uses lifetime spend. The engine already resets at period
+ *   boundaries (`windowSpend` in `buildMonthlyAccruals`); the display
+ *   now matches — cumulative resets at the same boundaries the engine
+ *   uses for tier qualification.
  *
- *   1. The pure builder `buildMonthlyAccruals` in `lib/contracts/accrual.ts`
- *      already computes a running cumulative correctly — these cases lock
- *      that contract in so a future refactor can't regress it.
- *   2. The server action `getAccrualTimeline` in
- *      `lib/actions/contracts/accrual.ts` aggregates per-term rows into
- *      one timeline. Pre-fix, it set `cumulativeSpend = totalSpend` (the
- *      current month's spend), so the Cumulative column mirrored Spend
- *      and zero-spend tail months showed $0. Post-fix, it accumulates
- *      across months so the label "Cumulative" is truthful.
+ * Rules (single-term contracts):
+ *   monthly    → cumulative = THIS month's spend (resets every month)
+ *   quarterly  → resets at each calendar quarter (Jan, Apr, Jul, Oct)
+ *   semi-ann.  → resets at H1 (Jan) and H2 (Jul)
+ *   annual     → resets at calendar-year start
  *
- * If the action-level assertion fails with actual `[100, 0, 50]` vs
- * expected `[100, 100, 150]`, the W1.X-B fix has regressed — chase the
- * `runningCumulative` accumulator in `getAccrualTimeline`, not this test.
+ * Multi-term contracts keep lifetime cumulative since different terms
+ * can run on different cadences.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { buildMonthlyAccruals } from "@/lib/contracts/accrual"
@@ -113,47 +118,61 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+function seedContract(evaluationPeriod: string) {
+  contractFindUniqueOrThrowMock.mockResolvedValue({
+    id: "c-1",
+    vendorId: "v-1",
+    facilityId: "fac-1",
+    contractType: "usage",
+    effectiveDate: EFFECTIVE,
+    expirationDate: EXPIRATION,
+    paymentCadence: "monthly",
+    terms: [
+      {
+        id: "term-1",
+        appliesTo: "all_products",
+        categories: [],
+        rebateMethod: "cumulative" as const,
+        evaluationPeriod,
+        effectiveStart: EFFECTIVE,
+        effectiveEnd: EXPIRATION,
+        tiers: [
+          {
+            tierNumber: 1,
+            tierName: null,
+            spendMin: 0,
+            spendMax: null,
+            rebateValue: 0.05, // fraction — engine scales at the boundary
+            rebateType: "percent_of_spend",
+          },
+        ],
+      },
+    ],
+  })
+  cogFindManyMock.mockResolvedValue(COG_ROWS)
+}
+
 describe("getAccrualTimeline cumulative column", () => {
-  it("returns running cumulative, not per-month spend", async () => {
-    contractFindUniqueOrThrowMock.mockResolvedValue({
-      id: "c-1",
-      vendorId: "v-1",
-      facilityId: "fac-1",
-      contractType: "usage",
-      effectiveDate: EFFECTIVE,
-      expirationDate: EXPIRATION,
-      paymentCadence: "monthly",
-      terms: [
-        {
-          id: "term-1",
-          appliesTo: "all_products",
-          categories: [],
-          rebateMethod: "cumulative" as const,
-          evaluationPeriod: "monthly",
-          effectiveStart: EFFECTIVE,
-          effectiveEnd: EXPIRATION,
-          tiers: [
-            {
-              tierNumber: 1,
-              tierName: null,
-              spendMin: 0,
-              spendMax: null,
-              rebateValue: 0.05, // fraction — engine scales at the boundary
-              rebateType: "percent_of_spend",
-            },
-          ],
-        },
-      ],
-    })
-
-    cogFindManyMock.mockResolvedValue(COG_ROWS)
-
+  it("annual eval: carries cumulative across months in the same year", async () => {
+    seedContract("annual")
     const result = (await getAccrualTimeline("c-1")) as TimelineResult
-
-    // Before the fix, cumulativeSpend === spend for every row.
-    // After the fix, cumulativeSpend is the running sum, carrying
-    // forward through the zero-spend February row.
     expect(result.rows.map((r) => r.spend)).toEqual([100, 0, 50])
+    // All 3 months live in calendar-year 2025, so no reset.
+    expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([100, 100, 150])
+  })
+
+  it("monthly eval: cumulative resets every month (matches tier math)", async () => {
+    seedContract("monthly")
+    const result = (await getAccrualTimeline("c-1")) as TimelineResult
+    expect(result.rows.map((r) => r.spend)).toEqual([100, 0, 50])
+    // Each month is its own window — cumulative equals that month's spend.
+    expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([100, 0, 50])
+  })
+
+  it("quarterly eval: cumulative resets at calendar-quarter boundaries", async () => {
+    seedContract("quarterly")
+    const result = (await getAccrualTimeline("c-1")) as TimelineResult
+    // Jan/Feb/Mar all live in Q1 2025 — no reset across them.
     expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([100, 100, 150])
   })
 })
