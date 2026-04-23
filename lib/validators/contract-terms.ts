@@ -36,7 +36,11 @@ export const createTermSchema = z.object({
   appliesTo: z.string().optional().default("all_products"),
   rebateMethod: RebateMethodSchema.default("cumulative"),
   effectiveStart: z.string().min(1, "Start date is required"),
-  effectiveEnd: z.string().min(1, "End date is required"),
+  // Empty string = evergreen (no fixed end). Mirrors
+  // createContractSchema.expirationDate — the server action writes the
+  // 9999-12-31 sentinel when this is "" so Prisma's NOT NULL column
+  // still gets a valid Date. See lib/actions/contracts.ts term-create.
+  effectiveEnd: z.string(),
   volumeType: VolumeTypeSchema.optional(),
   spendBaseline: z.number().min(0).optional(),
   volumeBaseline: z.number().int().min(0).optional(),
@@ -104,7 +108,11 @@ export const termFormSchema = z.object({
   appliesTo: z.string().optional().default("all_products"),
   rebateMethod: RebateMethodSchema.default("cumulative"),
   effectiveStart: z.string().min(1, "Start date is required"),
-  effectiveEnd: z.string().min(1, "End date is required"),
+  // Empty string = evergreen (no fixed end). Mirrors
+  // createContractSchema.expirationDate — the server action writes the
+  // 9999-12-31 sentinel when this is "" so Prisma's NOT NULL column
+  // still gets a valid Date. See lib/actions/contracts.ts term-create.
+  effectiveEnd: z.string(),
   volumeType: VolumeTypeSchema.optional(),
   spendBaseline: z.number().min(0).optional(),
   volumeBaseline: z.number().int().min(0).optional(),
