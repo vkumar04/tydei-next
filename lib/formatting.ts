@@ -19,8 +19,12 @@ export function formatCurrency(value: number, precise = false): string {
 }
 
 export function formatDate(date: string | Date | null | undefined): string {
-  if (date === null || date === undefined) return "—"
+  if (date === null || date === undefined || date === "") return "—"
   const d = new Date(date)
+  // Guard against Invalid Date. `Intl.DateTimeFormat.format(Invalid Date)`
+  // throws "date value is not finite" — this used to bubble up as an
+  // unhandled exception during SSR/render and 500 the page.
+  if (isNaN(d.getTime())) return "—"
   // Evergreen sentinel. `lib/actions/contracts.ts` writes 9999-12-31 when
   // a contract has no fixed expiration (AI extractor returned null).
   if (d.getUTCFullYear() >= 9999) return "Evergreen"
