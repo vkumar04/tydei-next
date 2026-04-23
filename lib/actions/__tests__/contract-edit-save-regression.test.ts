@@ -23,6 +23,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const {
   contractFindUniqueOrThrowMock,
+  contractFindUniqueMock,
   contractUpdateMock,
   facilityDeleteManyMock,
   facilityCreateManyMock,
@@ -42,6 +43,10 @@ const {
   recomputeAccrualMock,
 } = vi.hoisted(() => ({
   contractFindUniqueOrThrowMock: vi.fn(),
+  contractFindUniqueMock: vi.fn().mockResolvedValue({
+    facilityId: "fac-1",
+    contractFacilities: [],
+  }),
   contractUpdateMock: vi.fn(),
   facilityDeleteManyMock: vi.fn(),
   facilityCreateManyMock: vi.fn(),
@@ -65,6 +70,7 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     contract: {
       findUniqueOrThrow: contractFindUniqueOrThrowMock,
+      findUnique: contractFindUniqueMock,
       update: contractUpdateMock,
     },
     contractFacility: {
