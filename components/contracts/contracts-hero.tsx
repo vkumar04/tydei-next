@@ -1,9 +1,7 @@
 "use client"
 
-import Link from "next/link"
-import { AlertTriangle, FileText, Layers } from "lucide-react"
+import { AlertTriangle, FileText } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 
@@ -70,12 +68,12 @@ export function ContractsHero({
               {expiringSoon} expiring in 30 days
             </Badge>
           )}
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/dashboard/contracts/bundles">
-              <Layers className="mr-1.5 h-3.5 w-3.5" />
-              Tie-In Bundles
-            </Link>
-          </Button>
+          {/* Tie-In Bundles top-level CTA removed per Charles's feedback —
+              the bundle abstraction was confusing users into thinking
+              tie-ins required this separate setup. Tie-in capital now
+              lives directly on Contract (contractType = tie_in) and is
+              set during contract creation; bundles remain accessible
+              from contract-detail pages that need them. */}
         </div>
       </div>
 
