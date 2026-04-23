@@ -279,14 +279,14 @@ function buildScenario(seed: number): Scenario {
     }
   }
 
-  // 3. variancePercent extreme — 50× catalog price (4900% variance).
-  //    NOTE: the `variancePercent` column is Decimal(6,2) with a max of
-  //    ~9999.99%, so any multiplier above ~100× will overflow the DB write
-  //    and the pipeline throws. There is currently NO clamp in
-  //    `lib/cog/enrichment.ts` — a true 100,000× row would crash. This test
-  //    stays at 50× to exercise the large-variance path without tripping
-  //    the unfixed overflow. If/when a clamp is added, raise the multiplier
-  //    to 100_000 to regression-guard it.
+  // 3. variancePercent extreme — 100,000× catalog price (9,999,900% raw).
+  //    The `variancePercent` column is Decimal(6,2) with max ±9,999.99.
+  //    `lib/cog/enrichment.ts` clamps the computed variance to that range
+  //    (see the `VARIANCE_CLAMP = 9999.99` block in the `price_variance`
+  //    case) so the pipeline doesn't throw on extreme-mismatch rows.
+  //    This edge-case regression-guards that clamp: a pipeline that
+  //    removes the clamp would crash with `ValueOutOfRange`, failing
+  //    the test before we even reach the oracle diff.
   if (pricedContract && pricedContract.pricingItems.length > 0) {
     const item = pricedContract.pricingItems[0]!
     const tx = randomDateInWindow(rng, false)
@@ -295,7 +295,7 @@ function buildScenario(seed: number): Scenario {
       facilityId: pricedContract.primaryFacilityId,
       vendorId: pricedContract.vendorId,
       vendorItemNo: item.vendorItemNo,
-      unitCost: item.unitPrice * 50,
+      unitCost: item.unitPrice * 100_000,
       quantity: 1,
       transactionDate: tx,
       extendedPrice: 0,
@@ -326,14 +326,34 @@ function buildScenario(seed: number): Scenario {
     })
   }
 
-  // 5. Null-vendor rows: skipped — `recomputeMatchStatusesForVendor` is
-  //    scoped to a (vendorId, facilityId) pair and never processes
-  //    null-vendor rows. In the current pipeline, null-vendor rows sit at
-  //    the schema default `pending` status and are addressed by a separate
-  //    import/enrichment path. Including them here would just test that
-  //    `pending` rows aren't touched; not a meaningful invariant for this
-  //    script. Documented as a gap: there is no `unknown_vendor`
-  //    classifier running against existing null-vendor rows.
+  // 5. Null-vendor edge case. `recomputeMatchStatusesForVendor` is scoped
+  //    to a (vendorId, facilityId) pair and never processes null-vendor
+  //    rows — that's a real production invariant. A row imported without
+  //    a resolvable vendor sits at the schema default `pending` until a
+  //    separate import/enrichment path assigns a vendorId. This test
+  //    pins that invariant: the app groupBy MUST show these rows at
+  //    `pending` after recompute (not `unknown_vendor`, which would
+  //    require the pure matcher to have been called with the null row).
+  //    If recompute ever starts sweeping null-vendor rows, this test
+  //    fires and forces us to decide whether that's desired.
+  const anyFacility = facilities[0]!
+  for (let n = 0; n < 3; n++) {
+    cog.push({
+      id: "",
+      // Facilities carry their name as their logical id during generation
+      // (real DB id gets back-filled after createMany). Use .name here.
+      facilityId: anyFacility.name,
+      vendorId: null,
+      vendorItemNo: "E2E_NULLV_SKU_" + n,
+      unitCost: 100,
+      quantity: 1,
+      transactionDate: randomDateInWindow(rng, false),
+      extendedPrice: 0,
+      expected: "pending",
+      subScenario: "edge_null_vendor",
+      expectedContractId: null,
+    })
+  }
 
   // Compute extendedPrice now that unit+qty are locked
   for (const row of cog) {
@@ -375,9 +395,9 @@ function predictExpected(
 ): { expected: ExpectedBucket; expectedContractId: string | null } {
   // Null-vendor rows: recomputeMatchStatusesForVendor is called per
   // (vendorId, facilityId) pair; null-vendor rows are never processed and
-  // stay at the DB default `pending`. Our generator never emits null-vendor
-  // rows (see below) so this branch is dead; kept for safety.
-  if (!r.vendorId) return { expected: "unknown_vendor", expectedContractId: null }
+  // stay at the DB default `pending`. Return that so the oracle matches
+  // what the app's groupBy will actually show.
+  if (!r.vendorId) return { expected: "pending", expectedContractId: null }
 
   const vendorContracts = contracts.filter(
     (c) => c.vendorId === r.vendorId && includesFacility(c, r.facilityId),
@@ -829,7 +849,14 @@ type BucketMap = Map<ExpectedBucket, BucketAgg>
 
 function emptyBucketMap(): BucketMap {
   const m = new Map<ExpectedBucket, BucketAgg>()
-  for (const b of ["on_contract", "price_variance", "off_contract_item", "out_of_scope", "unknown_vendor"] as const) {
+  for (const b of [
+    "on_contract",
+    "price_variance",
+    "off_contract_item",
+    "out_of_scope",
+    "unknown_vendor",
+    "pending",
+  ] as const) {
     m.set(b, { count: 0, spend: 0 })
   }
   return m
@@ -934,7 +961,8 @@ function printMatrix(title: string, byKey: Map<string, BucketMap>): void {
       "price_variance".padStart(18) +
       "off_contract".padStart(18) +
       "out_of_scope".padStart(18) +
-      "unknown".padStart(18),
+      "unknown".padStart(18) +
+      "pending".padStart(18),
   )
   for (const [k, buckets] of byKey) {
     const row = [
@@ -944,6 +972,7 @@ function printMatrix(title: string, byKey: Map<string, BucketMap>): void {
       fmtBucket(buckets.get("off_contract_item")!).padStart(18),
       fmtBucket(buckets.get("out_of_scope")!).padStart(18),
       fmtBucket(buckets.get("unknown_vendor")!).padStart(18),
+      fmtBucket(buckets.get("pending")!).padStart(18),
     ].join("")
     console.log(row)
   }
