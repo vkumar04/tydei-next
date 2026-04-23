@@ -62,6 +62,15 @@ const ALIASES: Record<string, string[]> = {
     "itemno", "itemnumber", "sku",
     "productrefnumber", "productref", "refnumber", "refno",
     "productnumber", "productno",
+    // Vendor/supplier item identifiers — when the CSV has only ONE
+    // item-identifier column and it's labeled "Vendor Item Number",
+    // that same column satisfies inventoryNumber (so the wizard
+    // advances) AND vendorItemNo (so the matcher can join contract
+    // pricing). Target fields are not mutually exclusive — the
+    // mapper is allowed to pick the same source column twice.
+    "vendoritemnumber", "vendoritemno", "vendoritem",
+    "supplieritemno", "supplieritemnumber",
+    "catalogno", "catalognumber",
   ],
   inventoryDescription: [
     "inventorydescription", "description", "desc",
