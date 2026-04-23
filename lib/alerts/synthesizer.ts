@@ -558,6 +558,8 @@ export function synthesizeAlertsForFacility(input: SynthInput): SynthResult {
   const rebate = synthRebateDue(input, now)
   const payment = synthPaymentDue(input, now)
   const inactive = synthVendorInactive(input, now)
+  const tieIn = synthTieInAtRisk(input)
+  const compliance = synthComplianceDrop(input, now)
 
   const keepKeys = new Set<string>([
     ...off.keepKeys,
@@ -566,6 +568,8 @@ export function synthesizeAlertsForFacility(input: SynthInput): SynthResult {
     ...rebate.keepKeys,
     ...payment.keepKeys,
     ...inactive.keepKeys,
+    ...tieIn.keepKeys,
+    ...compliance.keepKeys,
   ])
 
   // Any existing alert whose dedupeKey is NOT in keepKeys has no active condition.
@@ -584,6 +588,8 @@ export function synthesizeAlertsForFacility(input: SynthInput): SynthResult {
     ...rebate.create,
     ...payment.create,
     ...inactive.create,
+    ...tieIn.create,
+    ...compliance.create,
   ]
 
   return { toCreate, toResolve }
@@ -597,6 +603,162 @@ export function synthesizeAlertsForFacility(input: SynthInput): SynthResult {
 
 /** Default activity window — mirrors v0 `alertTriggers.VENDOR_INACTIVE`. */
 export const VENDOR_INACTIVE_THRESHOLD_DAYS = 90
+
+// ─── Rule 7: tie_in_at_risk ──────────────────────────────────────
+//
+// Fires when a tie-in bundle has at least one member whose current
+// spend is below the committed minimum. For all_or_nothing bundles
+// this means the entire rebate is at risk; for cross_vendor it means
+// the facility bonus is at risk; for proportional it means the
+// weighted compliance (and therefore effective rate) is degraded.
+// Fed by `SynthInput.bundles` — the caller aggregates member spend.
+
+function synthTieInAtRisk(input: SynthInput): {
+  create: SynthAlert[]
+  keepKeys: Set<string>
+} {
+  const create: SynthAlert[] = []
+  const keepKeys = new Set<string>()
+
+  for (const b of input.bundles ?? []) {
+    const belowMin = b.members.filter(
+      (m) => m.minimumSpend > 0 && m.currentSpend < m.minimumSpend,
+    )
+    if (belowMin.length === 0) continue
+
+    const largestGap = belowMin.reduce(
+      (max, m) => Math.max(max, m.minimumSpend - m.currentSpend),
+      0,
+    )
+    const dedupeKey = dedupeKeyFor("tie_in_at_risk", b.bundleId)
+    keepKeys.add(dedupeKey)
+    if (findExistingByDedupe(input.existingAlerts, dedupeKey)) continue
+
+    const severity: "high" | "medium" = b.complianceMode === "all_or_nothing"
+      ? "high"
+      : "medium"
+
+    create.push({
+      portalType: "facility",
+      alertType: "tie_in_at_risk",
+      title: `Tie-in bundle "${b.bundleLabel}" at risk`,
+      description:
+        b.complianceMode === "all_or_nothing"
+          ? `${belowMin.length} of ${b.members.length} members below minimum — entire rebate at risk.`
+          : b.complianceMode === "cross_vendor"
+            ? `${belowMin.length} vendor(s) below minimum — facility bonus at risk.`
+            : `${belowMin.length} of ${b.members.length} members below minimum — weighted compliance degraded.`,
+      severity,
+      facilityId: input.facilityId,
+      contractId: b.primaryContractId,
+      actionLink: `/dashboard/contracts/bundles/${b.bundleId}`,
+      metadata: {
+        dedupeKey,
+        bundle_id: b.bundleId,
+        bundle_label: b.bundleLabel,
+        compliance_mode: b.complianceMode,
+        members_below_min: belowMin.length,
+        total_members: b.members.length,
+        largest_shortfall: largestGap,
+      },
+      dedupeKey,
+    })
+  }
+
+  return { create, keepKeys }
+}
+
+// ─── Rule 8: compliance_drop ─────────────────────────────────────
+//
+// Fires when facility on-contract % has dropped by at least
+// COMPLIANCE_DROP_THRESHOLD over the COMPLIANCE_DROP_WINDOW_DAYS
+// comparison window vs the prior window of equal length. Uses
+// existing SynthInput.cogRecords — no new input needed.
+//
+// Suppressed when the prior window had fewer than N rows (we can't
+// claim a meaningful drop without a stable baseline).
+
+/** On-contract share must fall by at least this many percentage points. */
+export const COMPLIANCE_DROP_THRESHOLD = 0.1
+/** Recent and prior windows are each this many days long. */
+export const COMPLIANCE_DROP_WINDOW_DAYS = 30
+/** Prior-window minimum row count before we'll claim a drop. */
+export const COMPLIANCE_DROP_MIN_BASELINE_ROWS = 20
+
+function synthComplianceDrop(input: SynthInput, now: Date): {
+  create: SynthAlert[]
+  keepKeys: Set<string>
+} {
+  const create: SynthAlert[] = []
+  const keepKeys = new Set<string>()
+
+  const dayMs = 24 * 60 * 60 * 1000
+  const recentStart = new Date(
+    now.getTime() - COMPLIANCE_DROP_WINDOW_DAYS * dayMs,
+  )
+  const priorStart = new Date(
+    now.getTime() - 2 * COMPLIANCE_DROP_WINDOW_DAYS * dayMs,
+  )
+
+  let recentOn = 0
+  let recentTotal = 0
+  let priorOn = 0
+  let priorTotal = 0
+  let priorRows = 0
+
+  for (const r of input.cogRecords) {
+    const d = r.transactionDate
+    if (!d) continue
+    const amt = r.extendedPrice ?? r.unitCost * r.quantity
+    if (d >= recentStart && d <= now) {
+      recentTotal += amt
+      if (r.matchStatus === "on_contract") recentOn += amt
+    } else if (d >= priorStart && d < recentStart) {
+      priorTotal += amt
+      priorRows += 1
+      if (r.matchStatus === "on_contract") priorOn += amt
+    }
+  }
+
+  if (recentTotal <= 0 || priorTotal <= 0) return { create, keepKeys }
+  if (priorRows < COMPLIANCE_DROP_MIN_BASELINE_ROWS) {
+    return { create, keepKeys }
+  }
+
+  const recentPct = recentOn / recentTotal
+  const priorPct = priorOn / priorTotal
+  const drop = priorPct - recentPct
+
+  if (drop < COMPLIANCE_DROP_THRESHOLD) return { create, keepKeys }
+
+  const dedupeKey = dedupeKeyFor("compliance_drop", input.facilityId)
+  keepKeys.add(dedupeKey)
+  if (findExistingByDedupe(input.existingAlerts, dedupeKey)) {
+    return { create, keepKeys }
+  }
+
+  const severity: "high" | "medium" = drop >= 0.2 ? "high" : "medium"
+
+  create.push({
+    portalType: "facility",
+    alertType: "compliance_drop",
+    title: `On-contract compliance dropped ${(drop * 100).toFixed(1)}pp`,
+    description: `${(priorPct * 100).toFixed(1)}% → ${(recentPct * 100).toFixed(1)}% over the last ${COMPLIANCE_DROP_WINDOW_DAYS} days vs the prior ${COMPLIANCE_DROP_WINDOW_DAYS}-day window.`,
+    severity,
+    facilityId: input.facilityId,
+    actionLink: `/dashboard/cog-data`,
+    metadata: {
+      dedupeKey,
+      recent_pct: recentPct,
+      prior_pct: priorPct,
+      drop_pp: drop,
+      window_days: COMPLIANCE_DROP_WINDOW_DAYS,
+    },
+    dedupeKey,
+  })
+
+  return { create, keepKeys }
+}
 
 function synthVendorInactive(input: SynthInput, now: Date): {
   create: SynthAlert[]

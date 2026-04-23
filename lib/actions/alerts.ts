@@ -15,12 +15,14 @@ import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import {
   synthesizeAlertsForFacility,
+  type SynthBundle,
   type SynthCogRecord,
   type SynthContract,
   type SynthContractPeriod,
   type SynthExistingAlert,
   type SynthTier,
 } from "@/lib/alerts/synthesizer"
+import { computeBundleStatus } from "@/lib/contracts/bundle-compute"
 import {
   planBulkAction,
   type BulkAlertAction,
@@ -199,7 +201,13 @@ export async function synthesizeAndPersistAlerts(): Promise<{
   const facilityId = session.facility.id
 
   // Load the minimal columns each input shape needs.
-  const [cogRows, contractRows, periodRows, existingRows] = await Promise.all([
+  const [
+    cogRows,
+    contractRows,
+    periodRows,
+    existingRows,
+    bundleRows,
+  ] = await Promise.all([
     prisma.cOGRecord.findMany({
       where: { facilityId },
       select: {
@@ -278,6 +286,26 @@ export async function synthesizeAndPersistAlerts(): Promise<{
         status: true,
       },
     }),
+    prisma.tieInBundle.findMany({
+      where: {
+        primaryContract: {
+          OR: [
+            { facilityId },
+            { contractFacilities: { some: { facilityId } } },
+          ],
+        },
+      },
+      include: {
+        primaryContract: {
+          select: { id: true, name: true },
+        },
+        members: {
+          include: {
+            contract: { select: { id: true, name: true } },
+          },
+        },
+      },
+    }),
   ])
 
   const cogRecords: SynthCogRecord[] = cogRows.map((r) => ({
@@ -340,12 +368,76 @@ export async function synthesizeAndPersistAlerts(): Promise<{
     status: a.status,
   }))
 
+  // Resolve each bundle's current member-spend via the oracle-locked
+  // compute layer. Uses the same aggregation path as the UI so alerts
+  // and the dashboard shortfall card can never disagree on who's below
+  // minimum.
+  const bundles: SynthBundle[] = []
+  for (const b of bundleRows) {
+    const status = await computeBundleStatus(prisma, b.id, facilityId)
+    if (!status) continue
+    const members: SynthBundle["members"] = []
+    if (status.allOrNothing) {
+      // allOrNothing.shortfalls is indexed against the members array
+      // order as persisted. We use the DB-member list for labels and
+      // zip against shortfalls to derive currentSpend (min - shortfall).
+      b.members.forEach((m, i) => {
+        const min = m.minimumSpend == null ? 0 : Number(m.minimumSpend)
+        const sf = status.allOrNothing?.shortfalls.find((s) => s.index === i)
+        const currentSpend = sf ? Math.max(0, min - sf.shortfall) : min
+        members.push({
+          entityId: m.contractId ?? m.vendorId ?? "",
+          entityName:
+            m.contract?.name ?? (m.vendorId ? "Vendor member" : "Unknown"),
+          currentSpend,
+          minimumSpend: min,
+        })
+      })
+    } else if (status.crossVendor) {
+      for (const v of status.crossVendor.perVendor) {
+        // currentSpend = v.spend; minimumSpend = v.spend + shortfall
+        // (v.shortfall is 0 when compliant).
+        members.push({
+          entityId: v.vendorId,
+          entityName: v.vendorName,
+          currentSpend: v.spend,
+          minimumSpend: v.spend + (v.shortfall ?? 0),
+        })
+      }
+    } else if (status.proportional) {
+      // Proportional compute doesn't expose per-member spend; pull
+      // minimums straight from the DB and treat currentSpend=min as a
+      // "compliant" placeholder so the at-risk rule skips proportional
+      // bundles unless members are explicitly below. v0 treats
+      // proportional as a weighted-rate model, not a binary alert
+      // trigger.
+      for (const m of b.members) {
+        const min = m.minimumSpend == null ? 0 : Number(m.minimumSpend)
+        members.push({
+          entityId: m.contractId ?? m.vendorId ?? "",
+          entityName:
+            m.contract?.name ?? (m.vendorId ? "Vendor member" : "Unknown"),
+          currentSpend: min,
+          minimumSpend: min,
+        })
+      }
+    }
+    bundles.push({
+      bundleId: b.id,
+      bundleLabel: b.primaryContract.name,
+      primaryContractId: b.primaryContractId,
+      complianceMode: b.complianceMode,
+      members,
+    })
+  }
+
   const result = synthesizeAlertsForFacility({
     facilityId,
     cogRecords,
     contracts,
     contractPeriods,
     paymentSchedules: [],
+    bundles,
     existingAlerts,
   })
 
