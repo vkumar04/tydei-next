@@ -12,21 +12,24 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MetricCard } from "@/components/shared/cards/metric-card"
 import { MarketShareCharts } from "./market-share-charts"
+import { MarketShareHero } from "./market-share-hero"
 import { getVendorMarketShare } from "@/lib/actions/vendor-analytics"
 import { queryKeys } from "@/lib/query-keys"
 import { levenshteinSimilarity } from "@/lib/utils/levenshtein"
-import { LayoutGrid, PieChart as PieChartIcon, Trophy } from "lucide-react"
-import { motion } from "motion/react"
-import { staggerContainer } from "@/lib/animations"
 
 import { CategoryTableSection } from "./sections/category-table-section"
 import { CategoryBreakdownSection } from "./sections/category-breakdown-section"
 import { GrowthOpportunitiesSection } from "./sections/growth-opportunities-section"
 import { SimilarCategoriesAlert } from "./sections/similar-categories-alert"
 import { FacilityTableSection } from "./sections/facility-table-section"
-import type { CategoryRow, FacilityRow, SimilarPair, MarketShareStats } from "./sections/types"
+import { CompetitorsSection } from "./sections/competitors-section"
+import type {
+  CategoryRow,
+  FacilityRow,
+  SimilarPair,
+  MarketShareStats,
+} from "./sections/types"
 
 interface MarketShareClientProps {
   vendorId: string
@@ -34,7 +37,9 @@ interface MarketShareClientProps {
 
 export function MarketShareClient({ vendorId }: MarketShareClientProps) {
   const [timeRange, setTimeRange] = useState("ytd")
-  const [mergedCategories, setMergedCategories] = useState<Map<string, string>>(new Map())
+  const [mergedCategories, setMergedCategories] = useState<Map<string, string>>(
+    new Map(),
+  )
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.vendorAnalytics.marketShare(vendorId, { timeRange }),
@@ -161,76 +166,47 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
       />
 
       {isLoading || !data || !stats ? (
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[120px] rounded-xl" />
-            ))}
-          </div>
+        <div className="space-y-6">
+          <Skeleton className="h-[280px] rounded-xl" />
+          <Skeleton className="h-10 w-[420px] rounded-md" />
           <Skeleton className="h-[400px] rounded-xl" />
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Skeleton className="h-[380px] rounded-xl" />
-            <Skeleton className="h-[380px] rounded-xl" />
-          </div>
         </div>
       ) : (
         <>
-          {/* Stat Cards */}
-          <motion.div
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          >
-            <MetricCard
-              title="Current Market Share"
-              value={`${stats.overallSharePct}%`}
-              icon={PieChartIcon}
-              description="Overall share of total market spend"
-              change={`+${(stats.overallSharePct * 0.05).toFixed(1)}% vs prior`}
-              changeType="positive"
-            />
-            <MetricCard
-              title="vs Industry Average"
-              value={`${stats.overallSharePct}%`}
-              icon={Trophy}
-              description="Your rank among vendor categories"
-              secondaryValue={`#${stats.revenueRank}`}
-              secondaryLabel="revenue rank"
-            />
-            <MetricCard
-              title="Top Category"
-              value={stats.totalCategories}
-              icon={LayoutGrid}
-              description="Active product categories"
-              change={`${stats.totalCategories} active`}
-              changeType="positive"
-            />
-          </motion.div>
+          <MarketShareHero stats={stats} categoryRows={categoryRows} />
 
-          <Tabs defaultValue="categories">
+          <Tabs defaultValue="overview">
             <TabsList>
-              <TabsTrigger value="categories">Categories</TabsTrigger>
-              <TabsTrigger value="breakdown">Breakdown</TabsTrigger>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="categories">By Category</TabsTrigger>
+              <TabsTrigger value="facilities">By Facility</TabsTrigger>
+              <TabsTrigger value="competitors">Competitors</TabsTrigger>
             </TabsList>
 
+            <TabsContent value="overview" className="space-y-6 mt-6">
+              <MarketShareCharts data={data} />
+              <GrowthOpportunitiesSection
+                categoryRows={categoryRows}
+                facilityRows={facilityRows}
+              />
+            </TabsContent>
+
             <TabsContent value="categories" className="space-y-6 mt-6">
+              <SimilarCategoriesAlert pairs={similarPairs} onMerge={handleMerge} />
               <CategoryTableSection
                 categoryRows={categoryRows}
                 stats={stats}
                 mergedCount={mergedCategories.size}
               />
               <CategoryBreakdownSection categoryRows={categoryRows} />
-              <GrowthOpportunitiesSection
-                categoryRows={categoryRows}
-                facilityRows={facilityRows}
-              />
-              <SimilarCategoriesAlert pairs={similarPairs} onMerge={handleMerge} />
             </TabsContent>
 
-            <TabsContent value="breakdown" className="space-y-6 mt-6">
+            <TabsContent value="facilities" className="space-y-6 mt-6">
               <FacilityTableSection facilityRows={facilityRows} />
-              <MarketShareCharts data={data} />
+            </TabsContent>
+
+            <TabsContent value="competitors" className="space-y-6 mt-6">
+              <CompetitorsSection categoryRows={categoryRows} />
             </TabsContent>
           </Tabs>
         </>
