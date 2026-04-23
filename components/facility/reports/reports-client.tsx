@@ -6,7 +6,9 @@ import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
 import { getContracts } from "@/lib/actions/reports"
 import { getVendors } from "@/lib/actions/vendors"
-import { ReportsFilterBar } from "./reports-filter-bar"
+import { listReportSchedules } from "@/lib/actions/reports/schedule"
+import { ReportsHero } from "./reports-hero"
+import { ReportsControlBar } from "./reports-control-bar"
 import {
   ReportsTabRouter,
   computeAvailableTabs,
@@ -14,7 +16,6 @@ import {
 import { ReportsOverviewTab } from "./reports-overview-tab"
 import { ReportsPerTypeTab } from "./reports-per-type-tab"
 import { ReportsCalculationsTab } from "./reports-calculations-tab"
-import { ReportsQuickAccessCards } from "./reports-quick-access-cards"
 import { ReportsScheduleDialog } from "./reports-schedule-dialog"
 import type {
   ReportsContract,
@@ -23,10 +24,12 @@ import type {
 } from "./reports-types"
 
 /**
- * Reports Hub orchestrator. Owns:
- *   - Filter state (vendor, contract, date range)
- *   - Active tab + auto-routing on contract change
- *   - Schedule dialog open state
+ * Reports Hub orchestrator. Uses the "hero + tabs" pattern (matches
+ * Analysis, Rebate Optimizer, Contracts, Dashboard):
+ *
+ *   1. Hero — 4 hero stats + quick-access callouts.
+ *   2. ControlBar — vendor/contract/date filters + schedules CTA.
+ *   3. Tabs — Overview / per-type / Calculations.
  *
  * Per-tab data fetching lives inside each tab component so the hub
  * stays focused on composition.
@@ -73,6 +76,11 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
     queryFn: () => getVendors(),
   })
 
+  const { data: schedulesRaw } = useQuery({
+    queryKey: queryKeys.reportSchedules.list(facilityId),
+    queryFn: () => listReportSchedules(),
+  })
+
   const contracts = useMemo<ReportsContract[]>(() => {
     return (contractsRaw ?? []) as ReportsContract[]
   }, [contractsRaw])
@@ -81,6 +89,17 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
     const rows = (vendorsRaw ?? []) as { id: string; name: string }[]
     return rows.map((v) => ({ id: v.id, name: v.name }))
   }, [vendorsRaw])
+
+  const scheduleStats = useMemo(() => {
+    const rows = schedulesRaw ?? []
+    const active = rows.filter((s) => s.isActive).length
+    const mostRecent = rows.reduce<string | null>((acc, s) => {
+      if (!s.lastSentAt) return acc
+      if (!acc) return s.lastSentAt
+      return s.lastSentAt > acc ? s.lastSentAt : acc
+    }, null)
+    return { active, total: rows.length, lastSentAt: mostRecent }
+  }, [schedulesRaw])
 
   const selectedContract = useMemo<ReportsContract | null>(
     () =>
@@ -115,18 +134,17 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Reports</h1>
-        <p className="text-muted-foreground">
-          Multi-contract performance reporting hub
-        </p>
-      </div>
-
-      <ReportsQuickAccessCards
+      <ReportsHero
+        contractCount={contracts.length}
+        vendorCount={vendors.length}
+        activeSchedules={scheduleStats.active}
+        totalSchedules={scheduleStats.total}
+        lastSentAt={scheduleStats.lastSentAt}
+        priceDiscrepancyHref="/dashboard/reports/price-discrepancy"
         onOpenScheduledReports={() => setScheduleOpen(true)}
       />
 
-      <ReportsFilterBar
+      <ReportsControlBar
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
         selectedVendorId={selectedVendorId}
@@ -135,6 +153,7 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
         onContractChange={setSelectedContractId}
         vendors={vendors}
         contracts={contracts}
+        onOpenScheduledReports={() => setScheduleOpen(true)}
       />
 
       <div id="reports-tabs">
