@@ -45,7 +45,17 @@ export function OverviewTab({
   dateRange,
 }: OverviewTabProps) {
   const totalSpend = allPeriods.reduce((s, p) => s + p.totalSpend, 0)
-  const totalRebate = allPeriods.reduce((s, p) => s + p.rebateEarned, 0)
+  // Charles 2026-04-23 audit — total Rebate Earned on the overview
+  // card comes from the canonical server-computed total
+  // (`rebateEarnedCanonical` via sumEarnedRebatesLifetime on the Rebate
+  // table), not a reduce over ContractPeriod.rebateEarned. The two
+  // diverge when Rebate rows exist without matching ContractPeriod
+  // rollups (manual entries, tie-in auto-accruals).
+  const totalRebate =
+    data?.contracts.reduce(
+      (s, c) => s + (c.rebateEarnedCanonical ?? 0),
+      0,
+    ) ?? 0
   const contractCount = data?.contracts.length ?? 0
 
   if (selectedContract) {
@@ -287,7 +297,7 @@ export function OverviewTab({
             <div className="space-y-3">
               {data?.contracts.map((c) => {
                 const spend = c.periods.reduce((s, p) => s + p.totalSpend, 0)
-                const rebate = c.periods.reduce((s, p) => s + p.rebateEarned, 0)
+                const rebate = c.rebateEarnedCanonical ?? 0
                 return (
                   <div
                     key={c.id}

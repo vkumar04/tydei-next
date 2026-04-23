@@ -83,6 +83,12 @@ interface ContractRow {
   vendorId: string
   contractType: string
   totalValue: number
+  // Charles 2026-04-23 audit — canonical Rebate-table totals computed
+  // server-side in getReportData via sumEarnedRebatesLifetime /
+  // sumCollectedRebates. Tabs display these so they reconcile with
+  // Contract Detail header + Dashboard KPIs.
+  rebateEarnedCanonical: number
+  rebateCollectedCanonical: number
   periods: PeriodRow[]
 }
 
@@ -136,8 +142,15 @@ export function ReportsPerTypeTab({
         totalValue: c.totalValue,
         spend: periods.reduce((s, p) => s + p.totalSpend, 0),
         volume: periods.reduce((s, p) => s + p.totalVolume, 0),
-        rebateEarned: periods.reduce((s, p) => s + p.rebateEarned, 0),
-        rebateCollected: periods.reduce((s, p) => s + p.rebateCollected, 0),
+        // Charles 2026-04-23 audit — canonical rebate totals come from
+        // the Rebate table via sumEarnedRebatesLifetime /
+        // sumCollectedRebates, routed through the server
+        // (`rebateEarnedCanonical` / `rebateCollectedCanonical` on
+        // getReportData). Reducing over ContractPeriod.rebateEarned/
+        // Collected drifted from the canonical helpers the rest of
+        // the app uses.
+        rebateEarned: c.rebateEarnedCanonical,
+        rebateCollected: c.rebateCollectedCanonical,
         paymentExpected: periods.reduce((s, p) => s + p.paymentExpected, 0),
         paymentActual: periods.reduce((s, p) => s + p.paymentActual, 0),
         periodCount: periods.length,

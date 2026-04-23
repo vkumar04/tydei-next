@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 
 // ─── Contracts List (for report selector) ───────────────────────
 
@@ -59,10 +61,34 @@ export async function getReportData(input: {
         },
         orderBy: { periodStart: "asc" },
       },
+      // Charles 2026-04-23 audit — canonical rebate totals on Reports
+      // surfaces must come from the Rebate table via
+      // sumEarnedRebatesLifetime / sumCollectedRebates, not from raw
+      // `ContractPeriod.rebateEarned/Collected`. ContractPeriod is a
+      // monthly rollup that can drift from the Rebate ledger (manual
+      // rebate entries, out-of-band collections, auto-accrual tie-in
+      // stamps). Fetching the rebate rows here and returning them
+      // alongside the periods lets the tabs display ContractPeriod
+      // rollups for the per-month ledger AND render canonical totals
+      // computed from the Rebate table, guaranteeing Reports agrees
+      // with Contract Detail / Dashboard / Contracts List.
+      rebates: {
+        where: {
+          payPeriodStart: { gte: new Date(dateFrom) },
+          payPeriodEnd: { lte: new Date(dateTo) },
+        },
+        select: {
+          payPeriodEnd: true,
+          rebateEarned: true,
+          collectionDate: true,
+          rebateCollected: true,
+        },
+      },
     },
     orderBy: { name: "asc" },
   })
 
+  const windowEnd = new Date(dateTo)
   return serialize({
     contracts: contracts.map((c) => ({
       id: c.id,
@@ -71,6 +97,11 @@ export async function getReportData(input: {
       vendorId: c.vendor.id,
       contractType: c.contractType,
       totalValue: Number(c.totalValue),
+      // Canonical per-contract rebate totals over the report window.
+      // These are what all downstream tabs should display — the raw
+      // `periods[].rebateEarned/Collected` reducers drift.
+      rebateEarnedCanonical: sumEarnedRebatesLifetime(c.rebates, windowEnd),
+      rebateCollectedCanonical: sumCollectedRebates(c.rebates),
       periods: c.periods.map((p) => ({
         id: p.id,
         periodStart: p.periodStart.toISOString(),

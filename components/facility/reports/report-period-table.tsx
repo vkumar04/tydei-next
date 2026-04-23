@@ -6,16 +6,35 @@ import type { ContractPeriodRow } from "./report-columns"
 interface ReportPeriodTableProps {
   periods: ContractPeriodRow[]
   reportType: string
+  /**
+   * Canonical Rebate-table totals passed by the parent when available
+   * (Charles 2026-04-23 audit). When present these OVERRIDE the
+   * periods-reduce totals on the footer row so the report reconciles
+   * with the Contract Detail header and the Dashboard. Older callers
+   * that don't pass them fall back to the original reduce.
+   */
+  canonicalTotals?: {
+    rebateEarned: number
+    rebateCollected: number
+  }
 }
 
-export function ReportPeriodTable({ periods, reportType }: ReportPeriodTableProps) {
+export function ReportPeriodTable({
+  periods,
+  reportType,
+  canonicalTotals,
+}: ReportPeriodTableProps) {
   const isUsage = reportType === "usage"
   const isService = reportType === "service" || reportType === "capital"
   const isTieIn = reportType === "tie_in"
 
   const totalSpend = periods.reduce((s, p) => s + p.totalSpend, 0)
-  const totalRebateEarned = periods.reduce((s, p) => s + p.rebateEarned, 0)
-  const totalRebateCollected = periods.reduce((s, p) => s + p.rebateCollected, 0)
+  const totalRebateEarned =
+    canonicalTotals?.rebateEarned ??
+    periods.reduce((s, p) => s + p.rebateEarned, 0)
+  const totalRebateCollected =
+    canonicalTotals?.rebateCollected ??
+    periods.reduce((s, p) => s + p.rebateCollected, 0)
   const totalPaymentExpected = periods.reduce((s, p) => s + p.paymentExpected, 0)
   const totalPaymentActual = periods.reduce((s, p) => s + p.paymentActual, 0)
 

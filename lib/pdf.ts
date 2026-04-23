@@ -1,6 +1,8 @@
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { prisma } from "@/lib/db"
+import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 
 // ─── jspdf-autotable extends the doc with lastAutoTable ──────────
 
@@ -100,6 +102,18 @@ export async function generateContractReport(contractId: string): Promise<Uint8A
       },
       periods: {
         orderBy: { periodStart: "asc" },
+      },
+      // Charles 2026-04-23 audit — PDF totals must match the app's
+      // canonical rebate figures. Pull the Rebate rows so the summary
+      // row can route through sumEarnedRebatesLifetime /
+      // sumCollectedRebates instead of summing ContractPeriod fields.
+      rebates: {
+        select: {
+          payPeriodEnd: true,
+          rebateEarned: true,
+          collectionDate: true,
+          rebateCollected: true,
+        },
       },
     },
   })
@@ -221,11 +235,14 @@ export async function generateContractReport(contractId: string): Promise<Uint8A
       p.tierAchieved ? String(p.tierAchieved) : "-",
     ])
 
-    // Totals row
+    // Totals row — canonical Rebate-table figures (Charles 2026-04-23).
+    // The per-period rows above still come from ContractPeriod so the
+    // monthly audit trail renders; the summary row uses the canonical
+    // helpers so PDFs agree with Contract Detail and the Dashboard.
     const totalSpend = contract.periods.reduce((s, p) => s + Number(p.totalSpend), 0)
     const totalVolume = contract.periods.reduce((s, p) => s + p.totalVolume, 0)
-    const totalRebateEarned = contract.periods.reduce((s, p) => s + Number(p.rebateEarned), 0)
-    const totalRebateCollected = contract.periods.reduce((s, p) => s + Number(p.rebateCollected), 0)
+    const totalRebateEarned = sumEarnedRebatesLifetime(contract.rebates)
+    const totalRebateCollected = sumCollectedRebates(contract.rebates)
 
     periodRows.push([
       "TOTAL",
@@ -291,9 +308,13 @@ export async function generateRebateReport(
   )
 
   // ── Summary Stats ──
+  // Canonical helpers (Charles 2026-04-23 audit). Earned sums only
+  // rows whose payPeriodEnd <= today; collected sums only rows with a
+  // non-null collectionDate. Matches Contract Detail / Dashboard /
+  // Contracts List semantics exactly.
   let y = 56
-  const totalEarned = rebates.reduce((s, r) => s + Number(r.rebateEarned), 0)
-  const totalCollected = rebates.reduce((s, r) => s + Number(r.rebateCollected), 0)
+  const totalEarned = sumEarnedRebatesLifetime(rebates)
+  const totalCollected = sumCollectedRebates(rebates)
   const totalUnearned = rebates.reduce((s, r) => s + Number(r.rebateUnearned), 0)
   const outstanding = totalEarned - totalCollected
 

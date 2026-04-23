@@ -29,8 +29,21 @@ export function CalculationAuditTab({
   dateRange,
 }: CalculationAuditTabProps) {
   const totalSpend = allPeriods.reduce((s, p) => s + p.totalSpend, 0)
-  const totalRebateEarned = allPeriods.reduce((s, p) => s + p.rebateEarned, 0)
-  const totalRebateCollected = allPeriods.reduce((s, p) => s + p.rebateCollected, 0)
+  // Charles 2026-04-23 audit — canonical rebate totals come from the
+  // per-contract `rebateEarnedCanonical` / `rebateCollectedCanonical`
+  // fields (server-computed via sumEarnedRebatesLifetime /
+  // sumCollectedRebates on the Rebate table). ContractPeriod-based
+  // reducers drifted from the rest of the app.
+  const totalRebateEarned =
+    data?.contracts.reduce(
+      (s, c) => s + (c.rebateEarnedCanonical ?? 0),
+      0,
+    ) ?? 0
+  const totalRebateCollected =
+    data?.contracts.reduce(
+      (s, c) => s + (c.rebateCollectedCanonical ?? 0),
+      0,
+    ) ?? 0
   const totalPaymentExpected = allPeriods.reduce((s, p) => s + p.paymentExpected, 0)
   const totalPaymentActual = allPeriods.reduce((s, p) => s + p.paymentActual, 0)
 
@@ -82,8 +95,8 @@ export function CalculationAuditTab({
       {/* Per-contract breakdown */}
       {data?.contracts.map((c) => {
         const cSpend = c.periods.reduce((s, p) => s + p.totalSpend, 0)
-        const cRebEarned = c.periods.reduce((s, p) => s + p.rebateEarned, 0)
-        const cRebCollected = c.periods.reduce((s, p) => s + p.rebateCollected, 0)
+        const cRebEarned = c.rebateEarnedCanonical ?? 0
+        const cRebCollected = c.rebateCollectedCanonical ?? 0
         return (
           <Card key={c.id}>
             <CardHeader>

@@ -8,6 +8,11 @@ export interface ContractSummary {
   vendor: string
   contractType: string
   periods: ContractPeriodRow[]
+  // Charles 2026-04-23 audit — canonical Rebate-table totals computed
+  // server-side so Reports numbers reconcile with Contract Detail /
+  // Dashboard. Optional for back-compat with older call sites.
+  rebateEarnedCanonical?: number
+  rebateCollectedCanonical?: number
 }
 
 export interface ReportData {
