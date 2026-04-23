@@ -798,10 +798,20 @@ async function _createContractImpl(
       void _termAmortizationShape
       void _termId
 
+      // Empty effectiveEnd → same evergreen sentinel the parent contract
+      // uses. Required because terms nested in the create payload from the
+      // AI-extract path inherit the parent contract's effective window;
+      // when AI returns null expirationDate (evergreen), the form passes
+      // "" through, and `new Date("")` is Invalid Date → Prisma rejects.
+      const EVERGREEN = new Date(Date.UTC(9999, 11, 31))
       const termCreateData: Prisma.ContractTermCreateInput = {
         ...termData,
-        effectiveStart: new Date(termData.effectiveStart),
-        effectiveEnd: new Date(termData.effectiveEnd),
+        effectiveStart: termData.effectiveStart
+          ? new Date(termData.effectiveStart)
+          : new Date(Date.UTC(1970, 0, 1)),
+        effectiveEnd: termData.effectiveEnd
+          ? new Date(termData.effectiveEnd)
+          : EVERGREEN,
         contract: { connect: { id: contract.id } },
         ...(scopedCategoryIds && scopedCategoryIds.length > 0 && {
           categories: scopedCategoryIds,
