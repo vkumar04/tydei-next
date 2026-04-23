@@ -1,7 +1,9 @@
 "use client"
 
-import { AlertTriangle, FileText } from "lucide-react"
+import Link from "next/link"
+import { AlertTriangle, FileText, Layers } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 
@@ -58,15 +60,23 @@ export function ContractsHero({
             )}
           </h2>
         </div>
-        {expiringSoon > 0 && (
-          <Badge
-            variant="secondary"
-            className="gap-1.5 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
-          >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {expiringSoon} expiring in 30 days
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {expiringSoon > 0 && (
+            <Badge
+              variant="secondary"
+              className="gap-1.5 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {expiringSoon} expiring in 30 days
+            </Badge>
+          )}
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/contracts/bundles">
+              <Layers className="mr-1.5 h-3.5 w-3.5" />
+              Tie-In Bundles
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="mt-8 grid gap-6 border-y py-6 sm:grid-cols-2 lg:grid-cols-4">
