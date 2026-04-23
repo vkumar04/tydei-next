@@ -1201,21 +1201,165 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
     }
   }
 
-  // ─── Doc example 5 — tie-in all-or-nothing base compliance ───────
-  // §4 "exactly at minimums" → base rate applies. Spends [$25k,$40k,$35k],
-  // baseRate 2% → $100k × 2% = $2,000.
-  const tieInAon = v0TieInAllOrNothing(
-    [
-      { minimumSpend: 25_000, currentSpend: 25_000 },
-      { minimumSpend: 40_000, currentSpend: 40_000 },
-      { minimumSpend: 35_000, currentSpend: 35_000 },
-    ],
-    { baseRate: 2 },
+  // ─── Tie-in all-or-nothing — ALL doc scenarios (§4 + impact analysis) ──
+  // Charles: "the TIE in is very important we need to get this one right
+  // from the get go." Every scenario from the doc example table is
+  // asserted here; any regression in base / bonus / accelerator / partial
+  // non-compliance paths trips the oracle.
+  const aonMembers = [
+    { minimumSpend: 25_000 },
+    { minimumSpend: 40_000 },
+    { minimumSpend: 35_000 },
+  ]
+  const aonBundle = { baseRate: 2, bonusRate: 1, acceleratorMultiplier: 1.5 }
+  // Case 1 — exactly at minimums. Base rate only. $100k × 2% = $2,000.
+  const c1 = v0TieInAllOrNothing(
+    aonMembers.map((m, i) => ({
+      ...m,
+      currentSpend: [25_000, 40_000, 35_000][i]!,
+    })),
+    aonBundle,
   )
+  if (
+    !c1.compliant ||
+    c1.bonusLevel !== "base" ||
+    !approx(c1.applicableRate, 2) ||
+    !approx(c1.rebateEarned, 2_000)
+  ) {
+    failures.push({ where: "v0 tie-in aon base", detail: JSON.stringify(c1) })
+  }
+  // Case 2 — partial non-compliance ($20k < $25k). Zero rebate.
+  const c2 = v0TieInAllOrNothing(
+    aonMembers.map((m, i) => ({
+      ...m,
+      currentSpend: [20_000, 40_000, 35_000][i]!,
+    })),
+    aonBundle,
+  )
+  if (c2.compliant || c2.bonusLevel !== "none" || !approx(c2.rebateEarned, 0)) {
+    failures.push({
+      where: "v0 tie-in aon partial non-compliance",
+      detail: JSON.stringify(c2),
+    })
+  }
+  // Case 3 — 20% over all (bonus triggers). Spends [$30k, $48k, $42k],
+  // total $120k, rate = 2 + 1 = 3%, rebate $3,600.
+  const c3 = v0TieInAllOrNothing(
+    aonMembers.map((m, i) => ({
+      ...m,
+      currentSpend: [30_000, 48_000, 42_000][i]!,
+    })),
+    aonBundle,
+  )
+  if (
+    !c3.compliant ||
+    c3.bonusLevel !== "bonus" ||
+    !approx(c3.applicableRate, 3) ||
+    !approx(c3.rebateEarned, 3_600)
+  ) {
+    failures.push({ where: "v0 tie-in aon bonus 20%", detail: JSON.stringify(c3) })
+  }
+  // Case 4 — 50% over all (accelerator triggers). Spends [$37.5k, $60k,
+  // $52.5k], total $150k. rate = (2 + 1) × 1.5 = 4.5%, rebate $6,750.
+  const c4 = v0TieInAllOrNothing(
+    aonMembers.map((m, i) => ({
+      ...m,
+      currentSpend: [37_500, 60_000, 52_500][i]!,
+    })),
+    aonBundle,
+  )
+  if (
+    !c4.compliant ||
+    c4.bonusLevel !== "accelerator" ||
+    !approx(c4.applicableRate, 4.5) ||
+    !approx(c4.rebateEarned, 6_750)
+  ) {
+    failures.push({
+      where: "v0 tie-in aon accelerator 50%",
+      detail: JSON.stringify(c4),
+    })
+  }
+  // Keep the original assertion name so the failure message is
+  // unchanged if case 1 regresses.
+  const tieInAon = c1
   if (!tieInAon.compliant || !approx(tieInAon.rebateEarned, 2_000)) {
     failures.push({
       where: "v0 tie-in all-or-nothing self-check",
       detail: `expected compliant + $2,000, got ${JSON.stringify(tieInAon)}`,
+    })
+  }
+
+  // ─── Tie-in impact-analysis scenario runner (§4) ─────────────────
+  const { v0TieInImpactAnalysis, v0CrossVendorTieIn } = await import(
+    "@/lib/v0-spec/tie-in"
+  )
+  const impact = v0TieInImpactAnalysis(aonMembers, aonBundle, [
+    { name: "Minimum Compliance", spends: [25_000, 40_000, 35_000] },
+    { name: "Partial Non-Compliance", spends: [20_000, 40_000, 35_000] },
+    { name: "20% Over All", spends: [30_000, 48_000, 42_000] },
+    { name: "50% Over All (Accelerator)", spends: [37_500, 60_000, 52_500] },
+  ])
+  if (
+    !approx(impact[0]!.rebateEarned, 2_000) ||
+    !approx(impact[1]!.rebateEarned, 0) ||
+    !approx(impact[2]!.rebateEarned, 3_600) ||
+    !approx(impact[3]!.rebateEarned, 6_750) ||
+    impact[1]!.compliant ||
+    !impact[3]!.compliant
+  ) {
+    failures.push({
+      where: "v0 tie-in impact analysis",
+      detail: JSON.stringify(impact.map((r) => r.rebateEarned)),
+    })
+  }
+
+  // ─── Cross-vendor tie-in (§4) ────────────────────────────────────
+  // Doc example at exact minimums + 1% facility bonus when all compliant:
+  //   Suture Co    $50k  @ 2%   → $1,000
+  //   Implant Inc  $100k @ 2.5% → $2,500
+  //   Equipment    $75k  @ 1.5% → $1,125
+  //   Vendor total = $4,625. Facility bonus 1% × $225k = $2,250.
+  //   Grand total = $6,875.
+  const xVendor = v0CrossVendorTieIn(
+    [
+      { vendorId: "a", vendorName: "Suture Co", minimumSpend: 50_000, rebateContribution: 2, currentSpend: 50_000 },
+      { vendorId: "b", vendorName: "Implant Inc", minimumSpend: 100_000, rebateContribution: 2.5, currentSpend: 100_000 },
+      { vendorId: "c", vendorName: "Equipment Ltd", minimumSpend: 75_000, rebateContribution: 1.5, currentSpend: 75_000 },
+    ],
+    { rate: 1, requirement: "all_compliant" },
+  )
+  if (
+    !xVendor.allCompliant ||
+    !approx(xVendor.vendorRebateTotal, 4_625) ||
+    !approx(xVendor.facilityBonus, 2_250) ||
+    !approx(xVendor.totalRebate, 6_875)
+  ) {
+    failures.push({
+      where: "v0 cross-vendor tie-in all compliant",
+      detail: JSON.stringify(xVendor),
+    })
+  }
+  // Partial non-compliance: one vendor below min. Compliant vendors still
+  // earn their rebate, non-compliant earns 0. No facility bonus.
+  const xPartial = v0CrossVendorTieIn(
+    [
+      { vendorId: "a", vendorName: "Suture Co", minimumSpend: 50_000, rebateContribution: 2, currentSpend: 40_000 },
+      { vendorId: "b", vendorName: "Implant Inc", minimumSpend: 100_000, rebateContribution: 2.5, currentSpend: 100_000 },
+      { vendorId: "c", vendorName: "Equipment Ltd", minimumSpend: 75_000, rebateContribution: 1.5, currentSpend: 75_000 },
+    ],
+    { rate: 1, requirement: "all_compliant" },
+  )
+  // Compliant vendors: Implant $2,500 + Equipment $1,125 = $3,625.
+  // Non-compliant Suture: $0 rebate, $10k shortfall.
+  if (
+    xPartial.allCompliant ||
+    !approx(xPartial.vendorRebateTotal, 3_625) ||
+    !approx(xPartial.facilityBonus, 0) ||
+    !approx(xPartial.vendorRebates[0]!.shortfall, 10_000)
+  ) {
+    failures.push({
+      where: "v0 cross-vendor tie-in partial",
+      detail: JSON.stringify(xPartial),
     })
   }
 
@@ -1541,6 +1685,95 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
   })
   if (risk.riskLevel !== "low" && risk.riskLevel !== "medium") {
     failures.push({ where: "v0 renewal risk label", detail: risk.riskLevel })
+  }
+
+  // ─── Tie-in proportional — additional scenarios ──────────────────
+  // 100%-across-all members → full base rate; 0% members → zero rebate.
+  const propFull = (
+    await import("@/lib/v0-spec/rebate-math")
+  ).v0TieInProportional(
+    [
+      { minimumSpend: 25_000, currentSpend: 25_000, weight: 0.3 },
+      { minimumSpend: 40_000, currentSpend: 40_000, weight: 0.4 },
+      { minimumSpend: 35_000, currentSpend: 35_000, weight: 0.3 },
+    ],
+    2,
+  )
+  if (!approx(propFull.overallCompliance, 1) || !approx(propFull.effectiveRate, 2) || !approx(propFull.rebateEarned, 2_000)) {
+    failures.push({
+      where: "v0 tie-in proportional full",
+      detail: JSON.stringify(propFull),
+    })
+  }
+  const propZero = (
+    await import("@/lib/v0-spec/rebate-math")
+  ).v0TieInProportional(
+    [
+      { minimumSpend: 25_000, currentSpend: 0, weight: 0.5 },
+      { minimumSpend: 40_000, currentSpend: 0, weight: 0.5 },
+    ],
+    2,
+  )
+  if (!approx(propZero.rebateEarned, 0)) {
+    failures.push({
+      where: "v0 tie-in proportional zero",
+      detail: JSON.stringify(propZero),
+    })
+  }
+
+  // ─── Capital depreciation + Service SLA (§1) ─────────────────────
+  const {
+    v0StraightLineDepreciation,
+    v0DecliningBalanceDepreciation,
+    v0ServiceSlaPenalty,
+  } = await import("@/lib/v0-spec/tie-in")
+  // Straight-line: ($100k − $10k) / 5 yrs = $18k.
+  if (
+    !approx(
+      v0StraightLineDepreciation({
+        purchasePrice: 100_000,
+        salvageValue: 10_000,
+        usefulLifeYears: 5,
+      }),
+      18_000,
+    )
+  ) {
+    failures.push({
+      where: "v0 straight-line depreciation",
+      detail: "expected $18,000",
+    })
+  }
+  // Declining-balance: $80k book × 20% = $16k.
+  if (
+    !approx(
+      v0DecliningBalanceDepreciation({
+        bookValue: 80_000,
+        depreciationRatePct: 20,
+      }),
+      16_000,
+    )
+  ) {
+    failures.push({
+      where: "v0 declining-balance depreciation",
+      detail: "expected $16,000",
+    })
+  }
+  // SLA: response 6h vs 4h sla at $100/hr = $200; uptime 98% vs 99%
+  // on $50k annual fee = $50k × 1% = $500. Total $700.
+  const sla = v0ServiceSlaPenalty({
+    actualResponseHours: 6,
+    slaResponseHours: 4,
+    hourlyPenaltyRate: 100,
+    actualUptimePct: 98,
+    slaUptimePct: 99,
+    annualFee: 50_000,
+  })
+  if (
+    !approx(sla.responsePenalty, 200) ||
+    !approx(sla.uptimePenalty, 500) ||
+    !approx(sla.totalPenalty, 700)
+  ) {
+    failures.push({ where: "v0 SLA penalty", detail: JSON.stringify(sla) })
   }
 
   // ─── v0 Alerts ──────────────────────────────────────────────────

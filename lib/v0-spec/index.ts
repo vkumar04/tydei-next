@@ -9,6 +9,7 @@
  * Divergence = tydei bug, not a spec bug.
  */
 export * from "./rebate-math"
+export * from "./tie-in"
 export * from "./rebate-optimizer"
 export * from "./renewals"
 export * from "./cog"
