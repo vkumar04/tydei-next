@@ -129,9 +129,9 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
                 <Line
                   type="monotone"
                   dataKey="share"
-                  stroke="#3b82f6"
+                  stroke="var(--chart-2)"
                   strokeWidth={2}
-                  dot={{ fill: "#3b82f6", r: 4 }}
+                  dot={{ fill: "var(--chart-2)", r: 4 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -163,7 +163,7 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
                 formatter={(v) => [`${Number(v)}%`, "Market Share"]}
                 contentStyle={chartTooltipStyle}
               />
-              <Bar dataKey="share" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Market Share" />
+              <Bar dataKey="share" fill="var(--chart-2)" radius={[0, 4, 4, 0]} name="Market Share" />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

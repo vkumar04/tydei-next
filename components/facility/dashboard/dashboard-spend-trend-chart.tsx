@@ -101,11 +101,11 @@ export function DashboardSpendTrendChart({
                 iconType="circle"
                 wrapperStyle={{ fontSize: "0.75rem" }}
               />
-              <Bar dataKey="spend" name="Spend" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="spend" name="Spend" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
               <Bar
                 dataKey="rebate"
                 name="Rebate"
-                fill="#0ea5e9"
+                fill="var(--chart-2)"
                 radius={[4, 4, 0, 0]}
               />
             </BarChart>

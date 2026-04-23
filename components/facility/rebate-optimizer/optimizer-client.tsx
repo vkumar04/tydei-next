@@ -669,14 +669,14 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
                     dataKey="earned"
                     name="Earned"
                     stackId="a"
-                    fill="#22c55e"
+                    fill="var(--chart-1)"
                     radius={[0, 4, 4, 0]}
                   />
                   <Bar
                     dataKey="potential"
                     name="Potential"
                     stackId="a"
-                    fill="#3b82f6"
+                    fill="var(--chart-2)"
                     radius={[0, 4, 4, 0]}
                   />
                 </BarChart>

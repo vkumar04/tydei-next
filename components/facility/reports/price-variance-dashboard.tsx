@@ -289,13 +289,13 @@ export function PriceVarianceDashboard({
                 <Bar
                   yAxisId="left"
                   dataKey="Count"
-                  fill="#6366f1"
+                  fill="var(--chart-8)"
                   radius={[4, 4, 0, 0]}
                 />
                 <Bar
                   yAxisId="right"
                   dataKey="Impact"
-                  fill="#f43f5e"
+                  fill="var(--destructive)"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>

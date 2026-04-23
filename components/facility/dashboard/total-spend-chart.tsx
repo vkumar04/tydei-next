@@ -58,9 +58,9 @@ export function TotalSpendChart({ data }: TotalSpendChartProps) {
               <Line
                 type="monotone"
                 dataKey="spend"
-                stroke="#10b981"
+                stroke="var(--chart-1)"
                 strokeWidth={2}
-                dot={{ fill: "#10b981" }}
+                dot={{ fill: "var(--chart-1)" }}
               />
             </LineChart>
           </ResponsiveContainer>

@@ -467,8 +467,8 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                       <Area
                         type="monotone"
                         dataKey="target"
-                        stroke="#94a3b8"
-                        fill="#94a3b8"
+                        stroke="var(--muted-foreground)"
+                        fill="var(--muted-foreground)"
                         fillOpacity={0.2}
                         strokeDasharray="5 5"
                         name="Target"
@@ -476,8 +476,8 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                       <Area
                         type="monotone"
                         dataKey="spend"
-                        stroke="#3b82f6"
-                        fill="#3b82f6"
+                        stroke="var(--chart-2)"
+                        fill="var(--chart-2)"
                         fillOpacity={0.3}
                         name="Actual Spend"
                       />
@@ -509,8 +509,8 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                       <Radar
                         name="Performance"
                         dataKey="value"
-                        stroke="#3b82f6"
-                        fill="#3b82f6"
+                        stroke="var(--chart-2)"
+                        fill="var(--chart-2)"
                         fillOpacity={0.3}
                       />
                     </RadarChart>
@@ -552,7 +552,7 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                       }}
                       labelStyle={{ color: "var(--foreground)" }}
                     />
-                    <Bar dataKey="rebates" fill="#22c55e" radius={[4, 4, 0, 0]} name="Rebates" />
+                    <Bar dataKey="rebates" fill="var(--chart-1)" radius={[4, 4, 0, 0]} name="Rebates" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -880,8 +880,8 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
                       labelStyle={{ color: "var(--foreground)" }}
                     />
                     <Legend />
-                    <Bar dataKey="target" fill="#94a3b8" name="Target" radius={[0, 4, 4, 0]} />
-                    <Bar dataKey="spend" fill="#3b82f6" name="Actual" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="target" fill="var(--muted-foreground)" name="Target" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="spend" fill="var(--chart-2)" name="Actual" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

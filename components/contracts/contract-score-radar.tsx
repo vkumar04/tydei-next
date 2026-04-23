@@ -141,16 +141,16 @@ export function ContractScoreRadar({
             <Radar
               name="Score"
               dataKey="value"
-              stroke="#10b981"
-              fill="#10b981"
+              stroke="var(--chart-1)"
+              fill="var(--chart-1)"
               fillOpacity={0.3}
             />
             {benchmark && (
               <Radar
                 name="Industry benchmark"
                 dataKey="benchmark"
-                stroke="#94a3b8"
-                fill="#94a3b8"
+                stroke="var(--muted-foreground)"
+                fill="var(--muted-foreground)"
                 fillOpacity={0.15}
               />
             )}

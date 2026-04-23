@@ -63,7 +63,7 @@ export function SpendByCategoryChart({ data }: SpendByCategoryChartProps) {
                   cy="50%"
                   labelLine={false}
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill="var(--chart-5)"
                   dataKey="value"
                   label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
                 >

@@ -63,13 +63,13 @@ export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartP
               <Bar
                 dataKey="paymentExpected"
                 name="Expected Payment"
-                fill="#3b82f6"
+                fill="var(--chart-2)"
                 radius={[4, 4, 0, 0]}
               />
               <Bar
                 dataKey="paymentActual"
                 name="Payments Made"
-                fill="#22c55e"
+                fill="var(--chart-1)"
                 radius={[4, 4, 0, 0]}
               />
             </>
@@ -78,13 +78,13 @@ export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartP
               <Bar
                 dataKey="spend"
                 name="Monthly Spend"
-                fill="#3b82f6"
+                fill="var(--chart-2)"
                 radius={[4, 4, 0, 0]}
               />
               <Bar
                 dataKey="rebateEarned"
                 name="Target Spend"
-                fill="#22c55e"
+                fill="var(--chart-1)"
                 radius={[4, 4, 0, 0]}
               />
             </>
@@ -93,13 +93,13 @@ export function ReportTrendChart({ data, metric, reportType }: ReportTrendChartP
               <Bar
                 dataKey="spend"
                 name="Monthly Spend"
-                fill="#3b82f6"
+                fill="var(--chart-2)"
                 radius={[4, 4, 0, 0]}
               />
               <Bar
                 dataKey="rebateEarned"
                 name="Rebate Earned"
-                fill="#22c55e"
+                fill="var(--chart-1)"
                 radius={[4, 4, 0, 0]}
               />
             </>

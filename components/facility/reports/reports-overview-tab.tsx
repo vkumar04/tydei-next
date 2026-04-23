@@ -173,13 +173,13 @@ export function ReportsOverviewTab({
                     <Bar
                       dataKey="spend"
                       name="Spend"
-                      fill="#3b82f6"
+                      fill="var(--chart-2)"
                       radius={[4, 4, 0, 0]}
                     />
                     <Bar
                       dataKey="rebate"
                       name="Rebate"
-                      fill="#22c55e"
+                      fill="var(--chart-1)"
                       radius={[4, 4, 0, 0]}
                     />
                   </BarChart>

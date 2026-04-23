@@ -55,10 +55,10 @@ export function ContractPerformanceCharts({ contractId }: { contractId: string }
             <AreaChart data={data.monthly} margin={{ left: 8, right: 8, top: 8, bottom: 24 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month">
-                <Label value="Month" position="insideBottom" offset={-12} style={{ fill: "#6b7280", fontSize: 11 }} />
+                <Label value="Month" position="insideBottom" offset={-12} style={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
               </XAxis>
               <YAxis width={80} tickFormatter={formatAxisCurrency}>
-                <Label value="Spend (USD)" angle={-90} position="insideLeft" style={{ fill: "#6b7280", fontSize: 11, textAnchor: "middle" }} />
+                <Label value="Spend (USD)" angle={-90} position="insideLeft" style={{ fill: "var(--muted-foreground)", fontSize: 11, textAnchor: "middle" }} />
               </YAxis>
               <Tooltip
                 formatter={(value) => [
@@ -72,7 +72,7 @@ export function ContractPerformanceCharts({ contractId }: { contractId: string }
                     : s
                 }}
               />
-              <Area type="monotone" dataKey="spend" name="Spend" stroke="#10b981" fill="#10b98133" />
+              <Area type="monotone" dataKey="spend" name="Spend" stroke="var(--chart-1)" fill="color-mix(in oklch, var(--chart-1) 20%, transparent)" />
             </AreaChart>
           </ResponsiveContainer>
         </CardContent>
@@ -94,8 +94,8 @@ export function ContractPerformanceCharts({ contractId }: { contractId: string }
                 <YAxis width={80} tickFormatter={formatAxisCurrency} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="rebateEarned" fill="#3b82f6" name="Earned" />
-                <Bar dataKey="rebateCollected" fill="#10b981" name="Collected" />
+                <Bar dataKey="rebateEarned" fill="var(--chart-2)" name="Earned" />
+                <Bar dataKey="rebateCollected" fill="var(--chart-1)" name="Collected" />
               </BarChart>
             </ResponsiveContainer>
           )}

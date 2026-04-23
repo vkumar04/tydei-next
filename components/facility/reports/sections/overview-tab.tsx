@@ -278,8 +278,8 @@ export function OverviewTab({
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="spend" name="Spend" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="rebate" name="Rebate" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="spend" name="Spend" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="rebate" name="Rebate" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

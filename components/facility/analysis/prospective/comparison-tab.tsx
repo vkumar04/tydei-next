@@ -188,12 +188,12 @@ export function ComparisonTab({ proposals, onClear }: ComparisonTabProps) {
                 <Legend />
                 <Bar
                   dataKey={comparable[0]!.vendorName}
-                  fill="#3b82f6"
+                  fill="var(--chart-2)"
                   radius={[4, 4, 0, 0]}
                 />
                 <Bar
                   dataKey={comparable[1]!.vendorName}
-                  fill="#8b5cf6"
+                  fill="var(--chart-5)"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>

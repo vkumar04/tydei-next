@@ -54,8 +54,8 @@ export function PerformanceRadar({ scores }: PerformanceRadarProps) {
               <Radar
                 name="Performance"
                 dataKey="value"
-                stroke="#3b82f6"
-                fill="#3b82f6"
+                stroke="var(--chart-2)"
+                fill="var(--chart-2)"
                 fillOpacity={0.3}
               />
               <Tooltip contentStyle={chartTooltipStyle} />

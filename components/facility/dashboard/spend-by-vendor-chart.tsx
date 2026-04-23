@@ -66,7 +66,7 @@ export function SpendByVendorChart({ data }: SpendByVendorChartProps) {
                 contentStyle={chartTooltipStyle}
                 formatter={(value) => [formatCurrency(Number(value)), "Spend"]}
               />
-              <Bar dataKey="total" fill="#10b981" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="total" fill="var(--chart-1)" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
