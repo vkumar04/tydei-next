@@ -720,7 +720,14 @@ async function _createContractImpl(
       contractType: data.contractType,
       status: data.status,
       effectiveDate: new Date(data.effectiveDate),
-      expirationDate: new Date(data.expirationDate),
+      // Empty string → evergreen sentinel. Prisma Contract.expirationDate
+      // is NOT NULL (prisma/schema.prisma line 601), so we write the
+      // sentinel 9999-12-31 instead of null. `formatDate` renders it as
+      // "Evergreen"; `lib/contracts/match.ts:156` treats any date past
+      // the COG transaction as in-window, so every future row matches.
+      expirationDate: data.expirationDate
+        ? new Date(data.expirationDate)
+        : new Date(Date.UTC(9999, 11, 31)),
       autoRenewal: data.autoRenewal,
       terminationNoticeDays: data.terminationNoticeDays,
       totalValue: data.totalValue,
@@ -947,7 +954,10 @@ async function _updateContractImpl(
   if (data.contractType !== undefined) updateData.contractType = data.contractType
   if (data.status !== undefined) updateData.status = data.status
   if (data.effectiveDate !== undefined) updateData.effectiveDate = new Date(data.effectiveDate)
-  if (data.expirationDate !== undefined) updateData.expirationDate = new Date(data.expirationDate)
+  if (data.expirationDate !== undefined)
+    updateData.expirationDate = data.expirationDate
+      ? new Date(data.expirationDate)
+      : new Date(Date.UTC(9999, 11, 31))
   if (data.autoRenewal !== undefined) updateData.autoRenewal = data.autoRenewal
   if (data.terminationNoticeDays !== undefined) updateData.terminationNoticeDays = data.terminationNoticeDays
   if (data.totalValue !== undefined) updateData.totalValue = data.totalValue

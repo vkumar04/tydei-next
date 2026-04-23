@@ -18,12 +18,23 @@ export function formatCurrency(value: number, precise = false): string {
     : currencyFormatter.format(value)
 }
 
-export function formatDate(date: string | Date): string {
+export function formatDate(date: string | Date | null | undefined): string {
+  if (date === null || date === undefined) return "—"
+  const d = new Date(date)
+  // Evergreen sentinel. `lib/actions/contracts.ts` writes 9999-12-31 when
+  // a contract has no fixed expiration (AI extractor returned null).
+  if (d.getUTCFullYear() >= 9999) return "Evergreen"
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date(date))
+    // Contract dates are stored as UTC midnight (e.g. 2024-01-01T00:00:00Z).
+    // Formatting without an explicit timeZone defaults to the runtime's
+    // local zone, which shifts UTC-midnight dates to the previous calendar
+    // day for viewers west of UTC. Pin to UTC so the displayed date always
+    // matches the stored calendar date.
+    timeZone: "UTC",
+  }).format(d)
 }
 
 export function formatDateRange(

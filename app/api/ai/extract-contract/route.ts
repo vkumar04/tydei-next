@@ -37,6 +37,18 @@ KEY THINGS TO EXTRACT:
 
 Be thorough - extract every tier, product, and condition mentioned. Use null for fields not found in the document.
 
+── EVERGREEN / AUTO-RENEWING CONTRACTS (CRITICAL) ──
+Some contracts have an initial term of N months followed by automatic
+extensions, or language like "continues until terminated", "auto-renews
+annually", "remains in effect unless either party provides notice", or
+"pricing fixed for initial term with X% annual increase for extensions".
+For these contracts:
+- Return expirationDate: null — DO NOT return the end of the initial term.
+- Returning the initial-term end causes downstream spend-matching to
+  reject every transaction past that date; the matcher treats null as
+  "no upper bound", which is correct for an evergreen agreement.
+- effectiveDate is still the start date of the initial term.
+
 ── TIER EXTRACTION (CRITICAL) ──
 Usage contracts ALMOST ALWAYS have rebate tiers. If the document mentions
 ANY of the following, you MUST emit one row in terms[].tiers[] per tier:
@@ -144,6 +156,11 @@ you MUST emit one row per tier inside terms[].tiers[]:
 - rebateType: "percent_of_spend" for percentages, "fixed_rebate" for flat $ amounts.
 - rebateValue: the percentage number (3 for 3%) or the dollar amount.
 Do NOT return an empty tiers array for a usage contract that clearly has a tier structure.
+
+EVERGREEN / AUTO-RENEWING CONTRACTS: if the contract has language like
+"continues until terminated", "auto-renews annually", or "initial term
+followed by extensions", return expirationDate: null (do NOT use the
+initial-term end date). effectiveDate is still the start of the initial term.
 
 Return valid JSON only — no markdown fences.
 

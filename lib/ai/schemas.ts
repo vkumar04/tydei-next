@@ -9,8 +9,16 @@ export const extractedContractSchema = z.object({
   contractType: z
     .enum(["usage", "capital", "service", "tie_in", "grouped", "pricing_only"])
     .describe("The type of contract. Use 'usage' if the contract has rebate tiers based on spend or volume. Use 'pricing_only' ONLY if the contract is purely a price list with no rebates or performance terms. Use 'capital' for equipment purchases. Use 'grouped' for GPO/multi-vendor agreements. Use 'tie_in' for bundled product deals. Use 'service' for service-level agreements."),
-  effectiveDate: z.string().describe("Effective date in YYYY-MM-DD format"),
-  expirationDate: z.string().describe("Expiration date in YYYY-MM-DD format"),
+  effectiveDate: z
+    .string()
+    .nullable()
+    .describe("Effective date in YYYY-MM-DD format, or null if not stated"),
+  expirationDate: z
+    .string()
+    .nullable()
+    .describe(
+      "Expiration date in YYYY-MM-DD format, or null if the contract is evergreen / auto-renewing / 'continues until terminated'. Do NOT invent the initial-term end date for an evergreen contract.",
+    ),
   totalValue: z.number().optional().describe("Total contract value in dollars"),
   description: z.string().optional().describe("Brief description of the contract"),
   productCategory: z

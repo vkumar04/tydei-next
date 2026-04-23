@@ -351,10 +351,15 @@ export function VendorContractSubmission({
 
     setContractName(data.contractName)
     setContractType(data.contractType)
-    const effDate = new Date(data.effectiveDate)
-    const expDate = new Date(data.expirationDate)
-    if (!isNaN(effDate.getTime())) setEffectiveDate(effDate)
-    if (!isNaN(expDate.getTime())) setExpirationDate(expDate)
+    // AI extractor returns null for undated / evergreen fields; skip when null.
+    if (data.effectiveDate) {
+      const effDate = new Date(data.effectiveDate)
+      if (!isNaN(effDate.getTime())) setEffectiveDate(effDate)
+    }
+    if (data.expirationDate) {
+      const expDate = new Date(data.expirationDate)
+      if (!isNaN(expDate.getTime())) setExpirationDate(expDate)
+    }
     if (data.totalValue) setContractTotal(String(data.totalValue))
     if (data.description) setDescription(data.description)
 
@@ -374,8 +379,8 @@ export function VendorContractSubmission({
           paymentTiming: "quarterly",
           appliesTo: "all_products",
           rebateMethod: "cumulative" as const,
-          effectiveStart: data.effectiveDate,
-          effectiveEnd: data.expirationDate,
+          effectiveStart: data.effectiveDate ?? "",
+          effectiveEnd: data.expirationDate ?? "",
           tiers: t.tiers.map((tier) => ({
             tierNumber: tier.tierNumber,
             spendMin: tier.spendMin ?? 0,

@@ -31,7 +31,12 @@ export const createContractSchema = z.object({
   contractType: ContractTypeSchema,
   status: ContractStatusSchema,
   effectiveDate: z.string().min(1, "Effective date is required"),
-  expirationDate: z.string().min(1, "Expiration date is required"),
+  // Empty string = evergreen (no fixed expiration). The server action
+  // writes null to Prisma when this is "", and `lib/contracts/match.ts`
+  // treats null as "no upper bound" so every future COG row still
+  // matches. See app/api/ai/extract-contract/route.ts for how the AI
+  // extractor returns null for auto-renewing contracts.
+  expirationDate: z.string(),
   autoRenewal: z.boolean(),
   terminationNoticeDays: z.number().int().min(0),
   totalValue: z.number().min(0),

@@ -207,7 +207,7 @@ export function AIExtractReview({
           {editField === "effectiveDate" ? (
             <Input
               type="date"
-              defaultValue={data.effectiveDate}
+              defaultValue={data.effectiveDate ?? ""}
               autoFocus
               onBlur={(e) => updateField("effectiveDate", e.target.value)}
             />
@@ -216,7 +216,7 @@ export function AIExtractReview({
               className="font-medium text-sm cursor-pointer group flex items-center gap-1"
               onClick={() => setEditField("effectiveDate")}
             >
-              {data.effectiveDate || "Not detected"}
+              {data.effectiveDate ?? "Not detected"}
               <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
             </p>
           )}
@@ -228,7 +228,7 @@ export function AIExtractReview({
           {editField === "expirationDate" ? (
             <Input
               type="date"
-              defaultValue={data.expirationDate}
+              defaultValue={data.expirationDate ?? ""}
               autoFocus
               onBlur={(e) => updateField("expirationDate", e.target.value)}
             />
@@ -237,7 +237,7 @@ export function AIExtractReview({
               className="font-medium text-sm cursor-pointer group flex items-center gap-1"
               onClick={() => setEditField("expirationDate")}
             >
-              {data.expirationDate || "Not detected"}
+              {data.expirationDate ?? "Evergreen"}
               <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
             </p>
           )}
@@ -384,27 +384,21 @@ export function AIExtractReview({
         />
 
         {pricingItems.length > 0 ? (
-          <div className="flex items-center justify-between p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{pricingFileName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {pricingItems.length} pricing items loaded
-                </p>
+          <div className="p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{pricingFileName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {pricingItems.length} pricing items loaded
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Badge variant="secondary">{pricingItems.length} items</Badge>
-              {pricingCategories.map((cat) => (
-                <Badge key={cat} variant="outline" className="text-xs">
-                  {cat}
-                </Badge>
-              ))}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-7 w-7 shrink-0"
                 onClick={() => {
                   setPricingItems([])
                   setPricingFileName(null)
@@ -414,6 +408,14 @@ export function AIExtractReview({
               >
                 <X className="h-4 w-4" />
               </Button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">{pricingItems.length} items</Badge>
+              {pricingCategories.map((cat) => (
+                <Badge key={cat} variant="outline" className="text-xs">
+                  {cat}
+                </Badge>
+              ))}
             </div>
           </div>
         ) : (

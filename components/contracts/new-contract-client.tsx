@@ -392,13 +392,19 @@ export function NewContractClient({
     form.setValue("name", data.contractName)
     if (data.contractNumber) form.setValue("contractNumber", data.contractNumber)
     form.setValue("contractType", data.contractType)
-    form.setValue("effectiveDate", data.effectiveDate)
-    form.setValue("expirationDate", data.expirationDate)
+    // Null-safe: the AI extractor now returns null for evergreen
+    // contracts (expirationDate) and for undated fields (effectiveDate).
+    // Store "" in the form so the date <input> renders empty; the server
+    // action (lib/actions/contracts.ts) converts "" back to null.
+    form.setValue("effectiveDate", data.effectiveDate ?? "")
+    form.setValue("expirationDate", data.expirationDate ?? "")
     if (data.totalValue) {
       form.setValue("totalValue", data.totalValue)
-      // Auto-compute annual value
-      const effMs = new Date(data.effectiveDate).getTime()
-      const expMs = new Date(data.expirationDate).getTime()
+      // Auto-compute annual value. For evergreen contracts (no
+      // expirationDate) default to 1 year so annualValue == totalValue
+      // rather than dividing by NaN.
+      const effMs = data.effectiveDate ? new Date(data.effectiveDate).getTime() : NaN
+      const expMs = data.expirationDate ? new Date(data.expirationDate).getTime() : NaN
       const years = (!isNaN(effMs) && !isNaN(expMs)) ? Math.max(1, (expMs - effMs) / (365.25 * 24 * 60 * 60 * 1000)) : 1
       form.setValue("annualValue", Math.round((data.totalValue / years) * 100) / 100)
     }
@@ -524,8 +530,8 @@ export function NewContractClient({
             paymentTiming: "quarterly" as const,
             appliesTo: "all_products" as const,
             rebateMethod: "cumulative" as const,
-            effectiveStart: data.effectiveDate,
-            effectiveEnd: data.expirationDate,
+            effectiveStart: data.effectiveDate ?? "",
+            effectiveEnd: data.expirationDate ?? "",
             tiers: normalizedTiers,
           }
         })
@@ -554,6 +560,14 @@ export function NewContractClient({
       toast.error("Please fix the form errors")
       return
     }
+
+    // Primary "Create Contract" path: the form's default status is "draft"
+    // (see useContractForm), which excludes the contract from
+    // recomputeMatchStatusesForVendor and leaves every COG row as
+    // off_contract_item. The symmetric "Save as Draft" button explicitly
+    // sets "draft"; the main CTA must explicitly set "active" so the two
+    // buttons have aligned semantics.
+    form.setValue("status", "active")
 
     const values = form.getValues()
     // Charles W1.W-D3 + W1.W-E1 — include tie-in capital fields alongside
