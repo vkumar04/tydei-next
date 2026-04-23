@@ -118,11 +118,17 @@ def load_arthrex_pos(cog_path: Path) -> list[dict]:
         for row in reader:
             if not (row.get("Vendor") or "").strip().upper().startswith("ARTHREX"):
                 continue
+            date = parse_date(row.get("Date Ordered") or "")
+            # Rows with no parseable date are dropped — matches the real
+            # bulkImportCOGRecords behavior (schema requires transactionDate).
+            # Typically these are credit memos / return rows in Charles's data.
+            if date is None:
+                continue
             pos.append(
                 {
                     "ref": (row.get(ref_col) or "").strip(),
                     "product": (row.get(desc_col) or "").strip() if desc_col else "",
-                    "date": parse_date(row.get("Date Ordered") or ""),
+                    "date": date,
                     "extended": parse_money(row.get("Extended Cost") or ""),
                     "unit_cost": parse_money(row.get("Unit Cost") or ""),
                     "po": (row.get("Purchase Order Number") or "").strip(),
@@ -188,7 +194,13 @@ def main() -> None:
         lifetime = summarize("lifetime", pos)
         trailing = summarize(
             "trailing-12mo",
-            [p for p in pos if p["date"] and p["date"] >= TRAILING_12MO_START],
+            [
+                p
+                for p in pos
+                if p["date"]
+                and p["date"] >= TRAILING_12MO_START
+                and p["date"] <= TODAY
+            ],
         )
         ytd = summarize(
             "ytd", [p for p in pos if p["date"] and p["date"] >= YEAR_START]

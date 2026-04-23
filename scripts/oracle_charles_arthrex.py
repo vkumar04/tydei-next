@@ -186,7 +186,13 @@ def main() -> None:
     print(f"| **total** | **{n}** | **{fmt_currency(total)}** | 100.0% |")
     print()
 
-    trailing_pos = [p for p in pos if p["date"] and p["date"] >= TRAILING_12MO_START]
+    trailing_pos = [
+        p
+        for p in pos
+        if p["date"]
+        and p["date"] >= TRAILING_12MO_START
+        and p["date"] <= TODAY
+    ]
     print("## 3. Spend classification — trailing 12 months")
     print()
     total_t, n_t, by_bucket_t = section_totals(trailing_pos, "trailing")

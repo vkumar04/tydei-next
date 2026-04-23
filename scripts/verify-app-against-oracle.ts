@@ -36,14 +36,24 @@ const COG_CSV = "/Users/vickkumar/Desktop/experiment COG vendor short NEW.csv"
 const PRICE_XLSX = "/Users/vickkumar/Desktop/Cogsart01012024 Price file.xlsx"
 const ARTHREX_VENDOR_NAME = "Arthrex"
 
-// Oracle ground truth (from scripts/oracle_all_desktop.py, 2026-04-23):
+// Oracle ground truth (scripts/oracle_all_desktop.py, 2026-04-23) after
+// two corrections that aligned the oracle with production-importer
+// behavior:
+//   1) Trailing-12mo filter now gates BOTH ends of the window
+//      (date ≤ today). Prior version over-counted 2,169 future-dated
+//      rows — Charles's CSV extends through end-of-2026.
+//   2) Rows with un-parseable Date Ordered are dropped before
+//      classification. `bulkImportCOGRecords` rejects them at schema
+//      validation too (2 credit-memo rows in the big CSV). Honest
+//      parity requires the same skip.
 const ORACLE = {
-  lifetimeOnContractRows: 1037,
-  lifetimeOnContractSpend: 1_829_277.4,
-  lifetimeNotPricedSpend: 3_118_653.43,
-  lifetimeTotalSpend: 4_947_930.83,
-  trailingOnContractSpend: 1_718_979.57,
-  trailingTotalSpend: 4_065_791.99,
+  lifetimeOnContractRows: 1036,
+  lifetimeOnContractSpend: 1_829_652.4,
+  lifetimeNotPricedSpend: 3_119_573.43,
+  lifetimeTotalSpend: 4_949_225.83,
+  // trailing-12mo = [today - 365d, today] (both bounds)
+  trailingOnContractSpend: 1_260_401.46,
+  trailingTotalSpend: 1_596_582.47,
 }
 
 // ─── CSV (same parser as the live mass-upload) ────────────────────
