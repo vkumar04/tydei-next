@@ -104,7 +104,7 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
             </p>
           </div>
           <div>
-            <p className="text-muted-foreground">Not Priced</p>
+            <p className="text-muted-foreground">Off Contract</p>
             <p className="text-2xl font-bold text-sky-600">
               {formatCurrency(data.notPriced)}
             </p>
@@ -132,7 +132,7 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
                         yet. Not leakage — these are purchases from this
                         contract&apos;s vendor that need enrichment. Run
                         &quot;Re-run match&quot; on COG Data to resolve them
-                        into On Contract or Not Priced.
+                        into On Contract or Off Contract.
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -148,7 +148,7 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
           ) : null}
           <div className="col-span-2">
             <p className="inline-flex items-center gap-1 text-muted-foreground">
-              Off Contract
+              Leakage
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -163,7 +163,7 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
                     <p className="text-xs">
                       Leakage counts only truly off-contract spend: purchases
                       from vendors outside any active contract (or unknown
-                      vendors). &quot;Not Priced&quot; items are a pricing-file
+                      vendors). &quot;Off Contract&quot; items are a pricing-file
                       gap; &quot;Pre-Match&quot; items are same-vendor rows
                       awaiting enrichment — neither is leakage.
                     </p>
@@ -188,7 +188,7 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
             keyPrefix="on"
           />
           <BucketDrilldown
-            title="Not-priced items"
+            title="Off-contract items"
             items={data.topNotPriced}
             emptyMessage="No not-priced spend."
             keyPrefix="np"
