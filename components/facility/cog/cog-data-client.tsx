@@ -11,6 +11,7 @@ import { COGImportDialog } from "@/components/facility/cog/cog-import-dialog"
 import { PricingImportDialog } from "@/components/facility/cog/pricing-import-dialog"
 import { COGManualEntry } from "@/components/facility/cog/cog-manual-entry"
 import { CogEnrichmentStatsPanel } from "@/components/facility/cog/cog-enrichment-stats-panel"
+import { CogVendorConcentrationCard } from "@/components/facility/cog/cog-vendor-concentration-card"
 import { PricingImportHistoryCard } from "@/components/facility/cog/pricing-import-history-card"
 import { CogHero } from "@/components/facility/cog/cog-hero"
 import { CogControlBar } from "@/components/facility/cog/cog-control-bar"
@@ -142,6 +143,9 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
       {/* Enrichment stats panel — rows total / matched / unmatched /
           on-contract%. See COG data rewrite spec §6. */}
       <CogEnrichmentStatsPanel facilityId={facilityId} />
+
+      {/* Vendor concentration (v0 §9 HHI). */}
+      <CogVendorConcentrationCard facilityId={facilityId} />
 
       {/* Pricing-file import history (Subsystem 10.3) */}
       <PricingImportHistoryCard />
