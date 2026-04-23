@@ -291,18 +291,28 @@ export async function recomputeMatchStatusesForVendor(
       contracts,
     )
 
-    // If the cascade found a contract via vendor+date or fuzzy-name but the
-    // strict item-level matcher returned off_contract_item (e.g. the
-    // contract has zero ContractPricing rows, or the vendorItemNo simply
-    // isn't on the contract line-sheet), trust the weaker cascade signal
-    // and classify the row as on_contract against that contractId.
+    // Cascade override — only fires for contracts WITHOUT a priced catalog.
     //
-    // Without this override the match cascade's steps 2 & 3 have no effect:
-    // `matchCOGRecordToContract` only returns on_contract/price_variance
-    // when a pricingItems row matches, which defeats the whole purpose of
-    // a cascade fallback.
+    // When a contract has no `ContractPricing` rows (e.g. seeded data, or
+    // pricing lives in a `PricingFile` that hasn't been materialized), the
+    // strict item-level matcher can't find anything to match against, so
+    // every row would flip to `off_contract_item` without this override.
+    // The cascade's `vendorAndDate` step still legitimately says "yes, a
+    // contract covers this vendor on this date" — we trust that weaker
+    // signal and classify as `on_contract` (no authoritative price).
+    //
+    // HOWEVER — when the contract DOES have pricing items and the row's
+    // vendorItemNo simply isn't on the sheet, that's genuinely off-contract
+    // (oracle-parity fix, 2026-04-23). Firing the override there inflates
+    // on-contract spend by the entire long tail of miscoded-vendor rows.
+    // Example: Arthrex POs with refs like TAXES, HVAC, or misattributed
+    // Stryker SKUs — vendor matches, date matches, but the item is not
+    // really on an Arthrex contract. Strict matcher's off_contract_item
+    // result is correct; honor it.
+    const catalogPresent = contracts.some((c) => c.pricingItems.length > 0)
     const effectiveResult: MatchResult =
       result.status === "off_contract_item" &&
+      !catalogPresent &&
       cascade.contractId !== null &&
       (cascade.mode === "vendorAndDate" || cascade.mode === "fuzzyVendorName")
         ? { status: "on_contract", contractId: cascade.contractId, contractPrice: 0, savings: 0 }

@@ -257,6 +257,57 @@ describe("recomputeMatchStatusesForVendor", () => {
     })
   })
 
+  it("does NOT fire the cascade override when the contract has a priced catalog and the item isn't on it (oracle-parity fix)", async () => {
+    // Regression from the 2026-04-23 oracle re-run: the cascade override
+    // was firing for Arthrex POs whose vendorItemNo wasn't on the
+    // contract's pricing sheet, inflating on_contract by 3,221 rows
+    // (4,258 actual vs 1,037 oracle ground truth). The override should
+    // ONLY fire when the contract has NO pricing catalog (the
+    // zero-pricing-rows scenario above). When a catalog IS present and
+    // the item simply isn't on it, that's genuinely off-contract.
+    const { db, updates } = makeDb({
+      contracts: [
+        {
+          id: "c-with-pricing",
+          vendorId: "v-arthrex",
+          status: "active",
+          effectiveDate: new Date("2024-01-01"),
+          expirationDate: new Date("2026-12-31"),
+          facilityId: "fac-1",
+          contractFacilities: [],
+          pricingItems: [
+            { vendorItemNo: "AR-CATALOGUED", unitPrice: 100, listPrice: 150 },
+          ],
+        },
+      ],
+      records: [
+        {
+          id: "r-off",
+          facilityId: "fac-1",
+          vendorId: "v-arthrex",
+          vendorName: "Arthrex",
+          vendorItemNo: "AR-NOT-ON-SHEET",
+          unitCost: 50,
+          quantity: 1,
+          transactionDate: new Date("2025-06-15"),
+        },
+      ],
+    })
+
+    // @ts-expect-error — fake DB shape
+    const summary = await recomputeMatchStatusesForVendor(db, {
+      vendorId: "v-arthrex",
+      facilityId: "fac-1",
+    })
+
+    expect(summary.onContract).toBe(0)
+    expect(summary.offContract).toBe(1)
+    expect(updates[0]!.data).toMatchObject({
+      matchStatus: "off_contract_item",
+      isOnContract: false,
+    })
+  })
+
   it("flips records to out_of_scope when contract dates don't cover transaction", async () => {
     const { db, updates } = makeDb({
       contracts: [

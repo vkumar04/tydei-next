@@ -47,6 +47,8 @@ const COG_CSV = "/Users/vickkumar/Desktop/experiment COG vendor short NEW.csv"
 const PRICE_XLSX = "/Users/vickkumar/Desktop/Cogsart01012024 Price file.xlsx"
 
 const MATCH_FLOOR = 1000 // oracle = 1,037 ± tolerance
+const MATCH_CEIL = 1100 // oracle ground truth; anything higher is
+// the cascade-override fire-happy bug (see 2026-04-23 oracle-parity fix).
 
 // ─── CSV parse (delimiter + quoted fields, no dep) ──────────────
 function splitCsvLine(line: string): string[] {
@@ -312,8 +314,13 @@ async function main() {
       },
       [contract],
     )
+    // Mirror the catalogPresent gate from lib/cog/recompute.ts
+    // (oracle-parity fix 2026-04-23): only trust the cascade's weaker
+    // signal when the contract has NO priced catalog to check against.
+    const catalogPresent = contract.pricingItems.length > 0
     const effectiveResult =
       result.status === "off_contract_item" &&
+      !catalogPresent &&
       cascade.contractId !== null &&
       (cascade.mode === "vendorAndDate" || cascade.mode === "fuzzyVendorName")
         ? { status: "on_contract" as const, contractId: cascade.contractId, contractPrice: 0, savings: 0 }
@@ -372,16 +379,22 @@ async function main() {
   console.log()
   console.log(`## Oracle check`)
   console.log()
-  console.log(`Expected: on_contract + price_variance ≥ ${MATCH_FLOOR}`)
+  console.log(`Expected: ${MATCH_FLOOR} ≤ (on_contract + price_variance) ≤ ${MATCH_CEIL}`)
   console.log(`Actual:   ${matched}`)
   console.log()
-  if (matched >= MATCH_FLOOR) {
-    console.log(`**PASS** — matched ${matched} ≥ ${MATCH_FLOOR}`)
-    process.exit(0)
-  } else {
-    console.log(`**FAIL** — matched ${matched} < ${MATCH_FLOOR}`)
+  if (matched < MATCH_FLOOR) {
+    console.log(`**FAIL** — matched ${matched} < ${MATCH_FLOOR} (under-matching)`)
     process.exit(1)
   }
+  if (matched > MATCH_CEIL) {
+    console.log(
+      `**FAIL** — matched ${matched} > ${MATCH_CEIL} (over-matching — ` +
+        `cascade override probably firing when it shouldn't)`,
+    )
+    process.exit(1)
+  }
+  console.log(`**PASS** — matched ${matched} within oracle band`)
+  process.exit(0)
 }
 
 main().catch((err) => {
