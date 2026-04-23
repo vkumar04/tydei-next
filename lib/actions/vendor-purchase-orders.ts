@@ -8,6 +8,7 @@ import type { Prisma } from "@prisma/client"
 export interface VendorPORow {
   id: string
   poNumber: string
+  facilityId: string
   facilityName: string
   orderDate: string
   totalCost: number
@@ -33,6 +34,7 @@ export async function getVendorPurchaseOrders(_vendorId?: string): Promise<Vendo
   return serialize(pos.map((p) => ({
     id: p.id,
     poNumber: p.poNumber,
+    facilityId: p.facilityId,
     facilityName: p.facility.name,
     orderDate: p.orderDate.toISOString(),
     totalCost: Number(p.totalCost ?? 0),

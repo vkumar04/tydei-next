@@ -1,25 +1,54 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  getVendorPurchaseOrders,
-  getVendorFacilities,
-  getVendorFacilityProducts,
-  searchVendorProducts,
-  createVendorPurchaseOrder,
-  type VendorPORow,
-} from "@/lib/actions/vendor-purchase-orders"
+import { useCallback, useMemo, useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { POStatsCards } from "./purchase-orders/po-stats-cards"
-import { POFilterBar } from "./purchase-orders/po-filter-bar"
+import {
+  createVendorPurchaseOrder,
+  getVendorPurchaseOrders,
+  type VendorPORow,
+} from "@/lib/actions/vendor-purchase-orders"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+
 import { POTable } from "./purchase-orders/po-table"
 import { POViewDialog } from "./purchase-orders/po-view-dialog"
 import { POCreateDialog } from "./purchase-orders/po-create-dialog"
-import type { POLineItem, POType, POStats } from "./purchase-orders/types"
+import { VendorPOHero } from "./purchase-orders/po-hero"
+import { VendorPOControlBar } from "./purchase-orders/po-control-bar"
+import { useNewPOForm } from "./purchase-orders/use-new-po-form"
 import { poStatusConfig } from "./purchase-orders/types"
+
+// ─── Tab definitions ───────────────────────────────────────────────
+
+const TAB_KEYS = ["all", "pending", "approved", "in-progress", "fulfilled"] as const
+type TabKey = (typeof TAB_KEYS)[number]
+
+const PENDING_STATUSES = new Set(["pending_approval", "pending", "draft"])
+const APPROVED_STATUSES = new Set(["approved"])
+const IN_PROGRESS_STATUSES = new Set([
+  "acknowledged",
+  "processing",
+  "sent",
+  "shipped",
+])
+const FULFILLED_STATUSES = new Set(["fulfilled", "completed"])
+
+function matchesTab(status: string, tab: TabKey): boolean {
+  switch (tab) {
+    case "all":
+      return true
+    case "pending":
+      return PENDING_STATUSES.has(status)
+    case "approved":
+      return APPROVED_STATUSES.has(status)
+    case "in-progress":
+      return IN_PROGRESS_STATUSES.has(status)
+    case "fulfilled":
+      return FULFILLED_STATUSES.has(status)
+  }
+}
 
 // ─── Component ─────────────────────────────────────────────────────
 
@@ -29,30 +58,15 @@ interface VendorPurchaseOrdersClientProps {
 
 export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersClientProps) {
   const qc = useQueryClient()
+  const [tab, setTab] = useState<TabKey>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [facilityFilter, setFacilityFilter] = useState<string>("all")
+  const [searchQuery, setSearchQuery] = useState("")
   const [selectedPO, setSelectedPO] = useState<VendorPORow | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isAddPODialogOpen, setIsAddPODialogOpen] = useState(false)
 
-  // ─── New PO form state ─────────────────────────────────────────
-  const [newPOFacility, setNewPOFacility] = useState("")
-  const [newPOType, setNewPOType] = useState<POType>("standard")
-  const [newPODate, setNewPODate] = useState("")
-  const [newPONotes, setNewPONotes] = useState("")
-  const [newPOLineItems, setNewPOLineItems] = useState<POLineItem[]>([])
-  const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
-  const [productSearch, setProductSearch] = useState("")
-  const [addMethod, setAddMethod] = useState<"select" | "scan">("select")
-  const [scanInput, setScanInput] = useState("")
-  const [showExceptionForm, setShowExceptionForm] = useState(false)
-  const [exceptionProduct, setExceptionProduct] = useState({
-    sku: "",
-    name: "",
-    description: "",
-    lotSn: "",
-    unitPrice: "",
-    reason: "",
-  })
+  const form = useNewPOForm(vendorId)
 
   // ─── Queries ───────────────────────────────────────────────────
 
@@ -61,59 +75,6 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
     queryFn: () => getVendorPurchaseOrders(vendorId),
   })
 
-  const { data: facilities = [] } = useQuery({
-    queryKey: ["vendorFacilities", vendorId],
-    queryFn: () => getVendorFacilities(vendorId),
-  })
-
-  const selectedFacilityObj = facilities.find((f) => f.id === newPOFacility)
-
-  const { data: facilityProducts = [] } = useQuery({
-    queryKey: ["vendorFacilityProducts", vendorId, newPOFacility],
-    queryFn: () => getVendorFacilityProducts({ vendorId, facilityId: newPOFacility }),
-    enabled: !!newPOFacility,
-  })
-
-  const { data: searchResults = [] } = useQuery({
-    queryKey: ["vendorProductSearch", vendorId, newPOFacility, productSearch],
-    queryFn: () =>
-      searchVendorProducts({
-        vendorId,
-        facilityId: newPOFacility || undefined,
-        query: productSearch,
-      }),
-    enabled: productSearch.length >= 2,
-  })
-
-  // ─── Derived product lists ─────────────────────────────────────
-
-  const searchTerm = productSearch.toLowerCase().trim()
-
-  const filteredFacilityProducts = useMemo(() => {
-    if (!newPOFacility) return []
-    if (!searchTerm) return facilityProducts
-    return facilityProducts.filter(
-      (p) =>
-        p.description.toLowerCase().includes(searchTerm) ||
-        p.vendorItemNo.toLowerCase().includes(searchTerm) ||
-        (p.category ?? "").toLowerCase().includes(searchTerm)
-    )
-  }, [facilityProducts, searchTerm, newPOFacility])
-
-  const filteredCatalogProducts = useMemo(() => {
-    if (searchTerm.length < 2) return []
-    const facilityIds = new Set(facilityProducts.map((p) => p.vendorItemNo))
-    return searchResults.filter((p) => !facilityIds.has(p.vendorItemNo))
-  }, [searchResults, facilityProducts, searchTerm])
-
-  const displayedFacilityProducts = filteredFacilityProducts.slice(0, 50)
-  const displayedCatalogProducts = filteredCatalogProducts.slice(
-    0,
-    Math.max(0, 50 - displayedFacilityProducts.length)
-  )
-
-  // ─── Create mutation ───────────────────────────────────────────
-
   const createMutation = useMutation({
     mutationFn: createVendorPurchaseOrder,
     onSuccess: (result) => {
@@ -121,7 +82,7 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
       toast.success("Purchase Order Submitted", {
         description: `${result.poNumber} sent to ${result.facilityName} for approval`,
       })
-      resetForm()
+      form.resetForm()
       setIsAddPODialogOpen(false)
     },
     onError: (err) => {
@@ -135,252 +96,80 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
 
   const allOrders = data ?? []
 
-  const filteredOrders = useMemo(() => {
-    if (statusFilter === "all") return allOrders
-    return allOrders.filter((po) => po.status === statusFilter)
-  }, [allOrders, statusFilter])
-
-  const stats: POStats = useMemo(
+  const heroStats = useMemo(
     () => ({
-      pendingApproval: allOrders.filter(
-        (po) => po.status === "pending_approval" || po.status === "pending"
-      ).length,
-      approved: allOrders.filter((po) => po.status === "approved").length,
-      inProgress: allOrders.filter((po) =>
-        ["acknowledged", "processing", "sent", "shipped"].includes(po.status)
-      ).length,
-      fulfilled: allOrders.filter(
-        (po) => po.status === "fulfilled" || po.status === "completed"
-      ).length,
-      rejected: allOrders.filter(
-        (po) => po.status === "rejected" || po.status === "cancelled"
-      ).length,
+      totalPOs: allOrders.length,
       totalValue: allOrders.reduce((sum, po) => sum + po.totalCost, 0),
+      pendingApproval: allOrders.filter((po) => PENDING_STATUSES.has(po.status))
+        .length,
+      fulfilled: allOrders.filter((po) => FULFILLED_STATUSES.has(po.status))
+        .length,
+      cancelled: allOrders.filter((po) =>
+        ["rejected", "cancelled"].includes(po.status)
+      ).length,
     }),
     [allOrders]
   )
 
-  const newPOTotal = newPOLineItems.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
-    0
+  const tabCounts = useMemo(
+    () => ({
+      all: allOrders.length,
+      pending: allOrders.filter((po) => matchesTab(po.status, "pending")).length,
+      approved: allOrders.filter((po) => matchesTab(po.status, "approved")).length,
+      "in-progress": allOrders.filter((po) => matchesTab(po.status, "in-progress"))
+        .length,
+      fulfilled: allOrders.filter((po) => matchesTab(po.status, "fulfilled")).length,
+    }),
+    [allOrders]
   )
 
-  // ─── Line Item Handlers ────────────────────────────────────────
-
-  const handleAddLineItem = useCallback(() => {
-    let product = facilityProducts.find((p) => p.id === selectedProductToAdd)
-    let isFromCatalog = false
-
-    if (!product) {
-      product = searchResults.find((p) => p.id === selectedProductToAdd)
-      isFromCatalog = true
-    }
-
-    if (!product) return
-
-    if (newPOLineItems.some((item) => item.sku === product.vendorItemNo)) {
-      toast.error("Product already added", { description: "Update the quantity instead" })
-      return
-    }
-
-    const price = product.contractPrice ?? product.listPrice ?? 0
-
-    setNewPOLineItems((prev) => [
-      ...prev,
-      {
-        productId: product.id,
-        productName: product.description,
-        sku: product.vendorItemNo,
-        vendorItemNo: product.vendorItemNo,
-        lotSn: "",
-        quantity: 1,
-        unitPrice: price,
-        uom: product.uom,
-      },
-    ])
-
-    if (isFromCatalog && newPOFacility) {
-      toast.info("Product from catalog", {
-        description: "This product is not in the facility price file",
-      })
-    }
-
-    setSelectedProductToAdd("")
-    setProductSearch("")
-  }, [selectedProductToAdd, facilityProducts, searchResults, newPOLineItems, newPOFacility])
-
-  const handleScanProduct = useCallback(() => {
-    if (!scanInput.trim()) return
-
-    const term = scanInput.trim().toUpperCase()
-    const allProducts = newPOFacility ? facilityProducts : searchResults
-
-    let product = allProducts.find(
-      (p) =>
-        p.vendorItemNo.toUpperCase() === term ||
-        p.vendorItemNo.toUpperCase().includes(term) ||
-        p.description.toUpperCase().includes(term)
-    )
-
-    if (!product && newPOFacility) {
-      product = searchResults.find(
-        (p) =>
-          p.vendorItemNo.toUpperCase() === term ||
-          p.vendorItemNo.toUpperCase().includes(term) ||
-          p.description.toUpperCase().includes(term)
-      )
-      if (product) {
-        toast.info("Product from catalog", {
-          description: "This product is not in the facility price file - using list price",
-        })
+  const uniqueFacilities = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>()
+    for (const po of allOrders) {
+      if (po.facilityId && !map.has(po.facilityId)) {
+        map.set(po.facilityId, { id: po.facilityId, name: po.facilityName })
       }
     }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [allOrders])
 
-    if (!product) {
-      setExceptionProduct({
-        sku: scanInput.trim(),
-        name: "",
-        description: "",
-        lotSn: "",
-        unitPrice: "",
-        reason: "",
-      })
-      setShowExceptionForm(true)
-      toast.info("Product not found", {
-        description: "You can add this as a product exception",
-      })
-      return
-    }
-
-    const price = product.contractPrice ?? product.listPrice ?? 0
-
-    const existingIdx = newPOLineItems.findIndex(
-      (item) => item.sku === product.vendorItemNo
-    )
-    if (existingIdx !== -1) {
-      const updated = [...newPOLineItems]
-      updated[existingIdx].quantity += 1
-      setNewPOLineItems(updated)
-      toast.success("Quantity updated", {
-        description: `${product.description} qty: ${updated[existingIdx].quantity}`,
-      })
-    } else {
-      setNewPOLineItems((prev) => [
-        ...prev,
-        {
-          productId: product.id,
-          productName: product.description,
-          sku: product.vendorItemNo,
-          vendorItemNo: product.vendorItemNo,
-          lotSn: "",
-          quantity: 1,
-          unitPrice: price,
-          uom: product.uom,
-        },
-      ])
-      toast.success("Product added", { description: product.description })
-    }
-
-    setScanInput("")
-  }, [scanInput, facilityProducts, searchResults, newPOLineItems, newPOFacility])
-
-  const handleScanKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      handleScanProduct()
-    }
-  }
-
-  const handleAddException = () => {
-    if (!exceptionProduct.name || !exceptionProduct.unitPrice) {
-      toast.error("Missing information", {
-        description: "Please enter product name and price",
-      })
-      return
-    }
-
-    const price = parseFloat(exceptionProduct.unitPrice)
-    if (isNaN(price) || price <= 0) {
-      toast.error("Invalid price", { description: "Please enter a valid price" })
-      return
-    }
-
-    setNewPOLineItems((prev) => [
-      ...prev,
-      {
-        productId: `exception-${Date.now()}`,
-        productName: `${exceptionProduct.name} (Exception)`,
-        description: exceptionProduct.description,
-        sku: exceptionProduct.sku || `EXC-${Date.now()}`,
-        lotSn: exceptionProduct.lotSn,
-        quantity: 1,
-        unitPrice: price,
-        uom: "EA",
-        isException: true,
-        exceptionReason: exceptionProduct.reason,
-      },
-    ])
-
-    toast.success("Exception product added", { description: exceptionProduct.name })
-    setShowExceptionForm(false)
-    setExceptionProduct({ sku: "", name: "", description: "", lotSn: "", unitPrice: "", reason: "" })
-    setScanInput("")
-  }
-
-  const handleCancelException = () => {
-    setShowExceptionForm(false)
-    setExceptionProduct({ sku: "", name: "", description: "", lotSn: "", unitPrice: "", reason: "" })
-    setScanInput("")
-  }
-
-  const handleCameraScan = () => {
-    toast.info("Camera scanning", {
-      description: "Camera scan would activate here. For demo, use manual entry.",
+  const filteredOrders = useMemo(() => {
+    const search = searchQuery.trim().toLowerCase()
+    return allOrders.filter((po) => {
+      if (!matchesTab(po.status, tab)) return false
+      if (statusFilter !== "all" && po.status !== statusFilter) return false
+      if (facilityFilter !== "all" && po.facilityId !== facilityFilter) return false
+      if (search) {
+        const haystack = `${po.poNumber} ${po.facilityName}`.toLowerCase()
+        if (!haystack.includes(search)) return false
+      }
+      return true
     })
-    setAddMethod("scan")
-  }
-
-  const handleUpdateQuantity = (productId: string, quantity: number) => {
-    setNewPOLineItems((prev) =>
-      prev.map((item) =>
-        item.productId === productId ? { ...item, quantity: Math.max(1, quantity) } : item
-      )
-    )
-  }
-
-  const handleUpdateLotSn = (productId: string, lotSn: string) => {
-    setNewPOLineItems((prev) =>
-      prev.map((item) => (item.productId === productId ? { ...item, lotSn } : item))
-    )
-  }
-
-  const handleRemoveLineItem = (productId: string) => {
-    setNewPOLineItems((prev) => prev.filter((item) => item.productId !== productId))
-  }
+  }, [allOrders, tab, statusFilter, facilityFilter, searchQuery])
 
   // ─── Submit ────────────────────────────────────────────────────
 
   const handleCreatePO = () => {
-    if (!newPOFacility) {
+    if (!form.newPOFacility) {
       toast.error("Please select a facility")
       return
     }
-    if (!newPODate) {
+    if (!form.newPODate) {
       toast.error("Please select a PO date")
       return
     }
-    if (newPOLineItems.length === 0) {
+    if (form.newPOLineItems.length === 0) {
       toast.error("Please add at least one product")
       return
     }
 
     createMutation.mutate({
       vendorId,
-      facilityId: newPOFacility,
-      contractId: selectedFacilityObj?.contractId ?? undefined,
-      orderDate: newPODate,
-      notes: newPONotes || undefined,
-      lineItems: newPOLineItems.map((item) => ({
+      facilityId: form.newPOFacility,
+      contractId: form.selectedFacilityObj?.contractId ?? undefined,
+      orderDate: form.newPODate,
+      notes: form.newPONotes || undefined,
+      lineItems: form.newPOLineItems.map((item) => ({
         sku: item.sku,
         inventoryDescription: item.productName,
         vendorItemNo: item.vendorItemNo,
@@ -390,20 +179,6 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
         isOffContract: item.isException ?? false,
       })),
     })
-  }
-
-  const resetForm = () => {
-    setNewPOFacility("")
-    setNewPOType("standard")
-    setNewPODate("")
-    setNewPONotes("")
-    setNewPOLineItems([])
-    setScanInput("")
-    setProductSearch("")
-    setAddMethod("select")
-    setShowExceptionForm(false)
-    setSelectedProductToAdd("")
-    setExceptionProduct({ sku: "", name: "", description: "", lotSn: "", unitPrice: "", reason: "" })
   }
 
   // ─── Export ────────────────────────────────────────────────────
@@ -430,8 +205,6 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
     })
   }
 
-  // ─── View PO handler ──────────────────────────────────────────
-
   const handleViewPO = useCallback((po: VendorPORow) => {
     setSelectedPO(po)
     setIsViewDialogOpen(true)
@@ -441,27 +214,54 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
 
   return (
     <div className="space-y-6">
-      <POStatsCards stats={stats} />
+      <VendorPOHero
+        totalPOs={heroStats.totalPOs}
+        totalValue={heroStats.totalValue}
+        pendingApproval={heroStats.pendingApproval}
+        fulfilled={heroStats.fulfilled}
+        cancelled={heroStats.cancelled}
+        isLoading={isLoading}
+      />
 
-      <POFilterBar
+      <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
+        <TabsList>
+          <TabTriggerWithCount value="all" label="All" count={tabCounts.all} />
+          <TabTriggerWithCount
+            value="pending"
+            label="Pending"
+            count={tabCounts.pending}
+          />
+          <TabTriggerWithCount
+            value="approved"
+            label="Approved"
+            count={tabCounts.approved}
+          />
+          <TabTriggerWithCount
+            value="in-progress"
+            label="In Progress"
+            count={tabCounts["in-progress"]}
+          />
+          <TabTriggerWithCount
+            value="fulfilled"
+            label="Fulfilled"
+            count={tabCounts.fulfilled}
+          />
+        </TabsList>
+      </Tabs>
+
+      <VendorPOControlBar
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        facilityId={facilityFilter}
+        onFacilityIdChange={setFacilityFilter}
+        facilities={uniqueFacilities}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         onExportCSV={handleExportCSV}
         onAddPO={() => setIsAddPODialogOpen(true)}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Purchase Orders</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <POTable
-            data={filteredOrders}
-            isLoading={isLoading}
-            onViewPO={handleViewPO}
-          />
-        </CardContent>
-      </Card>
+      <POTable data={filteredOrders} isLoading={isLoading} onViewPO={handleViewPO} />
 
       <POViewDialog
         open={isViewDialogOpen}
@@ -473,49 +273,70 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
         open={isAddPODialogOpen}
         onOpenChange={(open) => {
           setIsAddPODialogOpen(open)
-          if (!open) resetForm()
+          if (!open) form.resetForm()
         }}
-        facility={newPOFacility}
-        onFacilityChange={setNewPOFacility}
-        poType={newPOType}
-        onPOTypeChange={setNewPOType}
-        poDate={newPODate}
-        onPODateChange={setNewPODate}
-        notes={newPONotes}
-        onNotesChange={setNewPONotes}
-        facilities={facilities}
-        selectedFacilityObj={selectedFacilityObj}
-        facilityProducts={facilityProducts}
-        displayedFacilityProducts={displayedFacilityProducts}
-        displayedCatalogProducts={displayedCatalogProducts}
-        filteredFacilityProductsCount={filteredFacilityProducts.length}
-        filteredCatalogProductsCount={filteredCatalogProducts.length}
-        lineItems={newPOLineItems}
-        lineItemsTotal={newPOTotal}
-        searchTerm={searchTerm}
-        selectedProductToAdd={selectedProductToAdd}
-        onSelectedProductToAddChange={setSelectedProductToAdd}
-        productSearch={productSearch}
-        onProductSearchChange={setProductSearch}
-        addMethod={addMethod}
-        onAddMethodChange={setAddMethod}
-        scanInput={scanInput}
-        onScanInputChange={setScanInput}
-        showExceptionForm={showExceptionForm}
-        exceptionProduct={exceptionProduct}
-        onExceptionProductChange={setExceptionProduct}
-        onAddLineItem={handleAddLineItem}
-        onScanProduct={handleScanProduct}
-        onScanKeyPress={handleScanKeyPress}
-        onAddException={handleAddException}
-        onCancelException={handleCancelException}
-        onCameraScan={handleCameraScan}
-        onUpdateQuantity={handleUpdateQuantity}
-        onUpdateLotSn={handleUpdateLotSn}
-        onRemoveLineItem={handleRemoveLineItem}
+        facility={form.newPOFacility}
+        onFacilityChange={form.setNewPOFacility}
+        poType={form.newPOType}
+        onPOTypeChange={form.setNewPOType}
+        poDate={form.newPODate}
+        onPODateChange={form.setNewPODate}
+        notes={form.newPONotes}
+        onNotesChange={form.setNewPONotes}
+        facilities={form.facilities}
+        selectedFacilityObj={form.selectedFacilityObj}
+        facilityProducts={form.facilityProducts}
+        displayedFacilityProducts={form.displayedFacilityProducts}
+        displayedCatalogProducts={form.displayedCatalogProducts}
+        filteredFacilityProductsCount={form.filteredFacilityProductsCount}
+        filteredCatalogProductsCount={form.filteredCatalogProductsCount}
+        lineItems={form.newPOLineItems}
+        lineItemsTotal={form.newPOTotal}
+        searchTerm={form.searchTerm}
+        selectedProductToAdd={form.selectedProductToAdd}
+        onSelectedProductToAddChange={form.setSelectedProductToAdd}
+        productSearch={form.productSearch}
+        onProductSearchChange={form.setProductSearch}
+        addMethod={form.addMethod}
+        onAddMethodChange={form.setAddMethod}
+        scanInput={form.scanInput}
+        onScanInputChange={form.setScanInput}
+        showExceptionForm={form.showExceptionForm}
+        exceptionProduct={form.exceptionProduct}
+        onExceptionProductChange={form.setExceptionProduct}
+        onAddLineItem={form.handleAddLineItem}
+        onScanProduct={form.handleScanProduct}
+        onScanKeyPress={form.handleScanKeyPress}
+        onAddException={form.handleAddException}
+        onCancelException={form.handleCancelException}
+        onCameraScan={form.handleCameraScan}
+        onUpdateQuantity={form.handleUpdateQuantity}
+        onUpdateLotSn={form.handleUpdateLotSn}
+        onRemoveLineItem={form.handleRemoveLineItem}
         onCreatePO={handleCreatePO}
         isCreating={createMutation.isPending}
       />
     </div>
+  )
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────
+
+function TabTriggerWithCount({
+  value,
+  label,
+  count,
+}: {
+  value: TabKey
+  label: string
+  count: number
+}) {
+  return (
+    <TabsTrigger value={value} className="gap-2">
+      {label}
+      <Badge variant="secondary" className="h-5 px-1.5 text-[11px] tabular-nums">
+        {count}
+      </Badge>
+    </TabsTrigger>
   )
 }
