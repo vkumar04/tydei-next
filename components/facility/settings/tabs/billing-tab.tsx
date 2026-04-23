@@ -44,8 +44,8 @@ export function BillingTab() {
           <h3 className="font-medium mb-4">Payment Method</h3>
           <div className="flex items-center justify-between p-4 rounded-lg border">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-16 rounded bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center">
-                <span className="text-white text-xs font-bold">VISA</span>
+              <div className="flex h-10 w-16 items-center justify-center rounded border bg-muted">
+                <span className="text-xs font-bold tracking-wide text-foreground">VISA</span>
               </div>
               <div>
                 <p className="font-medium">Visa ending in 4242</p>
@@ -61,8 +61,8 @@ export function BillingTab() {
           <div className="space-y-3">
             <div className="flex items-center justify-between p-4 rounded-lg border">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-                  <TrendingUp className="h-5 w-5 text-white" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <TrendingUp className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="font-medium">Predictive Forecasting</p>
@@ -80,8 +80,8 @@ export function BillingTab() {
             </div>
             <div className="flex items-center justify-between p-4 rounded-lg border bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center">
-                  <Bot className="h-5 w-5 text-white" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Bot className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="font-medium">AI Contract Analysis</p>
