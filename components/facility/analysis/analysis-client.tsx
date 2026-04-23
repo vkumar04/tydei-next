@@ -9,26 +9,32 @@ import {
   type AnalyzeCapitalContractResult,
 } from "@/lib/actions/financial-analysis"
 import { queryKeys } from "@/lib/query-keys"
-import { AnalysisInputForm, type AnalysisFormState } from "./analysis-input-form"
-import { AnalysisResultsPanel } from "./analysis-results-panel"
+import {
+  AnalysisControlBar,
+  type AnalysisFormState,
+} from "./analysis-control-bar"
+import { AnalysisHero } from "./analysis-hero"
 import { AnalysisDepreciationTable } from "./analysis-depreciation-table"
 import { AnalysisCashflowChart } from "./analysis-cashflow-chart"
-import { AnalysisNarrativeCard } from "./analysis-narrative-card"
 import { AnalysisClauseRiskCard } from "./analysis-clause-risk-card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 /**
- * Financial-analysis orchestrator (subsystems 1-7).
+ * Financial-analysis orchestrator.
  *
- * Responsibilities:
- *   1. Load the facility's active contracts for the picker (subsystem 2).
- *   2. Hold form state + call `analyzeCapitalContract` whenever inputs
- *      settle (subsystems 1 + 3).
- *   3. Lay out the result cards: KPI panel, depreciation, cashflow,
- *      narrative, and (when available) clause-risk adjustment.
+ * New layout (2026-04-22 redesign, Pattern 1 — hero + tabbed details):
  *
- * Keeps under 200 lines by delegating rendering to the six dedicated
- * child components — this file is pure glue.
+ *   1. Horizontal ControlBar at the top: contract picker + inline stat
+ *      summary + "Assumptions" popover for full numeric inputs.
+ *   2. AnalysisHero — verdict, three big numbers (NPV / IRR / Verdict),
+ *      headline, narrative bullets, risks, and recommendation all in one
+ *      elevated panel.
+ *   3. Supporting detail tabs — Cashflow, Depreciation, Clause risk
+ *      (conditional). One panel visible at a time cuts the "card farm"
+ *      feel the old stacked layout had.
+ *
+ * Replaces the old 360px-sidebar + stacked-results grid.
  */
 export interface AnalysisClientProps {
   facilityId: string
@@ -114,66 +120,76 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
   const result = analyzeQuery.data
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-      <div className="space-y-4">
-        <AnalysisInputForm
-          contracts={contractOptions}
-          contractsLoading={contractsQuery.isLoading}
-          value={form}
-          onChange={setForm}
-          showPayUpfront={isCapital}
-        />
-      </div>
+    <div className="flex flex-col gap-6">
+      <AnalysisControlBar
+        contracts={contractOptions}
+        contractsLoading={contractsQuery.isLoading}
+        value={form}
+        onChange={setForm}
+        showPayUpfront={isCapital}
+      />
 
-      <div className="space-y-6">
-        {analyzeQuery.isError && (
-          <Alert variant="destructive">
-            <AlertTitle>Analysis failed</AlertTitle>
-            <AlertDescription>
-              {analyzeQuery.error instanceof Error
-                ? analyzeQuery.error.message
-                : "Unable to compute capital ROI."}
-            </AlertDescription>
-          </Alert>
-        )}
+      {analyzeQuery.isError && (
+        <Alert variant="destructive">
+          <AlertTitle>Analysis failed</AlertTitle>
+          <AlertDescription>
+            {analyzeQuery.error instanceof Error
+              ? analyzeQuery.error.message
+              : "Unable to compute capital ROI."}
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {!form.contractId && !contractsQuery.isLoading && (
-          <Alert>
-            <AlertTitle>Select a contract</AlertTitle>
-            <AlertDescription>
-              Pick an active contract from the form to run a capital ROI
-              analysis.
-            </AlertDescription>
-          </Alert>
-        )}
+      {!form.contractId && !contractsQuery.isLoading && (
+        <Alert>
+          <AlertTitle>Select a contract</AlertTitle>
+          <AlertDescription>
+            Pick an active contract from the control bar to run a capital ROI
+            analysis.
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {analyzeQuery.isFetching && !result && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Computing analysis...
-          </div>
-        )}
+      {analyzeQuery.isFetching && !result && (
+        <div className="flex items-center gap-2 rounded-lg border bg-card px-4 py-8 text-sm text-muted-foreground shadow-xs">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Computing analysis…
+        </div>
+      )}
 
-        {result && (
-          <>
-            <AnalysisResultsPanel
-              npv={result.roi.npv}
-              irr={result.roi.irr}
-              discountRate={form.discountRate / 100}
-              verdict={result.narrative.verdict}
-              headline={result.narrative.headline}
-            />
-            <div className="grid gap-6 xl:grid-cols-2">
+      {result && (
+        <>
+          <AnalysisHero
+            npv={result.roi.npv}
+            irr={result.roi.irr}
+            discountRate={form.discountRate / 100}
+            verdict={result.narrative.verdict}
+            narrative={result.narrative}
+          />
+
+          <Tabs defaultValue="cashflow" className="w-full">
+            <TabsList>
+              <TabsTrigger value="cashflow">Cashflow</TabsTrigger>
+              <TabsTrigger value="depreciation">Depreciation</TabsTrigger>
+              {result.riskAdjustedNPV && (
+                <TabsTrigger value="risk">Clause risk</TabsTrigger>
+              )}
+            </TabsList>
+
+            <TabsContent value="cashflow" className="mt-4">
               <AnalysisCashflowChart cashflows={result.roi.cashflows} />
-              <AnalysisNarrativeCard narrative={result.narrative} />
-            </div>
-            <AnalysisDepreciationTable schedule={result.roi.depreciation} />
+            </TabsContent>
+            <TabsContent value="depreciation" className="mt-4">
+              <AnalysisDepreciationTable schedule={result.roi.depreciation} />
+            </TabsContent>
             {result.riskAdjustedNPV && (
-              <AnalysisClauseRiskCard adjusted={result.riskAdjustedNPV} />
+              <TabsContent value="risk" className="mt-4">
+                <AnalysisClauseRiskCard adjusted={result.riskAdjustedNPV} />
+              </TabsContent>
             )}
-          </>
-        )}
-      </div>
+          </Tabs>
+        </>
+      )}
     </div>
   )
 }
