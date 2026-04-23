@@ -364,17 +364,20 @@ export async function getCOGStats(facilityId: string) {
       where: { facilityId: facility.id },
       _sum: { extendedPrice: true },
     }),
-    // Count items where the vendor has an active contract at this facility
-    prisma.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(DISTINCT cr.id)::bigint AS count
-        FROM cog_record cr
-        INNER JOIN contract c ON c."vendorId" = cr."vendorId"
-          AND c.status IN ('active', 'expiring')
-          AND (c."facilityId" = ${facility.id}
-               OR EXISTS (SELECT 1 FROM contract_facility cf WHERE cf."contractId" = c.id AND cf."facilityId" = ${facility.id}))
-        WHERE cr."facilityId" = ${facility.id}
-          AND cr."vendorId" IS NOT NULL
-      `.then((rows) => Number(rows[0]?.count ?? 0)),
+    // Charles 2026-04-23 — canonical on-contract count: matchStatus
+    // in (on_contract, price_variance). Previously this used a raw SQL
+    // vendor-join which counted "the vendor has a contract" (broader).
+    // That gave a different number than the Match Pricing toast
+    // (`matchCOGToContracts.onContractAfter`), and it showed 0 whenever
+    // matchStatus was still `pending` despite there being contracts in
+    // the system. Honest KPI: did the enrichment pipeline actually
+    // attach this row to a contract item? That's matchStatus.
+    prisma.cOGRecord.count({
+      where: {
+        facilityId: facility.id,
+        matchStatus: { in: ["on_contract", "price_variance"] },
+      },
+    }),
     // Sum real savings across matched rows. A row is "matched" when the
     // enrichment pipeline has attached it to contract pricing — i.e.
     // matchStatus is on_contract or price_variance. Everything else has
