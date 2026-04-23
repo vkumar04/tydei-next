@@ -21,11 +21,23 @@ export function useContracts(facilityId: string, filters?: Partial<ContractFilte
   })
 }
 
-export function useContract(id: string, periodId?: string) {
+export function useContract(
+  id: string,
+  periodId?: string,
+  options?: {
+    initialData?: Awaited<ReturnType<typeof getContract>>
+  },
+) {
   return useQuery({
     queryKey: queryKeys.contracts.detail(id, periodId),
     queryFn: () => getContract(id, periodId ? { periodId } : undefined),
     enabled: !!id,
+    // W2.A.5 — `initialData` seeds the React Query cache with the
+    // server-rendered payload so the first client render already has
+    // the full contract (no "$0" flash on the header cards). Only
+    // applies when no `periodId` filter is active — the server pre-
+    // fetches the all-periods view.
+    initialData: periodId ? undefined : options?.initialData,
   })
 }
 

@@ -25,6 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
+import type { getContract } from "@/lib/actions/contracts"
 import { getContractPeriods } from "@/lib/actions/contract-periods"
 import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
@@ -72,15 +73,23 @@ import {
 
 interface ContractDetailClientProps {
   contractId: string
+  // W2.A.5 — server-rendered contract payload threaded in from the
+  // server component so the first client render already has the full
+  // header-card numbers (currentSpend, rebateEarnedYTD, …). Prevents
+  // the "$0 flash" on initial page load.
+  initialContract?: Awaited<ReturnType<typeof getContract>>
 }
 
 export function ContractDetailClient({
   contractId,
+  initialContract,
 }: ContractDetailClientProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [periodId, setPeriodId] = useState<string | undefined>(undefined)
-  const { data: contract, isLoading } = useContract(contractId, periodId)
+  const { data: contract, isLoading } = useContract(contractId, periodId, {
+    initialData: initialContract,
+  })
   const { data: periods } = useQuery({
     queryKey: ["contract-periods", contractId],
     queryFn: () => getContractPeriods(contractId),
