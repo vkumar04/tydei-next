@@ -1970,6 +1970,226 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
     failures.push({ where: "v0 SLA penalty", detail: JSON.stringify(sla) })
   }
 
+  // ─── Tydei vs v0 — case-costing helpers ──────────────────────────
+  const {
+    defaultTierRebatePct,
+    specialtyPaymentMultiplier,
+    cmiAdjustedSpend,
+    peerVariancePct,
+    calculateSurgeonScores,
+  } = await import("@/lib/case-costing/score-calc")
+  if (defaultTierRebatePct(2) !== 4) {
+    failures.push({ where: "tydei defaultTierRebatePct(2)", detail: "≠ 4%" })
+  }
+  if (
+    specialtyPaymentMultiplier("cardiac") !== 1.2 ||
+    specialtyPaymentMultiplier("spine") !== 1.3 ||
+    specialtyPaymentMultiplier("orthopedic") !== 1.35
+  ) {
+    failures.push({ where: "tydei specialtyPaymentMultiplier", detail: "mismatch" })
+  }
+  if (!approx(cmiAdjustedSpend(1200, 1.2), 1000)) {
+    failures.push({ where: "tydei cmiAdjustedSpend", detail: "≠ 1000" })
+  }
+  if (!approx(peerVariancePct(120, 100), 20)) {
+    failures.push({ where: "tydei peerVariancePct", detail: "≠ 20" })
+  }
+  // Surgeon score 5-dim with defaults when bmi/age/time absent.
+  // Expected: payor 100, bmi 80 (default), age 70 (default), spend 90
+  // (100 − 5000/500), time 100 (100 − 0/5). Overall = mean = 88.
+  const ssDefault = calculateSurgeonScores({
+    commercialOrPrivatePayors: 5,
+    totalPayors: 5,
+    avgSpendPerCase: 5_000,
+  })
+  if (ssDefault.overallScore !== 88) {
+    failures.push({
+      where: "tydei surgeon score 5-dim defaults",
+      detail: `overall ${ssDefault.overallScore}, expected 88`,
+    })
+  }
+
+  // ─── Tydei vs v0 — alerts helpers ─────────────────────────────────
+  const {
+    priceDiscrepancySeverity,
+    complianceDropFires,
+    vendorInactiveFires,
+    tieInAtRiskFires,
+  } = await import("@/lib/alerts/severity")
+  if (
+    priceDiscrepancySeverity(1) !== "none" ||
+    priceDiscrepancySeverity(3) !== "warning" ||
+    priceDiscrepancySeverity(7) !== "critical"
+  ) {
+    failures.push({ where: "tydei priceDiscrepancySeverity", detail: "mismatch" })
+  }
+  if (!complianceDropFires({ currentPct: 82, historicalAvgPct: 90 })) {
+    failures.push({ where: "tydei complianceDropFires 8pp", detail: "should fire" })
+  }
+  if (complianceDropFires({ currentPct: 86, historicalAvgPct: 90 })) {
+    failures.push({ where: "tydei complianceDropFires 4pp", detail: "should not fire" })
+  }
+  if (!vendorInactiveFires(91)) {
+    failures.push({ where: "tydei vendorInactiveFires 91", detail: "should fire" })
+  }
+  if (
+    !tieInAtRiskFires([{ projectedSpend: 80, minimumSpend: 100 }])
+  ) {
+    failures.push({ where: "tydei tieInAtRiskFires 80/100", detail: "should fire" })
+  }
+
+  // ─── Tydei vs v0 — contract performance ───────────────────────────
+  const {
+    calculateRebateUtilization,
+    calculateSpendConcentration,
+    calculateRenewalRisk,
+  } = await import("@/lib/contracts/performance")
+  const tydeiUtil = calculateRebateUtilization(75_000, [
+    { tierNumber: 1, spendMin: 0, spendMax: 50_000, rebateValue: 2 },
+    { tierNumber: 2, spendMin: 50_000, spendMax: 100_000, rebateValue: 3 },
+    { tierNumber: 3, spendMin: 100_000, spendMax: null, rebateValue: 4 },
+  ])
+  // actual $75k × 3% = $2,250; max = $75k × 4% = $3,000; util 75%.
+  if (!approx(tydeiUtil.utilizationPct, 75)) {
+    failures.push({
+      where: "tydei calculateRebateUtilization",
+      detail: JSON.stringify(tydeiUtil),
+    })
+  }
+  const tydeiConc = calculateSpendConcentration([
+    { vendorId: "a", spend: 40 },
+    { vendorId: "b", spend: 30 },
+    { vendorId: "c", spend: 20 },
+    { vendorId: "d", spend: 10 },
+  ])
+  // shares 40/30/20/10 → HHI = 1600+900+400+100 = 3000 → high.
+  if (!approx(tydeiConc.hhi, 3_000) || tydeiConc.level !== "high") {
+    failures.push({
+      where: "tydei calculateSpendConcentration",
+      detail: JSON.stringify(tydeiConc),
+    })
+  }
+  const renewalRisk = calculateRenewalRisk({
+    daysRemaining: 100,
+    compliancePct: 90,
+    avgPriceVariancePct: 2,
+    avgResponseTimeHours: 12,
+    rebateUtilizationPct: 80,
+    openIssues: 1,
+  })
+  if (renewalRisk.riskLevel === "high") {
+    failures.push({
+      where: "tydei calculateRenewalRisk",
+      detail: `should not be high, got ${renewalRisk.riskLevel}`,
+    })
+  }
+
+  // ─── Tydei vs v0 — COG analytics helpers ──────────────────────────
+  const { normalizeVendorKey, contractSpendSplit, classifySpendTrend } =
+    await import("@/lib/cog/analytics")
+  if (normalizeVendorKey("Medtronic, Inc.") !== "medtronic") {
+    failures.push({ where: "tydei normalizeVendorKey", detail: "≠ medtronic" })
+  }
+  const tydeiSplit = contractSpendSplit([
+    { totalCost: 700_000, hasContractPricing: true },
+    { totalCost: 300_000, hasContractPricing: false },
+  ])
+  if (!approx(tydeiSplit.compliancePct, 70)) {
+    failures.push({ where: "tydei contractSpendSplit", detail: JSON.stringify(tydeiSplit) })
+  }
+  const tydeiTrend = classifySpendTrend([100, 100, 100, 120, 130, 125])
+  if (tydeiTrend.trend !== "up") {
+    failures.push({ where: "tydei classifySpendTrend", detail: JSON.stringify(tydeiTrend) })
+  }
+
+  // ─── Tydei vs v0 — multi-facility rollup + dedup confidence ──────
+  const { multiFacilityRebateRollup, dedupConfidence } = await import(
+    "@/lib/contracts/multi-facility-rollup"
+  )
+  const tydeiRoll = multiFacilityRebateRollup(
+    [
+      { facilityId: "f1", spend: 500_000 },
+      { facilityId: "f2", spend: 300_000 },
+      { facilityId: "f3", spend: 200_000 },
+    ],
+    [
+      { tierNumber: 1, spendMin: 0, spendMax: 500_000, rebateValue: 2 },
+      { tierNumber: 2, spendMin: 500_000, spendMax: 1_000_000, rebateValue: 3 },
+      { tierNumber: 3, spendMin: 1_000_000, spendMax: null, rebateValue: 4 },
+    ],
+  )
+  if (!approx(tydeiRoll.totalRebate, 40_000) || !approx(tydeiRoll.perFacility[0]!.rebateShare, 20_000)) {
+    failures.push({ where: "tydei multiFacilityRebateRollup", detail: JSON.stringify(tydeiRoll) })
+  }
+  const dedupExact = dedupConfidence(
+    { inventoryNumber: "INV1", vendorItemNo: "AR-1", vendorName: "A", itemDescription: "x", date: "2025-01-01", poNumber: "PO1" },
+    { inventoryNumber: "INV1", vendorItemNo: "AR-1", vendorName: "A", itemDescription: "x", date: "2025-01-01", poNumber: "PO2" },
+  )
+  if (dedupExact !== "exact") {
+    failures.push({ where: "tydei dedupConfidence exact", detail: dedupExact })
+  }
+
+  // ─── Tydei vs v0 — invoice priority ──────────────────────────────
+  const { classifyInvoicePriority } = await import("@/lib/invoices/priority")
+  if (classifyInvoicePriority({ variancePct: 6 }) !== "high") {
+    failures.push({ where: "tydei classifyInvoicePriority >5%", detail: "≠ high" })
+  }
+  if (classifyInvoicePriority({ variancePct: 3 }) !== "medium") {
+    failures.push({ where: "tydei classifyInvoicePriority 3%", detail: "≠ medium" })
+  }
+  if (classifyInvoicePriority({ variancePct: 0, nonMatchingItem: true }) !== "high") {
+    failures.push({
+      where: "tydei classifyInvoicePriority non-matching",
+      detail: "≠ high",
+    })
+  }
+
+  // ─── Tydei vs v0 — performance history synthesis ─────────────────
+  const { synthesizePerformanceHistory } = await import(
+    "@/lib/renewals/synthesize-history"
+  )
+  const hist = synthesizePerformanceHistory({
+    currentSpend: 1_000_000,
+    earnedRebate: 50_000,
+    contractComplianceRate: 90,
+  })
+  if (
+    !approx(hist[0]!.spend, 850_000) ||
+    !approx(hist[1]!.spend, 720_000) ||
+    hist[0]!.compliance !== 85 ||
+    hist[1]!.compliance !== 80
+  ) {
+    failures.push({
+      where: "tydei synthesizePerformanceHistory",
+      detail: JSON.stringify(hist),
+    })
+  }
+
+  // ─── Tydei vs v0 — dynamic tiers + attainability ─────────────────
+  const { deriveDynamicTiers, tierAttainabilityScore } = await import(
+    "@/lib/prospective-analysis/dynamic-tiers"
+  )
+  const dyn = deriveDynamicTiers({ actualSpend: 100_000, baseRebatePct: 3 })
+  if (
+    dyn[0]!.threshold !== 50_000 ||
+    dyn[1]!.threshold !== 80_000 ||
+    dyn[2]!.threshold !== 100_000 ||
+    dyn[0]!.rebatePct !== 2 ||
+    dyn[2]!.rebatePct !== 4.5
+  ) {
+    failures.push({
+      where: "tydei deriveDynamicTiers",
+      detail: JSON.stringify(dyn),
+    })
+  }
+  if (
+    tierAttainabilityScore({ proposedSpend: 85_000, tier1Threshold: 50_000, tier2Threshold: 80_000 }) !== 85 ||
+    tierAttainabilityScore({ proposedSpend: 60_000, tier1Threshold: 50_000, tier2Threshold: 80_000 }) !== 70 ||
+    tierAttainabilityScore({ proposedSpend: 40_000, tier1Threshold: 50_000, tier2Threshold: 80_000 }) !== 50
+  ) {
+    failures.push({ where: "tydei tierAttainabilityScore", detail: "band mismatch" })
+  }
+
   // ─── Tydei vs v0 — price variance severity (3-band) ─────────────
   // Aligned 2026-04-23 to v0: ≤2 acceptable / ≤5 warning / >5 critical.
   const { calculatePriceVariance, classifyCogPriceVariance } = await import(

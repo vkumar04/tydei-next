@@ -46,14 +46,15 @@ describe("calculateSurgeonScores", () => {
     expect(r3.spendScore).toBe(100)
   })
 
-  it("overallScore = round((payorMix + spend) / 2)", () => {
-    // payorMix=70, spend=60 → (70+60)/2 = 65
+  it("overallScore = mean of 5 dimensions (v0 5-dim formula)", () => {
+    // payorMix=70, bmi=80 (default), age=70 (default), spend=60, time=100 (avgCaseTime=0)
+    // mean = (70 + 80 + 70 + 60 + 100) / 5 = 76
     const r = calculateSurgeonScores({
       commercialOrPrivatePayors: 7,
       totalPayors: 10,
       avgSpendPerCase: 20_000,
     })
-    expect(r.overallScore).toBe(65)
+    expect(r.overallScore).toBe(76)
   })
 
   it("color ≥75 → green", () => {
@@ -77,23 +78,30 @@ describe("calculateSurgeonScores", () => {
     expect(r.color).toBe("amber")
   })
 
-  it("color <50 → red", () => {
-    // payorMix=10, spend=0, overall=5 → red
+  it("color <50 → red (requires low dimensions, explicit bmi/age)", () => {
+    // Force all 5 dimensions low so mean drops under 50.
+    // payor=10, bmi=0, age=0, spend=0, time=0 → mean=2 → red.
     const r = calculateSurgeonScores({
       commercialOrPrivatePayors: 1,
       totalPayors: 10,
       avgSpendPerCase: 100_000,
+      bmiUnder40Pct: 0,
+      ageUnder65Pct: 0,
+      avgCaseTimeMinutes: 1_000,
     })
     expect(r.color).toBe("red")
   })
 
   it("boundary at 75 is green (inclusive)", () => {
-    // Need overall=75. payorMix=100, spend=50 → avg 50? (100+50)/2=75.
-    // spend=50 requires avg = 500 × 50 = 25_000
+    // Construct exactly 75: payor=100, bmi=80, age=70, spend=50, time=75
+    //   avgCase 500 × 50 = 25_000 → spend=50
+    //   avgCaseTimeMinutes = (100-75)*5 = 125 → time=75
+    // mean = (100+80+70+50+75)/5 = 75
     const r = calculateSurgeonScores({
       commercialOrPrivatePayors: 10,
       totalPayors: 10,
       avgSpendPerCase: 25_000,
+      avgCaseTimeMinutes: 125,
     })
     expect(r.overallScore).toBe(75)
     expect(r.color).toBe("green")
