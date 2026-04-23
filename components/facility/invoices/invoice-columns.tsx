@@ -114,7 +114,7 @@ export function getInvoiceColumns(
         const s = row.original.status
         const cfg = statusConfig[s] ?? {
           label: s,
-          className: "bg-gray-100 text-gray-800",
+          className: "bg-muted text-muted-foreground",
         }
         return (
           <Badge variant="secondary" className={cfg.className}>

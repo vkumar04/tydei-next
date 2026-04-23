@@ -276,7 +276,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-gray-500" />
+              <Clock className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Drafts</span>
             </div>
             <div className="text-2xl font-bold mt-1">{stats.draft}</div>
@@ -358,7 +358,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
               <DialogHeader>
                 <div className="flex items-center justify-between">
                   <DialogTitle className="text-xl">{selectedInvoice.invoiceNumber}</DialogTitle>
-                  <Badge className={statusConfig[selectedInvoice.status]?.color ?? "bg-gray-100 text-gray-700"}>
+                  <Badge className={statusConfig[selectedInvoice.status]?.color ?? "bg-muted text-muted-foreground"}>
                     {(() => {
                       const cfg = statusConfig[selectedInvoice.status]
                       const StatusIcon = cfg?.icon ?? FileText

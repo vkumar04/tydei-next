@@ -613,7 +613,7 @@ export function InvoiceValidationClient({
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge className={statusColors[invoice.status] ?? "bg-gray-100 text-gray-800"}>
+                            <Badge className={statusColors[invoice.status] ?? "bg-muted text-muted-foreground"}>
                               {invoice.status}
                             </Badge>
                           </TableCell>

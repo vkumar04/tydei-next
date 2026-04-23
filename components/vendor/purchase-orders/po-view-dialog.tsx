@@ -36,7 +36,7 @@ export function POViewDialog({ open, onOpenChange, selectedPO }: POViewDialogPro
                 <p className="text-sm text-muted-foreground">Status</p>
                 <Badge
                   className={
-                    poStatusConfig[selectedPO.status]?.color ?? "bg-gray-100 text-gray-700"
+                    poStatusConfig[selectedPO.status]?.color ?? "bg-muted text-muted-foreground"
                   }
                 >
                   {poStatusConfig[selectedPO.status]?.label ?? selectedPO.status}

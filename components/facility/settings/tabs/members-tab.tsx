@@ -68,7 +68,7 @@ export function MembersTab({
               <span className="text-sm"><strong>User:</strong> Standard access</span>
             </div>
             <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-gray-500" />
+              <Eye className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm"><strong>Viewer:</strong> Read-only</span>
             </div>
           </div>

@@ -48,7 +48,7 @@ export function POTable({ data, isLoading, onViewPO }: POTableProps) {
         header: "Status",
         cell: ({ row }) => {
           const s = row.original.status
-          const config = poStatusConfig[s] ?? { label: s, color: "bg-gray-100 text-gray-700" }
+          const config = poStatusConfig[s] ?? { label: s, color: "bg-muted text-muted-foreground" }
           return <Badge className={config.color}>{config.label}</Badge>
         },
       },

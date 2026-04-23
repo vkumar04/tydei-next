@@ -163,7 +163,7 @@ export function PdfClauseAnalyzerPanel({
                 <Badge
                   key={cat}
                   variant="outline"
-                  className="bg-white text-amber-800 border-amber-300"
+                  className="bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-100 dark:border-amber-800"
                 >
                   {categoryLabel(cat)}
                 </Badge>
