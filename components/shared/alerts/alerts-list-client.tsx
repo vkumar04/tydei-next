@@ -2,9 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Check } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -17,11 +15,11 @@ import {
 } from "@/hooks/use-alerts"
 import type { AlertFilters } from "@/lib/validators/alerts"
 
+import { AlertsHero } from "./alerts-hero"
 import {
   AlertsListFilters,
   type AlertsTabValue,
 } from "./alerts-list-filters"
-import { AlertsSummaryCards } from "./alerts-summary-cards"
 import { AlertsBulkActions } from "./alerts-bulk-actions"
 import { AlertsRow, type AlertRowItem } from "./alerts-row"
 import { AlertsListLoading, AlertsListEmpty } from "./alerts-list-states"
@@ -107,33 +105,19 @@ export function AlertsListClient({ facilityId }: AlertsListClientProps) {
 
   const emptyMessage =
     tab === "all"
-      ? "You\u2019re all caught up! We\u2019ll notify you when something needs your attention."
+      ? "You’re all caught up! We’ll notify you when something needs your attention."
       : "No alerts in this category."
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Alerts</h1>
-          <p className="text-muted-foreground">
-            Notifications about contracts, purchases, and rebates
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => markAllRead.mutate()}
-          disabled={markAllRead.isPending || summary.unread === 0}
-        >
-          <Check className="mr-2 h-4 w-4" />
-          Mark All Read
-        </Button>
-      </div>
-
-      <AlertsSummaryCards
+      <AlertsHero
         offContractCount={summary.offContract}
         expiringCount={summary.expiring}
         rebatesDueCount={summary.rebates}
         totalUnresolved={summary.total}
+        unreadCount={summary.unread}
+        onMarkAllRead={() => markAllRead.mutate()}
+        isMarkingAllRead={markAllRead.isPending}
       />
 
       <Card>
