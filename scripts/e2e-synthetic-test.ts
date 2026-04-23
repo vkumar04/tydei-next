@@ -1052,10 +1052,29 @@ async function crossViewConsistency(scenario: Scenario, failures: Failure[]): Pr
 
 /* ───────────────────── contract trailing-12mo check ────────────────── */
 
+/**
+ * `CogRecord.transactionDate` is `DateTime @db.Date` — Postgres stores
+ * only the date part (midnight UTC). A JS Date picked at e.g. 09:01Z
+ * on the same day as the window-start-at-20:19Z collapses to midnight
+ * in the DB, which means the DB row's stored date equals the window
+ * start's *date*. Any full-datetime comparison on the oracle side
+ * would drop it, while the DB's date-granularity query keeps it.
+ *
+ * Truncate both sides to UTC midnight so oracle + app compare at the
+ * same resolution the persistence layer actually uses.
+ */
+function toUtcMidnight(d: Date): Date {
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  )
+}
+
 async function trailing12MoCheck(scenario: Scenario, failures: Failure[]): Promise<void> {
   // For each contract, oracle = sum of extendedPrice for COG rows where the
   // pipeline classified the row as on_contract/price_variance to THIS contract
   // AND transactionDate within trailing 12mo. Compare to a grouped DB query.
+  const windowStartDay = toUtcMidnight(TRAILING_12MO_START)
+  const windowEndDay = toUtcMidnight(TODAY)
   for (const c of scenario.contracts) {
     // Oracle: planned rows whose expectedContractId == this contract AND
     // expected ∈ {on_contract, price_variance} AND date in trailing window.
@@ -1067,12 +1086,16 @@ async function trailing12MoCheck(scenario: Scenario, failures: Failure[]): Promi
     // need a separate lookup. Contract ids on the plan were filled on create,
     // but `expectedContractId` still holds the pre-id name. Fix: map names→ids.
     const cnameToId = new Map(scenario.contracts.map((x) => [x.name, x.id]))
-    for (const r of scenario.cog) {
+    for (let i = 0; i < scenario.cog.length; i++) {
+      const r = scenario.cog[i]!
       if (!r.expectedContractId) continue
       const resolvedContractId = cnameToId.get(r.expectedContractId) ?? r.expectedContractId
       if (resolvedContractId !== c.id) continue
       if (r.expected !== "on_contract" && r.expected !== "price_variance") continue
-      if (r.transactionDate < TRAILING_12MO_START || r.transactionDate > TODAY) continue
+      // Compare at day granularity — matches `@db.Date` storage. See
+      // toUtcMidnight comment above.
+      const rowDay = toUtcMidnight(r.transactionDate)
+      if (rowDay < windowStartDay || rowDay > windowEndDay) continue
       oracleSpend += r.extendedPrice
     }
     // App-side: DB groupBy filtered on contractId + date window
@@ -1086,9 +1109,56 @@ async function trailing12MoCheck(scenario: Scenario, failures: Failure[]): Promi
     })
     const appSpend = Number(appAgg._sum.extendedPrice ?? 0)
     if (Math.abs(oracleSpend - appSpend) > CENT) {
+      // Dump the divergent rows so triage knows which plan-vs-pipeline
+      // classification drifted. The pipeline usually wins (app > oracle)
+      // when a row the plan expected to go off_contract / unknown ends
+      // up routing to this contract via the cascade.
+      const appRows = await prisma.cOGRecord.findMany({
+        where: {
+          contractId: c.id,
+          transactionDate: { gte: TRAILING_12MO_START, lte: TODAY },
+          inventoryNumber: { startsWith: "E2E_INV_" },
+        },
+        select: {
+          id: true,
+          inventoryNumber: true,
+          extendedPrice: true,
+          matchStatus: true,
+          transactionDate: true,
+        },
+      })
+      const cnameToId = new Map(scenario.contracts.map((x) => [x.name, x.id]))
+      // COG rows are DB-indexed as E2E_INV_<position>, not by the
+      // plan's inventoryNumber field. Map position → plan row.
+      const oracleExpected = new Set<string>()
+      scenario.cog.forEach((r, i) => {
+        const rid = r.expectedContractId
+          ? cnameToId.get(r.expectedContractId) ?? r.expectedContractId
+          : null
+        if (
+          rid === c.id &&
+          (r.expected === "on_contract" ||
+            r.expected === "price_variance") &&
+          r.transactionDate >= TRAILING_12MO_START &&
+          r.transactionDate <= TODAY
+        ) {
+          oracleExpected.add(`E2E_INV_${i}`)
+        }
+      })
+      const oracleAll = new Map(
+        scenario.cog.map((r, i) => [`E2E_INV_${i}`, r] as const),
+      )
+      const extras = appRows
+        .filter((r) => !oracleExpected.has(r.inventoryNumber))
+        .slice(0, 5)
+        .map((r) => {
+          const plan = oracleAll.get(r.inventoryNumber)
+          return `  ${r.inventoryNumber} app=${r.matchStatus}/$${Number(r.extendedPrice).toFixed(2)} appDate=${r.transactionDate.toISOString()} planDate=${plan?.transactionDate.toISOString() ?? "?"} planExpected=${plan?.expected ?? "<missing>"}→${plan?.expectedContractId ?? "n/a"} window_start=${TRAILING_12MO_START.toISOString()}`
+        })
+        .join("\n")
       failures.push({
         where: `trailing12[${c.name}]`,
-        detail: `oracle=${oracleSpend.toFixed(2)} app=${appSpend.toFixed(2)} delta=${(appSpend - oracleSpend).toFixed(2)}`,
+        detail: `oracle=${oracleSpend.toFixed(2)} app=${appSpend.toFixed(2)} delta=${(appSpend - oracleSpend).toFixed(2)}\n${extras}`,
       })
     }
   }
