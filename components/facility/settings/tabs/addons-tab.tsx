@@ -43,14 +43,12 @@ export function AddonsTab({
         <CardContent className="space-y-4">
           <div
             className={`flex items-center justify-between rounded-lg border p-5 transition-colors ${
-              addonsState.predictive_forecasting
-                ? "bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800"
-                : ""
+              addonsState.predictive_forecasting ? "bg-muted/40" : ""
             }`}
           >
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 shadow-sm">
-                <BarChart3 className="h-6 w-6 text-white" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <BarChart3 className="h-6 w-6" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -65,9 +63,7 @@ export function AddonsTab({
                   AI-powered spend and rebate predictions on all charts and reports.
                   Forecast future contract performance and identify optimization opportunities.
                 </p>
-                <p className="text-sm font-semibold text-violet-700 dark:text-violet-400 mt-1">
-                  $200/mo
-                </p>
+                <p className="mt-1 text-sm font-semibold">$200/mo</p>
               </div>
             </div>
             <div className="flex-shrink-0 ml-4">
@@ -83,14 +79,12 @@ export function AddonsTab({
 
           <div
             className={`flex items-center justify-between rounded-lg border p-5 transition-colors ${
-              addonsState.ai_contract_analysis
-                ? "bg-teal-50/50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800"
-                : ""
+              addonsState.ai_contract_analysis ? "bg-muted/40" : ""
             }`}
           >
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 shadow-sm">
-                <Bot className="h-6 w-6 text-white" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Bot className="h-6 w-6" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -105,9 +99,7 @@ export function AddonsTab({
                   Automated PDF parsing, clause extraction, and contract recommendations.
                   Compare terms across vendors and identify risks automatically.
                 </p>
-                <p className="text-sm font-semibold text-teal-700 dark:text-teal-400 mt-1">
-                  $200/mo
-                </p>
+                <p className="mt-1 text-sm font-semibold">$200/mo</p>
               </div>
             </div>
             <div className="flex-shrink-0 ml-4">
@@ -123,14 +115,12 @@ export function AddonsTab({
 
           <div
             className={`flex items-center justify-between rounded-lg border p-5 transition-colors ${
-              addonsState.cost_modeling
-                ? "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
-                : ""
+              addonsState.cost_modeling ? "bg-muted/40" : ""
             }`}
           >
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 shadow-sm">
-                <Cpu className="h-6 w-6 text-white" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Cpu className="h-6 w-6" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -145,9 +135,7 @@ export function AddonsTab({
                   Build what-if cost models for contract negotiations.
                   Simulate pricing scenarios, volume commitments, and tier structures.
                 </p>
-                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 mt-1">
-                  $200/mo
-                </p>
+                <p className="mt-1 text-sm font-semibold">$200/mo</p>
               </div>
             </div>
             <div className="flex-shrink-0 ml-4">
