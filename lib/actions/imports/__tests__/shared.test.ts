@@ -24,12 +24,15 @@ describe("localFallbackMap — symmetric includes (W2.C-C)", () => {
     expect(mapping.vendorName).toBe("Vendor")
   })
 
-  it("maps a short header 'Date Ordered' to a target with long label", () => {
+  it("maps a short header 'Date Ordered' against the real cog-csv-import label 'Date Ordered / Transaction Date'", () => {
     const headers = ["Vendor", "Date Ordered"]
+    // This is the *exact* target-field label used by
+    // lib/actions/imports/cog-csv-import.ts — grepping the codebase
+    // for real production labels is the only reproducer that matters.
     const targets = [
       {
         key: "transactionDate",
-        label: "Transaction / Order / Invoice Date",
+        label: "Date Ordered / Transaction Date",
         required: true,
       },
     ]

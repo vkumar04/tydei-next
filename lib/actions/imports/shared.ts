@@ -98,7 +98,20 @@ export function localFallbackMap(
     const l = NORM(field.label)
     const match = headers.find((h) => {
       const n = NORM(h)
-      return n === k || n === l || n.includes(k) || n.includes(l)
+      // Charles W2.C-C: the match must be symmetric. When a header is
+      // SHORT ("Vendor", "Date Ordered") and the target label is a
+      // LONG superset ("Vendor / Supplier Name", "Catalog / Product
+      // Reference / Vendor Item Number"), the header doesn't contain
+      // the label — but the label does contain the header. Check both
+      // directions so real-world CSVs don't silently drop columns.
+      return (
+        n === k ||
+        n === l ||
+        n.includes(k) ||
+        n.includes(l) ||
+        k.includes(n) ||
+        l.includes(n)
+      )
     })
     if (match) mapping[field.key] = match
   }
