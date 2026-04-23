@@ -1022,19 +1022,26 @@ export function NewContractClient({
           <Button
             onClick={handleSubmit}
             disabled={createMutation.isPending}
-            className="min-w-[10rem]"
+            className="relative min-w-40"
           >
+            {/* Both labels are ALWAYS in the DOM at the same position;
+                only one is visible via `invisible`. This prevents any
+                reconciliation/transition window from painting both
+                labels at once (the earlier bug where "Creating..." and
+                "Create Contract" overlapped). */}
+            <span
+              className={createMutation.isPending ? "invisible" : "inline-flex items-center gap-2"}
+              aria-hidden={createMutation.isPending || undefined}
+            >
+              <Save className="h-4 w-4" />
+              Create Contract
+            </span>
             {createMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span className="absolute inset-0 inline-flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Creating...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Create Contract
-              </>
-            )}
+              </span>
+            ) : null}
           </Button>
         </div>
       </div>
