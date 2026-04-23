@@ -1094,6 +1094,177 @@ async function trailing12MoCheck(scenario: Scenario, failures: Failure[]): Promi
   }
 }
 
+/* ────────────────────── v0-parity checks ────────────────────────── */
+
+async function v0ParityChecks(failures: Failure[]): Promise<void> {
+  const {
+    v0Cumulative,
+    v0Marginal,
+    v0TierProgress,
+    v0PriceVariance,
+    v0TieInAllOrNothing,
+    v0TieInProportional,
+    v0QuarterlyTrueUp,
+    v0AnnualSettlement,
+  } = await import("@/lib/v0-spec/rebate-math")
+  const { calculateCumulative, calculateMarginal } = await import(
+    "@/lib/rebates/calculate"
+  )
+
+  const approx = (a: number, b: number, eps = 0.01) => Math.abs(a - b) <= eps
+
+  // ─── Doc example 1 — cumulative $75k / 3 tiers → $2,250 ──────────
+  // docs/contract-calculations.md §2
+  const tiersA = [
+    { tierNumber: 1, spendMin: 0, spendMax: 50_000, rebateValue: 2 },
+    { tierNumber: 2, spendMin: 50_000, spendMax: 100_000, rebateValue: 3 },
+    { tierNumber: 3, spendMin: 100_000, spendMax: null, rebateValue: 4 },
+  ]
+  const spec75 = v0Cumulative(75_000, tiersA)
+  if (!approx(spec75.rebateEarned, 2250)) {
+    failures.push({
+      where: "v0 cumulative self-check",
+      detail: `$75k/tiersA → expected $2,250, got ${spec75.rebateEarned}`,
+    })
+  }
+  const tydei75 = calculateCumulative(
+    75_000,
+    tiersA.map((t) => ({ ...t, tierName: null })),
+  )
+  if (!approx(tydei75.rebateEarned, spec75.rebateEarned)) {
+    failures.push({
+      where: "v0 cumulative vs tydei",
+      detail: `$75k → v0 ${spec75.rebateEarned}, tydei ${tydei75.rebateEarned}`,
+    })
+  }
+
+  // ─── Doc example 2 — marginal $125k → $3,500 ─────────────────────
+  const spec125 = v0Marginal(125_000, tiersA)
+  if (!approx(spec125.rebateEarned, 3500)) {
+    failures.push({
+      where: "v0 marginal self-check",
+      detail: `$125k/tiersA → expected $3,500, got ${spec125.rebateEarned}`,
+    })
+  }
+  const tydei125 = calculateMarginal(
+    125_000,
+    tiersA.map((t) => ({ ...t, tierName: null })),
+  )
+  if (!approx(tydei125.rebateEarned, spec125.rebateEarned)) {
+    failures.push({
+      where: "v0 marginal vs tydei",
+      detail: `$125k → v0 ${spec125.rebateEarned}, tydei ${tydei125.rebateEarned}`,
+    })
+  }
+
+  // ─── Doc example 3 — tier progression $35k → 70% / $15k ──────────
+  // docs/contract-calculations.md §3
+  const tiersB = [
+    { tierNumber: 1, spendMin: 0, spendMax: 50_000, rebateValue: 2 },
+    { tierNumber: 2, spendMin: 50_000, spendMax: null, rebateValue: 3 },
+  ]
+  const prog = v0TierProgress(35_000, tiersB)
+  if (
+    !approx(prog.progressPct, 70) ||
+    !approx(prog.amountToNextTier, 15_000) ||
+    prog.currentTierNumber !== 1 ||
+    prog.nextTierNumber !== 2
+  ) {
+    failures.push({
+      where: "v0 tier progression self-check",
+      detail: `$35k/tiersB → expected tier 1→2 @ 70% / $15k, got ${JSON.stringify(prog)}`,
+    })
+  }
+
+  // ─── Doc example 4 — price variance severity bands ───────────────
+  // docs/contract-calculations.md §6: ≤2% ACCEPTABLE, ≤5% WARNING, >5% CRITICAL
+  const cases: Array<[number, number, string]> = [
+    [100, 100, "ACCEPTABLE"], // 0% exact
+    [101, 100, "ACCEPTABLE"], // 1%
+    [102, 100, "ACCEPTABLE"], // 2% edge
+    [103, 100, "WARNING"], // 3%
+    [105, 100, "WARNING"], // 5% edge
+    [106, 100, "CRITICAL"], // 6%
+    [94, 100, "WARNING"], // -6%… actually -6% is CRITICAL
+    [95, 100, "WARNING"], // -5% edge
+  ]
+  // Above hand-authored expectations include one deliberate cross-check:
+  // -6% should be CRITICAL. Overwrite the 94/100 case accordingly.
+  cases[6] = [94, 100, "CRITICAL"]
+  for (const [actual, contract, expected] of cases) {
+    const v = v0PriceVariance(actual, contract)
+    if (v.severity !== expected) {
+      failures.push({
+        where: "v0 price-variance severity",
+        detail: `actual=${actual}, contract=${contract} → expected ${expected}, got ${v.severity}`,
+      })
+    }
+  }
+
+  // ─── Doc example 5 — tie-in all-or-nothing base compliance ───────
+  // §4 "exactly at minimums" → base rate applies. Spends [$25k,$40k,$35k],
+  // baseRate 2% → $100k × 2% = $2,000.
+  const tieInAon = v0TieInAllOrNothing(
+    [
+      { minimumSpend: 25_000, currentSpend: 25_000 },
+      { minimumSpend: 40_000, currentSpend: 40_000 },
+      { minimumSpend: 35_000, currentSpend: 35_000 },
+    ],
+    { baseRate: 2 },
+  )
+  if (!tieInAon.compliant || !approx(tieInAon.rebateEarned, 2_000)) {
+    failures.push({
+      where: "v0 tie-in all-or-nothing self-check",
+      detail: `expected compliant + $2,000, got ${JSON.stringify(tieInAon)}`,
+    })
+  }
+
+  // ─── Doc example 6 — tie-in proportional compliance ──────────────
+  // §4 "Proportional": spends [$20k,$40k,$28k] / minimums [$25k,$40k,$35k]
+  // with weights [30%,40%,30%], baseRate 2% → overall 0.88, rebate $1,548.80.
+  const tieInProp = v0TieInProportional(
+    [
+      { minimumSpend: 25_000, currentSpend: 20_000, weight: 0.3 },
+      { minimumSpend: 40_000, currentSpend: 40_000, weight: 0.4 },
+      { minimumSpend: 35_000, currentSpend: 28_000, weight: 0.3 },
+    ],
+    2,
+  )
+  if (
+    !approx(tieInProp.overallCompliance, 0.88, 0.001) ||
+    !approx(tieInProp.rebateEarned, 1548.8)
+  ) {
+    failures.push({
+      where: "v0 tie-in proportional self-check",
+      detail: `expected 0.88 compliance + $1,548.80, got ${JSON.stringify(tieInProp)}`,
+    })
+  }
+
+  // ─── Doc example 7 — quarterly true-up ───────────────────────────
+  // Q1 monthly accruals [$800, $900, $1050] sum to $2,750. Actual Q1
+  // rebate on $100k cumulative spend with tiersA — $100k exactly hits
+  // the tier-3 spendMin (4%), so actual = $100k × 4% = $4,000.
+  // Adjustment = $4,000 − $2,750 = +$1,250 additional owed.
+  const trueUp = v0QuarterlyTrueUp(100_000, tiersA, [800, 900, 1050])
+  if (!approx(trueUp.adjustment, 1_250)) {
+    failures.push({
+      where: "v0 quarterly true-up self-check",
+      detail: `expected +$1,250 adjustment, got ${trueUp.adjustment}`,
+    })
+  }
+
+  // ─── Doc example 8 — annual settlement ───────────────────────────
+  // Annual spend $500k on tiersA (cumulative) = $500k × 4% = $20,000.
+  // Sum of YTD accruals $10,000 → settlement = $10,000 due.
+  const settle = v0AnnualSettlement(500_000, tiersA, [10_000])
+  if (!approx(settle.settlementAmount, 10_000)) {
+    failures.push({
+      where: "v0 annual settlement self-check",
+      detail: `expected $10,000 settlement, got ${settle.settlementAmount}`,
+    })
+  }
+}
+
 /* ─────── tie-in persistence + collection-date round-trip ──────────── */
 
 async function tieInAndCollectionDateCheck(
@@ -1402,6 +1573,13 @@ async function main(): Promise<number> {
     // Trailing-12mo contract-detail cascade
     console.log(`[e2e] trailing-12mo check…`)
     await trailing12MoCheck(scenario, failures)
+
+    // Oracle now encodes Charles's v0 prototype math as ground truth.
+    // Any divergence between tydei's engine and the v0 spec is a bug
+    // in tydei, not in the spec. See `lib/v0-spec/rebate-math.ts` and
+    // the "docs" directory of the v0 prototype for the source rules.
+    console.log(`[e2e] v0-parity checks…`)
+    await v0ParityChecks(failures)
 
     // Charles — tie-in terms/tiers atomic-persistence + collection-date
     // round-trip checks. Regression guards for:
