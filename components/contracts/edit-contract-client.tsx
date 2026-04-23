@@ -199,8 +199,18 @@ export function EditContractClient({
           expirationDate: watchedExpiration || null,
         })
         if (cancelled) return
-        if (r.totalValue > 0) form.setValue("totalValue", r.totalValue)
-        if (r.annualValue > 0) form.setValue("annualValue", r.annualValue)
+        // Charles 2026-04-23 prod regression: if the user typed a value
+        // into Total/Annual after load, don't clobber it. RHF marks the
+        // field dirty only on user input (setValue with default shouldDirty
+        // keeps it clean), so dirtyFields is a reliable manual-override
+        // signal.
+        const dirty = form.formState.dirtyFields
+        if (r.totalValue > 0 && !dirty.totalValue) {
+          form.setValue("totalValue", r.totalValue)
+        }
+        if (r.annualValue > 0 && !dirty.annualValue) {
+          form.setValue("annualValue", r.annualValue)
+        }
       } catch {
         // Silent — user can manually re-enter values.
       }

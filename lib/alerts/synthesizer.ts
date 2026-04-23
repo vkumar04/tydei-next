@@ -97,6 +97,22 @@ export interface SynthExistingAlert {
   status: string // 'new_alert' | 'read' | 'resolved' | 'dismissed'
 }
 
+export interface SynthBundleMember {
+  /** contractId for all_or_nothing / proportional, vendorId for cross_vendor. */
+  entityId: string
+  entityName: string
+  currentSpend: number
+  minimumSpend: number
+}
+
+export interface SynthBundle {
+  bundleId: string
+  bundleLabel: string
+  primaryContractId: string
+  complianceMode: "all_or_nothing" | "proportional" | "cross_vendor"
+  members: SynthBundleMember[]
+}
+
 export interface SynthInput {
   facilityId: string
   /** `now` override — tests pass a fixed date. */
@@ -105,6 +121,8 @@ export interface SynthInput {
   contracts: SynthContract[]
   contractPeriods: SynthContractPeriod[]
   paymentSchedules?: SynthPaymentSchedule[]
+  /** Tie-in bundles with current member spend — drives tie_in_at_risk. */
+  bundles?: SynthBundle[]
   /** Currently-active (non-dismissed, non-resolved) alerts. */
   existingAlerts: SynthExistingAlert[]
 }

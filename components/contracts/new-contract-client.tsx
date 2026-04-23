@@ -121,14 +121,13 @@ export function NewContractClient({
       : `new-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   )
 
-  // Charles 2026-04-23 (Bugs 9 + 10): Contract Total is defined by spend,
-  // not an arbitrary user-entered or AI-extracted number. Whenever the
-  // vendor or effective window changes, snap Total + Annual to the
-  // derived COG aggregate even if the fields already carry values. The
-  // Fields remain editable so users can still override for one-off
-  // deals, but the default is ALWAYS the spend-based figure — not a
-  // stale AI guess or a placeholder. The separate "Suggest from COG"
-  // button was removed because its behavior is now the default.
+  // Charles 2026-04-23 (Bugs 9 + 10, revised): auto-derive Contract
+  // Total + Annual from COG when the vendor/date window changes — but
+  // NEVER overwrite a value the user has already typed. Prod regression
+  // was that a user's 5,300,000 would snap back to the COG-derived
+  // figure every time an upstream field changed. We now check the
+  // react-hook-form dirtyFields map: if totalValue/annualValue is
+  // dirty, it's a manual override and we leave it alone.
   const watchedVendorId = form.watch("vendorId")
   const watchedEffective = form.watch("effectiveDate")
   const watchedExpiration = form.watch("expirationDate")
@@ -142,8 +141,13 @@ export function NewContractClient({
           expirationDate: watchedExpiration || null,
         })
         if (cancelled) return
-        if (r.totalValue > 0) form.setValue("totalValue", r.totalValue)
-        if (r.annualValue > 0) form.setValue("annualValue", r.annualValue)
+        const dirty = form.formState.dirtyFields
+        if (r.totalValue > 0 && !dirty.totalValue) {
+          form.setValue("totalValue", r.totalValue)
+        }
+        if (r.annualValue > 0 && !dirty.annualValue) {
+          form.setValue("annualValue", r.annualValue)
+        }
       } catch {
         // Silent — user can still type values manually.
       }
