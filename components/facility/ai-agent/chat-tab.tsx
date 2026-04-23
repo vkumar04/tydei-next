@@ -35,7 +35,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { FACILITY_SUGGESTED_QUESTIONS } from "@/lib/ai/chat-suggestions"
 
 // Icon mapping for the 6 canonical categories (spec §2).
@@ -220,20 +219,23 @@ export function ChatTab() {
                 {FACILITY_SUGGESTED_QUESTIONS.map((sq) => {
                   const Icon = CATEGORY_ICONS[sq.category] ?? Sparkles
                   return (
-                    <Button
+                    <button
                       key={sq.category}
-                      variant="outline"
-                      className="h-auto p-4 flex flex-col items-start gap-2 text-left"
+                      type="button"
                       onClick={() => handleSuggestion(sq.question)}
+                      disabled={isLoading}
+                      className="flex h-auto w-full flex-col items-start gap-2 rounded-lg border bg-card p-4 text-left transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
                     >
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-primary" />
-                        <span className="font-medium">{sq.category}</span>
+                      <div className="flex w-full items-center gap-2">
+                        <Icon className="h-4 w-4 shrink-0 text-primary" />
+                        <span className="truncate text-sm font-medium">
+                          {sq.category}
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground line-clamp-2">
+                      <p className="line-clamp-2 w-full text-xs leading-relaxed text-muted-foreground">
                         {sq.question}
-                      </span>
-                    </Button>
+                      </p>
+                    </button>
                   )
                 })}
               </div>
@@ -294,15 +296,6 @@ export function ChatTab() {
           </p>
         </div>
       </Card>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Badge variant="secondary">Contract Analysis</Badge>
-        <Badge variant="secondary">Rebate Calculations</Badge>
-        <Badge variant="secondary">Market Share</Badge>
-        <Badge variant="secondary">Surgeon Metrics</Badge>
-        <Badge variant="secondary">Alerts Review</Badge>
-        <Badge variant="secondary">Cost Optimization</Badge>
-      </div>
     </div>
   )
 }
