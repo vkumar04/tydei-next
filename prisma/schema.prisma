@@ -98,6 +98,13 @@ enum AlertType {
   payment_due
   pricing_error
   compliance
+  // Charles 2026-04-23 — v0 §10 alertTriggers ported as first-class
+  // enum values. The synthesizer fires these from
+  // `lib/alerts/severity.ts` helpers (compliance-drop, vendor-
+  // inactive, tie-in-at-risk).
+  compliance_drop
+  vendor_inactive
+  tie_in_at_risk
 }
 
 enum AlertSeverity {

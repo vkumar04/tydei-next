@@ -123,6 +123,9 @@ export interface SynthAlert {
     | "tier_threshold"
     | "rebate_due"
     | "payment_due"
+    | "compliance_drop"
+    | "vendor_inactive"
+    | "tie_in_at_risk"
   title: string
   description: string
   severity: "high" | "medium" | "low"
@@ -536,6 +539,7 @@ export function synthesizeAlertsForFacility(input: SynthInput): SynthResult {
   const tier = synthTierThreshold(input)
   const rebate = synthRebateDue(input, now)
   const payment = synthPaymentDue(input, now)
+  const inactive = synthVendorInactive(input, now)
 
   const keepKeys = new Set<string>([
     ...off.keepKeys,
@@ -543,6 +547,7 @@ export function synthesizeAlertsForFacility(input: SynthInput): SynthResult {
     ...tier.keepKeys,
     ...rebate.keepKeys,
     ...payment.keepKeys,
+    ...inactive.keepKeys,
   ])
 
   // Any existing alert whose dedupeKey is NOT in keepKeys has no active condition.
@@ -560,7 +565,82 @@ export function synthesizeAlertsForFacility(input: SynthInput): SynthResult {
     ...tier.create,
     ...rebate.create,
     ...payment.create,
+    ...inactive.create,
   ]
 
   return { toCreate, toResolve }
+}
+
+// ─── Rule 6: vendor_inactive (v0 §10) ────────────────────────────
+//
+// Fires when a vendor that has any active contract has had no COG
+// activity in the last 90 days. Derived from SynthInput.cogRecords +
+// SynthInput.contracts — no new input needed.
+
+/** Default activity window — mirrors v0 `alertTriggers.VENDOR_INACTIVE`. */
+export const VENDOR_INACTIVE_THRESHOLD_DAYS = 90
+
+function synthVendorInactive(input: SynthInput, now: Date): {
+  create: SynthAlert[]
+  keepKeys: Set<string>
+} {
+  const create: SynthAlert[] = []
+  const keepKeys = new Set<string>()
+
+  // Map vendorId → most-recent COG transactionDate.
+  const lastByVendor = new Map<string, Date>()
+  for (const r of input.cogRecords) {
+    if (!r.vendorId || !r.transactionDate) continue
+    const prev = lastByVendor.get(r.vendorId)
+    if (!prev || r.transactionDate > prev) {
+      lastByVendor.set(r.vendorId, r.transactionDate)
+    }
+  }
+
+  // One alert per vendor that has an active contract AND at least one
+  // prior purchase AND no recent COG. Vendors with ZERO COG are
+  // excluded — without an activity baseline we can't claim they've
+  // gone quiet.
+  const seenVendors = new Set<string>()
+  for (const c of input.contracts) {
+    if (c.status !== "active") continue
+    if (seenVendors.has(c.vendorId)) continue
+    seenVendors.add(c.vendorId)
+    const last = lastByVendor.get(c.vendorId)
+    if (!last) continue
+    const days = Math.floor(
+      (now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24),
+    )
+    if (days <= VENDOR_INACTIVE_THRESHOLD_DAYS) continue
+
+    const dedupeKey = dedupeKeyFor("vendor_inactive", c.vendorId)
+    keepKeys.add(dedupeKey)
+    if (findExistingByDedupe(input.existingAlerts, dedupeKey)) continue
+
+    const displayDays = Number.isFinite(days) ? days : null
+    create.push({
+      portalType: "facility",
+      alertType: "vendor_inactive",
+      title:
+        displayDays != null
+          ? `No purchases from ${c.vendorName} in ${displayDays} days`
+          : `No recorded purchases from ${c.vendorName}`,
+      description: `Active contract "${c.name}" has seen no COG activity in the trailing ${VENDOR_INACTIVE_THRESHOLD_DAYS}-day window.`,
+      severity: "medium",
+      facilityId: input.facilityId,
+      contractId: c.id,
+      vendorId: c.vendorId,
+      actionLink: `/dashboard/contracts/${c.id}`,
+      metadata: {
+        dedupeKey,
+        vendor_id: c.vendorId,
+        vendor_name: c.vendorName,
+        days_since_last_purchase: displayDays,
+        threshold_days: VENDOR_INACTIVE_THRESHOLD_DAYS,
+      },
+      dedupeKey,
+    })
+  }
+
+  return { create, keepKeys }
 }
