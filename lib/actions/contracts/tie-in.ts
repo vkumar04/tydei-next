@@ -53,6 +53,12 @@ export async function getContractTieInBundle(contractId: string) {
 
   const perf: MemberPerformance[] = []
   for (const m of bundle.members) {
+    // Cross-vendor members (contractId null) are NOT supported by this
+    // legacy read path yet — it was written before the cross-vendor
+    // schema change. Skip them so existing pre-cross-vendor bundles
+    // keep working; cross-vendor bundles should be consumed via
+    // `computeBundleStatus` in `lib/contracts/bundle-compute.ts`.
+    if (!m.contract || !m.contractId) continue
     const cogAgg = await prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
@@ -61,9 +67,6 @@ export async function getContractTieInBundle(contractId: string) {
       _sum: { extendedPrice: true },
     })
     const spend = Number(cogAgg._sum.extendedPrice ?? 0)
-    // Charles R5.29: sum rebate across every term with tiers. Tie-in
-    // member contracts typically have one term, but nothing prevents
-    // two — and when they do, both should contribute.
     let rebate = 0
     if (spend > 0) {
       for (const term of m.contract.terms) {
@@ -80,11 +83,13 @@ export async function getContractTieInBundle(contractId: string) {
     })
   }
 
-  const members: TieInMember[] = bundle.members.map((m) => ({
-    contractId: m.contractId,
-    weightPercent: Number(m.weightPercent),
-    minimumSpend: m.minimumSpend != null ? Number(m.minimumSpend) : null,
-  }))
+  const members: TieInMember[] = bundle.members
+    .filter((m): m is typeof m & { contractId: string } => m.contractId !== null)
+    .map((m) => ({
+      contractId: m.contractId,
+      weightPercent: Number(m.weightPercent),
+      minimumSpend: m.minimumSpend != null ? Number(m.minimumSpend) : null,
+    }))
 
   const bonusMultiplier =
     bundle.bonusMultiplier != null ? Number(bundle.bonusMultiplier) : undefined
@@ -94,22 +99,24 @@ export async function getContractTieInBundle(contractId: string) {
       ? evaluateProportional(members, perf)
       : evaluateAllOrNothing(members, perf, { bonusMultiplier })
 
-  const memberRows = bundle.members.map((m) => {
-    const p = perf.find((p) => p.contractId === m.contractId)
-    return {
-      contractId: m.contractId,
-      contractName: m.contract.name,
-      vendorName: m.contract.vendor.name,
-      weightPercent: Number(m.weightPercent),
-      minimumSpend: m.minimumSpend != null ? Number(m.minimumSpend) : null,
-      currentSpend: p?.currentSpend ?? 0,
-      currentRebate: p?.currentRebate ?? 0,
-      compliantSoFar:
-        m.minimumSpend == null
-          ? true
-          : (p?.currentSpend ?? 0) >= Number(m.minimumSpend),
-    }
-  })
+  const memberRows = bundle.members
+    .filter((m): m is typeof m & { contract: NonNullable<typeof m.contract> } => m.contract !== null)
+    .map((m) => {
+      const p = perf.find((p) => p.contractId === m.contractId)
+      return {
+        contractId: m.contractId,
+        contractName: m.contract.name,
+        vendorName: m.contract.vendor.name,
+        weightPercent: Number(m.weightPercent),
+        minimumSpend: m.minimumSpend != null ? Number(m.minimumSpend) : null,
+        currentSpend: p?.currentSpend ?? 0,
+        currentRebate: p?.currentRebate ?? 0,
+        compliantSoFar:
+          m.minimumSpend == null
+            ? true
+            : (p?.currentSpend ?? 0) >= Number(m.minimumSpend),
+      }
+    })
 
   return serialize({
     bundle: {

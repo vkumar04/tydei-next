@@ -234,6 +234,10 @@ enum AccrualStatus {
 enum TieInMode {
   all_or_nothing
   proportional
+  // Charles 2026-04-23 — cross-vendor bundle per v0 spec (§4). Each
+  // member brings its own rebate rate; facility-level bonus fires when
+  // all members are compliant.
+  cross_vendor
 }
 
 enum VarianceDirection {
@@ -307,6 +311,7 @@ enum InvoiceDisputeStatus {
   resolved
   rejected
 }
+
 
 // ─── Better Auth managed tables ───────────────────────────────────
 
@@ -949,9 +954,27 @@ model TieInBundle {
   id                String    @id @default(cuid())
   primaryContractId String    @unique
   complianceMode   TieInMode @default(all_or_nothing)
-  bonusMultiplier  Decimal?  @db.Decimal(5, 4)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  // Charles 2026-04-23 — v0 spec bundle rebate structure.
+  //   baseRate: integer percent applied when all members are compliant.
+  //   bonusRate: added when every member is ≥120% of its minimum.
+  //   acceleratorMultiplier: multiplies (base+bonus) when every member
+  //     is ≥150%. Existing `bonusMultiplier` column is retained for
+  //     back-compat with pre-spec bundles and maps to acceleratorMultiplier
+  //     if non-null and acceleratorMultiplier is null.
+  baseRate              Decimal? @db.Decimal(5, 2)
+  bonusRate             Decimal? @db.Decimal(5, 2)
+  acceleratorMultiplier Decimal? @db.Decimal(4, 2)
+  bonusMultiplier       Decimal? @db.Decimal(5, 4)
+  // Bundle active window. Nullable so migrations don't require a
+  // default; server compute falls back to min/max of member contracts.
+  effectiveStart        DateTime?
+  effectiveEnd          DateTime?
+  // Cross-vendor bundle's facility-level bonus (e.g. from GPO). Applies
+  // the rate to total spend when every member is compliant. complianceMode
+  // = cross_vendor is the only mode that reads this pair.
+  facilityBonusRate     Decimal? @db.Decimal(5, 2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   primaryContract Contract            @relation("PrimaryContract", fields: [primaryContractId], references: [id], onDelete: Cascade)
   members         TieInBundleMember[]
@@ -962,15 +985,24 @@ model TieInBundle {
 model TieInBundleMember {
   id            String   @id @default(cuid())
   bundleId      String
-  contractId    String
+  // Charles 2026-04-23 — contractId now nullable. Cross-vendor members
+  // may reference a vendor directly without a full contract row. For
+  // all-or-nothing / proportional bundles contractId must be set.
+  contractId    String?
+  vendorId      String?
   weightPercent Decimal  @db.Decimal(5, 2)
   minimumSpend  Decimal? @db.Decimal(14, 2)
+  // Integer percent applied to this member's spend on cross_vendor
+  // bundles (e.g. Suture Co contributes 2% on its own spend).
+  rebateContribution Decimal? @db.Decimal(5, 2)
   createdAt     DateTime @default(now())
 
   bundle   TieInBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  contract Contract    @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contract Contract?   @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
-  @@unique([bundleId, contractId])
+  // `@@unique([bundleId, contractId])` was dropped to allow null
+  // contractId on cross-vendor members. Uniqueness is now enforced in
+  // the server action that writes the member.
   @@index([bundleId])
   @@map("tie_in_bundle_member")
 }
