@@ -1,10 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Building2 } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { VendorStats } from "./vendor-stats"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { VendorDashboardHero } from "./vendor-dashboard-hero"
 import { VendorSpendChart } from "./vendor-spend-chart"
 import { VendorMarketShareChart } from "./vendor-market-share-chart"
 import { VendorContractStatus } from "./vendor-contract-status"
@@ -37,9 +36,10 @@ export function VendorDashboardClient({ vendorId, vendorName }: VendorDashboardC
   const contractStatus = useVendorContractStatus(vendorId)
   const recentContracts = useVendorRecentContracts(vendorId)
 
+  const statsData = stats.data
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Page header */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight text-balance">
           Vendor Dashboard
@@ -49,66 +49,64 @@ export function VendorDashboardClient({ vendorId, vendorName }: VendorDashboardC
         </p>
       </div>
 
-      {/* Info Banner */}
-      <Card className="bg-primary/5 border-primary/20">
-        <CardContent className="py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-              <Building2 className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">
-                Vendor View Active - {vendorName}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                You are viewing aggregated data. Individual facility pricing and
-                competitor details are not visible.
-              </p>
-            </div>
+      <VendorDashboardHero
+        vendorName={vendorName}
+        activeContracts={statsData?.activeContracts ?? 0}
+        totalContracts={statsData?.totalContracts ?? 0}
+        totalSpend={statsData?.totalSpend ?? 0}
+        totalRebates={statsData?.totalRebates ?? 0}
+        activeFacilities={statsData?.activeFacilities ?? 0}
+        marketSharePercent={statsData?.marketSharePercent ?? 0}
+        isLoading={!statsData}
+      />
+
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="contracts">Contracts</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-4">
+          <div className="grid gap-6 lg:grid-cols-2">
+            {trend.data ? (
+              <VendorSpendChart data={trend.data} />
+            ) : (
+              <Skeleton className="h-[380px] rounded-xl" />
+            )}
+
+            {marketShare.data ? (
+              <VendorMarketShareChart data={marketShare.data} />
+            ) : (
+              <Skeleton className="h-[380px] rounded-xl" />
+            )}
           </div>
-        </CardContent>
-      </Card>
+        </TabsContent>
 
-      {/* Metric Cards */}
-      {stats.data ? (
-        <VendorStats stats={stats.data} />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[140px] rounded-xl" />
-          ))}
-        </div>
-      )}
+        <TabsContent value="performance" className="mt-4">
+          {trend.data ? (
+            <VendorSpendChart data={trend.data} />
+          ) : (
+            <Skeleton className="h-[380px] rounded-xl" />
+          )}
+        </TabsContent>
 
-      {/* Charts: Spend Trend + Market Share by Category */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {trend.data ? (
-          <VendorSpendChart data={trend.data} />
-        ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
-        )}
+        <TabsContent value="contracts" className="mt-4">
+          <div className="grid gap-6 lg:grid-cols-3">
+            {contractStatus.data ? (
+              <VendorContractStatus data={contractStatus.data} />
+            ) : (
+              <Skeleton className="h-[280px] rounded-xl" />
+            )}
 
-        {marketShare.data ? (
-          <VendorMarketShareChart data={marketShare.data} />
-        ) : (
-          <Skeleton className="h-[380px] rounded-xl" />
-        )}
-      </div>
-
-      {/* Contract Status + Recent Contracts */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {contractStatus.data ? (
-          <VendorContractStatus data={contractStatus.data} />
-        ) : (
-          <Skeleton className="h-[280px] rounded-xl" />
-        )}
-
-        {recentContracts.data ? (
-          <VendorRecentContracts data={recentContracts.data} />
-        ) : (
-          <Skeleton className="h-[280px] rounded-xl lg:col-span-2" />
-        )}
-      </div>
+            {recentContracts.data ? (
+              <VendorRecentContracts data={recentContracts.data} />
+            ) : (
+              <Skeleton className="h-[280px] rounded-xl lg:col-span-2" />
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
