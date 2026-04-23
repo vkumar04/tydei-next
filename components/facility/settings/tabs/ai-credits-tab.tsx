@@ -76,33 +76,54 @@ export function AICreditsTab({
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Credits Used</CardDescription>
-            <CardTitle className="text-3xl">
-              {creditsData ? creditsData.usedCredits.toLocaleString() : "0"}
+            <CardTitle className="text-3xl tabular-nums">
+              {creditsData ? creditsData.usedCredits.toLocaleString() : "—"}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {creditsData && (
+            {creditsData ? (
               <div className="space-y-2">
                 <Progress
-                  value={creditsData.monthlyCredits > 0
-                    ? Math.round((creditsData.usedCredits / (creditsData.monthlyCredits + creditsData.rolloverCredits)) * 100)
-                    : 0}
+                  value={Math.min(
+                    100,
+                    Math.round(
+                      (creditsData.usedCredits /
+                        Math.max(
+                          1,
+                          creditsData.monthlyCredits +
+                            creditsData.rolloverCredits,
+                        )) *
+                        100,
+                    ),
+                  )}
                   className="h-2"
                 />
                 <p className="text-xs text-muted-foreground">
-                  {creditsData.monthlyCredits > 0
-                    ? `${Math.round((creditsData.usedCredits / (creditsData.monthlyCredits + creditsData.rolloverCredits)) * 100)}% of ${(creditsData.monthlyCredits + creditsData.rolloverCredits).toLocaleString()} total credits`
-                    : "No credit limit configured"}
+                  {Math.round(
+                    (creditsData.usedCredits /
+                      Math.max(
+                        1,
+                        creditsData.monthlyCredits + creditsData.rolloverCredits,
+                      )) *
+                      100,
+                  )}
+                  % of{" "}
+                  {(
+                    creditsData.monthlyCredits + creditsData.rolloverCredits
+                  ).toLocaleString()}{" "}
+                  this period
                 </p>
               </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Loading…</p>
             )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Remaining Credits</CardDescription>
-            <CardTitle className="text-3xl text-green-600 dark:text-green-400">
-              {creditsData ? creditsData.remaining.toLocaleString() : "Unlimited"}
+            <CardTitle className="text-3xl tabular-nums text-green-600 dark:text-green-400">
+              {creditsData ? creditsData.remaining.toLocaleString() : "—"}
             </CardTitle>
           </CardHeader>
           <CardContent>

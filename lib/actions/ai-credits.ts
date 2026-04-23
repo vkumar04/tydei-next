@@ -29,20 +29,54 @@ export interface AIUsageRecord {
 
 // ─── Get Credits ────────────────────────────────────────────────
 
+const DEFAULT_MONTHLY_CREDITS = 1_000_000
+
+function startOfMonth(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))
+}
+
+function endOfMonth(d: Date): Date {
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 23, 59, 59, 999),
+  )
+}
+
 export async function getAICredits(input: {
   facilityId?: string
   vendorId?: string
 }): Promise<AICredit | null> {
   await requireAuth()
 
-  const credit = await prisma.aICredit.findFirst({
-    where: input.facilityId
-      ? { facilityId: input.facilityId }
-      : { vendorId: input.vendorId },
+  if (!input.facilityId && !input.vendorId) return null
+
+  const where = input.facilityId
+    ? { facilityId: input.facilityId }
+    : { vendorId: input.vendorId as string }
+
+  let credit = await prisma.aICredit.findFirst({
+    where,
     orderBy: { billingPeriodEnd: "desc" },
   })
 
-  if (!credit) return null
+  // Lazy-provision a default Enterprise-tier row on first read so the AI
+  // Credits tab shows real numbers (not "Unlimited" placeholder) even
+  // before the facility's first Claude call. Mirrors the provisioning in
+  // lib/ai/record-usage.ts — either side can be the first to create it.
+  if (!credit) {
+    const now = new Date()
+    credit = await prisma.aICredit.create({
+      data: {
+        facilityId: input.facilityId ?? null,
+        vendorId: input.vendorId ?? null,
+        tierId: "enterprise",
+        monthlyCredits: DEFAULT_MONTHLY_CREDITS,
+        usedCredits: 0,
+        rolloverCredits: 0,
+        billingPeriodStart: startOfMonth(now),
+        billingPeriodEnd: endOfMonth(now),
+      },
+    })
+  }
 
   const remaining =
     credit.monthlyCredits + credit.rolloverCredits - credit.usedCredits
