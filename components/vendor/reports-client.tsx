@@ -1,55 +1,38 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
-import {
-  FileText,
-  Download,
-  Calendar,
   BarChart3,
-  TrendingUp,
-  DollarSign,
   CheckCircle2,
-  FileBarChart,
-  Building2,
-  Loader2,
+  DollarSign,
+  TrendingUp,
 } from "lucide-react"
 import { toast } from "sonner"
+import { VendorReportsHero } from "@/components/vendor/reports/reports-hero"
+import { VendorReportsControlBar } from "@/components/vendor/reports/reports-control-bar"
+import { ReportTypeGrid } from "@/components/vendor/reports/report-type-grid"
+import { RecentReportsTable } from "@/components/vendor/reports/recent-reports-table"
+import { GenerateReportDialog } from "@/components/vendor/reports/generate-report-dialog"
+import type {
+  RecentReport,
+  ReportType,
+  ReportTypeId,
+} from "@/components/vendor/reports/reports-types"
 
-const reportTypes = [
+/**
+ * Vendor Reports hub ("hero + tabs" pattern).
+ *
+ *   1. Hero KPIs: Generated (MTD) · Scheduled · Last Sent · Facilities Reached
+ *   2. ControlBar: facility select, search, category chip group, "New Report"
+ *   3. ReportTypeGrid (filtered by category)
+ *   4. RecentReportsTable (filtered by category + search)
+ *
+ * Reference: components/facility/reports/* for the facility-side twin.
+ * Data is currently static v0 sample content until server-action wiring
+ * lands for the vendor side.
+ */
+
+const reportTypes: ReportType[] = [
   {
     id: "performance",
     name: "Performance Summary",
@@ -80,15 +63,6 @@ const reportTypes = [
   },
 ]
 
-interface RecentReport {
-  id: string
-  name: string
-  type: string
-  date: string
-  status: string
-  size: string
-}
-
 const defaultRecentReports: RecentReport[] = [
   { id: "1", name: "Q1 2024 Performance Summary", type: "performance", date: "2024-04-05", status: "ready", size: "2.4 MB" },
   { id: "2", name: "Q1 2024 Rebate Statement", type: "rebates", date: "2024-04-02", status: "ready", size: "1.8 MB" },
@@ -106,16 +80,23 @@ interface VendorReportsClientProps {
 export function VendorReportsClient(_props: VendorReportsClientProps) {
   const [selectedFacility, setSelectedFacility] = useState("all")
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false)
-  const [selectedReportType, setSelectedReportType] = useState<typeof reportTypes[0] | null>(null)
+  const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateProgress, setGenerateProgress] = useState(0)
   const [reportPeriod, setReportPeriod] = useState("current")
   const [generatedReports, setGeneratedReports] = useState<RecentReport[]>(defaultRecentReports)
+  const [category, setCategory] = useState<"all" | ReportTypeId>("all")
+  const [searchQuery, setSearchQuery] = useState("")
 
-  const handleGenerateReport = (report: typeof reportTypes[0], e?: React.MouseEvent) => {
-    e?.stopPropagation()
+  const handleGenerateReport = (report: ReportType) => {
     setSelectedReportType(report)
     setIsGenerateDialogOpen(true)
+  }
+
+  const handleDownload = (report: RecentReport) => {
+    toast.success("Download started", {
+      description: `Downloading ${report.name}...`,
+    })
   }
 
   const startGenerating = () => {
@@ -140,7 +121,7 @@ export function VendorReportsClient(_props: VendorReportsClientProps) {
         const newReport: RecentReport = {
           id: `new-${Date.now()}`,
           name: `${selectedReportType?.name} - ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
-          type: selectedReportType?.id || "performance",
+          type: selectedReportType?.id ?? "performance",
           date: new Date().toISOString().split("T")[0],
           status: "ready",
           size: `${(Math.random() * 3 + 1).toFixed(1)} MB`,
@@ -160,248 +141,97 @@ export function VendorReportsClient(_props: VendorReportsClientProps) {
     }, 2000)
   }
 
-  const handleDownload = (report: RecentReport) => {
-    toast.success("Download started", {
-      description: `Downloading ${report.name}...`,
+  const heroStats = useMemo(() => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth()
+    const generatedThisMonth = generatedReports.filter((r) => {
+      const d = new Date(r.date)
+      return d.getFullYear() === year && d.getMonth() === month
+    }).length
+    const sorted = [...generatedReports].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    )
+    return {
+      generatedThisMonth,
+      scheduledCount: reportTypes.length,
+      lastSentAt: sorted[0]?.date ?? null,
+      facilitiesReached: 3,
+    }
+  }, [generatedReports])
+
+  const filteredReports = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return generatedReports.filter((r) => {
+      if (category !== "all" && r.type !== category) return false
+      if (q && !r.name.toLowerCase().includes(q)) return false
+      return true
     })
-  }
+  }, [generatedReports, category, searchQuery])
+
+  const visibleReportTypes = useMemo(
+    () =>
+      category === "all"
+        ? reportTypes
+        : reportTypes.filter((rt) => rt.id === category),
+    [category],
+  )
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-balance">Reports</h1>
-          <p className="text-muted-foreground">
-            Generate and download performance and compliance reports
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedFacility} onValueChange={setSelectedFacility}>
-            <SelectTrigger className="w-[180px]">
-              <Building2 className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Facility" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Facilities</SelectItem>
-              <SelectItem value="firsthealth">FirstHealth Regional</SelectItem>
-              <SelectItem value="memorial">Memorial Hospital</SelectItem>
-              <SelectItem value="clearwater">Clearwater Medical</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <VendorReportsHero
+        generatedThisMonth={heroStats.generatedThisMonth}
+        scheduledCount={heroStats.scheduledCount}
+        lastSentAt={heroStats.lastSentAt}
+        facilitiesReached={heroStats.facilitiesReached}
+      />
 
-      {/* Report Types */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {reportTypes.map((report) => (
-          <Card key={report.id} className="hover:bg-accent/50 transition-colors">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <report.icon className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-sm">{report.name}</CardTitle>
-                  <Badge variant="outline" className="text-xs mt-1">
-                    {report.frequency}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-3">{report.description}</p>
-              <Button
-                type="button"
-                size="sm"
-                className="w-full"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  handleGenerateReport(report, e)
-                }}
-              >
-                <FileBarChart className="h-4 w-4 mr-2" />
-                Generate Report
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <VendorReportsControlBar
+        selectedFacility={selectedFacility}
+        onFacilityChange={setSelectedFacility}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        category={category}
+        onCategoryChange={setCategory}
+        reportTypes={reportTypes}
+        onNewReport={() => {
+          const first =
+            category !== "all"
+              ? reportTypes.find((rt) => rt.id === category) ?? reportTypes[0]
+              : reportTypes[0]
+          handleGenerateReport(first)
+        }}
+      />
 
-      {/* Recent Reports */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recent Reports</CardTitle>
-          <CardDescription>Previously generated reports available for download</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Report Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Generated</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {generatedReports.map((report) => (
-                <TableRow key={report.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      {report.name}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {reportTypes.find((t) => t.id === report.type)?.name || report.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      {report.date}
-                    </div>
-                  </TableCell>
-                  <TableCell>{report.size}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Ready
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleDownload(report)
-                      }}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <ReportTypeGrid
+        reportTypes={visibleReportTypes}
+        onGenerate={handleGenerateReport}
+      />
 
-      {/* Generate Report Dialog */}
-      <Dialog
+      <RecentReportsTable
+        reports={filteredReports}
+        reportTypes={reportTypes}
+        category={category}
+        onDownload={handleDownload}
+      />
+
+      <GenerateReportDialog
         open={isGenerateDialogOpen}
         onOpenChange={(open) => {
           if (!isGenerating) {
             setIsGenerateDialogOpen(open)
           }
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedReportType && <selectedReportType.icon className="h-5 w-5 text-primary" />}
-              Generate {selectedReportType?.name}
-            </DialogTitle>
-            <DialogDescription>{selectedReportType?.description}</DialogDescription>
-          </DialogHeader>
-
-          {isGenerating ? (
-            <div className="py-6 space-y-4">
-              <div className="flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Generating report...</span>
-                  <span>{Math.min(100, Math.round(generateProgress))}%</span>
-                </div>
-                <Progress value={Math.min(100, generateProgress)} />
-              </div>
-              <p className="text-sm text-muted-foreground text-center">
-                This may take a few moments depending on the data size.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Report Period</Label>
-                <Select value={reportPeriod} onValueChange={setReportPeriod}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="current">Current Period</SelectItem>
-                    <SelectItem value="last_month">Last Month</SelectItem>
-                    <SelectItem value="last_quarter">Last Quarter</SelectItem>
-                    <SelectItem value="ytd">Year to Date</SelectItem>
-                    <SelectItem value="last_year">Last Year</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Facility</Label>
-                <Select value={selectedFacility} onValueChange={setSelectedFacility}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Facilities</SelectItem>
-                    <SelectItem value="firsthealth">FirstHealth Regional</SelectItem>
-                    <SelectItem value="memorial">Memorial Hospital</SelectItem>
-                    <SelectItem value="clearwater">Clearwater Medical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="rounded-lg border p-3 bg-muted/30">
-                <div className="text-sm font-medium mb-1">Report Details</div>
-                <div className="text-sm text-muted-foreground space-y-1">
-                  <div className="flex justify-between">
-                    <span>Type:</span>
-                    <span>{selectedReportType?.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Frequency:</span>
-                    <span>{selectedReportType?.frequency}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Format:</span>
-                    <span>PDF</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            {!isGenerating && (
-              <>
-                <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    startGenerating()
-                  }}
-                >
-                  <FileBarChart className="h-4 w-4 mr-2" />
-                  Generate Report
-                </Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        reportType={selectedReportType}
+        isGenerating={isGenerating}
+        progress={generateProgress}
+        reportPeriod={reportPeriod}
+        onReportPeriodChange={setReportPeriod}
+        selectedFacility={selectedFacility}
+        onSelectedFacilityChange={setSelectedFacility}
+        onConfirm={startGenerating}
+        onCancel={() => setIsGenerateDialogOpen(false)}
+      />
     </div>
   )
 }
