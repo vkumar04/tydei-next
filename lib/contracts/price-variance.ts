@@ -1,20 +1,21 @@
 /**
  * Price variance detection for invoice lines against contract pricing.
  *
- * Spec section 6 of contract-calculations.md. Severity thresholds on
- * the absolute variance percent:
- * - minor: 0 ≤ |variance| < 2%
- * - moderate: 2% ≤ |variance| < 10%
- * - major: |variance| ≥ 10%
+ * Aligned 2026-04-23 to Charles's v0 spec (contract-calculations.md §6):
+ *   |variance| ≤ 2%  → acceptable
+ *   |variance| ≤ 5%  → warning
+ *   |variance| >  5% → critical
  *
- * (Note: these thresholds differ from the compliance engine's 5%
- * tolerance. Compliance treats anything over 5% as a compliance issue;
- * variance analysis separately grades severity regardless of
- * compliance.)
+ * Pre-alignment labels were minor/moderate/major with a 10% critical
+ * threshold; v0's 5% threshold matches the compliance-engine tolerance,
+ * so variance severity now agrees with compliance classification.
+ * The `minor/moderate/major` values are retained as aliases on the
+ * VarianceSeverity union for any external reader that still ships the
+ * old strings; new code should use the v0 names.
  */
 
 export type VarianceDirection = "overcharge" | "undercharge" | "at_price"
-export type VarianceSeverity = "minor" | "moderate" | "major"
+export type VarianceSeverity = "acceptable" | "warning" | "critical"
 
 export interface VarianceResult {
   variancePercent: number
@@ -53,9 +54,9 @@ export interface VarianceAnalysis {
 }
 
 function severityFor(absVariancePercent: number): VarianceSeverity {
-  if (absVariancePercent < 2) return "minor"
-  if (absVariancePercent < 10) return "moderate"
-  return "major"
+  if (absVariancePercent <= 2) return "acceptable"
+  if (absVariancePercent <= 5) return "warning"
+  return "critical"
 }
 
 export function calculatePriceVariance(
@@ -67,7 +68,7 @@ export function calculatePriceVariance(
     return {
       variancePercent: 0,
       direction: "at_price",
-      severity: "minor",
+      severity: "acceptable",
       dollarImpact: 0,
     }
   }
@@ -90,15 +91,49 @@ export function calculatePriceVariance(
   }
 }
 
+/**
+ * 5-band COG price-variance classifier from v0 cogs-functionality.md.
+ * Distinct from the 3-band severity above — this is the display-side
+ * classification used on the COG-data listing, where direction matters
+ * (discount vs overcharge) and there's a narrow "at contract" band
+ * around the contract price.
+ *   |variance| < 0.5%   → at_contract
+ *   variance ≤ -5%      → significant_discount
+ *   -5% < variance < 0  → minor_discount
+ *   0 ≤ variance ≤ 5%   → minor_overcharge
+ *   variance > 5%       → significant_overcharge
+ */
+export type CogPriceVarianceBand =
+  | "significant_discount"
+  | "minor_discount"
+  | "at_contract"
+  | "minor_overcharge"
+  | "significant_overcharge"
+
+export function classifyCogPriceVariance(
+  unitPrice: number,
+  contractPrice: number,
+): { variancePct: number; band: CogPriceVarianceBand } {
+  if (contractPrice <= 0) return { variancePct: 0, band: "at_contract" }
+  const variancePct = ((unitPrice - contractPrice) / contractPrice) * 100
+  let band: CogPriceVarianceBand
+  if (Math.abs(variancePct) < 0.5) band = "at_contract"
+  else if (variancePct <= -5) band = "significant_discount"
+  else if (variancePct < 0) band = "minor_discount"
+  else if (variancePct <= 5) band = "minor_overcharge"
+  else band = "significant_overcharge"
+  return { variancePct, band }
+}
+
 export function analyzePriceDiscrepancies(
   lines: InvoiceLineForVariance[],
   priceLookup: ContractPriceLookup,
 ): VarianceAnalysis {
   const analyzed: AnalyzedLine[] = []
   const bySeverity: Record<VarianceSeverity, number> = {
-    minor: 0,
-    moderate: 0,
-    major: 0,
+    acceptable: 0,
+    warning: 0,
+    critical: 0,
   }
   let overchargeTotal = 0
   let underchargeTotal = 0

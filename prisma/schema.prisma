@@ -247,6 +247,11 @@ enum VarianceDirection {
 }
 
 enum VarianceSeverity {
+  acceptable
+  warning
+  critical
+  // Charles 2026-04-23 aligned labels to v0 spec (§6). Legacy values
+  // kept so existing DB rows don't error during the transition.
   minor
   moderate
   major

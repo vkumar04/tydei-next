@@ -142,13 +142,13 @@ export function ContractInsightsCards({ contractId }: ContractInsightsCardsProps
               </div>
               <div className="grid grid-cols-3 gap-1 text-xs">
                 <Badge variant="outline" className="justify-center">
-                  {priceVariance.bySeverity.major} major
+                  {priceVariance.bySeverity.critical} critical
                 </Badge>
                 <Badge variant="outline" className="justify-center">
-                  {priceVariance.bySeverity.moderate} moderate
+                  {priceVariance.bySeverity.warning} warning
                 </Badge>
                 <Badge variant="outline" className="justify-center">
-                  {priceVariance.bySeverity.minor} minor
+                  {priceVariance.bySeverity.acceptable} acceptable
                 </Badge>
               </div>
               {priceVariance.underchargeTotal !== 0 && (

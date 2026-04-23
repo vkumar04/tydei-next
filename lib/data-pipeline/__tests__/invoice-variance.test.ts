@@ -58,7 +58,7 @@ describe("computeInvoiceVariances", () => {
     expect(row.actualPrice).toBe(101)
     expect(row.variancePercent).toBeCloseTo(1, 10)
     expect(row.variance).toBeCloseTo(10, 10) // (101-100) × 10
-    expect(row.severity).toBe("minor")
+    expect(row.severity).toBe("acceptable")
   })
 
   it("flags a 5% overcharge as moderate", () => {
@@ -67,7 +67,7 @@ describe("computeInvoiceVariances", () => {
 
     const rows = computeInvoiceVariances({ lineItems, priceLookup })
     expect(rows).toHaveLength(1)
-    expect(rows[0].severity).toBe("moderate")
+    expect(rows[0].severity).toBe("warning")
     expect(rows[0].variancePercent).toBeCloseTo(5, 10)
     expect(rows[0].variance).toBeCloseTo(20, 10) // (105-100) × 4
   })
@@ -78,7 +78,7 @@ describe("computeInvoiceVariances", () => {
 
     const rows = computeInvoiceVariances({ lineItems, priceLookup })
     expect(rows).toHaveLength(1)
-    expect(rows[0].severity).toBe("major")
+    expect(rows[0].severity).toBe("critical")
     expect(rows[0].variancePercent).toBeCloseTo(15, 10)
     expect(rows[0].variance).toBeCloseTo(30, 10) // (115-100) × 2
   })
@@ -93,7 +93,7 @@ describe("computeInvoiceVariances", () => {
     const row = rows[0]
     expect(row.variancePercent).toBeCloseTo(-5, 10)
     expect(row.variance).toBeCloseTo(-40, 10) // (95-100) × 8
-    expect(row.severity).toBe("moderate")
+    expect(row.severity).toBe("warning")
   })
 
   it("handles a -15% undercharge as major", () => {
@@ -102,7 +102,7 @@ describe("computeInvoiceVariances", () => {
 
     const rows = computeInvoiceVariances({ lineItems, priceLookup })
     expect(rows).toHaveLength(1)
-    expect(rows[0].severity).toBe("major")
+    expect(rows[0].severity).toBe("critical")
     expect(rows[0].variancePercent).toBeCloseTo(-15, 10)
     expect(rows[0].variance).toBeCloseTo(-15, 10)
   })
@@ -147,17 +147,17 @@ describe("computeInvoiceVariances", () => {
     const byId = new Map(rows.map((r) => [r.invoiceLineItemId, r]))
 
     const a = byId.get("li-a")!
-    expect(a.severity).toBe("minor")
+    expect(a.severity).toBe("acceptable")
     expect(a.variancePercent).toBeCloseTo(1, 10)
     expect(a.variance).toBeCloseTo(5, 10)
 
     const b = byId.get("li-b")!
-    expect(b.severity).toBe("major")
+    expect(b.severity).toBe("critical")
     expect(b.variancePercent).toBeCloseTo(10, 10)
     expect(b.variance).toBeCloseTo(10, 10)
 
     const c = byId.get("li-c")!
-    expect(c.severity).toBe("moderate")
+    expect(c.severity).toBe("warning")
     expect(c.variancePercent).toBeCloseTo(-5, 10)
     expect(c.variance).toBeCloseTo(-50, 10)
   })
@@ -176,6 +176,6 @@ describe("computeInvoiceVariances", () => {
     const rows = computeInvoiceVariances({ lineItems, priceLookup })
     expect(rows).toHaveLength(1)
     expect(rows[0].invoiceLineItemId).toBe("li-match")
-    expect(rows[0].severity).toBe("major")
+    expect(rows[0].severity).toBe("critical")
   })
 })

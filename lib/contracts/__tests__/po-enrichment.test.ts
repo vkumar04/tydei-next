@@ -26,7 +26,7 @@ describe("enrichPOLines", () => {
     expect(row!.contractPrice).toBe(100)
     expect(row!.variance).toBe(0)
     expect(row!.variancePercent).toBe(0)
-    expect(row!.severity).toBe("minor")
+    expect(row!.severity).toBe("acceptable")
   })
 
   it("marks a line off-contract when vendorItemNo is not in the lookup", () => {
@@ -61,16 +61,16 @@ describe("enrichPOLines", () => {
     expect(row!.severity).toBeNull()
   })
 
-  it("severity boundaries: 1% = minor, 5% = moderate, 15% = major", () => {
+  it("severity boundaries: 1% = acceptable, 5% = warning, 15% = critical (v0 bands)", () => {
     const lines: POLineInput[] = [
       { id: "a", vendorItemNo: "ITEM-100", unitPrice: 101, quantity: 1 }, // +1%
       { id: "b", vendorItemNo: "ITEM-100", unitPrice: 105, quantity: 1 }, // +5%
       { id: "c", vendorItemNo: "ITEM-100", unitPrice: 115, quantity: 1 }, // +15%
     ]
     const rows = enrichPOLines({ lines, pricingItems: pricing })
-    expect(rows[0]!.severity).toBe("minor")
-    expect(rows[1]!.severity).toBe("moderate")
-    expect(rows[2]!.severity).toBe("major")
+    expect(rows[0]!.severity).toBe("acceptable")
+    expect(rows[1]!.severity).toBe("warning")
+    expect(rows[2]!.severity).toBe("critical")
   })
 
   it("preserves the sign of variance for overcharge vs undercharge", () => {

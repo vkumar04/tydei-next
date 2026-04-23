@@ -37,7 +37,7 @@ export interface VarianceRow {
   variancePercent: number
   /** Dollars = (actualPrice - contractPrice) × quantity. Signed. */
   variance: number
-  severity: "minor" | "moderate" | "major"
+  severity: "acceptable" | "warning" | "critical"
 }
 
 export interface ComputeInvoiceVariancesInput {
@@ -56,10 +56,10 @@ export interface ComputeInvoiceVariancesInput {
  *    this contract).
  *  - `variancePercent = ((invoicePrice - contractPrice) / contractPrice) × 100`
  *  - `variance = (invoicePrice - contractPrice) × invoiceQuantity`
- *  - Severity on `|variancePercent|`:
- *    - `< 2` → minor
- *    - `< 10` → moderate
- *    - `else` → major
+ *  - Severity on `|variancePercent|` (v0 spec):
+ *    - `≤ 2` → acceptable
+ *    - `≤ 5` → warning
+ *    - `> 5` → critical
  *  - Lines with zero variance (exact contract-price match) are skipped —
  *    no-variance rows aren't stored.
  */

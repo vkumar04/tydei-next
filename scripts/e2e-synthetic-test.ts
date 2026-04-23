@@ -1970,6 +1970,53 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
     failures.push({ where: "v0 SLA penalty", detail: JSON.stringify(sla) })
   }
 
+  // ─── Tydei vs v0 — price variance severity (3-band) ─────────────
+  // Aligned 2026-04-23 to v0: ≤2 acceptable / ≤5 warning / >5 critical.
+  const { calculatePriceVariance, classifyCogPriceVariance } = await import(
+    "@/lib/contracts/price-variance"
+  )
+  const pvCases: Array<[number, number, "acceptable" | "warning" | "critical"]> = [
+    [100, 100, "acceptable"],
+    [101, 100, "acceptable"],
+    [102, 100, "acceptable"], // 2% boundary
+    [103, 100, "warning"],
+    [105, 100, "warning"],    // 5% boundary
+    [106, 100, "critical"],
+    [94, 100, "critical"],    // -6% → critical
+    [95, 100, "warning"],     // -5% boundary
+  ]
+  for (const [actual, contract, expected] of pvCases) {
+    const r = calculatePriceVariance(actual, contract, 1)
+    if (r.severity !== expected) {
+      failures.push({
+        where: "tydei price-variance severity",
+        detail: `actual=${actual} contract=${contract} → want ${expected}, got ${r.severity}`,
+      })
+    }
+  }
+
+  // ─── Tydei vs v0 — COG 5-band classifier ─────────────────────────
+  const cogBandCases: Array<[number, number, string]> = [
+    [100, 100, "at_contract"],        // 0% exact
+    [100.4, 100, "at_contract"],      // <0.5%
+    [100.5, 100, "minor_overcharge"], // 0.5% edge
+    [105, 100, "minor_overcharge"],   // 5% edge
+    [106, 100, "significant_overcharge"],
+    [99.6, 100, "at_contract"],       // -0.4%
+    [99.5, 100, "minor_discount"],    // -0.5% edge
+    [95, 100, "significant_discount"],// -5% edge
+    [94, 100, "significant_discount"],
+  ]
+  for (const [unit, contract, expected] of cogBandCases) {
+    const r = classifyCogPriceVariance(unit, contract)
+    if (r.band !== expected) {
+      failures.push({
+        where: "tydei COG 5-band classifier",
+        detail: `unit=${unit} contract=${contract} → want ${expected}, got ${r.band}`,
+      })
+    }
+  }
+
   // ─── Tydei vs v0 — expiration severity parity ────────────────────
   // Tydei's synthesizer previously used 30/60 thresholds; now aligned
   // to v0's 7/14/30 bands (collapsed to tydei's 3-level severity).

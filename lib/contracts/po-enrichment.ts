@@ -28,7 +28,7 @@ export interface ContractPriceLookupEntry {
   unitPrice: number
 }
 
-export type EnrichmentSeverity = "minor" | "moderate" | "major"
+export type EnrichmentSeverity = "acceptable" | "warning" | "critical"
 
 export interface EnrichedPOLine {
   id: string
@@ -45,9 +45,11 @@ export interface EnrichedPOLine {
 }
 
 function severityFor(absPercent: number): EnrichmentSeverity {
-  if (absPercent < 2) return "minor"
-  if (absPercent < 10) return "moderate"
-  return "major"
+  // Aligned 2026-04-23 to v0 spec (≤2% acceptable / ≤5% warning /
+  // >5% critical). Was: <2/<10/≥10 with minor/moderate/major labels.
+  if (absPercent <= 2) return "acceptable"
+  if (absPercent <= 5) return "warning"
+  return "critical"
 }
 
 export function enrichPOLines(input: {

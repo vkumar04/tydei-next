@@ -153,21 +153,22 @@ describe("recomputeInvoiceVariance — happy path", () => {
       facilityId: "fac-1",
       vendorId: "vnd-1",
       lineItems: [
-        // overcharge — 105 vs 100 → +5% (moderate)
+        // v0 severity bands: ≤2 acceptable / ≤5 warning / >5 critical.
+        // overcharge — 105 vs 100 → +5% (warning boundary)
         {
           id: "li-1",
           vendorItemNo: "SKU-A",
           invoicePrice: 105,
           invoiceQuantity: 2,
         },
-        // undercharge — 45 vs 50 → -10% (major)
+        // undercharge — 45 vs 50 → -10% (critical)
         {
           id: "li-2",
           vendorItemNo: "SKU-B",
           invoicePrice: 45,
           invoiceQuantity: 4,
         },
-        // moderate overcharge — 102 vs 100 → +2%
+        // small overcharge — 102 vs 100 → +2% (acceptable boundary)
         {
           id: "li-3",
           vendorItemNo: "SKU-C",
@@ -208,13 +209,12 @@ describe("recomputeInvoiceVariance — happy path", () => {
       upsertCalls.map((c) => [c.where.invoiceLineItemId, c.create]),
     )
     expect(byLine["li-1"]?.direction).toBe("overcharge")
-    expect(byLine["li-1"]?.severity).toBe("moderate")
+    expect(byLine["li-1"]?.severity).toBe("warning")
     expect(byLine["li-1"]?.contractId).toBe("ct-1")
     expect(byLine["li-2"]?.direction).toBe("undercharge")
-    expect(byLine["li-2"]?.severity).toBe("major")
-    // (45 - 50) * 4 = -20
+    expect(byLine["li-2"]?.severity).toBe("critical")
     expect(byLine["li-2"]?.dollarImpact).toBe(-20)
-    expect(byLine["li-3"]?.severity).toBe("moderate")
+    expect(byLine["li-3"]?.severity).toBe("acceptable")
   })
 })
 
