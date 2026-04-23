@@ -26,9 +26,14 @@ export default async function BundlesPage() {
             <span className="font-mono">cross_vendor</span> semantics.
           </p>
         </div>
-        <Button variant="outline" asChild>
-          <Link href="/dashboard/contracts">← Contracts</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/contracts">← Contracts</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/contracts/bundles/new">+ New bundle</Link>
+          </Button>
+        </div>
       </div>
 
       {bundles.length === 0 ? (
