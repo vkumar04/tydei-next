@@ -3,46 +3,36 @@
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { getVendorContractColumns } from "./vendor-contract-columns"
+import { VendorContractsHero } from "./vendor-contracts-hero"
+import {
+  VendorContractsControlBar,
+  type VendorStatusTab,
+} from "./vendor-contracts-control-bar"
 import { useVendorContracts } from "@/hooks/use-vendor-contracts"
 import { useVendorPendingContracts } from "@/hooks/use-pending-contracts"
-import { formatCurrency } from "@/lib/formatting"
-import { FileStack, CheckCircle2, Clock, DollarSign } from "lucide-react"
 import type { ContractStatus } from "@prisma/client"
 
 interface VendorContractListProps {
   vendorId: string
 }
 
-type TabValue = ContractStatus | "all" | "submitted" | "rejected"
-
-const STATUS_OPTIONS: { label: string; value: TabValue }[] = [
-  { label: "All", value: "all" },
-  { label: "Draft", value: "draft" },
-  { label: "Submitted", value: "submitted" },
-  { label: "Pending", value: "pending" },
-  { label: "Active", value: "active" },
-  { label: "Rejected", value: "rejected" },
-]
+const EXPIRING_SOON_WINDOW_DAYS = 30
 
 export function VendorContractList({ vendorId }: VendorContractListProps) {
   const router = useRouter()
-  const [tab, setTab] = useState<TabValue>("all")
+  const [statusTab, setStatusTab] = useState<VendorStatusTab>("all")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [facilityFilter, setFacilityFilter] = useState<string>("all")
 
-  // Always fetch the full set for stats
+  // Always fetch the full set for hero stats + facility options
   const { data: allData } = useVendorContracts(vendorId, { status: undefined })
   const allContracts = allData?.contracts ?? []
 
   // Fetch pending contracts from the PendingContract table
-  const { data: pendingData, isLoading: pendingLoading } = useVendorPendingContracts(vendorId)
+  const { data: pendingData, isLoading: pendingLoading } =
+    useVendorPendingContracts(vendorId)
   const pendingContracts = pendingData ?? []
 
   // Map pending contracts to match the Contract table row shape
@@ -76,25 +66,45 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
 
   const { data, isLoading: contractsLoading } = useVendorContracts(vendorId, {
     status:
-      tab === "all" || tab === "submitted" || tab === "rejected"
+      statusTab === "all" || statusTab === "submitted" || statusTab === "rejected"
         ? undefined
-        : (tab as ContractStatus),
+        : (statusTab as ContractStatus),
   })
 
   const rawContracts = data?.contracts ?? []
 
-  // Merge contracts with pending depending on the active filter
-  const contracts = useMemo(() => {
-    if (tab === "submitted") return mappedPending
-    if (tab === "rejected") return []
-    if (tab === "all") return [...rawContracts, ...mappedPending]
+  // Merge contracts with pending depending on the active status filter
+  const mergedContracts = useMemo(() => {
+    if (statusTab === "submitted") return mappedPending
+    if (statusTab === "rejected") return []
+    if (statusTab === "all") return [...rawContracts, ...mappedPending]
     return rawContracts
-  }, [tab, rawContracts, mappedPending])
+  }, [statusTab, rawContracts, mappedPending])
+
+  // Apply facility + search filters on the client
+  const contracts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return mergedContracts.filter((c) => {
+      if (facilityFilter !== "all" && c.facility?.id !== facilityFilter) {
+        return false
+      }
+      if (q.length > 0) {
+        const hay = [
+          c.name,
+          c.contractNumber ?? "",
+          c.facility?.name ?? "",
+        ]
+          .join(" ")
+          .toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [mergedContracts, facilityFilter, searchQuery])
 
   const isLoading = contractsLoading || pendingLoading
 
   const columns = getVendorContractColumns((id) => {
-    // Check if this is a pending contract
     const isPending = mappedPending.some((pc) => pc.id === id)
     if (isPending) {
       router.push(`/vendor/contracts/pending/${id}`)
@@ -103,71 +113,70 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
     }
   })
 
-  // Compute stats from the full (unfiltered) data set + pending
+  // --- Hero stats ---------------------------------------------------------
+  // Derived from the full (unfiltered) data set + pending so the hero is
+  // stable as the user narrows the table below.
   const activeCount = allContracts.filter((c) => c.status === "active").length
-  const pendingCount = mappedPending.length
+  const pendingReviewCount = mappedPending.length
   const totalValue = allContracts.reduce(
     (sum, c) => sum + Number(c.totalValue ?? 0),
-    0
+    0,
   )
+  const facilitiesServed = useMemo(() => {
+    const ids = new Set<string>()
+    for (const c of allContracts) {
+      if (c.facility?.id) ids.add(c.facility.id)
+    }
+    for (const c of mappedPending) {
+      if (c.facility?.id) ids.add(c.facility.id)
+    }
+    return ids.size
+  }, [allContracts, mappedPending])
+  const expiringSoon = useMemo(() => {
+    const now = Date.now()
+    const cutoff = now + EXPIRING_SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    return allContracts.filter((c) => {
+      if (c.status !== "active") return false
+      const exp = c.expirationDate ? new Date(c.expirationDate).getTime() : 0
+      return exp >= now && exp <= cutoff
+    }).length
+  }, [allContracts])
+
+  // Facility options across the full set so filtering works regardless of tab
+  const facilityOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const c of allContracts) {
+      if (c.facility?.id) map.set(c.facility.id, c.facility.name)
+    }
+    for (const c of mappedPending) {
+      if (c.facility?.id) map.set(c.facility.id, c.facility.name)
+    }
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )
+  }, [allContracts, mappedPending])
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Contracts</CardTitle>
-            <FileStack className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{allContracts.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{activeCount}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Value</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalValue)}</div>
-          </CardContent>
-        </Card>
-      </div>
+      <VendorContractsHero
+        totalContracts={allContracts.length + mappedPending.length}
+        activeCount={activeCount}
+        facilitiesServed={facilitiesServed}
+        totalValue={totalValue}
+        pendingReview={pendingReviewCount}
+        expiringSoon={expiringSoon}
+        isLoading={isLoading && allContracts.length === 0}
+      />
 
-      {/* Status filter + DataTable */}
-      <div className="flex items-center gap-2">
-        <Select value={tab} onValueChange={(v) => setTab(v as TabValue)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <VendorContractsControlBar
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        facilityFilter={facilityFilter}
+        onFacilityFilterChange={setFacilityFilter}
+        facilities={facilityOptions}
+        statusTab={statusTab}
+        onStatusTabChange={setStatusTab}
+      />
 
       <Card>
         <CardHeader>
@@ -181,8 +190,6 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
           <DataTable
             columns={columns as any}
             data={contracts as any}
-            searchKey="name"
-            searchPlaceholder="Search contracts..."
             isLoading={isLoading}
           />
         </CardContent>
