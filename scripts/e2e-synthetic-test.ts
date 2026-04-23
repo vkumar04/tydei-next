@@ -1263,6 +1263,325 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
       detail: `expected $10,000 settlement, got ${settle.settlementAmount}`,
     })
   }
+
+  // ─── v0 Rebate Optimizer · spend-to-next-tier ROI ───────────────
+  // $420k @ 3.5% now, next tier $500k @ 4%. Incremental gain to hit
+  // next tier = $20k − $14,700 = $5,300 on $80k additional spend.
+  const {
+    v0RebateOpportunity,
+    v0UrgencyForGap,
+    v0ProgressPctToNextTier,
+  } = await import("@/lib/v0-spec/rebate-optimizer")
+  const op = v0RebateOpportunity({
+    currentSpend: 420_000,
+    currentRebatePercent: 3.5,
+    nextThreshold: 500_000,
+    nextRebatePercent: 4,
+  })
+  if (!approx(op.currentRebate, 14_700) || !approx(op.additionalRebate, 5_300) || !approx(op.spendNeeded, 80_000)) {
+    failures.push({ where: "v0 rebate opportunity", detail: JSON.stringify(op) })
+  }
+  if (v0UrgencyForGap(80_000) !== "high") {
+    failures.push({ where: "v0 urgency", detail: "80k gap should be high urgency" })
+  }
+  if (!approx(v0ProgressPctToNextTier(420_000, 500_000), 84)) {
+    failures.push({ where: "v0 progressPct", detail: "expected 84% progress" })
+  }
+
+  // ─── v0 Renewals ────────────────────────────────────────────────
+  const { v0DaysRemaining, v0RenewalStatus, v0CommitmentMetPct } =
+    await import("@/lib/v0-spec/renewals")
+  const baseline = new Date("2026-04-23")
+  const in50 = new Date(baseline.getTime() + 50 * 86_400_000)
+  if (v0DaysRemaining(in50, baseline) !== 50) {
+    failures.push({ where: "v0 daysRemaining", detail: "expected 50" })
+  }
+  if (v0RenewalStatus(30) !== "critical" || v0RenewalStatus(60) !== "warning" || v0RenewalStatus(150) !== "upcoming" || v0RenewalStatus(200) !== "ok") {
+    failures.push({ where: "v0 renewal status", detail: "band mismatch" })
+  }
+  if (v0CommitmentMetPct(420_000, 600_000) !== 70) {
+    failures.push({ where: "v0 commitment met", detail: "expected 70" })
+  }
+
+  // ─── v0 COG · vendor key + variance bands + trend ───────────────
+  const {
+    v0NormalizeVendorKey,
+    v0ContractSpendSplit,
+    v0CogPriceVarianceBand,
+    v0SpendTrend,
+  } = await import("@/lib/v0-spec/cog")
+  if (v0NormalizeVendorKey("Medtronic, Inc.") !== "medtronic") {
+    failures.push({ where: "v0 vendor key norm", detail: "expected 'medtronic'" })
+  }
+  const split = v0ContractSpendSplit([
+    { totalCost: 700_000, hasContractPricing: true },
+    { totalCost: 300_000, hasContractPricing: false },
+  ])
+  if (!approx(split.compliancePct, 70)) {
+    failures.push({ where: "v0 cog split", detail: JSON.stringify(split) })
+  }
+  if (v0CogPriceVarianceBand(103, 100).band !== "minor_overcharge") {
+    failures.push({ where: "v0 cog band 3%", detail: "expected minor_overcharge" })
+  }
+  if (v0CogPriceVarianceBand(106, 100).band !== "significant_overcharge") {
+    failures.push({ where: "v0 cog band 6%", detail: "expected significant_overcharge" })
+  }
+  if (v0CogPriceVarianceBand(94, 100).band !== "significant_discount") {
+    failures.push({ where: "v0 cog band -6%", detail: "expected significant_discount" })
+  }
+  const trend = v0SpendTrend([100, 100, 100, 120, 130, 125])
+  if (trend.trend !== "up") {
+    failures.push({ where: "v0 spend trend", detail: JSON.stringify(trend) })
+  }
+
+  // ─── v0 Margins ─────────────────────────────────────────────────
+  const { v0Margins, v0RebateAllocationToProcedure } = await import(
+    "@/lib/v0-spec/margins"
+  )
+  const m = v0Margins({
+    revenue: 10_000,
+    supplyCosts: 4_000,
+    laborCosts: 2_000,
+    overheadCosts: 1_000,
+    rebateAllocation: 500,
+  })
+  if (!approx(m.standardMarginPct, 30) || !approx(m.trueMarginPct, 35)) {
+    failures.push({ where: "v0 margins", detail: JSON.stringify(m) })
+  }
+  if (
+    !approx(
+      v0RebateAllocationToProcedure({
+        procedureVendorSpend: 10_000,
+        vendorTotalSpend: 100_000,
+        vendorTotalRebate: 3_000,
+      }),
+      300,
+    )
+  ) {
+    failures.push({ where: "v0 rebate alloc", detail: "expected 300" })
+  }
+
+  // ─── v0 Case costing ────────────────────────────────────────────
+  const {
+    v0DefaultTierRebatePct,
+    v0SpecialtyFromCPT,
+    v0SpecialtyPaymentMultiplier,
+    v0SurgeonScore,
+    v0CMIAdjustedSpend,
+  } = await import("@/lib/v0-spec/case-costing")
+  if (v0DefaultTierRebatePct(2) !== 4) {
+    failures.push({ where: "v0 tier 2 default", detail: "expected 4%" })
+  }
+  if (v0SpecialtyFromCPT("27447") !== "orthopedic" || v0SpecialtyFromCPT("33533") !== "cardiac" || v0SpecialtyFromCPT("63030") !== "spine") {
+    failures.push({ where: "v0 specialty from cpt", detail: "mismatch" })
+  }
+  if (v0SpecialtyPaymentMultiplier("cardiac") !== 1.2 || v0SpecialtyPaymentMultiplier("spine") !== 1.3) {
+    failures.push({ where: "v0 specialty multiplier", detail: "mismatch" })
+  }
+  const ss = v0SurgeonScore({
+    payorMixPct: 80,
+    bmiUnder40Pct: 90,
+    ageUnder65Pct: 70,
+    avgSpend: 5_000,
+    avgCaseTimeMinutes: 120,
+  })
+  // spend = 100 − 5000/500 = 90; time = 100 − 120/5 = 76
+  if (!approx(ss.spend, 90) || !approx(ss.time, 76)) {
+    failures.push({ where: "v0 surgeon score", detail: JSON.stringify(ss) })
+  }
+  if (!approx(v0CMIAdjustedSpend(1_200, 1.2), 1_000)) {
+    failures.push({ where: "v0 cmi adjusted", detail: "expected 1000" })
+  }
+
+  // ─── v0 Proposal scoring ────────────────────────────────────────
+  const {
+    v0CostSavingsScore,
+    v0PriceCompetitivenessScore,
+    v0RebateAttainabilityScore,
+    v0LockInRiskScore,
+    v0TcoScore,
+    v0OverallProposalScore,
+    v0ProposalRecommendation,
+  } = await import("@/lib/v0-spec/proposal-scoring")
+  // 20% savings → 10; 10% → 5
+  if (
+    !approx(v0CostSavingsScore({ currentSpend: 100, proposedAnnual: 80 }).score, 10) ||
+    !approx(v0CostSavingsScore({ currentSpend: 100, proposedAnnual: 90 }).score, 5)
+  ) {
+    failures.push({ where: "v0 cost savings score", detail: "mismatch" })
+  }
+  // at-market = 5.0; 4% below = 6.0
+  if (
+    !approx(v0PriceCompetitivenessScore({ benchmark: 100, proposedAnnual: 100 }), 5) ||
+    !approx(v0PriceCompetitivenessScore({ benchmark: 100, proposedAnnual: 96 }), 6)
+  ) {
+    failures.push({ where: "v0 price comp score", detail: "mismatch" })
+  }
+  // 2× minimum = 10
+  if (!approx(v0RebateAttainabilityScore({ currentSpend: 200, minimumSpend: 100 }), 10)) {
+    failures.push({ where: "v0 rebate attainability", detail: "mismatch" })
+  }
+  // worst case: 4 years + exclusivity + 80% market + min > 0.8×total = 10-9 = 1
+  if (
+    v0LockInRiskScore({
+      contractLengthYears: 4,
+      exclusivity: true,
+      marketSharePct: 80,
+      minimumSpend: 90,
+      totalValue: 100,
+    }) !== 1
+  ) {
+    failures.push({ where: "v0 lockin", detail: "expected 1" })
+  }
+  // priceProtection + net60 + 6% volume discount = 10
+  if (
+    v0TcoScore({ priceProtection: true, paymentTerms: "net60", volumeDiscountPct: 6 }) !==
+    10
+  ) {
+    failures.push({ where: "v0 tco score", detail: "expected 10" })
+  }
+  // weighted overall: all 10 → 10, all 5 → 5
+  if (
+    !approx(
+      v0OverallProposalScore({
+        costSavings: 10,
+        priceCompetitiveness: 10,
+        rebateAttainability: 10,
+        lockInRisk: 10,
+        tco: 10,
+      }),
+      10,
+    )
+  ) {
+    failures.push({ where: "v0 overall 10", detail: "mismatch" })
+  }
+  if (v0ProposalRecommendation({ overall: 8, risksCount: 0 }) !== "accept") {
+    failures.push({ where: "v0 rec accept", detail: "8/0 should accept" })
+  }
+  if (v0ProposalRecommendation({ overall: 3, risksCount: 2 }) !== "decline") {
+    failures.push({ where: "v0 rec decline", detail: "3/2 should decline" })
+  }
+  if (v0ProposalRecommendation({ overall: 6, risksCount: 2 }) !== "negotiate") {
+    failures.push({ where: "v0 rec negotiate", detail: "6/2 should negotiate" })
+  }
+
+  // ─── v0 Invoice validation priority ─────────────────────────────
+  const { v0InvoicePriority } = await import("@/lib/v0-spec/invoice-validation")
+  if (v0InvoicePriority({ variancePct: 6 }) !== "high") {
+    failures.push({ where: "v0 invoice priority >5%", detail: "expected high" })
+  }
+  if (v0InvoicePriority({ variancePct: 3 }) !== "medium") {
+    failures.push({ where: "v0 invoice priority 3%", detail: "expected medium" })
+  }
+  if (v0InvoicePriority({ variancePct: 0, nonMatchingItem: true }) !== "high") {
+    failures.push({ where: "v0 non-matching", detail: "expected high" })
+  }
+
+  // ─── v0 Multi-facility rebate rollup ────────────────────────────
+  const { v0MultiFacilityRebateRollup, v0DedupConfidence } = await import(
+    "@/lib/v0-spec/multi-facility"
+  )
+  // Doc example: $500k + $300k + $200k = $1M → tier 3 (4%) → $40k,
+  //              shares 50/30/20 → $20k / $12k / $8k.
+  const tiersMulti = [
+    { tierNumber: 1, spendMin: 0, spendMax: 500_000, rebateValue: 2 },
+    { tierNumber: 2, spendMin: 500_000, spendMax: 1_000_000, rebateValue: 3 },
+    { tierNumber: 3, spendMin: 1_000_000, spendMax: null, rebateValue: 4 },
+  ]
+  const roll = v0MultiFacilityRebateRollup(
+    [
+      { facilityId: "f1", spend: 500_000 },
+      { facilityId: "f2", spend: 300_000 },
+      { facilityId: "f3", spend: 200_000 },
+    ],
+    tiersMulti,
+  )
+  if (
+    !approx(roll.totalRebate, 40_000) ||
+    roll.perFacility.length !== 3 ||
+    !approx(roll.perFacility[0]!.rebateShare, 20_000) ||
+    !approx(roll.perFacility[1]!.rebateShare, 12_000) ||
+    !approx(roll.perFacility[2]!.rebateShare, 8_000)
+  ) {
+    failures.push({ where: "v0 multi-facility rollup", detail: JSON.stringify(roll) })
+  }
+  const dedup = v0DedupConfidence(
+    { inventoryNumber: "INV1", vendorItemNo: "AR-1", vendorName: "A", itemDescription: "x", date: "2025-01-01", poNumber: "PO1" },
+    { inventoryNumber: "INV1", vendorItemNo: "AR-1", vendorName: "A", itemDescription: "x", date: "2025-01-01", poNumber: "PO2" },
+  )
+  if (dedup !== "exact") {
+    failures.push({ where: "v0 dedup exact", detail: dedup })
+  }
+
+  // ─── v0 Contract performance ────────────────────────────────────
+  const { v0RebateUtilization, v0SpendConcentration, v0RenewalRisk } =
+    await import("@/lib/v0-spec/contract-performance")
+  const util = v0RebateUtilization(75_000, tiersA)
+  // actual = $75k × 3% = $2,250; max = $75k × 4% = $3,000; utilization 75%.
+  if (!approx(util.utilizationPct, 75)) {
+    failures.push({ where: "v0 rebate utilization", detail: JSON.stringify(util) })
+  }
+  const conc = v0SpendConcentration([
+    { vendorId: "a", spend: 40 },
+    { vendorId: "b", spend: 30 },
+    { vendorId: "c", spend: 20 },
+    { vendorId: "d", spend: 10 },
+  ])
+  // shares 40/30/20/10; HHI = 1600+900+400+100 = 3000 → high.
+  if (!approx(conc.hhi, 3_000) || conc.level !== "high") {
+    failures.push({ where: "v0 HHI", detail: JSON.stringify(conc) })
+  }
+  const risk = v0RenewalRisk({
+    daysRemaining: 100,
+    compliancePct: 90,
+    avgPriceVariancePct: 2,
+    avgResponseTimeHours: 12,
+    rebateUtilizationPct: 80,
+    openIssues: 1,
+  })
+  if (risk.riskLevel !== "low" && risk.riskLevel !== "medium") {
+    failures.push({ where: "v0 renewal risk label", detail: risk.riskLevel })
+  }
+
+  // ─── v0 Alerts ──────────────────────────────────────────────────
+  const {
+    v0ExpirationSeverity,
+    v0PriceDiscrepancySeverity,
+    v0TierApproachingFires,
+    v0ComplianceDropFires,
+    v0VendorInactiveFires,
+    v0TieInAtRiskFires,
+  } = await import("@/lib/v0-spec/alerts")
+  if (
+    v0ExpirationSeverity(5) !== "critical" ||
+    v0ExpirationSeverity(10) !== "high" ||
+    v0ExpirationSeverity(25) !== "warning" ||
+    v0ExpirationSeverity(60) !== "none"
+  ) {
+    failures.push({ where: "v0 expiration severity", detail: "band mismatch" })
+  }
+  if (
+    v0PriceDiscrepancySeverity(1) !== "none" ||
+    v0PriceDiscrepancySeverity(3) !== "warning" ||
+    v0PriceDiscrepancySeverity(7) !== "critical"
+  ) {
+    failures.push({ where: "v0 price disc severity", detail: "band mismatch" })
+  }
+  if (!v0TierApproachingFires({ currentSpend: 95_000, nextTierMin: 100_000 })) {
+    failures.push({ where: "v0 tier approaching", detail: "95k/100k should fire" })
+  }
+  if (v0TierApproachingFires({ currentSpend: 80_000, nextTierMin: 100_000 })) {
+    failures.push({ where: "v0 tier approaching (negative)", detail: "80k/100k shouldn't fire" })
+  }
+  if (!v0ComplianceDropFires({ currentPct: 82, historicalAvgPct: 90 })) {
+    failures.push({ where: "v0 compliance drop", detail: "8pp below should fire" })
+  }
+  if (!v0VendorInactiveFires(120)) {
+    failures.push({ where: "v0 vendor inactive", detail: "120d should fire" })
+  }
+  if (!v0TieInAtRiskFires([{ projectedSpend: 80, minimumSpend: 100 }])) {
+    failures.push({ where: "v0 tie-in at risk", detail: "80/100 should fire" })
+  }
 }
 
 /* ─────── tie-in persistence + collection-date round-trip ──────────── */
