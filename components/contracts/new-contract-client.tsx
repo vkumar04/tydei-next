@@ -17,7 +17,6 @@ import {
 } from "lucide-react"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { useCreateContract } from "@/hooks/use-contracts"
-import { createContractTerm } from "@/lib/actions/contract-terms"
 import { createContractDocument } from "@/lib/actions/contracts"
 import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
 import { parsePricingFile, buildPricingItems as buildPricingItemsShared, detectPricingColumnMapping } from "@/lib/utils/parse-pricing-file"
@@ -122,21 +121,19 @@ export function NewContractClient({
       : `new-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   )
 
-  // Charles W1.W-A3a: auto-run "Suggest from COG" on vendor change
-  // (and again if effective/expiration change). Only fills when both
-  // totalValue and annualValue are still at empty defaults so we never
-  // clobber numbers the user typed in.
+  // Charles 2026-04-23 (Bugs 9 + 10): Contract Total is defined by spend,
+  // not an arbitrary user-entered or AI-extracted number. Whenever the
+  // vendor or effective window changes, snap Total + Annual to the
+  // derived COG aggregate even if the fields already carry values. The
+  // Fields remain editable so users can still override for one-off
+  // deals, but the default is ALWAYS the spend-based figure — not a
+  // stale AI guess or a placeholder. The separate "Suggest from COG"
+  // button was removed because its behavior is now the default.
   const watchedVendorId = form.watch("vendorId")
   const watchedEffective = form.watch("effectiveDate")
   const watchedExpiration = form.watch("expirationDate")
-  const lastDerivedVendorRef = useRef<string | null>(null)
   useEffect(() => {
     if (!watchedVendorId) return
-    const currentTotal = form.getValues("totalValue") ?? 0
-    const currentAnnual = form.getValues("annualValue") ?? 0
-    if (currentTotal !== 0 && currentAnnual !== 0) return
-    if (lastDerivedVendorRef.current === watchedVendorId && currentTotal !== 0) return
-    lastDerivedVendorRef.current = watchedVendorId
     let cancelled = false
     ;(async () => {
       try {
@@ -145,14 +142,10 @@ export function NewContractClient({
           expirationDate: watchedExpiration || null,
         })
         if (cancelled) return
-        if (r.totalValue > 0 && currentTotal === 0) {
-          form.setValue("totalValue", r.totalValue)
-        }
-        if (r.annualValue > 0 && currentAnnual === 0) {
-          form.setValue("annualValue", r.annualValue)
-        }
+        if (r.totalValue > 0) form.setValue("totalValue", r.totalValue)
+        if (r.annualValue > 0) form.setValue("annualValue", r.annualValue)
       } catch {
-        // Silent — manual "Suggest from COG" button remains as fallback.
+        // Silent — user can still type values manually.
       }
     })()
     return () => {
@@ -587,15 +580,12 @@ export function NewContractClient({
       downPayment: capital.downPayment,
       paymentCadence: capital.paymentCadence,
       amortizationShape: capital.amortizationShape,
+      // Charles — terms now persist inside createContract in one action.
+      // Sending them in the payload eliminates the previous race where a
+      // client-side for-loop calling createContractTerm after the contract
+      // was created could leave terms missing on tie-in saves.
+      terms,
     })
-
-    // Create terms for the new contract
-    for (const term of terms) {
-      await createContractTerm({
-        ...term,
-        contractId: contract.id,
-      })
-    }
 
     // Import pricing file if provided
     if (pricingItems.length > 0) {
@@ -648,15 +638,8 @@ export function NewContractClient({
       downPayment: capital.downPayment,
       paymentCadence: capital.paymentCadence,
       amortizationShape: capital.amortizationShape,
+      terms,
     })
-
-    // Create terms for the new contract
-    for (const term of terms) {
-      await createContractTerm({
-        ...term,
-        contractId: contract.id,
-      })
-    }
 
     // Import pricing file if provided
     if (pricingItems.length > 0) {
@@ -735,9 +718,17 @@ export function NewContractClient({
           </TabsList>
           <TabsContent value="pdf" className="mt-4">
             <ContractPdfDropZone
-              onFileSelected={(file) => {
-                setDroppedFile(file)
-                setAiExtractOpen(true)
+              onFileSelected={(file, kind) => {
+                if (kind === "contract") {
+                  setDroppedFile(file)
+                  setAiExtractOpen(true)
+                } else if (kind === "pricing") {
+                  void handlePricingUpload(file)
+                } else {
+                  toast.error(
+                    "Unsupported file type. Use PDF / DOCX / TXT for contract documents, or CSV / XLSX / XLS for pricing files.",
+                  )
+                }
               }}
               extractedFileName={contractFileName}
               onReplace={() => {
@@ -766,36 +757,6 @@ export function NewContractClient({
             return { id: created.id, name: created.name }
           }}
         />
-
-        <div className="flex items-center justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!form.watch("vendorId")}
-            onClick={async () => {
-              const vendorId = form.watch("vendorId")
-              if (!vendorId) return
-              try {
-                const r = await deriveContractTotalFromCOG(vendorId, {
-                  effectiveDate: form.getValues("effectiveDate") || null,
-                  expirationDate: form.getValues("expirationDate") || null,
-                })
-                form.setValue("totalValue", r.totalValue)
-                form.setValue("annualValue", r.annualValue)
-                toast.success(
-                  r.windowMonthsObserved
-                    ? `Filled: annual = trailing ${r.monthsObserved}mo, total over ${Math.round(r.windowMonthsObserved)}mo window`
-                    : `Filled from ${r.monthsObserved}-month COG aggregate`
-                )
-              } catch {
-                toast.error("Could not derive total from COG")
-              }
-            }}
-          >
-            Suggest from COG
-          </Button>
-        </div>
 
         {/* Tie-in capital contract picker */}
         {form.watch("contractType") === "tie_in" && (
@@ -866,6 +827,9 @@ export function NewContractClient({
                   vendorItemNo: p.vendorItemNo,
                   description: p.description ?? null,
                 }))}
+                availableCategories={liveCategories.filter((c) =>
+                  (form.watch("categoryIds") ?? []).includes(c.id),
+                )}
               />
             </CardContent>
           </Card>

@@ -146,13 +146,18 @@ export function DashboardClient({
           </div>
         </TabsContent>
 
-        <TabsContent value="spend" className="mt-4">
+        <TabsContent value="spend" className="mt-4 space-y-6">
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <DashboardSpendTrendChart data={charts.monthlyTrend} />
             </div>
             <DashboardSpendProjection projection={kpi.spendProjection} />
           </div>
+          {/* Bug 7 (2026-04-23): the Spend tab previously differed from
+              Overview only in the right-hand card. Adding an explicit
+              spend-focused summary strip (On-contract %, rebate yield,
+              off-contract gap) so Spend has content Overview doesn't. */}
+          <DashboardSpendSummaryStrip kpi={kpi} />
         </TabsContent>
 
         <TabsContent value="alerts" className="mt-4">
@@ -162,6 +167,67 @@ export function DashboardClient({
           />
         </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+/**
+ * Spend-focused summary strip rendered below the chart on the Spend tab.
+ * Consumes data already present in the KPI payload — no extra server
+ * round trip — and exposes four numbers Overview doesn't emphasize:
+ *  - On-contract spend (YTD)
+ *  - Off-contract spend (YTD)
+ *  - On-contract share (%)
+ *  - Rebate yield (rebates earned ÷ on-contract spend)
+ *
+ * Added 2026-04-23 so the Spend tab is not a near-duplicate of Overview.
+ */
+function DashboardSpendSummaryStrip({
+  kpi,
+}: {
+  kpi: DashboardKPISummary
+}) {
+  const total = kpi.totalSpendYTD ?? 0
+  const onContract = kpi.onContractSpendYTD ?? 0
+  const offContract = Math.max(0, total - onContract)
+  const onContractPct = total > 0 ? (onContract / total) * 100 : 0
+  const earned = kpi.totalRebatesEarned ?? 0
+  const rebateYield = onContract > 0 ? (earned / onContract) * 100 : 0
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    })
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="rounded-lg border bg-card p-4">
+        <p className="text-xs text-muted-foreground">On-contract spend (YTD)</p>
+        <p className="mt-1 text-xl font-semibold tabular-nums">
+          {fmt(onContract)}
+        </p>
+      </div>
+      <div className="rounded-lg border bg-card p-4">
+        <p className="text-xs text-muted-foreground">Off-contract spend (YTD)</p>
+        <p className="mt-1 text-xl font-semibold tabular-nums">
+          {fmt(offContract)}
+        </p>
+      </div>
+      <div className="rounded-lg border bg-card p-4">
+        <p className="text-xs text-muted-foreground">On-contract share</p>
+        <p className="mt-1 text-xl font-semibold tabular-nums">
+          {onContractPct.toFixed(1)}%
+        </p>
+      </div>
+      <div className="rounded-lg border bg-card p-4">
+        <p className="text-xs text-muted-foreground">Rebate yield</p>
+        <p className="mt-1 text-xl font-semibold tabular-nums">
+          {rebateYield.toFixed(2)}%
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Rebates earned ÷ on-contract spend
+        </p>
+      </div>
     </div>
   )
 }

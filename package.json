@@ -48,6 +48,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^1.8.0",
+    "mammoth": "^1.12.0",
     "motion": "^12.38.0",
     "next": "^16.2.4",
     "next-themes": "^0.4.6",

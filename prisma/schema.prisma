@@ -605,9 +605,6 @@ model Contract {
   complianceRate         Decimal?          @db.Decimal(5, 2)
   currentMarketShare     Decimal?          @db.Decimal(5, 2)
   marketShareCommitment  Decimal?          @db.Decimal(5, 2)
-  score                  Int?
-  scoreBand              String?
-  scoreUpdatedAt         DateTime?
   createdById            String?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt

@@ -133,8 +133,6 @@ export function ContractsListClient({
           totalValue: Number(c.totalValue),
           rebateEarned: Number(c.rebateEarned ?? 0),
           spend: Number(c.currentSpend ?? 0),
-          score: c.score,
-          scoreBand: c.scoreBand,
         })),
     [allContracts, selectedForCompare],
   )
@@ -197,22 +195,12 @@ export function ContractsListClient({
     const thirtyDays = 30 * 24 * 60 * 60 * 1000
     const rows = allContracts
     const active = rows.filter((c) => c.status === "active").length
-    const scored = rows.filter(
-      (c): c is typeof c & { score: number } =>
-        typeof c.score === "number" && c.score > 0,
-    )
-    const avgScore =
-      scored.length > 0
-        ? Math.round(
-            scored.reduce((sum, c) => sum + c.score, 0) / scored.length,
-          )
-        : null
     const expiringSoon = rows.filter((c) => {
       if (!c.expirationDate) return false
       const exp = new Date(c.expirationDate).getTime()
       return exp > now && exp - now <= thirtyDays && c.status !== "expired"
     }).length
-    return { active, avgScore, expiringSoon }
+    return { active, expiringSoon }
   }, [allContracts])
 
   const handleDeleteContract = async () => {
@@ -261,7 +249,6 @@ export function ContractsListClient({
         activeCount={derivedStats.active}
         totalValue={Number(stats?.totalValue ?? 0)}
         rebatesYTD={Number(stats?.totalRebates ?? 0)}
-        avgScore={derivedStats.avgScore}
         expiringSoon={derivedStats.expiringSoon}
         scopeLabel={SCOPE_LABEL[facilityScope]}
         isLoading={isLoading && !stats}

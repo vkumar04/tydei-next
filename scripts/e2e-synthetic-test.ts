@@ -1094,6 +1094,187 @@ async function trailing12MoCheck(scenario: Scenario, failures: Failure[]): Promi
   }
 }
 
+/* ─────── tie-in persistence + collection-date round-trip ──────────── */
+
+async function tieInAndCollectionDateCheck(
+  scenario: Scenario,
+  failures: Failure[],
+): Promise<void> {
+  // Pick the first already-seeded facility/vendor/contract — we tack a
+  // tie-in term + tier + rebate onto them under the E2E_<runId>_ prefix
+  // so cleanup still sweeps everything.
+  const facId = scenario.facilities[0]?.id
+  const contractId = scenario.contracts[0]?.id
+  if (!facId || !contractId) {
+    return // no fixture to piggyback on
+  }
+
+  // Seed a tie-in-shaped ContractTerm with one tier. Mirrors exactly the
+  // Prisma shape createContract now writes. If the schema ever drifts
+  // (FK rename, required field added, etc.) this assertion fails.
+  const term = await prisma.contractTerm.create({
+    data: {
+      contract: { connect: { id: contractId } },
+      termName: `E2E_${scenario.runId}_tiein_term`,
+      termType: "spend_rebate",
+      baselineType: "spend_based",
+      effectiveStart: new Date("2026-01-01"),
+      effectiveEnd: new Date("2026-12-31"),
+      evaluationPeriod: "annual",
+      paymentTiming: "quarterly",
+      appliesTo: "all_products",
+      rebateMethod: "cumulative",
+      tiers: {
+        create: [
+          {
+            tierNumber: 1,
+            spendMin: 0,
+            rebateType: "percent_of_spend",
+            rebateValue: 0.03,
+          },
+        ],
+      },
+    },
+    include: { tiers: true },
+  })
+
+  if (term.tiers.length !== 1) {
+    failures.push({
+      where: "tie-in persistence",
+      detail: `expected 1 tier after nested create, got ${term.tiers.length}`,
+    })
+  }
+
+  const readback = await prisma.contractTerm.findUnique({
+    where: { id: term.id },
+    include: { tiers: true },
+  })
+  if (!readback || readback.tiers.length !== 1) {
+    failures.push({
+      where: "tie-in persistence",
+      detail: `term/tier did not round-trip`,
+    })
+  }
+
+  // Collection-date round-trip: insert an earned Rebate row, then write
+  // a collectionDate distinct from the accrual period and assert it
+  // readbacks exactly. This is what createContractTransaction does on
+  // the collected branch (contract-periods.ts:325).
+  const earned = await prisma.rebate.create({
+    data: {
+      contractId,
+      facilityId: facId,
+      rebateEarned: 10_000,
+      rebateCollected: 0,
+      payPeriodStart: new Date("2025-01-01"),
+      payPeriodEnd: new Date("2025-03-31"),
+      collectionDate: null,
+      notes: `E2E_${scenario.runId}_rebate`,
+    },
+  })
+  const COLLECTION_DATE = new Date("2026-04-15")
+  await prisma.rebate.update({
+    where: { id: earned.id },
+    data: {
+      rebateCollected: 10_000,
+      collectionDate: COLLECTION_DATE,
+    },
+  })
+  const collected = await prisma.rebate.findUnique({ where: { id: earned.id } })
+  const got = collected?.collectionDate?.toISOString()
+  const want = COLLECTION_DATE.toISOString()
+  if (got !== want) {
+    failures.push({
+      where: "collection-date round-trip",
+      detail: `collectionDate mismatch — want ${want}, got ${got}`,
+    })
+  }
+
+  // ─── Bug 8 — scopedCategoryIds (ContractTerm.categories) round-trip ───
+  // The edit page hydrate was missing `scopedCategoryIds: t.categories`,
+  // so a user picked a category → saved → reloaded → dropdown blank.
+  // Guard: write a term with a specific `categories` array, read back,
+  // assert equal. Catches any future schema/column rename and any
+  // default-coercion that wipes the array on write.
+  const CATEGORY_FIXTURE = ["E2E_cat_alpha", "E2E_cat_beta"]
+  const termWithCats = await prisma.contractTerm.create({
+    data: {
+      contract: { connect: { id: contractId } },
+      termName: `E2E_${scenario.runId}_cats_term`,
+      termType: "spend_rebate",
+      baselineType: "spend_based",
+      effectiveStart: new Date("2026-01-01"),
+      effectiveEnd: new Date("2026-12-31"),
+      evaluationPeriod: "annual",
+      appliesTo: "specific_category",
+      rebateMethod: "cumulative",
+      categories: CATEGORY_FIXTURE,
+    },
+  })
+  const readbackCats = await prisma.contractTerm.findUnique({
+    where: { id: termWithCats.id },
+    select: { categories: true },
+  })
+  if (
+    !readbackCats ||
+    readbackCats.categories.length !== CATEGORY_FIXTURE.length ||
+    !CATEGORY_FIXTURE.every((c) => readbackCats.categories.includes(c))
+  ) {
+    failures.push({
+      where: "scopedCategoryIds round-trip",
+      detail: `categories mismatch — want ${JSON.stringify(
+        CATEGORY_FIXTURE,
+      )}, got ${JSON.stringify(readbackCats?.categories)}`,
+    })
+  }
+
+  // ─── Bug 13 — COG CSV multiplier auto-map ───
+  // Charles's "New New New Short.csv" uses the header "Conversion Factor
+  // Ordered" for the multiplier. Without the alias widening in
+  // `lib/actions/imports/cog-csv-import.ts`, the auto-mapper dropped the
+  // column and every row imported as multiplier=1. Guard against
+  // regression by importing `localFallbackMap` directly and asserting
+  // the mapping resolves for every common header variant.
+  const { localFallbackMap } = await import(
+    "@/lib/actions/imports/shared"
+  )
+  const multiplierTarget = [
+    {
+      key: "multiplier",
+      label:
+        "Multiplier / Case Pack / Units per Line / Conversion Factor / Conversion Factor Ordered",
+      required: false,
+    },
+  ]
+  const headerVariantsThatMustMap = [
+    "Conversion Factor Ordered",
+    "Conversion Factor",
+    "Multiplier",
+    "Case Pack",
+    "Units per Line",
+  ]
+  for (const variant of headerVariantsThatMustMap) {
+    const m = localFallbackMap([variant], multiplierTarget)
+    if (m.multiplier !== variant) {
+      failures.push({
+        where: "cog-csv multiplier auto-map",
+        detail: `header "${variant}" did not map to multiplier (got ${JSON.stringify(m)})`,
+      })
+    }
+  }
+
+  // Cleanup — these rows are under the E2E_<runId>_ prefix through the
+  // parent contract, so the main cleanup sweep picks them up, but we
+  // nuke them explicitly here so a mid-run crash still tidies.
+  await prisma.rebate.deleteMany({
+    where: { notes: { startsWith: `E2E_${scenario.runId}_rebate` } },
+  })
+  await prisma.contractTier.deleteMany({ where: { termId: term.id } })
+  await prisma.contractTerm.deleteMany({
+    where: { id: { in: [term.id, termWithCats.id] } },
+  })
+}
+
 /* ───────────────────────────── cleanup ─────────────────────────────── */
 
 async function cleanupRun(scenario: Scenario): Promise<void> {
@@ -1185,6 +1366,20 @@ async function main(): Promise<number> {
     // Trailing-12mo contract-detail cascade
     console.log(`[e2e] trailing-12mo check…`)
     await trailing12MoCheck(scenario, failures)
+
+    // Charles — tie-in terms/tiers atomic-persistence + collection-date
+    // round-trip checks. Regression guards for:
+    //  - bug: "terms and tiers for a tie-in don't save on create"
+    //  - bug: "collection date entered on a rebate doesn't collect on
+    //    that date" (server-side save path)
+    // We can't invoke the createContract server action directly from a
+    // script (requireFacility() reads HTTP headers), so we insert rows
+    // via Prisma using the same shape createContract now writes and
+    // assert readback. This catches schema/FK regressions and verifies
+    // the shape is round-trip safe; the server-action wiring is covered
+    // by type-check + vitest.
+    console.log(`[e2e] tie-in persistence + collection-date round-trip…`)
+    await tieInAndCollectionDateCheck(scenario, failures)
   } catch (err) {
     console.error(`[e2e] unexpected error:`, err)
     failures.push({ where: "pipeline", detail: String(err) })

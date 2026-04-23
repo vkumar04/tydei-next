@@ -137,6 +137,19 @@ export function EditContractClient({
           volumeBaseline: t.volumeBaseline ?? undefined,
           growthBaselinePercent: t.growthBaselinePercent ? Number(t.growthBaselinePercent) : undefined,
           desiredMarketShare: t.desiredMarketShare ? Number(t.desiredMarketShare) : undefined,
+          // Previously missing — the ContractTerm.categories String[]
+          // column round-trips through `scopedCategoryIds` on the form
+          // (see updateContractTerm in lib/actions/contract-terms.ts),
+          // but the edit hydrate wasn't mapping it back on load. That
+          // made the Categories picker render empty after save and the
+          // user saw "category doesn't save" when the value was actually
+          // in the DB (2026-04-23).
+          scopedCategoryIds: t.categories ?? [],
+          cptCodes: t.cptCodes ?? [],
+          minimumPurchaseCommitment:
+            t.minimumPurchaseCommitment != null
+              ? Number(t.minimumPurchaseCommitment)
+              : undefined,
           tiers: t.tiers.map((tier) => ({
             id: tier.id,
             tierNumber: tier.tierNumber,
@@ -156,22 +169,28 @@ export function EditContractClient({
     }
   }, [contract, initialized, form, setTerms])
 
-  // Charles W1.W-A3a: auto-run "Suggest from COG" when the vendor
-  // changes on an existing contract AND totalValue/annualValue are
-  // still empty. Initialization above seeds both from the stored
-  // contract, so this only fires on a deliberate vendor-change flow
-  // where the user has first zeroed out the value fields.
+  // Charles 2026-04-23 (Bugs 9 + 10): Contract Total on the edit page
+  // snaps to the COG-derived figure on any *deliberate* vendor or date
+  // change. On first hydrate we retain the stored values (so the page
+  // doesn't mutate on open), but any later edit of vendor/dates triggers
+  // a re-derive that clobbers Total + Annual. Matches the behavior of
+  // the new-contract page — Total is always spend-based unless the user
+  // types something after the most recent vendor/date change.
   const watchedVendorId = form.watch("vendorId")
   const watchedEffective = form.watch("effectiveDate")
   const watchedExpiration = form.watch("expirationDate")
-  const lastDerivedVendorRef = useRef<string | null>(null)
+  const lastSeenKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (!initialized || !watchedVendorId) return
-    const currentTotal = form.getValues("totalValue") ?? 0
-    const currentAnnual = form.getValues("annualValue") ?? 0
-    if (currentTotal !== 0 && currentAnnual !== 0) return
-    if (lastDerivedVendorRef.current === watchedVendorId && currentTotal !== 0) return
-    lastDerivedVendorRef.current = watchedVendorId
+    const key = `${watchedVendorId}|${watchedEffective}|${watchedExpiration}`
+    // First render after hydrate: stamp the key but don't snap — preserves
+    // the stored contract values.
+    if (lastSeenKeyRef.current === null) {
+      lastSeenKeyRef.current = key
+      return
+    }
+    if (lastSeenKeyRef.current === key) return
+    lastSeenKeyRef.current = key
     let cancelled = false
     ;(async () => {
       try {
@@ -180,12 +199,8 @@ export function EditContractClient({
           expirationDate: watchedExpiration || null,
         })
         if (cancelled) return
-        if (r.totalValue > 0 && currentTotal === 0) {
-          form.setValue("totalValue", r.totalValue)
-        }
-        if (r.annualValue > 0 && currentAnnual === 0) {
-          form.setValue("annualValue", r.annualValue)
-        }
+        if (r.totalValue > 0) form.setValue("totalValue", r.totalValue)
+        if (r.annualValue > 0) form.setValue("annualValue", r.annualValue)
       } catch {
         // Silent — user can manually re-enter values.
       }
@@ -450,6 +465,9 @@ export function EditContractClient({
             onChange={setTerms}
             contractType={form.watch("contractType")}
             availableItems={availableItems}
+            availableCategories={((liveCategories ?? categories) ?? []).filter((c) =>
+              (form.watch("categoryIds") ?? []).includes(c.id),
+            )}
           />
         </TabsContent>
 

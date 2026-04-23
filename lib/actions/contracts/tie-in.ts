@@ -279,6 +279,7 @@ export async function getContractCapitalSchedule(
       terms: {
         select: {
           minimumPurchaseCommitment: true,
+          spendBaseline: true,
           rebateMethod: true,
           tiers: {
             select: {
@@ -435,9 +436,15 @@ export async function getContractCapitalSchedule(
   // Capital" block. These are derived here so the card stays a thin
   // renderer and the math lives alongside the schedule read.
 
-  // minAnnualPurchase: largest `minimumPurchaseCommitment` across terms.
-  // A tie-in contract's capital term typically carries this; picking the
-  // max avoids surfacing a second term's smaller per-term commitment.
+  // minAnnualPurchase: largest explicit `minimumPurchaseCommitment` across
+  // terms. If no term carries one, fall back to the largest `spendBaseline`
+  // across terms — user note 2026-04-23: "That is technically the
+  // definition of the Baseline that is in the Term/Tiers for a rebate."
+  // A tie-in contract's capital term typically carries
+  // `minimumPurchaseCommitment`; picking the max avoids surfacing a second
+  // term's smaller per-term commitment. The baseline fallback means a
+  // contract that defined its spend commitment at the term-level Baseline
+  // field still drives the Min Annual Purchase card instead of showing `—`.
   let minAnnualPurchase: number | null = null
   for (const t of contract.terms) {
     if (t.minimumPurchaseCommitment == null) continue
@@ -445,6 +452,16 @@ export async function getContractCapitalSchedule(
     if (!Number.isFinite(n) || n <= 0) continue
     if (minAnnualPurchase == null || n > minAnnualPurchase) {
       minAnnualPurchase = n
+    }
+  }
+  if (minAnnualPurchase == null) {
+    for (const t of contract.terms) {
+      if (t.spendBaseline == null) continue
+      const n = Number(t.spendBaseline)
+      if (!Number.isFinite(n) || n <= 0) continue
+      if (minAnnualPurchase == null || n > minAnnualPurchase) {
+        minAnnualPurchase = n
+      }
     }
   }
 
@@ -603,7 +620,10 @@ export async function getContractCapitalProjection(
       termMonths: true,
       paymentCadence: true,
       rebates: {
-        select: { collectionDate: true, rebateCollected: true },
+        select: {
+          collectionDate: true,
+          rebateCollected: true,
+        },
       },
     },
   })

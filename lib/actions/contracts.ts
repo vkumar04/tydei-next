@@ -16,7 +16,11 @@ import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
 import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
-import { recomputeContractScore } from "@/lib/actions/contracts/scoring"
+import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
+import {
+  termFormSchema,
+  type TermFormValues,
+} from "@/lib/validators/contract-terms"
 import {
   contractOwnershipWhere,
   contractsOwnedByFacility,
@@ -635,9 +639,34 @@ export async function getContractStats(
 
 // ─── Create Contract ─────────────────────────────────────────────
 
-export async function createContract(input: CreateContractInput) {
+export async function createContract(
+  input: CreateContractInput & { terms?: TermFormValues[] },
+) {
+  try {
+    return await _createContractImpl(input)
+  } catch (err) {
+    console.error("[createContract]", err, {
+      name: input.name,
+      vendorId: input.vendorId,
+      contractType: input.contractType,
+      termCount: Array.isArray(input.terms) ? input.terms.length : 0,
+    })
+    throw err
+  }
+}
+
+async function _createContractImpl(
+  input: CreateContractInput & { terms?: TermFormValues[] },
+) {
   const session = await requireFacility()
   const data = createContractSchema.parse(input)
+  // Terms travel alongside the validated contract payload rather than as
+  // part of it — embedding them in createContractSchema makes react-hook-form's
+  // zodResolver unhappy because termFormSchema defaults force the infer'd
+  // type to diverge from the input type. We validate them separately below.
+  const dataTerms: TermFormValues[] = Array.isArray(input.terms)
+    ? input.terms.map((t) => termFormSchema.parse(t))
+    : []
 
   // Charles W1.W-E1 — idempotency. When the client supplies a key we
   // hold a 30s cache of (key → created contract). A second call within
@@ -728,6 +757,92 @@ export async function createContract(input: CreateContractInput) {
     },
   })
 
+  // Charles — atomic term+tier persistence. Terms used to be written
+  // by a client-side loop calling `createContractTerm` after `createContract`
+  // returned; a stale Next.js server-action hash (or any network blip)
+  // between the two round-trips would leave the contract with no terms.
+  // Users then saw a contract they had to "Edit" to re-save terms. By
+  // writing terms inside this same server action, the only failure mode
+  // is "nothing saved, error surfaced to client" — never half-saved.
+  if (dataTerms.length > 0) {
+    for (const formTerm of dataTerms) {
+      const {
+        tiers,
+        scopedItemNumbers,
+        scopedCategoryId: _scopedCategoryId,
+        scopedCategoryIds,
+        customAmortizationRows: _customAmortizationRows,
+        capitalCost: _termCapitalCost,
+        interestRate: _termInterestRate,
+        termMonths: _termMonths,
+        downPayment: _termDownPayment,
+        paymentCadence: _termPaymentCadence,
+        amortizationShape: _termAmortizationShape,
+        id: _termId,
+        ...termData
+      } = formTerm
+      void _scopedCategoryId
+      void _customAmortizationRows
+      void _termCapitalCost
+      void _termInterestRate
+      void _termMonths
+      void _termDownPayment
+      void _termPaymentCadence
+      void _termAmortizationShape
+      void _termId
+
+      const termCreateData: Prisma.ContractTermCreateInput = {
+        ...termData,
+        effectiveStart: new Date(termData.effectiveStart),
+        effectiveEnd: new Date(termData.effectiveEnd),
+        contract: { connect: { id: contract.id } },
+        ...(scopedCategoryIds && scopedCategoryIds.length > 0 && {
+          categories: scopedCategoryIds,
+        }),
+        ...(tiers.length > 0 && {
+          tiers: {
+            create: tiers.map((tier) => ({
+              tierNumber: tier.tierNumber,
+              spendMin: tier.spendMin,
+              spendMax: tier.spendMax,
+              volumeMin: tier.volumeMin,
+              volumeMax: tier.volumeMax,
+              marketShareMin: tier.marketShareMin,
+              marketShareMax: tier.marketShareMax,
+              rebateType: tier.rebateType,
+              rebateValue: tier.rebateValue,
+            })),
+          },
+        }),
+      }
+      const createdTerm = await prisma.contractTerm.create({
+        data: termCreateData,
+      })
+
+      if (scopedItemNumbers && scopedItemNumbers.length > 0) {
+        await prisma.contractTermProduct.createMany({
+          data: scopedItemNumbers.map((vendorItemNo) => ({
+            termId: createdTerm.id,
+            vendorItemNo,
+          })),
+          skipDuplicates: true,
+        })
+      }
+    }
+
+    // Keep auto-accrual rebate rows in sync — mirrors what
+    // createContractTerm does per-term, but we only need one pass after
+    // the full set is in place.
+    try {
+      await recomputeAccrualForContract(contract.id)
+    } catch (err) {
+      console.warn(
+        `[createContract] recomputeAccrualForContract(${contract.id}) failed:`,
+        err,
+      )
+    }
+  }
+
   // Persist additional facilities selected via the multi-facility picker.
   // Uses the ContractFacility join table with skipDuplicates so repeat
   // saves (or overlap with data.facilityIds above) don't violate the
@@ -772,12 +887,9 @@ export async function createContract(input: CreateContractInput) {
     }
   }
 
-  // Compute the initial Contract.score so the list/detail pages show
-  // a number right after creation. Swallow errors — scoring failure
-  // shouldn't fail contract creation.
-  await recomputeContractScore(contract.id).catch((err) => {
-    console.warn("[createContract] score recompute failed:", err)
-  })
+  // Contract health-score feature removed 2026-04-23 (Bug 15) — the
+  // A-F rollup was unclear in provenance ("what is this score based on?
+  // not sure we need that") so the whole subsystem was ripped out.
 
   revalidatePath("/dashboard/cog")
   revalidatePath("/dashboard/contracts")
@@ -798,6 +910,24 @@ export async function createContract(input: CreateContractInput) {
 // ─── Update Contract ─────────────────────────────────────────────
 
 export async function updateContract(id: string, input: UpdateContractInput) {
+  try {
+    return await _updateContractImpl(id, input)
+  } catch (err) {
+    // Per CLAUDE.md "AI-action error path" — every server action that can
+    // throw should `console.error` with enough breadcrumbs to debug in
+    // production logs, because the client only sees a redacted digest
+    // ("An error occurred in the Server Components render"). Without
+    // this, a Save-failed toast is unactionable — which is exactly the
+    // scenario the user hit on 2026-04-23 while editing a tie-in.
+    console.error("[updateContract]", err, { contractId: id })
+    throw err
+  }
+}
+
+async function _updateContractImpl(
+  id: string,
+  input: UpdateContractInput,
+) {
   const session = await requireFacility()
   const { facility } = session
   const data = updateContractSchema.parse(input)
@@ -995,12 +1125,7 @@ export async function updateContract(id: string, input: UpdateContractInput) {
     }
   }
 
-  // Recompute Contract.score so the list / detail pages reflect any
-  // change in commitment / compliance / timeliness. Swallow errors.
-  await recomputeContractScore(id).catch((err) => {
-    console.warn("[updateContract] score recompute failed:", err)
-  })
-
+  // Contract health-score feature removed 2026-04-23 (Bug 15).
   revalidatePath("/dashboard/cog")
   revalidatePath("/dashboard/contracts")
   revalidatePath(`/dashboard/contracts/${id}`)

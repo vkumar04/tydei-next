@@ -5,17 +5,30 @@ import { CheckCircle2, Sparkles, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+export type DroppedFileKind = "contract" | "pricing" | "unsupported"
+
 interface ContractPdfDropZoneProps {
-  onFileSelected: (file: File) => void
+  onFileSelected: (file: File, kind: DroppedFileKind) => void
   extractedFileName?: string | null
   onReplace?: () => void
 }
 
+const CONTRACT_EXTS = ["pdf", "txt", "doc", "docx"]
+const PRICING_EXTS = ["csv", "xlsx", "xls"]
+const ACCEPT = ".pdf,.txt,.doc,.docx,.csv,.xlsx,.xls"
+
+function classify(file: File): DroppedFileKind {
+  const ext = file.name.toLowerCase().split(".").pop() ?? ""
+  if (CONTRACT_EXTS.includes(ext)) return "contract"
+  if (PRICING_EXTS.includes(ext)) return "pricing"
+  return "unsupported"
+}
+
 /**
- * Hero drop-zone for the New Contract page. Invites a PDF drop (or click
- * to browse); extraction itself is delegated to the parent via
- * `onFileSelected`. After a successful extraction the parent passes back
- * `extractedFileName` and the zone flips to a compact success row.
+ * Hero drop-zone for the New Contract page. Accepts contract documents
+ * (PDF/DOC/DOCX/TXT) and pricing files (CSV/XLSX/XLS). The parent routes
+ * each kind to the right backend: contract docs → AI extract; pricing
+ * files → pricing-file import (queued until contract save if needed).
  */
 export function ContractPdfDropZone({
   onFileSelected,
@@ -30,11 +43,7 @@ export function ContractPdfDropZone({
     setIsDragging(false)
     const file = e.dataTransfer.files?.[0]
     if (!file) return
-    const name = file.name.toLowerCase()
-    if (!name.endsWith(".pdf") && !name.endsWith(".txt")) {
-      return
-    }
-    onFileSelected(file)
+    onFileSelected(file, classify(file))
   }
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
@@ -47,7 +56,6 @@ export function ContractPdfDropZone({
     setIsDragging(false)
   }
 
-  // Post-extract compact state
   if (extractedFileName) {
     return (
       <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
@@ -71,7 +79,6 @@ export function ContractPdfDropZone({
     )
   }
 
-  // Idle / drag-hover state
   return (
     <div
       className={cn(
@@ -96,12 +103,11 @@ export function ContractPdfDropZone({
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,.txt"
+        accept={ACCEPT}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0]
-          if (file) onFileSelected(file)
-          // Reset so selecting the same file again re-triggers
+          if (file) onFileSelected(file, classify(file))
           e.target.value = ""
         }}
       />
@@ -110,11 +116,13 @@ export function ContractPdfDropZone({
       </div>
       <div className="space-y-1">
         <p className="text-base font-medium">
-          {isDragging ? "Drop the PDF to extract" : "Drop a contract PDF here, or click to upload"}
+          {isDragging
+            ? "Drop the file to continue"
+            : "Drop a contract or pricing file here, or click to upload"}
         </p>
         <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5" />
-          AI will extract contract details automatically
+          PDF / DOC / DOCX / TXT extract with AI · CSV / XLSX import as pricing
         </p>
       </div>
     </div>

@@ -40,7 +40,15 @@ export async function getAccrualTimeline(contractId: string) {
   // Charles R5.6: pricing-only contracts are not rebate-bearing. The
   // accrual ledger must be empty for them — no phantom rows from COG.
   if (!contractTypeEarnsRebates(contract.contractType)) {
-    return serialize({ rows: [], method: "cumulative" as RebateMethodName })
+    return serialize({
+      rows: [],
+      method: "cumulative" as RebateMethodName,
+      termLabels: [] as Array<{
+        termIndex: number
+        termName: string
+        evaluationPeriod: string
+      }>,
+    })
   }
 
   // Charles R5.29: iterate all terms and sum per-month accruals so the
@@ -49,7 +57,15 @@ export async function getAccrualTimeline(contractId: string) {
   // term's accrued values in the Performance tab timeline.
   const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
   if (termsWithTiers.length === 0) {
-    return serialize({ rows: [], method: "cumulative" as RebateMethodName })
+    return serialize({
+      rows: [],
+      method: "cumulative" as RebateMethodName,
+      termLabels: [] as Array<{
+        termIndex: number
+        termName: string
+        evaluationPeriod: string
+      }>,
+    })
   }
 
   // Charles W1.S — scale `rebateValue` by 100 at the Prisma boundary for
@@ -240,7 +256,18 @@ export async function getAccrualTimeline(contractId: string) {
     }
   })
 
-  return serialize({ rows, method })
+  // Per-term labels so the Accrual Timeline UI can render each term's
+  // contribution on multi-term contracts instead of collapsing to the
+  // "best" term. Without this, a contract with a spend rebate + a
+  // category-scoped rebate shows only the dominant rate, which led users
+  // to report "it's only pulling from the 1st one" (2026-04-23).
+  const termLabels = termsWithTiers.map((t, i) => ({
+    termIndex: i,
+    termName: t.termName ?? `Term ${i + 1}`,
+    evaluationPeriod: t.evaluationPeriod ?? "annual",
+  }))
+
+  return serialize({ rows, method, termLabels })
 }
 
 // Local month-key helpers duplicated from `lib/contracts/accrual.ts` —

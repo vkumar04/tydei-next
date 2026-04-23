@@ -675,8 +675,15 @@ function TransactionTable({
             return (
               <TableRow key={row.id}>
                 <TableCell className="font-medium">
-                  {formatDate(row.periodStart)} &ndash;{" "}
-                  {formatDate(row.periodEnd)}
+                  <div>
+                    {formatDate(row.periodStart)} &ndash;{" "}
+                    {formatDate(row.periodEnd)}
+                  </div>
+                  {row.collectionDate && (
+                    <div className="text-xs font-normal text-muted-foreground">
+                      collected {formatDate(row.collectionDate)}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className="gap-1">

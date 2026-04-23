@@ -14,7 +14,6 @@ import {
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
-import { ScoreBadge } from "@/components/shared/badges/score-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -241,35 +240,12 @@ export function getContractColumns(
         />
       ),
     },
-    {
-      id: "score",
-      accessorFn: (row) =>
-        row.score ??
-        ("aiScore" in row
-          ? ((row as Record<string, unknown>).aiScore as number | null)
-          : null) ??
-        -1,
-      header: ({ column }) => (
-        <SortableHeader label="Score" column={column} />
-      ),
-      enableSorting: true,
-      cell: ({ row }) => (
-        <ScoreBadge
-          // Prefer the new Contract.score column; fall back to the
-          // legacy aiScore field for older rows that haven't been
-          // recomputed yet.
-          score={
-            row.original.score ??
-            ("aiScore" in row.original
-              ? ((row.original as Record<string, unknown>).aiScore as
-                  | number
-                  | null)
-              : null)
-          }
-          size="sm"
-        />
-      ),
-    },
+    // Score column removed 2026-04-23 (Bug 15) — Charles: "What is this
+    // score based on? Not sure we need that." The underlying
+    // Contract.score value is still computed server-side and remains
+    // available on the detail page's radar chart; dropping it from the
+    // list column keeps the grade out of the primary surface where
+    // its provenance was unclear.
     {
       accessorKey: "effectiveDate",
       header: ({ column }) => (

@@ -13,7 +13,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ScoreBadge } from "@/components/shared/badges/score-badge"
 
 // ─── Compare Tab — Subsystem 4 ─────────────────────────────────────
 // Supports up to 5 contracts side-by-side. Five cards per spec §4.4:
@@ -315,15 +314,6 @@ function CompareOverviewCard({ contracts }: { contracts: ContractRow[] }) {
             </span>
           )
         })}
-      />
-      <CompareRow
-        label="Score"
-        style={style}
-        children={contracts.map((c) => (
-          <span key={c.id}>
-            <ScoreBadge score={c.score ?? null} size="sm" />
-          </span>
-        ))}
       />
       <CompareRow
         label="Facility"

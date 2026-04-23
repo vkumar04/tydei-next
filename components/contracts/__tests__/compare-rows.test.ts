@@ -18,8 +18,6 @@ describe("buildCompareRows", () => {
         totalValue: 1_000_000,
         rebateEarned: 50_000,
         spend: 800_000,
-        score: 82,
-        scoreBand: "B",
       },
       {
         id: "2",
@@ -32,12 +30,10 @@ describe("buildCompareRows", () => {
         totalValue: 2_000_000,
         rebateEarned: 80_000,
         spend: 1_200_000,
-        score: 91,
-        scoreBand: "A",
       },
     ]
     const rows = buildCompareRows(c)
-    expect(rows).toHaveLength(10)
+    expect(rows).toHaveLength(8)
     const vendorRow = rows.find((r) => r.label === "Vendor")
     expect(vendorRow?.values).toEqual(["Stryker", "Medtronic"])
     const totalRow = rows.find((r) => r.label === "Total Value")

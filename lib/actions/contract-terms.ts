@@ -60,6 +60,15 @@ export async function getContractTerms(contractId: string) {
 // ─── Create Term ─────────────────────────────────────────────────
 
 export async function createContractTerm(input: CreateTermInput) {
+  try {
+    return await _createContractTermImpl(input)
+  } catch (err) {
+    console.error("[createContractTerm]", err, { contractId: input.contractId })
+    throw err
+  }
+}
+
+async function _createContractTermImpl(input: CreateTermInput) {
   await requireFacility()
   const data = createTermSchema.parse(input)
 
@@ -153,6 +162,20 @@ export async function createContractTerm(input: CreateTermInput) {
 // ─── Update Term ─────────────────────────────────────────────────
 
 export async function updateContractTerm(id: string, input: UpdateTermInput) {
+  try {
+    return await _updateContractTermImpl(id, input)
+  } catch (err) {
+    // CLAUDE.md "AI-action error path" — surface real reason to server
+    // logs. Prod clients only see a redacted digest.
+    console.error("[updateContractTerm]", err, { termId: id })
+    throw err
+  }
+}
+
+async function _updateContractTermImpl(
+  id: string,
+  input: UpdateTermInput,
+) {
   await requireFacility()
   const data = updateTermSchema.parse(input)
 
@@ -228,6 +251,15 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
 // ─── Delete Term ─────────────────────────────────────────────────
 
 export async function deleteContractTerm(id: string) {
+  try {
+    return await _deleteContractTermImpl(id)
+  } catch (err) {
+    console.error("[deleteContractTerm]", err, { termId: id })
+    throw err
+  }
+}
+
+async function _deleteContractTermImpl(id: string) {
   await requireFacility()
 
   // Capture contractId before the delete cascades the term row away.
@@ -249,6 +281,18 @@ export async function deleteContractTerm(id: string) {
 // ─── Upsert Tiers ────────────────────────────────────────────────
 
 export async function upsertContractTiers(termId: string, tiers: TierInput[]) {
+  try {
+    return await _upsertContractTiersImpl(termId, tiers)
+  } catch (err) {
+    console.error("[upsertContractTiers]", err, { termId })
+    throw err
+  }
+}
+
+async function _upsertContractTiersImpl(
+  termId: string,
+  tiers: TierInput[],
+) {
   await requireFacility()
   const validated = z.array(tierInputSchema).parse(tiers)
 

@@ -90,8 +90,14 @@ export function ContractDetailClient({
   const { data: contract, isLoading } = useContract(contractId, periodId, {
     initialData: initialContract,
   })
+  // Keyed `contractPeriods` (camelCase) to match the invalidation key
+  // used by every other call site (edit-contract-client, contract-
+  // transactions, contract-terms-page-client). Prior `"contract-periods"`
+  // kebab-case key meant Transactions-tab writes never invalidated this
+  // view, so the detail page could show stale periods until a full
+  // refetch. Spotted while chasing Bug 12.
   const { data: periods } = useQuery({
-    queryKey: ["contract-periods", contractId],
+    queryKey: ["contractPeriods", contractId],
     queryFn: () => getContractPeriods(contractId),
     enabled: !!contractId,
   })

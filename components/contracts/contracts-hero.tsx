@@ -23,7 +23,6 @@ export interface ContractsHeroProps {
   activeCount: number
   totalValue: number
   rebatesYTD: number
-  avgScore: number | null
   expiringSoon: number
   scopeLabel: string
   isLoading?: boolean
@@ -34,7 +33,6 @@ export function ContractsHero({
   activeCount,
   totalValue,
   rebatesYTD,
-  avgScore,
   expiringSoon,
   scopeLabel,
   isLoading,
@@ -80,11 +78,7 @@ export function ContractsHero({
         <HeroStat
           label="Active"
           value={isLoading ? null : String(activeCount)}
-          sublabel={
-            avgScore === null
-              ? "No scored contracts"
-              : `Avg score ${avgScore}`
-          }
+          sublabel="Currently in force"
           tone="positive"
         />
         <HeroStat

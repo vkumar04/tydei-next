@@ -72,7 +72,14 @@ export async function ingestCOGRecordsCSV(
       // extendedPrice.
       {
         key: "multiplier",
-        label: "Multiplier / Case Pack / Units per Line",
+        // Widened 2026-04-23 — Charles's "New New New Short.csv" uses the
+        // header "Conversion Factor Ordered" for the multiplier. Without
+        // this alias the auto-mapper dropped the column and every row
+        // imported as multiplier=1 (Bug 13). localFallbackMap matches on
+        // substring in either direction, so stacking aliases in the label
+        // covers real-world variants without schema changes.
+        label:
+          "Multiplier / Case Pack / Units per Line / Conversion Factor / Conversion Factor Ordered",
         required: false,
       },
     ],

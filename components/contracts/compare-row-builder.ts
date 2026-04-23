@@ -19,8 +19,6 @@ export interface CompareContract {
   totalValue: number
   rebateEarned: number
   spend: number
-  score: number | null
-  scoreBand: string | null
 }
 
 export interface CompareRow {
@@ -57,14 +55,6 @@ export function buildCompareRows(contracts: CompareContract[]): CompareRow[] {
     {
       label: "Rebate Earned",
       values: contracts.map((c) => fmtMoney(c.rebateEarned)),
-    },
-    {
-      label: "Score",
-      values: contracts.map((c) => (c.score == null ? "—" : String(c.score))),
-    },
-    {
-      label: "Score Band",
-      values: contracts.map((c) => c.scoreBand ?? "—"),
     },
   ]
 }

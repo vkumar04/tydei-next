@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai"
 import { headers } from "next/headers"
+import mammoth from "mammoth"
 import { auth } from "@/lib/auth-server"
 import { claudeModel } from "@/lib/ai/config"
 import {
@@ -232,6 +233,74 @@ ${text.trim()}`,
       console.warn("[extract-contract] S3 archival skipped:", uploadErr)
     }
 
+    // Classify incoming file. PDFs are sent to Claude as a file part;
+    // DOCX is converted to plain text server-side via mammoth; TXT is
+    // read directly. DOC (legacy binary Word) is not natively supported
+    // and is rejected with a helpful message.
+    const lowerName = file.name.toLowerCase()
+    const isPdf = lowerName.endsWith(".pdf") || file.type === "application/pdf"
+    const isDocx =
+      lowerName.endsWith(".docx") ||
+      file.type ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    const isDoc = lowerName.endsWith(".doc") && !isDocx
+    const isTxt = lowerName.endsWith(".txt") || file.type === "text/plain"
+
+    if (isDoc) {
+      return Response.json(
+        {
+          error: "Legacy .doc format not supported",
+          details:
+            "Please save the file as PDF or .docx and try again. Mammoth can only read .docx.",
+        },
+        { status: 415 },
+      )
+    }
+
+    // For non-PDF inputs we convert to plain text and feed the existing
+    // text-extraction path to reuse one code path per input.
+    let docText: string | null = null
+    if (isDocx) {
+      try {
+        const { value } = await mammoth.extractRawText({
+          buffer: Buffer.from(fileData),
+        })
+        docText = value.trim()
+      } catch (err) {
+        console.error("[extract-contract] docx conversion failed:", err)
+        return Response.json(
+          {
+            error: "Could not read .docx file",
+            details: err instanceof Error ? err.message : "Unknown error",
+          },
+          { status: 400 },
+        )
+      }
+      if (!docText) {
+        return Response.json(
+          { error: "The .docx file contained no readable text." },
+          { status: 400 },
+        )
+      }
+    } else if (isTxt) {
+      docText = new TextDecoder().decode(fileData).trim()
+      if (!docText) {
+        return Response.json(
+          { error: "The .txt file was empty." },
+          { status: 400 },
+        )
+      }
+    } else if (!isPdf) {
+      return Response.json(
+        {
+          error: "Unsupported file type",
+          details:
+            "Supported: PDF, DOCX, TXT. CSV / Excel pricing files should go through the Pricing import flow.",
+        },
+        { status: 415 },
+      )
+    }
+
     const mediaType: "application/pdf" = "application/pdf"
 
     // Route PDF through the simpler legacy schema — the rich schema has
@@ -240,28 +309,36 @@ ${text.trim()}`,
     // bug new-1.
     let extracted: ExtractedContractData | undefined
     try {
+      const userContent: Array<
+        | { type: "text"; text: string }
+        | { type: "file"; data: Uint8Array; mediaType: "application/pdf"; filename: string }
+      > = [
+        {
+          type: "text",
+          text:
+            RICH_SYSTEM_PROMPT +
+            (userInstructions
+              ? `\n\nAdditional user instructions:\n${userInstructions}`
+              : "") +
+            (docText ? `\n\nContract document (extracted text):\n${docText}` : ""),
+        },
+      ]
+      if (isPdf) {
+        userContent.push({
+          type: "file",
+          data: fileData,
+          mediaType,
+          filename: file.name,
+        })
+      }
+
       const result = await generateText({
         model: claudeModel,
         output: Output.object({ schema: extractedContractSchema }),
         messages: [
           {
             role: "user",
-            content: [
-              {
-                type: "text",
-                text:
-                  RICH_SYSTEM_PROMPT +
-                  (userInstructions
-                    ? `\n\nAdditional user instructions:\n${userInstructions}`
-                    : ""),
-              },
-              {
-                type: "file",
-                data: fileData,
-                mediaType,
-                filename: file.name,
-              },
-            ],
+            content: userContent,
           },
         ],
       })

@@ -38,13 +38,19 @@ export async function getContractPeriods(contractId: string) {
       facilityId: true,
       effectiveDate: true,
       expirationDate: true,
+      // Bug 12 (2026-04-23) — the synthetic-period fallback was
+      // vendor-wide, so two contracts with the same vendor + overlapping
+      // windows rendered identical period sets. Pulling every term's
+      // scope here lets us narrow the COG query to only categories the
+      // contract's terms actually cover.
       terms: {
         select: {
           evaluationPeriod: true,
+          appliesTo: true,
+          categories: true,
           tiers: { orderBy: { tierNumber: "asc" } },
         },
         orderBy: { createdAt: "asc" },
-        take: 1,
       },
     },
   })
@@ -56,7 +62,20 @@ export async function getContractPeriods(contractId: string) {
   if (persisted.length > 0) return serialize(persisted)
 
   // ── Fallback: compute monthly periods from COG matched to this
-  // vendor at this facility, bounded by the contract's effective window.
+  // vendor at this facility, bounded by the contract's effective window
+  // AND the union of category scopes the contract's terms cover.
+  // Pre-fix (Bug 12) this was vendor-wide which produced identical
+  // periods across sibling contracts. Uses the same helper the
+  // contracts-list and accrual-timeline rely on so the scope is
+  // canonical.
+  const { buildUnionCategoryWhereClause } = await import(
+    "@/lib/contracts/cog-category-filter"
+  )
+  const termScopes = contract.terms.map((t) => ({
+    appliesTo: t.appliesTo,
+    categories: t.categories,
+  }))
+  const unionCategoryWhere = buildUnionCategoryWhereClause(termScopes)
   const cogRows = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,
@@ -65,6 +84,7 @@ export async function getContractPeriods(contractId: string) {
         gte: new Date(contract.effectiveDate),
         lte: new Date(contract.expirationDate),
       },
+      ...unionCategoryWhere,
     },
     select: { transactionDate: true, extendedPrice: true },
   })

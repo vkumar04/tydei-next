@@ -47,6 +47,8 @@ export function ContractAccrualTimeline({
 
   const totalAccrued = data.rows.reduce((s, r) => s + Number(r.accruedAmount), 0)
   const latest = data.rows[data.rows.length - 1]
+  const termLabels = data.termLabels ?? []
+  const isMultiTerm = termLabels.length > 1
 
   return (
     <Card>
@@ -57,6 +59,12 @@ export function ContractAccrualTimeline({
             Method: {data.method === "marginal" ? "Marginal (bracket)" : "Cumulative"}{" "}
             · Total accrued: {formatCurrency(totalAccrued)}
           </p>
+          {isMultiTerm && (
+            <p className="text-[11px] text-muted-foreground pt-0.5">
+              Contract has {termLabels.length} rebate terms — rows expand to
+              show each term&rsquo;s contribution.
+            </p>
+          )}
         </div>
         <Badge variant="secondary" className="shrink-0">
           {data.rows.length} {data.rows.length === 1 ? "month" : "months"}
@@ -76,35 +84,81 @@ export function ContractAccrualTimeline({
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((row) => (
-                <tr
-                  key={row.month}
-                  className="border-b last:border-0 hover:bg-muted/30"
-                >
-                  <td className="py-2">{row.month}</td>
-                  <td className="py-2 text-right tabular-nums">
-                    {formatCurrency(Number(row.spend))}
-                  </td>
-                  <td className="py-2 text-right tabular-nums">
-                    {formatCurrency(Number(row.cumulativeSpend))}
-                  </td>
-                  <td className="py-2 text-center">
-                    {row.tierAchieved > 0 ? (
-                      <Badge variant="outline" className="text-xs">
-                        {row.tierAchieved}
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="py-2 text-right tabular-nums">
-                    {Number(row.rebatePercent).toFixed(2)}%
-                  </td>
-                  <td className="py-2 text-right font-medium tabular-nums">
-                    {formatCurrency(Number(row.accruedAmount))}
-                  </td>
-                </tr>
-              ))}
+              {data.rows.map((row) => {
+                const contributions = row.termContributions ?? []
+                // Only render per-term breakdown when the contract has
+                // more than one rebate term AND at least one contribution
+                // exists. Single-term contracts keep the compact display.
+                const showBreakdown =
+                  isMultiTerm && contributions.length > 0
+                return (
+                  <tr
+                    key={row.month}
+                    className="border-b last:border-0 hover:bg-muted/30 align-top"
+                  >
+                    <td className="py-2">{row.month}</td>
+                    <td className="py-2 text-right tabular-nums">
+                      {formatCurrency(Number(row.spend))}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {formatCurrency(Number(row.cumulativeSpend))}
+                    </td>
+                    <td className="py-2 text-center">
+                      {showBreakdown ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          {contributions.map((c) => (
+                            <Badge
+                              key={c.termIndex}
+                              variant="outline"
+                              className="text-[10px]"
+                            >
+                              {c.tierAchieved > 0 ? `T${c.termIndex + 1}·${c.tierAchieved}` : "—"}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : row.tierAchieved > 0 ? (
+                        <Badge variant="outline" className="text-xs">
+                          {row.tierAchieved}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {showBreakdown ? (
+                        <div className="flex flex-col gap-0.5 text-xs">
+                          {contributions.map((c) => (
+                            <span key={c.termIndex} className="tabular-nums">
+                              <span className="text-muted-foreground mr-1">
+                                {termLabels[c.termIndex]?.termName ?? `T${c.termIndex + 1}`}:
+                              </span>
+                              {Number(c.rebatePercent).toFixed(2)}%
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <>{Number(row.rebatePercent).toFixed(2)}%</>
+                      )}
+                    </td>
+                    <td className="py-2 text-right font-medium tabular-nums">
+                      {showBreakdown ? (
+                        <div className="flex flex-col items-end gap-0.5 text-xs">
+                          {contributions.map((c) => (
+                            <span key={c.termIndex} className="tabular-nums">
+                              {formatCurrency(Number(c.accruedAmount))}
+                            </span>
+                          ))}
+                          <span className="border-t mt-0.5 pt-0.5 font-semibold">
+                            {formatCurrency(Number(row.accruedAmount))}
+                          </span>
+                        </div>
+                      ) : (
+                        <>{formatCurrency(Number(row.accruedAmount))}</>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t font-medium">

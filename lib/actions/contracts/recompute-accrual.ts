@@ -392,6 +392,16 @@ export async function recomputeAccrualForContract(
   // Roadmap track 2: every auto-accrual row carries the engine version
   // that computed it; stamp here so future targeted-recompute runs can
   // identify rows that predate a math change.
+  // Charles 2026-04-23 (Bug 3a): on tie-in contracts the rebate retires
+  // capital on EARN, not on collect — the vendor applies the credit
+  // directly. We encode that by auto-stamping `collectionDate` on
+  // tie-in auto-accrual rows equal to `payPeriodEnd`, so `rebateCollected`
+  // === `rebateEarned` by construction. That lets the canonical
+  // `sumRebateAppliedToCapital` keep its collected-only rule without a
+  // semantic flip while giving the user the "no manual collect needed"
+  // experience they asked for. Non-tie-in contracts keep the prior
+  // "earned, awaiting collection" shape.
+  const autoStampCollectionForTieIn = contract.contractType === "tie_in"
   const toInsert: {
     contractId: string
     facilityId: string
@@ -399,7 +409,7 @@ export async function recomputeAccrualForContract(
     rebateCollected: number
     payPeriodStart: Date
     payPeriodEnd: Date
-    collectionDate: null
+    collectionDate: Date | null
     notes: string
     engineVersion: string
     engineWarnings: string | null
@@ -414,10 +424,10 @@ export async function recomputeAccrualForContract(
         contractId,
         facilityId: facility.id,
         rebateEarned: b.rebateEarned,
-        rebateCollected: 0,
+        rebateCollected: autoStampCollectionForTieIn ? b.rebateEarned : 0,
         payPeriodStart: b.periodStart,
         payPeriodEnd: b.periodEnd,
-        collectionDate: null,
+        collectionDate: autoStampCollectionForTieIn ? b.periodEnd : null,
         notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
         engineVersion: ENGINE_VERSION,
         engineWarnings: null,
@@ -462,10 +472,10 @@ export async function recomputeAccrualForContract(
         contractId,
         facilityId: facility.id,
         rebateEarned: b.rebateEarned,
-        rebateCollected: 0,
+        rebateCollected: autoStampCollectionForTieIn ? b.rebateEarned : 0,
         payPeriodStart: b.periodStart,
         payPeriodEnd: b.periodEnd,
-        collectionDate: null,
+        collectionDate: autoStampCollectionForTieIn ? b.periodEnd : null,
         notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
         engineVersion: ENGINE_VERSION,
         engineWarnings: null,
