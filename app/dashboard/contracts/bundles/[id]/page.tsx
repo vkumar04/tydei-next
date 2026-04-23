@@ -45,9 +45,15 @@ export default async function BundleDetailPage({
             <span className="font-mono">{bundle.complianceMode}</span>
           </p>
         </div>
-        <Button variant="outline" asChild>
-          <Link href="/dashboard/contracts/bundles">← Bundles</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/contracts/bundles">← Bundles</Link>
+          </Button>
+          <BundleDeleteButton
+            bundleId={bundle.id}
+            bundleLabel={bundle.primaryContract.name}
+          />
+        </div>
       </div>
 
       {/* Compliance summary. Different compliance modes render different
