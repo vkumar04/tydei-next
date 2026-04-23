@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { Loader2 } from "lucide-react"
 import { getContracts } from "@/lib/actions/contracts"
 import {
@@ -9,6 +9,7 @@ import {
   type AnalyzeCapitalContractResult,
 } from "@/lib/actions/financial-analysis"
 import { queryKeys } from "@/lib/query-keys"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import {
   AnalysisControlBar,
   type AnalysisFormState,
@@ -89,32 +90,42 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
     }
   }, [contractOptions, form.contractId])
 
+  // Debounce the form so rapid typing in the Assumptions popover doesn't
+  // fire a server action on every keystroke. Contract-picker changes
+  // and the pay-upfront toggle feel instant because those are
+  // single-click interactions; the 350ms wait only affects numeric
+  // inputs where the user is mid-typing. `keepPreviousData` smooths
+  // the hero/tabs so they render the last good result during the
+  // debounce window rather than flashing a spinner.
+  const debouncedForm = useDebouncedValue(form, 350)
+
   const analyzeQuery = useQuery<AnalyzeCapitalContractResult>({
     queryKey: [
       "financialAnalysis",
       "capital",
-      form.contractId,
-      form.discountRate,
-      form.taxRate,
-      form.annualSpend,
-      form.rebateRate,
-      form.growthRatePerYear,
-      form.marketDeclineRate,
-      form.payUpfront,
+      debouncedForm.contractId,
+      debouncedForm.discountRate,
+      debouncedForm.taxRate,
+      debouncedForm.annualSpend,
+      debouncedForm.rebateRate,
+      debouncedForm.growthRatePerYear,
+      debouncedForm.marketDeclineRate,
+      debouncedForm.payUpfront,
     ],
     queryFn: () =>
       analyzeCapitalContract({
-        contractId: form.contractId as string,
-        discountRate: form.discountRate / 100,
-        taxRate: form.taxRate / 100,
-        annualSpend: form.annualSpend,
-        rebateRate: form.rebateRate / 100,
-        growthRatePerYear: form.growthRatePerYear / 100,
-        marketDeclineRate: form.marketDeclineRate / 100,
-        payUpfront: form.payUpfront,
+        contractId: debouncedForm.contractId as string,
+        discountRate: debouncedForm.discountRate / 100,
+        taxRate: debouncedForm.taxRate / 100,
+        annualSpend: debouncedForm.annualSpend,
+        rebateRate: debouncedForm.rebateRate / 100,
+        growthRatePerYear: debouncedForm.growthRatePerYear / 100,
+        marketDeclineRate: debouncedForm.marketDeclineRate / 100,
+        payUpfront: debouncedForm.payUpfront,
       }),
-    enabled: !!form.contractId,
+    enabled: !!debouncedForm.contractId,
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   })
 
   const result = analyzeQuery.data
