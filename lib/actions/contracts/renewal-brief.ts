@@ -28,6 +28,7 @@ import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { claudeModel } from "@/lib/ai/config"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 import {
   renewalBriefSchema,
   type RenewalBrief,
@@ -267,6 +268,23 @@ Produce the JSON response exactly matching the schema. Use the rebateHistory + p
     )
   }
   response = parsed.data
+
+  // Record usage — only reached on cache MISS, so we don't double-bill
+  // on repeated views of the same brief inside the 1-hour cache window.
+  try {
+    await recordClaudeUsage({
+      facilityId: session.facility.id,
+      userId: session.user.id,
+      userName: session.user.name ?? session.user.email ?? "Unknown",
+      action: "ai_recommendation",
+      description: `Generated renewal brief for ${contract.name.slice(0, 40)}`,
+    })
+  } catch (err) {
+    console.error("[generateRenewalBrief] usage-record failed", err, {
+      facilityId: session.facility.id,
+      contractId,
+    })
+  }
 
   // ── 5. Persist cache row + return ──────────────────────────────────
   const now = new Date()

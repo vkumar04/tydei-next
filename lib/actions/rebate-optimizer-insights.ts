@@ -34,6 +34,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { claudeModel } from "@/lib/ai/config"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 import { getRebateOpportunities as getRebateOpportunitiesEngine } from "@/lib/actions/rebate-optimizer-engine"
 import {
   rebateInsightSchema,
@@ -194,6 +195,22 @@ Produce the JSON response exactly matching the schema. Include observations only
     })
     const message = err instanceof Error ? err.message : "Unknown error"
     throw new Error(`AI Smart Recommendations generation failed: ${message.slice(0, 300)}`)
+  }
+
+  // Record usage — only reached on cache MISS, so we don't double-bill.
+  try {
+    await recordClaudeUsage({
+      facilityId,
+      userId: session.user.id,
+      userName: session.user.name ?? session.user.email ?? "Unknown",
+      action: "ai_recommendation",
+      description: "Generated rebate optimizer insights",
+    })
+  } catch (err) {
+    console.error("[getRebateOptimizerInsights] usage-record failed", err, {
+      facilityId,
+      userId: session.user.id,
+    })
   }
 
   // ── 5. Persist cache row + return ──────────────────────────────────

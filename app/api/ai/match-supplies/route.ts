@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth-server"
 import { claudeModel } from "@/lib/ai/config"
 import { supplyMatchSchema } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
+import { prisma } from "@/lib/db"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 
 const matchBodySchema = z.object({
   supplyName: z.string().min(1).max(500),
@@ -60,6 +62,27 @@ ${pricingContext}
 If no reasonable match exists (confidence < 0.3), return null for matchedVendorItemNo and matchedDescription.
 Explain your reasoning for the match or lack thereof.`,
     })
+
+    try {
+      const member = await prisma.member.findFirst({
+        where: { userId: session.user.id },
+        include: {
+          organization: { include: { facility: true, vendor: true } },
+        },
+      })
+      await recordClaudeUsage({
+        facilityId: member?.organization?.facility?.id ?? null,
+        vendorId: member?.organization?.vendor?.id ?? null,
+        userId: session.user.id,
+        userName: session.user.name ?? session.user.email ?? "Unknown",
+        action: "supply_matching",
+        description: `Supply match: ${supplyName.slice(0, 50)}`,
+      })
+    } catch (err) {
+      console.error("[match-supplies] usage-record failed", err, {
+        userId: session.user.id,
+      })
+    }
 
     return Response.json(result.output)
   } catch (error) {

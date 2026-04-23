@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth-server"
 import { claudeModel } from "@/lib/ai/config"
 import { dealScoreSchema, type DealScoreResult } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
+import { prisma } from "@/lib/db"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 
 const scoreBodySchema = z.object({
   contractData: z.record(z.string(), z.unknown()),
@@ -70,6 +72,27 @@ Provide an overall score (weighted average), a brief recommendation, and 3-5 act
       complianceLikelihood: clamp01to100(score.complianceLikelihood),
       overallScore: clamp01to100(score.overallScore),
     }
+    try {
+      const member = await prisma.member.findFirst({
+        where: { userId: session.user.id },
+        include: {
+          organization: { include: { facility: true, vendor: true } },
+        },
+      })
+      await recordClaudeUsage({
+        facilityId: member?.organization?.facility?.id ?? null,
+        vendorId: member?.organization?.vendor?.id ?? null,
+        userId: session.user.id,
+        userName: session.user.name ?? session.user.email ?? "Unknown",
+        action: "ai_recommendation",
+        description: `Scored contract deal (overall ${clamped.overallScore})`,
+      })
+    } catch (err) {
+      console.error("[score-deal] usage-record failed", err, {
+        userId: session.user.id,
+      })
+    }
+
     return Response.json(clamped)
   } catch (error) {
     console.error("Deal scoring error:", error)

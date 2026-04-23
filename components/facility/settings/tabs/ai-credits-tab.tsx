@@ -38,10 +38,38 @@ export interface AICreditsTabProps {
   usageData: AIUsageRecord[] | undefined
 }
 
+const PLAN_LABELS: Record<string, string> = {
+  starter: "Starter",
+  professional: "Professional",
+  enterprise: "Enterprise",
+  unlimited: "Unlimited",
+}
+
 export function AICreditsTab({
   creditsData,
   usageData,
 }: AICreditsTabProps) {
+  // Aggregate usage by action for the "Total Credits" column.
+  const totalByAction = new Map<string, number>()
+  if (usageData) {
+    for (const rec of usageData) {
+      totalByAction.set(
+        rec.action,
+        (totalByAction.get(rec.action) ?? 0) + rec.creditsUsed,
+      )
+    }
+  }
+
+  const monthlyCredits = creditsData?.monthlyCredits ?? 0
+  const planLabel = creditsData?.tierId
+    ? (PLAN_LABELS[creditsData.tierId] ?? creditsData.tierId)
+    : "—"
+  const allowanceLabel = creditsData
+    ? monthlyCredits >= 1_000_000
+      ? "Unlimited/mo"
+      : `${monthlyCredits.toLocaleString()}/mo`
+    : "No plan"
+
   return (
     <>
       <div className="grid gap-4 md:grid-cols-3">
@@ -89,8 +117,8 @@ export function AICreditsTab({
           <CardHeader className="pb-2">
             <CardDescription>Current Plan</CardDescription>
             <CardTitle className="text-xl flex items-center gap-2">
-              Enterprise
-              <Badge variant="secondary">Unlimited/mo</Badge>
+              {planLabel}
+              <Badge variant="secondary">{allowanceLabel}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -120,13 +148,20 @@ export function AICreditsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {Object.entries(AI_CREDIT_COSTS).map(([action, cost]) => (
-                <TableRow key={action}>
-                  <TableCell className="font-medium">{AI_ACTION_LABELS[action] ?? action}</TableCell>
-                  <TableCell className="text-center text-muted-foreground">{cost}</TableCell>
-                  <TableCell className="text-right">-</TableCell>
-                </TableRow>
-              ))}
+              {Object.entries(AI_CREDIT_COSTS).map(([action, cost]) => {
+                const total = totalByAction.get(action)
+                return (
+                  <TableRow key={action}>
+                    <TableCell className="font-medium">{AI_ACTION_LABELS[action] ?? action}</TableCell>
+                    <TableCell className="text-center text-muted-foreground">{cost}</TableCell>
+                    <TableCell className="text-right">
+                      {usageData === undefined
+                        ? "-"
+                        : (total ?? 0).toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </CardContent>

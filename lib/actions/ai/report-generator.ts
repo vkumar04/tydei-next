@@ -14,6 +14,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import { claudeModel } from "@/lib/ai/config"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 import {
   classifyReportPrompt,
   REPORT_COLUMN_TEMPLATES,
@@ -94,6 +95,21 @@ export async function generateReportFromPrompt(input: {
     // shape our public type promises — the Zod schema enforces this
     // at runtime, so the cast is safe.
     const data = output.data as Array<Record<string, string | number>>
+
+    try {
+      await recordClaudeUsage({
+        facilityId: session.facility.id,
+        userId: session.user.id,
+        userName: session.user.name ?? session.user.email ?? "Unknown",
+        action: "report_generation",
+        description: `Generated ${reportType} report (${data.length} rows)`,
+      })
+    } catch (err) {
+      console.error("[generateReportFromPrompt] usage-record failed", err, {
+        facilityId: session.facility.id,
+        userId: session.user.id,
+      })
+    }
 
     return serialize({
       title: output.title,

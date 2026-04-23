@@ -6,6 +6,7 @@ import { claudeModel } from "@/lib/ai/config"
 import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -172,6 +173,27 @@ Return valid JSON only — no markdown fences.`,
 
     if (!extracted) {
       return Response.json({ error: "No changes extracted" }, { status: 422 })
+    }
+
+    try {
+      const member = await prisma.member.findFirst({
+        where: { userId: session.user.id },
+        include: {
+          organization: { include: { facility: true, vendor: true } },
+        },
+      })
+      await recordClaudeUsage({
+        facilityId: member?.organization?.facility?.id ?? null,
+        vendorId: member?.organization?.vendor?.id ?? null,
+        userId: session.user.id,
+        userName: session.user.name ?? session.user.email ?? "Unknown",
+        action: "full_contract_analysis",
+        description: `Extracted amendment for ${contract.name.slice(0, 40)}`,
+      })
+    } catch (err) {
+      console.error("[extract-amendment] usage-record failed", err, {
+        userId: session.user.id,
+      })
     }
 
     return Response.json({

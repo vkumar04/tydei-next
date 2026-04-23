@@ -4,6 +4,8 @@ import { z } from "zod"
 import { auth } from "@/lib/auth-server"
 import { claudeModel } from "@/lib/ai/config"
 import { rateLimit } from "@/lib/rate-limit"
+import { prisma } from "@/lib/db"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 
 type Classification =
   | "contract"
@@ -364,6 +366,30 @@ Return all fields, using null for any you cannot determine.`,
           quarter: rich.quarter ?? quarter,
           month: rich.month ?? month,
           dataPeriod: rich.dataPeriod ?? dataPeriod,
+        }
+
+        try {
+          const member = await prisma.member.findFirst({
+            where: { userId: session.user.id },
+            include: {
+              organization: {
+                include: { facility: true, vendor: true },
+              },
+            },
+          })
+          await recordClaudeUsage({
+            facilityId: member?.organization?.facility?.id ?? null,
+            vendorId: member?.organization?.vendor?.id ?? null,
+            userId: session.user.id,
+            userName:
+              session.user.name ?? session.user.email ?? "Unknown",
+            action: "contract_classification",
+            description: `Classified ${fileName.slice(0, 40)} as ${merged.type}`,
+          })
+        } catch (err) {
+          console.error("[classify-document] usage-record failed", err, {
+            userId: session.user.id,
+          })
         }
 
         return Response.json({

@@ -24,6 +24,7 @@ import {
   buildRecommendations,
   buildRecommendationsCSV,
 } from "@/lib/contracts/score-recommendations"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 
 function clamp01to100(n: number): number {
   return Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0))
@@ -112,6 +113,21 @@ Provide an overall score, a brief recommendation, and 3-5 negotiation advice poi
       { error: "Scoring failed", details: message },
       { status: 502 }
     )
+  }
+
+  try {
+    await recordClaudeUsage({
+      facilityId: facility.id,
+      userId: session.user.id,
+      userName: session.user.name ?? session.user.email ?? "Unknown",
+      action: "ai_recommendation",
+      description: `Scored contract ${contract.name.slice(0, 40)} for export`,
+    })
+  } catch (err) {
+    console.error("[score/export] usage-record failed", err, {
+      facilityId: facility.id,
+      userId: session.user.id,
+    })
   }
 
   const dims = buildDimensions(aiScore)

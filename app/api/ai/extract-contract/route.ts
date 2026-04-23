@@ -8,6 +8,8 @@ import {
 } from "@/lib/ai/schemas"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
+import { prisma } from "@/lib/db"
+import { recordClaudeUsage } from "@/lib/ai/record-usage"
 
 const RICH_SYSTEM_PROMPT = `You are an expert at extracting healthcare contract information.
 
@@ -161,6 +163,7 @@ ${text.trim()}`,
           { status: 422 }
         )
       }
+      await recordExtractUsage(session.user.id, session.user.name ?? session.user.email ?? "Unknown", `Extracted contract: ${extracted.contractName ?? "Untitled"}`)
       return Response.json({
         extracted,
         confidence: 0.9,
@@ -298,6 +301,11 @@ ${text.trim()}`,
       )
     }
 
+    await recordExtractUsage(
+      session.user.id,
+      session.user.name ?? session.user.email ?? "Unknown",
+      `Extracted contract from ${file.name.slice(0, 40)}`,
+    )
     return Response.json({
       success: true,
       extracted,
@@ -331,6 +339,31 @@ ${text.trim()}`,
       { error: `Extraction failed: ${message.slice(0, 200)}` },
       { status: 500 }
     )
+  }
+}
+
+async function recordExtractUsage(
+  userId: string,
+  userName: string,
+  description: string,
+): Promise<void> {
+  try {
+    const member = await prisma.member.findFirst({
+      where: { userId },
+      include: {
+        organization: { include: { facility: true, vendor: true } },
+      },
+    })
+    await recordClaudeUsage({
+      facilityId: member?.organization?.facility?.id ?? null,
+      vendorId: member?.organization?.vendor?.id ?? null,
+      userId,
+      userName,
+      action: "full_contract_analysis",
+      description,
+    })
+  } catch (err) {
+    console.error("[extract-contract] usage-record failed", err, { userId })
   }
 }
 
