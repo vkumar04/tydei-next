@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client"
 import type { Facilities } from "./health-systems"
 import type { Vendors } from "./vendors"
+import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 
 const now = new Date()
 
@@ -119,6 +120,23 @@ export async function seedCOGRecords(
   }
 
   console.log(`  COG Records: ${records.length}`)
+
+  // ─── W2.A.1 H-F — recompute match statuses post-insert ───────────
+  // Without this step every just-inserted row sits at matchStatus=pending
+  // forever; no downstream surface (contract detail, cog page, dashboard)
+  // shows on_contract / price_variance coverage. Recompute once per
+  // unique (vendorId, facilityId) pair in the seeded batch.
+  const uniquePairs = new Set<string>()
+  for (const rec of records) {
+    uniquePairs.add(`${rec.vendorId}|${rec.facilityId}`)
+  }
+  for (const key of uniquePairs) {
+    const [vendorId, facilityId] = key.split("|")
+    await recomputeMatchStatusesForVendor(prisma, {
+      vendorId: vendorId!,
+      facilityId: facilityId!,
+    })
+  }
 
   return records.length
 }

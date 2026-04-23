@@ -1,6 +1,7 @@
 import type { PrismaClient, Prisma } from "@prisma/client"
 import { applyTiers, computeRebate } from "@/lib/rebates/calculate"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
+import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 
 // Vendor-specific realistic product catalogs used to generate synthetic COG
 // records that match active contracts. These are intentionally scoped to the
@@ -73,6 +74,11 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
   let totalPeriodsCreated = 0
   let totalRebatesCreated = 0
 
+  // W2.A.1 H-F — track every (vendor, facility) pair we insert COG for,
+  // so after the bulk seed we can call recompute once per pair. Without
+  // this the rows stay at matchStatus=pending forever.
+  const recomputePairs = new Set<string>()
+
   for (const contract of contracts) {
     const vendorName = contract.vendor.name
     const start = new Date(contract.effectiveDate)
@@ -124,6 +130,7 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
       }
       const cogResult = await prisma.cOGRecord.createMany({ data: rows })
       totalCogCreated += cogResult.count
+      recomputePairs.add(`${contract.vendorId}|${fId}`)
 
       // ── Generate monthly ContractPeriod rows spanning effective→now ──
       // Each period accumulates its share of COG, computes the tier
@@ -216,5 +223,18 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
   console.log(
     `  COG-for-Contracts total: ${totalCogCreated} COG records, ${totalPeriodsCreated} periods, ${totalRebatesCreated} rebates`,
   )
+
+  // ─── W2.A.1 H-F — post-seed recompute ───────────────────────────
+  // Without this, every just-inserted COG row stays at
+  // matchStatus=pending and no contract/detail/dashboard surface ever
+  // reflects the seed's on_contract coverage.
+  for (const key of recomputePairs) {
+    const [vendorId, facilityId] = key.split("|")
+    await recomputeMatchStatusesForVendor(prisma, {
+      vendorId: vendorId!,
+      facilityId: facilityId!,
+    })
+  }
+
   return totalCogCreated
 }
