@@ -24,6 +24,13 @@ vi.mock("@/lib/db", () => ({
       // prisma.contract.create / prisma.contract.update.
       findFirst: vi.fn().mockResolvedValue(null),
       findUniqueOrThrow: findUniqueOrThrowMock,
+      // W2.A.1 H-B: updateContract re-reads the contract after update
+      // to compute the multi-facility recompute set. Tests that touch
+      // updateContract must mock this too.
+      findUnique: vi.fn().mockResolvedValue({
+        facilityId: "fac-1",
+        contractFacilities: [],
+      }),
     },
     contractFacility: {
       deleteMany: contractFacilityDeleteManyMock,

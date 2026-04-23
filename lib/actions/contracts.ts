@@ -752,11 +752,25 @@ export async function createContract(input: CreateContractInput) {
 
   // Recompute COG match-statuses for this vendor so rows flip to
   // on_contract / price_variance / out_of_scope as appropriate.
-  // Scope tight: only the affected vendor at this facility.
-  await recomputeMatchStatusesForVendor(prisma, {
-    vendorId: data.vendorId,
-    facilityId: session.facility.id,
-  })
+  //
+  // W2.A.1 H-B: fan out across every facility the contract touches —
+  // {contract.facilityId} ∪ data.facilityIds ∪ data.additionalFacilityIds.
+  // Previously we only recomputed for `session.facility.id`, which left
+  // COG rows at peer facilities on a multi-facility contract stuck at
+  // matchStatus=pending. De-dupe via Set so the same pair can't be
+  // recomputed twice in one CRUD.
+  {
+    const facilityIds = new Set<string>()
+    if (contract.facilityId) facilityIds.add(contract.facilityId)
+    for (const fId of data.facilityIds) facilityIds.add(fId)
+    for (const fId of data.additionalFacilityIds ?? []) facilityIds.add(fId)
+    for (const facilityId of facilityIds) {
+      await recomputeMatchStatusesForVendor(prisma, {
+        vendorId: data.vendorId,
+        facilityId,
+      })
+    }
+  }
 
   // Compute the initial Contract.score so the list/detail pages show
   // a number right after creation. Swallow errors — scoring failure
@@ -939,16 +953,46 @@ export async function updateContract(id: string, input: UpdateContractInput) {
   // Recompute COG match-statuses for this contract's vendor. If the vendor
   // changed, recompute for both the old and new vendor so COG rows flip
   // off the old contract and onto (or off of) the new one.
+  //
+  // W2.A.1 H-B: fan out across every facility the contract touches —
+  // {contract.facilityId} ∪ contractFacilities[].facilityId — not just
+  // the acting session's facility. Without this, COG at peer facilities
+  // in a multi-facility contract stayed pending after an edit.
   const vendorsToRecompute = new Set<string>()
   vendorsToRecompute.add(contract.vendorId)
   if (data.vendorId !== undefined && data.vendorId !== contract.vendorId) {
     vendorsToRecompute.add(data.vendorId)
   }
+
+  // Re-read the contract with its facility join so the recompute set
+  // reflects the post-update multi-facility membership (data.facilityIds
+  // may have just replaced the whole join table).
+  const contractWithFacilities = await prisma.contract.findUnique({
+    where: { id },
+    select: {
+      facilityId: true,
+      contractFacilities: { select: { facilityId: true } },
+    },
+  })
+  const facilityIds = new Set<string>()
+  if (contractWithFacilities?.facilityId) {
+    facilityIds.add(contractWithFacilities.facilityId)
+  }
+  for (const cf of contractWithFacilities?.contractFacilities ?? []) {
+    facilityIds.add(cf.facilityId)
+  }
+  // Fall back to the session facility if the contract somehow has no
+  // facility linkage (shouldn't happen, but keep the old behavior as a
+  // safety net rather than skipping recompute entirely).
+  if (facilityIds.size === 0) facilityIds.add(facility.id)
+
   for (const vendorId of vendorsToRecompute) {
-    await recomputeMatchStatusesForVendor(prisma, {
-      vendorId,
-      facilityId: facility.id,
-    })
+    for (const facilityId of facilityIds) {
+      await recomputeMatchStatusesForVendor(prisma, {
+        vendorId,
+        facilityId,
+      })
+    }
   }
 
   // Recompute Contract.score so the list / detail pages reflect any
@@ -1028,11 +1072,17 @@ export async function deleteContract(id: string) {
   const session = await requireFacility()
   const { facility } = session
 
-  // Verify ownership + capture vendorId before deleting so we can
-  // recompute COG match-statuses after.
+  // Verify ownership + capture vendorId AND the full facility set before
+  // deleting so we can recompute COG match-statuses everywhere the
+  // contract used to cover (W2.A.1 H-B).
   const existing = await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(id, facility.id),
-    select: { id: true, vendorId: true },
+    select: {
+      id: true,
+      vendorId: true,
+      facilityId: true,
+      contractFacilities: { select: { facilityId: true } },
+    },
   })
 
   await prisma.contract.delete({ where: { id } })
@@ -1046,10 +1096,20 @@ export async function deleteContract(id: string) {
 
   // Recompute: rows that were on this contract flip to
   // off_contract_item / out_of_scope depending on remaining contracts.
-  await recomputeMatchStatusesForVendor(prisma, {
-    vendorId: existing.vendorId,
-    facilityId: facility.id,
-  })
+  //
+  // W2.A.1 H-B: fan out across every facility the deleted contract
+  // touched, not just the acting session's facility. Otherwise COG at
+  // peer facilities keeps its stale on_contract linkage.
+  const facilityIds = new Set<string>()
+  if (existing.facilityId) facilityIds.add(existing.facilityId)
+  for (const cf of existing.contractFacilities) facilityIds.add(cf.facilityId)
+  if (facilityIds.size === 0) facilityIds.add(facility.id)
+  for (const facilityId of facilityIds) {
+    await recomputeMatchStatusesForVendor(prisma, {
+      vendorId: existing.vendorId,
+      facilityId,
+    })
+  }
   revalidatePath("/dashboard/cog")
   revalidatePath("/dashboard/contracts")
   revalidatePath("/dashboard")
