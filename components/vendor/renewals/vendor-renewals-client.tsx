@@ -1,104 +1,163 @@
 "use client"
 
-import { useMemo } from "react"
-import { PageHeader } from "@/components/shared/page-header"
+/**
+ * Vendor renewals page — hero + tabs layout (2026-04-22 redesign,
+ * mirrors the facility Renewals page). The hero reports 30d/60d/90d/
+ * At-Risk, the ControlBar carries the Facility + Status select + search,
+ * and the Tabs partition the pipeline into Upcoming / In Progress /
+ * Renewed / Expired stages.
+ */
+
+import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { VendorRenewalPipeline } from "./vendor-renewal-pipeline"
-import { useExpiringContracts } from "@/hooks/use-renewals"
-import {
-  Calendar,
-  Download,
-  FileText,
-  Building2,
-  Eye,
-} from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent } from "@/components/ui/card"
+import { FileText } from "lucide-react"
 import { toast } from "sonner"
-import { formatCurrency, formatDate } from "@/lib/formatting"
 import Link from "next/link"
+import { useExpiringContracts } from "@/hooks/use-renewals"
+import type { ExpiringContract } from "@/lib/actions/renewals"
+import { PageHeader } from "@/components/shared/page-header"
+import { VendorRenewalPipeline } from "./vendor-renewal-pipeline"
+import {
+  VendorRenewalsHero,
+  type VendorRenewalsHeroStats,
+} from "./vendor-renewals-hero"
+import {
+  VendorRenewalsControlBar,
+  type VendorRenewalStage,
+} from "./vendor-renewals-control-bar"
 
 interface VendorRenewalsClientProps {
   vendorId: string
 }
 
-function getUrgencyStatus(daysUntilExpiry: number): "critical" | "warning" | "upcoming" | "ok" {
-  if (daysUntilExpiry <= 30) return "critical"
-  if (daysUntilExpiry <= 90) return "warning"
-  if (daysUntilExpiry <= 180) return "upcoming"
-  return "ok"
+const CRITICAL_UNSTARTED_DAYS = 14
+
+const STAGE_TABS: { value: VendorRenewalStage; label: string }[] = [
+  { value: "upcoming", label: "Upcoming" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "renewed", label: "Renewed" },
+  { value: "expired", label: "Expired" },
+]
+
+function exportRenewalsCalendar() {
+  try {
+    window.location.href = "/api/renewals/export"
+    toast.success("Calendar exported", {
+      description: "Downloading .ics — import into your calendar app",
+    })
+  } catch {
+    toast.error("Export failed", {
+      description: "Could not generate calendar file",
+    })
+  }
 }
 
-const urgencyConfig = {
-  critical: {
-    label: "Critical",
-    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800",
-  },
-  warning: {
-    label: "Warning",
-    className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800",
-  },
-  upcoming: {
-    label: "Upcoming",
-    className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800",
-  },
-  ok: {
-    label: "On Track",
-    className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800",
-  },
+/**
+ * Map an ExpiringContract to its pipeline stage.
+ *
+ * Vendor-side pipeline has no explicit "renewal workflow" state beyond
+ * submitRenewalProposal side-effects, so stage is derived from
+ * `daysUntilExpiry` + the backing contract status:
+ *
+ * - expired:    daysUntilExpiry <= 0 OR status === "expired"
+ * - in_progress: 0 < daysUntilExpiry <= 90 (active negotiation window)
+ * - upcoming:   90 < daysUntilExpiry <= 180
+ * - renewed:    daysUntilExpiry > 180 (far from expiration = healthy)
+ */
+function getStage(c: ExpiringContract): Exclude<VendorRenewalStage, "all"> {
+  if (c.daysUntilExpiry <= 0 || c.status === "expired") return "expired"
+  if (c.daysUntilExpiry <= 90) return "in_progress"
+  if (c.daysUntilExpiry <= 180) return "upcoming"
+  return "renewed"
 }
 
 export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
-  const { data: contracts, isLoading } = useExpiringContracts(vendorId, 365, "vendor")
+  const { data, isLoading } = useExpiringContracts(vendorId, 365, "vendor")
+  const contracts: ExpiringContract[] = useMemo(() => data ?? [], [data])
 
-  const handleExportCalendar = () => {
-    try {
-      window.location.href = "/api/renewals/export"
-      toast.success("Calendar exported", {
-        description: "Downloading .ics — import into your calendar app",
-      })
-    } catch {
-      toast.error("Export failed", {
-        description: "Could not generate calendar file",
-      })
+  const [stage, setStage] = useState<VendorRenewalStage>("upcoming")
+  const [facilityFilter, setFacilityFilter] = useState<string>("all")
+  const [search, setSearch] = useState("")
+
+  const facilities = useMemo(
+    () =>
+      [
+        ...new Set(
+          contracts.map((c) => c.facilityName).filter((n): n is string => !!n),
+        ),
+      ].sort(),
+    [contracts],
+  )
+
+  const contractStages = useMemo(
+    () => contracts.map((c) => ({ c, stage: getStage(c) })),
+    [contracts],
+  )
+
+  const counts = useMemo(() => {
+    const base = {
+      all: contracts.length,
+      upcoming: 0,
+      in_progress: 0,
+      renewed: 0,
+      expired: 0,
     }
+    for (const { stage: s } of contractStages) base[s] += 1
+    return base
+  }, [contracts, contractStages])
+
+  const heroStats = useMemo<VendorRenewalsHeroStats>(() => {
+    let e30 = 0
+    let e60 = 0
+    let e90 = 0
+    let atRisk = 0
+    let criticalUnstarted = 0
+    for (const c of contracts) {
+      const d = c.daysUntilExpiry
+      if (d > 0 && d <= 30) {
+        e30 += 1
+        if (d <= CRITICAL_UNSTARTED_DAYS) criticalUnstarted += 1
+      } else if (d > 30 && d <= 60) {
+        e60 += 1
+      } else if (d > 60 && d <= 90) {
+        e90 += 1
+      }
+      if (d > 0 && d <= 90) atRisk += 1
+    }
+    return {
+      expiring30: e30,
+      expiring60: e60,
+      expiring90: e90,
+      atRisk,
+      totalContracts: contracts.length,
+      criticalUnstarted,
+    }
+  }, [contracts])
+
+  const filteredByChrome = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    return contractStages.filter(({ c }) => {
+      if (facilityFilter !== "all" && c.facilityName !== facilityFilter)
+        return false
+      if (!needle) return true
+      return (
+        c.name.toLowerCase().includes(needle) ||
+        (c.facilityName?.toLowerCase().includes(needle) ?? false) ||
+        (c.contractNumber?.toLowerCase().includes(needle) ?? false)
+      )
+    })
+  }, [contractStages, facilityFilter, search])
+
+  const contractsForStage = (s: VendorRenewalStage): ExpiringContract[] => {
+    if (s === "all") return filteredByChrome.map((x) => x.c)
+    return filteredByChrome.filter((x) => x.stage === s).map((x) => x.c)
   }
 
-  // Compute pipeline summary from real data
-  const pipelineStats = useMemo(() => {
-    if (!contracts || contracts.length === 0)
-      return { total: 0, critical: 0, warning: 0, upcoming: 0, ok: 0 }
-
-    const critical = contracts.filter((c) => c.daysUntilExpiry <= 30).length
-    const warning = contracts.filter((c) => c.daysUntilExpiry > 30 && c.daysUntilExpiry <= 90).length
-    const upcoming = contracts.filter((c) => c.daysUntilExpiry > 90 && c.daysUntilExpiry <= 180).length
-    const ok = contracts.filter((c) => c.daysUntilExpiry > 180).length
-
-    return { total: contracts.length, critical, warning, upcoming, ok }
-  }, [contracts])
-
-  // Enriched rows for the summary table
-  const renewalRows = useMemo(() => {
-    if (!contracts) return []
-    return contracts
-      .map((c) => ({
-        ...c,
-        urgency: getUrgencyStatus(c.daysUntilExpiry),
-      }))
-      .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
-  }, [contracts])
-
-  // Empty state
-  if (!isLoading && (!contracts || contracts.length === 0)) {
+  // Empty state — no data at all
+  if (!isLoading && contracts.length === 0) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -110,7 +169,8 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
             <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-semibold mb-2">No Expiring Contracts</h3>
             <p className="text-muted-foreground text-center max-w-md mb-4">
-              No contracts are expiring within the next year. Check back later or extend the window.
+              No contracts are expiring within the next year. Check back later
+              or extend the window.
             </p>
             <Button asChild>
               <Link href="/vendor/contracts">View All Contracts</Link>
@@ -122,137 +182,56 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Contract Renewals"
-        description="Track and manage upcoming contract renewals across all facilities"
-        action={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExportCalendar}>
-              <Calendar className="mr-2 h-4 w-4" />
-              Export Calendar
-            </Button>
-            <Button variant="outline">
-              <Download className="mr-2 h-4 w-4" />
-              Export Report
-            </Button>
-          </div>
-        }
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Contract Renewals</h1>
+        <p className="text-sm text-muted-foreground">
+          Track and manage upcoming contract renewals across all facilities.
+        </p>
+      </div>
+
+      <VendorRenewalsControlBar
+        stage={stage}
+        onStageChange={setStage}
+        facilities={facilities}
+        facilityFilter={facilityFilter}
+        onFacilityFilterChange={setFacilityFilter}
+        search={search}
+        onSearchChange={setSearch}
+        onExportCalendar={exportRenewalsCalendar}
+        counts={counts}
       />
 
       {isLoading ? (
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[120px] rounded-xl" />
-            ))}
-          </div>
-          <Skeleton className="h-[400px] rounded-xl" />
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[160px] rounded-xl" />
-          ))}
-        </div>
+        <Skeleton className="h-[260px] rounded-xl" />
       ) : (
-        <>
-          {/* Renewals Summary Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Renewal Pipeline</CardTitle>
-              <CardDescription>
-                All contracts approaching expiration, sorted by urgency
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renewalRows.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  No renewals in the pipeline
-                </p>
-              ) : (
-                <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Contract Name</TableHead>
-                        <TableHead>Facility</TableHead>
-                        <TableHead>Expiration Date</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Days Remaining</TableHead>
-                        <TableHead className="text-right">Spend</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {renewalRows.map((row) => (
-                        <TableRow key={row.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-muted-foreground" />
-                              {row.name}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Building2 className="h-4 w-4 text-muted-foreground" />
-                              {row.facilityName ?? "N/A"}
-                            </div>
-                          </TableCell>
-                          <TableCell>{formatDate(row.expirationDate)}</TableCell>
-                          <TableCell>
-                            <Badge className={urgencyConfig[row.urgency].className}>
-                              {urgencyConfig[row.urgency].label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span
-                              className={
-                                row.daysUntilExpiry <= 30
-                                  ? "text-red-600 dark:text-red-400 font-bold"
-                                  : row.daysUntilExpiry <= 90
-                                    ? "text-amber-600 dark:text-amber-400 font-medium"
-                                    : ""
-                              }
-                            >
-                              {row.daysUntilExpiry} days
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatCurrency(row.totalSpend)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/vendor/contracts/${row.id}`}>
-                                <Eye className="h-4 w-4 mr-1" />
-                                View
-                              </Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm text-muted-foreground">
-                    <span>
-                      {renewalRows.length} contracts in pipeline |{" "}
-                      {pipelineStats.critical} critical | {pipelineStats.warning} warning |{" "}
-                      {pipelineStats.upcoming} upcoming
-                    </span>
-                    <span>
-                      Total at-risk spend:{" "}
-                      {formatCurrency(
-                        renewalRows
-                          .filter((r) => r.daysUntilExpiry <= 90)
-                          .reduce((sum, r) => sum + r.totalSpend, 0)
-                      )}
-                    </span>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+        <VendorRenewalsHero stats={heroStats} />
+      )}
 
-          {/* Existing full pipeline component with timeline, dialogs, etc. */}
-          <VendorRenewalPipeline contracts={contracts ?? []} />
-        </>
+      {isLoading ? (
+        <Skeleton className="h-[400px] rounded-xl" />
+      ) : (
+        <Tabs
+          value={stage === "all" ? "upcoming" : stage}
+          onValueChange={(v) => setStage(v as VendorRenewalStage)}
+          className="w-full"
+        >
+          <TabsList>
+            {STAGE_TABS.map((t) => (
+              <TabsTrigger key={t.value} value={t.value}>
+                {t.label} ({counts[t.value]})
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {STAGE_TABS.map((t) => (
+            <TabsContent key={t.value} value={t.value} className="mt-4">
+              <VendorRenewalPipeline
+                contracts={contractsForStage(t.value)}
+                emptyMessage={`No contracts in the ${t.label.toLowerCase()} stage`}
+              />
+            </TabsContent>
+          ))}
+        </Tabs>
       )}
     </div>
   )
