@@ -23,6 +23,7 @@ import {
   type SynthTier,
 } from "@/lib/alerts/synthesizer"
 import { computeBundleStatus } from "@/lib/contracts/bundle-compute"
+import { deriveBundleShortfalls } from "@/lib/contracts/bundle-shortfalls"
 import {
   planBulkAction,
   type BulkAlertAction,
@@ -368,66 +369,48 @@ export async function synthesizeAndPersistAlerts(): Promise<{
     status: a.status,
   }))
 
-  // Resolve each bundle's current member-spend via the oracle-locked
-  // compute layer. Uses the same aggregation path as the UI so alerts
-  // and the dashboard shortfall card can never disagree on who's below
-  // minimum.
+  // Resolve each bundle's shortfall summary via the canonical reducer
+  // — same code path the dashboard shortfall card uses, so
+  // tie_in_at_risk alerts and the card can never disagree on who's
+  // below minimum.
+  //
+  // Short-circuit: skip the compute call for bundles whose members
+  // have no minimum spend configured. The at-risk rule requires a
+  // non-zero minimum to fire, so computing their status would be
+  // wasted work — this scales linearly with bundle count and used to
+  // be the slowest part of alert generation on facilities with 50+
+  // bundles.
   const bundles: SynthBundle[] = []
   for (const b of bundleRows) {
+    const anyMinimum = b.members.some(
+      (m) => m.minimumSpend != null && Number(m.minimumSpend) > 0,
+    )
+    if (!anyMinimum) continue
     const status = await computeBundleStatus(prisma, b.id, facilityId)
     if (!status) continue
-    const members: SynthBundle["members"] = []
-    if (status.allOrNothing) {
-      // allOrNothing.shortfalls is indexed against the members array
-      // order as persisted. We use the DB-member list for labels and
-      // zip against shortfalls to derive currentSpend (min - shortfall).
-      b.members.forEach((m, i) => {
-        const min = m.minimumSpend == null ? 0 : Number(m.minimumSpend)
-        const sf = status.allOrNothing?.shortfalls.find((s) => s.index === i)
-        const currentSpend = sf ? Math.max(0, min - sf.shortfall) : min
-        members.push({
-          entityId: m.contractId ?? m.vendorId ?? "",
-          entityName:
-            m.contract?.name ?? (m.vendorId ? "Vendor member" : "Unknown"),
-          currentSpend,
-          minimumSpend: min,
-        })
-      })
-    } else if (status.crossVendor) {
-      for (const v of status.crossVendor.perVendor) {
-        // currentSpend = v.spend; minimumSpend = v.spend + shortfall
-        // (v.shortfall is 0 when compliant).
-        members.push({
-          entityId: v.vendorId,
-          entityName: v.vendorName,
-          currentSpend: v.spend,
-          minimumSpend: v.spend + (v.shortfall ?? 0),
-        })
-      }
-    } else if (status.proportional) {
-      // Proportional compute doesn't expose per-member spend; pull
-      // minimums straight from the DB and treat currentSpend=min as a
-      // "compliant" placeholder so the at-risk rule skips proportional
-      // bundles unless members are explicitly below. v0 treats
-      // proportional as a weighted-rate model, not a binary alert
-      // trigger.
-      for (const m of b.members) {
-        const min = m.minimumSpend == null ? 0 : Number(m.minimumSpend)
-        members.push({
-          entityId: m.contractId ?? m.vendorId ?? "",
-          entityName:
-            m.contract?.name ?? (m.vendorId ? "Vendor member" : "Unknown"),
-          currentSpend: min,
-          minimumSpend: min,
-        })
-      }
-    }
+    const result = deriveBundleShortfalls({
+      bundleId: b.id,
+      bundleLabel: b.primaryContract.name,
+      members: b.members.map((m) => ({
+        contractId: m.contractId,
+        vendorId: m.vendorId,
+        minimumSpend: m.minimumSpend == null ? null : Number(m.minimumSpend),
+        contractName: m.contract?.name ?? null,
+        vendorName: null,
+      })),
+      status,
+    })
     bundles.push({
       bundleId: b.id,
       bundleLabel: b.primaryContract.name,
       primaryContractId: b.primaryContractId,
       complianceMode: b.complianceMode,
-      members,
+      members: result.members.map((m) => ({
+        entityId: m.entityId,
+        entityName: m.entityName,
+        currentSpend: m.currentSpend,
+        minimumSpend: m.minimumSpend,
+      })),
     })
   }
 

@@ -6,6 +6,7 @@ import {
   formatTierRebateLabel,
   formatTierDollarAnnotation,
 } from "@/lib/contracts/tier-rebate-label"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Accordion,
@@ -68,7 +69,9 @@ function TierProgressCard({
   )
   const rebateDisplay = sourceTier
     ? formatTierRebateLabel(sourceTier.rebateType, Number(sourceTier.rebateValue))
-    : formatPercent(progress.currentTier.rebateValue * 100)
+    : formatPercent(
+        toDisplayRebateValue("percent_of_spend", progress.currentTier.rebateValue),
+      )
 
   // Charles W1.W-B3: the progress bar's primary denominator is the
   // BASELINE — the spendMin of the first tier that starts earning a

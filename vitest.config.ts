@@ -6,6 +6,19 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["./tests/setup.ts"],
+    // Playwright suites use .spec.ts; vitest cannot parse them (the
+    // Playwright `test` fixture has a different signature). Also
+    // exclude the visual-regression suite that imports
+    // @playwright/test directly. Vitest covers .test.ts(x).
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "**/.claude/**",
+      "**/.worktrees/**",
+      "**/*.spec.ts",
+      "tests/visual/**",
+    ],
   },
   resolve: {
     alias: {

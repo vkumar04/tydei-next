@@ -10,6 +10,7 @@ import {
   type RenewalRiskResult,
 } from "@/lib/contracts/performance"
 import type { TierLike } from "@/lib/rebates/calculate"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 
 /**
  * Load the data needed for `<ContractPerformanceCard>` and compute
@@ -70,7 +71,10 @@ export async function getContractPerformance(contractId: string): Promise<{
       spendMax: t.spendMax != null ? Number(t.spendMax) : null,
       // Boundary-scale: ContractTier.rebateValue is a fraction (0.03 =
       // 3%). Engine expects integer percent per CLAUDE.md.
-      rebateValue: Number(t.rebateValue) * 100,
+      rebateValue: toDisplayRebateValue(
+        "percent_of_spend",
+        Number(t.rebateValue),
+      ),
     }))
     const utilization =
       tiers.length > 0 && actualSpend > 0

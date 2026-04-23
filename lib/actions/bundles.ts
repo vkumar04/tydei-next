@@ -5,6 +5,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { revalidatePath } from "next/cache"
 import { computeBundleStatus } from "@/lib/contracts/bundle-compute"
+import { reportServerError } from "@/lib/errors/report"
 import { z } from "zod"
 
 // ─── Schemas ───────────────────────────────────────────────────────
@@ -202,10 +203,16 @@ export async function createBundle(input: CreateBundleInput) {
     revalidatePath("/dashboard/contracts/bundles")
     return serialize(bundle)
   } catch (err) {
-    console.error("[createBundle]", err, {
+    const { errorId } = reportServerError("createBundle", err, {
       primaryContractId: input.primaryContractId,
+      complianceMode: input.complianceMode,
+      memberCount: input.members?.length,
     })
-    throw err
+    throw new Error(
+      err instanceof Error
+        ? `${err.message} (ref ${errorId})`
+        : `Failed to create bundle (ref ${errorId})`,
+    )
   }
 }
 
@@ -256,8 +263,14 @@ export async function updateBundle(input: UpdateBundleInput) {
     revalidatePath("/dashboard/contracts/bundles")
     revalidatePath(`/dashboard/contracts/bundles/${data.bundleId}`)
   } catch (err) {
-    console.error("[updateBundle]", err, { bundleId: input.bundleId })
-    throw err
+    const { errorId } = reportServerError("updateBundle", err, {
+      bundleId: input.bundleId,
+    })
+    throw new Error(
+      err instanceof Error
+        ? `${err.message} (ref ${errorId})`
+        : `Failed to update bundle (ref ${errorId})`,
+    )
   }
 }
 
@@ -268,7 +281,11 @@ export async function deleteBundle(bundleId: string) {
     await prisma.tieInBundle.delete({ where: { id: bundleId } })
     revalidatePath("/dashboard/contracts/bundles")
   } catch (err) {
-    console.error("[deleteBundle]", err, { bundleId })
-    throw err
+    const { errorId } = reportServerError("deleteBundle", err, { bundleId })
+    throw new Error(
+      err instanceof Error
+        ? `${err.message} (ref ${errorId})`
+        : `Failed to delete bundle (ref ${errorId})`,
+    )
   }
 }

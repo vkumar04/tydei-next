@@ -31,6 +31,7 @@ import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
 import { computeProjectedRebate } from "@/lib/contracts/projected-rebate"
 import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
 import { ContractDetailOverview } from "@/components/contracts/contract-detail-overview"
 import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
@@ -237,12 +238,15 @@ export function ContractDetailClient({
               rebateEarnedYTD,
               tiers: tiersForEngine.map((t) => ({
                 ...t,
-                rebateValue:
-                  firstTermWithTiers.tiers.find(
-                    (src) => src.tierNumber === t.tierNumber,
-                  )?.rebateType === "percent_of_spend"
-                    ? Number(t.rebateValue) * 100
-                    : Number(t.rebateValue),
+                rebateValue: (() => {
+                  const src = firstTermWithTiers.tiers.find(
+                    (s) => s.tierNumber === t.tierNumber,
+                  )
+                  const v = Number(t.rebateValue)
+                  return src?.rebateType === "percent_of_spend"
+                    ? toDisplayRebateValue("percent_of_spend", v)
+                    : v
+                })(),
               })),
               method: tierMethod,
             })
@@ -746,7 +750,12 @@ export function ContractDetailClient({
                                     stats.currentTierSourceTier.rebateValue,
                                   ),
                                 )
-                              : formatPercent(currentTier.rebateValue * 100)
+                              : formatPercent(
+                                  toDisplayRebateValue(
+                                    "percent_of_spend",
+                                    currentTier.rebateValue,
+                                  ),
+                                )
                             // Charles W1.W-B3: bar denominator is BASELINE —
                             // the first tier threshold that starts earning a
                             // rebate. Past baseline, flip to "Past baseline ·

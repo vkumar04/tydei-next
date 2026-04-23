@@ -10,6 +10,7 @@ import { upsertContractTiers, createContractTerm, deleteContractTerm, updateCont
 import { createCategory, getCategories } from "@/lib/actions/categories"
 import { getContractPricing } from "@/lib/actions/pricing-files"
 import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-cog"
+import { useAutoFillWhenPristine } from "@/hooks/use-auto-fill-when-pristine"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
@@ -169,56 +170,34 @@ export function EditContractClient({
     }
   }, [contract, initialized, form, setTerms])
 
-  // Charles 2026-04-23 (Bugs 9 + 10): Contract Total on the edit page
-  // snaps to the COG-derived figure on any *deliberate* vendor or date
-  // change. On first hydrate we retain the stored values (so the page
-  // doesn't mutate on open), but any later edit of vendor/dates triggers
-  // a re-derive that clobbers Total + Annual. Matches the behavior of
-  // the new-contract page — Total is always spend-based unless the user
-  // types something after the most recent vendor/date change.
+  // Auto-derive Total/Annual from COG when vendor/date changes — but
+  // ONLY after initial hydrate (so the page doesn't mutate on open)
+  // and ONLY when the user hasn't manually typed a value. The
+  // `enabled` flag + the dirtyFields guard inside the hook together
+  // preserve both invariants.
   const watchedVendorId = form.watch("vendorId")
   const watchedEffective = form.watch("effectiveDate")
   const watchedExpiration = form.watch("expirationDate")
-  const lastSeenKeyRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!initialized || !watchedVendorId) return
-    const key = `${watchedVendorId}|${watchedEffective}|${watchedExpiration}`
-    // First render after hydrate: stamp the key but don't snap — preserves
-    // the stored contract values.
-    if (lastSeenKeyRef.current === null) {
-      lastSeenKeyRef.current = key
-      return
-    }
-    if (lastSeenKeyRef.current === key) return
-    lastSeenKeyRef.current = key
-    let cancelled = false
-    ;(async () => {
-      try {
-        const r = await deriveContractTotalFromCOG(watchedVendorId, {
-          effectiveDate: watchedEffective || null,
-          expirationDate: watchedExpiration || null,
-        })
-        if (cancelled) return
-        // Charles 2026-04-23 prod regression: if the user typed a value
-        // into Total/Annual after load, don't clobber it. RHF marks the
-        // field dirty only on user input (setValue with default shouldDirty
-        // keeps it clean), so dirtyFields is a reliable manual-override
-        // signal.
-        const dirty = form.formState.dirtyFields
-        if (r.totalValue > 0 && !dirty.totalValue) {
-          form.setValue("totalValue", r.totalValue)
-        }
-        if (r.annualValue > 0 && !dirty.annualValue) {
-          form.setValue("annualValue", r.annualValue)
-        }
-      } catch {
-        // Silent — user can manually re-enter values.
+  const firstFillRef = useRef(false)
+  useAutoFillWhenPristine(
+    form,
+    async () => {
+      if (!watchedVendorId) return {}
+      // Skip the very first call after hydrate — stored values should
+      // render as-is on open. Subsequent vendor/date changes auto-fill.
+      if (!firstFillRef.current) {
+        firstFillRef.current = true
+        return {}
       }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [initialized, watchedVendorId, watchedEffective, watchedExpiration, form])
+      const r = await deriveContractTotalFromCOG(watchedVendorId, {
+        effectiveDate: watchedEffective || null,
+        expirationDate: watchedExpiration || null,
+      })
+      return { totalValue: r.totalValue, annualValue: r.annualValue }
+    },
+    [watchedVendorId, watchedEffective, watchedExpiration],
+    initialized,
+  )
 
   async function handleSave() {
     const isValid = await form.trigger()

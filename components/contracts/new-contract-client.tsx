@@ -23,6 +23,7 @@ import { parsePricingFile, buildPricingItems as buildPricingItemsShared, detectP
 import { createCategory, getCategories } from "@/lib/actions/categories"
 import { computePricingVsCOG } from "@/lib/actions/cog-records"
 import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-cog"
+import { useAutoFillWhenPristine } from "@/hooks/use-auto-fill-when-pristine"
 import { queryKeys } from "@/lib/query-keys"
 import { createVendor } from "@/lib/actions/vendors"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
@@ -121,41 +122,25 @@ export function NewContractClient({
       : `new-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   )
 
-  // Charles 2026-04-23 (Bugs 9 + 10, revised): auto-derive Contract
-  // Total + Annual from COG when the vendor/date window changes — but
-  // NEVER overwrite a value the user has already typed. Prod regression
-  // was that a user's 5,300,000 would snap back to the COG-derived
-  // figure every time an upstream field changed. We now check the
-  // react-hook-form dirtyFields map: if totalValue/annualValue is
-  // dirty, it's a manual override and we leave it alone.
+  // Auto-derive Contract Total + Annual from COG when vendor/date
+  // changes. Guarded by dirtyFields so a user-typed value (Charles's
+  // 5.3M prod regression) is never clobbered. See
+  // hooks/use-auto-fill-when-pristine.ts.
   const watchedVendorId = form.watch("vendorId")
   const watchedEffective = form.watch("effectiveDate")
   const watchedExpiration = form.watch("expirationDate")
-  useEffect(() => {
-    if (!watchedVendorId) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const r = await deriveContractTotalFromCOG(watchedVendorId, {
-          effectiveDate: watchedEffective || null,
-          expirationDate: watchedExpiration || null,
-        })
-        if (cancelled) return
-        const dirty = form.formState.dirtyFields
-        if (r.totalValue > 0 && !dirty.totalValue) {
-          form.setValue("totalValue", r.totalValue)
-        }
-        if (r.annualValue > 0 && !dirty.annualValue) {
-          form.setValue("annualValue", r.annualValue)
-        }
-      } catch {
-        // Silent — user can still type values manually.
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [watchedVendorId, watchedEffective, watchedExpiration, form])
+  useAutoFillWhenPristine(
+    form,
+    async () => {
+      if (!watchedVendorId) return {}
+      const r = await deriveContractTotalFromCOG(watchedVendorId, {
+        effectiveDate: watchedEffective || null,
+        expirationDate: watchedExpiration || null,
+      })
+      return { totalValue: r.totalValue, annualValue: r.annualValue }
+    },
+    [watchedVendorId, watchedEffective, watchedExpiration],
+  )
 
   const handlePricingUpload = useCallback(async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase()

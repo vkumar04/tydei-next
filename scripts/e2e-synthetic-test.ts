@@ -2696,13 +2696,127 @@ async function bundleRoundTripCheck(
     })
   }
 
+  // ─── Case 4: canonical shortfall reducer parity ───
+  // deriveBundleShortfalls is the single helper every surface (dashboard
+  // card, alert synthesizer, future reports) calls to decide "who's
+  // below minimum". This case seeds an AON bundle with a deliberate
+  // member-below-min, runs the reducer, and asserts the v0-predicted
+  // shortfall matches the reducer output. If the reducer drifts from
+  // compute-layer semantics, this fires.
+  const { deriveBundleShortfalls } = await import(
+    "@/lib/contracts/bundle-shortfalls"
+  )
+  const shortfallPrefix = `E2E_${scenario.runId}_shortfall_`
+  const shortfallDate = new Date("2099-07-15")
+  const shortfallWindowStart = new Date("2099-07-01")
+  const shortfallWindowEnd = new Date("2099-07-31")
+
+  // Seed a deliberate below-min: member2 at 10k against 40k min.
+  async function seedShortfallCog(
+    vendorId: string,
+    contractId: string | null,
+    dollars: number,
+    tag: string,
+  ) {
+    await prisma.cOGRecord.create({
+      data: {
+        facilityId: facId,
+        vendorId,
+        vendorName: `E2E vendor ${vendorId.slice(-4)}`,
+        inventoryNumber: `${shortfallPrefix}${tag}`,
+        inventoryDescription: `E2E shortfall fixture ${tag}`,
+        unitCost: dollars,
+        quantity: 1,
+        extendedPrice: dollars,
+        matchStatus: "on_contract" as COGMatchStatus,
+        transactionDate: shortfallDate,
+        contractId,
+      },
+    })
+  }
+  await seedShortfallCog(vendorA, primary, 25_000, "m1")
+  await seedShortfallCog(vendorB, member2ContractId, 10_000, "m2")
+  await seedShortfallCog(vendorC, member3ContractId, 35_000, "m3")
+
+  // Use scenario.contracts[3] (or member2) as primary — b1/b3 already
+  // own `primary` and `member3ContractId` respectively on the
+  // TieInBundle.primaryContractId unique index.
+  const shortfallPrimary = scenario.contracts[3]?.id ?? member2ContractId
+  const b4 = await prisma.tieInBundle.create({
+    data: {
+      primaryContractId: shortfallPrimary,
+      complianceMode: "all_or_nothing",
+      baseRate: 2,
+      effectiveStart: shortfallWindowStart,
+      effectiveEnd: shortfallWindowEnd,
+      members: {
+        create: [
+          { contractId: primary, weightPercent: 0, minimumSpend: 25_000 },
+          { contractId: member2ContractId, weightPercent: 0, minimumSpend: 40_000 },
+          { contractId: member3ContractId, weightPercent: 0, minimumSpend: 35_000 },
+        ],
+      },
+    },
+    include: {
+      primaryContract: { select: { name: true } },
+      members: {
+        select: {
+          contractId: true,
+          vendorId: true,
+          minimumSpend: true,
+          contract: { select: { name: true } },
+        },
+      },
+    },
+  })
+
+  const status4 = await computeBundleStatus(prisma, b4.id, facId)
+  const result4 = deriveBundleShortfalls({
+    bundleId: b4.id,
+    bundleLabel: b4.primaryContract.name,
+    members: b4.members.map((m) => ({
+      contractId: m.contractId,
+      vendorId: m.vendorId,
+      minimumSpend: m.minimumSpend == null ? null : Number(m.minimumSpend),
+      contractName: m.contract?.name ?? null,
+      vendorName: null,
+    })),
+    status: status4!,
+  })
+  // Expected: 1 shortfall of $30k on member2.
+  if (!result4.hasShortfalls) {
+    failures.push({
+      where: "shortfall reducer AON hasShortfalls",
+      detail: `expected hasShortfalls=true, got ${JSON.stringify(result4)}`,
+    })
+  }
+  if (result4.shortfallCount !== 1) {
+    failures.push({
+      where: "shortfall reducer AON shortfallCount",
+      detail: `expected 1 shortfall, got ${result4.shortfallCount}`,
+    })
+  }
+  if (!approx(result4.largestShortfall, 30_000)) {
+    failures.push({
+      where: "shortfall reducer AON largestShortfall",
+      detail: `expected $30,000 gap, got $${result4.largestShortfall}`,
+    })
+  }
+
   // ─── Cleanup ───
   await prisma.tieInBundleMember.deleteMany({
-    where: { bundleId: { in: [b1.id, b3.id] } },
+    where: { bundleId: { in: [b1.id, b3.id, b4.id] } },
   })
-  await prisma.tieInBundle.deleteMany({ where: { id: { in: [b1.id, b3.id] } } })
+  await prisma.tieInBundle.deleteMany({
+    where: { id: { in: [b1.id, b3.id, b4.id] } },
+  })
   await prisma.cOGRecord.deleteMany({
-    where: { inventoryNumber: { startsWith: prefix } },
+    where: {
+      OR: [
+        { inventoryNumber: { startsWith: prefix } },
+        { inventoryNumber: { startsWith: shortfallPrefix } },
+      ],
+    },
   })
 }
 

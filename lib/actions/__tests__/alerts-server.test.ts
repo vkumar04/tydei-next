@@ -128,6 +128,9 @@ vi.mock("@/lib/db", () => ({
     contractPeriod: {
       findMany: vi.fn(async () => periodRows),
     },
+    tieInBundle: {
+      findMany: vi.fn(async () => []),
+    },
     $transaction: vi.fn(
       async (ops: Promise<unknown>[]) => Promise.all(ops),
     ),

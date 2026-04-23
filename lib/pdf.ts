@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable"
 import { prisma } from "@/lib/db"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
 
 // ─── jspdf-autotable extends the doc with lastAutoTable ──────────
 
@@ -192,9 +193,7 @@ export async function generateContractReport(contractId: string): Promise<Uint8A
         fmtCurrency(Number(t.spendMin)),
         t.spendMax ? fmtCurrency(Number(t.spendMax)) : "No Cap",
         t.rebateType,
-        t.rebateType === "percent_of_spend"
-          ? `${(Number(t.rebateValue) * 100).toFixed(2)}%`
-          : fmtCurrency(Number(t.rebateValue)),
+        formatTierRebateLabel(t.rebateType, Number(t.rebateValue)),
       ])
 
       autoTable(doc, {
