@@ -5,6 +5,7 @@ import { Eye, FileText } from "lucide-react"
 import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { classifyInvoicePriority } from "@/lib/invoices/priority"
 
 export type InvoiceRow = {
   id: string
@@ -104,6 +105,33 @@ export function getInvoiceColumns(
               {formatPercent(vp)}
             </Badge>
           </div>
+        )
+      },
+    },
+    {
+      id: "priority",
+      header: "Priority",
+      accessorFn: (row) =>
+        classifyInvoicePriority({ variancePct: row.variancePercent }),
+      cell: ({ row }) => {
+        // v0 invoice priority (lib/invoices/priority.ts):
+        //   |variance%| > 5 → high · > 2 → medium · > 0 → low · else none
+        const priority = classifyInvoicePriority({
+          variancePct: row.original.variancePercent,
+        })
+        if (priority === "none") {
+          return <span className="text-xs text-muted-foreground">—</span>
+        }
+        const cls =
+          priority === "high"
+            ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+            : priority === "medium"
+              ? "bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-200"
+              : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
+        return (
+          <Badge variant="secondary" className={`text-xs ${cls}`}>
+            {priority}
+          </Badge>
         )
       },
     },

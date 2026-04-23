@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { BundleImpactAnalysisCard } from "@/components/contracts/bundle-impact-analysis-card"
 
 function fmt(n: number): string {
   return n.toLocaleString("en-US", {
@@ -203,6 +204,33 @@ export default async function BundleDetailPage({
               </ul>
             </CardContent>
           </Card>
+        )}
+
+      {/* Impact analysis — all-or-nothing only (proportional + cross-
+          vendor have different formulas and benefit less from a spend-
+          reallocation sandbox). */}
+      {bundle.complianceMode === "all_or_nothing" &&
+        bundle.baseRate != null &&
+        bundle.members.length > 0 && (
+          <BundleImpactAnalysisCard
+            members={bundle.members.map((m) => ({
+              label: m.contract?.name ?? m.vendorId ?? "Member",
+              minimumSpend: Number(m.minimumSpend ?? 0),
+            }))}
+            bundle={{
+              baseRate: Number(bundle.baseRate),
+              bonusRate:
+                bundle.bonusRate != null
+                  ? Number(bundle.bonusRate)
+                  : undefined,
+              acceleratorMultiplier:
+                bundle.acceleratorMultiplier != null
+                  ? Number(bundle.acceleratorMultiplier)
+                  : bundle.bonusMultiplier != null
+                    ? Number(bundle.bonusMultiplier)
+                    : undefined,
+            }}
+          />
         )}
     </div>
   )
