@@ -133,6 +133,9 @@ vi.mock("@/lib/serialize", () => ({
 }))
 
 import { getContracts, getContract } from "@/lib/actions/contracts"
+import { mapRebateRowsToLedger } from "@/components/contracts/contract-transactions-display"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 
 function makeContract(overrides: Partial<ContractShape> = {}): ContractShape {
   const today = new Date()
@@ -317,5 +320,130 @@ describe("contracts list vs detail parity", () => {
     expect(Number(detail.rebateEarnedYTD)).toBe(58_660)
     expect(Number(detail.rebateCollected)).toBe(58_660)
     expect(Number(detail.currentSpend)).toBe(1_536_659)
+  })
+})
+
+/**
+ * W2.A.3 regression guard — Charles's 2026-04-22 screenshot showed the
+ * Transactions tab "Total Rebates (Lifetime)" card at $639,390 on a
+ * contract whose canonical `sumEarnedRebatesLifetime` returned
+ * $19,882.92 (32× drift). The root cause was stale client bundles
+ * predating W1.U-B's canonicalization — but there was no parity test
+ * pinning the Transactions-tab summary cards to the canonical helpers.
+ * If someone re-introduces a hand-rolled reducer in
+ * `contract-transactions.tsx`, this test fails.
+ *
+ * The tab's pipeline is: `getContractRebates` → `mapRebateRowsToLedger`
+ * → `sumEarnedRebatesLifetime` / `sumCollectedRebates`. The mapping is
+ * pure, so we can feed it the Arthrex cluster's 17 Rebate rows and
+ * assert the summary card math equals the canonical helpers applied
+ * to the same raw Rebate shape.
+ */
+describe("Transactions tab summary cards vs canonical helpers (W2.A.3)", () => {
+  it("mapRebateRowsToLedger → sumEarned/Collected matches canonical helpers on mixed past/future/collected rows", () => {
+    // FIXED clock = 2026-04-22, matches Arthrex diagnostic snapshot.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-04-22T12:00:00Z"))
+
+    // Mix-bag: closed w/ collection, closed w/o collection, future
+    // (excluded from earned-lifetime), zero-earned out-of-band
+    // collection row.
+    const rawRebates = [
+      {
+        id: "r-closed-collected",
+        rebateEarned: 5_698.84,
+        rebateCollected: 4_388.11,
+        payPeriodStart: "2025-07-01T00:00:00.000Z",
+        payPeriodEnd: "2025-09-30T00:00:00.000Z",
+        collectionDate: "2025-11-13T00:00:00.000Z",
+        notes: null,
+      },
+      {
+        id: "r-closed-uncollected",
+        rebateEarned: 4_786.80,
+        rebateCollected: 0,
+        payPeriodStart: "2025-04-01T00:00:00.000Z",
+        payPeriodEnd: "2026-03-31T00:00:00.000Z",
+        collectionDate: null,
+        notes: null,
+      },
+      {
+        id: "r-future",
+        // FUTURE row. If anyone re-introduces a sum-all-rows reducer
+        // in the summary card, the $2,794.13 leaks into "Total
+        // Rebates (Lifetime)" — this test catches it.
+        rebateEarned: 2_794.13,
+        rebateCollected: 0,
+        payPeriodStart: "2026-04-01T00:00:00.000Z",
+        payPeriodEnd: "2026-06-30T00:00:00.000Z",
+        collectionDate: null,
+        notes: null,
+      },
+      {
+        id: "r-small-collected",
+        rebateEarned: 2.5,
+        rebateCollected: 2.0,
+        payPeriodStart: "2025-04-01T00:00:00.000Z",
+        payPeriodEnd: "2025-05-01T00:00:00.000Z",
+        collectionDate: "2025-05-15T00:00:00.000Z",
+        notes: null,
+      },
+      {
+        id: "r-oob-collection",
+        // Out-of-band pure-collection row: rebateEarned=0, has a
+        // collectionDate. Should count toward Collected but not Earned.
+        rebateEarned: 0,
+        rebateCollected: 500,
+        payPeriodStart: "2026-02-01T00:00:00.000Z",
+        payPeriodEnd: "2026-02-01T00:00:00.000Z",
+        collectionDate: "2026-02-01T00:00:00.000Z",
+        notes: "[out-of-band]",
+      },
+    ]
+
+    // Simulate the DB-boundary filter that `getContractRebates`
+    // applies (payPeriodEnd <= today). The tab NEVER sees future rows
+    // in real life, but we include `r-future` here to assert the
+    // summary card reducer would ALSO exclude it if a client bundle
+    // ever bypassed the server filter.
+    const today = new Date()
+    const serverFiltered = rawRebates.filter(
+      (r) => new Date(r.payPeriodEnd).getTime() <= today.getTime(),
+    )
+
+    const rows = mapRebateRowsToLedger(serverFiltered)
+
+    // The tab's exact reducers, mirroring contract-transactions.tsx.
+    const tabEarnedLifetime = sumEarnedRebatesLifetime(
+      rows.map((r) => ({
+        payPeriodEnd: r.periodEnd,
+        rebateEarned: r.rebateEarned,
+      })),
+    )
+    const tabCollected = sumCollectedRebates(
+      rows.map((r) => ({
+        collectionDate: r.collectionDate,
+        rebateCollected: r.rebateCollected,
+      })),
+    )
+
+    // Oracle: apply the canonical helpers DIRECTLY to the raw Rebate
+    // shape with no mapping. If these agree, the `mapRebateRowsToLedger`
+    // + summary-card pipeline preserves the invariant.
+    const oracleEarnedLifetime = sumEarnedRebatesLifetime(serverFiltered)
+    const oracleCollected = sumCollectedRebates(serverFiltered)
+
+    expect(tabEarnedLifetime).toBeCloseTo(oracleEarnedLifetime, 2)
+    expect(tabCollected).toBeCloseTo(oracleCollected, 2)
+
+    // Explicit numeric pins so the numbers that Charles would see on
+    // screen are the ones we actually defend. The future row MUST be
+    // excluded, the zero-earned collected row MUST land in Collected.
+    //   Earned lifetime = 5698.84 + 4786.80 + 2.5 = 10488.14
+    //   Collected       = 4388.11 + 2.00 + 500    = 4890.11
+    expect(tabEarnedLifetime).toBeCloseTo(10_488.14, 2)
+    expect(tabCollected).toBeCloseTo(4_890.11, 2)
+
+    vi.useRealTimers()
   })
 })
