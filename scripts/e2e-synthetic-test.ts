@@ -1687,6 +1687,140 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
     failures.push({ where: "v0 renewal risk label", detail: risk.riskLevel })
   }
 
+  // ─── Tie-in — tydei vs v0 parity ─────────────────────────────────
+  // The v0 self-checks above pin the *expected* numbers from Charles's
+  // docs. These assertions pin the *tydei implementation* to the same
+  // numbers — any divergence between `lib/contracts/tie-in-compliance.ts`
+  // and the v0 spec trips here.
+  const {
+    computeTieInAllOrNothing,
+    computeTieInProportional,
+    computeCrossVendorTieIn,
+    runTieInImpactAnalysis,
+  } = await import("@/lib/contracts/tie-in-compliance")
+
+  // All-or-nothing — run all 4 scenarios through tydei and diff vs v0.
+  const aonScenarios: Array<[string, number[], number, "none" | "base" | "bonus" | "accelerator"]> = [
+    ["base",         [25_000, 40_000, 35_000], 2_000, "base"],
+    ["partial",      [20_000, 40_000, 35_000], 0,     "none"],
+    ["bonus",        [30_000, 48_000, 42_000], 3_600, "bonus"],
+    ["accelerator",  [37_500, 60_000, 52_500], 6_750, "accelerator"],
+  ]
+  for (const [name, spends, expectedRebate, expectedLevel] of aonScenarios) {
+    const tydeiOut = computeTieInAllOrNothing(
+      aonMembers.map((m, i) => ({ ...m, currentSpend: spends[i]! })),
+      aonBundle,
+    )
+    if (
+      !approx(tydeiOut.rebateEarned, expectedRebate) ||
+      tydeiOut.bonusLevel !== expectedLevel
+    ) {
+      failures.push({
+        where: `tydei tie-in AON ${name}`,
+        detail: `want $${expectedRebate}/${expectedLevel}, got $${tydeiOut.rebateEarned}/${tydeiOut.bonusLevel}`,
+      })
+    }
+  }
+
+  // Proportional — three cases against v0.
+  const propCases = [
+    {
+      label: "88% weighted (doc example)",
+      members: [
+        { minimumSpend: 25_000, currentSpend: 20_000, weight: 0.3 },
+        { minimumSpend: 40_000, currentSpend: 40_000, weight: 0.4 },
+        { minimumSpend: 35_000, currentSpend: 28_000, weight: 0.3 },
+      ],
+      baseRate: 2,
+      expectedRebate: 1_548.8,
+      expectedCompliance: 0.88,
+    },
+    {
+      label: "full",
+      members: [
+        { minimumSpend: 25_000, currentSpend: 25_000, weight: 0.3 },
+        { minimumSpend: 40_000, currentSpend: 40_000, weight: 0.4 },
+        { minimumSpend: 35_000, currentSpend: 35_000, weight: 0.3 },
+      ],
+      baseRate: 2,
+      expectedRebate: 2_000,
+      expectedCompliance: 1,
+    },
+    {
+      label: "zero",
+      members: [
+        { minimumSpend: 25_000, currentSpend: 0, weight: 0.5 },
+        { minimumSpend: 40_000, currentSpend: 0, weight: 0.5 },
+      ],
+      baseRate: 2,
+      expectedRebate: 0,
+      expectedCompliance: 0,
+    },
+  ]
+  for (const c of propCases) {
+    const out = computeTieInProportional(c.members, c.baseRate)
+    if (
+      !approx(out.rebateEarned, c.expectedRebate) ||
+      !approx(out.overallCompliance, c.expectedCompliance, 0.001)
+    ) {
+      failures.push({
+        where: `tydei tie-in proportional ${c.label}`,
+        detail: JSON.stringify(out),
+      })
+    }
+  }
+
+  // Cross-vendor — all-compliant and partial.
+  const xvAll = computeCrossVendorTieIn(
+    [
+      { vendorId: "a", vendorName: "Suture Co", minimumSpend: 50_000, rebateContribution: 2, currentSpend: 50_000 },
+      { vendorId: "b", vendorName: "Implant Inc", minimumSpend: 100_000, rebateContribution: 2.5, currentSpend: 100_000 },
+      { vendorId: "c", vendorName: "Equipment Ltd", minimumSpend: 75_000, rebateContribution: 1.5, currentSpend: 75_000 },
+    ],
+    { rate: 1, requirement: "all_compliant" },
+  )
+  if (
+    !xvAll.allCompliant ||
+    !approx(xvAll.vendorRebateTotal, 4_625) ||
+    !approx(xvAll.facilityBonus, 2_250) ||
+    !approx(xvAll.totalRebate, 6_875)
+  ) {
+    failures.push({ where: "tydei cross-vendor all", detail: JSON.stringify(xvAll) })
+  }
+  const xvPartial = computeCrossVendorTieIn(
+    [
+      { vendorId: "a", vendorName: "Suture Co", minimumSpend: 50_000, rebateContribution: 2, currentSpend: 40_000 },
+      { vendorId: "b", vendorName: "Implant Inc", minimumSpend: 100_000, rebateContribution: 2.5, currentSpend: 100_000 },
+      { vendorId: "c", vendorName: "Equipment Ltd", minimumSpend: 75_000, rebateContribution: 1.5, currentSpend: 75_000 },
+    ],
+    { rate: 1, requirement: "all_compliant" },
+  )
+  if (
+    xvPartial.allCompliant ||
+    !approx(xvPartial.vendorRebateTotal, 3_625) ||
+    !approx(xvPartial.facilityBonus, 0) ||
+    !approx(xvPartial.perVendor[0]!.shortfall, 10_000)
+  ) {
+    failures.push({ where: "tydei cross-vendor partial", detail: JSON.stringify(xvPartial) })
+  }
+
+  // Impact analysis — diff tydei's runner against v0's.
+  const tydeiImpact = runTieInImpactAnalysis(aonMembers, aonBundle, [
+    { name: "Minimum Compliance", spends: [25_000, 40_000, 35_000] },
+    { name: "Partial Non-Compliance", spends: [20_000, 40_000, 35_000] },
+    { name: "20% Over All", spends: [30_000, 48_000, 42_000] },
+    { name: "50% Over All (Accelerator)", spends: [37_500, 60_000, 52_500] },
+  ])
+  const expectedImpact = [2_000, 0, 3_600, 6_750]
+  for (let i = 0; i < expectedImpact.length; i++) {
+    if (!approx(tydeiImpact[i]!.rebateEarned, expectedImpact[i]!)) {
+      failures.push({
+        where: `tydei tie-in impact ${tydeiImpact[i]!.scenarioName}`,
+        detail: `want $${expectedImpact[i]}, got $${tydeiImpact[i]!.rebateEarned}`,
+      })
+    }
+  }
+
   // ─── Tie-in proportional — additional scenarios ──────────────────
   // 100%-across-all members → full base rate; 0% members → zero rebate.
   const propFull = (
