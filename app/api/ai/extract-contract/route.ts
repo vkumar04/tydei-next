@@ -37,17 +37,35 @@ KEY THINGS TO EXTRACT:
 
 Be thorough - extract every tier, product, and condition mentioned. Use null for fields not found in the document.
 
-── EVERGREEN / AUTO-RENEWING CONTRACTS (CRITICAL) ──
-Some contracts have an initial term of N months followed by automatic
-extensions, or language like "continues until terminated", "auto-renews
-annually", "remains in effect unless either party provides notice", or
-"pricing fixed for initial term with X% annual increase for extensions".
-For these contracts:
-- Return expirationDate: null — DO NOT return the end of the initial term.
-- Returning the initial-term end causes downstream spend-matching to
-  reject every transaction past that date; the matcher treats null as
-  "no upper bound", which is correct for an evergreen agreement.
-- effectiveDate is still the start date of the initial term.
+── EVERGREEN / AUTO-RENEWING CONTRACTS (BE STRICT) ──
+Return expirationDate: null ONLY when the contract *explicitly*
+continues past the initial term WITHOUT affirmative action by either
+party. Qualifying signals (must be one of these or equivalent):
+- "This Agreement shall automatically renew for successive [N]-month/
+  year periods unless either party gives written notice…"
+- "This Agreement shall remain in full force and effect until
+  terminated by either party."
+- "Continues in perpetuity" / "continues until terminated" as the
+  PRIMARY term-length clause (not as a rider on a fixed-term clause).
+
+DO NOT treat any of the following as evergreen — emit the stated end
+date instead:
+- Fixed N-month term with a termination-for-convenience clause
+  ("either party may terminate on 30 days' notice") — that's a standard
+  off-ramp, not an auto-renewal.
+- "Option to renew" / "may be extended by mutual consent" / "extensions
+  subject to mutual written agreement" — these require affirmative
+  action, so the contract DOES expire at the initial-term end unless
+  the option is exercised.
+- "Pricing fixed for initial term with X% annual increase for
+  extensions" — this describes price-escalation IF extended; it does
+  NOT imply automatic extension.
+- Contracts that simply list both an effective and expiration date
+  without explicit auto-renewal language.
+
+When unsure, prefer the fixed end date. A wrong null expiration causes
+every future COG row to match the contract; a wrong fixed date at
+least matches correctly during the stated term.
 
 ── TIER EXTRACTION (CRITICAL) ──
 Usage contracts ALMOST ALWAYS have rebate tiers. If the document mentions
@@ -157,10 +175,11 @@ you MUST emit one row per tier inside terms[].tiers[]:
 - rebateValue: the percentage number (3 for 3%) or the dollar amount.
 Do NOT return an empty tiers array for a usage contract that clearly has a tier structure.
 
-EVERGREEN / AUTO-RENEWING CONTRACTS: if the contract has language like
-"continues until terminated", "auto-renews annually", or "initial term
-followed by extensions", return expirationDate: null (do NOT use the
-initial-term end date). effectiveDate is still the start of the initial term.
+EVERGREEN: return expirationDate: null ONLY if the contract EXPLICITLY
+auto-renews without affirmative action ("automatically renews", "remains
+in effect until terminated"). A fixed-term contract with termination-
+for-convenience or mutual-consent extensions is NOT evergreen — emit
+the stated end date.
 
 Return valid JSON only — no markdown fences.
 
