@@ -14,13 +14,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type { BulkImportInput } from "@/lib/validators/cog-records"
 
-const createManyMock = vi.fn()
-const findManyMock = vi.fn(async () => [])
-const countMock = vi.fn(async () => 0)
-const txMock = vi.fn()
+type ExistingRow = {
+  id: string
+  inventoryNumber: string
+  transactionDate: Date
+  vendorItemNo: string | null
+}
+
+const createManyMock = vi.fn<(args: unknown) => Promise<{ count: number }>>()
+const findManyMock = vi.fn<(args: unknown) => Promise<ExistingRow[]>>(
+  async () => [],
+)
+const countMock = vi.fn<(args: unknown) => Promise<number>>(async () => 0)
+const txMock = vi.fn<(arg: unknown) => Promise<unknown[]>>()
 const logAuditMock = vi.fn(async (_args: Record<string, unknown>) => {})
-const resolveVendorIdsBulkMock = vi.fn(async () => new Map<string, string>())
-const recomputeMock = vi.fn()
+const resolveVendorIdsBulkMock = vi.fn(
+  async (_names: string[]) => new Map<string, string>(),
+)
+const recomputeMock = vi.fn(async (..._args: unknown[]) => undefined)
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -50,7 +61,8 @@ vi.mock("@/lib/vendors/resolve", () => ({
 }))
 
 vi.mock("@/lib/cog/recompute", () => ({
-  recomputeMatchStatusesForVendor: (...args: unknown[]) => recomputeMock(...args),
+  recomputeMatchStatusesForVendor: (...args: unknown[]) =>
+    recomputeMock(...args),
 }))
 
 import { bulkImportCOGRecords } from "@/lib/actions/cog-import"
