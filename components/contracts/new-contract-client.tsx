@@ -104,6 +104,10 @@ export function NewContractClient({
     setTerms,
   } = useContractForm()
   const createMutation = useCreateContract()
+  // Bug 7 guardrail: remember how many terms AI populated so submit can
+  // warn if the user ended up with fewer than that (accidental delete,
+  // or reviewed-but-dropped). Null = no AI populate happened.
+  const [aiTermCount, setAiTermCount] = useState<number | null>(null)
 
   // Charles W1.W-D3 — contract-level tie-in capital state.
   const [capital, setCapital] = useState<ContractCapital>({
@@ -494,6 +498,7 @@ export function NewContractClient({
     }
 
     // Populate terms if extracted — preserve AI-detected types
+    setAiTermCount(data.terms.length)
     if (data.terms.length > 0) {
       setTerms(
         data.terms.map((t) => {
@@ -559,6 +564,22 @@ export function NewContractClient({
     if (!isValid) {
       toast.error("Please fix the form errors")
       return
+    }
+
+    // Bug 7 guardrail: if the AI originally extracted more terms than
+    // what's about to be submitted, ask the user to confirm. Common
+    // failure mode: user clicked a trash icon mid-review and didn't
+    // realize the term was gone by submit time.
+    if (aiTermCount !== null && terms.length < aiTermCount) {
+      const missing = aiTermCount - terms.length
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(
+          `You're about to create this contract with ${terms.length} term(s), but the AI extractor found ${aiTermCount}. ${missing} term${missing === 1 ? " was" : "s were"} removed during review. Continue?`,
+        )
+      ) {
+        return
+      }
     }
 
     // Primary "Create Contract" path: the form's default status is "draft"

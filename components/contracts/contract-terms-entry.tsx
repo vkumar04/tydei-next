@@ -325,7 +325,23 @@ export function ContractTermsEntry({
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    onClick={() => removeTerm(termIdx)}
+                    onClick={() => {
+                      // Guardrail (Bug 7): accidental clicks on the
+                      // trash icon silently dropped terms populated by
+                      // the AI extractor. Confirm before destroying
+                      // an entire term + its tiers.
+                      const label = term.termName || `term ${termIdx + 1}`
+                      const tierCount = term.tiers.length
+                      if (
+                        typeof window !== "undefined" &&
+                        !window.confirm(
+                          `Delete "${label}" and its ${tierCount} tier${tierCount === 1 ? "" : "s"}? This cannot be undone until you save.`,
+                        )
+                      ) {
+                        return
+                      }
+                      removeTerm(termIdx)
+                    }}
                     className="text-destructive"
                   >
                     <Trash2 className="size-3.5" />
@@ -537,22 +553,30 @@ export function ContractTermsEntry({
                       <SelectContent>
                         <SelectItem value="cumulative">
                           <div className="flex flex-col">
-                            <span className="font-medium">Dollar 1 (Cumulative)</span>
-                            <span className="text-xs text-muted-foreground">Rebate applies from the first dollar once the tier is met. Example: $750K at tier 3 (3%) → $22,500.</span>
+                            <span className="font-medium">
+                              Retroactive (Dollar 1 / Cumulative)
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Once the highest tier is reached, the tier&apos;s rate applies to the entire spend (retroactively). Example on $1.26M with tier 1 at 5% ($0–$200K) and tier 2 at 10% ($201K+): $1.26M × 10% = <strong>$126,040</strong>.
+                            </span>
                           </div>
                         </SelectItem>
                         <SelectItem value="marginal">
                           <div className="flex flex-col">
-                            <span className="font-medium">Growth (Marginal)</span>
-                            <span className="text-xs text-muted-foreground">Rebate applies only to dollars above the baseline. Example: $500K @ 2% + $250K @ 3% → $17,500.</span>
+                            <span className="font-medium">
+                              Tiered (Per-slice / Marginal)
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Each tier&apos;s rate only applies to dollars within that tier&apos;s band. Example on $1.26M: $200K × 5% + $1.06M × 10% = <strong>$116,040</strong>.
+                            </span>
                           </div>
                         </SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       {term.rebateMethod === "marginal"
-                        ? "Growth: rebate applies only to dollars above the baseline."
-                        : "Dollar 1: rebate applies from the first dollar once the tier is met."}
+                        ? "Tiered: each tier's rate applies only to dollars within that tier's band."
+                        : "Retroactive: the highest-achieved tier's rate applies to the entire spend from dollar one."}
                     </p>
                   </div>
 

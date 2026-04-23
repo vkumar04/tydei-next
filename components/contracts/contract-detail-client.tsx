@@ -563,13 +563,40 @@ export function ContractDetailClient({
                 </p>
                 {stats.projectedYearEnd != null &&
                   stats.projectedYearEnd.projectedFullYear > 0 && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">
-                        {formatCurrency(
-                          stats.projectedYearEnd.projectedFullYear,
-                        )}
-                      </span>{" "}
-                      projected year-end at current pace
+                    <p className="mt-1 inline-flex items-start gap-1 text-xs text-muted-foreground">
+                      <span>
+                        <span className="font-medium text-foreground">
+                          {formatCurrency(
+                            stats.projectedYearEnd.projectedFullYear,
+                          )}
+                        </span>{" "}
+                        projected at period end if current pace holds
+                      </span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex cursor-help items-center">
+                              <HelpCircle
+                                className="h-3 w-3 text-muted-foreground"
+                                aria-label="Projection details"
+                              />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[360px] p-3 text-xs">
+                            <p>
+                              <span className="font-semibold">
+                                Projection, not earned:
+                              </span>{" "}
+                              this is what the rebate would be <em>if</em>{" "}
+                              the trailing-12-month spend pace continues
+                              and <em>if</em> all end-of-period thresholds
+                              are met at period close. Rebates are only
+                              earned when a period closes (see &quot;YTD
+                              only&quot; above).
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </p>
                   )}
                 {contract.contractType === "tie_in" && (
