@@ -23,7 +23,7 @@ export default async function CaseCostingPage() {
   return (
     <div className="space-y-6">
       <CaseCostingExplainer />
-      <CaseCostingClient facilityId={facility.id} />
+      <CaseCostingClient facilityId={facility.id} facilityName={facility.name} />
     </div>
   )
 }
