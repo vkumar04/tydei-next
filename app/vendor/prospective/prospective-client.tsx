@@ -1,14 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { PageHeader } from "@/components/shared/page-header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart3, Gauge, Scale } from "lucide-react"
 
 import { ProposalBuilder } from "@/components/vendor/prospective/proposal-builder"
+import { ProspectiveHero } from "@/components/vendor/prospective/prospective-hero"
 import { useVendorProposals } from "@/hooks/use-prospective"
 
-import { TopMetrics } from "./sections/TopMetrics"
 import { OpportunitiesSection } from "./sections/OpportunitiesSection"
 import { ProposalCards } from "./sections/ProposalCards"
 import { DealScorerSection } from "./sections/DealScorerSection"
@@ -31,12 +30,7 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Prospective Analysis"
-        description="Analyze opportunities and propose new contracts to facilities"
-      />
-
-      <TopMetrics
+      <ProspectiveHero
         proposals={proposals ?? []}
         totalProposals={totalProposals}
         totalProjectedSpend={totalProjectedSpend}
