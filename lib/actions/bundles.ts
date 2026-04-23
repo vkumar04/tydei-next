@@ -162,6 +162,58 @@ export async function createBundle(input: CreateBundleInput) {
   }
 }
 
+const updateBundleSchema = z.object({
+  bundleId: z.string().min(1),
+  complianceMode: bundleModeSchema.optional(),
+  baseRate: z.number().min(0).max(100).nullable().optional(),
+  bonusRate: z.number().min(0).max(100).nullable().optional(),
+  acceleratorMultiplier: z.number().min(0).max(10).nullable().optional(),
+  facilityBonusRate: z.number().min(0).max(100).nullable().optional(),
+  effectiveStart: z.string().nullable().optional(),
+  effectiveEnd: z.string().nullable().optional(),
+})
+
+export type UpdateBundleInput = z.infer<typeof updateBundleSchema>
+
+/**
+ * Scalar-only bundle update. Member rewiring goes through
+ * delete+recreate (the oracle-locked compute path doesn't care how
+ * members got there, but the audit trail is cleaner this way).
+ */
+export async function updateBundle(input: UpdateBundleInput) {
+  try {
+    await requireFacility()
+    const data = updateBundleSchema.parse(input)
+    await prisma.tieInBundle.update({
+      where: { id: data.bundleId },
+      data: {
+        complianceMode: data.complianceMode,
+        baseRate: data.baseRate,
+        bonusRate: data.bonusRate,
+        acceleratorMultiplier: data.acceleratorMultiplier,
+        facilityBonusRate: data.facilityBonusRate,
+        effectiveStart:
+          data.effectiveStart === undefined
+            ? undefined
+            : data.effectiveStart
+              ? new Date(data.effectiveStart)
+              : null,
+        effectiveEnd:
+          data.effectiveEnd === undefined
+            ? undefined
+            : data.effectiveEnd
+              ? new Date(data.effectiveEnd)
+              : null,
+      },
+    })
+    revalidatePath("/dashboard/contracts/bundles")
+    revalidatePath(`/dashboard/contracts/bundles/${data.bundleId}`)
+  } catch (err) {
+    console.error("[updateBundle]", err, { bundleId: input.bundleId })
+    throw err
+  }
+}
+
 export async function deleteBundle(bundleId: string) {
   try {
     await requireFacility()

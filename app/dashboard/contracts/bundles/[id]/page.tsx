@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { BundleImpactAnalysisCard } from "@/components/contracts/bundle-impact-analysis-card"
+import { BundleDeleteButton } from "@/components/contracts/bundle-delete-button"
 
 function fmt(n: number): string {
   return n.toLocaleString("en-US", {
@@ -48,6 +49,11 @@ export default async function BundleDetailPage({
         <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
             <Link href="/dashboard/contracts/bundles">← Bundles</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href={`/dashboard/contracts/bundles/${bundle.id}/edit`}>
+              Edit
+            </Link>
           </Button>
           <BundleDeleteButton
             bundleId={bundle.id}
