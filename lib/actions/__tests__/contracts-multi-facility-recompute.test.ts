@@ -14,6 +14,8 @@ const {
   updateMock,
   deleteMock,
   findUniqueOrThrowMock,
+  findUniqueMock,
+  findFirstMock,
   contractFacilityDeleteManyMock,
   contractFacilityCreateManyMock,
   recomputeMock,
@@ -22,6 +24,8 @@ const {
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
   findUniqueOrThrowMock: vi.fn(),
+  findUniqueMock: vi.fn(),
+  findFirstMock: vi.fn().mockResolvedValue(null),
   contractFacilityDeleteManyMock: vi.fn(),
   contractFacilityCreateManyMock: vi.fn(),
   recomputeMock: vi.fn(),
@@ -34,6 +38,8 @@ vi.mock("@/lib/db", () => ({
       update: updateMock,
       delete: deleteMock,
       findUniqueOrThrow: findUniqueOrThrowMock,
+      findUnique: findUniqueMock,
+      findFirst: findFirstMock,
     },
     contractFacility: {
       deleteMany: contractFacilityDeleteManyMock,
@@ -155,6 +161,10 @@ describe("updateContract — multi-facility recompute (W2.A.1 H-B)", () => {
       facilityId: "fac-A",
       contractFacilities: [{ facilityId: "fac-B" }, { facilityId: "fac-C" }],
     })
+    findUniqueMock.mockResolvedValue({
+      facilityId: "fac-A",
+      contractFacilities: [{ facilityId: "fac-B" }, { facilityId: "fac-C" }],
+    })
 
     await updateContract("c-1", {
       name: "Renamed",
@@ -178,6 +188,10 @@ describe("updateContract — multi-facility recompute (W2.A.1 H-B)", () => {
     updateMock.mockResolvedValue({
       id: "c-1",
       vendorId: "v-arthrex",
+      facilityId: "fac-A",
+      contractFacilities: [{ facilityId: "fac-A" }, { facilityId: "fac-B" }],
+    })
+    findUniqueMock.mockResolvedValue({
       facilityId: "fac-A",
       contractFacilities: [{ facilityId: "fac-A" }, { facilityId: "fac-B" }],
     })
