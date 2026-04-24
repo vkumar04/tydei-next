@@ -516,7 +516,7 @@ export function AmendmentExtractor({
                   detected
                 </p>
 
-                <div className="rounded-md border">
+                <div className="rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -554,16 +554,16 @@ export function AmendmentExtractor({
                             {change.label}
                           </TableCell>
                           <TableCell
-                            className={`text-sm ${change.type === "removed" ? "line-through text-muted-foreground" : ""}`}
+                            className={`text-sm whitespace-normal break-words align-top ${change.type === "removed" ? "line-through text-muted-foreground" : ""}`}
                           >
                             {change.oldValue || "\u2014"}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top">
                             {change.type !== "removed" && (
                               <ArrowRight className="size-3.5 text-muted-foreground" />
                             )}
                           </TableCell>
-                          <TableCell className="text-sm font-medium">
+                          <TableCell className="text-sm font-medium whitespace-normal break-words align-top">
                             {change.type === "removed"
                               ? "\u2014"
                               : change.newValue}

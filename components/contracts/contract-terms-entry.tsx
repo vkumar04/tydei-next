@@ -532,12 +532,14 @@ export function ContractTermsEntry({
                           </TooltipTrigger>
                           <TooltipContent className="max-w-[320px] p-3 text-xs">
                             <p>
-                              <span className="font-medium">Dollar 1:</span>{" "}
-                              rebate applies from the first dollar once the
-                              tier is met.{" "}
-                              <span className="font-medium">Growth:</span>{" "}
-                              rebate applies only to dollars above the
-                              baseline.
+                              <span className="font-medium">Retroactive (Dollar 1 / Cumulative):</span>{" "}
+                              once the highest tier is reached, that tier&apos;s
+                              rate applies to the entire spend from dollar one.
+                            </p>
+                            <p className="mt-2">
+                              <span className="font-medium">Tiered (Per-slice / Marginal):</span>{" "}
+                              each tier&apos;s rate applies only to dollars
+                              within that tier&apos;s band.
                             </p>
                           </TooltipContent>
                         </Tooltip>

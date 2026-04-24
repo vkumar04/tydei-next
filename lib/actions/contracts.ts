@@ -747,7 +747,25 @@ async function _createContractImpl(
     return replay
   }
 
-  const contract = await prisma.contract.create({
+  // Charles 2026-04-24 (Bug 10): wrap contract + terms + tiers +
+  // ContractTermProduct + additional facilities in a single interactive
+  // transaction so term #N failing mid-loop (e.g. a bad tier row) rolls
+  // back the whole contract instead of leaving a half-saved header with
+  // some-but-not-all terms. Pre-resolve scoped category IDs → names
+  // BEFORE opening the transaction so we don't hold it open on a
+  // read-only lookup. Post-write rebate-accrual + COG match recomputes
+  // stay outside the tx — they're idempotent best-effort and shouldn't
+  // block the write from committing.
+  const resolvedCategoryNamesByTerm = new Map<number, string[]>()
+  for (let i = 0; i < dataTerms.length; i++) {
+    const ids = dataTerms[i].scopedCategoryIds
+    if (ids && ids.length > 0) {
+      resolvedCategoryNamesByTerm.set(i, await resolveCategoryIdsToNames(ids))
+    }
+  }
+
+  const contract = await prisma.$transaction(async (tx) => {
+    const created = await tx.contract.create({
     data: {
       name: data.name,
       contractNumber: data.contractNumber,
@@ -809,7 +827,8 @@ async function _createContractImpl(
   // writing terms inside this same server action, the only failure mode
   // is "nothing saved, error surfaced to client" — never half-saved.
   if (dataTerms.length > 0) {
-    for (const formTerm of dataTerms) {
+    for (let termIdx = 0; termIdx < dataTerms.length; termIdx++) {
+      const formTerm = dataTerms[termIdx]
       const {
         tiers,
         scopedItemNumbers,
@@ -841,6 +860,7 @@ async function _createContractImpl(
       // when AI returns null expirationDate (evergreen), the form passes
       // "" through, and `new Date("")` is Invalid Date → Prisma rejects.
       const EVERGREEN = new Date(Date.UTC(9999, 11, 31))
+      const resolvedCategoryNames = resolvedCategoryNamesByTerm.get(termIdx)
       const termCreateData: Prisma.ContractTermCreateInput = {
         ...termData,
         effectiveStart: termData.effectiveStart
@@ -849,10 +869,9 @@ async function _createContractImpl(
         effectiveEnd: termData.effectiveEnd
           ? new Date(termData.effectiveEnd)
           : EVERGREEN,
-        contract: { connect: { id: contract.id } },
-        ...(scopedCategoryIds && scopedCategoryIds.length > 0 && {
-          // Resolve IDs → names; see resolve-category-names.ts rationale.
-          categories: await resolveCategoryIdsToNames(scopedCategoryIds),
+        contract: { connect: { id: created.id } },
+        ...(resolvedCategoryNames && resolvedCategoryNames.length > 0 && {
+          categories: resolvedCategoryNames,
         }),
         ...(tiers.length > 0 && {
           tiers: {
@@ -870,12 +889,12 @@ async function _createContractImpl(
           },
         }),
       }
-      const createdTerm = await prisma.contractTerm.create({
+      const createdTerm = await tx.contractTerm.create({
         data: termCreateData,
       })
 
       if (scopedItemNumbers && scopedItemNumbers.length > 0) {
-        await prisma.contractTermProduct.createMany({
+        await tx.contractTermProduct.createMany({
           data: scopedItemNumbers.map((vendorItemNo) => ({
             termId: createdTerm.id,
             vendorItemNo,
@@ -884,10 +903,29 @@ async function _createContractImpl(
         })
       }
     }
+  }
 
-    // Keep auto-accrual rebate rows in sync — mirrors what
-    // createContractTerm does per-term, but we only need one pass after
-    // the full set is in place.
+  // Persist additional facilities selected via the multi-facility picker.
+  // Uses the ContractFacility join table with skipDuplicates so repeat
+  // saves (or overlap with data.facilityIds above) don't violate the
+  // (contractId, facilityId) unique index.
+  if (data.additionalFacilityIds?.length) {
+    await tx.contractFacility.createMany({
+      data: data.additionalFacilityIds.map((fid) => ({
+        contractId: created.id,
+        facilityId: fid,
+      })),
+      skipDuplicates: true,
+    })
+  }
+
+    return created
+  })
+
+  // Keep auto-accrual rebate rows in sync — idempotent best-effort after
+  // the transaction commits, so a recompute failure doesn't roll back
+  // the saved contract (the user can re-trigger via "Recompute").
+  if (dataTerms.length > 0) {
     try {
       await recomputeAccrualForContract(contract.id)
     } catch (err) {
@@ -896,20 +934,6 @@ async function _createContractImpl(
         err,
       )
     }
-  }
-
-  // Persist additional facilities selected via the multi-facility picker.
-  // Uses the ContractFacility join table with skipDuplicates so repeat
-  // saves (or overlap with data.facilityIds above) don't violate the
-  // (contractId, facilityId) unique index.
-  if (data.additionalFacilityIds?.length) {
-    await prisma.contractFacility.createMany({
-      data: data.additionalFacilityIds.map((fid) => ({
-        contractId: contract.id,
-        facilityId: fid,
-      })),
-      skipDuplicates: true,
-    })
   }
 
   await logAudit({

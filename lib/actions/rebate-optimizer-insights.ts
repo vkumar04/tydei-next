@@ -85,7 +85,14 @@ export async function getRebateOptimizerInsights(
   const engineResult = await getRebateOpportunitiesEngine()
 
   // ── 2. Last 90-day vendor spend from COG ───────────────────────────
-  const since = new Date(Date.now() - LAST_N_DAYS * 24 * 60 * 60 * 1000)
+  // Charles 2026-04-24 (Bug 2): floor `since` to a UTC day boundary so
+  // every call within the same UTC day sees an identical window. Without
+  // this the window slides by milliseconds per call, flipping the spend
+  // aggregate the moment any COG row crosses the boundary → hash miss →
+  // fresh non-deterministic Claude call, which reads to the user as
+  // "numbers keep changing."
+  const sinceMs = Date.now() - LAST_N_DAYS * 24 * 60 * 60 * 1000
+  const since = new Date(Math.floor(sinceMs / 86_400_000) * 86_400_000)
   const spendRows = await prisma.cOGRecord.groupBy({
     by: ["vendorId"],
     where: {
@@ -140,7 +147,14 @@ export async function getRebateOptimizerInsights(
     recentSpend,
   }
 
-  const inputHash = hashInput(input)
+  // Charles 2026-04-24 (Bug 2): hash a time-bucketed projection of the
+  // input so `daysRemaining` (decrements daily) doesn't flip the cache
+  // every midnight. We keep the true per-day value in the prompt sent to
+  // Claude (so the model reasons on current truth) but collapse it into
+  // weekly buckets for the cache key. Result: within a 7-day window, the
+  // same opportunity mix hashes identically → one Claude call, stable
+  // output.
+  const inputHash = hashInput(bucketForHash(input))
 
   if (!opts?.forceFresh) {
     const cached = await prisma.rebateInsightCache.findFirst({
@@ -175,6 +189,11 @@ Produce the JSON response exactly matching the schema. Include observations only
       system: SYSTEM_PROMPT,
       prompt: userMessage,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
+      // Charles 2026-04-24 (Bug 2): temperature 0 so regenerations that
+      // DO miss the cache still produce the same ranking/prose for the
+      // same input. Without it, two mounts within the 15-minute cache
+      // window could race to insert and return different rows.
+      temperature: 0,
       providerOptions: {
         anthropic: {
           // Prompt caching — tag the (large, static) system prompt so repeat
@@ -326,6 +345,20 @@ export async function clearRebateInsightFlag(id: string): Promise<void> {
 function hashInput(input: RebateInsightsInput): string {
   const canonical = canonicalJson(input)
   return createHash("sha256").update(canonical).digest("hex")
+}
+
+/**
+ * Collapse time-drifting fields (`daysRemaining`) into weekly buckets for
+ * cache-key stability. See Charles 2026-04-24 Bug 2 note at the call site.
+ */
+function bucketForHash(input: RebateInsightsInput): RebateInsightsInput {
+  return {
+    ...input,
+    opportunities: input.opportunities.map((o) => ({
+      ...o,
+      daysRemaining: o.daysRemaining == null ? null : Math.floor(o.daysRemaining / 7),
+    })),
+  }
 }
 
 function canonicalJson(value: unknown): string {

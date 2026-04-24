@@ -1,5 +1,6 @@
 "use client"
 
+import type { ContractType } from "@prisma/client"
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -75,6 +76,7 @@ import { toast } from "sonner"
 
 interface ContractTransactionsProps {
   contractId: string
+  contractType: ContractType
 }
 
 // Charles W1.P: the ledger now has a single source (the `Rebate` table).
@@ -92,6 +94,7 @@ interface PeriodRow {
   tierAchieved: number | null
   collectionDate?: string | null
   notes?: string | null
+  createdAt?: string | null
 }
 
 type TransactionType = "rebate" | "credit" | "payment"
@@ -430,12 +433,20 @@ function EditTransactionDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const [amount, setAmount] = useState("")
+  const [earnedAmount, setEarnedAmount] = useState("")
   const [date, setDate] = useState("")
   const [notes, setNotes] = useState("")
+
+  // Charles 2026-04-24 (Bug 13): let users correct manually-logged earned
+  // amounts. Engine-generated rows carry `[auto-accrual]` in notes and
+  // stay locked — no amount of UI convenience is worth letting a manual
+  // typo overwrite a recompute result the user will regenerate anyway.
+  const isManualRow = !row?.notes?.includes("[auto-accrual]")
 
   useEffect(() => {
     if (!row) return
     setAmount(String(row.rebateCollected ?? 0))
+    setEarnedAmount(String(row.rebateEarned ?? 0))
     setDate(row.collectionDate ? row.collectionDate.slice(0, 10) : "")
     setNotes(row.notes ?? "")
   }, [row])
@@ -447,11 +458,20 @@ function EditTransactionDialog({
       toast.error("Enter a valid amount")
       return
     }
+    let parsedEarned: number | undefined
+    if (isManualRow) {
+      parsedEarned = parseFloat(earnedAmount.replace(/[^0-9.]/g, ""))
+      if (isNaN(parsedEarned) || parsedEarned < 0) {
+        toast.error("Enter a valid earned amount")
+        return
+      }
+    }
     try {
       await updateContractTransaction({
         id: row.id,
         contractId,
         rebateCollected: parsedAmount,
+        ...(parsedEarned !== undefined && { rebateEarned: parsedEarned }),
         collectionDate: date || null,
         notes,
       })
@@ -480,11 +500,22 @@ function EditTransactionDialog({
         <DialogHeader>
           <DialogTitle>Edit Ledger Row</DialogTitle>
           <DialogDescription>
-            Update amount, collection date, or notes. Earned amount is
-            engine-owned and cannot be edited here.
+            {isManualRow
+              ? "Update earned amount, collected amount, collection date, or notes."
+              : "Update collected amount, collection date, or notes. Earned is engine-owned on auto-accrual rows — edit tiers and click Recompute to change it."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
+          {isManualRow && (
+            <div className="space-y-2">
+              <Label htmlFor="edit-earned">Earned Amount</Label>
+              <Input
+                id="edit-earned"
+                value={earnedAmount}
+                onChange={(e) => setEarnedAmount(e.target.value)}
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="edit-amount">Collected Amount</Label>
             <Input
@@ -524,15 +555,25 @@ function EditTransactionDialog({
 
 function AddTransactionButtons({
   contractId,
+  contractType,
   queryClient,
   earnedRows,
 }: {
   contractId: string
+  contractType: ContractType
   queryClient: ReturnType<typeof useQueryClient>
   // Charles W1.W-C1: used by the Log-Collected-Rebate dialog's period
   // dropdown so the user can pick the earned row to stamp collected.
   earnedRows: PeriodRow[]
 }) {
+  // Charles 2026-04-24: credits/payments apply only to contract types that
+  // carry a payable balance to the vendor — capital (amortizing), service
+  // (recurring invoice), tie-in (capital + usage). Usage, grouped, and
+  // pricing_only contracts have no invoice stream to credit/pay against.
+  const supportsCreditPayment =
+    contractType === "capital" ||
+    contractType === "service" ||
+    contractType === "tie_in"
   const [mode, setMode] = useState<DialogMode | null>(null)
 
   // Charles W1.K: recompute auto-accrual Rebate rows on demand. The
@@ -597,15 +638,17 @@ function AddTransactionButtons({
             <CreditCard className="h-4 w-4" />
             Log Collected Rebate
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-2"
-            onClick={() => setMode({ kind: "credit-or-payment" })}
-          >
-            <DollarSign className="h-4 w-4" />
-            Log Credit / Payment
-          </Button>
+          {supportsCreditPayment && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={() => setMode({ kind: "credit-or-payment" })}
+            >
+              <DollarSign className="h-4 w-4" />
+              Log Credit / Payment
+            </Button>
+          )}
         </div>
       </div>
       {mode !== null && (
@@ -684,6 +727,17 @@ function TransactionTable({
                       collected {formatDate(row.collectionDate)}
                     </div>
                   )}
+                  {/*
+                   * Charles 2026-04-24 (Bug 13): audit sub-line showing
+                   * when the row itself was logged. Distinct from the
+                   * collection date (which is the business date a payment
+                   * was received).
+                   */}
+                  {row.createdAt && (
+                    <div className="text-xs font-normal text-muted-foreground">
+                      logged {formatDate(row.createdAt)}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className="gap-1">
@@ -755,7 +809,7 @@ function TransactionTable({
   )
 }
 
-export function ContractTransactions({ contractId }: ContractTransactionsProps) {
+export function ContractTransactions({ contractId, contractType }: ContractTransactionsProps) {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<"all" | TransactionType>("all")
   // Charles W1.X-A: selected row for the Edit dialog. `null` = closed.
@@ -927,6 +981,7 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
           </CardTitle>
           <AddTransactionButtons
             contractId={contractId}
+            contractType={contractType}
             queryClient={queryClient}
             earnedRows={earnedRows}
           />
@@ -1049,6 +1104,7 @@ export function ContractTransactions({ contractId }: ContractTransactionsProps) 
           </div>
           <AddTransactionButtons
             contractId={contractId}
+            contractType={contractType}
             queryClient={queryClient}
             earnedRows={earnedRows}
           />

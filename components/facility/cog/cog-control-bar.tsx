@@ -17,6 +17,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 /**
@@ -135,28 +141,58 @@ export function CogControlBar({
           <FileStack className="mr-2 h-4 w-4" />
           Mass Upload
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={matchPending}
-          onClick={onMatchPricing}
-        >
-          <RefreshCw
-            className={cn("mr-2 h-4 w-4", matchPending && "animate-spin")}
-          />
-          {matchPending ? "Matching..." : "Match Pricing"}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={rerunPending}
-          onClick={onRerunMatch}
-        >
-          <RefreshCw
-            className={cn("mr-2 h-4 w-4", rerunPending && "animate-spin")}
-          />
-          Re-run match
-        </Button>
+        {/*
+         * Charles 2026-04-24 (Bug 8): "Match" and "Re-run" do different
+         * things and were confusing users. Match Pricing resolves vendor
+         * NAMES → vendor IDs via the fuzzy resolver FIRST (picks up COG
+         * rows where `vendorName = "Stryker Corp"` with no vendorId yet),
+         * then recomputes matchStatus. Re-run only recomputes for rows
+         * that already have a vendorId on a contracted vendor. Tooltips
+         * now spell out the difference so the two buttons aren't
+         * read as duplicates.
+         */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={matchPending}
+                onClick={onMatchPricing}
+              >
+                <RefreshCw
+                  className={cn("mr-2 h-4 w-4", matchPending && "animate-spin")}
+                />
+                {matchPending ? "Matching..." : "Match Pricing"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[300px] text-xs">
+              Resolves vendor names → vendor IDs on unmatched rows, THEN
+              recomputes on-contract status. Use this first when new COG
+              rows come in.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={rerunPending}
+                onClick={onRerunMatch}
+              >
+                <RefreshCw
+                  className={cn("mr-2 h-4 w-4", rerunPending && "animate-spin")}
+                />
+                Re-run match
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[300px] text-xs">
+              Recomputes on-contract / price-variance status for rows that
+              already have a vendor ID. Faster than Match Pricing; use
+              after you change contract terms or add a new contract.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <Button variant="outline" size="sm" onClick={onImport}>
           <Upload className="mr-2 h-4 w-4" />
           Import

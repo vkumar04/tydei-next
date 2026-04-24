@@ -18,6 +18,10 @@ export interface LedgerRow {
   tierAchieved: number | null
   collectionDate: string | null
   notes: string | null
+  // Charles 2026-04-24 (Bug 13): creation timestamp for audit provenance.
+  // Shown as a sub-line so users can see when a row was logged, especially
+  // useful to distinguish manual entries from auto-accrual rows.
+  createdAt: string | null
 }
 
 /**
@@ -38,6 +42,7 @@ export function mapRebateRowsToLedger(
     tierAchieved: null,
     collectionDate: (r.collectionDate as string | null) ?? null,
     notes: (r.notes as string | null) ?? null,
+    createdAt: (r.createdAt as string | null) ?? null,
   }))
   return rows.sort(
     (a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime(),

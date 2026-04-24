@@ -307,12 +307,19 @@ export async function createContractTransaction(input: {
         collectionDate: true,
         notes: true,
       } as const
+      // Charles 2026-04-24: only match against rows whose window contains
+      // the collection date. The prior "oldest-unpaid" fallback caused a
+      // March 31 2026 collection to silently bind to a 2024 row when the
+      // current quarter's accrual hadn't been materialized yet. If no
+      // windowed row exists, fall through to the orphan-row creation
+      // path below (which is clearly labeled `[out-of-band]`) rather
+      // than attaching the collection to an unrelated period.
       const target = input.rebateId
         ? await prisma.rebate.findFirst({
             where: { id: input.rebateId, contractId: input.contractId },
             select: rebateSelect,
           })
-        : (await prisma.rebate.findFirst({
+        : await prisma.rebate.findFirst({
             where: {
               contractId: input.contractId,
               collectionDate: null,
@@ -322,16 +329,7 @@ export async function createContractTransaction(input: {
             },
             orderBy: { payPeriodEnd: "asc" },
             select: rebateSelect,
-          })) ??
-          (await prisma.rebate.findFirst({
-            where: {
-              contractId: input.contractId,
-              collectionDate: null,
-              rebateEarned: { gt: 0 },
-            },
-            orderBy: { payPeriodEnd: "asc" },
-            select: rebateSelect,
-          }))
+          })
 
       if (target) {
         const priorCollected = Number(target.rebateCollected ?? 0)
@@ -395,17 +393,29 @@ export async function createContractTransaction(input: {
     return serialize({ kind: "rebate" as const, row: rebate })
   }
 
+  // Charles 2026-04-24 (Bug 14): payments/credits are vendor-invoice
+  // activity and must not be written to `totalSpend`. `totalSpend` is the
+  // canonical source for Current Spend (see lib/actions/contracts.ts
+  // getContracts — `_sum: { totalSpend: true }` over ContractPeriod),
+  // so bleeding a payment amount into it would overwrite the spend card
+  // with the payment value. Both payment and credit mirror the same amount
+  // onto paymentExpected and paymentActual so the per-type report's
+  // variance column (expected − actual) nets to zero per logged row —
+  // matching the seed invoice pattern in prisma/seeds/contract-periods.ts.
+  // If we ever need a distinct expected-vs-actual signal for payments,
+  // split these into a dedicated payments ledger rather than reusing
+  // ContractPeriod rollup fields.
   const period = await prisma.contractPeriod.create({
     data: {
       contractId: input.contractId,
       facilityId: facility.id,
       periodStart: txnDate,
       periodEnd: txnDate,
-      totalSpend: input.type === "payment" ? input.amount : 0,
+      totalSpend: 0,
       rebateEarned: 0,
       rebateCollected: 0,
-      paymentExpected: input.type === "credit" ? input.amount : 0,
-      paymentActual: input.type === "credit" ? input.amount : 0,
+      paymentExpected: input.amount,
+      paymentActual: input.amount,
     },
   })
 
@@ -466,13 +476,19 @@ export async function getContractRebates(contractId: string) {
 // wrong date — short of hand-editing the DB. `updateContractTransaction`
 // is scoped via the same `requireFacility` + `contractOwnershipWhere`
 // guard as `createContractTransaction`, and only mutates the whitelisted
-// collection fields. `rebateEarned` is engine-owned (CLAUDE.md single-
-// source rule) and is deliberately NOT in the update set. Passing
-// `collectionDate: null` is the explicit "uncollect" path — it clears
-// the stamp while leaving the earned accrual intact.
+// collection fields.
+//
+// Charles 2026-04-24 (Bug 13): `rebateEarned` is editable on MANUALLY
+// entered rows (notes does NOT contain `[auto-accrual]`), so a typo in
+// a hand-logged earned amount can be corrected without a DB edit.
+// Engine-generated rows remain locked — the CLAUDE.md "rebates are
+// never auto-computed for display" rule applies only to the engine's
+// output; rows the user typed themselves are theirs to fix. Passing
+// `collectionDate: null` is the explicit "uncollect" path.
 interface UpdateContractTransactionInput {
   id: string
   contractId: string
+  rebateEarned?: number
   rebateCollected?: number
   collectionDate?: string | null // explicit null = uncollect
   quantity?: number | null
@@ -491,7 +507,7 @@ export async function updateContractTransaction(
   // The Rebate row must also belong to that contract.
   const rebate = await prisma.rebate.findUniqueOrThrow({
     where: { id: input.id },
-    select: { contractId: true },
+    select: { contractId: true, notes: true },
   })
   if (rebate.contractId !== input.contractId) {
     throw new Error("Rebate does not belong to the requested contract")
@@ -500,6 +516,20 @@ export async function updateContractTransaction(
   const data: Prisma.RebateUpdateInput = {}
   if (input.rebateCollected !== undefined) {
     data.rebateCollected = input.rebateCollected
+  }
+  if (input.rebateEarned !== undefined) {
+    // Engine-lock: auto-accrual rows carry the `[auto-accrual]` marker in
+    // notes and must not have their earned amount mutated by hand — the
+    // next recompute would just overwrite it anyway.
+    if (rebate.notes?.includes("[auto-accrual]")) {
+      throw new Error(
+        "Earned amount on auto-accrual rows is engine-owned. Edit the term's tiers or click Recompute instead.",
+      )
+    }
+    if (input.rebateEarned < 0) {
+      throw new Error("Earned amount cannot be negative")
+    }
+    data.rebateEarned = input.rebateEarned
   }
   if (input.collectionDate !== undefined) {
     data.collectionDate =

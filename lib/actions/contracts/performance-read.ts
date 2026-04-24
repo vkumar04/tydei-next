@@ -23,11 +23,23 @@ import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
  * no tiers) so the UI can cleanly skip each tile.
  */
 export async function getContractPerformance(contractId: string): Promise<{
-  utilization: RebateUtilizationResult | null
+  utilization:
+    | (RebateUtilizationResult & {
+        rebateMethod: "cumulative" | "marginal"
+        tierCount: number
+      })
+    | null
   renewalRisk: RenewalRiskResult | null
 }> {
   try {
     const { facility } = await requireFacility()
+    // Charles 2026-04-24 (Bug A "max at top tier / missed $0" looks wrong):
+    // previously this pulled `take:1` by `createdAt asc` — on multi-term
+    // contracts that routinely picked the wrong term (e.g. a single-tier
+    // carve-out instead of the real tiered rebate term), which made
+    // every contract read as 100% utilized. Load all terms and pick the
+    // term whose effective window contains today, preferring terms with
+    // >1 tier so single-tier baselines don't dominate.
     const contract = await prisma.contract.findFirst({
       where: {
         id: contractId,
@@ -40,11 +52,20 @@ export async function getContractPerformance(contractId: string): Promise<{
         terms: {
           include: { tiers: { orderBy: { tierNumber: "asc" } } },
           orderBy: { createdAt: "asc" },
-          take: 1,
         },
       },
     })
     if (!contract) return { utilization: null, renewalRisk: null }
+    const today = new Date()
+    const effectiveTerm =
+      contract.terms.find(
+        (t) =>
+          t.tiers.length > 1 &&
+          (!t.effectiveStart || t.effectiveStart <= today) &&
+          (!t.effectiveEnd || t.effectiveEnd >= today),
+      ) ??
+      contract.terms.find((t) => t.tiers.length > 1) ??
+      contract.terms[0]
 
     // Spend for utilization = sum of COG extendedPrice scoped to this
     // contract's vendor within its effective window. Simple, consistent
@@ -63,7 +84,7 @@ export async function getContractPerformance(contractId: string): Promise<{
     })
     const actualSpend = Number(spendAgg._sum.extendedPrice ?? 0)
 
-    const firstTerm = contract.terms[0]
+    const firstTerm = effectiveTerm
     const tiers: TierLike[] = (firstTerm?.tiers ?? []).map((t) => ({
       tierNumber: t.tierNumber,
       tierName: t.tierName ?? null,
@@ -84,10 +105,17 @@ export async function getContractPerformance(contractId: string): Promise<{
     const firstTermMethod = (firstTerm?.rebateMethod ?? "cumulative") as
       | "cumulative"
       | "marginal"
-    const utilization =
+    const utilizationBase =
       tiers.length > 0 && actualSpend > 0
         ? calculateRebateUtilization(actualSpend, tiers, firstTermMethod)
         : null
+    const utilization = utilizationBase
+      ? {
+          ...utilizationBase,
+          rebateMethod: firstTermMethod,
+          tierCount: tiers.length,
+        }
+      : null
 
     // Renewal risk uses days-to-expiration + compliance + utilization.
     // Compliance we approximate as 100 when the contract has an active

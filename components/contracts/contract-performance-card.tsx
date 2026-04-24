@@ -98,6 +98,35 @@ export function ContractPerformanceCard({
                 </span>
               </p>
             )}
+            {/*
+             * Charles 2026-04-24: without this footnote "Missed $0" on a
+             * cumulative/retroactive contract reads like a bug — the card
+             * gives no hint that under retroactive math, crossing the top
+             * tier by definition earns the top rate on all spend. Showing
+             * the active method + tier count makes the math legible.
+             */}
+            <p className="text-xs text-muted-foreground">
+              Method:{" "}
+              <span className="font-medium text-foreground">
+                {util.rebateMethod === "marginal"
+                  ? "Tiered (per-slice)"
+                  : "Retroactive (dollar-one)"}
+              </span>{" "}
+              · {util.tierCount} tier{util.tierCount === 1 ? "" : "s"}
+              {util.rebateMethod === "cumulative" && util.missedRebate === 0 && util.tierCount > 1 && (
+                <>
+                  {" "}
+                  · Missed $0 is by design under retroactive math once the
+                  top tier is crossed.
+                </>
+              )}
+              {util.tierCount === 1 && (
+                <>
+                  {" "}
+                  · Single-tier contract: actual always equals max.
+                </>
+              )}
+            </p>
           </div>
         )}
         {risk && (

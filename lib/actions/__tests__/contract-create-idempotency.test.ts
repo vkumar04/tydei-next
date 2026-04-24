@@ -20,8 +20,8 @@ const {
   recomputeScoreMock: vi.fn(),
 }))
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
+vi.mock("@/lib/db", () => {
+  const prisma: Record<string, unknown> = {
     contract: {
       create: createMock,
       // Charles W1.Y-B — soft-dedupe lookup. Default no-match so the
@@ -38,8 +38,13 @@ vi.mock("@/lib/db", () => ({
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
-  },
-}))
+  }
+  prisma.$transaction = async (fn: unknown) =>
+    typeof fn === "function"
+      ? (fn as (tx: typeof prisma) => Promise<unknown>)(prisma)
+      : Promise.all(fn as unknown[])
+  return { prisma }
+})
 vi.mock("@/lib/actions/auth", () => ({
   requireFacility: vi.fn().mockResolvedValue({
     facility: { id: "fac-1" },

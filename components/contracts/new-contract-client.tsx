@@ -609,31 +609,54 @@ export function NewContractClient({
       terms,
     })
 
-    // Import pricing file if provided
-    if (pricingItems.length > 0) {
-      await importContractPricing({ contractId: contract.id, items: pricingItems })
-    }
-
-    // Save uploaded contract PDF as a document
-    if (contractS3Key) {
-      await createContractDocument({
-        contractId: contract.id,
-        name: contractFileName ?? "Contract PDF",
-        type: "main",
-        url: contractS3Key,
-      })
-    }
-
-    // Save additional documents
-    for (const doc of additionalDocs) {
-      await createContractDocument({
-        contractId: contract.id,
-        name: doc.name,
-        type: doc.type,
-      })
-    }
+    // Charles 2026-04-24 (Bug 5): these post-create side effects previously
+    // threw into the outer async handler with no catch, producing an
+    // unhandled rejection / generic red toast that made users think the
+    // contract itself failed. The contract IS saved at this point — surface
+    // the real failure reason without hiding the successful create, and
+    // always navigate so the user lands on their new contract.
+    await runPostCreateSideEffects(contract.id)
 
     router.push(`/dashboard/contracts/${contract.id}`)
+  }
+
+  async function runPostCreateSideEffects(contractId: string) {
+    if (pricingItems.length > 0) {
+      try {
+        await importContractPricing({ contractId, items: pricingItems })
+      } catch (err) {
+        console.error("[new-contract] importContractPricing failed", err, { contractId })
+        const msg = err instanceof Error ? err.message : String(err)
+        toast.error(`Contract saved, but pricing import failed: ${msg}`)
+      }
+    }
+    if (contractS3Key) {
+      try {
+        await createContractDocument({
+          contractId,
+          name: contractFileName ?? "Contract PDF",
+          type: "main",
+          url: contractS3Key,
+        })
+      } catch (err) {
+        console.error("[new-contract] createContractDocument (main) failed", err, { contractId })
+        const msg = err instanceof Error ? err.message : String(err)
+        toast.error(`Contract saved, but PDF attachment failed: ${msg}`)
+      }
+    }
+    for (const doc of additionalDocs) {
+      try {
+        await createContractDocument({
+          contractId,
+          name: doc.name,
+          type: doc.type,
+        })
+      } catch (err) {
+        console.error("[new-contract] createContractDocument (additional) failed", err, { contractId, docName: doc.name })
+        const msg = err instanceof Error ? err.message : String(err)
+        toast.error(`Contract saved, but attachment "${doc.name}" failed: ${msg}`)
+      }
+    }
   }
 
   async function handleSaveAsDraft() {
@@ -663,29 +686,7 @@ export function NewContractClient({
       terms,
     })
 
-    // Import pricing file if provided
-    if (pricingItems.length > 0) {
-      await importContractPricing({ contractId: contract.id, items: pricingItems })
-    }
-
-    // Save uploaded contract PDF as a document
-    if (contractS3Key) {
-      await createContractDocument({
-        contractId: contract.id,
-        name: contractFileName ?? "Contract PDF",
-        type: "main",
-        url: contractS3Key,
-      })
-    }
-
-    // Save additional documents
-    for (const doc of additionalDocs) {
-      await createContractDocument({
-        contractId: contract.id,
-        name: doc.name,
-        type: doc.type,
-      })
-    }
+    await runPostCreateSideEffects(contract.id)
 
     router.push(`/dashboard/contracts/${contract.id}`)
   }

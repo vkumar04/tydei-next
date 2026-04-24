@@ -329,58 +329,6 @@ export function ContractDetailClient({
         </div>
 
         <div className="flex items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    router.push(`/dashboard/contracts/${contractId}/score`)
-                  }
-                >
-                  <Sparkles className="mr-2 size-4" /> AI Score
-                  <HelpCircle
-                    className="ml-1.5 h-3.5 w-3.5 text-muted-foreground"
-                    aria-label="AI Score help"
-                  />
-                </Button>
-              </TooltipTrigger>
-              {/*
-               * Charles W1.W-C3: the letter score showed up on the
-               * contract page without enough context. The tooltip now
-               * explains what the grade represents, what each letter
-               * means, and points the user at the breakdown page.
-               */}
-              <TooltipContent className="max-w-[340px] p-3 text-xs">
-                <p className="font-medium">Tydei AI Score</p>
-                <p className="mt-1">
-                  AI confidence + performance score based on extraction
-                  quality and six contract dimensions: financial value,
-                  rebate efficiency, pricing competitiveness, market-share
-                  alignment, compliance likelihood, and structural risk.
-                </p>
-                <ul className="mt-2 space-y-0.5">
-                  <li>
-                    <span className="font-medium">A</span> — all fields
-                    extracted cleanly; strong performance across the board.
-                  </li>
-                  <li>
-                    <span className="font-medium">B</span> — solid contract;
-                    one or two dimensions worth reviewing.
-                  </li>
-                  <li>
-                    <span className="font-medium">C</span> — mixed; several
-                    dimensions below benchmark.
-                  </li>
-                  <li>
-                    <span className="font-medium">D / F</span> — manual review
-                    recommended; extraction gaps or weak terms.
-                  </li>
-                </ul>
-                <p className="mt-2">Click to open the full breakdown.</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
           <Button
             variant="outline"
             onClick={() =>
@@ -467,11 +415,19 @@ export function ContractDetailClient({
                         </span>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-[320px] p-3 text-xs">
+                        {/*
+                         * Charles 2026-04-24 (Bug 6): the prior copy called
+                         * this "committed spend" which over-claims — for
+                         * many contracts (rebate-only, grouped, pricing-only)
+                         * there's no hard dollar commitment, just an expected
+                         * figure from the agreement. Neutralize the wording.
+                         */}
                         <p>
-                          Contract Value is the total committed spend for this
-                          contract during its term — the value written on the
-                          agreement, not the spend to date. Current Spend
-                          tracks actuals against this commitment.
+                          Contract Value is the total dollar figure captured
+                          from the agreement — typically the expected or
+                          committed spend over the full term. It does not
+                          update as spend accrues; Current Spend below shows
+                          actual purchase activity against this reference.
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -1196,7 +1152,7 @@ export function ContractDetailClient({
 
         {/* ── Transactions Tab ─────────────────────────────────── */}
         <TabsContent value="transactions" className="mt-6">
-          <ContractTransactions contractId={contractId} />
+          <ContractTransactions contractId={contractId} contractType={contract.contractType} />
         </TabsContent>
 
         {/* ── Performance Tab ──────────────────────────────────── */}
