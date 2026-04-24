@@ -32,7 +32,7 @@ import {
   sumEarnedRebatesLifetime,
   sumEarnedRebatesYTD,
 } from "@/lib/contracts/rebate-earned-filter"
-import { buildUnionCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
+import { buildUnionCategoryWhereClause, buildCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -564,12 +564,48 @@ export async function getContract(
   const currentSpend =
     periodSpend > 0 ? periodSpend : cogSpend > 0 ? cogSpend : cogVendorSpend
 
+  // Per-term scoped spend — for the Terms & Tiers display. Terms whose
+  // `appliesTo === "specific_category"` should show tier progress based
+  // on the spend that falls inside their category scope, not the
+  // contract-wide aggregate. Terms with `appliesTo === "all_products"`
+  // fall back to the contract-wide currentSpend. User-reported bug
+  // 2026-04-23: the Distal Extremities Rebate term showed identical
+  // projections to the Qualified Annual Spend Rebate term because both
+  // were multiplying contract-wide spend by their tier rate.
+  const termScopedSpend: Record<string, number> = {}
+  for (const t of contract.terms ?? []) {
+    const catWhere = buildCategoryWhereClause({
+      appliesTo: t.appliesTo,
+      categories: t.categories,
+    })
+    // Short-circuit: all_products (empty where) → reuse currentSpend.
+    if (Object.keys(catWhere).length === 0) {
+      termScopedSpend[t.id] = currentSpend
+      continue
+    }
+    const termAgg = await prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
+        OR: [
+          { contractId: contract.id },
+          { contractId: null, vendorId: contract.vendorId },
+        ],
+        matchStatus: { in: ["on_contract", "price_variance"] },
+        transactionDate: { gte: windowStart, lte: windowEnd },
+        ...catWhere,
+      },
+      _sum: { extendedPrice: true },
+    })
+    termScopedSpend[t.id] = Number(termAgg._sum.extendedPrice ?? 0)
+  }
+
   return serialize({
     ...contract,
     rebateEarned,
     rebateEarnedYTD,
     rebateCollected,
     currentSpend,
+    termScopedSpend,
   })
 }
 

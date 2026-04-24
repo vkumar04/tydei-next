@@ -26,6 +26,12 @@ type ContractTermWithTiers = ContractTerm & { tiers: ContractTier[] }
 interface ContractTermsDisplayProps {
   terms: ContractTermWithTiers[]
   currentSpend?: number
+  /** Per-term scoped spend keyed by term.id. For `appliesTo = all_products`
+   *  terms this matches `currentSpend`; for scoped terms it's the
+   *  category-filtered slice computed server-side in getContract. Without
+   *  it, both types of terms render identical tier projections (user bug
+   *  2026-04-23). */
+  termScopedSpend?: Record<string, number>
 }
 
 function TierProgressCard({
@@ -250,7 +256,7 @@ function TierDisplay({
   )
 }
 
-export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDisplayProps) {
+export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: ContractTermsDisplayProps) {
   if (terms.length === 0) {
     return (
       <Card>
@@ -326,42 +332,62 @@ export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDispl
                       </span>
                     </div>
                   </div>
-                  {currentSpend !== undefined && term.tiers.length > 0 && (
-                    <TierProgressCard term={term} currentSpend={currentSpend} />
-                  )}
-                  {term.tiers.length > 0 && (() => {
-                    // Determine the highest tier whose spendMin is met, so
-                    // each tier row can render its dollar-amount annotation
-                    // (earning/unlock/would-earn) relative to current spend.
-                    const sorted = [...term.tiers].sort(
-                      (a, b) => Number(a.spendMin) - Number(b.spendMin),
-                    )
-                    let currentTierNumber: number | undefined
-                    if (currentSpend !== undefined) {
-                      let idx = 0
-                      for (let i = 0; i < sorted.length; i++) {
-                        if (currentSpend >= Number(sorted[i].spendMin)) idx = i
-                      }
-                      currentTierNumber = sorted[idx].tierNumber
+                  {(() => {
+                    // Pick the spend that actually applies to THIS term:
+                    // scoped spend when the term is category-scoped and
+                    // the server provided a value, otherwise the contract-
+                    // wide aggregate (correct for all_products terms).
+                    const effectiveSpend =
+                      termScopedSpend?.[term.id] !== undefined
+                        ? termScopedSpend[term.id]
+                        : currentSpend
+                    const usingScopedSpend =
+                      term.appliesTo !== "all_products" &&
+                      termScopedSpend?.[term.id] !== undefined
+                    if (effectiveSpend === undefined || term.tiers.length === 0) {
+                      return null
                     }
-                    const topTierNumber = sorted[sorted.length - 1].tierNumber
-                    const isTopTierReached =
-                      currentTierNumber !== undefined &&
-                      currentTierNumber === topTierNumber
                     return (
-                      <div className="space-y-2">
-                        {term.tiers.map((tier) => (
-                          <TierDisplay
-                            key={tier.id}
-                            tier={tier}
-                            currentSpend={currentSpend}
-                            currentTierNumber={currentTierNumber}
-                            isTopTier={isTopTierReached}
-                            rebateMethod={(term.rebateMethod ?? "cumulative") as "cumulative" | "marginal"}
-                            termIsScoped={term.appliesTo !== "all_products"}
-                          />
-                        ))}
-                      </div>
+                      <>
+                        <TierProgressCard term={term} currentSpend={effectiveSpend} />
+                        {usingScopedSpend && (
+                          <p className="text-[11px] italic text-muted-foreground">
+                            Scoped to this term's product categories — not the
+                            full contract spend.
+                          </p>
+                        )}
+                        {(() => {
+                          const sorted = [...term.tiers].sort(
+                            (a, b) => Number(a.spendMin) - Number(b.spendMin),
+                          )
+                          let currentTierNumber: number | undefined
+                          let idx = 0
+                          for (let i = 0; i < sorted.length; i++) {
+                            if (effectiveSpend >= Number(sorted[i].spendMin)) idx = i
+                          }
+                          currentTierNumber = sorted[idx].tierNumber
+                          const topTierNumber = sorted[sorted.length - 1].tierNumber
+                          const isTopTierReached =
+                            currentTierNumber === topTierNumber
+                          return (
+                            <div className="space-y-2">
+                              {term.tiers.map((tier) => (
+                                <TierDisplay
+                                  key={tier.id}
+                                  tier={tier}
+                                  currentSpend={effectiveSpend}
+                                  currentTierNumber={currentTierNumber}
+                                  isTopTier={isTopTierReached}
+                                  rebateMethod={(term.rebateMethod ?? "cumulative") as "cumulative" | "marginal"}
+                                  // Now that the scoped spend is correct,
+                                  // the annotation can render honest numbers.
+                                  termIsScoped={false}
+                                />
+                              ))}
+                            </div>
+                          )
+                        })()}
+                      </>
                     )
                   })()}
                 </div>
