@@ -203,7 +203,14 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
       contractType: pending.contractType,
       status: "active",
       effectiveDate: pending.effectiveDate ?? new Date(),
-      expirationDate: pending.expirationDate ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      // Evergreen sentinel (see lib/actions/contracts.ts:728). Previously
+      // the fallback was now + 365d which silently created a contract
+      // that "expired" exactly one year after approval with no user
+      // action. For evergreen pending contracts, write the far-future
+      // sentinel so the matcher + formatDate treat it correctly
+      // ("Evergreen" in the UI, in-window for every future COG row).
+      expirationDate:
+        pending.expirationDate ?? new Date(Date.UTC(9999, 11, 31)),
       totalValue: pending.totalValue ?? 0,
       ...(pricingItems.length > 0 && {
         pricingItems: {

@@ -28,6 +28,7 @@ import { queryKeys } from "@/lib/query-keys"
 import { createVendor } from "@/lib/actions/vendors"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
 import { normalizeAIRebateValue, toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import { computeContractYears } from "@/lib/contracts/term-years"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
@@ -356,7 +357,7 @@ export function NewContractClient({
           const eff = form.getValues("effectiveDate")
           const exp = form.getValues("expirationDate")
           if (eff && exp) {
-            const years = Math.max(1, (new Date(exp).getTime() - new Date(eff).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            const years = computeContractYears(eff, exp)
             form.setValue("annualValue", Math.round((cogTotal / years) * 100) / 100)
           }
         }
@@ -404,12 +405,9 @@ export function NewContractClient({
     form.setValue("expirationDate", data.expirationDate ?? "")
     if (data.totalValue) {
       form.setValue("totalValue", data.totalValue)
-      // Auto-compute annual value. For evergreen contracts (no
-      // expirationDate) default to 1 year so annualValue == totalValue
-      // rather than dividing by NaN.
-      const effMs = data.effectiveDate ? new Date(data.effectiveDate).getTime() : NaN
-      const expMs = data.expirationDate ? new Date(data.expirationDate).getTime() : NaN
-      const years = (!isNaN(effMs) && !isNaN(expMs)) ? Math.max(1, (expMs - effMs) / (365.25 * 24 * 60 * 60 * 1000)) : 1
+      // Auto-compute annual value via calendar-month math so whole-year
+      // contracts produce clean integer divisions (not 0.999 or 2.902).
+      const years = computeContractYears(data.effectiveDate, data.expirationDate)
       form.setValue("annualValue", Math.round((data.totalValue / years) * 100) / 100)
     }
     if (data.description) form.setValue("description", data.description)

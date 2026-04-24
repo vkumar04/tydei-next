@@ -53,6 +53,7 @@ import {
 import { CalendarIcon } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { cn } from "@/lib/utils"
+import { computeContractYears } from "@/lib/contracts/term-years"
 
 interface VendorOption {
   id: string
@@ -325,16 +326,16 @@ export function ContractFormBasicInfo({
   const effectiveDate = parseDateString(effectiveDateStr)
   const expirationDate = parseDateString(expirationDateStr)
 
-  // Auto-compute annualValue when totalValue and dates are available
+  // Auto-compute annualValue when totalValue and dates are available.
+  // Uses calendar-month math (computeContractYears) so whole-year terms
+  // produce clean integers — a Jan 1 → Dec 31 contract is 1.0 years, not
+  // 0.999 that only avoided bad output via Math.max(1, …) flooring.
   useEffect(() => {
     const current = form.getValues("annualValue")
     if (current && current !== 0) return // don't overwrite manual entry
     if (!totalValue || totalValue === 0) return
     if (!effectiveDateStr || !expirationDateStr) return
-    const effMs = new Date(effectiveDateStr).getTime()
-    const expMs = new Date(expirationDateStr).getTime()
-    if (isNaN(effMs) || isNaN(expMs) || expMs <= effMs) return
-    const years = Math.max(1, (expMs - effMs) / (365.25 * 24 * 60 * 60 * 1000))
+    const years = computeContractYears(effectiveDateStr, expirationDateStr)
     setValue("annualValue", Math.round((totalValue / years) * 100) / 100)
   }, [totalValue, effectiveDateStr, expirationDateStr, form, setValue])
 

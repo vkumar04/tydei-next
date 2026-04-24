@@ -116,11 +116,20 @@ async function _createContractTermImpl(input: CreateTermInput) {
     termDataWithCategories.categories = scopedCategoryIds
   }
 
+  // Mirror the sentinel pattern in lib/actions/contracts.ts:806-814 so
+  // the standalone "Add Term" path to an existing evergreen contract
+  // doesn't blow up on `new Date("")` → Invalid Date → Prisma reject.
+  // createTermSchema.effectiveEnd was relaxed to z.string() in bdef6b2.
+  const EVERGREEN = new Date(Date.UTC(9999, 11, 31))
   const term = await prisma.contractTerm.create({
     data: {
       ...termDataWithCategories,
-      effectiveStart: new Date(termData.effectiveStart),
-      effectiveEnd: new Date(termData.effectiveEnd),
+      effectiveStart: termData.effectiveStart
+        ? new Date(termData.effectiveStart)
+        : new Date(Date.UTC(1970, 0, 1)),
+      effectiveEnd: termData.effectiveEnd
+        ? new Date(termData.effectiveEnd)
+        : EVERGREEN,
       ...(tiers.length > 0 && {
         tiers: {
           create: tiers.map((tier) => ({
@@ -211,11 +220,19 @@ async function _updateContractTermImpl(
   void _amortizationShape
 
   const updateData: Record<string, unknown> = { ...termData }
-  if (termData.effectiveStart) {
-    updateData.effectiveStart = new Date(termData.effectiveStart)
+  // Empty string = explicit user intent to mark evergreen (no fixed
+  // end). Distinct from `undefined` which means "field not in the
+  // payload, don't touch the column". Silent-skip on empty would drop
+  // the user's change without feedback.
+  if (termData.effectiveStart !== undefined) {
+    updateData.effectiveStart = termData.effectiveStart
+      ? new Date(termData.effectiveStart)
+      : new Date(Date.UTC(1970, 0, 1))
   }
-  if (termData.effectiveEnd) {
-    updateData.effectiveEnd = new Date(termData.effectiveEnd)
+  if (termData.effectiveEnd !== undefined) {
+    updateData.effectiveEnd = termData.effectiveEnd
+      ? new Date(termData.effectiveEnd)
+      : new Date(Date.UTC(9999, 11, 31))
   }
   if (scopedCategoryIds !== undefined) {
     updateData.categories = scopedCategoryIds
