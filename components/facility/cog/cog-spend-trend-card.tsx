@@ -21,7 +21,9 @@ import { getCogSpendTrend } from "@/lib/actions/cog/spend-trend"
  */
 export function CogSpendTrendCard({ facilityId }: { facilityId: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["cog-spend-trend", facilityId],
+    // Nested under "cog-records" so existing CRUD invalidations bust
+    // this cache too (same rationale as the concentration card).
+    queryKey: ["cog-records", "spend-trend", facilityId],
     queryFn: () => getCogSpendTrend(facilityId),
   })
 
@@ -38,6 +40,12 @@ export function CogSpendTrendCard({ facilityId }: { facilityId: string }) {
     )
   }
   if (!data || data.monthlySpend.length < 6) return null
+  // Defensive empty-state guard: if every month has zero spend, don't
+  // render a card — there's no trend to report and percentages would
+  // compute to NaN/Infinity on divide-by-zero. Also covers the case
+  // where a cached response survives a full data wipe.
+  const hasAnySpend = data.monthlySpend.some((m) => m > 0)
+  if (!hasAnySpend) return null
 
   const { trend, changePct, recentAvg, priorAvg } = data
   const Icon = trend === "up" ? ArrowUp : trend === "down" ? ArrowDown : Minus

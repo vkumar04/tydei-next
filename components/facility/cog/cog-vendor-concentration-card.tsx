@@ -24,7 +24,11 @@ export function CogVendorConcentrationCard({
   facilityId: string
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["cog-vendor-concentration", facilityId],
+    // Nested under "cog-records" so existing CRUD invalidations
+    // (hooks/use-cog.ts: deleteMany, importCOG, etc.) bust this cache
+    // too. Previously the card kept serving pre-delete numbers while
+    // the top stats panel correctly showed 0 rows.
+    queryKey: ["cog-records", "vendor-concentration", facilityId],
     queryFn: () => getVendorConcentration(facilityId),
   })
 
