@@ -26,9 +26,12 @@ skip brainstorming and ship directly. Use judgment — when in doubt, brainstorm
 - **Stack:** Next.js 16 App Router, React 19, Prisma 7, TypeScript strict, Vitest,
   TanStack Query, shadcn/ui, recharts, better-auth.
 - **DB:** `postgresql://tydei:tydei_dev_password@localhost:5432/tydei` (local).
-  Demo facility = "Lighthouse Community Hospital", `cmo6j6fx70004achlf8fr82h2`.
-  (Other Lighthouse facility: "Lighthouse Surgical Center" =
-  `cmo6j6fx40003achla96kuxs1` — easy to confuse; check facility name.)
+  **Primary demo facility is "Lighthouse Surgical Center"** — it's what
+  `scripts/qa-sanity.ts getDemoFacility()` targets and what the seed
+  loads most COG/contracts against. "Lighthouse Community Hospital" is
+  the secondary; easy to confuse — always match by `name`, never by
+  hard-coded cuid. IDs regenerate on every `bun run db:seed`, so any
+  literal `cmo6j6fx…`-style cuid you find in older notes is stale.
 - **No `any` in TypeScript.** Strict mode is on; use proper types.
 - **Server actions** live under `lib/actions/`. `"use server"` files can ONLY
   export async functions (interfaces/types are fine — they're erased).
