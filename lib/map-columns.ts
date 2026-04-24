@@ -20,6 +20,13 @@ const ALIASES: Record<string, string[]> = {
     "supplieritemnumber", "itemno", "itemnumber", "itemid", "sku",
     "partno", "partnumber", "productno", "productnumber", "catalogno",
     "catalognumber", "vendorpartno", "vendorpartnumber", "supplierpart",
+    // "Product Ref Number" (Arthrex / many healthcare COG formats) —
+    // previously these aliases lived only under `inventoryNumber`, so
+    // a CSV whose only SKU column was labeled "Product Ref Number"
+    // imported inventoryNumber correctly but left vendorItemNo null.
+    // The matcher joins pricing on vendorItemNo, so every such row
+    // became unmatchable. User-reported regression 2026-04-23.
+    "productrefnumber", "productref", "refnumber", "refno",
   ],
   productDescription: [
     "productdescription", "description", "desc", "itemdescription",

@@ -25,6 +25,11 @@ export function COGImportPreview({
   errors,
 }: COGImportPreviewProps) {
   const preview = records.slice(0, 10)
+  const missingVendorItemNo = records.filter(
+    (r) => !r.vendorItemNo || r.vendorItemNo.trim() === "",
+  ).length
+  const missingPct =
+    records.length > 0 ? (missingVendorItemNo / records.length) * 100 : 0
 
   return (
     <div className="space-y-3">
@@ -45,11 +50,27 @@ export function COGImportPreview({
         </Alert>
       )}
 
+      {missingPct >= 50 && records.length > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle className="size-4" />
+          <AlertDescription>
+            <strong>
+              {missingVendorItemNo} of {records.length} rows ({missingPct.toFixed(0)}%) have no Vendor Item #.
+            </strong>{" "}
+            These rows <strong>cannot match your contract pricing</strong> —
+            on-contract spend will report as $0. Check the column mapping for
+            your vendor-item / catalog / ref column; the import appears to have
+            missed it.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="rounded-md border max-h-64 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Inv #</TableHead>
+              <TableHead>Vendor Item #</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Vendor</TableHead>
               <TableHead className="text-right">Unit Cost</TableHead>
@@ -61,6 +82,9 @@ export function COGImportPreview({
               <TableRow key={i}>
                 <TableCell className="font-mono text-xs">
                   {r.inventoryNumber}
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {r.vendorItemNo ?? <span className="text-destructive">—</span>}
                 </TableCell>
                 <TableCell className="max-w-[200px] truncate">
                   {r.inventoryDescription}
