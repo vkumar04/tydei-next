@@ -33,6 +33,7 @@ import {
   sumEarnedRebatesYTD,
 } from "@/lib/contracts/rebate-earned-filter"
 import { buildUnionCategoryWhereClause, buildCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
+import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -850,7 +851,8 @@ async function _createContractImpl(
           : EVERGREEN,
         contract: { connect: { id: contract.id } },
         ...(scopedCategoryIds && scopedCategoryIds.length > 0 && {
-          categories: scopedCategoryIds,
+          // Resolve IDs → names; see resolve-category-names.ts rationale.
+          categories: await resolveCategoryIdsToNames(scopedCategoryIds),
         }),
         ...(tiers.length > 0 && {
           tiers: {

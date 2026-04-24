@@ -13,6 +13,7 @@ import {
 import { z } from "zod"
 import { serialize } from "@/lib/serialize"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
+import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 
 /**
  * Charles R5.36 P0 — invoke the accrual recompute without letting a
@@ -113,7 +114,11 @@ async function _createContractTermImpl(input: CreateTermInput) {
     categories?: string[]
   } = { ...termData }
   if (scopedCategoryIds && scopedCategoryIds.length > 0) {
-    termDataWithCategories.categories = scopedCategoryIds
+    // UI picks category IDs; downstream readers (buildCategoryWhereClause,
+    // match engine, accrual) compare against COGRecord.category which
+    // stores NAMES. Resolve IDs → names once at the write boundary so
+    // every read path can treat term.categories as the canonical form.
+    termDataWithCategories.categories = await resolveCategoryIdsToNames(scopedCategoryIds)
   }
 
   // Mirror the sentinel pattern in lib/actions/contracts.ts:806-814 so
@@ -235,7 +240,8 @@ async function _updateContractTermImpl(
       : new Date(Date.UTC(9999, 11, 31))
   }
   if (scopedCategoryIds !== undefined) {
-    updateData.categories = scopedCategoryIds
+    // Same ID → name resolution as the create path; see createContractTerm.
+    updateData.categories = await resolveCategoryIdsToNames(scopedCategoryIds)
   }
 
   const term = await prisma.contractTerm.update({

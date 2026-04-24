@@ -34,6 +34,13 @@ vi.mock("@/lib/db", () => ({
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    // Needed for resolveCategoryIdsToNames — without this the
+    // id→name resolver throws on `findMany of undefined`. Tests
+    // that verify the written categories column must pre-seed the
+    // mock return value (see "writes scopedCategoryIds" test).
+    productCategory: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   },
 }))
 vi.mock("@/lib/actions/auth", () => ({

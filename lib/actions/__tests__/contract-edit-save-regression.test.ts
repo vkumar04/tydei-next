@@ -97,6 +97,11 @@ vi.mock("@/lib/db", () => ({
       deleteMany: termProductDeleteManyMock,
       createMany: termProductCreateManyMock,
     },
+    productCategory: {
+      // resolveCategoryIdsToNames calls findMany. Empty mock is fine —
+      // the resolver falls through to pass-through when nothing matches.
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   },
 }))
 vi.mock("@/lib/actions/auth", () => ({
