@@ -292,35 +292,46 @@ export async function createContractTransaction(input: {
     // no earned row is available do we fall back to the R5.34 pure-
     // collection row (`rebateEarned=0`).
     if (kind === "collected") {
+      // Auto-match priority (when caller didn't pick a specific period):
+      //   1. Period whose window contains the collection date — this is
+      //      the user's actual intent in 99% of cases. Logging a collection
+      //      for "Mar 30, 2026" belongs in the Q1 2026 period, not the
+      //      oldest-outstanding Q1 2024 row (prior behavior — bug reported
+      //      by Charles 2026-04-23).
+      //   2. Oldest earned-uncollected row on the contract — fallback for
+      //      out-of-window collections (e.g. paid very late).
+      const rebateSelect = {
+        id: true,
+        rebateEarned: true,
+        rebateCollected: true,
+        collectionDate: true,
+        notes: true,
+      } as const
       const target = input.rebateId
         ? await prisma.rebate.findFirst({
-            where: {
-              id: input.rebateId,
-              contractId: input.contractId,
-            },
-            select: {
-              id: true,
-              rebateEarned: true,
-              rebateCollected: true,
-              collectionDate: true,
-              notes: true,
-            },
+            where: { id: input.rebateId, contractId: input.contractId },
+            select: rebateSelect,
           })
-        : await prisma.rebate.findFirst({
+        : (await prisma.rebate.findFirst({
+            where: {
+              contractId: input.contractId,
+              collectionDate: null,
+              rebateEarned: { gt: 0 },
+              payPeriodStart: { lte: txnDate },
+              payPeriodEnd: { gte: txnDate },
+            },
+            orderBy: { payPeriodEnd: "asc" },
+            select: rebateSelect,
+          })) ??
+          (await prisma.rebate.findFirst({
             where: {
               contractId: input.contractId,
               collectionDate: null,
               rebateEarned: { gt: 0 },
             },
             orderBy: { payPeriodEnd: "asc" },
-            select: {
-              id: true,
-              rebateEarned: true,
-              rebateCollected: true,
-              collectionDate: true,
-              notes: true,
-            },
-          })
+            select: rebateSelect,
+          }))
 
       if (target) {
         const priorCollected = Number(target.rebateCollected ?? 0)

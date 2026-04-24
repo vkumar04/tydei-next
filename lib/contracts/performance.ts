@@ -6,6 +6,8 @@
 
 import {
   calculateCumulative,
+  calculateMarginal,
+  type RebateMethodName,
   type TierLike,
 } from "@/lib/rebates/calculate"
 
@@ -20,13 +22,30 @@ export interface RebateUtilizationResult {
 /**
  * Rebate utilization — how much of the top-tier rebate potential the
  * contract has captured.
- *   actual  = engine(cumulative) on the actual spend + tier set
- *   max     = actualSpend × topTier.rebateValue
+ *
+ *   actual  = engine(method) on the actual spend + tier set
+ *   max     = actualSpend × topTier.rebateValue  (as if every dollar
+ *             earned the top-tier rate)
  *   util%   = actual / max × 100
+ *   missed  = max - actual
+ *
+ * For **retroactive cumulative** contracts, once the top tier is
+ * achieved, engine(cumulative) returns actualSpend × topRate — so
+ * actual == max → utilization = 100%, missed = $0. That's correct by
+ * definition of retroactive: your whole spend really does earn at the
+ * top rate once you cross the threshold.
+ *
+ * For **marginal** contracts, lower-tier slices always earn at their
+ * own lower rate, so actual < max whenever any spend lands below the
+ * top tier — utilization < 100%, missed > 0. This is the case Charles
+ * flagged: "hit tier 1 a bunch, didn't max it out" is only true under
+ * marginal math. Pre-W1 this function hardcoded cumulative, which made
+ * marginal contracts look falsely maxed-out.
  */
 export function calculateRebateUtilization(
   actualSpend: number,
   tiers: TierLike[],
+  method: RebateMethodName = "cumulative",
 ): RebateUtilizationResult {
   const sorted = [...tiers].sort(
     (a, b) => Number(a.spendMin) - Number(b.spendMin),
@@ -42,7 +61,10 @@ export function calculateRebateUtilization(
     }
   }
   const maxPossibleRebate = actualSpend * (Number(maxTier.rebateValue) / 100)
-  const actual = calculateCumulative(actualSpend, tiers)
+  const actual =
+    method === "marginal"
+      ? calculateMarginal(actualSpend, tiers)
+      : calculateCumulative(actualSpend, tiers)
   return {
     actualRebate: actual.rebateEarned,
     maxPossibleRebate,

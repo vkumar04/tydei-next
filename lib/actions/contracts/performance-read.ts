@@ -76,9 +76,17 @@ export async function getContractPerformance(contractId: string): Promise<{
         Number(t.rebateValue),
       ),
     }))
+    // Pass the term's rebateMethod so marginal contracts report the
+    // true actual < max. Hardcoding cumulative made marginal terms
+    // falsely display 100% utilization / $0 missed (user-reported
+    // 2026-04-23 "says it maxed the rebate out but it hit tier 1 a
+    // bunch so it did not max it out").
+    const firstTermMethod = (firstTerm?.rebateMethod ?? "cumulative") as
+      | "cumulative"
+      | "marginal"
     const utilization =
       tiers.length > 0 && actualSpend > 0
-        ? calculateRebateUtilization(actualSpend, tiers)
+        ? calculateRebateUtilization(actualSpend, tiers, firstTermMethod)
         : null
 
     // Renewal risk uses days-to-expiration + compliance + utilization.
