@@ -14,10 +14,12 @@
  *  - Jan 1 2024 → Nov 25 2026 → 35 months → **2.917 years**
  *  - Jan 1 2024 → Jan 15 2025 → 13 months → **1.083 years**
  *
- * Returns 1 when either date is missing, invalid, or the range is
- * zero/negative — matches the old `Math.max(1, …)` floor so the result
- * can always be used as a divisor.
+ * Returns 1 when either date is missing, invalid, the range is
+ * zero/negative, OR the expiration is the evergreen sentinel — matches
+ * the old `Math.max(1, …)` floor so the result can always be used as a
+ * divisor without producing absurdly-large or NaN outputs.
  */
+import { EVERGREEN_MS } from "@/lib/contracts/evergreen"
 export function computeContractYears(
   effectiveDate: Date | string | null | undefined,
   expirationDate: Date | string | null | undefined,
@@ -27,6 +29,12 @@ export function computeContractYears(
   const exp = expirationDate instanceof Date ? expirationDate : new Date(expirationDate)
   if (isNaN(eff.getTime()) || isNaN(exp.getTime())) return 1
   if (exp.getTime() <= eff.getTime()) return 1
+  // Evergreen sentinel: an evergreen contract has no defined term length,
+  // so auto-compute callers that do `totalValue / years` shouldn't see
+  // 7976 (sentinel year - effective year). Treat as 1 year so annualValue
+  // defaults to contractValue; the user can edit if the real intent is
+  // different.
+  if (exp.getTime() === EVERGREEN_MS) return 1
 
   // Inclusive-month count. Jan 1 → Dec 31 of same year = 12 months,
   // not 11: the start month counts in full and the end month counts

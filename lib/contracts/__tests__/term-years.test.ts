@@ -43,4 +43,12 @@ describe("computeContractYears — calendar-month math", () => {
     const annual = 5_300_000 / years
     expect(annual).toBe(5_300_000)
   })
+
+  it("evergreen sentinel returns 1 year (not 7976 from sentinel-year math)", () => {
+    const EVERGREEN = new Date(Date.UTC(9999, 11, 31))
+    expect(computeContractYears("2024-01-01", EVERGREEN)).toBe(1)
+    // $3M evergreen → annual defaults to $3M, not ~$376
+    const annual = 3_000_000 / computeContractYears("2024-01-01", EVERGREEN)
+    expect(annual).toBe(3_000_000)
+  })
 })
