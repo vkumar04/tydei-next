@@ -137,12 +137,22 @@ function TierDisplay({
   currentTierNumber,
   isTopTier,
   rebateMethod = "cumulative",
+  termIsScoped = false,
 }: {
   tier: ContractTier
   currentSpend?: number
   currentTierNumber?: number
   isTopTier?: boolean
   rebateMethod?: "cumulative" | "marginal"
+  /** True when the parent term is scoped to specific categories or SKUs.
+   *  We suppress the dollar-projection annotation in that case because
+   *  the only `currentSpend` we have is the contract-wide aggregate —
+   *  projecting from it produces identical numbers across differently-
+   *  scoped terms (e.g. all Arthrex Qualified Annual Spend shows the
+   *  same projected dollars as the Distal Extremities Rebate sub-scope,
+   *  which is wrong). Showing no annotation is more honest than showing
+   *  misleading numbers. */
+  termIsScoped?: boolean
 }) {
   const rebateLabel = formatTierRebateLabel(
     tier.rebateType,
@@ -164,8 +174,29 @@ function TierDisplay({
 
   // Charles W1.I: show dollar-amount context alongside the rate.
   // "$Y to unlock" / "earning $X at $spend" / non-percent unit suffix.
+  //
+  // When the term is scoped to specific categories or SKUs we skip the
+  // dollar projection entirely — the only spend we have access to is
+  // contract-wide, which produces misleadingly-identical numbers across
+  // differently-scoped terms (user-reported bug 2026-04-23).
   const annotation =
-    currentSpend !== undefined && currentTierNumber !== undefined
+    termIsScoped
+      ? tier.rebateType !== "percent_of_spend"
+        ? formatTierDollarAnnotation(
+            {
+              tierNumber: tier.tierNumber,
+              spendMin: Number(tier.spendMin),
+              spendMax: tier.spendMax ? Number(tier.spendMax) : null,
+              rebateType: tier.rebateType,
+              rebateValue: Number(tier.rebateValue),
+            },
+            0,
+            -1,
+            false,
+            rebateMethod,
+          )
+        : null
+      : currentSpend !== undefined && currentTierNumber !== undefined
       ? formatTierDollarAnnotation(
           {
             tierNumber: tier.tierNumber,
@@ -327,6 +358,7 @@ export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDispl
                             currentTierNumber={currentTierNumber}
                             isTopTier={isTopTierReached}
                             rebateMethod={(term.rebateMethod ?? "cumulative") as "cumulative" | "marginal"}
+                            termIsScoped={term.appliesTo !== "all_products"}
                           />
                         ))}
                       </div>
