@@ -27,7 +27,7 @@ import {
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
 import type { getContract } from "@/lib/actions/contracts"
 import { getContractPeriods } from "@/lib/actions/contract-periods"
-import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
+import { formatCurrency, formatDate, formatCalendarDate, formatPercent } from "@/lib/formatting"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
 import { computeProjectedRebate } from "@/lib/contracts/projected-rebate"
 import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
@@ -437,7 +437,7 @@ export function ContractDetailClient({
               <SelectItem value="__all__">All periods</SelectItem>
               {contract.periods.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {formatDate(p.periodStart)} – {formatDate(p.periodEnd)}
+                  {formatCalendarDate(p.periodStart)} – {formatCalendarDate(p.periodEnd)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -622,7 +622,7 @@ export function ContractDetailClient({
                   {stats.daysUntilExpiration}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {formatDate(stats.expirationDate)}
+                  {formatCalendarDate(stats.expirationDate)}
                 </p>
               </div>
             </CardContent>
@@ -728,11 +728,11 @@ export function ContractDetailClient({
                 )}
                 <DetailRow
                   label="Effective Date"
-                  value={formatDate(contract.effectiveDate)}
+                  value={formatCalendarDate(contract.effectiveDate)}
                 />
                 <DetailRow
                   label="Expiration Date"
-                  value={formatDate(contract.expirationDate)}
+                  value={formatCalendarDate(contract.expirationDate)}
                 />
                 <DetailRow label="Vendor" value={contract.vendor.name} />
                 {contract.description && (
@@ -1354,8 +1354,8 @@ function PerformanceSummary({
                       <div className="cursor-help space-y-1">
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">
-                            {formatDate(p.periodStart)} &ndash;{" "}
-                            {formatDate(p.periodEnd)}
+                            {formatCalendarDate(p.periodStart)} &ndash;{" "}
+                            {formatCalendarDate(p.periodEnd)}
                           </span>
                           <span className="font-medium">
                             {formatCurrency(spend)}
@@ -1366,7 +1366,7 @@ function PerformanceSummary({
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[280px] p-3 text-xs">
                       <p className="font-medium">
-                        {formatDate(p.periodStart)} – {formatDate(p.periodEnd)}
+                        {formatCalendarDate(p.periodStart)} – {formatCalendarDate(p.periodEnd)}
                       </p>
                       <p className="mt-1">
                         Spend on this contract only: {formatCurrency(spend)}
@@ -1405,8 +1405,8 @@ function PerformanceSummary({
                 className="flex items-center justify-between rounded-md border px-3 py-2"
               >
                 <span className="text-sm text-muted-foreground">
-                  {formatDate(p.periodStart)} &ndash;{" "}
-                  {formatDate(p.periodEnd)}
+                  {formatCalendarDate(p.periodStart)} &ndash;{" "}
+                  {formatCalendarDate(p.periodEnd)}
                 </span>
                 <span className="text-sm font-medium">
                   {p.tierAchieved != null ? `Tier ${p.tierAchieved}` : "N/A"}

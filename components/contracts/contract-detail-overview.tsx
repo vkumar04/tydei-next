@@ -1,6 +1,6 @@
 import { HelpCircle } from "lucide-react"
 import type { getContract } from "@/lib/actions/contracts"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -87,11 +87,11 @@ export function ContractDetailOverview({
 
         <InfoRow
           label="Effective Date"
-          value={formatDate(contract.effectiveDate)}
+          value={formatCalendarDate(contract.effectiveDate)}
         />
         <InfoRow
           label="Expiration Date"
-          value={formatDate(contract.expirationDate)}
+          value={formatCalendarDate(contract.expirationDate)}
         />
         <InfoRow
           label={

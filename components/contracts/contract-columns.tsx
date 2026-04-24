@@ -11,7 +11,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Badge } from "@/components/ui/badge"
@@ -252,7 +252,7 @@ export function getContractColumns(
         <SortableHeader label="Effective" column={column} />
       ),
       enableSorting: true,
-      cell: ({ row }) => formatDate(row.original.effectiveDate),
+      cell: ({ row }) => formatCalendarDate(row.original.effectiveDate),
     },
     {
       accessorKey: "expirationDate",
@@ -260,7 +260,7 @@ export function getContractColumns(
         <SortableHeader label="Expires" column={column} />
       ),
       enableSorting: true,
-      cell: ({ row }) => formatDate(row.original.expirationDate),
+      cell: ({ row }) => formatCalendarDate(row.original.expirationDate),
     },
     {
       accessorKey: "totalValue",

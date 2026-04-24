@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
+import { formatRebateMethodLabel } from "@/lib/contracts/rebate-method-label"
 import { getAccrualTimeline } from "@/lib/actions/contracts/accrual"
 
 interface ContractAccrualTimelineProps {
@@ -71,7 +72,7 @@ export function ContractAccrualTimeline({
         <div>
           <CardTitle>Accrual Timeline</CardTitle>
           <p className="text-xs text-muted-foreground pt-1">
-            Method: {data.method === "marginal" ? "Marginal (bracket)" : "Cumulative"}{" "}
+            Method: {formatRebateMethodLabel(data.method, { short: true })}{" "}
             · Total accrued: {formatCurrency(totalAccrued)}
           </p>
           {isMultiTerm && (

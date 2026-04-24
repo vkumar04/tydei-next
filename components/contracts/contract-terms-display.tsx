@@ -1,7 +1,8 @@
 "use client"
 
 import type { ContractTerm, ContractTier } from "@prisma/client"
-import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate, formatPercent } from "@/lib/formatting"
+import { formatRebateMethodLabel } from "@/lib/contracts/rebate-method-label"
 import {
   formatTierRebateLabel,
   formatTierDollarAnnotation,
@@ -256,13 +257,11 @@ export function ContractTermsDisplay({ terms, currentSpend }: ContractTermsDispl
                     variant={term.rebateMethod === "marginal" ? "default" : "outline"}
                     className="text-xs"
                   >
-                    {term.rebateMethod === "marginal"
-                      ? "Growth (Marginal)"
-                      : "Dollar 1 (Cumulative)"}
+                    {formatRebateMethodLabel(term.rebateMethod)}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    {formatDate(term.effectiveStart)} -{" "}
-                    {formatDate(term.effectiveEnd)}
+                    {formatCalendarDate(term.effectiveStart)} -{" "}
+                    {formatCalendarDate(term.effectiveEnd)}
                   </span>
                 </div>
               </AccordionTrigger>

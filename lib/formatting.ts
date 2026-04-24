@@ -1,3 +1,5 @@
+import { EVERGREEN_MS } from "@/lib/contracts/evergreen"
+
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -18,34 +20,61 @@ export function formatCurrency(value: number, precise = false): string {
     : currencyFormatter.format(value)
 }
 
-export function formatDate(date: string | Date | null | undefined): string {
+/**
+ * Format a calendar date (@db.Date column — effective/expiration,
+ * period start/end, pay-period end, etc.) pinned to UTC so the
+ * displayed day matches the stored day regardless of viewer tz.
+ *
+ * Use for: `Contract.effectiveDate`, `Contract.expirationDate`,
+ * `ContractTerm.effectiveStart/End`, `ContractPeriod.periodStart/End`,
+ * `Rebate.payPeriodStart/End`. Anything stored as a @db.Date.
+ */
+export function formatCalendarDate(
+  date: string | Date | null | undefined,
+): string {
   if (date === null || date === undefined || date === "") return "—"
   const d = new Date(date)
-  // Guard against Invalid Date. `Intl.DateTimeFormat.format(Invalid Date)`
-  // throws "date value is not finite" — this used to bubble up as an
-  // unhandled exception during SSR/render and 500 the page.
   if (isNaN(d.getTime())) return "—"
-  // Evergreen sentinel. `lib/actions/contracts.ts` writes 9999-12-31 when
-  // a contract has no fixed expiration (AI extractor returned null).
-  if (d.getUTCFullYear() >= 9999) return "Evergreen"
+  // Exact-millis sentinel check, not year >= 9999, so unrelated far-
+  // future dates don't false-positive as Evergreen.
+  if (d.getTime() === EVERGREEN_MS) return "Evergreen"
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-    // Contract dates are stored as UTC midnight (e.g. 2024-01-01T00:00:00Z).
-    // Formatting without an explicit timeZone defaults to the runtime's
-    // local zone, which shifts UTC-midnight dates to the previous calendar
-    // day for viewers west of UTC. Pin to UTC so the displayed date always
-    // matches the stored calendar date.
     timeZone: "UTC",
   }).format(d)
 }
 
+/**
+ * Format a timestamp (real wall-clock instant — createdAt, submittedAt,
+ * collectionDate, lastSentAt, etc.) in the viewer's local timezone.
+ *
+ * Previously this helper was UTC-pinned to fix an off-by-one on @db.Date
+ * columns, but that also shifted real timestamps (a 2pm-PST event on
+ * April 22 displayed as "Apr 23"). Split out `formatCalendarDate` for
+ * the UTC case; `formatDate` stays local-tz to match wall-clock reality.
+ */
+export function formatDate(
+  date: string | Date | null | undefined,
+): string {
+  if (date === null || date === undefined || date === "") return "—"
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return "—"
+  if (d.getTime() === EVERGREEN_MS) return "Evergreen"
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(d)
+}
+
+/** Calendar-date range (uses `formatCalendarDate` for both endpoints). */
 export function formatDateRange(
   start: string | Date,
-  end: string | Date
+  end: string | Date,
 ): string {
-  return `${formatDate(start)} – ${formatDate(end)}`
+  return `${formatCalendarDate(start)} – ${formatCalendarDate(end)}`
 }
 
 export function formatPercent(value: number, decimals = 1): string {

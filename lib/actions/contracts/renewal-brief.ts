@@ -29,6 +29,7 @@ import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { claudeModel } from "@/lib/ai/config"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
+import { formatRebateMethodLabel } from "@/lib/contracts/rebate-method-label"
 import {
   renewalBriefSchema,
   type RenewalBrief,
@@ -143,7 +144,7 @@ export async function generateRenewalBrief(
       termName: t.termName,
       termType: String(t.termType),
       baselineType: String(t.baselineType),
-      rebateMethod: String(t.rebateMethod),
+      rebateMethod: formatRebateMethodLabel(t.rebateMethod),
       effectiveStart: t.effectiveStart.toISOString(),
       effectiveEnd: t.effectiveEnd.toISOString(),
       spendBaseline:

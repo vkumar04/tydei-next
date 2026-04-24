@@ -26,6 +26,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import {
+  formatRebateMethodLabel,
+  describeRebateMethod,
+} from "@/lib/contracts/rebate-method-label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Select,
@@ -554,20 +558,20 @@ export function ContractTermsEntry({
                         <SelectItem value="cumulative">
                           <div className="flex flex-col">
                             <span className="font-medium">
-                              Retroactive (Dollar 1 / Cumulative)
+                              {formatRebateMethodLabel("cumulative")}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              Once the highest tier is reached, the tier&apos;s rate applies to the entire spend (retroactively). Example on $1.26M with tier 1 at 5% ($0–$200K) and tier 2 at 10% ($201K+): $1.26M × 10% = <strong>$126,040</strong>.
+                              {describeRebateMethod("cumulative")}
                             </span>
                           </div>
                         </SelectItem>
                         <SelectItem value="marginal">
                           <div className="flex flex-col">
                             <span className="font-medium">
-                              Tiered (Per-slice / Marginal)
+                              {formatRebateMethodLabel("marginal")}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              Each tier&apos;s rate only applies to dollars within that tier&apos;s band. Example on $1.26M: $200K × 5% + $1.06M × 10% = <strong>$116,040</strong>.
+                              {describeRebateMethod("marginal")}
                             </span>
                           </div>
                         </SelectItem>
