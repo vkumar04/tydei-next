@@ -26,7 +26,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatDate, formatCalendarDate } from "@/lib/formatting"
 import { getRebateCalculationAudit } from "@/lib/actions/reports/audit-trail"
 import {
   computeTierProgressProjection,
@@ -150,8 +150,8 @@ function CalculationsForContract({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline">
-                {formatDate(data.contract.effectiveDate)} –{" "}
-                {formatDate(data.contract.expirationDate)}
+                {formatCalendarDate(data.contract.effectiveDate)} –{" "}
+                {formatCalendarDate(data.contract.expirationDate)}
               </Badge>
               <Button size="sm" variant="ghost" onClick={onClear}>
                 Change

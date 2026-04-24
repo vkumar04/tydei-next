@@ -28,7 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import {
   getContractCapitalSchedule,
   type ContractCapitalScheduleResult,
@@ -192,7 +192,7 @@ export function ContractAmortizationCard({
                       {row.periodNumber}
                     </td>
                     <td className="py-2 pr-3 text-muted-foreground">
-                      {formatDate(row.periodDate)}
+                      {formatCalendarDate(row.periodDate)}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {formatCurrency(row.openingBalance)}

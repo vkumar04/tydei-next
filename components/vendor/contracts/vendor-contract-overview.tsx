@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { formatCurrency, formatDate, formatDateRange } from "@/lib/formatting"
+import { formatCurrency, formatDate, formatCalendarDate, formatDateRange } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -106,7 +106,7 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="h-3.5 w-3.5" />
-              <span>{formatDate(contract.effectiveDate)} - {formatDate(contract.expirationDate)}</span>
+              <span>{formatCalendarDate(contract.effectiveDate)} - {formatCalendarDate(contract.expirationDate)}</span>
             </div>
           </div>
         </CardContent>
@@ -164,7 +164,7 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
               {summary.daysRemaining}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Expires {formatDate(contract.expirationDate)}
+              Expires {formatCalendarDate(contract.expirationDate)}
             </p>
           </CardContent>
         </Card>
@@ -205,8 +205,8 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
 
               <Separator className="my-2" />
 
-              <InfoRow icon={CalendarDays} label="Effective Date" value={formatDate(contract.effectiveDate)} />
-              <InfoRow icon={CalendarDays} label="Expiration Date" value={formatDate(contract.expirationDate)} />
+              <InfoRow icon={CalendarDays} label="Effective Date" value={formatCalendarDate(contract.effectiveDate)} />
+              <InfoRow icon={CalendarDays} label="Expiration Date" value={formatCalendarDate(contract.expirationDate)} />
               <InfoRow label="Auto-Renewal" value={contract.autoRenewal ? "Yes" : "No"} />
               <InfoRow label="Termination Notice" value={`${contract.terminationNoticeDays} days`} />
 
@@ -268,7 +268,7 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
                           </Badge>
                         </div>
                         <span className="text-xs text-muted-foreground">
-                          {formatDate(term.effectiveStart)} - {formatDate(term.effectiveEnd)}
+                          {formatCalendarDate(term.effectiveStart)} - {formatCalendarDate(term.effectiveEnd)}
                         </span>
                       </div>
 

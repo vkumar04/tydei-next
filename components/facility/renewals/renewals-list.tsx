@@ -32,7 +32,7 @@ import {
 import { EmptyState } from "@/components/shared/empty-state"
 import { FileText, Eye } from "lucide-react"
 import type { RenewalStatus } from "@/lib/renewals/engine"
-import { formatDate } from "@/lib/formatting"
+import { formatCalendarDate } from "@/lib/formatting"
 
 export interface RenewalRow {
   id: string
@@ -154,7 +154,7 @@ export function RenewalsList({ rows, selectedId, onSelect }: RenewalsListProps) 
                 </TableCell>
                 <TableCell>{row.vendorName}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {formatDate(row.expirationDate)}
+                  {formatCalendarDate(row.expirationDate)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {row.daysUntilExpiry}

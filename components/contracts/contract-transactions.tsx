@@ -60,7 +60,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatDate, formatCalendarDate } from "@/lib/formatting"
 import {
   getContractRebates,
   updateContractTransaction,
@@ -329,7 +329,7 @@ function TransactionDialog({
                     )
                     return (
                       <SelectItem key={r.id} value={r.id}>
-                        {formatDate(r.periodStart)} – {formatDate(r.periodEnd)}{" "}
+                        {formatCalendarDate(r.periodStart)} – {formatCalendarDate(r.periodEnd)}{" "}
                         · earned {formatCurrency(r.rebateEarned)} · outstanding{" "}
                         {formatCurrency(outstanding)}
                       </SelectItem>
@@ -676,8 +676,8 @@ function TransactionTable({
               <TableRow key={row.id}>
                 <TableCell className="font-medium">
                   <div>
-                    {formatDate(row.periodStart)} &ndash;{" "}
-                    {formatDate(row.periodEnd)}
+                    {formatCalendarDate(row.periodStart)} &ndash;{" "}
+                    {formatCalendarDate(row.periodEnd)}
                   </div>
                   {row.collectionDate && (
                     <div className="text-xs font-normal text-muted-foreground">

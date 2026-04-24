@@ -42,7 +42,7 @@ import {
   type PerformanceHistoryRow,
   type RenewalStatus,
 } from "@/lib/renewals/engine"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { RenewalNotesSection } from "./renewal-notes-section"
 import { RenewalAlertSettingsForm } from "./renewal-alert-settings-form"
 import { RenewalTaskChecklist } from "./renewal-task-checklist"
@@ -146,8 +146,8 @@ export function RenewalDetailTabs({
           <AlertTitle>{statusLabel[status]}</AlertTitle>
           <AlertDescription>
             {detail.daysUntilExpiry < 0
-              ? `Expired ${Math.abs(detail.daysUntilExpiry)} days ago on ${formatDate(detail.expirationDate)}.`
-              : `${detail.daysUntilExpiry} days until expiration on ${formatDate(detail.expirationDate)}.`}
+              ? `Expired ${Math.abs(detail.daysUntilExpiry)} days ago on ${formatCalendarDate(detail.expirationDate)}.`
+              : `${detail.daysUntilExpiry} days until expiration on ${formatCalendarDate(detail.expirationDate)}.`}
           </AlertDescription>
         </Alert>
 

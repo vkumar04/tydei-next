@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
 import { Edit, HelpCircle, StickyNote, Trash2 } from "lucide-react"
 
@@ -111,7 +111,7 @@ export function getCOGColumns({
       header: "PO Date",
       cell: ({ row }) => (
         <span className="text-muted-foreground">
-          {formatDate(row.original.transactionDate)}
+          {formatCalendarDate(row.original.transactionDate)}
         </span>
       ),
     },

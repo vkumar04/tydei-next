@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { Loader2 } from "lucide-react"
 
 type PendingContractWithVendor = PendingContract & {
@@ -59,10 +59,10 @@ export function PendingReviewDialog({
             <div className="flex justify-between"><span className="text-muted-foreground">Vendor</span><span>{contract.vendor.name}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Type</span><span className="capitalize">{contract.contractType.replace("_", " ")}</span></div>
             {contract.effectiveDate && (
-              <div className="flex justify-between"><span className="text-muted-foreground">Effective</span><span>{formatDate(contract.effectiveDate)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Effective</span><span>{formatCalendarDate(contract.effectiveDate)}</span></div>
             )}
             {contract.expirationDate && (
-              <div className="flex justify-between"><span className="text-muted-foreground">Expiration</span><span>{formatDate(contract.expirationDate)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Expiration</span><span>{formatCalendarDate(contract.expirationDate)}</span></div>
             )}
             {contract.totalValue && (
               <div className="flex justify-between"><span className="text-muted-foreground">Value</span><span>{formatCurrency(Number(contract.totalValue))}</span></div>

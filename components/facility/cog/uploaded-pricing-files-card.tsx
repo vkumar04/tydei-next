@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { FileText, Loader2, Trash2, Upload } from "lucide-react"
-import { formatDate } from "@/lib/formatting"
+import { formatDate, formatCalendarDate } from "@/lib/formatting"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -144,12 +144,12 @@ export function UploadedPricingFilesCard({
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.earliestEffectiveDate
-                        ? formatDate(row.earliestEffectiveDate)
+                        ? formatCalendarDate(row.earliestEffectiveDate)
                         : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.latestExpirationDate
-                        ? formatDate(row.latestExpirationDate)
+                        ? formatCalendarDate(row.latestExpirationDate)
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right">

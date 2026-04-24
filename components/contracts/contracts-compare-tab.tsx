@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { ArrowLeftRight, Check } from "lucide-react"
 import type { useContracts } from "@/hooks/use-contracts"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -278,7 +278,7 @@ function CompareOverviewCard({ contracts }: { contracts: ContractRow[] }) {
         style={style}
         children={contracts.map((c) => (
           <span key={c.id}>
-            {c.effectiveDate ? formatDate(c.effectiveDate) : "—"}
+            {c.effectiveDate ? formatCalendarDate(c.effectiveDate) : "—"}
           </span>
         ))}
       />
@@ -287,7 +287,7 @@ function CompareOverviewCard({ contracts }: { contracts: ContractRow[] }) {
         style={style}
         children={contracts.map((c) => (
           <span key={c.id}>
-            {c.expirationDate ? formatDate(c.expirationDate) : "—"}
+            {c.expirationDate ? formatCalendarDate(c.expirationDate) : "—"}
           </span>
         ))}
       />
