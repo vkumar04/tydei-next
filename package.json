@@ -19,7 +19,12 @@
     "qa:v0-ledger-check": "bun run scripts/build-v0-feature-ledger.ts --check",
     "smoke": "bun run scripts/pre-ship-smoke.ts",
     "lint:ai": "bun run scripts/lint-ai-action-error-paths.ts",
-    "lint:ai-schema": "bun run scripts/lint-ai-schema-describe.ts"
+    "lint:ai-schema": "bun run scripts/lint-ai-schema-describe.ts",
+    "test:unit": "bunx vitest run --exclude '**/.claude/**' --exclude '**/.worktrees/**' --exclude '**/*.integration.test.ts'",
+    "test:integration": "RUN_INTEGRATION=1 bunx vitest run '**/*.integration.test.ts'",
+    "test:e2e": "bunx playwright test --project=e2e-setup --project=e2e",
+    "test:visual": "bunx playwright test --project=visual-setup --project=visual",
+    "test:all": "bun run test:unit && bun run test:integration && bun run test:e2e"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
