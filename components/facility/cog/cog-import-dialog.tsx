@@ -459,11 +459,68 @@ export function COGImportDialog({
                     records to exclude or proceed with all.
                   </p>
                 </div>
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="text-muted-foreground">
+                    {excludedIndices.size === 0
+                      ? "No duplicates excluded — all will be imported per the strategy on the next step."
+                      : `${excludedIndices.size} of ${duplicates.length} excluded (will be skipped entirely).`}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setExcludedIndices(
+                          new Set(duplicates.map((_, i) => i)),
+                        )
+                      }
+                      disabled={excludedIndices.size === duplicates.length}
+                    >
+                      Exclude all
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExcludedIndices(new Set())}
+                      disabled={excludedIndices.size === 0}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
                 <div className="max-h-[300px] overflow-y-auto rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[40px]">Exclude</TableHead>
+                        <TableHead className="w-[40px]">
+                          <input
+                            type="checkbox"
+                            aria-label="Toggle exclude all"
+                            checked={
+                              excludedIndices.size > 0 &&
+                              excludedIndices.size === duplicates.length
+                            }
+                            ref={(el) => {
+                              if (el) {
+                                el.indeterminate =
+                                  excludedIndices.size > 0 &&
+                                  excludedIndices.size < duplicates.length
+                              }
+                            }}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setExcludedIndices(
+                                  new Set(duplicates.map((_, i) => i)),
+                                )
+                              } else {
+                                setExcludedIndices(new Set())
+                              }
+                            }}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                        </TableHead>
                         <TableHead>Inventory #</TableHead>
                         <TableHead>Vendor</TableHead>
                         <TableHead>Existing Description</TableHead>
