@@ -196,6 +196,34 @@ export async function getAccrualTimeline(contractId: string) {
     return { termIndex: idx, series, rows, config: termConfigs[idx] }
   })
 
+  // Charles 2026-04-25: annual-eval terms shouldn't show per-month
+  // slice contributions on the timeline — the rebate isn't earned
+  // until year-end. Re-budget each year's slices into the
+  // period-end month (or the last in-range month for a partial
+  // year). buildMonthlyAccruals stays untouched (unit-tested per-
+  // month math preserved); this re-budget is a presentation concern.
+  // tierAchieved + rebatePercent stay on each row so the timeline's
+  // Tier and Rate columns still show progress on mid-year months.
+  for (const r of perTermResults) {
+    if (r.config.evaluationPeriod !== "annual" || r.rows.length === 0) {
+      continue
+    }
+    const yearKey = (m: string) => m.split("-")[0]
+    let runningSum = 0
+    for (let i = 0; i < r.rows.length; i++) {
+      runningSum += r.rows[i].accruedAmount
+      const next = r.rows[i + 1]
+      const isYearLastMonth =
+        next == null || yearKey(next.month) !== yearKey(r.rows[i].month)
+      if (isYearLastMonth) {
+        r.rows[i] = { ...r.rows[i], accruedAmount: runningSum }
+        runningSum = 0
+      } else {
+        r.rows[i] = { ...r.rows[i], accruedAmount: 0 }
+      }
+    }
+  }
+
   const monthsTimeline =
     perTermResults[0]?.series.map((s) => s.month) ?? []
 
@@ -258,15 +286,36 @@ export async function getAccrualTimeline(contractId: string) {
       if (!row || !entry) continue
       totalSpend += entry.spend
 
-      if (row.accruedAmount <= 0) continue
+      // Charles 2026-04-25: previously this `continue`d on
+      // accruedAmount <= 0, which dropped tier visibility for any
+      // month with $0 accrual. After the annual-eval re-budget
+      // (above), mid-year months legitimately have accrual=0 but
+      // still need their tier displayed in the Tier column. Always
+      // record the contribution; only the contributions list (which
+      // the UI uses to break down "who paid what this month") skips
+      // zero rows so we don't visually clutter the breakdown.
       totalAccrued += row.accruedAmount
-      contributions.push({
-        termIndex,
-        accruedAmount: row.accruedAmount,
-        tierAchieved: row.tierAchieved,
-        rebatePercent: row.rebatePercent,
-      })
-      if (row.accruedAmount > bestContribution) {
+      if (row.accruedAmount > 0) {
+        contributions.push({
+          termIndex,
+          accruedAmount: row.accruedAmount,
+          tierAchieved: row.tierAchieved,
+          rebatePercent: row.rebatePercent,
+        })
+      }
+      // Pick the term with the highest tier as the row's headline
+      // tier. For zero-accrual months (annual-eval pre-year-end), we
+      // still want the term's CURRENT tier on the row so the user
+      // sees their tracking progress. Tiebreak on rate when tiers
+      // match, then on accrual size.
+      const tierBeat = row.tierAchieved > bestTier
+      const sameTierBetterRate =
+        row.tierAchieved === bestTier && row.rebatePercent > bestPercent
+      const sameTierBetterAccrual =
+        row.tierAchieved === bestTier &&
+        row.rebatePercent === bestPercent &&
+        row.accruedAmount > bestContribution
+      if (tierBeat || sameTierBetterRate || sameTierBetterAccrual) {
         bestContribution = row.accruedAmount
         bestTier = row.tierAchieved
         bestPercent = row.rebatePercent

@@ -805,6 +805,15 @@ async function _createContractImpl(
       ...(data.amortizationShape != null && {
         amortizationShape: data.amortizationShape,
       }),
+      // Charles 2026-04-25 (audit follow-up): persist contract-level
+      // metrics that drive compliance + market-share rebate accruals.
+      ...(data.complianceRate != null && { complianceRate: data.complianceRate }),
+      ...(data.currentMarketShare != null && {
+        currentMarketShare: data.currentMarketShare,
+      }),
+      ...(data.marketShareCommitment != null && {
+        marketShareCommitment: data.marketShareCommitment,
+      }),
       createdById: session.user.id,
       ...(data.facilityIds.length > 0 && {
         isMultiFacility: true,
@@ -1067,6 +1076,16 @@ async function _updateContractImpl(
   if (data.paymentCadence !== undefined) updateData.paymentCadence = data.paymentCadence
   if (data.amortizationShape !== undefined)
     updateData.amortizationShape = data.amortizationShape
+  // Charles 2026-04-25 (audit follow-up): contract-level metrics for
+  // compliance + market-share rebate engines. Use undefined-vs-null
+  // discipline so the form can explicitly clear a value (set to null)
+  // without confusing it with "field not in payload" (undefined).
+  if (data.complianceRate !== undefined)
+    updateData.complianceRate = data.complianceRate
+  if (data.currentMarketShare !== undefined)
+    updateData.currentMarketShare = data.currentMarketShare
+  if (data.marketShareCommitment !== undefined)
+    updateData.marketShareCommitment = data.marketShareCommitment
 
   if (data.facilityIds !== undefined) {
     await prisma.contractFacility.deleteMany({ where: { contractId: id } })

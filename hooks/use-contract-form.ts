@@ -45,6 +45,12 @@ export function useContractForm(options?: UseContractFormOptions) {
       facilityIds: [],
       additionalFacilityIds: [],
       categoryIds: [],
+      // Charles 2026-04-25 (audit follow-up): contract-level metric
+      // defaults. null (not 0) so the engine treats them as
+      // "not tracked" rather than "0% achieved".
+      complianceRate: null,
+      currentMarketShare: null,
+      marketShareCommitment: null,
       ...options?.defaultValues,
     },
   })

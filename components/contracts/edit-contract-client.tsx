@@ -101,6 +101,23 @@ export function EditContractClient({
         isMultiFacility: contract.isMultiFacility,
         facilityIds: contract.contractFacilities.map((cf) => cf.facilityId),
         categoryIds: contract.contractCategories?.map((cc: { productCategoryId: string }) => cc.productCategoryId) ?? (contract.productCategoryId ? [contract.productCategoryId] : []),
+        // Charles 2026-04-25 (audit follow-up): hydrate the
+        // contract-level metric inputs that drive compliance +
+        // market-share rebate engines. Pre-fix these were not in
+        // the form reset payload, so editing a contract that had
+        // metric values would silently zero them on save.
+        complianceRate:
+          contract.complianceRate != null
+            ? Number(contract.complianceRate)
+            : null,
+        currentMarketShare:
+          contract.currentMarketShare != null
+            ? Number(contract.currentMarketShare)
+            : null,
+        marketShareCommitment:
+          contract.marketShareCommitment != null
+            ? Number(contract.marketShareCommitment)
+            : null,
       })
 
       // Charles W1.T — seed capital state from the Contract row.

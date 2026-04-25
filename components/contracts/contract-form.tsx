@@ -971,6 +971,93 @@ export function ContractFormBasicInfo({
               </div>
             </Field>
           </div>
+          {/*
+           * Charles 2026-04-25 (audit follow-up): contract-level
+           * metrics that drive the compliance_rebate + market_share
+           * term engines. Without these inputs, those term types
+           * silently compute $0 because the engine reads
+           * Contract.complianceRate / currentMarketShare directly.
+           * All three are optional — the engine returns 0 (no
+           * qualification) when null, which is the right default
+           * for contracts that don't track compliance or market share.
+           */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field
+              label="Compliance Rate (%)"
+              error={errors.complianceRate?.message}
+            >
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  {...register("complianceRate", {
+                    setValueAs: (v) =>
+                      v === "" || v == null ? null : Number(v),
+                  })}
+                  className="pr-8"
+                  placeholder="—"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  %
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Drives Compliance Rebate term accruals
+              </p>
+            </Field>
+            <Field
+              label="Current Market Share (%)"
+              error={errors.currentMarketShare?.message}
+            >
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  {...register("currentMarketShare", {
+                    setValueAs: (v) =>
+                      v === "" || v == null ? null : Number(v),
+                  })}
+                  className="pr-8"
+                  placeholder="—"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  %
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Drives Market Share term accruals
+              </p>
+            </Field>
+            <Field
+              label="Market Share Commitment (%)"
+              error={errors.marketShareCommitment?.message}
+            >
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  {...register("marketShareCommitment", {
+                    setValueAs: (v) =>
+                      v === "" || v == null ? null : Number(v),
+                  })}
+                  className="pr-8"
+                  placeholder="—"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  %
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Vendor's contractual target
+              </p>
+            </Field>
+          </div>
         </CardContent>
       </Card>
 

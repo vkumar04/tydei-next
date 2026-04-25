@@ -101,10 +101,20 @@ describe("getAccrualTimeline — Rate column scaling (Charles W1.S)", () => {
     // Post-fix: rebatePercent returned from the engine should be 3 (not
     // 0.03). UI formats this as `3.00%`.
     expect(jan?.rebatePercent).toBeCloseTo(3, 5)
-    // Accrued: spend × rate = 215754 × 0.03 = 6472.62. Pre-fix this was
-    // 100× too small (64.73) because the engine computed
-    // `spend × 0.03 / 100`.
-    expect(jan?.accruedAmount).toBeCloseTo(215754 * 0.03, 2)
+    // Charles 2026-04-25: annual-eval terms now re-budget per-month
+    // slices to the year-end row (mid-year months show tier/rate but
+    // $0 accrual since annual rebates aren't earned mid-year). The
+    // year's full $6472.62 lands on the last available month — for
+    // a 2025 series running through today, that's December 2025
+    // (or the latest in-range month for partial years).
+    expect(jan?.accruedAmount).toBe(0)
+    // Year's total accrual: spend × rate = 215754 × 0.03 = 6472.62.
+    // Pre-fix this was 100× too small (64.73) because the engine
+    // computed `spend × 0.03 / 100`. Post annual re-budget, look for
+    // it on the year-end row instead of January.
+    const year2025Rows = result.rows.filter((r) => r.month.startsWith("2025-"))
+    const year2025Last = year2025Rows[year2025Rows.length - 1]
+    expect(year2025Last?.accruedAmount).toBeCloseTo(215754 * 0.03, 2)
   })
 
   it("scales every percent tier consistently across a multi-month series", async () => {

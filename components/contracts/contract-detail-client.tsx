@@ -1163,6 +1163,21 @@ export function ContractDetailClient({
           <PerformanceSummary
             periods={periods ?? []}
             totalValue={stats?.totalValue ?? 0}
+            contractTiers={
+              // Charles 2026-04-25: feed the contract's first-term tier
+              // ladder into the Tier Achievement panel so it computes
+              // tier from period.totalSpend (the same way the timeline
+              // does) instead of trusting the stale ContractPeriod
+              // .tierAchieved rollup. Without this the panel can show
+              // "Tier 3" while the timeline shows the contract only
+              // reached Tier 1 in the same month.
+              contract.terms
+                ?.find((t) => t.tiers.length > 0)
+                ?.tiers.map((t) => ({
+                  tierNumber: t.tierNumber,
+                  spendMin: Number(t.spendMin),
+                })) ?? []
+            }
           />
         </TabsContent>
 
@@ -1258,9 +1273,18 @@ type PeriodData = Awaited<ReturnType<typeof getContractPeriods>>[number]
 function PerformanceSummary({
   periods,
   totalValue,
+  contractTiers,
 }: {
   periods: PeriodData[]
   totalValue: number
+  /**
+   * Charles 2026-04-25: tier ladder from the contract's first
+   * tiered term. The Tier Achievement panel now derives each
+   * period's tier from the period's `totalSpend` against this
+   * ladder rather than reading `period.tierAchieved` directly,
+   * which can be stale or inconsistent with the timeline.
+   */
+  contractTiers: Array<{ tierNumber: number; spendMin: number }>
 }) {
   if (periods.length === 0) {
     return (
@@ -1362,20 +1386,38 @@ function PerformanceSummary({
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {sorted.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between rounded-md border px-3 py-2"
-              >
-                <span className="text-sm text-muted-foreground">
-                  {formatCalendarDate(p.periodStart)} &ndash;{" "}
-                  {formatCalendarDate(p.periodEnd)}
-                </span>
-                <span className="text-sm font-medium">
-                  {p.tierAchieved != null ? `Tier ${p.tierAchieved}` : "N/A"}
-                </span>
-              </div>
-            ))}
+            {sorted.map((p) => {
+              // Charles 2026-04-25: derive tier from this period's
+              // actual totalSpend against the contract's ladder.
+              // Falls back to p.tierAchieved if the contract has no
+              // tiers (rare; legacy data).
+              const periodSpend = Number(p.totalSpend)
+              const sortedLadder = [...contractTiers].sort(
+                (a, b) => a.spendMin - b.spendMin,
+              )
+              let derivedTier: number | null = null
+              if (sortedLadder.length > 0) {
+                for (const t of sortedLadder) {
+                  if (periodSpend >= t.spendMin) derivedTier = t.tierNumber
+                }
+              } else if (p.tierAchieved != null) {
+                derivedTier = p.tierAchieved
+              }
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between rounded-md border px-3 py-2"
+                >
+                  <span className="text-sm text-muted-foreground">
+                    {formatCalendarDate(p.periodStart)} &ndash;{" "}
+                    {formatCalendarDate(p.periodEnd)}
+                  </span>
+                  <span className="text-sm font-medium">
+                    {derivedTier != null ? `Tier ${derivedTier}` : "N/A"}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </CardContent>
       </Card>

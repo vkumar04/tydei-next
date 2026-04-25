@@ -64,6 +64,14 @@ const createContractBase = z.object({
   downPayment: z.number().min(0).nullable().optional(),
   paymentCadence: z.enum(["monthly", "quarterly", "annual"]).nullable().optional(),
   amortizationShape: z.enum(["symmetrical", "custom"]).optional(),
+  // Charles 2026-04-25 (audit follow-up): contract-level metrics
+  // that drive compliance_rebate + market_share term computations.
+  // Compliance % is what % of purchases comply with contract terms;
+  // current/target market share % is the vendor's actual + commitment.
+  // All optional + nullable so existing contracts stay valid.
+  complianceRate: z.number().min(0).max(100).nullable().optional(),
+  currentMarketShare: z.number().min(0).max(100).nullable().optional(),
+  marketShareCommitment: z.number().min(0).max(100).nullable().optional(),
   customAmortizationRows: z
     .array(
       z.object({

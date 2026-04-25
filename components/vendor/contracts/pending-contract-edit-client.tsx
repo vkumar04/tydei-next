@@ -40,11 +40,18 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   withdrawn: { label: "Withdrawn", variant: "outline" },
 }
 
+// Charles 2026-04-25 (audit follow-up): the prior list was bogus —
+// "gpo", "direct", "local", "custom" are NOT members of the
+// `ContractType` enum. Saving with any of those values would throw
+// a Zod validation error at the server boundary. Match the actual
+// schema enum so the dropdown is round-trippable.
 const CONTRACT_TYPES = [
-  { value: "gpo", label: "GPO" },
-  { value: "direct", label: "Direct" },
-  { value: "local", label: "Local" },
-  { value: "custom", label: "Custom" },
+  { value: "usage", label: "Usage" },
+  { value: "capital", label: "Capital" },
+  { value: "service", label: "Service" },
+  { value: "tie_in", label: "Tie-In" },
+  { value: "grouped", label: "Grouped" },
+  { value: "pricing_only", label: "Pricing Only" },
 ]
 
 export function PendingContractEditClient({ pendingContractId }: PendingContractEditClientProps) {
