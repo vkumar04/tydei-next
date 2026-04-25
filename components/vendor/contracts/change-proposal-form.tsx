@@ -137,8 +137,29 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
               ) : (
                 <Input placeholder="Field" value={change.field} onChange={(e) => updateChange(i, "field", e.target.value)} />
               )}
-              <Input placeholder="Current value" value={change.currentValue} onChange={(e) => updateChange(i, "currentValue", e.target.value)} />
-              <Input placeholder="Proposed value" value={change.proposedValue} onChange={(e) => updateChange(i, "proposedValue", e.target.value)} />
+              {/* Charles audit round-4 vendor CONCERN: hint percent
+                  units when proposing interestRate so a vendor doesn't
+                  type "0.05" thinking fraction (server expects percent
+                  and divides by 100). Same convention as the new-
+                  contract submission form. */}
+              <Input
+                placeholder={
+                  change.field === "interestRate"
+                    ? "Current value (%)"
+                    : "Current value"
+                }
+                value={change.currentValue}
+                onChange={(e) => updateChange(i, "currentValue", e.target.value)}
+              />
+              <Input
+                placeholder={
+                  change.field === "interestRate"
+                    ? "Proposed value (%)"
+                    : "Proposed value"
+                }
+                value={change.proposedValue}
+                onChange={(e) => updateChange(i, "proposedValue", e.target.value)}
+              />
               <Button type="button" variant="ghost" size="icon-xs" onClick={() => removeChange(i)} disabled={changes.length === 1}>
                 <Trash2 className="size-3.5" />
               </Button>

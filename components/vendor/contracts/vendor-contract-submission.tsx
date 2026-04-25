@@ -518,6 +518,7 @@ export function VendorContractSubmission({
             cptCodes: t.cptCodes,
             tiers: t.tiers.map((tier) => ({
               tierNumber: tier.tierNumber,
+              tierName: tier.tierName ?? null,
               spendMin: tier.spendMin ?? 0,
               spendMax: tier.spendMax,
               // Charles 2026-04-25 (audit Bug 2): per-tier volume /

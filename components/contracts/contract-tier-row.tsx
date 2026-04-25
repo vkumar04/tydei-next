@@ -93,6 +93,25 @@ export function ContractTierRow({
         Tier {index + 1}
       </span>
 
+      {/* Charles audit round-4 vendor BLOCKER: tierName has no UI
+          input anywhere. The schema + hydrate + approve all carry
+          the field but the form never let the user populate it.
+          Optional friendly label like "Bronze / Silver / Gold". */}
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Label (optional)</label>
+        <Input
+          className="w-28"
+          placeholder="Bronze"
+          value={tier.tierName ?? ""}
+          onChange={(e) =>
+            onChange({
+              ...tier,
+              tierName: e.target.value || null,
+            })
+          }
+        />
+      </div>
+
       <div className="space-y-1">
         <label className="text-xs text-muted-foreground">{labels.min}</label>
         <div className="relative">

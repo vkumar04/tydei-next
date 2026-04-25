@@ -131,6 +131,17 @@ export const extractedContractSchema = z.object({
       tiers: z.array(
         z.object({
           tierNumber: z.number().describe("Tier number (1 = lowest)"),
+          // Charles audit round-4 vendor: AI now extracts the
+          // human-readable tier label when the contract uses one
+          // (e.g. "Bronze", "Silver", "Gold"). Optional; null/omitted
+          // when the contract uses pure numeric tiers.
+          tierName: z
+            .string()
+            .nullable()
+            .optional()
+            .describe(
+              "Optional human-readable tier label like 'Bronze', 'Silver', 'Gold'. Null/omitted when the contract uses unnamed numeric tiers.",
+            ),
           spendMin: z.number().optional().describe("Minimum spend threshold"),
           spendMax: z.number().optional().describe("Maximum spend threshold"),
           // Charles 2026-04-25 (audit Bug 2): per-tier volume + market-
