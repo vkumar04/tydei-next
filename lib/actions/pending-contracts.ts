@@ -396,15 +396,34 @@ export async function getVendorPendingContract(id: string) {
 // ─── Vendor: Create ─────────────────────────────────────────────
 
 export async function createPendingContract(input: CreatePendingContractInput) {
-  await requireVendor()
+  // Charles audit round-6 BLOCKER (same class as round-5 fix in
+  // createChangeProposal): authoritative vendor identity must come
+  // from requireVendor(), not from client input. Earlier code wrote
+  // `vendorId: data.vendorId` verbatim, so an authenticated vendor
+  // could submit a PendingContract impersonating any other vendor.
+  // Approval propagated the spoofed vendorId onto the live Contract.
+  // Facility identity is also looked up from the Facility row when
+  // facilityId is provided so the displayed name matches reality.
+  const { vendor } = await requireVendor()
   const data = createPendingContractSchema.parse(input)
+
+  // Resolve facility name from the Facility row so a vendor can't
+  // forge a facilityName independent of facilityId.
+  let resolvedFacilityName: string | null | undefined = data.facilityName
+  if (data.facilityId) {
+    const facility = await prisma.facility.findUnique({
+      where: { id: data.facilityId },
+      select: { name: true },
+    })
+    resolvedFacilityName = facility?.name ?? data.facilityName
+  }
 
   const contract = await prisma.pendingContract.create({
     data: {
-      vendorId: data.vendorId,
-      vendorName: data.vendorName,
+      vendorId: vendor.id,
+      vendorName: vendor.name,
       facilityId: data.facilityId,
-      facilityName: data.facilityName,
+      facilityName: resolvedFacilityName,
       contractName: data.contractName,
       contractType: data.contractType,
       effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null,
