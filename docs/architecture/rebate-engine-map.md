@@ -50,6 +50,7 @@ work by deleting the dispatcher, not by completing the bridges.
 | `recomputeVolumeAccrualForTerm` | `lib/actions/contracts/recompute-volume-accrual.ts` | `volume_rebate`, `rebate_per_use`. Sources from `Case.procedures` filtered by `term.cptCodes`; dedup by case+CPT. |
 | `recomputePoAccrualForTerm` | `lib/actions/contracts/recompute-po-accrual.ts` | `po_rebate`. Sources from `PurchaseOrder` rows at `(vendorId, facilityId)` filtered by status. |
 | `recomputeThresholdAccrualForTerm` | `lib/actions/contracts/recompute-threshold-accrual.ts` | `compliance_rebate` reads `Contract.complianceRate`; `market_share` reads `Contract.currentMarketShare`. Tier ladder = required %, flat $ payout per period when achieved. |
+| `recomputeInvoiceAccrualForTerm` | `lib/actions/contracts/recompute-invoice-accrual.ts` | `payment_rebate`. Sources from `Invoice` rows at `(vendorId, facilityId)` filtered by status. |
 | `createContractTransaction` (collected path) | `lib/actions/contract-periods.ts:225` | Type-agnostic — user supplies the dollar value |
 | Synthetic period builder (in-memory) | `lib/actions/contract-periods.ts:130-200` | Now derives effective rate via canonical helper; no longer touches `rebateValue` raw (drift hazard #3 closed 2026-04-25). |
 | Seed scripts | `prisma/seeds/rebates.ts`, `cog-for-contracts.ts:340`, `contract-pricing.ts` | Static fixtures + ContractPricing populated for active contracts so demo on-contract %, optimizer projections, accruals all show real numbers. |
@@ -95,8 +96,8 @@ TypeScript compiler enforces `toDisplayRebateValue` calls.
 
 ### 2. Dispatcher gap (was: 12 of 15 types silently degraded)
 
-**Status (2026-04-25):** PARTIALLY RESOLVED. After the dispatcher
-rebuild this session, **12 of 15** term types are functional:
+**Status (2026-04-25):** RESOLVED. After the dispatcher rebuild this
+session, **15 of 15** term types are functional:
 
 | Status | Term type | Engine path |
 |---|---|---|
@@ -112,10 +113,10 @@ rebuild this session, **12 of 15** term types are functional:
 | ✅ | `compliance_rebate` | `recompute-threshold-accrual.ts` reads `Contract.complianceRate`; tier `spendMin` = required %, `rebateValue` = flat $/period |
 | ✅ | `market_share` | shares `recompute-threshold-accrual.ts` reading `Contract.currentMarketShare` instead of complianceRate |
 | ✅ | `price_reduction` | no rebate accrual — pricing-only catalog handled by ContractPricing rows |
-| 🔒 | `payment_rebate` | needs payment-timing data source (when invoices were paid vs due) |
-| 🔒 | `market_share_price_reduction` | combines market_share threshold with price modifications — needs product input on which prices to modify |
-| 🔒 | `capitated_price_reduction` | needs procedure-priced semantics |
-| 🔒 | `capitated_pricing_rebate` | same |
+| ✅ | `payment_rebate` | `recompute-invoice-accrual.ts` — counts qualifying Invoice rows (vendor + facility + non-cancelled); tier rebateValue is $/invoice. v2 will add on-time-payment threshold once Invoice gains a paidDate field. |
+| ✅ | `market_share_price_reduction` | pricing-only catalog (same model as price_reduction) — discount applies via ContractPricing once market share target is met |
+| ✅ | `capitated_price_reduction` | pricing-only catalog (same model) — discount applies once procedure-spend threshold is met |
+| ✅ | `capitated_pricing_rebate` | shares `recompute-volume-accrual.ts` — per-procedure rebate when CPT count crosses tier (same Cases.procedures data, tier rebateValue is $/procedure) |
 
 The 6 remaining 🔒 types stay disabled in the dropdown with the
 "Engine pending" badge until product semantics are defined. Each

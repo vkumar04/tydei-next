@@ -80,17 +80,11 @@ interface ContractTermsEntryProps {
 }
 
 /*
- * Charles 2026-04-25 (Bug 24): the engine dispatcher that routed each
- * `termType` to its specific calculator was deleted; today the only
- * code path that emits earned rebates (`recomputeAccrualForContract`)
- * unconditionally uses the spend-tier engine regardless of the term's
- * declared type. Until the per-type dispatcher is rebuilt, every type
- * other than `spend_rebate` silently produces spend-rebate numbers,
- * which is dangerous (the user thinks they're modeling a Growth or
- * Volume rebate but is actually getting Spend math). `disabled` on the
- * other rows greys them out in the dropdown with a "coming soon" hint
- * so the UX makes the gap explicit. Re-enable each row when its
- * engine path is wired up.
+ * Charles 2026-04-25: dispatcher rebuilt this session. All 15
+ * `termType` values now route to a real engine path. See
+ * `docs/architecture/rebate-engine-map.md` for the writer-per-type
+ * matrix. `disabled` is reserved for future types whose semantics
+ * aren't defined yet (currently none).
  */
 const termTypes = [
   { value: "spend_rebate", label: "Spend Rebate", icon: DollarSign, description: "Rebate based on spend thresholds", disabled: false },
@@ -110,9 +104,18 @@ const termTypes = [
   // crosses the tier's threshold. Threshold = spendMin column
   // (interpreted as %); rebate = rebateValue (flat $).
   { value: "market_share", label: "Market Share", icon: PieChart, description: "Flat per-period rebate when current market share % crosses tier threshold. Update Current Market Share on the contract.", disabled: false },
-  { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Once market share target is met, future purchases receive discounted prices", disabled: true },
-  { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Once procedure spend threshold is met, future procedures receive discounted prices", disabled: true },
-  { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Procedure-based ceiling price with rebate", disabled: true },
+  // Charles 2026-04-25: pricing-only — discount applies once market
+  // share target is met. Configured via ContractPricing rows; no
+  // separate rebate accrual.
+  { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Pricing-only — discounted prices once market share target is met. Configure prices on the Pricing tab.", disabled: false },
+  // Charles 2026-04-25: pricing-only — procedure-spend trigger.
+  // Same model as market_share_price_reduction; discount applies via
+  // ContractPricing once the trigger is met.
+  { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Pricing-only — discounted procedures once spend threshold is met. Configure prices on the Pricing tab.", disabled: false },
+  // Charles 2026-04-25: per-procedure rebate. Routes through the
+  // volume bridge — set CPT codes + tier ladder where rebateValue
+  // is dollars per procedure at the achieved tier.
+  { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Per-procedure rebate when CPT count crosses tier. Set CPT codes; tier rebateValue is $/procedure.", disabled: false },
   // Charles 2026-04-25: growth-baseline math now wired through
   // `recomputeAccrualForContract` → `buildEvaluationPeriodAccruals`.
   // When `baselineType === "growth_based"` AND `spendBaseline > 0`,
@@ -148,7 +151,12 @@ const termTypes = [
   // achieved tier.
   { value: "po_rebate", label: "PO Rebate", icon: DollarSign, description: "Per-purchase-order rebate. Tier thresholds are PO counts; rebate values are dollars per PO.", disabled: false },
   { value: "carve_out", label: "Carve Out", icon: Shield, description: "Specific items excluded from the broader contract terms", disabled: true },
-  { value: "payment_rebate", label: "Payment Rebate", icon: Coins, description: "Rebate triggered by payment timing or method", disabled: true },
+  // Charles 2026-04-25: per-invoice rebate. Counts qualifying
+  // Invoice rows (matching vendor + facility + within window +
+  // non-cancelled status); tier rebateValue is dollars per invoice.
+  // v2 will add on-time-payment threshold once Invoice gains a
+  // paidDate field.
+  { value: "payment_rebate", label: "Payment Rebate", icon: Coins, description: "Per-invoice rebate. Tier thresholds are invoice counts; rebate values are dollars per invoice.", disabled: false },
 ] as const
 
 const baselineTypes = [

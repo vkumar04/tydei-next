@@ -514,14 +514,18 @@ export async function recomputeAccrualForContract(
   // spend rows from persisting.
   let volumeInserted = 0
   let volumeEarned = 0
-  // Charles 2026-04-25: rebate_per_use is a volume_rebate variant
-  // ("$X per procedure occurrence, no tier ladder"). Same engine path,
-  // same data source (Cases.procedures filtered by CPT). Configure
-  // with a single tier at threshold 0 + the per-occurrence dollar
-  // amount in rebateValue.
+  // Charles 2026-04-25: volume bridge family — all CPT-occurrence
+  // counting term types route through `recomputeVolumeAccrualForTerm`.
+  //   - volume_rebate: classic tiered occurrence ladder
+  //   - rebate_per_use: variant with one tier at threshold 0 ($/occ)
+  //   - capitated_pricing_rebate: per-procedure rebate when the
+  //     procedure-spend cap is reached. Same Cases.procedures
+  //     data source; the tier ladder defines when the cap is hit.
   const volumeTerms = contract.terms.filter(
     (t) =>
-      (t.termType === "volume_rebate" || t.termType === "rebate_per_use") &&
+      (t.termType === "volume_rebate" ||
+        t.termType === "rebate_per_use" ||
+        t.termType === "capitated_pricing_rebate") &&
       Array.isArray(t.cptCodes) &&
       t.cptCodes.length > 0 &&
       t.tiers.length > 0,
@@ -597,6 +601,48 @@ export async function recomputeAccrualForContract(
     }
   }
 
+  // Charles 2026-04-25: payment_rebate via invoice bridge.
+  // Counts qualifying invoices (matching vendor + facility + within
+  // window + non-cancelled) per evaluation period. Tier ladder =
+  // invoice counts; rebateValue = dollars per invoice at the
+  // achieved tier.
+  let invoiceInserted = 0
+  let invoiceEarned = 0
+  const invoiceTerms = contract.terms.filter(
+    (t) => t.termType === "payment_rebate" && t.tiers.length > 0,
+  )
+  if (invoiceTerms.length > 0) {
+    const { recomputeInvoiceAccrualForTerm } = await import(
+      "@/lib/actions/contracts/recompute-invoice-accrual"
+    )
+    for (const term of invoiceTerms) {
+      try {
+        const r = await recomputeInvoiceAccrualForTerm({
+          contractId,
+          vendorId: contract.vendorId,
+          facilityId: facility.id,
+          contractEffectiveDate: contract.effectiveDate,
+          contractExpirationDate: contract.expirationDate,
+          term: {
+            id: term.id,
+            rebateMethod: term.rebateMethod ?? null,
+            evaluationPeriod: term.evaluationPeriod ?? null,
+            effectiveStart: term.effectiveStart ?? null,
+            effectiveEnd: term.effectiveEnd ?? null,
+            tiers: term.tiers,
+          },
+        })
+        invoiceInserted += r.inserted
+        invoiceEarned += r.sumEarned
+      } catch (err) {
+        console.warn(
+          `[recomputeAccrualForContract] invoice-accrual term ${term.id} failed:`,
+          err,
+        )
+      }
+    }
+  }
+
   // Charles 2026-04-25: threshold-based dispatchers — compliance and
   // market-share rebates pay a flat tier dollar amount per evaluation
   // period when the contract-level metric crosses the threshold.
@@ -658,12 +704,14 @@ export async function recomputeAccrualForContract(
     toInsert.length === 0 &&
     volumeInserted === 0 &&
     poInserted === 0 &&
-    thresholdInserted === 0
+    thresholdInserted === 0 &&
+    invoiceInserted === 0
   ) {
     return {
       deleted: deleteResult.count,
       inserted: 0,
-      sumEarned: volumeEarned + poEarned + thresholdEarned,
+      sumEarned:
+        volumeEarned + poEarned + thresholdEarned + invoiceEarned,
     }
   }
 
@@ -686,12 +734,17 @@ export async function recomputeAccrualForContract(
     Number(sumAgg._sum.rebateEarned ?? 0) +
     volumeEarned +
     poEarned +
-    thresholdEarned
+    thresholdEarned +
+    invoiceEarned
 
   return {
     deleted: deleteResult.count,
     inserted:
-      createResult.count + volumeInserted + poInserted + thresholdInserted,
+      createResult.count +
+      volumeInserted +
+      poInserted +
+      thresholdInserted +
+      invoiceInserted,
     sumEarned,
   }
 }
