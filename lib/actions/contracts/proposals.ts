@@ -6,6 +6,58 @@ import { requireFacility } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 
+/**
+ * Charles 2026-04-25 (audit follow-up — Vendor mirror Phase 3):
+ * notify the vendor org when a ContractChangeProposal is acted on.
+ * Mirrors the pending-contract notification pattern: in-app row +
+ * email (best-effort), with a deep link back to the contract so
+ * the vendor can see the applied changes.
+ */
+async function notifyVendorOfProposalDecision(input: {
+  proposalId: string
+  vendorId: string
+  contractId: string
+  decision: "approved" | "rejected" | "revision_requested"
+  reviewNotes: string | null
+}): Promise<void> {
+  try {
+    const { createInAppNotifications } = await import(
+      "@/lib/actions/notifications/in-app"
+    )
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: input.vendorId },
+      select: {
+        organization: {
+          select: { members: { select: { user: { select: { id: true } } } } },
+        },
+      },
+    })
+    const userIds =
+      vendor?.organization?.members.map((m) => m.user.id) ?? []
+    if (userIds.length === 0) return
+    const decisionLabel =
+      input.decision === "approved"
+        ? "approved"
+        : input.decision === "rejected"
+          ? "rejected"
+          : "needs revision"
+    await createInAppNotifications({
+      userIds,
+      type: `contract_change_proposal_${input.decision}`,
+      title: `Your contract change proposal was ${decisionLabel}`,
+      body: input.reviewNotes,
+      payload: {
+        proposalId: input.proposalId,
+        contractId: input.contractId,
+        decision: input.decision,
+      },
+      actionUrl: `/vendor/contracts/${input.contractId}`,
+    })
+  } catch (err) {
+    console.warn("[notifyVendorOfProposalDecision] failed", err)
+  }
+}
+
 // ─── Queries ─────────────────────────────────────────────────────
 
 /**
@@ -83,6 +135,17 @@ export async function approveContractChangeProposal(
       changes: (proposal.changes ?? null) as Prisma.InputJsonValue,
     },
   })
+
+  // Charles 2026-04-25 (audit follow-up — Vendor mirror Phase 3):
+  // notify the vendor org that their proposal was acted on, both
+  // via in-app notification and email when configured.
+  await notifyVendorOfProposalDecision({
+    proposalId,
+    vendorId: proposal.vendorId,
+    contractId: proposal.contractId,
+    decision: "approved",
+    reviewNotes: null,
+  })
 }
 
 /**
@@ -121,6 +184,14 @@ export async function rejectContractChangeProposal(
     entityType: "contract_change_proposal",
     entityId: proposalId,
     metadata: { notes },
+  })
+
+  await notifyVendorOfProposalDecision({
+    proposalId,
+    vendorId: proposal.vendorId,
+    contractId: proposal.contractId,
+    decision: "rejected",
+    reviewNotes: notes,
   })
 }
 
@@ -162,6 +233,14 @@ export async function requestProposalRevision(
     entityType: "contract_change_proposal",
     entityId: proposalId,
     metadata: { notes },
+  })
+
+  await notifyVendorOfProposalDecision({
+    proposalId,
+    vendorId: proposal.vendorId,
+    contractId: proposal.contractId,
+    decision: "revision_requested",
+    reviewNotes: notes,
   })
 }
 

@@ -623,6 +623,19 @@ model Contract {
   complianceRate         Decimal?          @db.Decimal(5, 2)
   currentMarketShare     Decimal?          @db.Decimal(5, 2)
   marketShareCommitment  Decimal?          @db.Decimal(5, 2)
+  /**
+   * Charles 2026-04-25 (audit follow-up): per-category market share
+   * commitments. Vendor commitments are usually expressed per
+   * category ("60% of Joint Replacement, 40% of Spine"), not as a
+   * single contract-wide number. This Json blob keeps the schema
+   * change minimal — `[{ category, commitmentPct }, ...]`.
+   * `getCategoryMarketShareForVendor` already returns the LIVE share;
+   * this stores the COMMITMENT side so the threshold engine can
+   * evaluate met-vs-target per category. Null = no per-category
+   * targets set; the engine falls back to `marketShareCommitment`
+   * (contract-wide).
+   */
+  marketShareCommitmentByCategory Json?
   createdById            String?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt

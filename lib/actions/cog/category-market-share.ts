@@ -33,17 +33,60 @@ export interface CategoryMarketShareRow {
   sharePct: number
   /** Number of vendors competing in this category at the facility. */
   competingVendors: number
+  /**
+   * Optional per-category commitment % from
+   * `Contract.marketShareCommitmentByCategory` JSON. Null when the
+   * contract didn't set a commitment for this category. The UI
+   * uses this to render "X% / Y% commitment" with progress.
+   */
+  commitmentPct: number | null
 }
 
 export async function getCategoryMarketShareForVendor(input: {
   vendorId: string
   monthsBack?: number
+  /**
+   * Optional contract id to pull per-category commitment overlays
+   * from `Contract.marketShareCommitmentByCategory`. When omitted
+   * the result rows have `commitmentPct: null`.
+   */
+  contractId?: string
 }): Promise<CategoryMarketShareRow[]> {
   try {
     const { facility } = await requireFacility()
     const months = input.monthsBack ?? 12
     const since = new Date()
     since.setMonth(since.getMonth() - months)
+
+    // Optional commitment overlay per category. Schema stores the
+    // user-set targets as `[{category, commitmentPct}, ...]` JSON
+    // on Contract. We tolerate any non-array shape (old contracts
+    // / hand-edits) by treating it as an empty map.
+    const commitmentByCategory = new Map<string, number>()
+    if (input.contractId) {
+      const c = await prisma.contract.findUnique({
+        where: { id: input.contractId },
+        select: { marketShareCommitmentByCategory: true },
+      })
+      const raw = c?.marketShareCommitmentByCategory
+      if (Array.isArray(raw)) {
+        for (const entry of raw) {
+          if (
+            entry &&
+            typeof entry === "object" &&
+            "category" in entry &&
+            "commitmentPct" in entry &&
+            typeof (entry as Record<string, unknown>).category === "string" &&
+            typeof (entry as Record<string, unknown>).commitmentPct === "number"
+          ) {
+            commitmentByCategory.set(
+              (entry as { category: string }).category,
+              (entry as { commitmentPct: number }).commitmentPct,
+            )
+          }
+        }
+      }
+    }
 
     // Pull the facility's COG within the window. Group in-memory
     // because we need both per-category-per-vendor and per-category
@@ -97,6 +140,7 @@ export async function getCategoryMarketShareForVendor(input: {
         sharePct:
           bucket.total > 0 ? (vendorSpend / bucket.total) * 100 : 0,
         competingVendors: bucket.byVendor.size,
+        commitmentPct: commitmentByCategory.get(category) ?? null,
       })
     }
 

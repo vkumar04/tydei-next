@@ -1115,7 +1115,10 @@ export function ContractDetailClient({
            * required). Renders only on contracts whose vendor has
            * COG presence.
            */}
-          <CategoryMarketShareCard vendorId={contract.vendorId} />
+          <CategoryMarketShareCard
+            vendorId={contract.vendorId}
+            contractId={contractId}
+          />
 
           {contract.currentMarketShare != null && contract.marketShareCommitment != null && Number(contract.marketShareCommitment) > 0 && (
             <Card>

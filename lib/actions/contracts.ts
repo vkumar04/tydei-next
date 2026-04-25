@@ -10,7 +10,7 @@ import {
   type CreateContractInput,
   type UpdateContractInput,
 } from "@/lib/validators/contracts"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
@@ -814,6 +814,14 @@ async function _createContractImpl(
       ...(data.marketShareCommitment != null && {
         marketShareCommitment: data.marketShareCommitment,
       }),
+      ...(data.marketShareCommitmentByCategory !== undefined && {
+        // null clears (Prisma's `Prisma.JsonNull` sentinel); array
+        // value passes through as InputJsonValue.
+        marketShareCommitmentByCategory:
+          data.marketShareCommitmentByCategory === null
+            ? Prisma.JsonNull
+            : (data.marketShareCommitmentByCategory as Prisma.InputJsonValue),
+      }),
       createdById: session.user.id,
       ...(data.facilityIds.length > 0 && {
         isMultiFacility: true,
@@ -1086,6 +1094,11 @@ async function _updateContractImpl(
     updateData.currentMarketShare = data.currentMarketShare
   if (data.marketShareCommitment !== undefined)
     updateData.marketShareCommitment = data.marketShareCommitment
+  if (data.marketShareCommitmentByCategory !== undefined)
+    updateData.marketShareCommitmentByCategory =
+      data.marketShareCommitmentByCategory === null
+        ? Prisma.JsonNull
+        : (data.marketShareCommitmentByCategory as Prisma.InputJsonValue)
 
   if (data.facilityIds !== undefined) {
     await prisma.contractFacility.deleteMany({ where: { contractId: id } })

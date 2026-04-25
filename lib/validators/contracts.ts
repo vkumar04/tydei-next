@@ -72,6 +72,20 @@ const createContractBase = z.object({
   complianceRate: z.number().min(0).max(100).nullable().optional(),
   currentMarketShare: z.number().min(0).max(100).nullable().optional(),
   marketShareCommitment: z.number().min(0).max(100).nullable().optional(),
+  /**
+   * Charles 2026-04-25 (audit follow-up): per-category commitment
+   * targets. Pairs with `getCategoryMarketShareForVendor` which
+   * returns the live actuals; this stores the user's target side.
+   */
+  marketShareCommitmentByCategory: z
+    .array(
+      z.object({
+        category: z.string().min(1),
+        commitmentPct: z.number().min(0).max(100),
+      }),
+    )
+    .nullable()
+    .optional(),
   customAmortizationRows: z
     .array(
       z.object({

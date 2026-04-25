@@ -19,10 +19,21 @@ import { getCategoryMarketShareForVendor } from "@/lib/actions/cog/category-mark
  * market share." Computed live from COG (trailing 12 months) so it
  * reflects actual purchase mix without schema changes.
  */
-export function CategoryMarketShareCard({ vendorId }: { vendorId: string }) {
+export function CategoryMarketShareCard({
+  vendorId,
+  contractId,
+}: {
+  vendorId: string
+  /**
+   * Optional — when present, the action overlays per-category
+   * commitment % so the card can render "X% / Y% commitment".
+   */
+  contractId?: string
+}) {
   const { data, isLoading } = useQuery({
-    queryKey: ["category-market-share", vendorId],
-    queryFn: () => getCategoryMarketShareForVendor({ vendorId }),
+    queryKey: ["category-market-share", vendorId, contractId ?? null],
+    queryFn: () =>
+      getCategoryMarketShareForVendor({ vendorId, contractId }),
   })
 
   if (isLoading) {
@@ -49,27 +60,50 @@ export function CategoryMarketShareCard({ vendorId }: { vendorId: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {data.map((row) => (
-          <div key={row.category} className="space-y-1">
-            <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="font-medium">{row.category}</span>
-              <span className="tabular-nums">
-                <span className="font-semibold">{row.sharePct.toFixed(1)}%</span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {formatCurrency(row.vendorSpend)} of{" "}
-                  {formatCurrency(row.categoryTotal)}
+        {data.map((row) => {
+          // Charles 2026-04-25 (audit follow-up): when a per-category
+          // commitment exists, layer it onto the share progress bar
+          // so the user sees met-vs-target at a glance.
+          const meetingCommitment =
+            row.commitmentPct != null && row.sharePct >= row.commitmentPct
+          return (
+            <div key={row.category} className="space-y-1">
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="font-medium">{row.category}</span>
+                <span className="tabular-nums">
+                  <span className="font-semibold">{row.sharePct.toFixed(1)}%</span>
+                  {row.commitmentPct != null && (
+                    <span
+                      className={
+                        meetingCommitment
+                          ? "text-emerald-600"
+                          : "text-amber-600"
+                      }
+                    >
+                      {" "}
+                      / {row.commitmentPct.toFixed(1)}% commitment
+                    </span>
+                  )}
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {formatCurrency(row.vendorSpend)} of{" "}
+                    {formatCurrency(row.categoryTotal)}
+                  </span>
                 </span>
-              </span>
+              </div>
+              <Progress value={Math.min(100, row.sharePct)} />
+              <p className="text-[11px] text-muted-foreground">
+                {row.competingVendors === 1
+                  ? "Sole supplier in this category"
+                  : `${row.competingVendors} vendors competing`}
+                {row.commitmentPct != null &&
+                  (meetingCommitment
+                    ? ` · meeting commitment`
+                    : ` · ${(row.commitmentPct - row.sharePct).toFixed(1)}% short of commitment`)}
+              </p>
             </div>
-            <Progress value={Math.min(100, row.sharePct)} />
-            <p className="text-[11px] text-muted-foreground">
-              {row.competingVendors === 1
-                ? "Sole supplier in this category"
-                : `${row.competingVendors} vendors competing`}
-            </p>
-          </div>
-        ))}
+          )
+        })}
       </CardContent>
     </Card>
   )
