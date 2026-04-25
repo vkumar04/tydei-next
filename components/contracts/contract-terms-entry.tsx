@@ -244,11 +244,20 @@ function createEmptyTier(
   tierNumber: number,
   termType?: string,
 ): TierInput {
-  // Charles 2026-04-25 audit C6: a fixed_fee term needs a single tier
-  // whose rebateType is `fixed_rebate`. Defaulting to percent_of_spend
-  // meant a user typing "1000" got read as 100% of spend.
+  // Charles 2026-04-25 audit C6 + re-pass: flat-payout term types
+  // (fixed_fee, compliance_rebate, market_share) all default to
+  // `fixed_rebate` so a user typing "1000" stores as $1,000 not 100%
+  // of spend (the engine treats fraction values as percent at the
+  // boundary). All other term types default to percent_of_spend.
+  const flatPayoutTermTypes = new Set([
+    "fixed_fee",
+    "compliance_rebate",
+    "market_share",
+  ])
   const rebateType: TierInput["rebateType"] =
-    termType === "fixed_fee" ? "fixed_rebate" : "percent_of_spend"
+    termType && flatPayoutTermTypes.has(termType)
+      ? "fixed_rebate"
+      : "percent_of_spend"
   return {
     tierNumber,
     spendMin: 0,

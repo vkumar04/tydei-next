@@ -1115,13 +1115,26 @@ export function ContractFormBasicInfo({
                       <label className="text-xs text-muted-foreground">
                         Category
                       </label>
-                      <Input
+                      {/* Charles 2026-04-25 audit re-pass: bind to the
+                          category list so a typo can't desync from the
+                          COG row's `category` string. */}
+                      <Select
                         value={row.category}
-                        onChange={(e) =>
-                          updateMsbcRow(idx, { category: e.target.value })
+                        onValueChange={(v) =>
+                          updateMsbcRow(idx, { category: v })
                         }
-                        placeholder="e.g., Distal Extremities"
-                      />
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((c) => (
+                            <SelectItem key={c.id} value={c.name}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="w-32 space-y-1">
                       <label className="text-xs text-muted-foreground">

@@ -89,29 +89,43 @@ export function ContractTierRow({
 
       <div className="space-y-1">
         <label className="text-xs text-muted-foreground">{labels.min}</label>
-        <Input
-          type="number"
-          className="w-28"
-          value={tier.spendMin}
-          onChange={(e) =>
-            onChange({ ...tier, spendMin: Number(e.target.value) })
-          }
-        />
+        <div className="relative">
+          <Input
+            type="number"
+            className={labels.suffix ? "w-28 pr-7" : "w-28"}
+            value={tier.spendMin}
+            onChange={(e) =>
+              onChange({ ...tier, spendMin: Number(e.target.value) })
+            }
+          />
+          {labels.suffix && (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+              {labels.suffix}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1">
         <label className="text-xs text-muted-foreground">{labels.max}</label>
-        <Input
-          type="number"
-          className="w-28"
-          value={tier.spendMax ?? ""}
-          onChange={(e) =>
-            onChange({
-              ...tier,
-              spendMax: e.target.value ? Number(e.target.value) : undefined,
-            })
-          }
-        />
+        <div className="relative">
+          <Input
+            type="number"
+            className={labels.suffix ? "w-28 pr-7" : "w-28"}
+            value={tier.spendMax ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...tier,
+                spendMax: e.target.value ? Number(e.target.value) : undefined,
+              })
+            }
+          />
+          {labels.suffix && (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+              {labels.suffix}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1">

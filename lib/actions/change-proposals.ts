@@ -174,19 +174,16 @@ export async function reviewChangeProposal(
 // ─── Withdraw Proposal (Vendor) ─────────────────────────────────
 
 /**
- * TODO(Charles 2026-04-25 — B2): `ProposalStatus` has no `withdrawn`
- * value, so a vendor withdrawal currently flips status to `rejected`
- * with a "Withdrawn by vendor" note. The reviewNotes string is a fragile
- * way to distinguish vendor-initiated withdrawal from facility
- * rejection. Add a dedicated `withdrawn` enum value (schema migration)
- * and switch this write to it.
+ * Charles 2026-04-25 audit re-pass: ProposalStatus now has a
+ * dedicated `withdrawn` value so reports / analytics can distinguish
+ * vendor-initiated withdrawal from facility rejection.
  */
 export async function withdrawChangeProposal(id: string) {
   const { vendor } = await requireVendor()
 
   const result = await prisma.contractChangeProposal.updateMany({
     where: { id, vendorId: vendor.id, status: "pending" },
-    data: { status: "rejected", reviewNotes: "Withdrawn by vendor" },
+    data: { status: "withdrawn", reviewNotes: "Withdrawn by vendor" },
   })
   return serialize(result)
 }

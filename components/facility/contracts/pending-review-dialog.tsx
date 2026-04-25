@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { Loader2 } from "lucide-react"
 
 type PendingContractWithVendor = PendingContract & {
@@ -24,6 +25,94 @@ interface PendingReviewDialogProps {
   onReject: (notes: string) => void
   onRequestRevision: (notes: string) => void
   isSubmitting: boolean
+}
+
+interface PendingTermLike {
+  termName?: string
+  termType?: string
+  baselineType?: string
+  evaluationPeriod?: string
+  paymentTiming?: string
+  spendBaseline?: number | string | null
+  growthBaselinePercent?: number | string | null
+  cptCodes?: string[]
+  tiers?: Array<{
+    tierNumber?: number
+    tierName?: string | null
+    spendMin?: number | string
+    spendMax?: number | string | null
+    rebateType?: string
+    rebateValue?: number | string
+  }>
+}
+
+function PendingTermsSection({ terms }: { terms: unknown }) {
+  if (!Array.isArray(terms) || terms.length === 0) return null
+  const rows = terms as PendingTermLike[]
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <p className="text-sm font-medium">Rebate Terms ({rows.length})</p>
+      <div className="space-y-3">
+        {rows.map((t, i) => (
+          <div key={i} className="rounded-md border p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-medium text-sm">
+                {t.termName || `Term ${i + 1}`}
+              </span>
+              {t.termType && (
+                <Badge variant="outline" className="text-[10px] capitalize">
+                  {t.termType.replace(/_/g, " ")}
+                </Badge>
+              )}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {[t.baselineType, t.evaluationPeriod, t.paymentTiming]
+                .filter(Boolean)
+                .map((s) => String(s).replace(/_/g, " "))
+                .join(" · ")}
+            </div>
+            {t.cptCodes && t.cptCodes.length > 0 && (
+              <div className="mt-1 text-xs">
+                <span className="text-muted-foreground">CPT:</span>{" "}
+                {t.cptCodes.join(", ")}
+              </div>
+            )}
+            {Array.isArray(t.tiers) && t.tiers.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {t.tiers.map((tier, j) => (
+                  <div
+                    key={j}
+                    className="flex items-baseline justify-between gap-2 text-xs tabular-nums"
+                  >
+                    <span className="text-muted-foreground">
+                      Tier {tier.tierNumber ?? j + 1}
+                      {tier.tierName ? ` · ${tier.tierName}` : ""}
+                    </span>
+                    <span>
+                      {Number(tier.spendMin ?? 0).toLocaleString()}
+                      {tier.spendMax != null
+                        ? `–${Number(tier.spendMax).toLocaleString()}`
+                        : "+"}
+                      {" → "}
+                      <span className="font-medium">
+                        {tier.rebateType === "fixed_rebate" ||
+                        tier.rebateType === "fixed_rebate_per_unit"
+                          ? formatCurrency(Number(tier.rebateValue ?? 0))
+                          : `${toDisplayRebateValue(
+                              tier.rebateType ?? "percent_of_spend",
+                              Number(tier.rebateValue ?? 0),
+                            ).toFixed(2)}%`}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function PendingReviewDialog({
@@ -120,6 +209,15 @@ export function PendingReviewDialog({
                 <p className="mt-1">{contract.notes}</p>
               </div>
             )}
+
+            {/*
+             * Charles 2026-04-25 (audit re-pass — facility BLOCKER):
+             * surface the rebate-term + tier structure so the
+             * approver sees what they're actually agreeing to. The
+             * vendor's terms blob is JSON; we render a readable
+             * outline. Empty / malformed payloads are skipped.
+             */}
+            <PendingTermsSection terms={contract.terms} />
           </TabsContent>
 
           <TabsContent

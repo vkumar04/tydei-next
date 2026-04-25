@@ -159,6 +159,7 @@ enum ProposalStatus {
   rejected
   revision_requested
   countered
+  withdrawn
 }
 
 enum ConnectionStatus {

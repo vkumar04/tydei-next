@@ -42,7 +42,45 @@ export const createPendingContractSchema = z.object({
   downPayment: z.number().min(0).optional(),
   paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
   amortizationShape: z.enum(["symmetrical", "custom"]).optional(),
-  terms: z.any().optional(),
+  // Charles 2026-04-25 audit re-pass: schema-gate the terms blob so
+  // a partial term (missing tiers, etc.) can't silently land in the
+  // DB and then approve into a contract with an empty rebate ladder.
+  terms: z
+    .array(
+      z.object({
+        termName: z.string().min(1),
+        termType: z.string().min(1),
+        baselineType: z.string().optional(),
+        evaluationPeriod: z.string().optional(),
+        paymentTiming: z.string().optional(),
+        appliesTo: z.string().optional(),
+        rebateMethod: z.string().optional(),
+        spendBaseline: z
+          .union([z.number(), z.string(), z.null()])
+          .optional(),
+        growthBaselinePercent: z
+          .union([z.number(), z.string(), z.null()])
+          .optional(),
+        cptCodes: z.array(z.string()).optional(),
+        effectiveStart: z.string().optional(),
+        effectiveEnd: z.string().optional(),
+        tiers: z
+          .array(
+            z.object({
+              tierNumber: z.number().int().min(1),
+              tierName: z.string().nullable().optional(),
+              spendMin: z.union([z.number(), z.string()]),
+              spendMax: z
+                .union([z.number(), z.string(), z.null()])
+                .optional(),
+              rebateType: z.string().min(1),
+              rebateValue: z.union([z.number(), z.string()]),
+            }),
+          )
+          .min(1, "Each term must have at least one tier"),
+      }),
+    )
+    .optional(),
   documents: z.any().optional(),
   pricingData: z.any().optional(),
   notes: z.string().optional(),

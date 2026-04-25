@@ -22,6 +22,38 @@ interface Change {
   proposedValue: string
 }
 
+/**
+ * Charles 2026-04-25 audit re-pass: must mirror
+ * `ALLOWED_CONTRACT_EDIT_FIELDS` in
+ * `lib/actions/contracts/proposals.ts`. Free-text input previously
+ * meant any typo silently dropped the change on approve.
+ */
+const CONTRACT_EDIT_FIELD_OPTIONS: ReadonlyArray<{
+  value: string
+  label: string
+}> = [
+  { value: "name", label: "Contract name" },
+  { value: "vendorName", label: "Vendor name" },
+  { value: "description", label: "Description" },
+  { value: "totalValue", label: "Total value ($)" },
+  { value: "effectiveDate", label: "Effective date" },
+  { value: "expirationDate", label: "Expiration date" },
+  { value: "notes", label: "Notes" },
+  { value: "contractNumber", label: "Contract #" },
+  { value: "annualValue", label: "Annual value ($)" },
+  { value: "gpoAffiliation", label: "GPO affiliation" },
+  { value: "performancePeriod", label: "Performance period" },
+  { value: "rebatePayPeriod", label: "Rebate pay period" },
+  { value: "autoRenewal", label: "Auto-renewal" },
+  { value: "terminationNoticeDays", label: "Termination notice (days)" },
+  { value: "capitalCost", label: "Capital cost ($)" },
+  { value: "interestRate", label: "Interest rate" },
+  { value: "termMonths", label: "Term (months)" },
+  { value: "downPayment", label: "Down payment ($)" },
+  { value: "paymentCadence", label: "Payment cadence" },
+  { value: "amortizationShape", label: "Amortization shape" },
+]
+
 interface ChangeProposalFormProps {
   contract: { id: string; name: string; vendorId: string; vendorName: string; facilityId?: string; facilityName?: string }
   onSubmit: (proposal: CreateChangeProposalInput) => Promise<void>
@@ -86,7 +118,25 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
           </div>
           {changes.map((change, i) => (
             <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
-              <Input placeholder="Field" value={change.field} onChange={(e) => updateChange(i, "field", e.target.value)} />
+              {proposalType === "contract_edit" ? (
+                <Select
+                  value={change.field}
+                  onValueChange={(v) => updateChange(i, "field", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Field" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONTRACT_EDIT_FIELD_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input placeholder="Field" value={change.field} onChange={(e) => updateChange(i, "field", e.target.value)} />
+              )}
               <Input placeholder="Current value" value={change.currentValue} onChange={(e) => updateChange(i, "currentValue", e.target.value)} />
               <Input placeholder="Proposed value" value={change.proposedValue} onChange={(e) => updateChange(i, "proposedValue", e.target.value)} />
               <Button type="button" variant="ghost" size="icon-xs" onClick={() => removeChange(i)} disabled={changes.length === 1}>
