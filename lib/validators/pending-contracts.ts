@@ -11,6 +11,18 @@ export const createPendingContractSchema = z.object({
   effectiveDate: z.string().optional(),
   expirationDate: z.string().optional(),
   totalValue: z.number().min(0).optional(),
+  // Charles 2026-04-25 (vendor-mirror Phase 2): field-parity columns
+  // now backed by real DB columns on PendingContract. The vendor
+  // submission UI was already collecting these in local state but
+  // the server boundary dropped them — all optional so older clients
+  // stay compatible.
+  contractNumber: z.string().optional(),
+  annualValue: z.number().min(0).optional(),
+  gpoAffiliation: z.string().optional(),
+  performancePeriod: z.string().optional(),
+  rebatePayPeriod: z.string().optional(),
+  autoRenewal: z.boolean().optional(),
+  terminationNoticeDays: z.number().int().min(0).optional(),
   terms: z.any().optional(),
   documents: z.any().optional(),
   pricingData: z.any().optional(),

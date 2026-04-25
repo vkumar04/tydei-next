@@ -32,7 +32,26 @@ Scope explicitly excluded from Phase 1 (would need schema migration):
 field parity (capital tie-in, productCategoryId, multi-facility,
 performancePeriod, rebatePayPeriod, contractNumber, autoRenewal, etc.).
 
-## Phase 2 — richer flow (1-2 days)
+## Phase 2 (partial) — text/scalar field parity (2026-04-25)
+
+**Status:** SHIPPED for the simplest fields; tie-in capital +
+counter-proposal + Notification model still TBD (see "Phase 2
+remaining" below).
+
+What shipped:
+- Migration: added `contractNumber`, `annualValue`,
+  `gpoAffiliation`, `performancePeriod`, `rebatePayPeriod`,
+  `autoRenewal`, `terminationNoticeDays` columns to
+  `PendingContract` (all optional/nullable so older rows stay valid).
+- `createPendingContractSchema` + `updatePendingContractSchema`
+  accept the new fields.
+- `createPendingContract` + `updatePendingContract` persist them.
+- `approvePendingContract` ports them onto the real `Contract` row
+  (cast `performancePeriod` / `rebatePayPeriod` at the boundary —
+  they're free-form `String?` on PendingContract but enums on
+  Contract).
+
+## Phase 2 remaining (1 day)
 
 Goal: vendor can mirror the full facility form; revision loop is
 truly bidirectional.

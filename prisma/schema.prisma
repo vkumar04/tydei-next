@@ -1033,6 +1033,19 @@ model PendingContract {
   effectiveDate  DateTime?             @db.Date
   expirationDate DateTime?             @db.Date
   totalValue     Decimal?              @db.Decimal(14, 2)
+  // Charles 2026-04-25 (vendor-mirror Phase 2): field-parity columns
+  // so vendor submissions don't drop data on the floor. The vendor
+  // submission UI already collected most of these in local state;
+  // they were silently dropped at the server boundary because no
+  // column existed. All optional/nullable so existing rows in older
+  // databases stay valid.
+  contractNumber        String?
+  annualValue           Decimal?              @db.Decimal(14, 2)
+  gpoAffiliation        String?
+  performancePeriod     String?
+  rebatePayPeriod       String?
+  autoRenewal           Boolean               @default(false)
+  terminationNoticeDays Int?
   terms          Json                  @default("[]")
   documents      Json                  @default("[]")
   pricingData    Json?

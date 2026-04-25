@@ -215,6 +215,31 @@ export async function createPendingContract(input: CreatePendingContractInput) {
       effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null,
       expirationDate: data.expirationDate ? new Date(data.expirationDate) : null,
       totalValue: data.totalValue,
+      // Charles 2026-04-25 (vendor-mirror Phase 2): persist the
+      // field-parity columns. Pre-Phase-2 these were dropped on the
+      // floor at the server boundary even when the vendor UI sent
+      // them.
+      ...(data.contractNumber !== undefined && {
+        contractNumber: data.contractNumber,
+      }),
+      ...(data.annualValue !== undefined && {
+        annualValue: data.annualValue,
+      }),
+      ...(data.gpoAffiliation !== undefined && {
+        gpoAffiliation: data.gpoAffiliation,
+      }),
+      ...(data.performancePeriod !== undefined && {
+        performancePeriod: data.performancePeriod,
+      }),
+      ...(data.rebatePayPeriod !== undefined && {
+        rebatePayPeriod: data.rebatePayPeriod,
+      }),
+      ...(data.autoRenewal !== undefined && {
+        autoRenewal: data.autoRenewal,
+      }),
+      ...(data.terminationNoticeDays !== undefined && {
+        terminationNoticeDays: data.terminationNoticeDays,
+      }),
       terms: data.terms ?? [],
       documents: data.documents ?? [],
       pricingData: data.pricingData,
@@ -251,6 +276,30 @@ export async function updatePendingContract(id: string, input: UpdatePendingCont
       ...(data.effectiveDate !== undefined && { effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null }),
       ...(data.expirationDate !== undefined && { expirationDate: data.expirationDate ? new Date(data.expirationDate) : null }),
       ...(data.totalValue !== undefined && { totalValue: data.totalValue }),
+      // Charles 2026-04-25 (vendor-mirror Phase 2): mirror the create
+      // path's field-parity columns on update so vendor edits to the
+      // pending submission preserve them through the revision loop.
+      ...(data.contractNumber !== undefined && {
+        contractNumber: data.contractNumber,
+      }),
+      ...(data.annualValue !== undefined && {
+        annualValue: data.annualValue,
+      }),
+      ...(data.gpoAffiliation !== undefined && {
+        gpoAffiliation: data.gpoAffiliation,
+      }),
+      ...(data.performancePeriod !== undefined && {
+        performancePeriod: data.performancePeriod,
+      }),
+      ...(data.rebatePayPeriod !== undefined && {
+        rebatePayPeriod: data.rebatePayPeriod,
+      }),
+      ...(data.autoRenewal !== undefined && {
+        autoRenewal: data.autoRenewal,
+      }),
+      ...(data.terminationNoticeDays !== undefined && {
+        terminationNoticeDays: data.terminationNoticeDays,
+      }),
       ...(data.terms !== undefined && { terms: data.terms }),
       ...(data.documents !== undefined && { documents: data.documents }),
       ...(data.pricingData !== undefined && { pricingData: data.pricingData }),
@@ -323,6 +372,37 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
       expirationDate:
         pending.expirationDate ?? new Date(Date.UTC(9999, 11, 31)),
       totalValue: pending.totalValue ?? 0,
+      // Charles 2026-04-25 (vendor-mirror Phase 2): port the field-
+      // parity columns onto the real contract on approve. Without
+      // this the vendor's submitted values would still drop on the
+      // floor at the approve boundary even though Phase 2 added the
+      // columns to PendingContract.
+      ...(pending.contractNumber != null && {
+        contractNumber: pending.contractNumber,
+      }),
+      ...(pending.annualValue != null && {
+        annualValue: pending.annualValue,
+      }),
+      ...(pending.gpoAffiliation != null && {
+        gpoAffiliation: pending.gpoAffiliation,
+      }),
+      // performancePeriod / rebatePayPeriod are typed `String?` on
+      // PendingContract (free-form vendor input) but enums on the
+      // real Contract. Cast at the boundary; if the vendor sent a
+      // value that doesn't match the enum the create will throw and
+      // surface a helpful Prisma error to the reviewer.
+      ...(pending.performancePeriod != null && {
+        performancePeriod:
+          pending.performancePeriod as Prisma.ContractCreateInput["performancePeriod"],
+      }),
+      ...(pending.rebatePayPeriod != null && {
+        rebatePayPeriod:
+          pending.rebatePayPeriod as Prisma.ContractCreateInput["rebatePayPeriod"],
+      }),
+      autoRenewal: pending.autoRenewal,
+      ...(pending.terminationNoticeDays != null && {
+        terminationNoticeDays: pending.terminationNoticeDays,
+      }),
       ...(pricingItems.length > 0 && {
         pricingItems: {
           create: pricingItems,
