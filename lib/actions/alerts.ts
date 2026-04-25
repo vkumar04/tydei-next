@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { alertFiltersSchema, type AlertFilters } from "@/lib/validators/alerts"
 import type { Prisma } from "@prisma/client"
 import {
@@ -105,20 +105,29 @@ export async function getAlert(id: string) {
 // ─── Unread Count ────────────────────────────────────────────────
 
 export async function getUnreadAlertCount(input: {
+  /** @deprecated Charles audit round-10: ignored — derived from session. */
   facilityId?: string
+  /** @deprecated Charles audit round-10: ignored — derived from session. */
   vendorId?: string
   portalType: "facility" | "vendor"
 }) {
-  // Caller passes IDs from an already-authenticated session (layout.tsx),
-  // but guard against tampering by requiring at least one scope filter.
-  if (!input.facilityId && !input.vendorId) return 0
-
+  // Charles audit round-10 CONCERN: derive scope from authenticated
+  // session rather than client input. Pre-fix any facility user could
+  // pass another tenant's facilityId (or vendorId + portalType=vendor)
+  // to enumerate their unread-alert count. Counts only — info
+  // disclosure, not data corruption — but the same pattern was the
+  // class for several earlier BLOCKERs.
   const where: Prisma.AlertWhereInput = {
     portalType: input.portalType,
     status: "new_alert",
   }
-  if (input.facilityId) where.facilityId = input.facilityId
-  if (input.vendorId) where.vendorId = input.vendorId
+  if (input.portalType === "facility") {
+    const { facility } = await requireFacility()
+    where.facilityId = facility.id
+  } else {
+    const { vendor } = await requireVendor()
+    where.vendorId = vendor.id
+  }
 
   const count = await prisma.alert.count({ where })
   return count

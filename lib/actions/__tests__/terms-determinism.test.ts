@@ -83,6 +83,9 @@ describe("terms content determinism (Charles W2.B)", () => {
     contractId = term.contractId
     termId = term.id
     // Round-9: patch the auth mock so the ownership check passes.
+    if (!term.contract.facilityId) {
+      throw new Error("[terms-determinism] contract has no facilityId")
+    }
     facilityIdRef.current = term.contract.facilityId
 
     // Seed multiple ContractTermProduct rows in an order that is NOT

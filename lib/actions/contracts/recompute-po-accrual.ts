@@ -1,4 +1,9 @@
-"use server"
+// Charles audit round-10 BLOCKER: removed "use server" — internal
+// helper consumed by recomputeAccrualForContract (which gates auth +
+// ownership). Pre-fix the directive auto-registered the export as an
+// RPC entry point that any caller could invoke with arbitrary
+// contractId/facilityId to delete/insert Rebate rows on a foreign
+// tenant.
 
 /**
  * PO rebate accrual writer (Charles 2026-04-25).

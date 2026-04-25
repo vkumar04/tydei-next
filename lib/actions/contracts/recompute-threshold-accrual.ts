@@ -1,4 +1,5 @@
-"use server"
+// Charles audit round-10 BLOCKER: removed "use server" — internal
+// helper consumed by recomputeAccrualForContract.
 
 /**
  * Threshold-based rebate accrual writer (Charles 2026-04-25).
