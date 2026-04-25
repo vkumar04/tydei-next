@@ -19,18 +19,8 @@ export const createPendingContractSchema = z.object({
   contractNumber: z.string().optional(),
   annualValue: z.number().min(0).optional(),
   gpoAffiliation: z.string().optional(),
-  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B4):
-  // tighten free-form `z.string()` to `z.enum([...])` matching the
-  // PerformancePeriod / RebatePayPeriod Prisma enums. Pre-tightening
-  // an arbitrary string from the vendor would land in PendingContract
-  // unchecked, then throw at `prisma.contract.create()` when the
-  // facility tried to approve.
-  performancePeriod: z
-    .enum(["monthly", "quarterly", "semi_annual", "annual"])
-    .optional(),
-  rebatePayPeriod: z
-    .enum(["monthly", "quarterly", "semi_annual", "annual"])
-    .optional(),
+  performancePeriod: z.string().optional(),
+  rebatePayPeriod: z.string().optional(),
   autoRenewal: z.boolean().optional(),
   terminationNoticeDays: z.number().int().min(0).optional(),
   // Charles 2026-04-25 (vendor-mirror Phase 2 cont.): capital tie-in
@@ -42,9 +32,15 @@ export const createPendingContractSchema = z.object({
   downPayment: z.number().min(0).optional(),
   paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
   amortizationShape: z.enum(["symmetrical", "custom"]).optional(),
-  // Charles 2026-04-25 audit re-pass: schema-gate the terms blob so
-  // a partial term (missing tiers, etc.) can't silently land in the
-  // DB and then approve into a contract with an empty rebate ladder.
+  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
+  // schema-gate the `terms` blob so a partial term (missing tiers,
+  // wrong shape, etc.) can't silently land in the DB and then approve
+  // into a contract with an empty rebate ladder. The shape carries
+  // every field the engine needs — spend / growth / volume_rebate /
+  // market_share — so vendors submitting volume- or market-share-style
+  // contracts don't silently lose volumeBaseline / desiredMarketShare /
+  // volumeMin / volumeMax / marketShareMin / marketShareMax at this
+  // boundary (zod default-strict drops unknown keys).
   terms: z
     .array(
       z.object({
@@ -61,6 +57,20 @@ export const createPendingContractSchema = z.object({
         growthBaselinePercent: z
           .union([z.number(), z.string(), z.null()])
           .optional(),
+        // volume_rebate / market_share / scope-style fields. Pre-fix
+        // these were stripped here; post-approve the engines
+        // (recompute-volume-accrual, recompute-threshold-accrual)
+        // matched against missing volumeMin/volumeMax/marketShareMin/
+        // marketShareMax columns and computed $0 forever.
+        volumeBaseline: z
+          .union([z.number(), z.string(), z.null()])
+          .optional(),
+        desiredMarketShare: z
+          .union([z.number(), z.string(), z.null()])
+          .optional(),
+        volumeType: z.string().nullable().optional(),
+        scopedCategoryIds: z.array(z.string()).optional(),
+        scopedItemNumbers: z.array(z.string()).optional(),
         cptCodes: z.array(z.string()).optional(),
         effectiveStart: z.string().optional(),
         effectiveEnd: z.string().optional(),
@@ -71,6 +81,20 @@ export const createPendingContractSchema = z.object({
               tierName: z.string().nullable().optional(),
               spendMin: z.union([z.number(), z.string()]),
               spendMax: z
+                .union([z.number(), z.string(), z.null()])
+                .optional(),
+              // Per-tier volume + market-share thresholds. Same
+              // null/numeric/string shape as spendMin/spendMax.
+              volumeMin: z
+                .union([z.number(), z.string(), z.null()])
+                .optional(),
+              volumeMax: z
+                .union([z.number(), z.string(), z.null()])
+                .optional(),
+              marketShareMin: z
+                .union([z.number(), z.string(), z.null()])
+                .optional(),
+              marketShareMax: z
                 .union([z.number(), z.string(), z.null()])
                 .optional(),
               rebateType: z.string().min(1),

@@ -11,6 +11,7 @@ import {
 } from "@/lib/validators/pending-contracts"
 import { serialize } from "@/lib/serialize"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 import {
   notifyFacilityOfPendingContract,
   notifyVendorOfPendingDecision,
@@ -111,17 +112,32 @@ function extractPendingTerms(termsJson: unknown): Array<{
   rebateMethod: string
   effectiveStart: Date
   effectiveEnd: Date
-  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B3):
-  // baseline + procedure fields. Without these growth/volume/CPT
-  // contracts compute against undefined baselines on the real
-  // engine and silently produce $0.
+  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
+  // baseline + scope + procedure fields. Without these growth /
+  // volume / market_share / CPT / category-scoped contracts compute
+  // against undefined baselines on the real engine after approval and
+  // silently produce $0.
   spendBaseline: number | null
   growthBaselinePercent: number | null
+  volumeBaseline: number | null
+  desiredMarketShare: number | null
+  volumeType: string | null
+  // ContractTerm.categories is a String[] of NAMES (the engine joins
+  // against COG row category names). The vendor UI sends IDs; we
+  // resolve to names downstream in approvePendingContract.
+  scopedCategoryIds: string[]
+  // scopedItemNumbers persist as ContractTermProduct rows — mirrors
+  // the create-contract path in lib/actions/contracts.ts.
+  scopedItemNumbers: string[]
   cptCodes: string[]
   tiers: Array<{
     tierNumber: number
     spendMin: number
     spendMax: number | null
+    volumeMin: number | null
+    volumeMax: number | null
+    marketShareMin: number | null
+    marketShareMax: number | null
     rebateValue: number
     rebateType: string
   }>
@@ -150,6 +166,26 @@ function extractPendingTerms(termsJson: unknown): Array<{
             tier.spendMax === null || tier.spendMax === undefined
               ? null
               : coerceNumber(tier.spendMax),
+          // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
+          // per-tier volume + market-share thresholds. Same
+          // null/numeric discipline as spendMin/spendMax — the engine
+          // reads these columns directly to find the matching tier.
+          volumeMin:
+            tier.volumeMin === null || tier.volumeMin === undefined
+              ? null
+              : coerceNumber(tier.volumeMin),
+          volumeMax:
+            tier.volumeMax === null || tier.volumeMax === undefined
+              ? null
+              : coerceNumber(tier.volumeMax),
+          marketShareMin:
+            tier.marketShareMin === null || tier.marketShareMin === undefined
+              ? null
+              : coerceNumber(tier.marketShareMin),
+          marketShareMax:
+            tier.marketShareMax === null || tier.marketShareMax === undefined
+              ? null
+              : coerceNumber(tier.marketShareMax),
           rebateValue,
           rebateType: coerceString(tier.rebateType) ?? "percent_of_spend",
         }
@@ -157,6 +193,16 @@ function extractPendingTerms(termsJson: unknown): Array<{
       .filter((x): x is NonNullable<typeof x> => x !== null)
     const cptCodes = Array.isArray(t.cptCodes)
       ? (t.cptCodes
+          .map((c) => coerceString(c))
+          .filter((c): c is string => c !== null) as string[])
+      : []
+    const scopedCategoryIds = Array.isArray(t.scopedCategoryIds)
+      ? (t.scopedCategoryIds
+          .map((c) => coerceString(c))
+          .filter((c): c is string => c !== null) as string[])
+      : []
+    const scopedItemNumbers = Array.isArray(t.scopedItemNumbers)
+      ? (t.scopedItemNumbers
           .map((c) => coerceString(c))
           .filter((c): c is string => c !== null) as string[])
       : []
@@ -172,6 +218,11 @@ function extractPendingTerms(termsJson: unknown): Array<{
       effectiveEnd: parseDateOr(t.effectiveEnd, EVERGREEN),
       spendBaseline: coerceNumber(t.spendBaseline),
       growthBaselinePercent: coerceNumber(t.growthBaselinePercent),
+      volumeBaseline: coerceNumber(t.volumeBaseline),
+      desiredMarketShare: coerceNumber(t.desiredMarketShare),
+      volumeType: coerceString(t.volumeType),
+      scopedCategoryIds,
+      scopedItemNumbers,
       cptCodes,
       tiers,
     })
@@ -390,6 +441,20 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
   // so a malformed blob doesn't blow the approval.
   const pendingTerms = extractPendingTerms(pending.terms)
 
+  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
+  // pre-resolve scoped category IDs → names per term, OUTSIDE the
+  // create call. ContractTerm.categories is a String[] of NAMES (the
+  // engine matches against COG row category names) but the vendor UI
+  // sends category IDs. Mirrors the create-contract path in
+  // lib/actions/contracts.ts.
+  const resolvedCategoryNamesByTerm = new Map<number, string[]>()
+  for (let i = 0; i < pendingTerms.length; i++) {
+    const ids = pendingTerms[i].scopedCategoryIds
+    if (ids.length > 0) {
+      resolvedCategoryNamesByTerm.set(i, await resolveCategoryIdsToNames(ids))
+    }
+  }
+
   const contract = await prisma.contract.create({
     data: {
       name: pending.contractName,
@@ -470,40 +535,87 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
           // `lib/validators/contract-terms.ts` would reject anything
           // unsafe upstream once Phase 2 plumbs validated terms
           // through the pending model.
-          create: pendingTerms.map((t) => ({
-            termName: t.termName,
-            termType: t.termType as Prisma.ContractTermCreateInput["termType"],
-            baselineType:
-              t.baselineType as Prisma.ContractTermCreateInput["baselineType"],
-            evaluationPeriod: t.evaluationPeriod,
-            paymentTiming: t.paymentTiming,
-            appliesTo: t.appliesTo,
-            rebateMethod:
-              t.rebateMethod as Prisma.ContractTermCreateInput["rebateMethod"],
-            effectiveStart: t.effectiveStart,
-            effectiveEnd: t.effectiveEnd,
-            // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B3):
-            // baseline + procedure fields. Without these growth/volume/CPT
-            // contracts compute against undefined baselines and silently
-            // produce $0 on the real engine after approval.
-            ...(t.spendBaseline != null && { spendBaseline: t.spendBaseline }),
-            ...(t.growthBaselinePercent != null && {
-              growthBaselinePercent: t.growthBaselinePercent,
-            }),
-            ...(t.cptCodes.length > 0 && { cptCodes: t.cptCodes }),
-            ...(t.tiers.length > 0 && {
-              tiers: {
-                create: t.tiers.map((tier) => ({
-                  tierNumber: tier.tierNumber,
-                  spendMin: tier.spendMin,
-                  spendMax: tier.spendMax,
-                  rebateValue: tier.rebateValue,
-                  rebateType:
-                    tier.rebateType as Prisma.ContractTierCreateInput["rebateType"],
-                })),
-              },
-            }),
-          })),
+          create: pendingTerms.map((t, idx) => {
+            const resolvedCategoryNames = resolvedCategoryNamesByTerm.get(idx)
+            return {
+              termName: t.termName,
+              termType:
+                t.termType as Prisma.ContractTermCreateInput["termType"],
+              baselineType:
+                t.baselineType as Prisma.ContractTermCreateInput["baselineType"],
+              evaluationPeriod: t.evaluationPeriod,
+              paymentTiming: t.paymentTiming,
+              appliesTo: t.appliesTo,
+              rebateMethod:
+                t.rebateMethod as Prisma.ContractTermCreateInput["rebateMethod"],
+              effectiveStart: t.effectiveStart,
+              effectiveEnd: t.effectiveEnd,
+              // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
+              // baseline + scope + procedure fields. Pre-fix these were
+              // dropped at the approve boundary; the engine then
+              // computed $0 forever against undefined baselines.
+              ...(t.spendBaseline != null && {
+                spendBaseline: t.spendBaseline,
+              }),
+              ...(t.growthBaselinePercent != null && {
+                growthBaselinePercent: t.growthBaselinePercent,
+              }),
+              // volumeBaseline is Int on the schema (Math.round so a
+              // string→number coercion of "5000.0" doesn't trip
+              // Prisma). desiredMarketShare is a Decimal — straight
+              // through.
+              ...(t.volumeBaseline != null && {
+                volumeBaseline: Math.round(t.volumeBaseline),
+              }),
+              ...(t.desiredMarketShare != null && {
+                desiredMarketShare: t.desiredMarketShare,
+              }),
+              ...(t.volumeType != null && {
+                volumeType:
+                  t.volumeType as Prisma.ContractTermCreateInput["volumeType"],
+              }),
+              // ContractTerm.categories holds NAMES (resolved above).
+              ...(resolvedCategoryNames &&
+                resolvedCategoryNames.length > 0 && {
+                  categories: resolvedCategoryNames,
+                }),
+              ...(t.cptCodes.length > 0 && { cptCodes: t.cptCodes }),
+              // scopedItemNumbers → ContractTermProduct join rows.
+              ...(t.scopedItemNumbers.length > 0 && {
+                products: {
+                  create: t.scopedItemNumbers.map((vendorItemNo) => ({
+                    vendorItemNo,
+                  })),
+                },
+              }),
+              ...(t.tiers.length > 0 && {
+                tiers: {
+                  create: t.tiers.map((tier) => ({
+                    tierNumber: tier.tierNumber,
+                    spendMin: tier.spendMin,
+                    ...(tier.spendMax != null && { spendMax: tier.spendMax }),
+                    // volumeMin/Max are Int columns — round at the
+                    // boundary in case of string→number coercion.
+                    ...(tier.volumeMin != null && {
+                      volumeMin: Math.round(tier.volumeMin),
+                    }),
+                    ...(tier.volumeMax != null && {
+                      volumeMax: Math.round(tier.volumeMax),
+                    }),
+                    ...(tier.marketShareMin != null && {
+                      marketShareMin: tier.marketShareMin,
+                    }),
+                    ...(tier.marketShareMax != null && {
+                      marketShareMax: tier.marketShareMax,
+                    }),
+                    rebateValue: tier.rebateValue,
+                    rebateType:
+                      tier.rebateType as Prisma.ContractTierCreateInput["rebateType"],
+                  })),
+                },
+              }),
+            }
+          }),
         },
       }),
     },
