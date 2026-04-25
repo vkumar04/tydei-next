@@ -651,12 +651,44 @@ export function VendorContractSubmission({
     })
 
     try {
-      // Fan out one PendingContract per selected facility so the
-      // GPO membership all receive the row.
-      for (const facId of facilityIdsToSubmit) {
-        await create.mutateAsync(buildPayloadFor(facId))
+      // Charles audit round-2 vendor CONCERN 2: fan out with
+      // Promise.allSettled so a mid-flight failure on one facility
+      // doesn't skip the rest, and surface a single rolled-up toast
+      // (instead of one per success) telling the user exactly what
+      // succeeded and what failed.
+      const results = await Promise.allSettled(
+        facilityIdsToSubmit.map((facId) =>
+          create.mutateAsync(buildPayloadFor(facId)),
+        ),
+      )
+      const failures = results
+        .map((r, i) =>
+          r.status === "rejected"
+            ? {
+                facilityName:
+                  facilities.find((f) => f.id === facilityIdsToSubmit[i])
+                    ?.name ?? facilityIdsToSubmit[i],
+                error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+              }
+            : null,
+        )
+        .filter((x): x is { facilityName: string; error: string } => x !== null)
+      const successes = results.length - failures.length
+      if (failures.length === 0) {
+        toast.success(
+          successes === 1
+            ? "Contract submitted for review"
+            : `Contract submitted to ${successes} facilities`,
+        )
+        router.push("/vendor/contracts")
+        return
       }
-      router.push("/vendor/contracts")
+      toast.error(
+        `Submitted to ${successes} of ${results.length} facilities. Failed: ${failures
+          .map((f) => f.facilityName)
+          .join(", ")}`,
+      )
+      setIsSubmitting(false)
     } catch {
       setIsSubmitting(false)
     }

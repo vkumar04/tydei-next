@@ -77,19 +77,28 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
 
   // Charles audit round-1 vendor C4: aggregate the FULL period table
   // for lifetime totals so the vendor overview's Spend / Rebate
-  // Earned / Rebate Collected don't truncate at 4 most-recent rows.
-  const lifetimeAgg = await prisma.contractPeriod.aggregate({
-    where: { contractId: id },
-    _sum: {
-      totalSpend: true,
-      rebateEarned: true,
-      rebateCollected: true,
-    },
-  })
+  // Earned don't truncate at 4 most-recent rows.
+  // Charles audit round-2 vendor CONCERN 1: rebateCollected goes
+  // through canonical sumCollectedRebates over the Rebate table
+  // (not the period rollup), which enforces the
+  // collectionDate != null invariant per the CLAUDE.md table.
+  const [lifetimeAgg, rebateRows] = await Promise.all([
+    prisma.contractPeriod.aggregate({
+      where: { contractId: id },
+      _sum: { totalSpend: true, rebateEarned: true },
+    }),
+    prisma.rebate.findMany({
+      where: { contractId: id },
+      select: { rebateCollected: true, collectionDate: true },
+    }),
+  ])
+  const { sumCollectedRebates } = await import(
+    "@/lib/contracts/rebate-collected-filter"
+  )
   const lifetimeTotals = {
     spend: Number(lifetimeAgg._sum.totalSpend ?? 0),
     rebateEarned: Number(lifetimeAgg._sum.rebateEarned ?? 0),
-    rebateCollected: Number(lifetimeAgg._sum.rebateCollected ?? 0),
+    rebateCollected: sumCollectedRebates(rebateRows),
   }
 
   return serialize({ ...contract, lifetimeTotals })

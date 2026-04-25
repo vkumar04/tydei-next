@@ -25,8 +25,22 @@ async function revalidateCapitalRoutes(contractId: string): Promise<void> {
       select: { tieInCapitalContractId: true },
     })
     revalidatePath(`/dashboard/contracts/${contractId}`)
+    // usage→capital direction: this contract points at a capital
+    // sibling whose Capital Amortization card aggregates this row's
+    // collected rebates.
     if (c?.tieInCapitalContractId) {
       revalidatePath(`/dashboard/contracts/${c.tieInCapitalContractId}`)
+    }
+    // capital→usage direction (Charles audit round-2 facility CONCERN-1):
+    // when the mutated row IS the capital contract, sibling usage
+    // contracts that point at it may show stale tie-in math too.
+    // Best-effort sweep — if there are sibling rows, bust their routes.
+    const siblings = await prisma.contract.findMany({
+      where: { tieInCapitalContractId: contractId },
+      select: { id: true },
+    })
+    for (const s of siblings) {
+      revalidatePath(`/dashboard/contracts/${s.id}`)
     }
   } catch {
     // best-effort cache hint; never block the mutation on revalidate failure

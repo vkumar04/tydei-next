@@ -29,9 +29,13 @@ export function useCreatePendingContract() {
     mutationFn: createPendingContract,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pendingContracts"] })
-      toast.success("Contract submitted for review")
     },
-    onError: (e) => toast.error(e.message || "Failed to submit contract"),
+    // Charles audit round-2 vendor CONCERN 2: success/error toast
+    // moved to the caller (vendor-contract-submission.tsx) so the
+    // multi-facility fan-out can roll up "submitted to N of M
+    // facilities" into one message instead of N stacked toasts.
+    // The caller uses Promise.allSettled and reports per-facility
+    // failures in a single rolled-up error toast.
   })
 }
 

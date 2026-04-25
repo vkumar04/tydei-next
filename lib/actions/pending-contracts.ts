@@ -165,6 +165,7 @@ function extractPendingTerms(termsJson: unknown, contractEffectiveDate?: Date | 
   cptCodes: string[]
   tiers: Array<{
     tierNumber: number
+    tierName: string | null
     spendMin: number
     spendMax: number | null
     volumeMin: number | null
@@ -293,6 +294,11 @@ function extractPendingTerms(termsJson: unknown, contractEffectiveDate?: Date | 
         return {
           tierNumber:
             typeof tier.tierNumber === "number" ? tier.tierNumber : idx + 1,
+          // Charles audit round-2 vendor BLOCKER 1: tierName must
+          // round-trip through approve too. Hydrate fix + tierInputSchema
+          // alone weren't enough — the server-side approve mapping
+          // dropped it.
+          tierName: coerceString(tier.tierName),
           spendMin,
           spendMax,
           // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
@@ -733,6 +739,7 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
                 tiers: {
                   create: t.tiers.map((tier) => ({
                     tierNumber: tier.tierNumber,
+                    ...(tier.tierName != null && { tierName: tier.tierName }),
                     spendMin: tier.spendMin,
                     ...(tier.spendMax != null && { spendMax: tier.spendMax }),
                     // volumeMin/Max are Int columns — round at the
