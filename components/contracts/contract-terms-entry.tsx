@@ -240,11 +240,19 @@ function createEmptyTerm(): TermFormValues {
   }
 }
 
-function createEmptyTier(tierNumber: number): TierInput {
+function createEmptyTier(
+  tierNumber: number,
+  termType?: string,
+): TierInput {
+  // Charles 2026-04-25 audit C6: a fixed_fee term needs a single tier
+  // whose rebateType is `fixed_rebate`. Defaulting to percent_of_spend
+  // meant a user typing "1000" got read as 100% of spend.
+  const rebateType: TierInput["rebateType"] =
+    termType === "fixed_fee" ? "fixed_rebate" : "percent_of_spend"
   return {
     tierNumber,
     spendMin: 0,
-    rebateType: "percent_of_spend",
+    rebateType,
     rebateValue: 0,
   }
 }
@@ -329,7 +337,7 @@ export function ContractTermsEntry({
 
   function addTier(termIndex: number) {
     const term = terms[termIndex]
-    const newTier = createEmptyTier(term.tiers.length + 1)
+    const newTier = createEmptyTier(term.tiers.length + 1, term.termType)
     updateTerm(termIndex, { tiers: [...term.tiers, newTier] })
   }
 
@@ -1020,6 +1028,7 @@ export function ContractTermsEntry({
                             key={tierIdx}
                             tier={tier}
                             index={tierIdx}
+                            termType={term.termType}
                             onChange={(t) => updateTier(termIdx, tierIdx, t)}
                             onRemove={() => removeTier(termIdx, tierIdx)}
                           />

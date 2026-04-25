@@ -19,6 +19,7 @@ import { CompareScenariosTable } from "./compare-scenarios-table"
 import { ContractsTierProgress } from "./contracts-tier-progress"
 import { EarningsChart } from "./earnings-chart"
 import { OpportunitiesRecommendations } from "./opportunities-recommendations"
+import { ThresholdOpportunitiesCard } from "./threshold-opportunities-card"
 import { RebateCalculatorDialog } from "./rebate-calculator-dialog"
 import {
   RebateOptimizerHero,
@@ -359,7 +360,7 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
           )}
 
           {hasOpportunities && (
-            <TabsContent value="opportunities" className="mt-4">
+            <TabsContent value="opportunities" className="mt-4 space-y-4">
               <TabPanel
                 title="Top ranked opportunities"
                 description="Contracts sorted by potential additional rebate."
@@ -369,6 +370,9 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
                   onOpenCalculator={handleOpenCalculator}
                 />
               </TabPanel>
+              {/* Charles 2026-04-25: companion to the spend optimizer
+                  for compliance_rebate + market_share term types. */}
+              <ThresholdOpportunitiesCard />
             </TabsContent>
           )}
 

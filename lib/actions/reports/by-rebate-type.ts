@@ -32,11 +32,20 @@ export interface RebateTypeBucket {
   contractCount: number
 }
 
+/**
+ * Maps an auto-accrual notes prefix to a fallback termType label,
+ * used only when the row's `term:<id>` cannot be resolved (term was
+ * deleted, notes truncated, etc.). Threshold rows fall back to
+ * `compliance_rebate` rather than the synthetic
+ * "compliance_or_market_share" literal — the bucket is still
+ * imprecise but it's at least a real enum value the UI knows how to
+ * label. Charles 2026-04-25 audit facility C2.
+ */
 const PREFIX_TO_INFERRED_TYPE: Record<string, string> = {
   "[auto-accrual]": "spend_rebate",
   "[auto-volume-accrual]": "volume_rebate",
   "[auto-po-accrual]": "po_rebate",
-  "[auto-threshold-accrual]": "compliance_or_market_share",
+  "[auto-threshold-accrual]": "compliance_rebate",
   "[auto-invoice-accrual]": "payment_rebate",
 }
 

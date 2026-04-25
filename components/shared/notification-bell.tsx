@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ import {
  * context.
  */
 export function NotificationBell() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: ["my-notifications"],
@@ -95,7 +97,17 @@ export function NotificationBell() {
               onSelect={(e) => {
                 e.preventDefault()
                 if (!n.readAt) markRead.mutate(n.id)
-                if (n.actionUrl) window.open(n.actionUrl, "_blank")
+                if (n.actionUrl) {
+                  // Charles 2026-04-25 audit C3: same-origin links
+                  // navigate in-place via the router so the user
+                  // doesn't accumulate a new tab per click. External
+                  // (http/https) links still open in a new tab.
+                  if (n.actionUrl.startsWith("/")) {
+                    router.push(n.actionUrl)
+                  } else {
+                    window.open(n.actionUrl, "_blank")
+                  }
+                }
               }}
               className={`flex flex-col items-start gap-0.5 ${n.readAt ? "" : "bg-muted/50"}`}
             >

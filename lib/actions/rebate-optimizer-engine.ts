@@ -58,11 +58,24 @@ export interface RebateOptimizerActionResult {
 
 // ─── Mappers: Prisma rows → engine input shapes ─────────────────────
 
-/** Prisma TermType → engine RebateTermKind. */
-function mapTermKind(termType: string): RebateTermKind {
+/**
+ * Prisma TermType → engine RebateTermKind. Returns null for term types
+ * the spend-rebate engine doesn't model (compliance_rebate, market_share,
+ * volume_rebate, payment_rebate, fixed_fee, locked_pricing, …) so the
+ * caller can drop them. Charles 2026-04-25 audit B1: previously every
+ * unmapped type fell through to SPEND_REBATE, which fed an
+ * occurrence/PO/invoice-count `spendMin` column to the spend optimizer
+ * as if it were dollars and produced nonsense "spend $X to unlock $Y"
+ * cards. Threshold-based termTypes have their own
+ * ThresholdOpportunitiesCard.
+ */
+function mapTermKind(termType: string): RebateTermKind | null {
+  if (termType === "spend_rebate" || termType === "growth_rebate") {
+    return "SPEND_REBATE"
+  }
   if (termType === "po_rebate") return "PO_REBATE"
   if (termType === "carve_out") return "CARVE_OUT"
-  return "SPEND_REBATE"
+  return null
 }
 
 function mapMethod(rebateMethod: string | null | undefined): TierMethod {
@@ -160,13 +173,19 @@ export async function getRebateOpportunities(): Promise<RebateOptimizerActionRes
 
   // ── Shape contracts for the engine ───────────────────────────────
   const engineContracts: RebateOpportunityContract[] = contracts.map((c) => {
-    const terms: RebateOpportunityTerm[] = c.terms.map((term) => ({
-      termId: term.id,
-      kind: mapTermKind(term.termType),
-      method: mapMethod(term.rebateMethod),
-      boundaryRule: mapBoundaryRule(term.boundaryRule),
-      tiers: term.tiers.map(mapTier),
-    }))
+    const terms: RebateOpportunityTerm[] = c.terms
+      .map((term) => {
+        const kind = mapTermKind(term.termType)
+        if (kind === null) return null
+        return {
+          termId: term.id,
+          kind,
+          method: mapMethod(term.rebateMethod),
+          boundaryRule: mapBoundaryRule(term.boundaryRule),
+          tiers: term.tiers.map(mapTier),
+        }
+      })
+      .filter((t): t is RebateOpportunityTerm => t !== null)
     return {
       contractId: c.id,
       contractName: c.name,

@@ -28,6 +28,32 @@ interface ContractTierRowProps {
   index: number
   onChange: (tier: TierInput) => void
   onRemove: () => void
+  /**
+   * Charles 2026-04-25 audit C5: parent term's termType so the
+   * Min/Max labels read "Occurrences"/"PO Count"/"Invoices"/"% Achieved"
+   * for non-spend ladders instead of the misleading "Spend Min/Max".
+   */
+  termType?: string
+}
+
+function thresholdLabels(termType: string | undefined): { min: string; max: string; suffix?: string } {
+  switch (termType) {
+    case "volume_rebate":
+    case "rebate_per_use":
+    case "capitated_pricing_rebate":
+      return { min: "Min Occurrences", max: "Max Occurrences" }
+    case "po_rebate":
+      return { min: "Min PO Count", max: "Max PO Count" }
+    case "payment_rebate":
+      return { min: "Min Invoices", max: "Max Invoices" }
+    case "compliance_rebate":
+    case "market_share":
+      return { min: "Min % Achieved", max: "Max % Achieved", suffix: "%" }
+    case "fixed_fee":
+      return { min: "Threshold", max: "Cap" }
+    default:
+      return { min: "Spend Min", max: "Spend Max" }
+  }
 }
 
 const rebateTypes = [
@@ -42,8 +68,10 @@ export function ContractTierRow({
   index,
   onChange,
   onRemove,
+  termType,
 }: ContractTierRowProps) {
   const isPercent = isPercentRebateType(tier.rebateType)
+  const labels = thresholdLabels(termType)
 
   // The DB stores percent_of_spend as a fraction (0.03 = 3%) but we
   // want the user to type plain percent. Charles R5.25: typing "3"
@@ -60,7 +88,7 @@ export function ContractTierRow({
       </span>
 
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Spend Min</label>
+        <label className="text-xs text-muted-foreground">{labels.min}</label>
         <Input
           type="number"
           className="w-28"
@@ -72,7 +100,7 @@ export function ContractTierRow({
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Spend Max</label>
+        <label className="text-xs text-muted-foreground">{labels.max}</label>
         <Input
           type="number"
           className="w-28"

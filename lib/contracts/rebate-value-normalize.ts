@@ -25,6 +25,70 @@ export function isPercentRebateType(rebateType: string): boolean {
 }
 
 /**
+ * Charles 2026-04-25 (audit follow-up — branded type rollout).
+ *
+ * `PercentFraction` is a nominal brand on `number` that documents
+ * "this value is a fraction (0.03 = 3%)" at the type level. The
+ * brand exists purely at the TypeScript layer — at runtime it's
+ * just a number — but it makes accidental percent-vs-fraction
+ * arithmetic harder to write by mistake:
+ *
+ *   const pct: PercentFraction = readTierValue(t)
+ *   spend * pct          // ✗ TS error — `number × PercentFraction` is not safe
+ *   spend * unwrapPercent(pct, "percent_of_spend")  // ✓ explicit unwrap
+ *
+ * This file only INTRODUCES the brand + helpers. Existing call
+ * sites still use the legacy `Number(t.rebateValue)` pattern; the
+ * scaling-drift Vitest scanner already prevents the highest-impact
+ * display bugs and the per-bridge `toDisplayRebateValue` calls
+ * cover the engine paths. New surfaces touching `rebateValue`
+ * SHOULD adopt the brand:
+ *
+ *   import { readTierRebateAsFraction, toDisplayRebateValue } from
+ *     "@/lib/contracts/rebate-value-normalize"
+ *   const fraction = readTierRebateAsFraction(prismaTier)
+ *   const display = toDisplayRebateValue(prismaTier.rebateType, fraction)
+ *
+ * Gradual migration: each new touch routes through the brand. No
+ * big-bang refactor required.
+ */
+declare const __percentFractionBrand: unique symbol
+export type PercentFraction = number & { [__percentFractionBrand]: true }
+
+/**
+ * Tag a raw fraction value with the PercentFraction brand. Use only
+ * at the Prisma reader boundary — once tagged, downstream code
+ * can't accidentally treat the value as already-scaled percent.
+ */
+export function asPercentFraction(value: number): PercentFraction {
+  return value as PercentFraction
+}
+
+/**
+ * Canonical Prisma reader for `ContractTier.rebateValue`. Wraps the
+ * raw value in the PercentFraction brand for percent_of_spend tiers
+ * (the actual storage convention); leaves dollar-denominated values
+ * unbranded since the brand only models the percent-vs-fraction
+ * confusion.
+ */
+export function readTierRebateAsFraction(tier: {
+  rebateType: string
+  rebateValue: unknown
+}): PercentFraction {
+  return asPercentFraction(Number(tier.rebateValue ?? 0))
+}
+
+/**
+ * Explicit unwrap for sites that need a plain `number` after they
+ * understand the percent-vs-fraction semantics. Callers should
+ * usually go through `toDisplayRebateValue` instead — this is the
+ * escape hatch for engine code that consumes raw fractions.
+ */
+export function unwrapPercentFraction(value: PercentFraction): number {
+  return value as number
+}
+
+/**
  * Convert a stored `rebateValue` into the number the user should see in
  * the form. For percent_of_spend we denormalize fraction → percent
  * (0.03 → 3). For dollar-denominated rebate types the value passes

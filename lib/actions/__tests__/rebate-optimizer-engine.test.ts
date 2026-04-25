@@ -277,12 +277,15 @@ describe("getRebateOpportunities (engine-wired)", () => {
     )
   })
 
-  it("surfaces a volume_rebate contract with tiers as an opportunity (Charles bug bash)", async () => {
-    // Previously the optimizer hid contracts whose tiered rebates lived
-    // under termType=volume_rebate (or market_share / locked_pricing),
-    // because the action filter implicitly narrowed to spend_rebate. The
-    // unified engine handles every rebate type — as long as there's a
-    // tier ladder and some spend, an opportunity should appear.
+  it("drops a volume_rebate-only contract from the spend optimizer (Charles 2026-04-25 audit B1)", async () => {
+    // Earlier code returned SPEND_REBATE for every termType that wasn't
+    // po_rebate/carve_out, which fed unit-count thresholds to the
+    // spend engine as if they were dollars and produced nonsense
+    // "spend $X to unlock $Y" cards. The fix is to keep the DB filter
+    // permissive (any term with tiers, so the threshold optimizer + future
+    // engines can read the same rows) but drop non-spend term types
+    // from the spend engine's input. A contract whose only term is
+    // volume_rebate should produce no spend-engine opportunity.
     contractRows = [
       {
         id: "c-vol",
@@ -311,13 +314,9 @@ describe("getRebateOpportunities (engine-wired)", () => {
 
     const result = await getRebateOpportunities()
 
-    expect(result.opportunities).toHaveLength(1)
-    const opp = result.opportunities[0]!
-    expect(opp.contractId).toBe("c-vol")
-    expect(opp.currentTierNumber).toBe(2)
-    expect(opp.nextTierThreshold).toBe(250_000)
+    expect(result.opportunities).toHaveLength(0)
 
-    // And the findMany filter must include the "at least one tier"
+    // The findMany filter must STILL include the "at least one tier"
     // predicate so the DB query itself no longer hides these rows.
     const w = lastContractWhere as {
       status: { in: string[] }

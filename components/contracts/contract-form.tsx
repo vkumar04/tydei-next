@@ -166,6 +166,33 @@ export function ContractFormBasicInfo({
   const totalValue = watch("totalValue")
   const contractType = watch("contractType")
   const selectedCategoryIds = watch("categoryIds") ?? []
+  // Charles 2026-04-25 audit facility C1: per-category market-share
+  // commitment overlay (validator + engine already accept this).
+  const msbcRows = watch("marketShareCommitmentByCategory") ?? []
+  const updateMsbcRow = (
+    index: number,
+    patch: Partial<{ category: string; commitmentPct: number }>,
+  ) => {
+    const next = [...msbcRows]
+    const current = next[index] ?? { category: "", commitmentPct: 0 }
+    next[index] = { ...current, ...patch }
+    setValue("marketShareCommitmentByCategory", next, { shouldDirty: true })
+  }
+  const addMsbcRow = () => {
+    setValue(
+      "marketShareCommitmentByCategory",
+      [...msbcRows, { category: "", commitmentPct: 0 }],
+      { shouldDirty: true },
+    )
+  }
+  const removeMsbcRow = (index: number) => {
+    const next = msbcRows.filter((_, i) => i !== index)
+    setValue(
+      "marketShareCommitmentByCategory",
+      next.length > 0 ? next : null,
+      { shouldDirty: true },
+    )
+  }
   const [cogAutoFilled, setCogAutoFilled] = useState(false)
   const [linkedContractId, setLinkedContractId] = useState<string>("")
   const [additionalVendorIds, setAdditionalVendorIds] = useState<string[]>([])
@@ -1057,6 +1084,74 @@ export function ContractFormBasicInfo({
                 Vendor's contractual target
               </p>
             </Field>
+          </div>
+
+          {/* Charles 2026-04-25 audit facility C1: per-category overlay. */}
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">
+                  Per-category market-share commitments
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Optional: override the contract-wide commitment for
+                  specific categories. The market-share card overlays
+                  these targets on the live actuals.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-xs font-medium text-primary hover:underline"
+                onClick={addMsbcRow}
+              >
+                + Add category
+              </button>
+            </div>
+            {msbcRows.length > 0 && (
+              <div className="space-y-2">
+                {msbcRows.map((row, idx) => (
+                  <div key={idx} className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Category
+                      </label>
+                      <Input
+                        value={row.category}
+                        onChange={(e) =>
+                          updateMsbcRow(idx, { category: e.target.value })
+                        }
+                        placeholder="e.g., Distal Extremities"
+                      />
+                    </div>
+                    <div className="w-32 space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Commitment %
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={row.commitmentPct}
+                        onChange={(e) =>
+                          updateMsbcRow(idx, {
+                            commitmentPct: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="mb-1.5 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeMsbcRow(idx)}
+                      aria-label="Remove row"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
