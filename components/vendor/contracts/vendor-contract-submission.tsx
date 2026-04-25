@@ -502,10 +502,32 @@ export function VendorContractSubmission({
             rebateMethod,
             effectiveStart: data.effectiveDate ?? "",
             effectiveEnd: data.expirationDate ?? "",
+            // Charles 2026-04-25 (audit Bug 2): honor every term-level
+            // baseline / scope / procedure field the AI returned.
+            // Pre-fix the mapper dropped these even when the
+            // extractedContractSchema delivered them, so the
+            // resulting pending row had nothing for the engine to
+            // match on after approval.
+            volumeType: t.volumeType,
+            spendBaseline: t.spendBaseline,
+            volumeBaseline: t.volumeBaseline,
+            growthBaselinePercent: t.growthBaselinePercent,
+            desiredMarketShare: t.desiredMarketShare,
+            scopedCategoryIds: t.scopedCategoryIds,
+            scopedItemNumbers: t.scopedItemNumbers,
+            cptCodes: t.cptCodes,
             tiers: t.tiers.map((tier) => ({
               tierNumber: tier.tierNumber,
               spendMin: tier.spendMin ?? 0,
               spendMax: tier.spendMax,
+              // Charles 2026-04-25 (audit Bug 2): per-tier volume /
+              // market-share thresholds. Without these the volume +
+              // market-share engines collapse the ladder to a single
+              // tier (every tier starts at 0).
+              volumeMin: tier.volumeMin,
+              volumeMax: tier.volumeMax,
+              marketShareMin: tier.marketShareMin,
+              marketShareMax: tier.marketShareMax,
               rebateType: "percent_of_spend" as const,
               // Charles R5.25 — AI often returns "3" for 3%; the DB
               // stores percent_of_spend as a fraction (0.03).

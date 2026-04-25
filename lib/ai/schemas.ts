@@ -76,11 +76,83 @@ export const extractedContractSchema = z.object({
         .describe(
           "cumulative = top tier's rate applies to the entire qualifying spend; marginal = each tier's rate applies only to the slice within that tier.",
         ),
+      // Charles 2026-04-25 (audit Bug 2): baseline + scope + procedure
+      // hints. Pre-fix the AI mapper dropped these even when present
+      // upstream; the consumer in vendor-contract-submission.tsx
+      // honors each value when defined.
+      volumeType: z
+        .enum(["product_category", "catalog_cap_based", "procedure_code"])
+        .optional()
+        .describe(
+          "Volume measurement type for volume_rebate / rebate_per_use terms.",
+        ),
+      spendBaseline: z
+        .number()
+        .optional()
+        .describe(
+          "Prior-year baseline spend for growth_rebate terms (dollars).",
+        ),
+      volumeBaseline: z
+        .number()
+        .optional()
+        .describe(
+          "Prior-year baseline procedure / unit count for volume-based growth.",
+        ),
+      growthBaselinePercent: z
+        .number()
+        .optional()
+        .describe(
+          "Required year-over-year growth percent for the rebate to trigger.",
+        ),
+      desiredMarketShare: z
+        .number()
+        .optional()
+        .describe(
+          "Target market share percent for market_share / market_share_price_reduction terms.",
+        ),
+      scopedCategoryIds: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Category IDs the term is scoped to (when contract restricts to specific categories).",
+        ),
+      scopedItemNumbers: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Vendor item numbers / SKUs the term is scoped to.",
+        ),
+      cptCodes: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "CPT procedure codes for per_procedure_rebate / volume_rebate terms.",
+        ),
       tiers: z.array(
         z.object({
           tierNumber: z.number().describe("Tier number (1 = lowest)"),
           spendMin: z.number().optional().describe("Minimum spend threshold"),
           spendMax: z.number().optional().describe("Maximum spend threshold"),
+          // Charles 2026-04-25 (audit Bug 2): per-tier volume + market-
+          // share thresholds. Without these, volume_rebate /
+          // market_share extracts collapse to a single tier on
+          // submission.
+          volumeMin: z
+            .number()
+            .optional()
+            .describe("Minimum unit / procedure count for this tier."),
+          volumeMax: z
+            .number()
+            .optional()
+            .describe("Maximum unit / procedure count for this tier."),
+          marketShareMin: z
+            .number()
+            .optional()
+            .describe("Minimum market share percent for this tier."),
+          marketShareMax: z
+            .number()
+            .optional()
+            .describe("Maximum market share percent for this tier."),
           rebateType: z.string().optional().describe("Rebate type"),
           rebateValue: z.number().optional().describe("Rebate value (percentage or fixed)"),
         })

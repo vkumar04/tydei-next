@@ -37,10 +37,30 @@ function extractPendingTerms(termsJson: unknown) {
   if (!Array.isArray(termsJson)) return []
   const EVERGREEN = new Date(Date.UTC(9999, 11, 31))
   const EPOCH = new Date(Date.UTC(1970, 0, 1))
+  // Mirrors lib/actions/pending-contracts.ts (Bug 4).
+  const defaultRebateMethodForTermType = (tt: string): string => {
+    switch (tt) {
+      case "volume_rebate":
+      case "growth_rebate":
+        return "marginal"
+      default:
+        return "cumulative"
+    }
+  }
+  // Mirrors lib/actions/pending-contracts.ts (Bug 3).
+  const isVolumeColumnTermType = (tt: string): boolean =>
+    tt === "volume_rebate" ||
+    tt === "rebate_per_use" ||
+    tt === "capitated_pricing_rebate" ||
+    tt === "po_rebate" ||
+    tt === "payment_rebate"
+  const isMarketShareColumnTermType = (tt: string): boolean =>
+    tt === "compliance_rebate" || tt === "market_share"
   const out: Array<{
     termName: string
     termType: string
     baselineType: string
+    rebateMethod: string
     spendBaseline: number | null
     growthBaselinePercent: number | null
     volumeBaseline: number | null
@@ -68,37 +88,76 @@ function extractPendingTerms(termsJson: unknown) {
     const t = raw as Record<string, unknown>
     const termName = coerceString(t.termName)
     if (!termName) continue
+    const termType = coerceString(t.termType) ?? "spend_rebate"
     const tiersRaw = Array.isArray(t.tiers) ? t.tiers : []
     const tiers = tiersRaw
       .map((rawTier, idx) => {
         if (!rawTier || typeof rawTier !== "object") return null
         const tier = rawTier as Record<string, unknown>
-        const spendMin = coerceNumber(tier.spendMin) ?? 0
+        const rawSpendMin = coerceNumber(tier.spendMin)
+        const rawSpendMax =
+          tier.spendMax === null || tier.spendMax === undefined
+            ? null
+            : coerceNumber(tier.spendMax)
+        const rawVolumeMin =
+          tier.volumeMin === null || tier.volumeMin === undefined
+            ? null
+            : coerceNumber(tier.volumeMin)
+        const rawVolumeMax =
+          tier.volumeMax === null || tier.volumeMax === undefined
+            ? null
+            : coerceNumber(tier.volumeMax)
+        const rawMarketShareMin =
+          tier.marketShareMin === null || tier.marketShareMin === undefined
+            ? null
+            : coerceNumber(tier.marketShareMin)
+        const rawMarketShareMax =
+          tier.marketShareMax === null || tier.marketShareMax === undefined
+            ? null
+            : coerceNumber(tier.marketShareMax)
         const rebateValue = coerceNumber(tier.rebateValue) ?? 0
+
+        let spendMin = rawSpendMin ?? 0
+        let spendMax = rawSpendMax
+        if (
+          isVolumeColumnTermType(termType) &&
+          (rawSpendMin === null || rawSpendMin === 0) &&
+          rawVolumeMin !== null &&
+          rawVolumeMin !== undefined
+        ) {
+          spendMin = rawVolumeMin
+          if (
+            (spendMax === null || spendMax === undefined) &&
+            rawVolumeMax !== null &&
+            rawVolumeMax !== undefined
+          ) {
+            spendMax = rawVolumeMax
+          }
+        } else if (
+          isMarketShareColumnTermType(termType) &&
+          (rawSpendMin === null || rawSpendMin === 0) &&
+          rawMarketShareMin !== null &&
+          rawMarketShareMin !== undefined
+        ) {
+          spendMin = rawMarketShareMin
+          if (
+            (spendMax === null || spendMax === undefined) &&
+            rawMarketShareMax !== null &&
+            rawMarketShareMax !== undefined
+          ) {
+            spendMax = rawMarketShareMax
+          }
+        }
+
         return {
           tierNumber:
             typeof tier.tierNumber === "number" ? tier.tierNumber : idx + 1,
           spendMin,
-          spendMax:
-            tier.spendMax === null || tier.spendMax === undefined
-              ? null
-              : coerceNumber(tier.spendMax),
-          volumeMin:
-            tier.volumeMin === null || tier.volumeMin === undefined
-              ? null
-              : coerceNumber(tier.volumeMin),
-          volumeMax:
-            tier.volumeMax === null || tier.volumeMax === undefined
-              ? null
-              : coerceNumber(tier.volumeMax),
-          marketShareMin:
-            tier.marketShareMin === null || tier.marketShareMin === undefined
-              ? null
-              : coerceNumber(tier.marketShareMin),
-          marketShareMax:
-            tier.marketShareMax === null || tier.marketShareMax === undefined
-              ? null
-              : coerceNumber(tier.marketShareMax),
+          spendMax,
+          volumeMin: rawVolumeMin,
+          volumeMax: rawVolumeMax,
+          marketShareMin: rawMarketShareMin,
+          marketShareMax: rawMarketShareMax,
           rebateValue,
           rebateType: coerceString(tier.rebateType) ?? "percent_of_spend",
         }
@@ -121,8 +180,10 @@ function extractPendingTerms(termsJson: unknown) {
       : []
     out.push({
       termName,
-      termType: coerceString(t.termType) ?? "spend_rebate",
+      termType,
       baselineType: coerceString(t.baselineType) ?? "spend_based",
+      rebateMethod:
+        coerceString(t.rebateMethod) ?? defaultRebateMethodForTermType(termType),
       spendBaseline: coerceNumber(t.spendBaseline),
       growthBaselinePercent: coerceNumber(t.growthBaselinePercent),
       volumeBaseline: coerceNumber(t.volumeBaseline),
@@ -340,5 +401,159 @@ describe("extractPendingTerms — volume + market_share round-trip (B5)", () => 
     expect(out[0]!.tiers[0]!.volumeMax).toBe(4999)
     expect(out[0]!.tiers[0]!.marketShareMin).toBe(50)
     expect(out[0]!.tiers[0]!.marketShareMax).toBe(100)
+  })
+})
+
+describe("extractPendingTerms — column-reuse mirroring (Bug 3)", () => {
+  it("volume_rebate tier with only volumeMin mirrors into spendMin (engine reads spendMin as occurrence threshold)", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Volume Tier Rebate",
+        termType: "volume_rebate",
+        baselineType: "volume_based",
+        tiers: [
+          {
+            tierNumber: 1,
+            volumeMin: 0,
+            volumeMax: 99,
+            rebateType: "fixed_rebate_per_unit",
+            rebateValue: 1,
+          },
+          {
+            tierNumber: 2,
+            volumeMin: 100,
+            volumeMax: 499,
+            rebateType: "fixed_rebate_per_unit",
+            rebateValue: 2,
+          },
+          {
+            tierNumber: 3,
+            volumeMin: 500,
+            rebateType: "fixed_rebate_per_unit",
+            rebateValue: 3,
+          },
+        ],
+      },
+    ])
+    expect(out[0]!.tiers[0]!.spendMin).toBe(0)
+    expect(out[0]!.tiers[0]!.spendMax).toBe(99)
+    expect(out[0]!.tiers[1]!.spendMin).toBe(100)
+    expect(out[0]!.tiers[1]!.spendMax).toBe(499)
+    expect(out[0]!.tiers[2]!.spendMin).toBe(500)
+    expect(out[0]!.tiers[2]!.spendMax).toBeNull()
+    // Dedicated columns still preserved.
+    expect(out[0]!.tiers[1]!.volumeMin).toBe(100)
+    expect(out[0]!.tiers[1]!.volumeMax).toBe(499)
+  })
+
+  it("market_share tier with only marketShareMin mirrors into spendMin", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Market Share Rebate",
+        termType: "market_share",
+        tiers: [
+          {
+            tierNumber: 1,
+            marketShareMin: 0,
+            marketShareMax: 49.99,
+            rebateValue: 0.01,
+          },
+          {
+            tierNumber: 2,
+            marketShareMin: 50,
+            marketShareMax: 100,
+            rebateValue: 0.03,
+          },
+        ],
+      },
+    ])
+    expect(out[0]!.tiers[0]!.spendMin).toBe(0)
+    expect(out[0]!.tiers[0]!.spendMax).toBe(49.99)
+    expect(out[0]!.tiers[1]!.spendMin).toBe(50)
+    expect(out[0]!.tiers[1]!.spendMax).toBe(100)
+    expect(out[0]!.tiers[1]!.marketShareMin).toBe(50)
+  })
+
+  it("does NOT clobber an explicitly-set spendMin (e.g. user set both)", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Explicit spendMin wins",
+        termType: "volume_rebate",
+        tiers: [
+          {
+            tierNumber: 1,
+            spendMin: 42,
+            volumeMin: 999,
+            rebateValue: 1,
+          },
+        ],
+      },
+    ])
+    expect(out[0]!.tiers[0]!.spendMin).toBe(42)
+    expect(out[0]!.tiers[0]!.volumeMin).toBe(999)
+  })
+
+  it("does NOT mirror for spend_rebate (column-reuse only applies to non-spend types)", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Plain Spend",
+        termType: "spend_rebate",
+        tiers: [
+          {
+            tierNumber: 1,
+            volumeMin: 1000,
+            rebateValue: 0.02,
+          },
+        ],
+      },
+    ])
+    expect(out[0]!.tiers[0]!.spendMin).toBe(0)
+  })
+})
+
+describe("extractPendingTerms — rebateMethod default (Bug 4)", () => {
+  it("defaults rebateMethod to 'marginal' for volume_rebate when omitted", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Vol",
+        termType: "volume_rebate",
+        tiers: [],
+      },
+    ])
+    expect(out[0]!.rebateMethod).toBe("marginal")
+  })
+
+  it("defaults rebateMethod to 'marginal' for growth_rebate when omitted", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Grow",
+        termType: "growth_rebate",
+        tiers: [],
+      },
+    ])
+    expect(out[0]!.rebateMethod).toBe("marginal")
+  })
+
+  it("defaults rebateMethod to 'cumulative' for spend_rebate", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Spend",
+        termType: "spend_rebate",
+        tiers: [],
+      },
+    ])
+    expect(out[0]!.rebateMethod).toBe("cumulative")
+  })
+
+  it("honors explicit rebateMethod even when termType-default would override", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Vol cumulative explicit",
+        termType: "volume_rebate",
+        rebateMethod: "cumulative",
+        tiers: [],
+      },
+    ])
+    expect(out[0]!.rebateMethod).toBe("cumulative")
   })
 })

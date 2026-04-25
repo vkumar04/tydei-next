@@ -40,7 +40,36 @@ interface PendingContractEditClientProps {
  * defaults used by extractPendingTerms in lib/actions/pending-contracts.ts
  * so a round-trip through edit -> save preserves the vendor's
  * original submission shape.
+ *
+ * Charles 2026-04-25 (audit Bug 1): Pre-fix this function silently
+ * dropped every term-level baseline / scope / volume / market-share
+ * field and every per-tier volume/market-share threshold. When a
+ * vendor opened a growth/volume/market-share contract to fix a typo,
+ * `handleSave` would then PUT `terms: contractTerms` back to the
+ * server and zero every dropped field. Now we mirror the full
+ * TermFormValues shape — every field `extractPendingTerms` reads on
+ * the server side is preserved through the edit round-trip.
  */
+function coerceNumberOrUndefined(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v
+  if (typeof v === "string") {
+    const n = Number(v.replace(/[$,]/g, ""))
+    return Number.isFinite(n) ? n : undefined
+  }
+  return undefined
+}
+
+function coerceStringArray(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined
+  const out: string[] = []
+  for (const item of v) {
+    if (typeof item === "string" && item.trim().length > 0) {
+      out.push(item.trim())
+    }
+  }
+  return out.length > 0 ? out : undefined
+}
+
 function hydrateTermsForForm(termsJson: unknown): TermFormValues[] {
   if (!Array.isArray(termsJson)) return []
   const out: TermFormValues[] = []
@@ -55,12 +84,13 @@ function hydrateTermsForForm(termsJson: unknown): TermFormValues[] {
         const tier = rawTier as Record<string, unknown>
         const tierNumber =
           typeof tier.tierNumber === "number" ? tier.tierNumber : idx + 1
-        const spendMin =
-          typeof tier.spendMin === "number" ? tier.spendMin : 0
-        const spendMax =
-          typeof tier.spendMax === "number" ? tier.spendMax : undefined
-        const rebateValue =
-          typeof tier.rebateValue === "number" ? tier.rebateValue : 0
+        const spendMin = coerceNumberOrUndefined(tier.spendMin) ?? 0
+        const spendMax = coerceNumberOrUndefined(tier.spendMax)
+        const volumeMin = coerceNumberOrUndefined(tier.volumeMin)
+        const volumeMax = coerceNumberOrUndefined(tier.volumeMax)
+        const marketShareMin = coerceNumberOrUndefined(tier.marketShareMin)
+        const marketShareMax = coerceNumberOrUndefined(tier.marketShareMax)
+        const rebateValue = coerceNumberOrUndefined(tier.rebateValue) ?? 0
         const rebateType =
           typeof tier.rebateType === "string"
             ? (tier.rebateType as TermFormValues["tiers"][number]["rebateType"])
@@ -69,6 +99,10 @@ function hydrateTermsForForm(termsJson: unknown): TermFormValues[] {
           tierNumber,
           spendMin,
           spendMax,
+          volumeMin,
+          volumeMax,
+          marketShareMin,
+          marketShareMax,
           rebateType,
           rebateValue,
         } satisfies TermFormValues["tiers"][number]
@@ -98,6 +132,20 @@ function hydrateTermsForForm(termsJson: unknown): TermFormValues[] {
         typeof t.effectiveStart === "string" ? t.effectiveStart : "",
       effectiveEnd:
         typeof t.effectiveEnd === "string" ? t.effectiveEnd : "",
+      // Charles 2026-04-25 (audit Bug 1): term-level baseline + scope
+      // + procedure fields. Pre-fix these were dropped on hydrate, so
+      // a vendor "fix typo" save zeroed them.
+      volumeType:
+        typeof t.volumeType === "string"
+          ? (t.volumeType as TermFormValues["volumeType"])
+          : undefined,
+      spendBaseline: coerceNumberOrUndefined(t.spendBaseline),
+      volumeBaseline: coerceNumberOrUndefined(t.volumeBaseline),
+      growthBaselinePercent: coerceNumberOrUndefined(t.growthBaselinePercent),
+      desiredMarketShare: coerceNumberOrUndefined(t.desiredMarketShare),
+      scopedCategoryIds: coerceStringArray(t.scopedCategoryIds),
+      scopedItemNumbers: coerceStringArray(t.scopedItemNumbers),
+      cptCodes: coerceStringArray(t.cptCodes),
       tiers,
     })
   }

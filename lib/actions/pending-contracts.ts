@@ -146,46 +146,128 @@ function extractPendingTerms(termsJson: unknown): Array<{
   const EVERGREEN = new Date(Date.UTC(9999, 11, 31))
   const EPOCH = new Date(Date.UTC(1970, 0, 1))
   const out: ReturnType<typeof extractPendingTerms> = []
+  // Charles 2026-04-25 (audit Bug 4): termType-aware default for
+  // rebateMethod. Mirrors the client-side helper in
+  // vendor-contract-submission.tsx (defaultRebateMethodForTermType).
+  // Pre-fix the server defaulted to "cumulative" for everything when
+  // the JSON omitted rebateMethod (older drafts, ingest paths, AI
+  // extracts that didn't set it). For volume_rebate / growth_rebate
+  // the natural shape is a marginal $/unit (or $/% growth) ladder, so
+  // cumulative would compound the top tier's rate over the entire
+  // qualifying base and over-pay the rebate. Bias to "marginal" for
+  // those two, leaving every other type at "cumulative".
+  const defaultRebateMethodForTermType = (tt: string): string => {
+    switch (tt) {
+      case "volume_rebate":
+      case "growth_rebate":
+        return "marginal"
+      default:
+        return "cumulative"
+    }
+  }
+  // Charles 2026-04-25 (audit Bug 3): tier-engine column-reuse —
+  // `lib/actions/contracts/recompute-volume-accrual.ts` (and the
+  // peer market-share writer) read tier.spendMin / tier.spendMax as
+  // the OCCURRENCE / SHARE-PERCENT thresholds for non-spend term
+  // types. The vendor UI populates dedicated `volumeMin` /
+  // `marketShareMin` columns instead. Without mirroring at this
+  // boundary, every volume/market-share tier lands with spendMin = 0
+  // → engine sees every tier starting at 0 → highest tier always wins
+  // → tier ladder collapses. Mirror at extract so the engine + the
+  // UI agree without changing the engines (smaller blast radius).
+  const isVolumeColumnTermType = (tt: string): boolean =>
+    tt === "volume_rebate" ||
+    tt === "rebate_per_use" ||
+    tt === "capitated_pricing_rebate" ||
+    tt === "po_rebate" ||
+    tt === "payment_rebate"
+  const isMarketShareColumnTermType = (tt: string): boolean =>
+    tt === "compliance_rebate" || tt === "market_share"
+
   for (const raw of termsJson) {
     if (!raw || typeof raw !== "object") continue
     const t = raw as Record<string, unknown>
     const termName = coerceString(t.termName)
     if (!termName) continue
+    const termType = coerceString(t.termType) ?? "spend_rebate"
     const tiersRaw = Array.isArray(t.tiers) ? t.tiers : []
     const tiers = tiersRaw
       .map((rawTier, idx) => {
         if (!rawTier || typeof rawTier !== "object") return null
         const tier = rawTier as Record<string, unknown>
-        const spendMin = coerceNumber(tier.spendMin) ?? 0
+        const rawSpendMin = coerceNumber(tier.spendMin)
+        const rawSpendMax =
+          tier.spendMax === null || tier.spendMax === undefined
+            ? null
+            : coerceNumber(tier.spendMax)
+        const rawVolumeMin =
+          tier.volumeMin === null || tier.volumeMin === undefined
+            ? null
+            : coerceNumber(tier.volumeMin)
+        const rawVolumeMax =
+          tier.volumeMax === null || tier.volumeMax === undefined
+            ? null
+            : coerceNumber(tier.volumeMax)
+        const rawMarketShareMin =
+          tier.marketShareMin === null || tier.marketShareMin === undefined
+            ? null
+            : coerceNumber(tier.marketShareMin)
+        const rawMarketShareMax =
+          tier.marketShareMax === null || tier.marketShareMax === undefined
+            ? null
+            : coerceNumber(tier.marketShareMax)
         const rebateValue = coerceNumber(tier.rebateValue) ?? 0
+
+        // Charles 2026-04-25 (audit Bug 3): mirror dedicated column
+        // values into the spendMin/spendMax columns the engine reads
+        // for column-reuse term types, but ONLY when spendMin is
+        // missing or 0 (so users who explicitly populated spendMin
+        // win). Same pattern for market_share.
+        let spendMin = rawSpendMin ?? 0
+        let spendMax = rawSpendMax
+        if (
+          isVolumeColumnTermType(termType) &&
+          (rawSpendMin === null || rawSpendMin === 0) &&
+          rawVolumeMin !== null &&
+          rawVolumeMin !== undefined
+        ) {
+          spendMin = rawVolumeMin
+          if (
+            (spendMax === null || spendMax === undefined) &&
+            rawVolumeMax !== null &&
+            rawVolumeMax !== undefined
+          ) {
+            spendMax = rawVolumeMax
+          }
+        } else if (
+          isMarketShareColumnTermType(termType) &&
+          (rawSpendMin === null || rawSpendMin === 0) &&
+          rawMarketShareMin !== null &&
+          rawMarketShareMin !== undefined
+        ) {
+          spendMin = rawMarketShareMin
+          if (
+            (spendMax === null || spendMax === undefined) &&
+            rawMarketShareMax !== null &&
+            rawMarketShareMax !== undefined
+          ) {
+            spendMax = rawMarketShareMax
+          }
+        }
+
         return {
           tierNumber:
             typeof tier.tierNumber === "number" ? tier.tierNumber : idx + 1,
           spendMin,
-          spendMax:
-            tier.spendMax === null || tier.spendMax === undefined
-              ? null
-              : coerceNumber(tier.spendMax),
+          spendMax,
           // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
           // per-tier volume + market-share thresholds. Same
           // null/numeric discipline as spendMin/spendMax — the engine
           // reads these columns directly to find the matching tier.
-          volumeMin:
-            tier.volumeMin === null || tier.volumeMin === undefined
-              ? null
-              : coerceNumber(tier.volumeMin),
-          volumeMax:
-            tier.volumeMax === null || tier.volumeMax === undefined
-              ? null
-              : coerceNumber(tier.volumeMax),
-          marketShareMin:
-            tier.marketShareMin === null || tier.marketShareMin === undefined
-              ? null
-              : coerceNumber(tier.marketShareMin),
-          marketShareMax:
-            tier.marketShareMax === null || tier.marketShareMax === undefined
-              ? null
-              : coerceNumber(tier.marketShareMax),
+          volumeMin: rawVolumeMin,
+          volumeMax: rawVolumeMax,
+          marketShareMin: rawMarketShareMin,
+          marketShareMax: rawMarketShareMax,
           rebateValue,
           rebateType: coerceString(tier.rebateType) ?? "percent_of_spend",
         }
@@ -208,12 +290,13 @@ function extractPendingTerms(termsJson: unknown): Array<{
       : []
     out.push({
       termName,
-      termType: coerceString(t.termType) ?? "spend_rebate",
+      termType,
       baselineType: coerceString(t.baselineType) ?? "spend_based",
       evaluationPeriod: coerceString(t.evaluationPeriod) ?? "annual",
       paymentTiming: coerceString(t.paymentTiming) ?? "quarterly",
       appliesTo: coerceString(t.appliesTo) ?? "all_products",
-      rebateMethod: coerceString(t.rebateMethod) ?? "cumulative",
+      rebateMethod:
+        coerceString(t.rebateMethod) ?? defaultRebateMethodForTermType(termType),
       effectiveStart: parseDateOr(t.effectiveStart, EPOCH),
       effectiveEnd: parseDateOr(t.effectiveEnd, EVERGREEN),
       spendBaseline: coerceNumber(t.spendBaseline),
