@@ -392,32 +392,69 @@ export function VendorContractSubmission({
       setFacilityId(facilities[0].id)
     }
 
-    // Populate terms if extracted
+    // Populate terms if extracted.
+    // Charles 2026-04-25 (audit follow-up — vendor walkthrough C):
+    // the prior implementation hard-coded `termType: spend_rebate`,
+    // `baselineType: spend_based`, `rebateMethod: cumulative` for
+    // EVERY extracted term — silently mistyping volume / growth /
+    // market-share contracts as spend rebates so the engines never
+    // matched the contract's actual semantics. Now we honor what
+    // the AI extracted, with conservative fallbacks only when the
+    // AI didn't return a value or returned something we don't
+    // recognize.
     if (data.terms.length > 0) {
       setContractTerms(
-        data.terms.map((t) => ({
-          termName: t.termName,
-          termType: "spend_rebate" as const,
-          baselineType: "spend_based" as const,
-          evaluationPeriod: "annual",
-          paymentTiming: "quarterly",
-          appliesTo: "all_products",
-          rebateMethod: "cumulative" as const,
-          effectiveStart: data.effectiveDate ?? "",
-          effectiveEnd: data.expirationDate ?? "",
-          tiers: t.tiers.map((tier) => ({
-            tierNumber: tier.tierNumber,
-            spendMin: tier.spendMin ?? 0,
-            spendMax: tier.spendMax,
-            rebateType: "percent_of_spend" as const,
-            // Charles R5.25 — AI often returns "3" for 3%; the DB
-            // stores percent_of_spend as a fraction (0.03).
-            rebateValue: normalizeAIRebateValue(
-              "percent_of_spend",
-              tier.rebateValue,
-            ),
-          })),
-        }))
+        data.terms.map((t) => {
+          const aiTermType = String(t.termType ?? "").trim()
+          const termType: TermFormValues["termType"] = (
+            [
+              "spend_rebate",
+              "volume_rebate",
+              "growth_rebate",
+              "rebate_per_use",
+              "po_rebate",
+              "payment_rebate",
+              "compliance_rebate",
+              "market_share",
+              "fixed_fee",
+              "locked_pricing",
+              "price_reduction",
+              "market_share_price_reduction",
+              "capitated_price_reduction",
+              "capitated_pricing_rebate",
+              "carve_out",
+            ] as const
+          ).includes(aiTermType as TermFormValues["termType"])
+            ? (aiTermType as TermFormValues["termType"])
+            : "spend_rebate"
+          // Growth-baseline contracts almost always use growth_based
+          // baseline; everything else defaults to spend_based.
+          const baselineType: TermFormValues["baselineType"] =
+            termType === "growth_rebate" ? "growth_based" : "spend_based"
+          return {
+            termName: t.termName,
+            termType,
+            baselineType,
+            evaluationPeriod: "annual",
+            paymentTiming: "quarterly",
+            appliesTo: "all_products",
+            rebateMethod: "cumulative" as const,
+            effectiveStart: data.effectiveDate ?? "",
+            effectiveEnd: data.expirationDate ?? "",
+            tiers: t.tiers.map((tier) => ({
+              tierNumber: tier.tierNumber,
+              spendMin: tier.spendMin ?? 0,
+              spendMax: tier.spendMax,
+              rebateType: "percent_of_spend" as const,
+              // Charles R5.25 — AI often returns "3" for 3%; the DB
+              // stores percent_of_spend as a fraction (0.03).
+              rebateValue: normalizeAIRebateValue(
+                "percent_of_spend",
+                tier.rebateValue,
+              ),
+            })),
+          }
+        })
       )
     }
 

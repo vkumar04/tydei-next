@@ -3,12 +3,14 @@ import Link from "next/link"
 import { getBundle } from "@/lib/actions/bundles"
 import { Button } from "@/components/ui/button"
 import { EditBundleForm } from "./edit-bundle-form"
+import { requireFacility } from "@/lib/actions/auth"
 
 export default async function EditBundlePage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requireFacility()
   const { id } = await params
   const data = await getBundle(id)
   if (!data) notFound()

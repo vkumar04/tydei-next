@@ -350,6 +350,7 @@ model User {
   renewalNotes     RenewalNote[]
   completedRenewalTasks RenewalTask[] @relation("RenewalTaskCompleter")
   rebateInsightFlags RebateInsightFlag[]
+  notifications    Notification[]
 
   @@index([role])
   @@map("user")
@@ -1020,6 +1021,39 @@ model TieInBundleMember {
 }
 
 // ─── Pending Contracts (Vendor Submissions) ───────────────────────
+
+/**
+ * Charles 2026-04-25 (audit follow-up): in-app notifications
+ * complement the email path in `lib/actions/notifications.ts`.
+ * Today the system fires emails on pending-contract submit /
+ * approve / reject / revision-request — but if the recipient
+ * doesn't check email, they miss it. A notification record + a
+ * top-bar bell gives the user a persistent, in-app surface.
+ *
+ * Read state is tracked via `readAt` (null = unread). Polymorphic
+ * `payload` Json carries type-specific metadata (e.g. pendingId,
+ * contractId, decision) so the UI can deep-link without a separate
+ * column per type.
+ */
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  /** Type-specific metadata, e.g. { pendingId, contractId, decision }. */
+  payload   Json?
+  /** Where to deep-link when the user clicks the notification. */
+  actionUrl String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@map("notification")
+}
 
 model PendingContract {
   id             String                @id @default(cuid())

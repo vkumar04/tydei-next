@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { BundleImpactAnalysisCard } from "@/components/contracts/bundle-impact-analysis-card"
 import { BundleDeleteButton } from "@/components/contracts/bundle-delete-button"
+import { requireFacility } from "@/lib/actions/auth"
 
 function fmt(n: number): string {
   return n.toLocaleString("en-US", {
@@ -26,6 +27,7 @@ export default async function BundleDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  await requireFacility()
   const { id } = await params
   const data = await getBundle(id)
   if (!data) notFound()

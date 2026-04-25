@@ -9,8 +9,10 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { requireFacility } from "@/lib/actions/auth"
 
 export default async function BundlesPage() {
+  await requireFacility()
   const bundles = await listBundles()
 
   return (

@@ -37,6 +37,43 @@ async function getFacilityMemberEmails(facilityId: string): Promise<string[]> {
 }
 
 /**
+ * Charles 2026-04-25: peer of `getFacilityMemberEmails` returning
+ * userIds for the in-app Notification fanout. Same query shape;
+ * different projection.
+ */
+async function getFacilityMemberUserIds(facilityId: string): Promise<string[]> {
+  const facility = await prisma.facility.findUnique({
+    where: { id: facilityId },
+    select: {
+      organization: {
+        select: {
+          members: {
+            select: { user: { select: { id: true } } },
+          },
+        },
+      },
+    },
+  })
+  return facility?.organization?.members.map((m) => m.user.id) ?? []
+}
+
+async function getVendorMemberUserIds(vendorId: string): Promise<string[]> {
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: vendorId },
+    select: {
+      organization: {
+        select: {
+          members: {
+            select: { user: { select: { id: true } } },
+          },
+        },
+      },
+    },
+  })
+  return vendor?.organization?.members.map((m) => m.user.id) ?? []
+}
+
+/**
  * Charles 2026-04-25 (vendor-mirror Phase 1): same as
  * `getFacilityMemberEmails` but for vendor orgs. Used to notify the
  * vendor when their pending submission is approved / rejected /
@@ -289,6 +326,23 @@ export async function notifyFacilityOfPendingContract(input: {
   pendingId: string
 }): Promise<{ sent: number }> {
   try {
+    // In-app: write a Notification row per facility-org member so
+    // the top-bar bell surfaces it even if email is misconfigured.
+    // Charles 2026-04-25 (audit follow-up).
+    const userIds = await getFacilityMemberUserIds(input.facilityId)
+    if (userIds.length > 0) {
+      const { createInAppNotifications } = await import(
+        "@/lib/actions/notifications/in-app"
+      )
+      void createInAppNotifications({
+        userIds,
+        type: "pending_contract_submitted",
+        title: `${input.vendorName} submitted a contract`,
+        body: input.contractName,
+        payload: { pendingId: input.pendingId, vendorName: input.vendorName },
+        actionUrl: `/dashboard/contracts`,
+      })
+    }
     const emails = await getFacilityMemberEmails(input.facilityId)
     if (emails.length === 0) return { sent: 0 }
     const { subject, html } = pendingContractSubmittedEmail({
@@ -322,6 +376,30 @@ export async function notifyVendorOfPendingDecision(input: {
   reviewNotes?: string | null
 }): Promise<{ sent: number }> {
   try {
+    const userIds = await getVendorMemberUserIds(input.vendorId)
+    if (userIds.length > 0) {
+      const { createInAppNotifications } = await import(
+        "@/lib/actions/notifications/in-app"
+      )
+      const decisionLabel =
+        input.decision === "approved"
+          ? "approved"
+          : input.decision === "rejected"
+            ? "rejected"
+            : "needs revision"
+      void createInAppNotifications({
+        userIds,
+        type: `pending_contract_${input.decision}`,
+        title: `Submission ${decisionLabel}: ${input.contractName}`,
+        body: input.reviewNotes ?? null,
+        payload: {
+          pendingId: input.pendingId,
+          decision: input.decision,
+          facilityName: input.facilityName,
+        },
+        actionUrl: `/vendor/contracts/pending/${input.pendingId}/edit`,
+      })
+    }
     const emails = await getVendorMemberEmails(input.vendorId)
     if (emails.length === 0) return { sent: 0 }
     const { subject, html } = pendingContractDecisionEmail({

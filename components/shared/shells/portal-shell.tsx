@@ -27,6 +27,7 @@ import { UserMenu } from "@/components/shared/shells/user-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { CommandSearch } from "@/components/shared/shells/command-search"
 import { AlertBell } from "@/components/shared/shells/alert-bell"
+import { NotificationBell } from "@/components/shared/notification-bell"
 import { MassUpload } from "@/components/import/mass-upload"
 
 interface PortalShellProps {
@@ -139,6 +140,15 @@ export function PortalShell({
               vendorId={vendorId}
               initialCount={alertCount}
             />
+            {/*
+             * Charles 2026-04-25 (audit follow-up): in-app
+             * notification bell — fires on pending-contract events
+             * (submit / approve / reject / revision_requested) so
+             * users without email reach can still see decisions.
+             * Renders for both facility + vendor roles; the underlying
+             * server action figures out which role you are.
+             */}
+            <NotificationBell />
           </div>
         </header>
 
