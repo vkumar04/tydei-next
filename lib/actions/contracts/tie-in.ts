@@ -421,6 +421,15 @@ export async function getContractCapitalSchedule(
       select: { collectionDate: true, rebateCollected: true },
     })
     allRebates.push(...siblingRebates)
+    // Charles audit pass-4 round-2 C3: legacy compat. Pre-cross-
+    // contract behavior was that "capital" rows could have rebates
+    // wired directly to them (no sibling usage contract). If no
+    // siblings exist for a capital row but the row itself has
+    // rebates, fall back to those so legacy data doesn't silently
+    // zero out the paydown.
+    if (siblingRebates.length === 0 && contract.rebates.length > 0) {
+      allRebates.push(...contract.rebates)
+    }
   }
   if (isTieIn || isCapital) {
     for (const r of allRebates) {
@@ -785,8 +794,18 @@ export async function getContractCapitalProjection(
       },
       select: { collectionDate: true, rebateCollected: true },
     })
-    allRebates = sib
+    // Legacy compat (round-2 C3): fall back to own.rebates when no
+    // siblings exist so pre-cross-contract data doesn't zero out.
+    allRebates =
+      sib.length === 0 && contract.rebates.length > 0
+        ? [...contract.rebates]
+        : sib
   }
+  // Track whether the trailing-90 query should follow siblings or
+  // fall back to the contract's own rebates.
+  const useSiblingTrailing90 =
+    isCapitalRow && allRebates !== contract.rebates && allRebates.length > 0
+
   const paidToDate = sumRebateAppliedToCapital(
     allRebates,
     isCapitalRow ? "tie_in" : contract.contractType,
@@ -798,7 +817,7 @@ export async function getContractCapitalProjection(
   // capital row instead of contractId-only.
   const ninetyDaysAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000)
   const rebateAgg = await prisma.rebate.aggregate({
-    where: isCapitalRow
+    where: useSiblingTrailing90
       ? {
           contract: {
             tieInCapitalContractId: contractId,

@@ -186,7 +186,12 @@ describe("tie-in capital-applied parity (W1.Y-C)", () => {
     )
   })
 
-  it("capital with no siblings: rebateAppliedToCapital and paidToDate are 0 (post pass-4 CONCERN 6 — own.rebates ignored on capital, only siblings count)", async () => {
+  it("capital with no siblings BUT own rebates: legacy-compat falls back to own.rebates (round-2 C3)", async () => {
+    // Pre-cross-contract behavior was: separate-row "capital"
+    // contracts could have rebates wired directly to themselves.
+    // Round-2 C3 fix: when there are no siblings BUT own.rebates
+    // are populated, fall back to own. This prevents legacy data
+    // from silently zeroing out paidToDate.
     contractRow = {
       id: FIXTURE_CONTRACT_ID,
       contractType: "capital",
@@ -210,7 +215,8 @@ describe("tie-in capital-applied parity (W1.Y-C)", () => {
     )
     const result = await getContractCapitalSchedule(FIXTURE_CONTRACT_ID)
 
-    expect(result.rebateAppliedToCapital).toBe(0)
-    expect(result.paidToDate).toBe(0)
+    // Same expected sum as the tie_in case — own.rebates fall through.
+    expect(result.rebateAppliedToCapital).toBe(EXPECTED_APPLIED_TO_CAPITAL)
+    expect(result.paidToDate).toBe(EXPECTED_APPLIED_TO_CAPITAL)
   })
 })
