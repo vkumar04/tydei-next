@@ -4,8 +4,10 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import {
   createTermSchema,
+  createTermSchemaWithTierCheck,
   updateTermSchema,
   tierInputSchema,
+  refineTierOrdering,
   type CreateTermInput,
   type UpdateTermInput,
   type TierInput,
@@ -71,7 +73,11 @@ export async function createContractTerm(input: CreateTermInput) {
 
 async function _createContractTermImpl(input: CreateTermInput) {
   await requireFacility()
-  const data = createTermSchema.parse(input)
+  // Charles 2026-04-25 (Bug 21): use the with-check variant so tier
+  // overlaps are rejected at the server boundary even on direct
+  // createContractTerm calls (the contract-create path is already
+  // guarded via termFormSchemaWithTierCheck).
+  const data = createTermSchemaWithTierCheck.parse(input)
 
   // scopedItemNumbers doesn't belong on ContractTerm itself — it
   // maps to ContractTermProduct join rows written after the term.
@@ -192,6 +198,18 @@ async function _updateContractTermImpl(
 ) {
   await requireFacility()
   const data = updateTermSchema.parse(input)
+  // Charles 2026-04-25 (Bug 21): apply the tier-overlap refinement
+  // manually here. updateTermSchema is `.partial()` so it can't carry a
+  // superRefine — but if the caller IS sending tiers, we still want
+  // the same overlap check the create path enforces.
+  if (data.tiers !== undefined) {
+    const result = z.object({}).superRefine((_, ctx) => {
+      refineTierOrdering(data.tiers ?? [], ctx)
+    }).safeParse({})
+    if (!result.success) {
+      throw new z.ZodError(result.error.issues)
+    }
+  }
 
   // Scope fields don't live on ContractTerm itself:
   //   - scopedItemNumbers → ContractTermProduct join rows (handled below).

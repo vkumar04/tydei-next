@@ -174,6 +174,15 @@ export function ContractAmortizationCard({
                 <th className="py-2 pr-3 text-right font-medium">
                   Amortization Due
                 </th>
+                {/* Charles 2026-04-25 (Bug 23): per-period rebate-applied
+                    column. Only meaningful for tie-in contracts (rebates
+                    retire capital there). For other contract types every
+                    row would show $0, so we hide the whole column. */}
+                {data.contractType === "tie_in" && (
+                  <th className="py-2 pr-3 text-right font-medium">
+                    Rebate Applied
+                  </th>
+                )}
                 <th className="py-2 text-right font-medium">Closing Balance</th>
               </tr>
             </thead>
@@ -206,6 +215,20 @@ export function ContractAmortizationCard({
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {formatCurrency(row.amortizationDue)}
                     </td>
+                    {data.contractType === "tie_in" && (
+                      <td
+                        className={
+                          "py-2 pr-3 text-right tabular-nums " +
+                          (row.rebateAppliedThisPeriod > 0
+                            ? "text-emerald-600"
+                            : "text-muted-foreground")
+                        }
+                      >
+                        {row.rebateAppliedThisPeriod > 0
+                          ? formatCurrency(row.rebateAppliedThisPeriod)
+                          : "—"}
+                      </td>
+                    )}
                     <td className="py-2 text-right tabular-nums">
                       {formatCurrency(row.closingBalance)}
                     </td>

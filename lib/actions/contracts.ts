@@ -18,7 +18,7 @@ import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import {
-  termFormSchema,
+  termFormSchemaWithTierCheck,
   type TermFormValues,
 } from "@/lib/validators/contract-terms"
 import {
@@ -702,7 +702,7 @@ async function _createContractImpl(
   // zodResolver unhappy because termFormSchema defaults force the infer'd
   // type to diverge from the input type. We validate them separately below.
   const dataTerms: TermFormValues[] = Array.isArray(input.terms)
-    ? input.terms.map((t) => termFormSchema.parse(t))
+    ? input.terms.map((t) => termFormSchemaWithTierCheck.parse(t))
     : []
 
   // Charles W1.W-E1 — idempotency. When the client supplies a key we

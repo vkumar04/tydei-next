@@ -96,20 +96,62 @@ export async function getSurgeonScorecardsForFacility(): Promise<Surgeon[]> {
 export async function getFacilityAveragesForFacility(): Promise<FacilityAverages> {
   const { facility, user } = await requireFacility()
 
-  const cases = await prisma.case.findMany({
-    where: { facilityId: facility.id },
-    select: {
-      totalSpend: true,
-      totalReimbursement: true,
-    },
-  })
+  // Charles 2026-04-25 (Bug 27): the case-list (`getCases`) backfills
+  // each case's reimbursement from a live PayorContract.cptRates lookup
+  // when `Case.totalReimbursement` is 0 (which it is for most seed
+  // rows). The hero card was reading `totalReimbursement` raw and
+  // therefore showing 0.0% Avg Margin while the per-case rows showed
+  // real margins — a parity gap. Apply the same fallback here.
+  const [cases, payorContracts] = await Promise.all([
+    prisma.case.findMany({
+      where: { facilityId: facility.id },
+      select: {
+        totalSpend: true,
+        totalReimbursement: true,
+        primaryCptCode: true,
+        procedures: { select: { cptCode: true } },
+      },
+    }),
+    prisma.payorContract.findMany({
+      where: { facilityId: facility.id, status: "active" },
+      select: { cptRates: true },
+    }),
+  ])
 
-  const input: CaseForAverages[] = cases.map((c) => ({
-    totalSpend: Number(c.totalSpend),
-    totalReimbursement: Number(c.totalReimbursement),
-    // Case.timeInOr is time-of-day (String?) — see file header.
-    timeInOrMinutes: null,
-  }))
+  const cptRateMap = new Map<string, number>()
+  for (const pc of payorContracts) {
+    const rates =
+      (pc.cptRates as
+        | Array<{ cpt?: string; cptCode?: string; rate: number }>
+        | null) ?? []
+    for (const r of rates) {
+      const code = r.cptCode ?? r.cpt
+      if (!code || typeof r.rate !== "number") continue
+      const existing = cptRateMap.get(code)
+      if (existing === undefined || r.rate > existing) {
+        cptRateMap.set(code, r.rate)
+      }
+    }
+  }
+
+  const input: CaseForAverages[] = cases.map((c) => {
+    const stored = Number(c.totalReimbursement)
+    let computed = 0
+    if (c.primaryCptCode && cptRateMap.has(c.primaryCptCode)) {
+      computed = cptRateMap.get(c.primaryCptCode) ?? 0
+    }
+    for (const p of c.procedures) {
+      if (p.cptCode && cptRateMap.has(p.cptCode)) {
+        computed = Math.max(computed, cptRateMap.get(p.cptCode) ?? 0)
+      }
+    }
+    return {
+      totalSpend: Number(c.totalSpend),
+      totalReimbursement: stored > 0 ? stored : computed,
+      // Case.timeInOr is time-of-day (String?) — see file header.
+      timeInOrMinutes: null,
+    }
+  })
 
   const averages = computeFacilityAverages({ cases: input })
 

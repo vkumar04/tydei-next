@@ -44,10 +44,20 @@ vi.mock("@/lib/db", () => ({
             if ("totalSpend" in select) projection.totalSpend = r.totalSpend
             if ("totalReimbursement" in select)
               projection.totalReimbursement = r.totalReimbursement
+            if ("primaryCptCode" in select)
+              projection.primaryCptCode = r.primaryCptCode ?? null
+            if ("procedures" in select) projection.procedures = []
             return projection
           })
         },
       ),
+    },
+    // Charles 2026-04-25 (Bug 27): getFacilityAveragesForFacility now
+    // joins payor contracts to backfill reimbursement when the case's
+    // stored value is 0. Empty mock keeps existing-fixture math
+    // unchanged (no rates → no override).
+    payorContract: {
+      findMany: vi.fn(async () => []),
     },
   },
 }))
@@ -282,11 +292,18 @@ describe("getFacilityAveragesForFacility", () => {
     expect(result.avgCaseCost).toBe(1000)
   })
 
-  it("projects only totalSpend + totalReimbursement", async () => {
+  it("projects totalSpend + totalReimbursement plus the CPT-fallback fields", async () => {
+    // Charles 2026-04-25 (Bug 27): the projection now also pulls
+    // primaryCptCode + procedures.cptCode so the function can fall back
+    // to live PayorContract.cptRates when totalReimbursement is 0
+    // (parity with `getCases`). Update the assertion to reflect the
+    // wider select.
     await getFacilityAveragesForFacility()
     expect(lastSelect).toEqual({
       totalSpend: true,
       totalReimbursement: true,
+      primaryCptCode: true,
+      procedures: { select: { cptCode: true } },
     })
   })
 

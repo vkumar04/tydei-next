@@ -24,6 +24,53 @@ export const tierInputSchema = z.object({
 
 export type TierInput = z.infer<typeof tierInputSchema>
 
+/**
+ * Charles 2026-04-25: tiers must be strictly non-overlapping. If
+ * tier-N's `spendMax` equals tier-(N+1)'s `spendMin`, the boundary
+ * dollar belongs to both tiers under the cumulative engine, doubling
+ * the rebate at the edge. Same for volume + market-share. Apply this
+ * via `superRefine` on every term schema that accepts a tier array.
+ */
+export function refineTierOrdering(
+  tiers: TierInput[],
+  ctx: z.RefinementCtx,
+): void {
+  const sorted = [...tiers].sort((a, b) => a.tierNumber - b.tierNumber)
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1]
+    const cur = sorted[i]
+    if (prev.spendMax != null && cur.spendMin <= prev.spendMax) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tiers", i, "spendMin"],
+        message: `Tier ${cur.tierNumber} spendMin ($${cur.spendMin.toLocaleString()}) must be greater than Tier ${prev.tierNumber} spendMax ($${prev.spendMax.toLocaleString()}). Overlapping tiers cause the boundary dollar to be rebated twice — set spendMin to $${(prev.spendMax + 1).toLocaleString()} or higher.`,
+      })
+    }
+    if (
+      prev.volumeMax != null &&
+      cur.volumeMin != null &&
+      cur.volumeMin <= prev.volumeMax
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tiers", i, "volumeMin"],
+        message: `Tier ${cur.tierNumber} volumeMin (${cur.volumeMin}) must be greater than Tier ${prev.tierNumber} volumeMax (${prev.volumeMax}).`,
+      })
+    }
+    if (
+      prev.marketShareMax != null &&
+      cur.marketShareMin != null &&
+      cur.marketShareMin <= prev.marketShareMax
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tiers", i, "marketShareMin"],
+        message: `Tier ${cur.tierNumber} marketShareMin (${cur.marketShareMin}%) must be greater than Tier ${prev.tierNumber} marketShareMax (${prev.marketShareMax}%).`,
+      })
+    }
+  }
+}
+
 // ─── Create Term Schema ──────────────────────────────────────────
 
 export const createTermSchema = z.object({
@@ -88,6 +135,20 @@ export const createTermSchema = z.object({
   tiers: z.array(tierInputSchema).optional().default([]),
 })
 
+// Charles 2026-04-25 (Bug 21): tier-ordering refinement is applied as a
+// wrapper rather than `.superRefine()` on the object itself, because
+// `updateTermSchema = createTermSchema.partial()` below can't be derived
+// from a refined object (zod throws "cannot be used on object schemas
+// containing refinements"). Keeping the base object unrefined and
+// applying the rule at the export boundary preserves both validations
+// without breaking the partial-update path.
+const _createTermSchemaBase = createTermSchema
+export const createTermSchemaWithTierCheck = _createTermSchemaBase.superRefine(
+  (value, ctx) => {
+    refineTierOrdering(value.tiers ?? [], ctx)
+  },
+)
+
 export type CreateTermInput = z.infer<typeof createTermSchema>
 
 // ─── Update Term Schema ──────────────────────────────────────────
@@ -149,5 +210,15 @@ export const termFormSchema = z.object({
     .optional(),
   tiers: z.array(tierInputSchema).default([]),
 })
+
+// See createTermSchemaWithTierCheck above for the rationale on keeping
+// the base object unrefined. termFormSchema is the form-level wrapper
+// used by the contract create/edit form's zodResolver, so we want the
+// tier-overlap rule to fire there too.
+export const termFormSchemaWithTierCheck = termFormSchema.superRefine(
+  (value, ctx) => {
+    refineTierOrdering(value.tiers ?? [], ctx)
+  },
+)
 
 export type TermFormValues = z.infer<typeof termFormSchema>

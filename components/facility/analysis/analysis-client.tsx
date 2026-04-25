@@ -66,14 +66,26 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
       }),
   })
 
+  // Charles 2026-04-25 (Bug 26): Financial Analysis runs MACRS depreciation
+  // + ROI/NPV against `contract.totalValue` as the equipment basis. That
+  // math is only meaningful for capital and tie-in contracts (which carry
+  // a real capitalCost). Listing every active contract was producing
+  // nonsensical "Negative ROI -$866K" cards on rebate-only contracts
+  // because their totalValue was being depreciated as if it were
+  // equipment. Restrict the picker to contract types that can plausibly
+  // have a capital basis.
   const contractOptions = useMemo(
     () =>
-      (contractsQuery.data?.contracts ?? []).map((c) => ({
-        id: c.id,
-        name: c.name,
-        vendorName: c.vendor?.name ?? "Unknown vendor",
-        contractType: c.contractType,
-      })),
+      (contractsQuery.data?.contracts ?? [])
+        .filter(
+          (c) => c.contractType === "capital" || c.contractType === "tie_in",
+        )
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          vendorName: c.vendor?.name ?? "Unknown vendor",
+          contractType: c.contractType,
+        })),
     [contractsQuery.data],
   )
 

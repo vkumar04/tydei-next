@@ -108,6 +108,13 @@ const ALIASES: Record<string, string[]> = {
     "carveout", "carve_out", "excluded", "exempt", "carved_out",
     "exclusion", "is_excluded", "carve",
   ],
+  // Charles 2026-04-25: PO number was missing from ALIASES so the
+  // auto-mapper never suggested a column for it; users had to hand-pick
+  // and then `buildRecords` dropped the value anyway. Both halves fixed.
+  poNumber: [
+    "ponumber", "purchaseordernumber", "ponum", "po", "purchaseorder",
+    "ponbr", "poid", "ordernumber", "orderno", "ordernum",
+  ],
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")

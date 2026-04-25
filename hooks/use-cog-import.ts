@@ -145,6 +145,10 @@ export function useCOGImport() {
           quantity: qty,
           transactionDate,
           category: row[mapping.category ?? ""] || undefined,
+          // Charles 2026-04-25: PO number was being silently dropped here
+          // even when the user mapped it; the mapping was discoverable
+          // (TARGET_FIELDS exposes it) but the projection didn't read it.
+          poNumber: row[mapping.poNumber ?? ""] || undefined,
         }
       })
       .filter(

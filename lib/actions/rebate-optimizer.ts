@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 
 export interface RebateOpportunity {
   contractId: string
@@ -64,11 +65,42 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
 
   const opportunities: RebateOpportunity[] = []
 
+  // Charles 2026-04-25 (Bug 25): the prior implementation summed
+  // `ContractPeriod.totalSpend` over the last 4 periods, which is empty
+  // on contracts that haven't generated periods yet (and stale on ones
+  // that have). Replace with a trailing-12-month sum from the canonical
+  // COG source so this matches the contracts list / detail. Pre-fetch
+  // all spend in one grouped query to avoid an N+1 round-trip per
+  // contract.
+  const trailingStart = new Date()
+  trailingStart.setMonth(trailingStart.getMonth() - 12)
+  const vendorIds = Array.from(
+    new Set(
+      contracts.map((c) => c.vendorId).filter((v): v is string => Boolean(v)),
+    ),
+  )
+  const spendRows = vendorIds.length
+    ? await prisma.cOGRecord.groupBy({
+        by: ["vendorId"],
+        where: {
+          facilityId,
+          vendorId: { in: vendorIds },
+          transactionDate: { gte: trailingStart },
+        },
+        _sum: { extendedPrice: true },
+      })
+    : []
+  const spendByVendor = new Map<string, number>()
+  for (const r of spendRows) {
+    if (r.vendorId) {
+      spendByVendor.set(r.vendorId, Number(r._sum.extendedPrice ?? 0))
+    }
+  }
+
   for (const contract of contracts) {
-    const currentSpend = contract.periods.reduce(
-      (sum, p) => sum + Number(p.totalSpend),
-      0
-    )
+    const currentSpend = contract.vendorId
+      ? spendByVendor.get(contract.vendorId) ?? 0
+      : 0
     const currentTierAchieved = contract.periods[0]?.tierAchieved ?? 0
 
     for (const term of contract.terms) {
@@ -87,8 +119,19 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
 
       const nextThreshold = Number(nextTier.spendMin)
       const spendGap = Math.max(0, nextThreshold - currentSpend)
-      const currentRebatePercent = Number(currentTier.rebateValue)
-      const nextRebatePercent = Number(nextTier.rebateValue)
+      // Charles 2026-04-25 (Bug 25): `ContractTier.rebateValue` is stored
+      // as a fraction (0.02 = 2%) but the optimizer math below expects
+      // integer percent (the `/100` divisor). Without `toDisplayRebateValue`
+      // every projected-rebate number was 100x too small. CLAUDE.md
+      // canonical-helpers table marks this as the boundary scaler.
+      const currentRebatePercent = toDisplayRebateValue(
+        currentTier.rebateType,
+        Number(currentTier.rebateValue),
+      )
+      const nextRebatePercent = toDisplayRebateValue(
+        nextTier.rebateType,
+        Number(nextTier.rebateValue),
+      )
 
       const projectedAdditionalRebate =
         (nextRebatePercent - currentRebatePercent) * currentSpend / 100

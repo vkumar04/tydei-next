@@ -79,22 +79,35 @@ interface ContractTermsEntryProps {
   contractType?: string
 }
 
+/*
+ * Charles 2026-04-25 (Bug 24): the engine dispatcher that routed each
+ * `termType` to its specific calculator was deleted; today the only
+ * code path that emits earned rebates (`recomputeAccrualForContract`)
+ * unconditionally uses the spend-tier engine regardless of the term's
+ * declared type. Until the per-type dispatcher is rebuilt, every type
+ * other than `spend_rebate` silently produces spend-rebate numbers,
+ * which is dangerous (the user thinks they're modeling a Growth or
+ * Volume rebate but is actually getting Spend math). `disabled` on the
+ * other rows greys them out in the dropdown with a "coming soon" hint
+ * so the UX makes the gap explicit. Re-enable each row when its
+ * engine path is wired up.
+ */
 const termTypes = [
-  { value: "spend_rebate", label: "Spend Rebate", icon: DollarSign, description: "Rebate based on spend thresholds" },
-  { value: "volume_rebate", label: "Volume Rebate", icon: TrendingUp, description: "Rebate based on usage count. Baseline is in $ amounts" },
-  { value: "price_reduction", label: "Price Reduction", icon: Percent, description: "Once spend/volume threshold is met, future purchases receive discounted prices" },
-  { value: "market_share", label: "Market Share", icon: PieChart, description: "Rebate based on market share percentage" },
-  { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Once market share target is met, future purchases receive discounted prices" },
-  { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Once procedure spend threshold is met, future procedures receive discounted prices" },
-  { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Procedure-based ceiling price with rebate" },
-  { value: "growth_rebate", label: "Growth Rebate", icon: TrendingUp, description: "Rebate based on spend growth over baseline" },
-  { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Rebate for meeting compliance requirements" },
-  { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate amount" },
-  { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price locked for contract duration" },
-  { value: "rebate_per_use", label: "Rebate Per Use", icon: Coins, description: "Per-unit rebate tracked by usage count" },
-  { value: "po_rebate", label: "PO Rebate", icon: DollarSign, description: "Per-purchase-order rebate triggered by PO totals" },
-  { value: "carve_out", label: "Carve Out", icon: Shield, description: "Specific items excluded from the broader contract terms" },
-  { value: "payment_rebate", label: "Payment Rebate", icon: Coins, description: "Rebate triggered by payment timing or method" },
+  { value: "spend_rebate", label: "Spend Rebate", icon: DollarSign, description: "Rebate based on spend thresholds", disabled: false },
+  { value: "volume_rebate", label: "Volume Rebate", icon: TrendingUp, description: "Rebate based on usage count. Baseline is in $ amounts", disabled: true },
+  { value: "price_reduction", label: "Price Reduction", icon: Percent, description: "Once spend/volume threshold is met, future purchases receive discounted prices", disabled: true },
+  { value: "market_share", label: "Market Share", icon: PieChart, description: "Rebate based on market share percentage", disabled: true },
+  { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Once market share target is met, future purchases receive discounted prices", disabled: true },
+  { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Once procedure spend threshold is met, future procedures receive discounted prices", disabled: true },
+  { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Procedure-based ceiling price with rebate", disabled: true },
+  { value: "growth_rebate", label: "Growth Rebate", icon: TrendingUp, description: "Rebate based on spend growth over baseline", disabled: true },
+  { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Rebate for meeting compliance requirements", disabled: true },
+  { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate amount", disabled: true },
+  { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price locked for contract duration", disabled: true },
+  { value: "rebate_per_use", label: "Rebate Per Use", icon: Coins, description: "Per-unit rebate tracked by usage count", disabled: true },
+  { value: "po_rebate", label: "PO Rebate", icon: DollarSign, description: "Per-purchase-order rebate triggered by PO totals", disabled: true },
+  { value: "carve_out", label: "Carve Out", icon: Shield, description: "Specific items excluded from the broader contract terms", disabled: true },
+  { value: "payment_rebate", label: "Payment Rebate", icon: Coins, description: "Rebate triggered by payment timing or method", disabled: true },
 ] as const
 
 const baselineTypes = [
@@ -385,13 +398,25 @@ export function ContractTermsEntry({
                         </SelectTrigger>
                         <SelectContent>
                           {termTypes.map((tt) => (
-                            <SelectItem key={tt.value} value={tt.value}>
+                            <SelectItem
+                              key={tt.value}
+                              value={tt.value}
+                              disabled={tt.disabled}
+                            >
                               <div className="flex items-center gap-2">
                                 <tt.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                                 <div>
-                                  <div>{tt.label}</div>
+                                  <div>
+                                    {tt.label}
+                                    {tt.disabled && (
+                                      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-600">
+                                        Engine pending
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="text-xs text-muted-foreground">
                                     {tt.description}
+                                    {tt.disabled && " — selectable once the per-type engine ships; for now use Spend Rebate."}
                                   </div>
                                 </div>
                               </div>

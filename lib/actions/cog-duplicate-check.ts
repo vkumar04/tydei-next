@@ -37,6 +37,13 @@ export interface DuplicateMatch {
 }
 
 const DUPLICATE_BATCH_SIZE = 500
+// Charles 2026-04-25: a hard 500-row cap on the result set was making
+// the duplicate-check step claim "Found 500 duplicates" on imports that
+// actually had 21k+ overlaps. Server still skipped them all on import,
+// so the data was safe — but the UI was lying. Bumped to 50k as a
+// reasonable safety ceiling; pathological re-imports beyond that point
+// hit a "+more" indicator in the UI rather than truncating silently.
+const MAX_REPORTED_DUPLICATES = 50_000
 
 function sameDay(a: Date, b: Date): boolean {
   return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10)
@@ -116,8 +123,8 @@ export async function checkCOGDuplicates(input: {
       }
     }
 
-    if (allMatches.length >= 500) break
+    if (allMatches.length >= MAX_REPORTED_DUPLICATES) break
   }
 
-  return serialize(allMatches.slice(0, 500))
+  return serialize(allMatches.slice(0, MAX_REPORTED_DUPLICATES))
 }

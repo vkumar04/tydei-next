@@ -55,11 +55,17 @@ export function CogSpendTrendCard({ facilityId }: { facilityId: string }) {
       : trend === "down"
         ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100"
         : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
+  // Charles 2026-04-25 (Bug 15/16 — "hard codex / gibberish"): values
+  // are real, but two big currencies were being crammed into one 1/3-
+  // width grid cell and the display truncated to "$187,—" mid-number.
+  // Switch to compact notation ($3.6M / $187K) so they always fit, and
+  // split the cells in the layout below.
   const fmt = (n: number) =>
     n.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
-      maximumFractionDigits: 0,
+      notation: "compact",
+      maximumFractionDigits: 1,
     })
   return (
     <Card>
@@ -70,7 +76,7 @@ export function CogSpendTrendCard({ facilityId }: { facilityId: string }) {
           down = &lt;-10% lower; else stable.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid grid-cols-3 gap-4">
+      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
           <p className="text-xs text-muted-foreground">Direction</p>
           <Badge variant="secondary" className={`mt-1 text-xs ${tone}`}>
@@ -86,12 +92,15 @@ export function CogSpendTrendCard({ facilityId }: { facilityId: string }) {
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">
-            Recent / prior 3-mo avg
-          </p>
+          <p className="text-xs text-muted-foreground">Recent 3-mo avg</p>
           <p className="mt-1 text-sm font-medium tabular-nums">
             {fmt(recentAvg)}
-            <span className="text-muted-foreground"> · {fmt(priorAvg)}</span>
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Prior 3-mo avg</p>
+          <p className="mt-1 text-sm font-medium tabular-nums">
+            {fmt(priorAvg)}
           </p>
         </div>
       </CardContent>

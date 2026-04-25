@@ -146,7 +146,11 @@ describe("edit-contract type change + new term persistence (W1.W-E3)", () => {
         },
         {
           tierNumber: 2,
-          spendMin: 500_000,
+          // Charles 2026-04-25 Bug 21: tier overlap (tier 2 spendMin
+          // == tier 1 spendMax) now rejected at validation. Stepping
+          // tier 2 to spendMax+1 keeps the original test intent (a
+          // two-tier rebate) without tripping the overlap check.
+          spendMin: 500_001,
           rebateType: "percent_of_spend",
           rebateValue: 0.04,
         },
@@ -159,7 +163,7 @@ describe("edit-contract type change + new term persistence (W1.W-E3)", () => {
     expect(callArgs.data.tiers.create[0].rebateValue).toBe(0.02)
     expect(callArgs.data.tiers.create[1].rebateValue).toBe(0.04)
     expect(callArgs.data.tiers.create[0].spendMin).toBe(0)
-    expect(callArgs.data.tiers.create[1].spendMin).toBe(500_000)
+    expect(callArgs.data.tiers.create[1].spendMin).toBe(500_001)
   })
 
   it("runs both steps in sequence: contract type update, then term create — fields round-trip", async () => {

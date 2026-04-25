@@ -67,6 +67,27 @@ When unsure, prefer the fixed end date. A wrong null expiration causes
 every future COG row to match the contract; a wrong fixed date at
 least matches correctly during the stated term.
 
+── TOTAL VALUE (BE STRICT) ──
+totalValue is the contract's committed or expected dollar ceiling — the
+"Total Contract Value", commitment, or maximum spend over the full
+term. Examples that ARE totalValue:
+- "Total contract value: $5,300,000"
+- "Facility commits to $X over the initial term"
+- A capital contract's purchase price ($X for the equipment)
+
+The following are NOT totalValue — they are tier thresholds or minimum
+spend qualifications and must NOT be used as totalValue:
+- "Minimum QAS threshold of $5,300,000 required to qualify for any rebate"
+- "Tier 1 begins at $X; Tier 2 begins at $Y"
+- "Rebate paid on spend above $X"
+- "Rebate cap: $X paid annually"
+- "Volume threshold of N units"
+
+Charles 2026-04-25 reported a contract where the AI returned the QAS
+threshold as totalValue. If the contract states ONLY a threshold and no
+committed total, return totalValue: null. Do not infer a total from
+tier ceilings or rebate caps.
+
 ── TIER EXTRACTION (CRITICAL) ──
 Usage contracts ALMOST ALWAYS have rebate tiers. If the document mentions
 ANY of the following, you MUST emit one row in terms[].tiers[] per tier:
@@ -81,6 +102,10 @@ For each tier:
 - tierNumber: 1 = lowest threshold, counting up.
 - spendMin / spendMax: the dollar thresholds. The first tier is spendMin=0.
   Open-ended top tiers have spendMax=null.
+  IMPORTANT: tiers must NOT overlap. Tier (N+1).spendMin MUST be strictly
+  greater than Tier N.spendMax (use spendMax+1, not spendMax). The
+  cumulative engine double-rebates the boundary dollar otherwise. Same
+  rule applies to volumeMin/volumeMax and marketShareMin/marketShareMax.
 - volumeMin / volumeMax: unit thresholds for volume-based rebates.
 - marketShareMin / marketShareMax: percentages (0-100) for market-share tiers.
 - rebateType: "percent_of_spend" for % rebates, "fixed_rebate" for flat $,
@@ -105,7 +130,7 @@ If the rich schema validation fails, respond with the legacy shape instead:
       "termType": "spend_rebate",
       "tiers": [
         { "tierNumber": 1, "spendMin": 0, "spendMax": 750000, "rebateType": "percent_of_spend", "rebateValue": 3 },
-        { "tierNumber": 2, "spendMin": 750000, "rebateType": "percent_of_spend", "rebateValue": 5 }
+        { "tierNumber": 2, "spendMin": 750001, "rebateType": "percent_of_spend", "rebateValue": 5 }
       ]
     }
   ]

@@ -19,7 +19,12 @@ export const extractedContractSchema = z.object({
     .describe(
       "Expiration date in YYYY-MM-DD format, or null if the contract is evergreen / auto-renewing / 'continues until terminated'. Do NOT invent the initial-term end date for an evergreen contract.",
     ),
-  totalValue: z.number().optional().describe("Total contract value in dollars"),
+  totalValue: z
+    .number()
+    .optional()
+    .describe(
+      "Total committed or expected contract value in dollars (Total Contract Value, ceiling, or commitment over the full term). Do NOT use rebate tier thresholds, minimum spend qualifications (e.g. 'minimum QAS threshold of $5,300,000'), tier breakpoints, capital costs, or rebate dollar caps. If only a threshold appears and no committed total is stated, return null instead of guessing.",
+    ),
   description: z.string().optional().describe("Brief description of the contract"),
   productCategory: z
     .string()

@@ -157,6 +157,14 @@ export interface ContractCapitalScheduleRow {
   principalDue: number
   amortizationDue: number
   closingBalance: number
+  /**
+   * Charles 2026-04-25 (Bug 23): collected rebate that landed inside this
+   * period's window (collectionDate falls between the previous row's
+   * periodDate and this row's periodDate, inclusive of the upper bound).
+   * Only populated for tie-in contracts where rebate retires capital;
+   * 0 for non-tie-in. Sums across rows equal `rebateAppliedToCapital`.
+   */
+  rebateAppliedThisPeriod: number
 }
 
 export interface ContractCapitalScheduleResult {
@@ -368,6 +376,31 @@ export async function getContractCapitalSchedule(
   const start = new Date(contract.effectiveDate)
   const monthsStep = monthsPerPeriod(period)
   const today = new Date()
+  // Charles 2026-04-25 (Bug 23): bucket collected rebates into amortization
+  // periods so the schedule can show how much rebate paid down capital
+  // each period. Only meaningful on tie-in contracts; non-tie-in
+  // collected rebates aren't applied to a capital balance.
+  const isTieIn = contract.contractType === "tie_in"
+  const collectionsByPeriod = new Map<number, number>()
+  if (isTieIn) {
+    for (const r of contract.rebates) {
+      if (!r.collectionDate) continue
+      const collectedMs = new Date(r.collectionDate).getTime()
+      const startMs = start.getTime()
+      if (collectedMs < startMs) continue
+      const monthsSinceStart =
+        (collectedMs - startMs) / (1000 * 60 * 60 * 24 * 30.4375)
+      const periodNumber = Math.max(
+        1,
+        Math.min(entries.length, Math.ceil(monthsSinceStart / monthsStep)),
+      )
+      const prior = collectionsByPeriod.get(periodNumber) ?? 0
+      collectionsByPeriod.set(
+        periodNumber,
+        prior + Number(r.rebateCollected ?? 0),
+      )
+    }
+  }
   const schedule: ContractCapitalScheduleRow[] = entries.map((e) => {
     const periodDate = addMonths(start, e.periodNumber * monthsStep)
     return {
@@ -378,6 +411,7 @@ export async function getContractCapitalSchedule(
       principalDue: e.principalDue,
       amortizationDue: e.amortizationDue,
       closingBalance: e.closingBalance,
+      rebateAppliedThisPeriod: collectionsByPeriod.get(e.periodNumber) ?? 0,
     }
   })
 
