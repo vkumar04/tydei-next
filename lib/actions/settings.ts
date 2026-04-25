@@ -222,8 +222,39 @@ export interface TeamMember {
   createdAt: string
 }
 
+/**
+ * Charles audit round-8: every team-management action must verify the
+ * caller is in the target organization (and admin/owner for write
+ * actions). Pre-fix: any authenticated user could enumerate any org's
+ * members, invite themselves to any org, delete any member from any
+ * org, or escalate any member's role — all by guessing/learning IDs.
+ */
+async function assertCallerIsMember(
+  userId: string,
+  organizationId: string,
+): Promise<{ role: string }> {
+  const callerMember = await prisma.member.findFirst({
+    where: { userId, organizationId },
+    select: { role: true },
+  })
+  if (!callerMember) {
+    throw new Error("Not authorized: not a member of this organization")
+  }
+  return callerMember
+}
+async function assertCallerCanManage(
+  userId: string,
+  organizationId: string,
+): Promise<void> {
+  const { role } = await assertCallerIsMember(userId, organizationId)
+  if (role !== "owner" && role !== "admin") {
+    throw new Error("Not authorized: requires admin or owner role")
+  }
+}
+
 export async function getTeamMembers(organizationId: string): Promise<TeamMember[]> {
-  await requireAuth()
+  const session = await requireAuth()
+  await assertCallerIsMember(session.user.id, organizationId)
 
   const members = await prisma.member.findMany({
     where: { organizationId },
@@ -250,6 +281,7 @@ export async function inviteTeamMember(input: {
   role: string
 }): Promise<void> {
   const session = await requireAuth()
+  await assertCallerCanManage(session.user.id, input.organizationId)
 
   await prisma.invitation.create({
     data: {
@@ -264,7 +296,12 @@ export async function inviteTeamMember(input: {
 }
 
 export async function removeTeamMember(memberId: string): Promise<void> {
-  await requireAuth()
+  const session = await requireAuth()
+  const target = await prisma.member.findUniqueOrThrow({
+    where: { id: memberId },
+    select: { organizationId: true },
+  })
+  await assertCallerCanManage(session.user.id, target.organizationId)
   await prisma.member.delete({ where: { id: memberId } })
 }
 
@@ -272,7 +309,12 @@ export async function updateTeamMemberRole(
   memberId: string,
   role: string
 ): Promise<void> {
-  await requireAuth()
+  const session = await requireAuth()
+  const target = await prisma.member.findUniqueOrThrow({
+    where: { id: memberId },
+    select: { organizationId: true },
+  })
+  await assertCallerCanManage(session.user.id, target.organizationId)
   await prisma.member.update({ where: { id: memberId }, data: { role } })
 }
 

@@ -36,23 +36,26 @@ async function assertKeyVisibleToUser(key: string): Promise<void> {
   })
   if (doc) return
 
-  // Pending-contract documents JSON blob — best-effort string contains.
-  // Restricted to the requester's vendor scope on submit, or facility
-  // scope when reviewing.
-  const pending = await prisma.pendingContract.findFirst({
-    where: {
-      AND: [
-        { documents: { string_contains: key } as never },
-        facilityId
-          ? { facilityId }
-          : vendorId
-            ? { vendorId }
-            : { id: "__none__" },
-      ],
-    },
-    select: { id: true },
+  // Pending-contract documents JSON blob — fetch the row's documents
+  // and exact-match the key against `url`/`key` fields. Avoids the
+  // substring-collision risk with predictable filenames.
+  const pendingRows = await prisma.pendingContract.findMany({
+    where: facilityId
+      ? { facilityId }
+      : vendorId
+        ? { vendorId }
+        : { id: "__none__" },
+    select: { documents: true },
   })
-  if (pending) return
+  for (const row of pendingRows) {
+    const docs = row.documents
+    if (!Array.isArray(docs)) continue
+    for (const d of docs) {
+      if (d === null || typeof d !== "object") continue
+      const r = d as { url?: unknown; key?: unknown; name?: unknown }
+      if (r.url === key || r.key === key || r.name === key) return
+    }
+  }
 
   throw new Error("File not found or not accessible")
 }

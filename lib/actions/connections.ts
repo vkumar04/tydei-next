@@ -134,10 +134,40 @@ export async function sendConnectionInvite(input: {
   })
 }
 
-// ─── Accept Connection ───────────────────────────────────────────
+// ─── Accept / Reject / Remove ────────────────────────────────────
+
+/**
+ * Charles audit round-8 BLOCKER: connection mutations must verify the
+ * caller is one of the two parties (facility OR vendor) on the row.
+ * Pre-fix any authenticated user could accept/reject/delete arbitrary
+ * connections, corrupting the partnership graph and potentially
+ * granting data-sharing scopes.
+ */
+async function assertCallerOnConnection(
+  userId: string,
+  connectionId: string,
+): Promise<void> {
+  const connection = await prisma.connection.findUniqueOrThrow({
+    where: { id: connectionId },
+    select: { facilityId: true, vendorId: true },
+  })
+  const member = await prisma.member.findFirst({
+    where: { userId },
+    include: { organization: { include: { facility: true, vendor: true } } },
+  })
+  const callerFacilityId = member?.organization?.facility?.id
+  const callerVendorId = member?.organization?.vendor?.id
+  if (
+    connection.facilityId !== callerFacilityId &&
+    connection.vendorId !== callerVendorId
+  ) {
+    throw new Error("Not authorized: not a party to this connection")
+  }
+}
 
 export async function acceptConnection(connectionId: string): Promise<void> {
-  await requireAuth()
+  const session = await requireAuth()
+  await assertCallerOnConnection(session.user.id, connectionId)
 
   await prisma.connection.update({
     where: { id: connectionId },
@@ -145,10 +175,9 @@ export async function acceptConnection(connectionId: string): Promise<void> {
   })
 }
 
-// ─── Reject Connection ───────────────────────────────────────────
-
 export async function rejectConnection(connectionId: string): Promise<void> {
-  await requireAuth()
+  const session = await requireAuth()
+  await assertCallerOnConnection(session.user.id, connectionId)
 
   await prisma.connection.update({
     where: { id: connectionId },
@@ -156,9 +185,8 @@ export async function rejectConnection(connectionId: string): Promise<void> {
   })
 }
 
-// ─── Remove Connection ───────────────────────────────────────────
-
 export async function removeConnection(connectionId: string): Promise<void> {
-  await requireAuth()
+  const session = await requireAuth()
+  await assertCallerOnConnection(session.user.id, connectionId)
   await prisma.connection.delete({ where: { id: connectionId } })
 }
