@@ -100,7 +100,12 @@ const termTypes = [
   { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Once market share target is met, future purchases receive discounted prices", disabled: true },
   { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Once procedure spend threshold is met, future procedures receive discounted prices", disabled: true },
   { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Procedure-based ceiling price with rebate", disabled: true },
-  { value: "growth_rebate", label: "Growth Rebate", icon: TrendingUp, description: "Rebate based on spend growth over baseline", disabled: true },
+  // Charles 2026-04-25: growth-baseline math now wired through
+  // `recomputeAccrualForContract` → `buildEvaluationPeriodAccruals`.
+  // When `baselineType === "growth_based"` AND `spendBaseline > 0`,
+  // the engine evaluates tiers against `max(0, periodSpend −
+  // proRatedBaseline)` so only spend ABOVE the baseline counts.
+  { value: "growth_rebate", label: "Growth Rebate", icon: TrendingUp, description: "Rebate based on spend growth over baseline. Set Baseline Type=Growth Based + Annual Spend Baseline below.", disabled: false },
   { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Rebate for meeting compliance requirements", disabled: true },
   { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate amount", disabled: true },
   { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price locked for contract duration", disabled: true },

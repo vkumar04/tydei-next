@@ -213,3 +213,116 @@ describe("buildEvaluationPeriodAccruals — tier qualification runs on aggregate
     expect(buckets[0].tierAchieved).toBe(2)
   })
 })
+
+/**
+ * Charles 2026-04-25: growth-baseline support.
+ *
+ * When `baselineType === "growth_based"` (or `termType === "growth_rebate"`)
+ * AND `spendBaseline > 0`, only spend ABOVE the pro-rated baseline counts
+ * toward tier qualification. The bucket's reported `totalSpend` stays at
+ * gross spend (display surface) but the tier engine sees the growth slice.
+ */
+describe("buildEvaluationPeriodAccruals — growth-baseline (Charles 2026-04-25)", () => {
+  it("annual: $120K spend with $100K annual baseline → tiers see $20K", () => {
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 5 },
+    ]
+    const series = twelveMonthsFrom(2025, 10_000) // $120K total
+    const buckets = buildEvaluationPeriodAccruals(
+      series,
+      tiers,
+      "cumulative",
+      "annual",
+      new Date(Date.UTC(2025, 0, 1)),
+      {
+        boundedUntil: new Date(Date.UTC(2026, 3, 19)),
+        spendBaseline: 100_000,
+        growthBased: true,
+      },
+    )
+    expect(buckets.length).toBe(1)
+    // Display still shows the full $120K spend...
+    expect(buckets[0].totalSpend).toBe(120_000)
+    // ...but rebate is computed on growth slice only: $20K × 5% = $1,000.
+    expect(buckets[0].rebateEarned).toBe(1_000)
+  })
+
+  it("quarterly: pro-rates the annual baseline to the period (÷4)", () => {
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 5 },
+    ]
+    // Q1: $40K spend, annual baseline $100K → quarterly baseline $25K →
+    // growth slice $15K → 5% × $15K = $750.
+    const series: MonthlySpend[] = [
+      { month: "2025-01", spend: 15_000 },
+      { month: "2025-02", spend: 12_000 },
+      { month: "2025-03", spend: 13_000 },
+    ]
+    const buckets = buildEvaluationPeriodAccruals(
+      series,
+      tiers,
+      "cumulative",
+      "quarterly",
+      new Date(Date.UTC(2025, 0, 1)),
+      {
+        // Bound to end-of-Q1 so subsequent empty quarters don't appear
+        // in the result. (The loop emits a row per cadence-bucket up
+        // to boundedUntil regardless of whether the series has data.)
+        boundedUntil: new Date(Date.UTC(2025, 2, 31, 23, 59, 59, 999)),
+        spendBaseline: 100_000,
+        growthBased: true,
+      },
+    )
+    expect(buckets.length).toBe(1)
+    expect(buckets[0].totalSpend).toBe(40_000)
+    expect(buckets[0].rebateEarned).toBe(750)
+  })
+
+  it("below-baseline: spend < pro-rated baseline → $0 rebate (no negative slice)", () => {
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 5 },
+    ]
+    const series = twelveMonthsFrom(2025, 5_000) // $60K total, baseline $100K
+    const buckets = buildEvaluationPeriodAccruals(
+      series,
+      tiers,
+      "cumulative",
+      "annual",
+      new Date(Date.UTC(2025, 0, 1)),
+      {
+        boundedUntil: new Date(Date.UTC(2026, 3, 19)),
+        spendBaseline: 100_000,
+        growthBased: true,
+      },
+    )
+    expect(buckets.length).toBe(1)
+    expect(buckets[0].totalSpend).toBe(60_000)
+    // max(0, 60_000 - 100_000) = 0 → no rebate.
+    expect(buckets[0].rebateEarned).toBe(0)
+  })
+
+  it("growthBased=false (default): full spend reaches the engine even with spendBaseline set", () => {
+    // Defensive: passing spendBaseline alone (without growthBased) MUST
+    // NOT silently subtract — caller has to opt in. Otherwise turning on
+    // a baseline field elsewhere in the form would silently halve every
+    // contract's accruals.
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 5 },
+    ]
+    const series = twelveMonthsFrom(2025, 10_000)
+    const buckets = buildEvaluationPeriodAccruals(
+      series,
+      tiers,
+      "cumulative",
+      "annual",
+      new Date(Date.UTC(2025, 0, 1)),
+      {
+        boundedUntil: new Date(Date.UTC(2026, 3, 19)),
+        spendBaseline: 100_000,
+        // growthBased not set
+      },
+    )
+    expect(buckets.length).toBe(1)
+    expect(buckets[0].rebateEarned).toBe(6_000) // full $120K × 5%
+  })
+})

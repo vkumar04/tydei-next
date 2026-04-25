@@ -336,6 +336,20 @@ export interface TermAccrualConfig {
   evaluationPeriod: EvaluationPeriod
   effectiveStart?: Date | null
   effectiveEnd?: Date | null
+  /**
+   * Charles 2026-04-25: growth-baseline support. When `baselineType`
+   * is "growth_based" (or `termType` is "growth_rebate") AND
+   * `spendBaseline` is set, tier evaluation runs against
+   * `max(0, periodSpend − proRatedBaseline)`. The baseline is
+   * understood as ANNUAL dollars and pro-rated to the evaluation
+   * period (annual=full, quarterly=÷4, semi_annual=÷2, monthly=÷12).
+   *
+   * Both fields are optional so existing callers that don't supply
+   * them keep the prior "evaluate on full spend" behavior.
+   */
+  spendBaseline?: number | null
+  baselineType?: string | null
+  termType?: string | null
 }
 
 /**
@@ -634,12 +648,28 @@ export function buildEvaluationPeriodAccruals(
   method: RebateMethodName,
   evaluationPeriod: EvaluationPeriod,
   effectiveStart: Date,
-  options?: { boundedUntil?: Date },
+  options?: {
+    boundedUntil?: Date
+    /**
+     * Charles 2026-04-25: growth-baseline mode. When set, the engine
+     * evaluates tiers against `max(0, periodSpend − proRatedBaseline)`
+     * instead of full periodSpend. `spendBaseline` is annual dollars
+     * pro-rated to the evaluation period. See `TermAccrualConfig`.
+     */
+    spendBaseline?: number | null
+    growthBased?: boolean
+  },
 ): EvaluationPeriodBucket[] {
   if (series.length === 0 || tiers.length === 0) return []
 
   const width = monthsInEvaluationPeriod(evaluationPeriod)
   const fn = engine(method)
+  // Pro-rate the annual baseline to the evaluation period. Annual eval
+  // = full baseline; quarterly = baseline/4; etc.
+  const proRatedBaseline =
+    options?.growthBased && options.spendBaseline && options.spendBaseline > 0
+      ? options.spendBaseline * (width / 12)
+      : 0
 
   const byMonth = new Map<string, number>()
   for (const s of series) byMonth.set(s.month, s.spend)
@@ -673,7 +703,14 @@ export function buildEvaluationPeriodAccruals(
       monthCursor.setUTCMonth(monthCursor.getUTCMonth() + 1)
     }
 
-    const result = fn(totalSpend, tiers)
+    // Charles 2026-04-25: under growth-based math, only spend ABOVE
+    // the pro-rated baseline counts toward tier qualification. The
+    // bucket's reported `totalSpend` stays at gross spend (so display
+    // surfaces show "we spent $X this period"), but tier evaluation
+    // uses the growth slice.
+    const tierSpend =
+      proRatedBaseline > 0 ? Math.max(0, totalSpend - proRatedBaseline) : totalSpend
+    const result = fn(tierSpend, tiers)
     buckets.push({
       periodStart: cursorStart,
       periodEnd,

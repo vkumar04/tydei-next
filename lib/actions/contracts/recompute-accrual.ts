@@ -200,6 +200,16 @@ export async function recomputeAccrualForContract(
       evaluationPeriod,
       effectiveStart: term.effectiveStart ?? null,
       effectiveEnd: term.effectiveEnd ?? null,
+      // Charles 2026-04-25: growth-baseline plumbing. Threading the
+      // term's `spendBaseline` + `baselineType` + `termType` through
+      // so `buildEvaluationPeriodAccruals` can subtract the pro-rated
+      // baseline before tier evaluation when the term is growth-based.
+      spendBaseline:
+        term.spendBaseline === null || term.spendBaseline === undefined
+          ? null
+          : Number(term.spendBaseline),
+      baselineType: term.baselineType ?? null,
+      termType: term.termType ?? null,
     }
   })
 
@@ -454,13 +464,26 @@ export async function recomputeAccrualForContract(
         )
       : new Date(Math.min(now.getTime(), end.getTime()))
 
+    // Charles 2026-04-25: signal growth-baseline math when EITHER
+    // signal is set on the term — `baselineType === "growth_based"`
+    // (the explicit baseline knob) OR `termType === "growth_rebate"`
+    // (the explicit type indicator). Either alone is enough; both
+    // together are common when the form's "Growth Rebate" preset
+    // populates both fields.
+    const isGrowthBased =
+      config.baselineType === "growth_based" ||
+      config.termType === "growth_rebate"
     const periodBuckets = buildEvaluationPeriodAccruals(
       series,
       config.tiers,
       config.method,
       config.evaluationPeriod,
       windowAnchor,
-      { boundedUntil: termWindowEnd },
+      {
+        boundedUntil: termWindowEnd,
+        spendBaseline: isGrowthBased ? config.spendBaseline ?? null : null,
+        growthBased: isGrowthBased,
+      },
     )
 
     for (const b of periodBuckets) {

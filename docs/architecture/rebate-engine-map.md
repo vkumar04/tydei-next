@@ -123,14 +123,17 @@ arithmetic.
 
 ### 6. Growth-baseline rebates silently degrade to spend-tier math
 
-**Status (2026-04-25):** UNDOCUMENTED → DOCUMENTED. Charles asked
-about "growth language" 2026-04-25; investigation showed the
-`baselineType === "growth_based"` branch on `ContractTerm` is
-populated correctly but `recomputeAccrualForContract` doesn't
-honor `term.spendBaseline` — it evaluates tiers against full
-cumulative spend regardless of baseline. Mitigated for now by
-keeping `growth_rebate` disabled in the term-type dropdown
-("Engine pending" badge). Implementing growth math right requires
-a product decision on per-evaluation-period baseline distribution
-(annual baseline vs proportional monthly) — captured for the
-per-type-engine roadmap.
+**Status (2026-04-25):** RESOLVED. `buildEvaluationPeriodAccruals`
+now accepts `{ spendBaseline, growthBased }` options. When
+`growthBased === true` AND `spendBaseline > 0`, the engine
+evaluates tiers against `max(0, periodSpend − proRatedBaseline)`
+where `proRatedBaseline = spendBaseline × (evalMonths / 12)`.
+Bucket's reported `totalSpend` stays at gross spend so display
+surfaces show "we spent $X this period"; only the tier engine
+sees the growth slice. Wired through `recomputeAccrualForContract`
+which signals growth-mode when `baselineType === "growth_based"`
+OR `termType === "growth_rebate"`. `growth_rebate` is now enabled
+in the term-type dropdown. Tests in
+`lib/contracts/__tests__/annual-evaluation-accrual.test.ts`
+cover annual, quarterly pro-rate, below-baseline, and the
+opt-in-required default.
