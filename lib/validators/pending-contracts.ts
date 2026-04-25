@@ -19,8 +19,18 @@ export const createPendingContractSchema = z.object({
   contractNumber: z.string().optional(),
   annualValue: z.number().min(0).optional(),
   gpoAffiliation: z.string().optional(),
-  performancePeriod: z.string().optional(),
-  rebatePayPeriod: z.string().optional(),
+  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B4):
+  // tighten free-form `z.string()` to `z.enum([...])` matching the
+  // PerformancePeriod / RebatePayPeriod Prisma enums. Pre-tightening
+  // an arbitrary string from the vendor would land in PendingContract
+  // unchecked, then throw at `prisma.contract.create()` when the
+  // facility tried to approve.
+  performancePeriod: z
+    .enum(["monthly", "quarterly", "semi_annual", "annual"])
+    .optional(),
+  rebatePayPeriod: z
+    .enum(["monthly", "quarterly", "semi_annual", "annual"])
+    .optional(),
   autoRenewal: z.boolean().optional(),
   terminationNoticeDays: z.number().int().min(0).optional(),
   // Charles 2026-04-25 (vendor-mirror Phase 2 cont.): capital tie-in

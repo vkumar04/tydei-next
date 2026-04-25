@@ -259,8 +259,18 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
           ? Number(terminationNoticeDays)
           : undefined,
         gpoAffiliation: gpoAffiliation || undefined,
-        performancePeriod: performancePeriod || undefined,
-        rebatePayPeriod: rebatePayPeriod || undefined,
+        performancePeriod: (performancePeriod || undefined) as
+          | "monthly"
+          | "quarterly"
+          | "semi_annual"
+          | "annual"
+          | undefined,
+        rebatePayPeriod: (rebatePayPeriod || undefined) as
+          | "monthly"
+          | "quarterly"
+          | "semi_annual"
+          | "annual"
+          | undefined,
         ...(contractType === "capital" || contractType === "tie_in"
           ? {
               capitalCost: capitalCost ? Number(capitalCost) : undefined,

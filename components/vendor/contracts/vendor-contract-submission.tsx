@@ -558,8 +558,18 @@ export function VendorContractSubmission({
       // when contractType is capital or tie_in — for other types
       // they're empty strings → undefined and skipped server-side.
       gpoAffiliation: gpoAffiliation || undefined,
-      performancePeriod: performancePeriod || undefined,
-      rebatePayPeriod: rebatePayPeriod || undefined,
+      performancePeriod: (performancePeriod || undefined) as
+        | "monthly"
+        | "quarterly"
+        | "semi_annual"
+        | "annual"
+        | undefined,
+      rebatePayPeriod: (rebatePayPeriod || undefined) as
+        | "monthly"
+        | "quarterly"
+        | "semi_annual"
+        | "annual"
+        | undefined,
       contractNumber: contractNumber || undefined,
       annualValue: annualValue ? parseFloat(annualValue) : undefined,
       autoRenewal: autoRenewal || undefined,

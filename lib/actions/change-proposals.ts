@@ -128,38 +128,59 @@ export async function createChangeProposal(input: CreateChangeProposalInput) {
 
 // ─── Review Change Proposal (Facility) ──────────────────────────
 
+/**
+ * Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B2):
+ * delegate to the canonical per-action helpers in
+ * `lib/actions/contracts/proposals.ts`. The previous in-line
+ * implementation here flipped status but skipped the patch-extraction,
+ * audit log, and vendor notifications. Routing through the canonical
+ * helpers keeps every approve path going through the same code so the
+ * vendor mirror can't silently regress.
+ */
 export async function reviewChangeProposal(
   id: string,
   input: ReviewChangeProposalInput
 ) {
-  const { facility } = await requireFacility()
   const data = reviewChangeProposalSchema.parse(input)
 
-  const statusMap = {
-    approve: "approved",
-    reject: "rejected",
-    revision_requested: "revision_requested",
-    // `countered` behaves like revision_requested for filtering/
-    // aggregation (both = awaiting vendor response), but is its own
-    // first-class status so the UI can distinguish facility-initiated
-    // counter-proposals from generic revision requests. See W1.3.
-    counter_propose: "countered",
-  } as const
+  const {
+    approveContractChangeProposal,
+    rejectContractChangeProposal,
+    requestProposalRevision,
+    counterContractChangeProposal,
+  } = await import("@/lib/actions/contracts/proposals")
 
-  const proposal = await prisma.contractChangeProposal.update({
-    where: { id, facilityId: facility.id },
-    data: {
-      status: statusMap[data.action],
-      reviewedBy: data.reviewedBy,
-      reviewNotes: data.notes,
-      reviewedAt: new Date(),
-    },
+  switch (data.action) {
+    case "approve":
+      await approveContractChangeProposal(id)
+      break
+    case "reject":
+      await rejectContractChangeProposal(id, data.notes ?? "")
+      break
+    case "revision_requested":
+      await requestProposalRevision(id, data.notes ?? "")
+      break
+    case "counter_propose":
+      await counterContractChangeProposal(id, data.notes ?? "")
+      break
+  }
+
+  const updated = await prisma.contractChangeProposal.findUniqueOrThrow({
+    where: { id },
   })
-  return serialize(proposal)
+  return serialize(updated)
 }
 
 // ─── Withdraw Proposal (Vendor) ─────────────────────────────────
 
+/**
+ * TODO(Charles 2026-04-25 — B2): `ProposalStatus` has no `withdrawn`
+ * value, so a vendor withdrawal currently flips status to `rejected`
+ * with a "Withdrawn by vendor" note. The reviewNotes string is a fragile
+ * way to distinguish vendor-initiated withdrawal from facility
+ * rejection. Add a dedicated `withdrawn` enum value (schema migration)
+ * and switch this write to it.
+ */
 export async function withdrawChangeProposal(id: string) {
   const { vendor } = await requireVendor()
 

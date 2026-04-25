@@ -111,6 +111,13 @@ function extractPendingTerms(termsJson: unknown): Array<{
   rebateMethod: string
   effectiveStart: Date
   effectiveEnd: Date
+  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B3):
+  // baseline + procedure fields. Without these growth/volume/CPT
+  // contracts compute against undefined baselines on the real
+  // engine and silently produce $0.
+  spendBaseline: number | null
+  growthBaselinePercent: number | null
+  cptCodes: string[]
   tiers: Array<{
     tierNumber: number
     spendMin: number
@@ -148,6 +155,11 @@ function extractPendingTerms(termsJson: unknown): Array<{
         }
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
+    const cptCodes = Array.isArray(t.cptCodes)
+      ? (t.cptCodes
+          .map((c) => coerceString(c))
+          .filter((c): c is string => c !== null) as string[])
+      : []
     out.push({
       termName,
       termType: coerceString(t.termType) ?? "spend_rebate",
@@ -158,6 +170,9 @@ function extractPendingTerms(termsJson: unknown): Array<{
       rebateMethod: coerceString(t.rebateMethod) ?? "cumulative",
       effectiveStart: parseDateOr(t.effectiveStart, EPOCH),
       effectiveEnd: parseDateOr(t.effectiveEnd, EVERGREEN),
+      spendBaseline: coerceNumber(t.spendBaseline),
+      growthBaselinePercent: coerceNumber(t.growthBaselinePercent),
+      cptCodes,
       tiers,
     })
   }
@@ -467,6 +482,15 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
               t.rebateMethod as Prisma.ContractTermCreateInput["rebateMethod"],
             effectiveStart: t.effectiveStart,
             effectiveEnd: t.effectiveEnd,
+            // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B3):
+            // baseline + procedure fields. Without these growth/volume/CPT
+            // contracts compute against undefined baselines and silently
+            // produce $0 on the real engine after approval.
+            ...(t.spendBaseline != null && { spendBaseline: t.spendBaseline }),
+            ...(t.growthBaselinePercent != null && {
+              growthBaselinePercent: t.growthBaselinePercent,
+            }),
+            ...(t.cptCodes.length > 0 && { cptCodes: t.cptCodes }),
             ...(t.tiers.length > 0 && {
               tiers: {
                 create: t.tiers.map((tier) => ({

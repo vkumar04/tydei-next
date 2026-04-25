@@ -1,6 +1,6 @@
 "use server"
 
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
@@ -300,18 +300,137 @@ export async function counterContractChangeProposal(
  * Whitelist of `Contract` fields that an approved contract_edit
  * proposal is allowed to mutate. Keeps the approve path from turning
  * into an arbitrary field-write primitive.
+ *
+ * Charles 2026-04-25 (vendor-mirror Phase 3 follow-up):
+ * - Renamed `startDate`/`endDate` to match the actual `Contract`
+ *   schema (`effectiveDate`/`expirationDate`).
+ * - Extended with the Phase-2 vendor field-parity columns so that
+ *   contract_edit proposals submitted by vendors actually apply on
+ *   approve instead of being silently dropped.
  */
-const ALLOWED_CONTRACT_EDIT_FIELDS = new Set<string>([
+const ALLOWED_CONTRACT_EDIT_FIELDS: ReadonlySet<ContractEditField> = new Set([
   "name",
   "vendorName",
   "description",
   "totalValue",
-  "startDate",
-  "endDate",
+  "effectiveDate",
+  "expirationDate",
   "notes",
+  // Phase-2 vendor-editable contract fields:
+  "contractNumber",
+  "annualValue",
+  "gpoAffiliation",
+  "performancePeriod",
+  "rebatePayPeriod",
+  "autoRenewal",
+  "terminationNoticeDays",
+  "capitalCost",
+  "interestRate",
+  "termMonths",
+  "downPayment",
+  "paymentCadence",
+  "amortizationShape",
 ])
 
+type ContractEditField =
+  | "name"
+  | "vendorName"
+  | "description"
+  | "totalValue"
+  | "effectiveDate"
+  | "expirationDate"
+  | "notes"
+  | "contractNumber"
+  | "annualValue"
+  | "gpoAffiliation"
+  | "performancePeriod"
+  | "rebatePayPeriod"
+  | "autoRenewal"
+  | "terminationNoticeDays"
+  | "capitalCost"
+  | "interestRate"
+  | "termMonths"
+  | "downPayment"
+  | "paymentCadence"
+  | "amortizationShape"
+
 type ContractEditPatch = Record<string, unknown>
+
+const DATE_FIELDS = new Set<ContractEditField>([
+  "effectiveDate",
+  "expirationDate",
+])
+const DECIMAL_FIELDS = new Set<ContractEditField>([
+  "totalValue",
+  "annualValue",
+  "capitalCost",
+  "interestRate",
+  "downPayment",
+])
+const INT_FIELDS = new Set<ContractEditField>([
+  "terminationNoticeDays",
+  "termMonths",
+])
+const BOOL_FIELDS = new Set<ContractEditField>(["autoRenewal"])
+
+function isAllowedField(name: string): name is ContractEditField {
+  return (ALLOWED_CONTRACT_EDIT_FIELDS as ReadonlySet<string>).has(name)
+}
+
+/**
+ * Coerce a JSON-shaped value into the right Prisma type for the given
+ * Contract field. Returns `undefined` if the value can't be coerced —
+ * caller drops the field rather than writing a bad value.
+ */
+function coerceFieldValue(
+  field: ContractEditField,
+  raw: unknown,
+): unknown | undefined {
+  if (raw === undefined) return undefined
+  if (raw === null) return null
+
+  if (DATE_FIELDS.has(field)) {
+    if (raw instanceof Date) return raw
+    if (typeof raw === "string" && raw.length > 0) {
+      const d = new Date(raw)
+      return Number.isNaN(d.getTime()) ? undefined : d
+    }
+    return undefined
+  }
+  if (DECIMAL_FIELDS.has(field)) {
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return new Prisma.Decimal(raw)
+    }
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      const cleaned = raw.replace(/[$,]/g, "")
+      const n = Number(cleaned)
+      if (Number.isFinite(n)) return new Prisma.Decimal(cleaned)
+    }
+    return undefined
+  }
+  if (INT_FIELDS.has(field)) {
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return Math.trunc(raw)
+    }
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      const n = Number(raw)
+      return Number.isFinite(n) ? Math.trunc(n) : undefined
+    }
+    return undefined
+  }
+  if (BOOL_FIELDS.has(field)) {
+    if (typeof raw === "boolean") return raw
+    if (typeof raw === "string") {
+      if (raw === "true") return true
+      if (raw === "false") return false
+    }
+    return undefined
+  }
+  // Plain string-or-enum fields: pass through if it's a string.
+  if (typeof raw === "string") return raw
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw)
+  return undefined
+}
 
 function extractContractUpdateData(
   proposalType: string,
@@ -322,23 +441,33 @@ function extractContractUpdateData(
 
   const patch: ContractEditPatch = {}
 
+  const applyEntry = (field: string, raw: unknown) => {
+    if (!isAllowedField(field)) return
+    const coerced = coerceFieldValue(field, raw)
+    if (coerced === undefined) return
+    patch[field] = coerced
+  }
+
   if (Array.isArray(changes)) {
-    // Shape: [{ field: string, newValue: unknown }, ...]
+    // Vendor form emits `{ field, currentValue, proposedValue }`.
+    // Older clients / facility-side helpers may emit `{ field, newValue }`.
+    // Prefer `proposedValue` and fall back to `newValue` for compat.
     for (const entry of changes) {
       if (entry === null || typeof entry !== "object") continue
       const row = entry as Record<string, unknown>
       const field = typeof row.field === "string" ? row.field : null
-      if (field && ALLOWED_CONTRACT_EDIT_FIELDS.has(field)) {
-        patch[field] = row.newValue
-      }
+      if (!field) continue
+      const value =
+        "proposedValue" in row && row.proposedValue !== undefined
+          ? row.proposedValue
+          : row.newValue
+      applyEntry(field, value)
     }
   } else if (typeof changes === "object") {
     for (const [key, value] of Object.entries(
       changes as Record<string, unknown>,
     )) {
-      if (ALLOWED_CONTRACT_EDIT_FIELDS.has(key)) {
-        patch[key] = value
-      }
+      applyEntry(key, value)
     }
   }
 
