@@ -506,11 +506,61 @@ export async function recomputeAccrualForContract(
     }
   }
 
-  if (toInsert.length === 0) {
-    return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }
+  // Charles 2026-04-25: volume-rebate dispatcher. For terms whose
+  // termType is "volume_rebate", run the volume engine (CPT-event
+  // counting from Cases) alongside the spend writer's output. Each
+  // path uses its own AUTO_*_PREFIX so they don't clobber each
+  // other on re-run. Best-effort: a failure here doesn't block the
+  // spend rows from persisting.
+  let volumeInserted = 0
+  let volumeEarned = 0
+  const volumeTerms = contract.terms.filter(
+    (t) =>
+      t.termType === "volume_rebate" &&
+      Array.isArray(t.cptCodes) &&
+      t.cptCodes.length > 0 &&
+      t.tiers.length > 0,
+  )
+  if (volumeTerms.length > 0) {
+    const { recomputeVolumeAccrualForTerm } = await import(
+      "@/lib/actions/contracts/recompute-volume-accrual"
+    )
+    for (const term of volumeTerms) {
+      try {
+        const r = await recomputeVolumeAccrualForTerm({
+          contractId,
+          facilityId: facility.id,
+          contractEffectiveDate: contract.effectiveDate,
+          contractExpirationDate: contract.expirationDate,
+          term: {
+            id: term.id,
+            cptCodes: term.cptCodes,
+            rebateMethod: term.rebateMethod ?? null,
+            evaluationPeriod: term.evaluationPeriod ?? null,
+            effectiveStart: term.effectiveStart ?? null,
+            effectiveEnd: term.effectiveEnd ?? null,
+            tiers: term.tiers,
+          },
+        })
+        volumeInserted += r.inserted
+        volumeEarned += r.sumEarned
+      } catch (err) {
+        console.warn(
+          `[recomputeAccrualForContract] volume-accrual term ${term.id} failed:`,
+          err,
+        )
+      }
+    }
   }
 
-  const createResult = await prisma.rebate.createMany({ data: toInsert })
+  if (toInsert.length === 0 && volumeInserted === 0) {
+    return { deleted: deleteResult.count, inserted: 0, sumEarned: volumeEarned }
+  }
+
+  const createResult =
+    toInsert.length > 0
+      ? await prisma.rebate.createMany({ data: toInsert })
+      : { count: 0 }
 
   // Re-read the auto-accrual total so the caller can render a real $
   // figure in a toast. Filtering on the notes prefix matches the same
@@ -522,11 +572,11 @@ export async function recomputeAccrualForContract(
     },
     _sum: { rebateEarned: true },
   })
-  const sumEarned = Number(sumAgg._sum.rebateEarned ?? 0)
+  const sumEarned = Number(sumAgg._sum.rebateEarned ?? 0) + volumeEarned
 
   return {
     deleted: deleteResult.count,
-    inserted: createResult.count,
+    inserted: createResult.count + volumeInserted,
     sumEarned,
   }
 }

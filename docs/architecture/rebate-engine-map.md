@@ -28,7 +28,7 @@ and fixed_rebate. Per-unit and per-procedure types fall through to 0.
 | Engine | File | Status |
 |---|---|---|
 | Spend rebate | `engine/spend-rebate.ts` | Tests only, no live caller |
-| Volume rebate | `engine/volume-rebate.ts` | Tests only |
+| Volume rebate | `engine/volume-rebate.ts` | **Wired** via `lib/actions/contracts/recompute-volume-accrual.ts` (Charles 2026-04-25). The bridge does NOT call `calculateVolumeRebate` directly because that engine's tier path delegates to `calculateCumulativeRebate` which divides by 100 (percent semantics from spend rebate). Volume tiers store `rebateValue` as $/occurrence — the bridge applies `occurrences × tier.rebateValue` directly. Both cumulative and marginal methods supported; dedup by case+CPT per the [A5] rule. Engine file is still referenced for type definitions only. |
 | Tier price reduction | `engine/tier-price-reduction.ts` | Tests only |
 | Market-share rebate | `engine/market-share-rebate.ts` | Tests only |
 | Market-share price reduction | `engine/market-share-price-reduction.ts` | Tests only |

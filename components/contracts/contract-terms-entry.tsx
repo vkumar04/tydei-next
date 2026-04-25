@@ -94,7 +94,12 @@ interface ContractTermsEntryProps {
  */
 const termTypes = [
   { value: "spend_rebate", label: "Spend Rebate", icon: DollarSign, description: "Rebate based on spend thresholds", disabled: false },
-  { value: "volume_rebate", label: "Volume Rebate", icon: TrendingUp, description: "Rebate based on usage count. Baseline is in $ amounts", disabled: true },
+  // Charles 2026-04-25: volume rebate now wired through
+  // `recomputeVolumeAccrualForTerm`. Counts CPT-coded procedure
+  // occurrences across the facility's Cases (deduped by case+CPT)
+  // within the term window. Configure CPT codes on the term and use
+  // tier `spendMin` columns as occurrence thresholds.
+  { value: "volume_rebate", label: "Volume Rebate", icon: TrendingUp, description: "Rebate based on procedure count. Set CPT codes on the term; tier thresholds are interpreted as occurrences (not dollars).", disabled: false },
   { value: "price_reduction", label: "Price Reduction", icon: Percent, description: "Once spend/volume threshold is met, future purchases receive discounted prices", disabled: true },
   { value: "market_share", label: "Market Share", icon: PieChart, description: "Rebate based on market share percentage", disabled: true },
   { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Once market share target is met, future purchases receive discounted prices", disabled: true },
