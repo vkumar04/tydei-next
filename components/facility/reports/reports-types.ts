@@ -18,6 +18,12 @@ export type ReportTabKey =
   | "grouped"
   | "pricing"
   | "calculations"
+  // Charles 2026-04-25 (audit follow-up): rebate-type breakdown so
+  // a facility can answer "what % of my earned came from spend
+  // rebates vs volume vs PO vs threshold?" without exporting raw
+  // Rebate rows. The contract-type tabs above don't reveal this
+  // because one contract can mix term types.
+  | "by_rebate_type"
 
 export interface ReportsContract {
   id: string

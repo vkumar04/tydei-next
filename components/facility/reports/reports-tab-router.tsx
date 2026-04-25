@@ -26,6 +26,7 @@ const ALL_TABS: { value: ReportTabKey; label: string }[] = [
   { value: "tie_in", label: "Tie-In" },
   { value: "grouped", label: "Grouped" },
   { value: "pricing", label: "Pricing" },
+  { value: "by_rebate_type", label: "By Rebate Type" },
   { value: "calculations", label: "Calculations" },
 ]
 
@@ -45,6 +46,9 @@ export function computeAvailableTabs(
     return ALL_TABS.map((t) => t.value)
   }
   const typeTab = TYPE_TO_TAB[selectedContract.contractType]
+  // Charles 2026-04-25 (audit follow-up): "By Rebate Type" only
+  // makes sense at the facility-wide level. A single-contract drill
+  // already shows that contract's term types in its detail page.
   const base: ReportTabKey[] = ["overview", "calculations"]
   return typeTab ? [typeTab, ...base] : base
 }

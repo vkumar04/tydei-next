@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { ArrowLeft, Save, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -69,6 +70,27 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
   const [expirationDate, setExpirationDate] = useState("")
   const [totalValue, setTotalValue] = useState("")
   const [notes, setNotes] = useState("")
+  // Charles 2026-04-25 (audit follow-up): Phase-2 fields. The prior
+  // edit form dropped all of these on save even though the schema +
+  // validator + create path support them — vendor revisions
+  // couldn't actually revise most of what was originally submitted.
+  const [contractNumber, setContractNumber] = useState("")
+  const [annualValue, setAnnualValue] = useState("")
+  const [autoRenewal, setAutoRenewal] = useState(false)
+  const [terminationNoticeDays, setTerminationNoticeDays] = useState("90")
+  const [gpoAffiliation, setGpoAffiliation] = useState("")
+  const [performancePeriod, setPerformancePeriod] = useState("")
+  const [rebatePayPeriod, setRebatePayPeriod] = useState("")
+  const [capitalCost, setCapitalCost] = useState("")
+  const [interestRate, setInterestRate] = useState("")
+  const [termMonths, setTermMonths] = useState("")
+  const [downPayment, setDownPayment] = useState("")
+  const [paymentCadence, setPaymentCadence] = useState<
+    "monthly" | "quarterly" | "annual"
+  >("monthly")
+  const [amortizationShape, setAmortizationShape] = useState<
+    "symmetrical" | "custom"
+  >("symmetrical")
   const [saving, setSaving] = useState(false)
 
   // Populate form when contract loads
@@ -88,6 +110,44 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
       )
       setTotalValue(contract.totalValue != null ? String(contract.totalValue) : "")
       setNotes(contract.notes ?? "")
+      // Phase-2 hydration — preserve every value the vendor sent on
+      // initial submission so a "revision" round-trip doesn't silently
+      // erase fields the reviewer didn't ask about.
+      setContractNumber(contract.contractNumber ?? "")
+      setAnnualValue(
+        contract.annualValue != null ? String(contract.annualValue) : "",
+      )
+      setAutoRenewal(Boolean(contract.autoRenewal))
+      setTerminationNoticeDays(
+        contract.terminationNoticeDays != null
+          ? String(contract.terminationNoticeDays)
+          : "90",
+      )
+      setGpoAffiliation(contract.gpoAffiliation ?? "")
+      setPerformancePeriod(contract.performancePeriod ?? "")
+      setRebatePayPeriod(contract.rebatePayPeriod ?? "")
+      setCapitalCost(
+        contract.capitalCost != null ? String(contract.capitalCost) : "",
+      )
+      setInterestRate(
+        contract.interestRate != null
+          ? String(Number(contract.interestRate) * 100) // schema = fraction; UI = %
+          : "",
+      )
+      setTermMonths(
+        contract.termMonths != null ? String(contract.termMonths) : "",
+      )
+      setDownPayment(
+        contract.downPayment != null ? String(contract.downPayment) : "",
+      )
+      setPaymentCadence(
+        (contract.paymentCadence as "monthly" | "quarterly" | "annual") ??
+          "monthly",
+      )
+      setAmortizationShape(
+        (contract.amortizationShape as "symmetrical" | "custom") ??
+          "symmetrical",
+      )
     }
   }, [contract])
 
@@ -103,6 +163,30 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
         expirationDate: expirationDate || undefined,
         totalValue: totalValue ? Number(totalValue) : undefined,
         notes: notes || undefined,
+        // Charles 2026-04-25 (audit follow-up): persist the Phase-2
+        // fields on save so the revision loop preserves vendor's
+        // original submission instead of silently zeroing them.
+        contractNumber: contractNumber || undefined,
+        annualValue: annualValue ? Number(annualValue) : undefined,
+        autoRenewal,
+        terminationNoticeDays: terminationNoticeDays
+          ? Number(terminationNoticeDays)
+          : undefined,
+        gpoAffiliation: gpoAffiliation || undefined,
+        performancePeriod: performancePeriod || undefined,
+        rebatePayPeriod: rebatePayPeriod || undefined,
+        ...(contractType === "capital" || contractType === "tie_in"
+          ? {
+              capitalCost: capitalCost ? Number(capitalCost) : undefined,
+              interestRate: interestRate
+                ? Number(interestRate) / 100 // UI = %, schema = fraction
+                : undefined,
+              termMonths: termMonths ? Number(termMonths) : undefined,
+              downPayment: downPayment ? Number(downPayment) : undefined,
+              paymentCadence,
+              amortizationShape,
+            }
+          : {}),
       }
       await updatePendingContract(pendingContractId, updates)
       await queryClient.invalidateQueries({
@@ -236,15 +320,197 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
             </Field>
           </div>
 
-          <Field label="Total Value ($)">
-            <Input
-              type="number"
-              value={totalValue}
-              onChange={(e) => setTotalValue(e.target.value)}
-              placeholder="0"
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Total Value ($)">
+              <Input
+                type="number"
+                value={totalValue}
+                onChange={(e) => setTotalValue(e.target.value)}
+                placeholder="0"
+                disabled={!isEditable}
+              />
+            </Field>
+            <Field label="Annual Value ($)">
+              <Input
+                type="number"
+                value={annualValue}
+                onChange={(e) => setAnnualValue(e.target.value)}
+                placeholder="0"
+                disabled={!isEditable}
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Contract Number">
+              <Input
+                value={contractNumber}
+                onChange={(e) => setContractNumber(e.target.value)}
+                placeholder="e.g. STK-2026-001"
+                disabled={!isEditable}
+              />
+            </Field>
+            <Field label="GPO Affiliation">
+              <Input
+                value={gpoAffiliation}
+                onChange={(e) => setGpoAffiliation(e.target.value)}
+                placeholder="e.g. Vizient, Premier"
+                disabled={!isEditable}
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Performance Period">
+              <Select
+                value={performancePeriod || ""}
+                onValueChange={setPerformancePeriod}
+                disabled={!isEditable}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="semi_annual">Semi-Annual</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Rebate Pay Period">
+              <Select
+                value={rebatePayPeriod || ""}
+                onValueChange={setRebatePayPeriod}
+                disabled={!isEditable}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="semi_annual">Semi-Annual</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Termination Notice (days)">
+              <Input
+                type="number"
+                min="0"
+                value={terminationNoticeDays}
+                onChange={(e) => setTerminationNoticeDays(e.target.value)}
+                disabled={!isEditable}
+              />
+            </Field>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div>
+              <p className="text-sm font-medium">Auto-Renewal</p>
+              <p className="text-xs text-muted-foreground">
+                Contract renews automatically at the end of the term unless
+                terminated.
+              </p>
+            </div>
+            <Switch
+              checked={autoRenewal}
+              onCheckedChange={setAutoRenewal}
               disabled={!isEditable}
             />
-          </Field>
+          </div>
+
+          {(contractType === "capital" || contractType === "tie_in") && (
+            <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <div>
+                <p className="text-sm font-medium">Capital amortization</p>
+                <p className="text-xs text-muted-foreground">
+                  Required for capital + tie-in contracts so the facility
+                  can render the amortization schedule on approve.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Capital Cost ($)">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={capitalCost}
+                    onChange={(e) => setCapitalCost(e.target.value)}
+                    placeholder="0"
+                    disabled={!isEditable}
+                  />
+                </Field>
+                <Field label="Interest Rate (%)">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={interestRate}
+                    onChange={(e) => setInterestRate(e.target.value)}
+                    placeholder="0"
+                    disabled={!isEditable}
+                  />
+                </Field>
+                <Field label="Term (months)">
+                  <Input
+                    type="number"
+                    min="0"
+                    value={termMonths}
+                    onChange={(e) => setTermMonths(e.target.value)}
+                    placeholder="60"
+                    disabled={!isEditable}
+                  />
+                </Field>
+                <Field label="Down Payment ($)">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={downPayment}
+                    onChange={(e) => setDownPayment(e.target.value)}
+                    placeholder="0"
+                    disabled={!isEditable}
+                  />
+                </Field>
+                <Field label="Payment Cadence">
+                  <Select
+                    value={paymentCadence}
+                    onValueChange={(v) =>
+                      setPaymentCadence(v as "monthly" | "quarterly" | "annual")
+                    }
+                    disabled={!isEditable}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="annual">Annual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Amortization">
+                  <Select
+                    value={amortizationShape}
+                    onValueChange={(v) =>
+                      setAmortizationShape(v as "symmetrical" | "custom")
+                    }
+                    disabled={!isEditable}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="symmetrical">
+                        Symmetrical (PMT)
+                      </SelectItem>
+                      <SelectItem value="custom">Custom rows</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+            </div>
+          )}
 
           <Field label="Notes">
             <Textarea

@@ -21,6 +21,7 @@ import {
   SubmissionSidebar,
 } from "./submission"
 import type { FacilityOption, PricingFileData, UploadedDoc } from "./submission"
+import { VendorPhase2FieldsCard } from "./submission/vendor-phase2-fields-card"
 
 interface VendorContractSubmissionProps {
   vendorId: string
@@ -53,6 +54,29 @@ export function VendorContractSubmission({
   const [capitalTieIn, setCapitalTieIn] = useState(false)
   const [tieInRef, setTieInRef] = useState("")
   const [contractTerms, setContractTerms] = useState<TermFormValues[]>([])
+
+  // Charles 2026-04-25 (audit follow-up): vendor-mirror Phase 2 added
+  // these columns to PendingContract but the submission UI never grew
+  // inputs for them. Capital/tie-in submissions silently dropped the
+  // financial structure on approve. State here; UI rendered below in a
+  // conditional card; payload includes all of them on submit.
+  const [contractNumber, setContractNumber] = useState("")
+  const [annualValue, setAnnualValue] = useState("")
+  const [autoRenewal, setAutoRenewal] = useState(false)
+  const [terminationNoticeDays, setTerminationNoticeDays] = useState("90")
+  // Capital tie-in fields — only relevant when contractType is
+  // capital or tie_in. Stored as strings so empty input doesn't
+  // coerce to 0.
+  const [capitalCost, setCapitalCost] = useState("")
+  const [interestRate, setInterestRate] = useState("")
+  const [termMonths, setTermMonths] = useState("")
+  const [downPayment, setDownPayment] = useState("")
+  const [paymentCadence, setPaymentCadence] = useState<
+    "monthly" | "quarterly" | "annual"
+  >("monthly")
+  const [amortizationShape, setAmortizationShape] = useState<
+    "symmetrical" | "custom"
+  >("symmetrical")
 
   const [contractFile, setContractFile] = useState<File | null>(null)
   const [contractS3Key, setContractS3Key] = useState<string | null>(null)
@@ -437,13 +461,33 @@ export function VendorContractSubmission({
       notes: description || undefined,
       division: division || undefined,
       tieInContractId: tieInRef || undefined,
-      // Charles 2026-04-25 (audit follow-up): Phase-2 fields collected
-      // in form state were dropped here. Sending the three the form
-      // already gathers; the rest (capitalCost, autoRenewal, etc.)
-      // need UI inputs which are tracked separately.
+      // Charles 2026-04-25 (audit follow-up): all Phase-2 fields now
+      // sent. The form gathers everything PendingContract supports;
+      // approvePendingContract ports them onto the real Contract on
+      // approve. Capital tie-in fields only have meaningful values
+      // when contractType is capital or tie_in — for other types
+      // they're empty strings → undefined and skipped server-side.
       gpoAffiliation: gpoAffiliation || undefined,
       performancePeriod: performancePeriod || undefined,
       rebatePayPeriod: rebatePayPeriod || undefined,
+      contractNumber: contractNumber || undefined,
+      annualValue: annualValue ? parseFloat(annualValue) : undefined,
+      autoRenewal: autoRenewal || undefined,
+      terminationNoticeDays: terminationNoticeDays
+        ? parseInt(terminationNoticeDays, 10)
+        : undefined,
+      ...(contractType === "capital" || contractType === "tie_in"
+        ? {
+            capitalCost: capitalCost ? parseFloat(capitalCost) : undefined,
+            interestRate: interestRate
+              ? parseFloat(interestRate) / 100 // user enters %, schema stores fraction
+              : undefined,
+            termMonths: termMonths ? parseInt(termMonths, 10) : undefined,
+            downPayment: downPayment ? parseFloat(downPayment) : undefined,
+            paymentCadence,
+            amortizationShape,
+          }
+        : {}),
       pricingData: pricingItems.length > 0
         ? {
             fileName: pricingFile?.name ?? "pricing",
@@ -537,6 +581,40 @@ export function VendorContractSubmission({
             <FinancialDetailsCard
               contractTotal={contractTotal}
               onContractTotalChange={setContractTotal}
+            />
+
+            {/*
+             * Charles 2026-04-25 (audit follow-up): Phase-2 field
+             * parity inputs. These columns exist on PendingContract
+             * but had no UI surface — vendor submissions were
+             * silently dropping the values at the form layer.
+             * Capital tie-in fields render only when contractType
+             * is capital or tie_in.
+             */}
+            <VendorPhase2FieldsCard
+              contractNumber={contractNumber}
+              onContractNumberChange={setContractNumber}
+              annualValue={annualValue}
+              onAnnualValueChange={setAnnualValue}
+              autoRenewal={autoRenewal}
+              onAutoRenewalChange={setAutoRenewal}
+              terminationNoticeDays={terminationNoticeDays}
+              onTerminationNoticeDaysChange={setTerminationNoticeDays}
+              showCapital={
+                contractType === "capital" || contractType === "tie_in"
+              }
+              capitalCost={capitalCost}
+              onCapitalCostChange={setCapitalCost}
+              interestRate={interestRate}
+              onInterestRateChange={setInterestRate}
+              termMonths={termMonths}
+              onTermMonthsChange={setTermMonths}
+              downPayment={downPayment}
+              onDownPaymentChange={setDownPayment}
+              paymentCadence={paymentCadence}
+              onPaymentCadenceChange={setPaymentCadence}
+              amortizationShape={amortizationShape}
+              onAmortizationShapeChange={setAmortizationShape}
             />
 
             <ContractTermsCard

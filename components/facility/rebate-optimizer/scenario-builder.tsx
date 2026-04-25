@@ -43,15 +43,21 @@ import type { RebateOpportunity } from "@/lib/actions/rebate-optimizer-engine"
 // scenario. The underlying term's actual type is unchanged; this is a
 // labelling convenience.
 
+// Charles 2026-04-25 (audit follow-up): the scenario builder's
+// underlying engine (`lib/rebate-optimizer/engine.ts`) only models
+// SPEND_REBATE today — the other options were aspirational labels
+// the engine would silently ignore. Listing types we don't actually
+// model produces "your scenario was dropped" surprise. Until the
+// per-type optimizer math is wired (matching the dispatcher rebuild
+// in `lib/actions/contracts/recompute-*-accrual.ts`), only show
+// what the optimizer can actually compute. Carve-out + tie-in
+// capital are kept because they appear as eligibility filters in
+// the engine's output (contracts dropped with reason
+// ONLY_CARVE_OUT_OR_PO_REBATE).
 export const REBATE_TYPE_OPTIONS = [
   { value: "SPEND_REBATE", label: "Spend Rebate" },
-  { value: "VOLUME_REBATE", label: "Volume Rebate" },
-  { value: "TIER_PRICE_REDUCTION", label: "Tier Price Reduction" },
-  { value: "MARKET_SHARE_REBATE", label: "Market Share Rebate" },
-  { value: "MARKET_SHARE_PRICE_REDUCTION", label: "Market Share Price Reduction" },
-  { value: "CAPITATED", label: "Capitated" },
-  { value: "CARVE_OUT", label: "Carve Out" },
-  { value: "TIE_IN_CAPITAL", label: "Tie-In Capital" },
+  { value: "CARVE_OUT", label: "Carve Out (display only)" },
+  { value: "TIE_IN_CAPITAL", label: "Tie-In Capital (display only)" },
 ] as const
 
 export type RebateTypeOption = (typeof REBATE_TYPE_OPTIONS)[number]["value"]
@@ -223,10 +229,14 @@ export function ScenarioBuilder({
           </div>
         </div>
 
-        {/* Market share — only meaningful for MARKET_SHARE_* types but shown
-            always so the form has a consistent layout. */}
-        {(rebateType === "MARKET_SHARE_REBATE" ||
-          rebateType === "MARKET_SHARE_PRICE_REDUCTION") && (
+        {/* Market share input intentionally hidden — the only term
+            types that consume it (MARKET_SHARE_REBATE,
+            MARKET_SHARE_PRICE_REDUCTION) were removed from
+            REBATE_TYPE_OPTIONS in the audit follow-up because the
+            optimizer engine doesn't model them yet. Re-add when
+            the per-type optimizer math ships.
+            Charles 2026-04-25. */}
+        {false && (
           <div className="mt-4 max-w-sm space-y-2">
             <Label htmlFor="scenario-share">Market Share (%)</Label>
             <Input

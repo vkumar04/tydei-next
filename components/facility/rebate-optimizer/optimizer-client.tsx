@@ -199,10 +199,25 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Rebate Tier Optimizer
+            Spend Rebate Tier Optimizer
           </h1>
+          {/*
+           * Charles 2026-04-25 (audit follow-up): the optimizer
+           * engine only models SPEND_REBATE tiers today (carve-out
+           * and PO-rebate are recognized as eligibility filters but
+           * don't have what-if modeling). The page used to imply
+           * coverage of all 15 term types via its name; the rename
+           * + the line below make the actual scope explicit so users
+           * with volume / compliance / market-share contracts know
+           * where to look (the contract detail page's
+           * Performance tab) until those engines get optimizer
+           * coverage too.
+           */}
           <p className="text-sm text-muted-foreground">
-            Maximize rebate earnings by reaching higher tier thresholds.
+            Maximize rebate earnings by reaching higher tier thresholds on
+            spend-rebate contracts. Volume, market-share, compliance, and
+            other rebate types are evaluated on each contract&apos;s detail
+            page; broader optimizer coverage is on the roadmap.
           </p>
         </div>
       </div>

@@ -15,6 +15,7 @@ import {
 } from "./reports-tab-router"
 import { ReportsOverviewTab } from "./reports-overview-tab"
 import { ReportsPerTypeTab } from "./reports-per-type-tab"
+import { ReportsByRebateTypeTab } from "./reports-by-rebate-type-tab"
 import { ReportsCalculationsTab } from "./reports-calculations-tab"
 import { ReportsScheduleDialog } from "./reports-schedule-dialog"
 import type {
@@ -182,6 +183,10 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
               />
             </TabsContent>
           ))}
+
+          <TabsContent value="by_rebate_type" className="mt-4">
+            <ReportsByRebateTypeTab />
+          </TabsContent>
 
           <TabsContent value="calculations" className="mt-4">
             <ReportsCalculationsTab
