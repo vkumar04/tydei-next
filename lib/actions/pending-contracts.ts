@@ -88,14 +88,23 @@ function extractPendingPricingItems(
     listPrice: number | null
     uom: string
   }> = []
+  // Charles audit pass-4 round-3 CONCERN: dedupe pricing rows by
+  // normalized vendorItemNo (case-insensitive trim) so a vendor
+  // pasting "ABC", "abc", "ABC " into pricing CSV doesn't produce
+  // 3 ContractPricing rows on approve (which would double-count in
+  // variance/escalator math).
+  const seenVendorItemNos = new Set<string>()
   for (const raw of inputArray) {
     if (raw === null || typeof raw !== "object") continue
     const r = raw as PendingPricingItem
     const vendorItemNo = coerceString(r.vendorItemNo)
     const unitPrice = coerceNumber(r.unitPrice)
     if (!vendorItemNo || unitPrice === null) continue
+    const normalized = vendorItemNo.trim().toUpperCase()
+    if (seenVendorItemNos.has(normalized)) continue
+    seenVendorItemNos.add(normalized)
     rows.push({
-      vendorItemNo,
+      vendorItemNo: vendorItemNo.trim(),
       description: coerceString(r.description),
       category: coerceString(r.category),
       unitPrice,
@@ -760,6 +769,7 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
     vendorName: pending.vendorName,
     facilityName: pending.facilityName,
     pendingId: pending.id,
+    approvedContractId: contract.id,
     decision: "approved",
   })
 

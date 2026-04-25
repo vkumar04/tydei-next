@@ -421,13 +421,16 @@ export async function getContractCapitalSchedule(
       select: { collectionDate: true, rebateCollected: true },
     })
     allRebates.push(...siblingRebates)
-    // Charles audit pass-4 round-2 C3: legacy compat. Pre-cross-
-    // contract behavior was that "capital" rows could have rebates
-    // wired directly to them (no sibling usage contract). If no
-    // siblings exist for a capital row but the row itself has
-    // rebates, fall back to those so legacy data doesn't silently
-    // zero out the paydown.
-    if (siblingRebates.length === 0 && contract.rebates.length > 0) {
+    // Charles audit pass-4 round-2 C3 + round-3: legacy compat.
+    // Pre-cross-contract behavior was that "capital" rows could
+    // have rebates wired directly to them. Fall back to own.rebates
+    // when siblings have NO collected rows (not just "no rows" — a
+    // sibling row with collectionDate=null shouldn't block legacy
+    // compat).
+    const siblingHasCollected = siblingRebates.some(
+      (r) => r.collectionDate && Number(r.rebateCollected ?? 0) > 0,
+    )
+    if (!siblingHasCollected && contract.rebates.length > 0) {
       allRebates.push(...contract.rebates)
     }
   }
@@ -794,10 +797,13 @@ export async function getContractCapitalProjection(
       },
       select: { collectionDate: true, rebateCollected: true },
     })
-    // Legacy compat (round-2 C3): fall back to own.rebates when no
-    // siblings exist so pre-cross-contract data doesn't zero out.
+    // Legacy compat (round-2 C3 + round-3): fall back to own.rebates
+    // when siblings have no COLLECTED rebates (not just no rows).
+    const sibHasCollected = sib.some(
+      (r) => r.collectionDate && Number(r.rebateCollected ?? 0) > 0,
+    )
     allRebates =
-      sib.length === 0 && contract.rebates.length > 0
+      !sibHasCollected && contract.rebates.length > 0
         ? [...contract.rebates]
         : sib
   }

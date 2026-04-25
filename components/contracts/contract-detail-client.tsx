@@ -556,7 +556,11 @@ export function ContractDetailClient({
                       </TooltipProvider>
                     </p>
                   )}
-                {contract.contractType === "tie_in" && (
+                {/* Charles audit pass-4 round-3: include "capital"
+                    contracts with sibling-usage rebates retiring
+                    their balance — they have a real schedule too. */}
+                {(contract.contractType === "tie_in" ||
+                  contract.contractType === "capital") && (
                   <TieInRebateSplit
                     contractId={contractId}
                     rebateEarned={stats.rebateEarned}

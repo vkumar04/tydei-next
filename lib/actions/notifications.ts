@@ -372,6 +372,12 @@ export async function notifyVendorOfPendingDecision(input: {
   vendorName: string
   facilityName?: string | null
   pendingId: string
+  /**
+   * Charles audit pass-4 round-3: when decision === "approved", the
+   * pending row is in terminal state and the edit page is stale —
+   * the vendor should land on the new approved Contract instead.
+   */
+  approvedContractId?: string | null
   decision: "approved" | "rejected" | "revision_requested"
   reviewNotes?: string | null
 }): Promise<{ sent: number }> {
@@ -397,7 +403,10 @@ export async function notifyVendorOfPendingDecision(input: {
           decision: input.decision,
           facilityName: input.facilityName,
         },
-        actionUrl: `/vendor/contracts/pending/${input.pendingId}/edit`,
+        actionUrl:
+          input.decision === "approved" && input.approvedContractId
+            ? `/vendor/contracts/${input.approvedContractId}`
+            : `/vendor/contracts/pending/${input.pendingId}/edit`,
       })
     }
     const emails = await getVendorMemberEmails(input.vendorId)
