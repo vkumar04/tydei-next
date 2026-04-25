@@ -100,8 +100,16 @@ const termTypes = [
   // within the term window. Configure CPT codes on the term and use
   // tier `spendMin` columns as occurrence thresholds.
   { value: "volume_rebate", label: "Volume Rebate", icon: TrendingUp, description: "Rebate based on procedure count. Set CPT codes on the term; tier thresholds are interpreted as occurrences (not dollars).", disabled: false },
-  { value: "price_reduction", label: "Price Reduction", icon: Percent, description: "Once spend/volume threshold is met, future purchases receive discounted prices", disabled: true },
-  { value: "market_share", label: "Market Share", icon: PieChart, description: "Rebate based on market share percentage", disabled: true },
+  // Charles 2026-04-25: price_reduction has no separate rebate accrual —
+  // it's enforced by the contract's ContractPricing rows (the matched
+  // price IS the reduced price). Enabled so users can categorize their
+  // pricing-only contracts correctly; no Rebate rows are emitted.
+  { value: "price_reduction", label: "Price Reduction", icon: Percent, description: "Pricing-only contract — discounted prices applied via the Pricing tab. No separate rebate accrual.", disabled: false },
+  // Charles 2026-04-25: market_share rebate pays a flat tier dollar
+  // amount per evaluation period when `Contract.currentMarketShare`
+  // crosses the tier's threshold. Threshold = spendMin column
+  // (interpreted as %); rebate = rebateValue (flat $).
+  { value: "market_share", label: "Market Share", icon: PieChart, description: "Flat per-period rebate when current market share % crosses tier threshold. Update Current Market Share on the contract.", disabled: false },
   { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Once market share target is met, future purchases receive discounted prices", disabled: true },
   { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Once procedure spend threshold is met, future procedures receive discounted prices", disabled: true },
   { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Procedure-based ceiling price with rebate", disabled: true },
@@ -111,7 +119,10 @@ const termTypes = [
   // the engine evaluates tiers against `max(0, periodSpend −
   // proRatedBaseline)` so only spend ABOVE the baseline counts.
   { value: "growth_rebate", label: "Growth Rebate", icon: TrendingUp, description: "Rebate based on spend growth over baseline. Set Baseline Type=Growth Based + Annual Spend Baseline below.", disabled: false },
-  { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Rebate for meeting compliance requirements", disabled: true },
+  // Charles 2026-04-25: compliance_rebate pays a flat tier dollar
+  // amount per evaluation period when `Contract.complianceRate`
+  // crosses the tier's threshold (same shape as market_share).
+  { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Flat per-period rebate when compliance % crosses tier threshold. Update Compliance Rate on the contract.", disabled: false },
   // Charles 2026-04-25: fixed_fee works through the existing spend
   // writer when the user adds a single tier with rebateType=fixed_rebate
   // (the spend writer reads `t.rebateType === "fixed_rebate"` and emits

@@ -102,11 +102,27 @@ export async function recomputePoAccrualForTerm(input: {
       term.effectiveStart?.getTime() ?? -Infinity,
     ),
   )
+  // Push date-only bounds to end-of-day so a period whose periodEnd
+  // is the same calendar day as the contract expiration still counts
+  // as in-window (Charles 2026-04-25 — same fix as the threshold
+  // and volume writers).
+  const endOfDay = (d: Date) =>
+    new Date(
+      Date.UTC(
+        d.getUTCFullYear(),
+        d.getUTCMonth(),
+        d.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    )
   const end = new Date(
     Math.min(
       today.getTime(),
-      input.contractExpirationDate.getTime(),
-      term.effectiveEnd?.getTime() ?? Infinity,
+      endOfDay(input.contractExpirationDate).getTime(),
+      term.effectiveEnd ? endOfDay(term.effectiveEnd).getTime() : Infinity,
     ),
   )
   if (end.getTime() <= start.getTime()) {

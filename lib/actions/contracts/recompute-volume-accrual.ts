@@ -109,6 +109,22 @@ export async function recomputeVolumeAccrualForTerm(input: {
 
   // Window: bound by contract effective range AND term effective range
   // AND today (no future buckets, same rule as spend writer).
+  // Push date-only bounds to end-of-day so a period whose periodEnd
+  // is the same calendar day as the contract/term expiration still
+  // counts as in-window (Charles 2026-04-25 — same fix as the
+  // threshold writer).
+  const endOfDay = (d: Date) =>
+    new Date(
+      Date.UTC(
+        d.getUTCFullYear(),
+        d.getUTCMonth(),
+        d.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    )
   const today = new Date()
   const startCandidates = [
     contractEffectiveDate.getTime(),
@@ -117,8 +133,8 @@ export async function recomputeVolumeAccrualForTerm(input: {
   const start = new Date(Math.max(...startCandidates))
   const endCandidates = [
     today.getTime(),
-    input.contractExpirationDate.getTime(),
-    term.effectiveEnd?.getTime() ?? Infinity,
+    endOfDay(input.contractExpirationDate).getTime(),
+    term.effectiveEnd ? endOfDay(term.effectiveEnd).getTime() : Infinity,
   ]
   const end = new Date(Math.min(...endCandidates))
   if (end.getTime() <= start.getTime()) {

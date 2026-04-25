@@ -597,11 +597,73 @@ export async function recomputeAccrualForContract(
     }
   }
 
-  if (toInsert.length === 0 && volumeInserted === 0 && poInserted === 0) {
+  // Charles 2026-04-25: threshold-based dispatchers — compliance and
+  // market-share rebates pay a flat tier dollar amount per evaluation
+  // period when the contract-level metric crosses the threshold.
+  // Both share the same bridge.
+  let thresholdInserted = 0
+  let thresholdEarned = 0
+  const thresholdTerms = contract.terms.filter(
+    (t) =>
+      (t.termType === "compliance_rebate" || t.termType === "market_share") &&
+      t.tiers.length > 0,
+  )
+  if (thresholdTerms.length > 0) {
+    const { recomputeThresholdAccrualForTerm } = await import(
+      "@/lib/actions/contracts/recompute-threshold-accrual"
+    )
+    for (const term of thresholdTerms) {
+      const metric: "complianceRate" | "currentMarketShare" =
+        term.termType === "market_share"
+          ? "currentMarketShare"
+          : "complianceRate"
+      const metricValue =
+        metric === "currentMarketShare"
+          ? contract.currentMarketShare === null ||
+            contract.currentMarketShare === undefined
+            ? null
+            : Number(contract.currentMarketShare)
+          : contract.complianceRate === null ||
+              contract.complianceRate === undefined
+            ? null
+            : Number(contract.complianceRate)
+      try {
+        const r = await recomputeThresholdAccrualForTerm({
+          contractId,
+          facilityId: facility.id,
+          contractEffectiveDate: contract.effectiveDate,
+          contractExpirationDate: contract.expirationDate,
+          metric,
+          metricValue,
+          term: {
+            id: term.id,
+            evaluationPeriod: term.evaluationPeriod ?? null,
+            effectiveStart: term.effectiveStart ?? null,
+            effectiveEnd: term.effectiveEnd ?? null,
+            tiers: term.tiers,
+          },
+        })
+        thresholdInserted += r.inserted
+        thresholdEarned += r.sumEarned
+      } catch (err) {
+        console.warn(
+          `[recomputeAccrualForContract] threshold-accrual term ${term.id} (${metric}) failed:`,
+          err,
+        )
+      }
+    }
+  }
+
+  if (
+    toInsert.length === 0 &&
+    volumeInserted === 0 &&
+    poInserted === 0 &&
+    thresholdInserted === 0
+  ) {
     return {
       deleted: deleteResult.count,
       inserted: 0,
-      sumEarned: volumeEarned + poEarned,
+      sumEarned: volumeEarned + poEarned + thresholdEarned,
     }
   }
 
@@ -621,11 +683,15 @@ export async function recomputeAccrualForContract(
     _sum: { rebateEarned: true },
   })
   const sumEarned =
-    Number(sumAgg._sum.rebateEarned ?? 0) + volumeEarned + poEarned
+    Number(sumAgg._sum.rebateEarned ?? 0) +
+    volumeEarned +
+    poEarned +
+    thresholdEarned
 
   return {
     deleted: deleteResult.count,
-    inserted: createResult.count + volumeInserted + poInserted,
+    inserted:
+      createResult.count + volumeInserted + poInserted + thresholdInserted,
     sumEarned,
   }
 }
