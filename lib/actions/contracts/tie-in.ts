@@ -421,16 +421,15 @@ export async function getContractCapitalSchedule(
       select: { collectionDate: true, rebateCollected: true },
     })
     allRebates.push(...siblingRebates)
-    // Charles audit pass-4 round-2 C3 + round-3: legacy compat.
-    // Pre-cross-contract behavior was that "capital" rows could
-    // have rebates wired directly to them. Fall back to own.rebates
-    // when siblings have NO collected rows (not just "no rows" — a
-    // sibling row with collectionDate=null shouldn't block legacy
-    // compat).
-    const siblingHasCollected = siblingRebates.some(
-      (r) => r.collectionDate && Number(r.rebateCollected ?? 0) > 0,
-    )
-    if (!siblingHasCollected && contract.rebates.length > 0) {
+    // Charles audit pass-4 round-4: UNION sibling + own rebates on
+    // capital rows. Earlier rounds switched between sibling-only and
+    // own-only based on a "siblingHasCollected" flag, which silently
+    // dropped legacy own.rebates the moment a single sibling rebate
+    // appeared. For transitional data (siblings just wired up while
+    // legacy own.rebates still exist), both sources should retire
+    // capital. Migration is the right way to zero one out — code
+    // shouldn't silently choose.
+    if (contract.rebates.length > 0) {
       allRebates.push(...contract.rebates)
     }
   }
@@ -797,20 +796,13 @@ export async function getContractCapitalProjection(
       },
       select: { collectionDate: true, rebateCollected: true },
     })
-    // Legacy compat (round-2 C3 + round-3): fall back to own.rebates
-    // when siblings have no COLLECTED rebates (not just no rows).
-    const sibHasCollected = sib.some(
-      (r) => r.collectionDate && Number(r.rebateCollected ?? 0) > 0,
-    )
-    allRebates =
-      !sibHasCollected && contract.rebates.length > 0
-        ? [...contract.rebates]
-        : sib
+    // Round-4: union both sources to stay symmetric with the
+    // schedule path and not drop legacy data when siblings appear.
+    allRebates = [...sib, ...contract.rebates]
   }
-  // Track whether the trailing-90 query should follow siblings or
-  // fall back to the contract's own rebates.
-  const useSiblingTrailing90 =
-    isCapitalRow && allRebates !== contract.rebates && allRebates.length > 0
+  // Trailing-90 query: when this is a capital row with siblings,
+  // include both the sibling chain AND the contract's own rows.
+  const useSiblingTrailing90 = isCapitalRow
 
   const paidToDate = sumRebateAppliedToCapital(
     allRebates,
@@ -825,10 +817,16 @@ export async function getContractCapitalProjection(
   const rebateAgg = await prisma.rebate.aggregate({
     where: useSiblingTrailing90
       ? {
-          contract: {
-            tieInCapitalContractId: contractId,
-            facilityId: facility.id,
-          },
+          // Round-4: union — match either sibling-chain OR own row.
+          OR: [
+            {
+              contract: {
+                tieInCapitalContractId: contractId,
+                facilityId: facility.id,
+              },
+            },
+            { contractId, facilityId: facility.id },
+          ],
           payPeriodEnd: { gte: ninetyDaysAgo, lte: today },
         }
       : {

@@ -90,10 +90,12 @@ function extractPendingPricingItems(
   }> = []
   // Charles audit pass-4 round-3 CONCERN: dedupe pricing rows by
   // normalized vendorItemNo (case-insensitive trim) so a vendor
-  // pasting "ABC", "abc", "ABC " into pricing CSV doesn't produce
-  // 3 ContractPricing rows on approve (which would double-count in
-  // variance/escalator math).
-  const seenVendorItemNos = new Set<string>()
+  // pasting "ABC", "abc", "ABC " doesn't produce 3 ContractPricing
+  // rows on approve. Round-4: LAST-WINS semantics. A vendor's CSV
+  // with `ABC` at $10 followed by a corrected `ABC` at $12 is the
+  // standard "I'm updating this row" pattern — first-wins would
+  // silently drop the correction. Last-wins preserves it.
+  const indexByVendorItemNo = new Map<string, number>()
   for (const raw of inputArray) {
     if (raw === null || typeof raw !== "object") continue
     const r = raw as PendingPricingItem
@@ -101,16 +103,21 @@ function extractPendingPricingItems(
     const unitPrice = coerceNumber(r.unitPrice)
     if (!vendorItemNo || unitPrice === null) continue
     const normalized = vendorItemNo.trim().toUpperCase()
-    if (seenVendorItemNos.has(normalized)) continue
-    seenVendorItemNos.add(normalized)
-    rows.push({
+    const row = {
       vendorItemNo: vendorItemNo.trim(),
       description: coerceString(r.description),
       category: coerceString(r.category),
       unitPrice,
       listPrice: coerceNumber(r.listPrice),
       uom: coerceString(r.uom) ?? "EA",
-    })
+    }
+    const existingIdx = indexByVendorItemNo.get(normalized)
+    if (existingIdx !== undefined) {
+      rows[existingIdx] = row
+    } else {
+      indexByVendorItemNo.set(normalized, rows.length)
+      rows.push(row)
+    }
   }
   return rows
 }
