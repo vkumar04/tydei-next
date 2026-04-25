@@ -12,6 +12,7 @@ import {
 import { serialize } from "@/lib/serialize"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
+import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
 import {
   notifyFacilityOfPendingContract,
   notifyVendorOfPendingDecision,
@@ -283,11 +284,16 @@ function extractPendingTerms(termsJson: unknown): Array<{
           .map((c) => coerceString(c))
           .filter((c): c is string => c !== null) as string[])
       : []
-    const scopedItemNumbers = Array.isArray(t.scopedItemNumbers)
-      ? (t.scopedItemNumbers
-          .map((c) => coerceString(c))
-          .filter((c): c is string => c !== null) as string[])
-      : []
+    // Charles audit pass-2: dedupe + trim via canonical helper so a
+    // vendor pasting "ABC, , ABC " can't trip the unique constraint
+    // at approve time.
+    const scopedItemNumbers = normalizeScopedItemNumbers(
+      Array.isArray(t.scopedItemNumbers)
+        ? (t.scopedItemNumbers
+            .map((c) => coerceString(c))
+            .filter((c): c is string => c !== null) as string[])
+        : [],
+    )
     out.push({
       termName,
       termType,

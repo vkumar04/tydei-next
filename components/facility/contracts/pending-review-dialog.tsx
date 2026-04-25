@@ -39,11 +39,63 @@ interface PendingTermLike {
   tiers?: Array<{
     tierNumber?: number
     tierName?: string | null
-    spendMin?: number | string
+    spendMin?: number | string | null
     spendMax?: number | string | null
+    volumeMin?: number | string | null
+    volumeMax?: number | string | null
+    marketShareMin?: number | string | null
+    marketShareMax?: number | string | null
     rebateType?: string
     rebateValue?: number | string
   }>
+}
+
+/**
+ * Charles 2026-04-25 audit pass-2 C1: pre-mirror reviewer view.
+ *
+ * Vendor-submitted volume_rebate / market_share contracts populate
+ * `volumeMin/Max` / `marketShareMin/Max` directly. The mirror to
+ * `spendMin/Max` only happens at `extractPendingTerms` (during
+ * approve). The reviewer's pending-review dialog runs PRE-approve,
+ * so reading only `spendMin` would render "0%+" for a tier the
+ * vendor actually configured at 80%. Pick the right column per
+ * termType so the reviewer sees what they're approving.
+ */
+function readTierMin(
+  termType: string | undefined,
+  tier: NonNullable<PendingTermLike["tiers"]>[number],
+): number | string | null | undefined {
+  switch (termType) {
+    case "volume_rebate":
+    case "rebate_per_use":
+    case "capitated_pricing_rebate":
+    case "po_rebate":
+    case "payment_rebate":
+      return tier.volumeMin ?? tier.spendMin
+    case "compliance_rebate":
+    case "market_share":
+      return tier.marketShareMin ?? tier.spendMin
+    default:
+      return tier.spendMin
+  }
+}
+function readTierMax(
+  termType: string | undefined,
+  tier: NonNullable<PendingTermLike["tiers"]>[number],
+): number | string | null | undefined {
+  switch (termType) {
+    case "volume_rebate":
+    case "rebate_per_use":
+    case "capitated_pricing_rebate":
+    case "po_rebate":
+    case "payment_rebate":
+      return tier.volumeMax ?? tier.spendMax
+    case "compliance_rebate":
+    case "market_share":
+      return tier.marketShareMax ?? tier.spendMax
+    default:
+      return tier.spendMax
+  }
 }
 
 /**
@@ -59,6 +111,9 @@ function formatTierThreshold(
   spendMin: number | string | null | undefined,
   spendMax: number | string | null | undefined,
 ): string {
+  // Charles audit pass-2 C1: signature already accepts null; callers
+  // now pre-pick the correct column per termType (volume*/marketShare*
+  // mirror to spend* only at extract time).
   const min = Number(spendMin ?? 0).toLocaleString()
   const max = spendMax != null ? Number(spendMax).toLocaleString() : null
   switch (termType) {
@@ -122,7 +177,7 @@ function PendingTermsSection({ terms }: { terms: unknown }) {
                       {tier.tierName ? ` · ${tier.tierName}` : ""}
                     </span>
                     <span>
-                      {formatTierThreshold(t.termType, tier.spendMin, tier.spendMax)}
+                      {formatTierThreshold(t.termType, readTierMin(t.termType, tier), readTierMax(t.termType, tier))}
                       {" → "}
                       <span className="font-medium">
                         {tier.rebateType === "fixed_rebate" ||

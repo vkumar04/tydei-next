@@ -528,11 +528,22 @@ export function VendorContractSubmission({
               volumeMax: tier.volumeMax,
               marketShareMin: tier.marketShareMin,
               marketShareMax: tier.marketShareMax,
-              rebateType: "percent_of_spend" as const,
+              // Charles 2026-04-25 audit pass-2 B2: honor the AI's
+              // tier.rebateType (the schema accepts percent_of_spend /
+              // fixed_rebate / fixed_rebate_per_unit / per_procedure_rebate).
+              // Hardcoding percent_of_spend was silently mistyping
+              // every market_share / fixed_fee / volume contract:
+              // a $1500/period flat payout was stored as 15% of spend.
+              rebateType: ((tier.rebateType ?? "percent_of_spend") as
+                | "percent_of_spend"
+                | "fixed_rebate"
+                | "fixed_rebate_per_unit"
+                | "per_procedure_rebate"),
               // Charles R5.25 — AI often returns "3" for 3%; the DB
-              // stores percent_of_spend as a fraction (0.03).
+              // stores percent_of_spend as a fraction (0.03). Other
+              // rebate types are flat dollars and don't normalize.
               rebateValue: normalizeAIRebateValue(
-                "percent_of_spend",
+                tier.rebateType ?? "percent_of_spend",
                 tier.rebateValue,
               ),
             })),

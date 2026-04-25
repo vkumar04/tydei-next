@@ -88,8 +88,12 @@ export async function getPendingProposals(_facilityId?: string) {
 export async function getVendorProposals(_vendorId?: string) {
   const { vendor } = await requireVendor()
 
+  // Charles audit pass-2: hide withdrawn proposals from the active
+  // list (withdrawn means the vendor pulled it; they shouldn't see it
+  // in their in-flight queue). A future "history" view can include
+  // status: "withdrawn" explicitly.
   const proposals = await prisma.contractChangeProposal.findMany({
-    where: { vendorId: vendor.id },
+    where: { vendorId: vendor.id, status: { not: "withdrawn" } },
     include: { contract: { select: { name: true } } },
     orderBy: { submittedAt: "desc" },
   })
