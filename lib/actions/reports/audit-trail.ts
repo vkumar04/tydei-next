@@ -24,6 +24,7 @@ import {
   type AuditPurchase,
   type RebateCalcAudit,
 } from "@/lib/reports/audit-trail"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 
 /**
  * Return the full audit trail for a single contract, scoped to the
@@ -76,7 +77,15 @@ export async function getRebateCalculationAudit(
     maxSpend: t.spendMax === null || t.spendMax === undefined
       ? null
       : Number(t.spendMax),
-    rebateRate: Number(t.rebateValue ?? 0),
+    // Charles 2026-04-25: scale fraction → percent at the boundary so the
+    // audit's `(spend × rate) / 100` math (and the downstream
+    // tier-progress projection that consumes these values) gets percent
+    // semantics, not raw fraction. Without this the audit reports
+    // gross rebate 100x too small.
+    rebateRate: toDisplayRebateValue(
+      String(t.rebateType ?? "percent_of_spend"),
+      Number(t.rebateValue ?? 0),
+    ),
   }))
 
   // ─── Contract pricing coverage map ────────────────────────────

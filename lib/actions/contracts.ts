@@ -17,6 +17,7 @@ import { revalidatePath } from "next/cache"
 import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
+import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
 import {
   termFormSchemaWithTierCheck,
   type TermFormValues,
@@ -963,6 +964,20 @@ async function _createContractImpl(
         vendorId: data.vendorId,
         facilityId,
       })
+      // Charles 2026-04-25 (Bug 27 part 2): keep CaseSupply.isOnContract
+      // in sync with the contract catalog so Case Costing's "Avg
+      // On-Contract %" reflects newly-added/removed contracts.
+      // Best-effort — a recompute failure logs but doesn't block the
+      // create from succeeding (matches the rebate-accrual recompute
+      // pattern).
+      try {
+        await recomputeCaseSupplyContractStatus(prisma, facilityId)
+      } catch (err) {
+        console.warn(
+          `[createContract] recomputeCaseSupplyContractStatus(${facilityId}) failed:`,
+          err,
+        )
+      }
     }
   }
 
@@ -1204,6 +1219,20 @@ async function _updateContractImpl(
         vendorId,
         facilityId,
       })
+    }
+  }
+
+  // Charles 2026-04-25 (Bug 27 part 2): same case-supply recompute as
+  // createContract — done once per facility (not per vendor) since the
+  // case-supply join doesn't filter by vendor.
+  for (const facilityId of facilityIds) {
+    try {
+      await recomputeCaseSupplyContractStatus(prisma, facilityId)
+    } catch (err) {
+      console.warn(
+        `[updateContract] recomputeCaseSupplyContractStatus(${facilityId}) failed:`,
+        err,
+      )
     }
   }
 

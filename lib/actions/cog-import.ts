@@ -238,6 +238,21 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
           )
         }
       }
+      // Charles 2026-04-25 (Bug 27 part 2): after a COG import we have
+      // potentially new vendor → contract bindings; refresh the
+      // case-supply on-contract flags so Case Costing's compliance
+      // numbers stay in sync.
+      try {
+        const { recomputeCaseSupplyContractStatus } = await import(
+          "@/lib/case-costing/recompute-supply"
+        )
+        await recomputeCaseSupplyContractStatus(prisma, session.facility.id)
+      } catch (err) {
+        console.warn(
+          `[cog-import] recomputeCaseSupplyContractStatus failed for facility ${session.facility.id}`,
+          err,
+        )
+      }
     }
   }
 

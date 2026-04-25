@@ -21,6 +21,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import {
   buildRebateOpportunities,
   type DroppedContract,
@@ -78,6 +79,7 @@ interface PrismaTier {
   spendMin: unknown
   spendMax: unknown
   rebateValue: unknown
+  rebateType?: unknown
 }
 
 function mapTier(row: PrismaTier): RebateTier {
@@ -89,7 +91,15 @@ function mapTier(row: PrismaTier): RebateTier {
     tierName: row.tierName,
     thresholdMin: Number(row.spendMin),
     thresholdMax: max,
-    rebateValue: Number(row.rebateValue),
+    // Charles 2026-04-25: scale fraction → percent at the boundary so
+    // the optimizer's downstream consumers (alert payloads, AI tool
+    // outputs, optimizer-hero "+X% rebate" labels) see display-percent.
+    // Without this every recommendation shows "+0.005% rebate" when it
+    // should show "+0.5%".
+    rebateValue: toDisplayRebateValue(
+      String(row.rebateType ?? "percent_of_spend"),
+      Number(row.rebateValue),
+    ),
   }
 }
 

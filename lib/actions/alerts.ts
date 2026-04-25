@@ -23,6 +23,7 @@ import {
   type SynthTier,
 } from "@/lib/alerts/synthesizer"
 import { computeBundleStatus } from "@/lib/contracts/bundle-compute"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { deriveBundleShortfalls } from "@/lib/contracts/bundle-shortfalls"
 import {
   planBulkAction,
@@ -244,6 +245,7 @@ export async function synthesizeAndPersistAlerts(): Promise<{
                 spendMin: true,
                 spendMax: true,
                 rebateValue: true,
+                rebateType: true,
               },
             },
           },
@@ -330,7 +332,14 @@ export async function synthesizeAndPersistAlerts(): Promise<{
         tierNumber: tier.tierNumber,
         spendMin: Number(tier.spendMin),
         spendMax: tier.spendMax === null ? null : Number(tier.spendMax),
-        rebateValue: Number(tier.rebateValue),
+        // Charles 2026-04-25: scale at the boundary so alert payloads
+        // carry display-percent (3 = 3%), not raw fraction (0.03). The
+        // synthesizer ships `tier_rebate` in alert metadata that's
+        // rendered directly as "X%" in the UI.
+        rebateValue: toDisplayRebateValue(
+          String(tier.rebateType ?? "percent_of_spend"),
+          Number(tier.rebateValue),
+        ),
       })),
     )
     const currentSpend =

@@ -240,3 +240,57 @@ export function teamInviteEmail(
     html: layout("Team Invitation", body),
   }
 }
+
+// ─── Pending-contract submission / decision (vendor mirror) ────
+
+interface PendingContractEmailInput {
+  contractName: string
+  vendorName: string
+  facilityName?: string | null
+  pendingId: string
+}
+
+export function pendingContractSubmittedEmail(
+  input: PendingContractEmailInput,
+): { subject: string; html: string } {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:20px;color:#18181b;">New contract submission from ${input.vendorName}</h2>
+    <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">
+      <strong>${input.vendorName}</strong> has submitted a contract for your review:
+    </p>
+    <p style="margin:0 0 8px;color:#71717a;font-size:14px;"><strong>Contract:</strong> ${input.contractName}</p>
+    ${input.facilityName ? `<p style="margin:0 0 16px;color:#71717a;font-size:14px;"><strong>Facility:</strong> ${input.facilityName}</p>` : ""}
+    <a href="${appUrl}/dashboard/contracts" style="display:inline-block;padding:10px 24px;background-color:#18181b;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:6px;margin-top:8px;">Review submission</a>
+  `
+  return {
+    subject: `[TYDEi] ${input.vendorName} submitted a contract for review`,
+    html: layout(`New submission: ${input.contractName}`, body),
+  }
+}
+
+export function pendingContractDecisionEmail(
+  input: PendingContractEmailInput & {
+    decision: "approved" | "rejected" | "revision_requested"
+    reviewNotes?: string | null
+  },
+): { subject: string; html: string } {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"
+  const decisionLabel =
+    input.decision === "approved"
+      ? "approved"
+      : input.decision === "rejected"
+        ? "rejected"
+        : "needs revision"
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:20px;color:#18181b;">Your contract submission was ${decisionLabel}</h2>
+    <p style="margin:0 0 8px;color:#71717a;font-size:14px;"><strong>Contract:</strong> ${input.contractName}</p>
+    ${input.facilityName ? `<p style="margin:0 0 16px;color:#71717a;font-size:14px;"><strong>Facility:</strong> ${input.facilityName}</p>` : ""}
+    ${input.reviewNotes ? `<p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;"><strong>Reviewer notes:</strong><br>${input.reviewNotes}</p>` : ""}
+    <a href="${appUrl}/vendor/contracts/pending/${input.pendingId}/edit" style="display:inline-block;padding:10px 24px;background-color:#18181b;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:6px;margin-top:8px;">View submission</a>
+  `
+  return {
+    subject: `[TYDEi] Submission ${decisionLabel}: ${input.contractName}`,
+    html: layout(`Submission ${decisionLabel}`, body),
+  }
+}

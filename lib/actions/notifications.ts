@@ -6,6 +6,8 @@ import {
   alertNotificationEmail,
   renewalReminderEmail,
   weeklyDigestEmail,
+  pendingContractSubmittedEmail,
+  pendingContractDecisionEmail,
 } from "@/lib/email-templates"
 import { getNotificationPreferences } from "@/lib/actions/settings"
 
@@ -32,6 +34,28 @@ async function getFacilityMemberEmails(facilityId: string): Promise<string[]> {
   return (
     facility?.organization?.members.map((m) => m.user.email) ?? []
   )
+}
+
+/**
+ * Charles 2026-04-25 (vendor-mirror Phase 1): same as
+ * `getFacilityMemberEmails` but for vendor orgs. Used to notify the
+ * vendor when their pending submission is approved / rejected /
+ * revision-requested.
+ */
+async function getVendorMemberEmails(vendorId: string): Promise<string[]> {
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: vendorId },
+    select: {
+      organization: {
+        select: {
+          members: {
+            select: { user: { select: { email: true } } },
+          },
+        },
+      },
+    },
+  })
+  return vendor?.organization?.members.map((m) => m.user.email) ?? []
 }
 
 /**
@@ -248,4 +272,72 @@ export async function sendWeeklyDigest(
   )
 
   return { sent: emails.length }
+}
+
+// ─── Pending-contract notifications (vendor-mirror Phase 1) ─────
+
+/**
+ * Send a notification to every member of the facility's org when a
+ * vendor submits a pending contract for review. Best-effort — failures
+ * log but never block the submission. Charles 2026-04-25.
+ */
+export async function notifyFacilityOfPendingContract(input: {
+  facilityId: string
+  contractName: string
+  vendorName: string
+  facilityName?: string | null
+  pendingId: string
+}): Promise<{ sent: number }> {
+  try {
+    const emails = await getFacilityMemberEmails(input.facilityId)
+    if (emails.length === 0) return { sent: 0 }
+    const { subject, html } = pendingContractSubmittedEmail({
+      contractName: input.contractName,
+      vendorName: input.vendorName,
+      facilityName: input.facilityName,
+      pendingId: input.pendingId,
+    })
+    await Promise.allSettled(
+      emails.map((to) => sendEmail({ to, subject, html })),
+    )
+    return { sent: emails.length }
+  } catch (err) {
+    console.warn("[notifyFacilityOfPendingContract] failed", err)
+    return { sent: 0 }
+  }
+}
+
+/**
+ * Send a notification to every member of the vendor's org when the
+ * facility approves / rejects / requests revisions on a pending
+ * contract. Best-effort. Charles 2026-04-25.
+ */
+export async function notifyVendorOfPendingDecision(input: {
+  vendorId: string
+  contractName: string
+  vendorName: string
+  facilityName?: string | null
+  pendingId: string
+  decision: "approved" | "rejected" | "revision_requested"
+  reviewNotes?: string | null
+}): Promise<{ sent: number }> {
+  try {
+    const emails = await getVendorMemberEmails(input.vendorId)
+    if (emails.length === 0) return { sent: 0 }
+    const { subject, html } = pendingContractDecisionEmail({
+      contractName: input.contractName,
+      vendorName: input.vendorName,
+      facilityName: input.facilityName,
+      pendingId: input.pendingId,
+      decision: input.decision,
+      reviewNotes: input.reviewNotes,
+    })
+    await Promise.allSettled(
+      emails.map((to) => sendEmail({ to, subject, html })),
+    )
+    return { sent: emails.length }
+  } catch (err) {
+    console.warn("[notifyVendorOfPendingDecision] failed", err)
+    return { sent: 0 }
+  }
 }

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { formatCurrency, formatDate, formatCalendarDate, formatDateRange } from "@/lib/formatting"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -303,8 +304,15 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
                                   {tier.spendMax ? ` - ${formatCurrency(Number(tier.spendMax))}` : "+"}
                                 </span>
                                 <span className="font-medium">
+                                  {/*
+                                   * Charles 2026-04-25: ContractTier.rebateValue
+                                   * is stored as a fraction (0.03 = 3%); displaying
+                                   * `Number(tier.rebateValue).toFixed(1)` rendered
+                                   * "0.0%" on every tier in the vendor portal.
+                                   * Route through the canonical scaler.
+                                   */}
                                   {tier.rebateType === "percent_of_spend"
-                                    ? `${Number(tier.rebateValue).toFixed(1)}%`
+                                    ? `${toDisplayRebateValue("percent_of_spend", Number(tier.rebateValue)).toFixed(1)}%`
                                     : formatCurrency(Number(tier.rebateValue), true)}
                                 </span>
                               </div>

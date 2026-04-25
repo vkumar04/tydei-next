@@ -42,7 +42,13 @@ type TierRow = {
   tierName: string | null
   spendMin: number
   spendMax: number | null
+  // Charles 2026-04-25: in production, ContractTier.rebateValue is
+  // stored as a fraction (0.02 = 2%). Test fixtures used to use
+  // integer percent (2 = 2%) which silently mis-modeled reality. The
+  // audit-trail action now scales fraction → percent at the boundary
+  // via toDisplayRebateValue, so fixtures must use fractions.
   rebateValue: number
+  rebateType?: string
 }
 
 type PricingRow = {
@@ -362,14 +368,16 @@ describe("getRebateCalculationAudit", () => {
         tierName: "Tier 1",
         spendMin: 0,
         spendMax: 500_000,
-        rebateValue: 2,
+        rebateValue: 0.02,
+        rebateType: "percent_of_spend",
       },
       {
         tierNumber: 2,
         tierName: "Tier 2",
         spendMin: 500_000,
         spendMax: null,
-        rebateValue: 4,
+        rebateValue: 0.04,
+        rebateType: "percent_of_spend",
       },
     ]
     const result = await getRebateCalculationAudit("c-1")
@@ -387,7 +395,8 @@ describe("getRebateCalculationAudit", () => {
         tierName: "Tier 1",
         spendMin: 0,
         spendMax: null,
-        rebateValue: 5,
+        rebateValue: 0.05,
+        rebateType: "percent_of_spend",
       },
     ]
     pricingRows = [
@@ -459,14 +468,16 @@ describe("getRebateCalculationAudit", () => {
         tierName: "Tier 1",
         spendMin: 0,
         spendMax: 500_000,
-        rebateValue: 2,
+        rebateValue: 0.02,
+        rebateType: "percent_of_spend",
       },
       {
         tierNumber: 2,
         tierName: "Tier 2",
         spendMin: 500_000,
         spendMax: null,
-        rebateValue: 4,
+        rebateValue: 0.04,
+        rebateType: "percent_of_spend",
       },
     ]
     pricingRows = [

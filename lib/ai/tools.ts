@@ -1,6 +1,7 @@
 import { tool } from "ai"
 import { z } from "zod"
 import { prisma } from "@/lib/db"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 
 export const chatTools = {
   getContractPerformance: tool({
@@ -149,8 +150,14 @@ export const chatTools = {
       return {
         currentSpend,
         currentTierNumber: currentTier?.tierNumber ?? 0,
+        // Charles 2026-04-25: scale fraction → percent before exposing
+        // to the AI tool. Without this, Claude sees "0.03" and tells
+        // the user "you're earning 0.03% rebate".
         currentRebateValue: currentTier
-          ? Number(currentTier.rebateValue)
+          ? toDisplayRebateValue(
+              String(currentTier.rebateType ?? "percent_of_spend"),
+              Number(currentTier.rebateValue),
+            )
           : 0,
         rebateEarned: Number(latestPeriod.rebateEarned),
         nextTierSpendMin: nextTier ? Number(nextTier.spendMin) : null,
@@ -332,7 +339,10 @@ export const chatTools = {
           if (!nextTier) return null
 
           const gap = Number(nextTier.spendMin ?? 0) - spend
-          const potentialRebate = Number(nextTier.rebateValue ?? 0)
+          const potentialRebate = toDisplayRebateValue(
+            String(nextTier.rebateType ?? "percent_of_spend"),
+            Number(nextTier.rebateValue ?? 0),
+          )
 
           return {
             contract: c.name,

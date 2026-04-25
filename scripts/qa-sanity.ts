@@ -314,6 +314,39 @@ const invariants: Invariant[] = [
   },
 
   {
+    // Charles 2026-04-25: catch the "21k orphan rows at Lighthouse
+    // Surgical" class of drift early. Real seed paths (cog-records.ts,
+    // cog-for-contracts.ts) always populate vendorItemNo + fileImportId.
+    // A high count of rows missing BOTH usually means a verify-against-
+    // oracle / e2e-synthetic script aborted between createMany and
+    // deleteMany; left untreated this hides as 0% pricing-file coverage.
+    name: "no-orphan-cog-rows",
+    describe: "<5% of facility's COG rows are missing vendorItemNo AND fileImportId",
+    async check() {
+      const facility = await getDemoFacility()
+      const total = await prisma.cOGRecord.count({
+        where: { facilityId: facility.id },
+      })
+      if (total === 0) return { ok: true }
+      const orphans = await prisma.cOGRecord.count({
+        where: {
+          facilityId: facility.id,
+          vendorItemNo: null,
+          fileImportId: null,
+        },
+      })
+      const pct = orphans / total
+      if (pct >= 0.05) {
+        return {
+          ok: false,
+          detail: `${orphans} of ${total} COG rows (${(pct * 100).toFixed(1)}%) are missing both vendorItemNo and fileImportId. These usually indicate aborted verify-against-oracle / e2e-synthetic runs that left bulk-created rows behind. Run \`bun run db:seed\` to clear, then investigate which script left them.`,
+        }
+      }
+      return { ok: true }
+    },
+  },
+
+  {
     name: "case-reimbursement-coverage",
     describe: "≥50% of cases can compute a reimbursement via payor CPT rate lookup",
     async check() {
