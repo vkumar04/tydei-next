@@ -264,11 +264,34 @@ export async function importContractPricing(input: {
 
   if (input.items.length === 0) return { imported: 0 }
 
+  // Charles audit round-3 facility CONCERN-1: dedupe by case-insensitive
+  // trimmed vendorItemNo with last-wins semantics (matches the pending-
+  // contracts pricing extractor convention). Without this, a vendor
+  // CSV with `ABC`, `abc`, ` ABC ` produces 3 distinct ContractPricing
+  // rows and per-SKU price-variance / compliance lookups silently miss.
+  const indexByItemNo = new Map<string, number>()
+  const dedupedItems: ContractPricingItem[] = []
+  for (const item of input.items) {
+    const raw = item.vendorItemNo
+    if (!raw || typeof raw !== "string") continue
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+    const key = trimmed.toUpperCase()
+    const existing = indexByItemNo.get(key)
+    const normalized = { ...item, vendorItemNo: trimmed }
+    if (existing !== undefined) {
+      dedupedItems[existing] = normalized
+    } else {
+      indexByItemNo.set(key, dedupedItems.length)
+      dedupedItems.push(normalized)
+    }
+  }
+
   const BATCH = 500
   let imported = 0
 
-  for (let i = 0; i < input.items.length; i += BATCH) {
-    const batch = input.items.slice(i, i + BATCH)
+  for (let i = 0; i < dedupedItems.length; i += BATCH) {
+    const batch = dedupedItems.slice(i, i + BATCH)
     const result = await prisma.contractPricing.createMany({
       data: batch.map((item) => ({
         contractId: input.contractId,

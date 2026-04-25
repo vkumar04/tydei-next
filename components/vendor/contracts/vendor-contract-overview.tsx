@@ -69,12 +69,13 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
     }
     const spendToDate = lifetime.spend
     const rebateEarned = lifetime.rebateEarned
+    const rebateCollected = lifetime.rebateCollected
 
     const now = new Date()
     const expiration = new Date(contract.expirationDate)
     const daysRemaining = Math.max(0, Math.ceil((expiration.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
 
-    return { spendToDate, rebateEarned, daysRemaining }
+    return { spendToDate, rebateEarned, rebateCollected, daysRemaining }
   }, [contract])
 
   return (
@@ -155,11 +156,18 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
               <span className="text-sm text-muted-foreground">Rebate Earned</span>
             </div>
             <div className="text-2xl font-bold mt-1">{formatCurrency(summary.rebateEarned)}</div>
-            {summary.spendToDate > 0 && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {((summary.rebateEarned / summary.spendToDate) * 100).toFixed(2)}% effective rate
-              </p>
-            )}
+            {/* Charles audit round-3 vendor: surface lifetime collected
+                alongside earned so vendor sees what's actually been
+                paid out. */}
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {formatCurrency(summary.rebateCollected)} collected
+              {summary.spendToDate > 0 && (
+                <>
+                  {" · "}
+                  {((summary.rebateEarned / summary.spendToDate) * 100).toFixed(2)}% effective rate
+                </>
+              )}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -303,7 +311,10 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
                           {term.tiers.map((tier) => (
                             <div key={tier.id} className="flex items-center gap-3 rounded-md border p-2.5 bg-muted/30">
                               <Badge variant="outline" className="shrink-0 text-xs">
-                                Tier {tier.tierNumber}
+                                {/* Charles audit round-3 vendor: surface
+                                    tierName when present (e.g. "Bronze") so
+                                    the vendor sees what facility sees. */}
+                                {tier.tierName ?? `Tier ${tier.tierNumber}`}
                               </Badge>
                               <div className="flex-1 flex justify-between text-sm">
                                 <span className="text-muted-foreground">

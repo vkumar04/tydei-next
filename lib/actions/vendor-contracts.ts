@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import type { ContractStatus, Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
+import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 
 // ─── Vendor Contracts List ──────────────────────────────────────
 
@@ -75,29 +77,30 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
     },
   })
 
-  // Charles audit round-1 vendor C4: aggregate the FULL period table
-  // for lifetime totals so the vendor overview's Spend / Rebate
-  // Earned don't truncate at 4 most-recent rows.
-  // Charles audit round-2 vendor CONCERN 1: rebateCollected goes
-  // through canonical sumCollectedRebates over the Rebate table
-  // (not the period rollup), which enforces the
-  // collectionDate != null invariant per the CLAUDE.md table.
-  const [lifetimeAgg, rebateRows] = await Promise.all([
+  // Charles audit round-1 vendor C4 + round-2 + round-3: lifetime
+  // totals come from canonical helpers per the CLAUDE.md invariants
+  // table. Spend = ContractPeriod._sum (period rollup is the canonical
+  // spend source; rebate-table doesn't carry spend). Rebate metrics
+  // come from sumEarnedRebatesLifetime + sumCollectedRebates over the
+  // Rebate rows — same source the facility surfaces use, no drift.
+  const [spendAgg, rebateRows] = await Promise.all([
     prisma.contractPeriod.aggregate({
       where: { contractId: id },
-      _sum: { totalSpend: true, rebateEarned: true },
+      _sum: { totalSpend: true },
     }),
     prisma.rebate.findMany({
       where: { contractId: id },
-      select: { rebateCollected: true, collectionDate: true },
+      select: {
+        rebateEarned: true,
+        rebateCollected: true,
+        payPeriodEnd: true,
+        collectionDate: true,
+      },
     }),
   ])
-  const { sumCollectedRebates } = await import(
-    "@/lib/contracts/rebate-collected-filter"
-  )
   const lifetimeTotals = {
-    spend: Number(lifetimeAgg._sum.totalSpend ?? 0),
-    rebateEarned: Number(lifetimeAgg._sum.rebateEarned ?? 0),
+    spend: Number(spendAgg._sum.totalSpend ?? 0),
+    rebateEarned: sumEarnedRebatesLifetime(rebateRows),
     rebateCollected: sumCollectedRebates(rebateRows),
   }
 

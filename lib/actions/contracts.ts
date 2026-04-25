@@ -100,12 +100,12 @@ export async function getContracts(input: ContractFilters) {
   // auto-computed for display"): earned counts only closed periods,
   // collected counts only rows with a collectionDate set.
   //
-  // Charles R5.31: earned is scoped to the current calendar year (YTD) so
-  // the list column matches the detail header's "Rebates Earned (YTD)"
-  // card (added in R5.27). Must stay in lockstep with the `rebateEarnedYTD`
-  // computation in `getContract` above. Charles W1.U-B: routed through
-  // the canonical `sumEarnedRebatesYTD` helper so the list column, detail
-  // header card, and Transactions tab cannot drift apart.
+  // Charles R5.31 → iMessage 2026-04-20 N13: contracts-list earned column
+  // is now LIFETIME (was YTD). Routed through canonical
+  // sumEarnedRebatesLifetime so list column + detail Transactions tab
+  // "Total Rebates (Lifetime)" + reports overview cannot drift apart.
+  // Per CLAUDE.md invariants table: list = lifetime, detail header
+  // "Earned (YTD)" card = YTD via sumEarnedRebatesYTD.
   const today = new Date()
 
   // Charles W1.J — populate `currentSpend` per row using the R5.28
