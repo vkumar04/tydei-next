@@ -23,7 +23,7 @@ const { cogFindManyMock, contractFindUniqueMock } = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     contract: {
-      findUniqueOrThrow: contractFindUniqueMock,
+      findFirstOrThrow: contractFindUniqueMock,
     },
     cOGRecord: {
       findMany: cogFindManyMock,

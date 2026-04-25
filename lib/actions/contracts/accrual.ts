@@ -8,6 +8,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   buildMonthlyAccruals,
   type EvaluationPeriod,
@@ -27,8 +28,9 @@ import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 export async function getAccrualTimeline(contractId: string) {
   const { facility } = await requireFacility()
 
-  const contract = await prisma.contract.findUniqueOrThrow({
-    where: { id: contractId },
+  // Charles audit round-11 BLOCKER: scope by ownership.
+  const contract = await prisma.contract.findFirstOrThrow({
+    where: contractOwnershipWhere(contractId, facility.id),
     include: {
       terms: {
         include: { tiers: { orderBy: { tierNumber: "asc" } } },

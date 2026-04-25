@@ -42,7 +42,7 @@ const {
 vi.mock("@/lib/db", () => ({
   prisma: {
     contract: {
-      findUniqueOrThrow: contractFindUniqueMock,
+      findFirstOrThrow: contractFindUniqueMock,
       findUnique: contractFindUniqueMock,
     },
     cOGRecord: {
