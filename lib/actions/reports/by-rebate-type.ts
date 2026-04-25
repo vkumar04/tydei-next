@@ -30,6 +30,14 @@ export interface RebateTypeBucket {
   collected: number
   rowCount: number
   contractCount: number
+  /**
+   * True when ANY row in this bucket was attributed via the auto-*
+   * notes-prefix fallback (term lookup missed) rather than a clean
+   * term:<id> resolution. Surfaces in the UI as an "inferred from
+   * notes prefix" badge so the reviewer knows the bucket is best-
+   * effort. Charles 2026-04-25 audit re-pass F1.
+   */
+  inferred: boolean
 }
 
 /**
@@ -98,26 +106,41 @@ export async function getRebateBreakdownByType(): Promise<RebateTypeBucket[]> {
 
     const buckets = new Map<
       string,
-      { earned: number; collected: number; rowCount: number; contracts: Set<string> }
+      {
+        earned: number
+        collected: number
+        rowCount: number
+        contracts: Set<string>
+        // True when at least one row landed in this bucket via the
+        // prefix fallback (manual rows or rows whose term:<id> didn't
+        // resolve). Drives the UI's "inferred from notes prefix"
+        // badge so the reviewer knows the attribution is best-effort.
+        inferred: boolean
+      }
     >()
     for (const r of rebates) {
       const inferred = inferTypeFromNotes(r.notes)
       let termType: string
+      let isInferred: boolean
       if (inferred.termId && termTypeById.has(inferred.termId)) {
         termType = termTypeById.get(inferred.termId)!
+        isInferred = false
       } else {
         termType = inferred.fallbackType
+        isInferred = true
       }
       const bucket = buckets.get(termType) ?? {
         earned: 0,
         collected: 0,
         rowCount: 0,
         contracts: new Set<string>(),
+        inferred: false,
       }
       bucket.earned += Number(r.rebateEarned ?? 0)
       bucket.collected += Number(r.rebateCollected ?? 0)
       bucket.rowCount += 1
       bucket.contracts.add(r.contractId)
+      if (isInferred) bucket.inferred = true
       buckets.set(termType, bucket)
     }
 
@@ -129,6 +152,7 @@ export async function getRebateBreakdownByType(): Promise<RebateTypeBucket[]> {
         collected: b.collected,
         rowCount: b.rowCount,
         contractCount: b.contracts.size,
+        inferred: b.inferred,
       })
     }
     // Sort biggest earned first — most material first.

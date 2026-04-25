@@ -36,7 +36,7 @@ interface ContractTierRowProps {
   termType?: string
 }
 
-function thresholdLabels(termType: string | undefined): { min: string; max: string; suffix?: string } {
+function thresholdLabels(termType: string | undefined): { min: string; max: string | null; suffix?: string } {
   switch (termType) {
     case "volume_rebate":
     case "rebate_per_use":
@@ -46,9 +46,15 @@ function thresholdLabels(termType: string | undefined): { min: string; max: stri
       return { min: "Min PO Count", max: "Max PO Count" }
     case "payment_rebate":
       return { min: "Min Invoices", max: "Max Invoices" }
+    // Charles 2026-04-25 audit re-pass F3 — for threshold-style
+    // payouts (compliance / market_share) the engine matches tiers
+    // EXCLUSIVE-style. If both Min and Max % are set and the metric
+    // value lands above the highest tier's spendMax, the tier match
+    // returns null and the row silently pays $0. Render Min only;
+    // spendMax stays null which the engine treats as +∞.
     case "compliance_rebate":
     case "market_share":
-      return { min: "Min % Achieved", max: "Max % Achieved", suffix: "%" }
+      return { min: "Threshold % Achieved", max: null, suffix: "%" }
     case "fixed_fee":
       return { min: "Threshold", max: "Cap" }
     default:
@@ -106,27 +112,29 @@ export function ContractTierRow({
         </div>
       </div>
 
-      <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">{labels.max}</label>
-        <div className="relative">
-          <Input
-            type="number"
-            className={labels.suffix ? "w-28 pr-7" : "w-28"}
-            value={tier.spendMax ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...tier,
-                spendMax: e.target.value ? Number(e.target.value) : undefined,
-              })
-            }
-          />
-          {labels.suffix && (
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-              {labels.suffix}
-            </span>
-          )}
+      {labels.max && (
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">{labels.max}</label>
+          <div className="relative">
+            <Input
+              type="number"
+              className={labels.suffix ? "w-28 pr-7" : "w-28"}
+              value={tier.spendMax ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...tier,
+                  spendMax: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+            />
+            {labels.suffix && (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                {labels.suffix}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="space-y-1">
         <label className="text-xs text-muted-foreground">Rebate Type</label>

@@ -40,8 +40,58 @@ interface ThresholdRebateTermLike {
     spendMin: unknown
     spendMax: unknown
     rebateValue: unknown
+    rebateType?: string | null
   }>
 }
+
+/**
+ * Charles 2026-04-25 audit re-pass F2 — legacy compatibility.
+ *
+ * The threshold engine pays a flat dollar amount per evaluation
+ * period when the metric crosses a tier threshold. Newly-created
+ * contracts default the tier's rebateType to `fixed_rebate` so
+ * `tier.rebateValue` is the literal dollar amount.
+ *
+ * Older contracts (or hydration paths that defaulted to
+ * `percent_of_spend`) store rebateValue as a fraction (0.02 = 2%).
+ * Reading 0.02 as a flat payout would pay $0.02 per period instead
+ * of the intended dollar amount. Until those rows are backfilled,
+ * we treat percent_of_spend tiers in this engine as percent-points
+ * × 100 (so 0.02 → $2, matching the boundary scaling the spend
+ * engine performs). Logged once per contract so the backfill is
+ * traceable.
+ *
+ * NEW contracts should always use fixed_rebate for compliance /
+ * market_share term types — see createEmptyTier.
+ */
+function payoutForTier(
+  tier: {
+    rebateValue: unknown
+    rebateType?: string | null
+  },
+  contractId: string,
+  warned: Set<string>,
+): number {
+  const raw = Number(tier.rebateValue ?? 0)
+  if (tier.rebateType === "fixed_rebate") {
+    return raw
+  }
+  if (tier.rebateType === "percent_of_spend") {
+    if (!warned.has(contractId)) {
+      console.warn(
+        `[recompute-threshold-accrual] contract ${contractId}: tier.rebateType=percent_of_spend on a threshold term — interpreting tier.rebateValue (${raw}) as percent-points × 100 for legacy compatibility. Backfill to fixed_rebate when possible.`,
+      )
+      warned.add(contractId)
+    }
+    return raw * 100
+  }
+  // Unknown / null rebateType — assume the value is already the
+  // intended dollar payout. Same conservative behavior as before
+  // this fix.
+  return raw
+}
+
+const LEGACY_PAYOUT_WARNED = new Set<string>()
 
 function widthMonths(eval_: string | null): number {
   switch (eval_) {
@@ -115,6 +165,8 @@ export async function recomputeThresholdAccrualForTerm(input: {
 
   // Tier ladder: spendMin is the threshold percent (0-100);
   // rebateValue is the flat dollar payment when that tier is achieved.
+  // payoutForTier handles legacy rebateType=percent_of_spend rows that
+  // store the value as a fraction — see helper docs above.
   const tiers: RebateTier[] = term.tiers
     .map((t) => ({
       tierNumber: t.tierNumber,
@@ -124,7 +176,7 @@ export async function recomputeThresholdAccrualForTerm(input: {
         t.spendMax === null || t.spendMax === undefined
           ? null
           : Number(t.spendMax),
-      rebateValue: Number(t.rebateValue ?? 0),
+      rebateValue: payoutForTier(t, contractId, LEGACY_PAYOUT_WARNED),
     }))
     .sort((a, b) => a.thresholdMin - b.thresholdMin)
   if (tiers.length === 0) return { inserted: 0, sumEarned: 0 }

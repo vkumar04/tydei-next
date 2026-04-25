@@ -45,6 +45,35 @@ export interface ThresholdOpportunity {
   annualUplift: number | null
 }
 
+/**
+ * Charles 2026-04-25 audit re-pass F2 — legacy compatibility.
+ * Mirrors `payoutForTier` in recompute-threshold-accrual.ts. The
+ * threshold engine pays a flat dollar amount per period; older
+ * contracts may store rebateValue as a fraction with rebateType =
+ * percent_of_spend. Until those rows are backfilled to fixed_rebate,
+ * scale the fraction by 100 to recover the intended dollar amount.
+ */
+function payoutForTier(
+  tier: { rebateValue: unknown; rebateType?: string | null },
+  contractId: string,
+  warned: Set<string>,
+): number {
+  const raw = Number(tier.rebateValue ?? 0)
+  if (tier.rebateType === "fixed_rebate") return raw
+  if (tier.rebateType === "percent_of_spend") {
+    if (!warned.has(contractId)) {
+      console.warn(
+        `[getThresholdOpportunities] contract ${contractId}: tier.rebateType=percent_of_spend on a threshold term — interpreting tier.rebateValue (${raw}) as percent-points × 100 for legacy compatibility. Backfill to fixed_rebate when possible.`,
+      )
+      warned.add(contractId)
+    }
+    return raw * 100
+  }
+  return raw
+}
+
+const LEGACY_PAYOUT_WARNED = new Set<string>()
+
 function widthMonths(eval_: string | null): number {
   switch (eval_) {
     case "monthly":
@@ -95,6 +124,7 @@ export async function getThresholdOpportunities(): Promise<ThresholdOpportunity[
                 tierNumber: true,
                 spendMin: true,
                 rebateValue: true,
+                rebateType: true,
               },
             },
           },
@@ -121,7 +151,7 @@ export async function getThresholdOpportunities(): Promise<ThresholdOpportunity[
           .map((tier) => ({
             tierNumber: tier.tierNumber,
             threshold: Number(tier.spendMin ?? 0),
-            rebate: Number(tier.rebateValue ?? 0),
+            rebate: payoutForTier(tier, c.id, LEGACY_PAYOUT_WARNED),
           }))
           .sort((a, b) => a.threshold - b.threshold)
         if (sortedTiers.length === 0) continue

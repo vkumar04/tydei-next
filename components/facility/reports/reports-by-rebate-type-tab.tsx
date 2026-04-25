@@ -80,7 +80,7 @@ export function ReportsByRebateTypeTab() {
                       <span className="font-medium capitalize">
                         {row.termType.replace(/_/g, " ")}
                       </span>
-                      {row.termType === "compliance_or_market_share" && (
+                      {row.inferred && row.termType !== "manual" && (
                         <Badge variant="outline" className="ml-2 text-[10px]">
                           inferred from notes prefix
                         </Badge>

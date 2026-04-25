@@ -244,15 +244,28 @@ function createEmptyTier(
   tierNumber: number,
   termType?: string,
 ): TierInput {
-  // Charles 2026-04-25 audit C6 + re-pass: flat-payout term types
-  // (fixed_fee, compliance_rebate, market_share) all default to
-  // `fixed_rebate` so a user typing "1000" stores as $1,000 not 100%
-  // of spend (the engine treats fraction values as percent at the
-  // boundary). All other term types default to percent_of_spend.
+  // Charles 2026-04-25 audit C6 + re-pass F6: every term type whose
+  // engine adapter reads `tier.rebateValue` as flat dollars-per-event
+  // (or per period) defaults to `fixed_rebate` so a user typing
+  // "1000" stores as $1,000 not 100% of spend. The engine treats
+  // fraction values as percent at the boundary, so a percent_of_spend
+  // default would silently scale × 100 in the engine and pay $0.X
+  // instead of $X. Verified against:
+  //   - recompute-volume-accrual.ts (occurrences × rebateValue)
+  //   - recompute-po-accrual.ts (count × rebateValue)
+  //   - recompute-invoice-accrual.ts (count × rebateValue)
+  //   - recompute-threshold-accrual.ts (per-period payoutForTier)
+  // All other term types (spend_rebate, growth_rebate, …) keep the
+  // percent_of_spend default.
   const flatPayoutTermTypes = new Set([
     "fixed_fee",
     "compliance_rebate",
     "market_share",
+    "payment_rebate",
+    "rebate_per_use",
+    "capitated_pricing_rebate",
+    "po_rebate",
+    "volume_rebate",
   ])
   const rebateType: TierInput["rebateType"] =
     termType && flatPayoutTermTypes.has(termType)

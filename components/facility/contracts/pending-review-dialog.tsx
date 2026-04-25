@@ -46,6 +46,39 @@ interface PendingTermLike {
   }>
 }
 
+/**
+ * Charles 2026-04-25 audit re-pass F4 — tier-threshold formatter.
+ *
+ * Threshold columns (`spendMin` / `spendMax`) are interpreted by the
+ * engine differently per termType. Without a unit cue, a reviewer
+ * looking at "95+ → $1,000" can't tell if 95 is dollars, percent,
+ * occurrences, etc. Returns a unit-aware formatted threshold.
+ */
+function formatTierThreshold(
+  termType: string | undefined,
+  spendMin: number | string | null | undefined,
+  spendMax: number | string | null | undefined,
+): string {
+  const min = Number(spendMin ?? 0).toLocaleString()
+  const max = spendMax != null ? Number(spendMax).toLocaleString() : null
+  switch (termType) {
+    case "compliance_rebate":
+    case "market_share":
+      return max != null ? `${min}%–${max}%` : `${min}%+`
+    case "volume_rebate":
+    case "rebate_per_use":
+    case "capitated_pricing_rebate":
+      return max != null ? `${min}–${max} ev` : `${min}+ ev`
+    case "po_rebate":
+      return max != null ? `${min}–${max} POs` : `${min}+ POs`
+    case "payment_rebate":
+      return max != null ? `${min}–${max} invoices` : `${min}+ invoices`
+    default:
+      // Spend-shaped threshold (spend_rebate, growth_rebate, fixed_fee, …).
+      return max != null ? `$${min}–$${max}` : `$${min}+`
+  }
+}
+
 function PendingTermsSection({ terms }: { terms: unknown }) {
   if (!Array.isArray(terms) || terms.length === 0) return null
   const rows = terms as PendingTermLike[]
@@ -89,10 +122,7 @@ function PendingTermsSection({ terms }: { terms: unknown }) {
                       {tier.tierName ? ` · ${tier.tierName}` : ""}
                     </span>
                     <span>
-                      {Number(tier.spendMin ?? 0).toLocaleString()}
-                      {tier.spendMax != null
-                        ? `–${Number(tier.spendMax).toLocaleString()}`
-                        : "+"}
+                      {formatTierThreshold(t.termType, tier.spendMin, tier.spendMax)}
                       {" → "}
                       <span className="font-medium">
                         {tier.rebateType === "fixed_rebate" ||
