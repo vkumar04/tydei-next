@@ -23,6 +23,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 
 export interface CategoryMarketShareRow {
@@ -64,8 +65,9 @@ export async function getCategoryMarketShareForVendor(input: {
     // / hand-edits) by treating it as an empty map.
     const commitmentByCategory = new Map<string, number>()
     if (input.contractId) {
-      const c = await prisma.contract.findUnique({
-        where: { id: input.contractId },
+      // Charles audit round-12 CONCERN: scope by ownership.
+      const c = await prisma.contract.findFirst({
+        where: contractOwnershipWhere(input.contractId, facility.id),
         select: { marketShareCommitmentByCategory: true },
       })
       const raw = c?.marketShareCommitmentByCategory

@@ -1,7 +1,8 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireAuth } from "@/lib/actions/auth"
+import { requireAuth, requireFacility } from "@/lib/actions/auth"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { addDays } from "date-fns"
 import { serialize } from "@/lib/serialize"
 import {
@@ -115,10 +116,11 @@ export async function getExpiringContracts(input: {
 // ─── Get Renewal Summary ─────────────────────────────────────────
 
 export async function getRenewalSummary(contractId: string): Promise<RenewalSummary> {
-  await requireAuth()
+  // Charles audit round-12 BLOCKER: gate by facility ownership.
+  const { facility } = await requireFacility()
 
-  const contract = await prisma.contract.findUniqueOrThrow({
-    where: { id: contractId },
+  const contract = await prisma.contract.findFirstOrThrow({
+    where: contractOwnershipWhere(contractId, facility.id),
     include: {
       vendor: { select: { name: true } },
       periods: {

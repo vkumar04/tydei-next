@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -230,10 +231,11 @@ export async function getFinancialProjections(input: {
   projectionMonths: number
   growthRate?: number
 }): Promise<FinancialProjection[]> {
-  await requireFacility()
+  // Charles audit round-12 BLOCKER: gate by ownership.
+  const { facility } = await requireFacility()
 
-  const contract = await prisma.contract.findUniqueOrThrow({
-    where: { id: input.contractId },
+  const contract = await prisma.contract.findFirstOrThrow({
+    where: contractOwnershipWhere(input.contractId, facility.id),
     select: { annualValue: true },
   })
 
