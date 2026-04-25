@@ -42,14 +42,21 @@ periodData, options)` that switched on `config.type`. Removed in commit
 6 of 8 branches had no Prisma → engine bridge. The audit closed the
 work by deleting the dispatcher, not by completing the bridges.
 
-## Single writer of `Rebate` rows
+## Writers of `Rebate` rows
 
-| Writer | File:line | RebateType coverage |
+| Writer | File:line | Term-type coverage |
 |---|---|---|
-| `recomputeAccrualForContract` | `lib/actions/contracts/recompute-accrual.ts:72` | `percent_of_spend`, `fixed_rebate` only. Per-unit / per-procedure → 0. The 6 typed-engine `RebateType` values aren't branched on. |
+| `recomputeAccrualForContract` | `lib/actions/contracts/recompute-accrual.ts:72` | Spend writer — `spend_rebate`, `growth_rebate` (via `growthBased` opt-in), `fixed_fee` (via `fixed_rebate` tier), and any future `percent_of_spend` / `fixed_rebate` path. Dispatches to volume + PO writers below. |
+| `recomputeVolumeAccrualForTerm` | `lib/actions/contracts/recompute-volume-accrual.ts` | `volume_rebate`, `rebate_per_use`. Sources from `Case.procedures` filtered by `term.cptCodes`; dedup by case+CPT. |
+| `recomputePoAccrualForTerm` | `lib/actions/contracts/recompute-po-accrual.ts` | `po_rebate`. Sources from `PurchaseOrder` rows at `(vendorId, facilityId)` filtered by status. |
 | `createContractTransaction` (collected path) | `lib/actions/contract-periods.ts:225` | Type-agnostic — user supplies the dollar value |
-| Synthetic period builder (in-memory) | `lib/actions/contract-periods.ts:130-180` | Re-applies `bucket.spend × Number(applicableTier.rebateValue)` inline; relies on the fraction-storage convention being intact |
-| Seed scripts | `prisma/seeds/rebates.ts`, `cog-for-contracts.ts:340` | Static fixtures |
+| Synthetic period builder (in-memory) | `lib/actions/contract-periods.ts:130-200` | Now derives effective rate via canonical helper; no longer touches `rebateValue` raw (drift hazard #3 closed 2026-04-25). |
+| Seed scripts | `prisma/seeds/rebates.ts`, `cog-for-contracts.ts:340`, `contract-pricing.ts` | Static fixtures + ContractPricing populated for active contracts so demo on-contract %, optimizer projections, accruals all show real numbers. |
+
+Each persisting writer uses its own notes prefix so re-runs don't
+clobber each other and user-collected rows survive: `[auto-accrual]`
+(spend), `[auto-volume-accrual] term:<id>` (volume + rebate-per-use),
+`[auto-po-accrual] term:<id>` (PO).
 
 ## Canonical reducers (CLAUDE.md table)
 
@@ -85,11 +92,35 @@ that day's fix wave):
 **Recommended fix:** branded type at the Prisma reader boundary so the
 TypeScript compiler enforces `toDisplayRebateValue` calls.
 
-### 2. Dispatcher gap (6 RebateType values silently degrade)
+### 2. Dispatcher gap (was: 12 of 15 types silently degraded)
 
-Mitigated 2026-04-25 by disabling the unsupported types in the form
-dropdown. Real fix: rebuild the dispatcher with the missing
-`buildConfigFromPrismaTerm` bridges for each type.
+**Status (2026-04-25):** PARTIALLY RESOLVED. After the dispatcher
+rebuild this session, **9 of 15** term types are functional:
+
+| Status | Term type | Engine path |
+|---|---|---|
+| ✅ | `spend_rebate` | `recompute-accrual.ts` (canonical spend writer) |
+| ✅ | `growth_rebate` | `recompute-accrual.ts` + `buildEvaluationPeriodAccruals` growth-baseline branch |
+| ✅ | `volume_rebate` | `recompute-volume-accrual.ts` (CPT-event counting from Cases) |
+| ✅ | `rebate_per_use` | shares `recompute-volume-accrual.ts` (same Cases data, single-tier shape) |
+| ✅ | `po_rebate` | `recompute-po-accrual.ts` (PO counts from PurchaseOrder) |
+| ✅ | `fixed_fee` | spend writer's `fixed_rebate` tier path (configure single tier) |
+| ✅ | `locked_pricing` | no engine — pricing-only catalog handled by `ContractPricing` |
+| ✅ | `carve_out` | `carve-out.ts` (pre-existing) |
+| ✅ | `tie_in_capital` | `tie-in.ts` (pre-existing) |
+| 🔒 | `compliance_rebate` | needs compliance-threshold field on term (schema gap) |
+| 🔒 | `payment_rebate` | needs payment-timing data source |
+| 🔒 | `price_reduction` | not really a rebate — modifies future prices via ContractPricing |
+| 🔒 | `market_share` | needs market-share data per category per period |
+| 🔒 | `market_share_price_reduction` | same |
+| 🔒 | `capitated_price_reduction` | needs procedure-priced semantics |
+| 🔒 | `capitated_pricing_rebate` | same |
+
+The 6 remaining 🔒 types stay disabled in the dropdown with the
+"Engine pending" badge until product semantics are defined. Each
+follows the established bridge pattern (separate `recompute-*-accrual.ts`
+file with its own `[auto-*-accrual]` notes prefix, dispatcher branch
+in `recompute-accrual.ts`) so wiring a new one is now a 2-3 hour task.
 
 ### 3. Synthetic ContractPeriod builder is a parallel reducer
 
