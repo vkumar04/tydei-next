@@ -35,14 +35,18 @@ function baseContract(
             tierName: null,
             spendMin: 0,
             spendMax: 50_000,
-            rebateValue: 2,
+            // Charles 2026-04-25: production stores rebateValue as a
+            // fraction (0.02 = 2%). The compare-cards builder now
+            // routes through `toDisplayRebateValue` to render percent;
+            // fixtures must use fractions to match real Prisma data.
+            rebateValue: 0.02,
           },
           {
             tierNumber: 2,
             tierName: "Gold",
             spendMin: 50_000,
             spendMax: null,
-            rebateValue: 4,
+            rebateValue: 0.04,
           },
         ],
       },
@@ -139,8 +143,9 @@ describe("buildRebateTermsCard", () => {
   it("renders percent rate labels for PERCENT term types", () => {
     const card = buildRebateTermsCard(baseContract())
     const rates = card.terms[0].tiers.map((t) => t.rateLabel)
-    expect(rates[0]).toContain("2%")
-    expect(rates[1]).toContain("4%")
+    // toDisplayRebateValue formats with one decimal (e.g. "2.0%").
+    expect(rates[0]).toContain("2.0%")
+    expect(rates[1]).toContain("4.0%")
     expect(rates[1]).toContain("$50,000")
   })
 })

@@ -13,6 +13,8 @@
  * are mixed-type display rows.
  */
 
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
+
 // ---------------------------------------------------------------------------
 // Input shape
 // ---------------------------------------------------------------------------
@@ -147,8 +149,12 @@ function tierRateLabel(
   termType: string,
 ): string {
   const isPercent = termType.toLowerCase().includes("percent")
+  // Charles 2026-04-25: route through the canonical scaler so tiers
+  // stored as fractions (0.03) render as percent labels (3%) rather
+  // than fraction labels (0.03%). See
+  // `docs/architecture/recurring-bug-patterns.md` family 1.
   const rate = isPercent
-    ? `${tier.rebateValue}%`
+    ? `${toDisplayRebateValue("percent_of_spend", tier.rebateValue).toFixed(1)}%`
     : formatCurrency(tier.rebateValue)
   const threshold = `${formatCurrency(tier.spendMin)}`
   return `${rate} on spend ≥ ${threshold}`

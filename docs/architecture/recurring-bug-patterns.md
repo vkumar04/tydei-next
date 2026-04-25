@@ -177,6 +177,27 @@ sibling query keys.
 `queryKey` listed in `lib/query-keys.ts` for that entity (or call
 `queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all })`).
 
+## Defensive infrastructure landed (2026-04-25)
+
+These exist now and should fail CI on regression:
+
+- **`lib/contracts/__tests__/rebate-value-scaling-drift.test.ts`** —
+  scans every `.ts`/`.tsx` outside the allowlist for unsafe display
+  patterns: `${*.rebateValue}%` and `*.rebateValue).toFixed(N)}%`.
+  Catches the recurring family-1 bug before it ships. Allowlist in
+  the test file lists the boundary helpers + engine internals that
+  legitimately handle raw fractions; everywhere else must route
+  through `toDisplayRebateValue`.
+
+- **`scripts/qa-sanity.ts no-orphan-cog-rows`** — fails when >5% of
+  facility's COG rows are missing both `vendorItemNo` AND
+  `fileImportId`. Catches the verify-against-oracle / e2e-synthetic
+  drift class that produced the 21k orphan rows on 2026-04-24.
+
+- **`lib/actions/__tests__/contracts-list-vs-detail-parity.test.ts`**
+  — locks parity between contract-list and detail surfaces using
+  the canonical helpers (W2.A.3).
+
 ## Recurring-bug review checklist
 
 When you fix a bug, ask:

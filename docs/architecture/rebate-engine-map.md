@@ -93,10 +93,15 @@ dropdown. Real fix: rebuild the dispatcher with the missing
 
 ### 3. Synthetic ContractPeriod builder is a parallel reducer
 
-`lib/actions/contract-periods.ts:130-180` — re-implements tier
-lookup + rate application instead of calling
-`computeRebateFromPrismaTiers`. Caused W1.U-B drift; not yet
-parity-tested.
+**Status (2026-04-25):** PARTIALLY MITIGATED. The synthetic builder
+at `lib/actions/contract-periods.ts:130-200` no longer reads
+`Number(applicableTier.rebateValue)` raw — it now derives an
+`effectiveRate` from the canonical helper's
+`facade.rebateEarned / tierSpend` and re-applies to the month's
+own spend. So the unit-storage convention is owned exclusively by
+`computeRebateFromPrismaTiers`. Still not parity-tested at the
+function level (the function isn't exported); future work could
+extract the inner math into a pure helper for direct testing.
 
 ### 4. AI / alert surfaces emit raw fractions
 
@@ -105,11 +110,27 @@ needs auditing on the alert + AI tool paths.
 
 ### 5. No type-system enforcement of the canonical-helper rule
 
-CLAUDE.md lists 7 invariants; enforcement is by reviewer plus a
-single parity test. New surfaces (e.g. `vendor-contract-overview.tsx`)
-ship with re-implemented reducers because nothing flags ad-hoc
-patterns.
+**Status (2026-04-25):** PARTIALLY MITIGATED. Added
+`lib/contracts/__tests__/rebate-value-scaling-drift.test.ts` — a
+Vitest scanner that fails CI when an unallowlisted file matches the
+high-signal display patterns `${*.rebateValue}%` or
+`*.rebateValue).toFixed(N)}%`. The scanner deliberately does NOT
+flag every `Number(*.rebateValue)` (too noisy — many helpers
+legitimately accept raw fraction). Future hardening: introduce a
+branded `PercentFraction` type at the Prisma reader boundary so the
+TypeScript compiler enforces `toDisplayRebateValue` calls before
+arithmetic.
 
-**Recommended fix:** an ESLint rule banning ad-hoc reducers on
-`Rebate[]` outside the helper files. Or a no-explicit-conversion
-check on `Number(tier.rebateValue)` outside the boundary helpers.
+### 6. Growth-baseline rebates silently degrade to spend-tier math
+
+**Status (2026-04-25):** UNDOCUMENTED → DOCUMENTED. Charles asked
+about "growth language" 2026-04-25; investigation showed the
+`baselineType === "growth_based"` branch on `ContractTerm` is
+populated correctly but `recomputeAccrualForContract` doesn't
+honor `term.spendBaseline` — it evaluates tiers against full
+cumulative spend regardless of baseline. Mitigated for now by
+keeping `growth_rebate` disabled in the term-type dropdown
+("Engine pending" badge). Implementing growth math right requires
+a product decision on per-evaluation-period baseline distribution
+(annual baseline vs proportional monthly) — captured for the
+per-type-engine roadmap.

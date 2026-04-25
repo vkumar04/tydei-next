@@ -149,9 +149,15 @@ export async function getContractPeriods(contractId: string) {
     // `rebatePercent` is 0 for fixed/per-unit tiers.
     const facade = computeRebateFromPrismaTiers(tierSpend, tiers)
     const tierAchieved = facade.tierAchieved
-    // For percent-of-spend the facade's `rebateEarned` is computed from
-    // `tierSpend`. When the contract evaluates cumulatively but we want
-    // this *month's* rebate, re-apply the rate to the month's own spend.
+    // Charles 2026-04-25 (drift fix): the prior implementation read
+    // `Number(applicableTier.rebateValue)` raw and multiplied by
+    // `bucket.spend`, which only worked because rebateValue is stored
+    // as a fraction. Any future change to that storage convention
+    // (or the addition of a non-fraction rebateType to the same
+    // branch) would silently break this path. Use the facade's
+    // canonical effective rate (`facade.rebateEarned / tierSpend`)
+    // and re-apply to the month's own spend, so the unit convention
+    // is owned exclusively by `computeRebateFromPrismaTiers`.
     const applicableTier = [...tiers]
       .sort((a, b) => Number(a.spendMin) - Number(b.spendMin))
       .reduce<(typeof tiers)[number] | null>(
@@ -160,8 +166,9 @@ export async function getContractPeriods(contractId: string) {
       )
     let rebateEarned = 0
     if (applicableTier?.rebateType === "percent_of_spend") {
-      // rebateValue is a fraction (0.03 = 3%); apply to this month's spend.
-      rebateEarned = bucket.spend * Number(applicableTier.rebateValue)
+      const effectiveRate =
+        tierSpend > 0 ? facade.rebateEarned / tierSpend : 0
+      rebateEarned = bucket.spend * effectiveRate
     } else {
       // Fixed / per-unit / per-procedure — trust the facade (which
       // short-circuits unit-based types to 0 since we don't have unit
