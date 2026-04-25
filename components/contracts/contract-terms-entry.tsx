@@ -112,10 +112,30 @@ const termTypes = [
   // proRatedBaseline)` so only spend ABOVE the baseline counts.
   { value: "growth_rebate", label: "Growth Rebate", icon: TrendingUp, description: "Rebate based on spend growth over baseline. Set Baseline Type=Growth Based + Annual Spend Baseline below.", disabled: false },
   { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Rebate for meeting compliance requirements", disabled: true },
-  { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate amount", disabled: true },
-  { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price locked for contract duration", disabled: true },
-  { value: "rebate_per_use", label: "Rebate Per Use", icon: Coins, description: "Per-unit rebate tracked by usage count", disabled: true },
-  { value: "po_rebate", label: "PO Rebate", icon: DollarSign, description: "Per-purchase-order rebate triggered by PO totals", disabled: true },
+  // Charles 2026-04-25: fixed_fee works through the existing spend
+  // writer when the user adds a single tier with rebateType=fixed_rebate
+  // (the spend writer reads `t.rebateType === "fixed_rebate"` and emits
+  // the flat dollar amount per evaluation period — see
+  // recompute-accrual.ts ~line 175). One tier with spendMin=0 +
+  // fixed_rebate $X gives the user a flat $X each period.
+  { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate per period. Add one tier with rebate type Fixed Rebate and the dollar amount.", disabled: false },
+  // Charles 2026-04-25: locked_pricing has no rebate computation —
+  // it's a pricing catalog (ContractPricing rows lock prices for the
+  // contract duration). The contract's pricing-file import + the COG
+  // matcher already enforce locked prices via `escalatorPercent: null`.
+  // No engine wiring needed; just enable so users can categorize
+  // their pricing-only contracts correctly.
+  { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price catalog locked for the contract duration. Pricing rows are managed via the Pricing tab; no separate rebate accrual.", disabled: false },
+  // Charles 2026-04-25: rebate_per_use shares the volume bridge —
+  // counts CPT occurrences and pays a flat $/occurrence (no tier
+  // ladder needed; configure with one tier at threshold 0).
+  { value: "rebate_per_use", label: "Rebate Per Use", icon: Coins, description: "Per-procedure rebate. Set CPT codes and add one tier at threshold 0 with the dollars per occurrence.", disabled: false },
+  // Charles 2026-04-25: po_rebate counts qualifying PurchaseOrder
+  // rows (status submitted | approved | received) at the contract's
+  // vendor + facility within the term's evaluation period. Tier
+  // thresholds are PO COUNTS, rebateValue is dollars-per-PO at the
+  // achieved tier.
+  { value: "po_rebate", label: "PO Rebate", icon: DollarSign, description: "Per-purchase-order rebate. Tier thresholds are PO counts; rebate values are dollars per PO.", disabled: false },
   { value: "carve_out", label: "Carve Out", icon: Shield, description: "Specific items excluded from the broader contract terms", disabled: true },
   { value: "payment_rebate", label: "Payment Rebate", icon: Coins, description: "Rebate triggered by payment timing or method", disabled: true },
 ] as const

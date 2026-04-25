@@ -514,9 +514,14 @@ export async function recomputeAccrualForContract(
   // spend rows from persisting.
   let volumeInserted = 0
   let volumeEarned = 0
+  // Charles 2026-04-25: rebate_per_use is a volume_rebate variant
+  // ("$X per procedure occurrence, no tier ladder"). Same engine path,
+  // same data source (Cases.procedures filtered by CPT). Configure
+  // with a single tier at threshold 0 + the per-occurrence dollar
+  // amount in rebateValue.
   const volumeTerms = contract.terms.filter(
     (t) =>
-      t.termType === "volume_rebate" &&
+      (t.termType === "volume_rebate" || t.termType === "rebate_per_use") &&
       Array.isArray(t.cptCodes) &&
       t.cptCodes.length > 0 &&
       t.tiers.length > 0,
@@ -553,8 +558,51 @@ export async function recomputeAccrualForContract(
     }
   }
 
-  if (toInsert.length === 0 && volumeInserted === 0) {
-    return { deleted: deleteResult.count, inserted: 0, sumEarned: volumeEarned }
+  // Charles 2026-04-25: po_rebate dispatcher. Per-PO rebate counted
+  // against PurchaseOrder rows tied to this contract's vendor.
+  let poInserted = 0
+  let poEarned = 0
+  const poTerms = contract.terms.filter(
+    (t) => t.termType === "po_rebate" && t.tiers.length > 0,
+  )
+  if (poTerms.length > 0) {
+    const { recomputePoAccrualForTerm } = await import(
+      "@/lib/actions/contracts/recompute-po-accrual"
+    )
+    for (const term of poTerms) {
+      try {
+        const r = await recomputePoAccrualForTerm({
+          contractId,
+          vendorId: contract.vendorId,
+          facilityId: facility.id,
+          contractEffectiveDate: contract.effectiveDate,
+          contractExpirationDate: contract.expirationDate,
+          term: {
+            id: term.id,
+            rebateMethod: term.rebateMethod ?? null,
+            evaluationPeriod: term.evaluationPeriod ?? null,
+            effectiveStart: term.effectiveStart ?? null,
+            effectiveEnd: term.effectiveEnd ?? null,
+            tiers: term.tiers,
+          },
+        })
+        poInserted += r.inserted
+        poEarned += r.sumEarned
+      } catch (err) {
+        console.warn(
+          `[recomputeAccrualForContract] po-accrual term ${term.id} failed:`,
+          err,
+        )
+      }
+    }
+  }
+
+  if (toInsert.length === 0 && volumeInserted === 0 && poInserted === 0) {
+    return {
+      deleted: deleteResult.count,
+      inserted: 0,
+      sumEarned: volumeEarned + poEarned,
+    }
   }
 
   const createResult =
@@ -572,11 +620,12 @@ export async function recomputeAccrualForContract(
     },
     _sum: { rebateEarned: true },
   })
-  const sumEarned = Number(sumAgg._sum.rebateEarned ?? 0) + volumeEarned
+  const sumEarned =
+    Number(sumAgg._sum.rebateEarned ?? 0) + volumeEarned + poEarned
 
   return {
     deleted: deleteResult.count,
-    inserted: createResult.count + volumeInserted,
+    inserted: createResult.count + volumeInserted + poInserted,
     sumEarned,
   }
 }
