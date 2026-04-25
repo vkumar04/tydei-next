@@ -1,6 +1,5 @@
 "use client"
 
-import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import {
   Card,
@@ -11,16 +10,17 @@ import {
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 
+// Charles 2026-04-25 (audit C1): gpoAffiliation input removed from this
+// card and promoted to VendorPhase2FieldsCard so it's reachable for all
+// contract types — not just `grouped`. This card now configures only
+// multi-facility participation, which is the only group-specific setting
+// left.
 export interface GroupContractSettingsCardProps {
-  gpoAffiliation: string
-  onGpoAffiliationChange: (value: string) => void
   isMultiFacility: boolean
   onIsMultiFacilityChange: (checked: boolean) => void
 }
 
 export function GroupContractSettingsCard({
-  gpoAffiliation,
-  onGpoAffiliationChange,
   isMultiFacility,
   onIsMultiFacilityChange,
 }: GroupContractSettingsCardProps) {
@@ -29,19 +29,11 @@ export function GroupContractSettingsCard({
       <CardHeader>
         <CardTitle className="text-sm">Group Contract Settings</CardTitle>
         <CardDescription>
-          Configure GPO affiliation and multi-facility participation
+          Configure multi-facility participation. GPO affiliation is set in
+          the Contract Details section below.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="gpoAffiliation">GPO Affiliation</Label>
-          <Input
-            id="gpoAffiliation"
-            value={gpoAffiliation}
-            onChange={(e) => onGpoAffiliationChange(e.target.value)}
-            placeholder="e.g., Vizient, Premier, HealthTrust"
-          />
-        </div>
         <div className="flex items-center gap-3">
           <Switch
             checked={isMultiFacility}

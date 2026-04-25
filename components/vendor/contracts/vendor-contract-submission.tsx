@@ -427,18 +427,71 @@ export function VendorContractSubmission({
           ).includes(aiTermType as TermFormValues["termType"])
             ? (aiTermType as TermFormValues["termType"])
             : "spend_rebate"
-          // Growth-baseline contracts almost always use growth_based
-          // baseline; everything else defaults to spend_based.
+
+          // Charles 2026-04-25 (audit C2): honor what the AI returned
+          // for the term shape; only fall back when the field is
+          // missing. Fallbacks are termType-aware — e.g. a market_share
+          // or compliance_rebate has no spend baseline, growth_rebate
+          // is growth_based, volume_rebate is volume_based — so even
+          // when the AI omits the field we don't actively mistype the
+          // term as a spend_based / cumulative rebate.
+          const defaultBaselineForTermType = (
+            tt: TermFormValues["termType"],
+          ): TermFormValues["baselineType"] => {
+            switch (tt) {
+              case "growth_rebate":
+                return "growth_based"
+              case "volume_rebate":
+              case "rebate_per_use":
+              case "po_rebate":
+              case "payment_rebate":
+              case "capitated_pricing_rebate":
+                return "volume_based"
+              // market_share / compliance / fixed_fee / locked_pricing /
+              // price_reduction / market_share_price_reduction /
+              // capitated_price_reduction / carve_out have no real
+              // spend-baseline semantics — keep spend_based as the
+              // schema-required default but the engines ignore it.
+              default:
+                return "spend_based"
+            }
+          }
+          const defaultRebateMethodForTermType = (
+            tt: TermFormValues["termType"],
+          ): TermFormValues["rebateMethod"] => {
+            // Tier-engine `marginal` only makes sense when tiers are
+            // ordered $/unit thresholds; flat-trigger types are always
+            // cumulative-equivalent.
+            switch (tt) {
+              case "market_share":
+              case "compliance_rebate":
+              case "fixed_fee":
+              case "locked_pricing":
+              case "price_reduction":
+              case "market_share_price_reduction":
+              case "capitated_price_reduction":
+                return "cumulative"
+              default:
+                return "cumulative"
+            }
+          }
+
           const baselineType: TermFormValues["baselineType"] =
-            termType === "growth_rebate" ? "growth_based" : "spend_based"
+            t.baselineType ?? defaultBaselineForTermType(termType)
+          const rebateMethod: TermFormValues["rebateMethod"] =
+            t.rebateMethod ?? defaultRebateMethodForTermType(termType)
+          const evaluationPeriod: string = t.evaluationPeriod ?? "annual"
+          const paymentTiming: string = t.paymentTiming ?? "quarterly"
+          const appliesTo: string = t.appliesTo ?? "all_products"
+
           return {
             termName: t.termName,
             termType,
             baselineType,
-            evaluationPeriod: "annual",
-            paymentTiming: "quarterly",
-            appliesTo: "all_products",
-            rebateMethod: "cumulative" as const,
+            evaluationPeriod,
+            paymentTiming,
+            appliesTo,
+            rebateMethod,
             effectiveStart: data.effectiveDate ?? "",
             effectiveEnd: data.expirationDate ?? "",
             tiers: t.tiers.map((tier) => ({
@@ -597,8 +650,6 @@ export function VendorContractSubmission({
 
             {contractType === "grouped" && (
               <GroupContractSettingsCard
-                gpoAffiliation={gpoAffiliation}
-                onGpoAffiliationChange={setGpoAffiliation}
                 isMultiFacility={isMultiFacility}
                 onIsMultiFacilityChange={handleMultiFacilityChange}
               />
@@ -637,6 +688,8 @@ export function VendorContractSubmission({
               onAutoRenewalChange={setAutoRenewal}
               terminationNoticeDays={terminationNoticeDays}
               onTerminationNoticeDaysChange={setTerminationNoticeDays}
+              gpoAffiliation={gpoAffiliation}
+              onGpoAffiliationChange={setGpoAffiliation}
               showCapital={
                 contractType === "capital" || contractType === "tie_in"
               }

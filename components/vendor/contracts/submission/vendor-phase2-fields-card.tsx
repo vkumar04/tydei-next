@@ -31,6 +31,15 @@ export function VendorPhase2FieldsCard(props: {
   onAutoRenewalChange: (v: boolean) => void
   terminationNoticeDays: string
   onTerminationNoticeDaysChange: (v: string) => void
+  // Charles 2026-04-25 (audit C1): gpoAffiliation previously only had
+  // a UI surface inside GroupContractSettingsCard, which is gated to
+  // contractType === "grouped". Vendor submissions for usage / capital /
+  // tie-in / pricing-only contracts had state + payload wiring but no
+  // input — the value was always "". Promoted here so every contract
+  // type can record GPO affiliation; the grouped-card duplicate is
+  // removed so there's only one input writing the same state.
+  gpoAffiliation: string
+  onGpoAffiliationChange: (v: string) => void
   showCapital: boolean
   capitalCost: string
   onCapitalCostChange: (v: string) => void
@@ -79,6 +88,15 @@ export function VendorPhase2FieldsCard(props: {
                 className="pl-7"
               />
             </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="vc-gpo-affiliation">GPO Affiliation</Label>
+            <Input
+              id="vc-gpo-affiliation"
+              value={props.gpoAffiliation}
+              onChange={(e) => props.onGpoAffiliationChange(e.target.value)}
+              placeholder="e.g. Vizient, Premier, HealthTrust"
+            />
           </div>
           <div className="space-y-1">
             <Label htmlFor="vc-termination-notice">Termination Notice (days)</Label>
