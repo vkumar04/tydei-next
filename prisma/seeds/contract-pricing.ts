@@ -92,6 +92,36 @@ const VENDOR_PRODUCTS: Record<
     { description: "CUSA Clarity Ultrasonic Tips", vendorItemNo: "ILS-CCT-001", unitCost: 680, category: "Neurosurgery" },
     { description: "Mayfield Skull Clamp Pins", vendorItemNo: "ILS-MSC-001", unitCost: 95, category: "Neurosurgery" },
   ],
+  // Charles 2026-04-25 (audit follow-up): the audit found ~40% of demo
+  // vendors had no entry here, leaving their active contracts at 0
+  // pricingItems and reproducing the very "$0 optimizer" symptom this
+  // seed was meant to fix.
+  "Zimmer Biomet": [
+    { description: "Persona TKA Primary System", vendorItemNo: "ZB-PTK-001", unitCost: 4800, category: "Joint Replacement" },
+    { description: "Vivacit-E Poly Insert", vendorItemNo: "ZB-VEP-001", unitCost: 1100, category: "Joint Replacement" },
+    { description: "Taperloc Complete Hip Stem", vendorItemNo: "ZB-TCH-001", unitCost: 2900, category: "Joint Replacement" },
+    { description: "G7 Acetabular System", vendorItemNo: "ZB-G7A-001", unitCost: 2600, category: "Joint Replacement" },
+    { description: "Oxford Partial Knee System", vendorItemNo: "ZB-OPK-001", unitCost: 3600, category: "Joint Replacement" },
+    { description: "Comprehensive Reverse Shoulder", vendorItemNo: "ZB-CRS-001", unitCost: 5200, category: "Joint Replacement" },
+  ],
+  Conmed: [
+    { description: "System 5000 Electrosurgical Generator", vendorItemNo: "CNMD-S5K-001", unitCost: 3500, category: "General Surgery" },
+    { description: "AirSeal Trocar 12mm", vendorItemNo: "CNMD-AST-12", unitCost: 290, category: "General Surgery" },
+    { description: "Hall 50 Power Instrument", vendorItemNo: "CNMD-H50-001", unitCost: 1800, category: "Surgical Instruments" },
+    { description: "Linvatec Shaver Blade 4.5mm", vendorItemNo: "CNMD-LSB-45", unitCost: 245, category: "Arthroscopy" },
+    { description: "AirSeal iFS Intelligent Flow System", vendorItemNo: "CNMD-IFS-001", unitCost: 4200, category: "General Surgery" },
+  ],
+  NuVasive: [
+    { description: "Modulus XLIF Cage 18x55mm", vendorItemNo: "NUV-MXC-1855", unitCost: 3200, category: "Spine" },
+    { description: "Reline Pedicle Screw System 6.5x50", vendorItemNo: "NUV-RPS-6550", unitCost: 480, category: "Spine" },
+    { description: "MAGEC Rod Growth System", vendorItemNo: "NUV-MGR-001", unitCost: 12500, category: "Spine" },
+    { description: "CoRoent XL PEEK Cage 14x50", vendorItemNo: "NUV-CXP-1450", unitCost: 2800, category: "Spine" },
+  ],
+  Hologic: [
+    { description: "Genius 3D Mammography Detector", vendorItemNo: "HLG-G3D-001", unitCost: 850, category: "Imaging" },
+    { description: "Affirm Prone Biopsy System Needle", vendorItemNo: "HLG-APB-001", unitCost: 320, category: "Diagnostics" },
+    { description: "ThinPrep Pap Test Kit (box/50)", vendorItemNo: "HLG-TPP-050", unitCost: 425, category: "Diagnostics" },
+  ],
 }
 
 // Negotiated contract price = listPrice × CONTRACT_DISCOUNT_FACTOR.

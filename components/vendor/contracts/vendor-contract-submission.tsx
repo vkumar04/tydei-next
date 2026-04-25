@@ -437,6 +437,13 @@ export function VendorContractSubmission({
       notes: description || undefined,
       division: division || undefined,
       tieInContractId: tieInRef || undefined,
+      // Charles 2026-04-25 (audit follow-up): Phase-2 fields collected
+      // in form state were dropped here. Sending the three the form
+      // already gathers; the rest (capitalCost, autoRenewal, etc.)
+      // need UI inputs which are tracked separately.
+      gpoAffiliation: gpoAffiliation || undefined,
+      performancePeriod: performancePeriod || undefined,
+      rebatePayPeriod: rebatePayPeriod || undefined,
       pricingData: pricingItems.length > 0
         ? {
             fileName: pricingFile?.name ?? "pricing",

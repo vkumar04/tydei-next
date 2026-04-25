@@ -67,32 +67,71 @@ export function CogVendorConcentrationCard({
           &lt;2500 moderate · else high.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div>
-          <p className="text-xs text-muted-foreground">HHI</p>
-          <p className="mt-1 text-lg font-semibold tabular-nums">
-            {Math.round(data.hhi).toLocaleString()}
-          </p>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div>
+            <p className="text-xs text-muted-foreground">HHI</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {Math.round(data.hhi).toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Level</p>
+            <Badge variant="secondary" className={`mt-1 text-xs ${levelClass}`}>
+              {data.level}
+            </Badge>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Top vendor</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {data.topVendorSharePct.toFixed(1)}%
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Top 3 combined</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {data.top3SharePct.toFixed(1)}%
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Level</p>
-          <Badge variant="secondary" className={`mt-1 text-xs ${levelClass}`}>
-            {data.level}
-          </Badge>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Top vendor</p>
-          <p className="mt-1 text-lg font-semibold tabular-nums">
-            {data.topVendorSharePct.toFixed(1)}%
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Top 3 combined</p>
-          <p className="mt-1 text-lg font-semibold tabular-nums">
-            {data.top3SharePct.toFixed(1)}%
-          </p>
-        </div>
+        {/*
+         * Charles 2026-04-25 ("these values seem hardcoded"): the
+         * percentages above looked too clean without context. Render
+         * the underlying vendor breakdown — concrete names + dollars
+         * — so the user can audit the math against their own COG
+         * data and see this is not a static widget.
+         */}
+        {data.topVendors.length > 0 && (
+          <div className="rounded-md border bg-muted/40 p-2.5">
+            <p className="text-xs text-muted-foreground">
+              Computed from {data.recordCount.toLocaleString()} COG records ·
+              total spend {formatCompact(data.totalSpend)}
+            </p>
+            <ul className="mt-1.5 space-y-0.5 text-xs">
+              {data.topVendors.map((v) => (
+                <li
+                  key={v.vendorId}
+                  className="flex items-baseline justify-between gap-3 tabular-nums"
+                >
+                  <span className="truncate font-medium">{v.vendorName}</span>
+                  <span className="text-muted-foreground">
+                    {v.pct.toFixed(1)}% · {formatCompact(v.spend)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
+}
+
+function formatCompact(n: number): string {
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  })
 }

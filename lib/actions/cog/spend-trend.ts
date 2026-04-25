@@ -12,6 +12,13 @@ import { classifySpendTrend } from "@/lib/cog/analytics"
  */
 export async function getCogSpendTrend(_facilityId: string): Promise<{
   monthlySpend: number[]
+  /**
+   * Charles 2026-04-25 ("these values seem hardcoded"): expose the
+   * per-month buckets keyed by YYYY-MM so the card can render the
+   * underlying series and prove the aggregate isn't a static widget.
+   */
+  monthlyBreakdown: Array<{ month: string; spend: number }>
+  recordCount: number
   trend: "up" | "down" | "stable"
   changePct: number
   recentAvg: number
@@ -50,7 +57,10 @@ export async function getCogSpendTrend(_facilityId: string): Promise<{
         buckets.set(key, (buckets.get(key) ?? 0) + Number(r.extendedPrice ?? 0))
       }
     }
-    const monthlySpend = Array.from(buckets.values())
+    const monthlyBreakdown = Array.from(buckets.entries()).map(
+      ([month, spend]) => ({ month, spend }),
+    )
+    const monthlySpend = monthlyBreakdown.map((m) => m.spend)
     const { changePct, trend } = classifySpendTrend(monthlySpend)
     const recent = monthlySpend.slice(-3)
     const prior = monthlySpend.slice(-6, -3)
@@ -58,7 +68,15 @@ export async function getCogSpendTrend(_facilityId: string): Promise<{
       recent.length > 0 ? recent.reduce((s, v) => s + v, 0) / recent.length : 0
     const priorAvg =
       prior.length > 0 ? prior.reduce((s, v) => s + v, 0) / prior.length : 0
-    return serialize({ monthlySpend, trend, changePct, recentAvg, priorAvg })
+    return serialize({
+      monthlySpend,
+      monthlyBreakdown,
+      recordCount: rows.length,
+      trend,
+      changePct,
+      recentAvg,
+      priorAvg,
+    })
   } catch (err) {
     console.error("[getCogSpendTrend]", err)
     throw err

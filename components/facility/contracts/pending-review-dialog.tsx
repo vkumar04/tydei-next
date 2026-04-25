@@ -67,6 +67,53 @@ export function PendingReviewDialog({
             {contract.totalValue && (
               <div className="flex justify-between"><span className="text-muted-foreground">Value</span><span>{formatCurrency(Number(contract.totalValue))}</span></div>
             )}
+            {/*
+             * Charles 2026-04-25 (audit follow-up — vendor-mirror
+             * Phase 2): surface the field-parity columns the vendor
+             * may have submitted so the facility approver can see
+             * everything they're approving. Each row is conditional
+             * on the field being set so the dialog doesn't bloat
+             * with empty rows on legacy submissions.
+             */}
+            {contract.contractNumber && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Contract #</span><span>{contract.contractNumber}</span></div>
+            )}
+            {contract.annualValue != null && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Annual Value</span><span>{formatCurrency(Number(contract.annualValue))}</span></div>
+            )}
+            {contract.gpoAffiliation && (
+              <div className="flex justify-between"><span className="text-muted-foreground">GPO</span><span>{contract.gpoAffiliation}</span></div>
+            )}
+            {contract.performancePeriod && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Performance period</span><span className="capitalize">{contract.performancePeriod}</span></div>
+            )}
+            {contract.rebatePayPeriod && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Rebate pay period</span><span className="capitalize">{contract.rebatePayPeriod}</span></div>
+            )}
+            {contract.autoRenewal && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Auto-renewal</span><span>Yes</span></div>
+            )}
+            {contract.terminationNoticeDays != null && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Termination notice</span><span>{contract.terminationNoticeDays} days</span></div>
+            )}
+            {contract.capitalCost != null && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Capital cost</span><span>{formatCurrency(Number(contract.capitalCost))}</span></div>
+            )}
+            {contract.interestRate != null && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Interest rate</span><span>{(Number(contract.interestRate) * 100).toFixed(2)}%</span></div>
+            )}
+            {contract.termMonths != null && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Term</span><span>{contract.termMonths} months</span></div>
+            )}
+            {contract.downPayment != null && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Down payment</span><span>{formatCurrency(Number(contract.downPayment))}</span></div>
+            )}
+            {contract.paymentCadence && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Payment cadence</span><span className="capitalize">{contract.paymentCadence}</span></div>
+            )}
+            {contract.amortizationShape && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Amortization</span><span className="capitalize">{contract.amortizationShape}</span></div>
+            )}
             {contract.notes && (
               <div>
                 <p className="text-muted-foreground">Notes</p>

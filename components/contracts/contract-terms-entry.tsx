@@ -793,13 +793,21 @@ export function ContractTermsEntry({
                     </Field>
                   )}
 
-                  {/* Charles W1.X-A6 — Per-Procedure rebate tiers need CPT
-                      codes to match case-costing records. Show the CPT code
-                      list whenever any tier on this term uses
-                      per_procedure_rebate. Stored as ContractTerm.cptCodes[]. */}
-                  {(term.tiers ?? []).some(
+                  {/* Charles 2026-04-25: CPT codes are required when EITHER
+                      a tier carries per_procedure_rebate OR the term type
+                      itself is one of the CPT-driven engines (volume_rebate,
+                      capitated_pricing_rebate, rebate_per_use). The previous
+                      gate hid the input from the term-type users — they'd
+                      never see the field even though their dropdown
+                      description told them to set it, and the engine would
+                      silently match 0 cases. Show the input whenever ANY
+                      signal demands CPT codes. */}
+                  {((term.tiers ?? []).some(
                     (t) => t.rebateType === "per_procedure_rebate",
-                  ) && (
+                  ) ||
+                    term.termType === "volume_rebate" ||
+                    term.termType === "capitated_pricing_rebate" ||
+                    term.termType === "rebate_per_use") && (
                     <Field label="CPT Codes">
                       <CptCodeList
                         values={term.cptCodes ?? []}

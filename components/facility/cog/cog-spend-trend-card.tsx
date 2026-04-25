@@ -76,32 +76,53 @@ export function CogSpendTrendCard({ facilityId }: { facilityId: string }) {
           down = &lt;-10% lower; else stable.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div>
-          <p className="text-xs text-muted-foreground">Direction</p>
-          <Badge variant="secondary" className={`mt-1 text-xs ${tone}`}>
-            <Icon className="mr-1 h-3 w-3" />
-            {trend}
-          </Badge>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Direction</p>
+            <Badge variant="secondary" className={`mt-1 text-xs ${tone}`}>
+              <Icon className="mr-1 h-3 w-3" />
+              {trend}
+            </Badge>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Change</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {changePct >= 0 ? "+" : ""}
+              {changePct.toFixed(1)}%
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Recent 3-mo avg</p>
+            <p className="mt-1 text-sm font-medium tabular-nums">
+              {fmt(recentAvg)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Prior 3-mo avg</p>
+            <p className="mt-1 text-sm font-medium tabular-nums">
+              {fmt(priorAvg)}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Change</p>
-          <p className="mt-1 text-lg font-semibold tabular-nums">
-            {changePct >= 0 ? "+" : ""}
-            {changePct.toFixed(1)}%
+        {/*
+         * Charles 2026-04-25 ("these values seem hardcoded"): the
+         * 6-month series feeding the aggregate is now visible so the
+         * user can audit the trend math against their own COG.
+         */}
+        <div className="rounded-md border bg-muted/40 p-2.5">
+          <p className="text-xs text-muted-foreground">
+            Computed from {data.recordCount.toLocaleString()} COG records
+            across the last 6 months
           </p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Recent 3-mo avg</p>
-          <p className="mt-1 text-sm font-medium tabular-nums">
-            {fmt(recentAvg)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Prior 3-mo avg</p>
-          <p className="mt-1 text-sm font-medium tabular-nums">
-            {fmt(priorAvg)}
-          </p>
+          <ul className="mt-1.5 grid grid-cols-3 gap-x-3 gap-y-0.5 text-xs sm:grid-cols-6">
+            {data.monthlyBreakdown.map((m) => (
+              <li key={m.month} className="tabular-nums">
+                <span className="text-muted-foreground">{m.month}:</span>{" "}
+                <span className="font-medium">{fmt(m.spend)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </CardContent>
     </Card>

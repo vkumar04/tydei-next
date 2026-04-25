@@ -131,8 +131,46 @@ export async function recomputeAccrualForContract(
   // Rebate") under-reported because only the first term's math was ever
   // summed into the ledger. We now compute each term's own accrual
   // series and sum per-month across terms before writing Rebate rows.
-  const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
-  if (termsWithTiers.length === 0) {
+  // Charles 2026-04-25: filter out term types that have their own
+  // dispatcher OR that are pricing-only (no rebate accrual). Without
+  // this filter, a `price_reduction` term with tiers would feed the
+  // spend writer and emit phantom Rebate rows even though the type's
+  // dropdown description promises "no separate rebate accrual."
+  // Pricing-only types (no rebate accrual at all):
+  //   price_reduction, market_share_price_reduction,
+  //   capitated_price_reduction, locked_pricing.
+  // Types with their own dispatcher (handled below this block):
+  //   volume_rebate, rebate_per_use, capitated_pricing_rebate
+  //     → recomputeVolumeAccrualForTerm
+  //   po_rebate → recomputePoAccrualForTerm
+  //   payment_rebate → recomputeInvoiceAccrualForTerm
+  //   compliance_rebate, market_share → recomputeThresholdAccrualForTerm
+  // NOTE: carve_out and tie_in_capital are NOT in this skip set —
+  // they keep the spend-writer math; their dedicated engines layer
+  // additional logic on top (carve-out handles excluded items;
+  // tie-in handles capital amortization) but do not replace the
+  // spend writer's accrual emission.
+  const SPEND_WRITER_SKIP_TYPES = new Set([
+    "price_reduction",
+    "market_share_price_reduction",
+    "capitated_price_reduction",
+    "locked_pricing",
+    "volume_rebate",
+    "rebate_per_use",
+    "capitated_pricing_rebate",
+    "po_rebate",
+    "payment_rebate",
+    "compliance_rebate",
+    "market_share",
+  ])
+  const allTermsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
+  const termsWithTiers = allTermsWithTiers.filter(
+    (t) => !SPEND_WRITER_SKIP_TYPES.has(t.termType),
+  )
+  // Early-return ONLY when there are no terms in either the spend
+  // writer's domain OR any dispatcher's domain. A contract with only
+  // a volume_rebate term still needs the volume dispatcher to fire.
+  if (allTermsWithTiers.length === 0) {
     return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }
   }
 
