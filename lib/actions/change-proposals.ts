@@ -95,16 +95,33 @@ export async function getVendorChangeProposals(_vendorId?: string) {
 // ─── Create Change Proposal (Vendor) ────────────────────────────
 
 export async function createChangeProposal(input: CreateChangeProposalInput) {
-  await requireVendor()
+  // Charles audit round-5 CONCERN: scope to the authenticated vendor.
+  // Earlier code accepted vendorId/vendorName + contractId from the
+  // client and wrote them verbatim — any authenticated vendor could
+  // submit a proposal impersonating another vendor against an
+  // arbitrary contract. Now: ignore client-supplied vendor identity
+  // and verify the target contract actually belongs to the
+  // authenticated vendor before writing.
+  const { vendor } = await requireVendor()
   const data = createChangeProposalSchema.parse(input)
+
+  const contract = await prisma.contract.findUnique({
+    where: { id: data.contractId },
+    select: { id: true, vendorId: true, facilityId: true, facility: { select: { name: true } } },
+  })
+  if (!contract || contract.vendorId !== vendor.id) {
+    throw new Error("Contract not found or not owned by this vendor.")
+  }
 
   const proposal = await prisma.contractChangeProposal.create({
     data: {
       contractId: data.contractId,
-      vendorId: data.vendorId,
-      vendorName: data.vendorName,
-      facilityId: data.facilityId,
-      facilityName: data.facilityName,
+      // Authoritative vendor identity — never trust the client.
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      // Facility identity comes from the contract row, not the client.
+      facilityId: contract.facilityId ?? data.facilityId,
+      facilityName: contract.facility?.name ?? data.facilityName,
       proposalType: data.proposalType,
       changes: JSON.parse(JSON.stringify(data.changes)),
       proposedTerms: data.proposedTerms
