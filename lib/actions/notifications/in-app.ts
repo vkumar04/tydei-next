@@ -31,6 +31,14 @@ export interface NotificationRow {
  * Polymorphic create — used by both facility-side and vendor-side
  * triggers. Writes one row per recipient. Best-effort: failures
  * log + return 0; never throw into the caller.
+ *
+ * Charles audit round-7 BLOCKER: requires authenticated session.
+ * Pre-fix this had NO auth gate — exported "use server" function
+ * callable directly via the Next.js action endpoint, so any
+ * unauthenticated caller could spam-write Notification rows to
+ * arbitrary userIds. The function is intended as an internal helper
+ * called by other server actions (which already require auth), so
+ * adding a session check is correct semantically.
  */
 export async function createInAppNotifications(input: {
   userIds: string[]
@@ -40,6 +48,8 @@ export async function createInAppNotifications(input: {
   payload?: unknown
   actionUrl?: string | null
 }): Promise<{ created: number }> {
+  const { requireAuth } = await import("@/lib/actions/auth")
+  await requireAuth()
   try {
     if (input.userIds.length === 0) return { created: 0 }
     const result = await prisma.notification.createMany({

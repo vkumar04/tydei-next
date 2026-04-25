@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   pricingFiltersSchema,
   bulkImportPricingSchema,
@@ -260,7 +261,15 @@ export async function importContractPricing(input: {
   contractId: string
   items: ContractPricingItem[]
 }) {
-  await requireFacility()
+  // Charles audit round-7 BLOCKER: verify contract ownership before
+  // writing pricing rows. Pre-fix any facility user could inject
+  // ContractPricing rows into ANY other facility's contracts,
+  // corrupting price-variance / savings math for the victim.
+  const { facility } = await requireFacility()
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(input.contractId, facility.id),
+    select: { id: true },
+  })
 
   if (input.items.length === 0) return { imported: 0 }
 
@@ -321,7 +330,17 @@ export async function updateContractPricing(id: string, data: {
   category?: string
   uom?: string
 }) {
-  await requireFacility()
+  // Charles audit round-7 BLOCKER: verify the row's contract belongs
+  // to this facility before mutating.
+  const { facility } = await requireFacility()
+  const existing = await prisma.contractPricing.findUniqueOrThrow({
+    where: { id },
+    select: { contractId: true },
+  })
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(existing.contractId, facility.id),
+    select: { id: true },
+  })
   const record = await prisma.contractPricing.update({
     where: { id },
     data: {
@@ -338,7 +357,13 @@ export async function updateContractPricing(id: string, data: {
 // ─── List ContractPricing for a given contract ─────────────────
 
 export async function getContractPricing(contractId: string) {
-  await requireFacility()
+  // Charles audit round-7 CONCERN: scope read by facility ownership
+  // so cross-tenant pricing isn't exposed.
+  const { facility } = await requireFacility()
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(contractId, facility.id),
+    select: { id: true },
+  })
   const records = await prisma.contractPricing.findMany({
     where: { contractId },
     orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
@@ -349,6 +374,15 @@ export async function getContractPricing(contractId: string) {
 // ─── Delete a single ContractPricing record ────────────────────
 
 export async function deleteContractPricing(id: string) {
-  await requireFacility()
+  // Charles audit round-7 BLOCKER: verify ownership before delete.
+  const { facility } = await requireFacility()
+  const existing = await prisma.contractPricing.findUniqueOrThrow({
+    where: { id },
+    select: { contractId: true },
+  })
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(existing.contractId, facility.id),
+    select: { id: true },
+  })
   await prisma.contractPricing.delete({ where: { id } })
 }

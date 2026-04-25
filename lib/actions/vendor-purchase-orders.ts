@@ -183,6 +183,23 @@ export interface CreateVendorPOInput {
 export async function createVendorPurchaseOrder(input: CreateVendorPOInput) {
   const { vendor } = await requireVendor()
 
+  // Charles audit round-7 CONCERN: verify the contract (if provided)
+  // belongs to this vendor, AND that this vendor has a relationship
+  // with the facility. Pre-fix the vendor could write a PO against
+  // ANY facility/contractId combination.
+  if (input.contractId) {
+    const contract = await prisma.contract.findUnique({
+      where: { id: input.contractId },
+      select: { vendorId: true, facilityId: true },
+    })
+    if (!contract || contract.vendorId !== vendor.id) {
+      throw new Error("Contract not found or not owned by this vendor.")
+    }
+    if (input.facilityId && contract.facilityId !== input.facilityId) {
+      throw new Error("Contract belongs to a different facility.")
+    }
+  }
+
   const totalCost = input.lineItems.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
     0

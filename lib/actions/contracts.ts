@@ -1288,7 +1288,16 @@ export async function createContractDocument(input: {
   type?: string
   url?: string
 }) {
-  await requireFacility()
+  // Charles audit round-7 BLOCKER: verify the contract belongs to
+  // this facility before attaching a document. Pre-fix any facility
+  // user could attach a document to any other facility's contract
+  // (deleteContractDocument already verified — pattern was right
+  // there to copy).
+  const { facility } = await requireFacility()
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(input.contractId, facility.id),
+    select: { id: true },
+  })
   return prisma.contractDocument.create({
     data: {
       contractId: input.contractId,

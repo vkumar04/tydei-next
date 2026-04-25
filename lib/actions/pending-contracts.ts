@@ -578,8 +578,12 @@ export async function getFacilityPendingContracts(_facilityId?: string) {
 
 // ─── Facility: Approve ──────────────────────────────────────────
 
-export async function approvePendingContract(id: string, reviewedBy: string) {
-  const { facility } = await requireFacility()
+export async function approvePendingContract(id: string, _reviewedByIgnored?: string) {
+  // Charles audit round-7 CONCERN: reviewedBy comes from session, not
+  // client. Pre-fix the client-supplied string was written verbatim to
+  // the audit field, so the reviewer-of-record could be forged.
+  const { facility, user } = await requireFacility()
+  const reviewedBy = user.id
 
   const pending = await prisma.pendingContract.findUniqueOrThrow({
     where: { id, facilityId: facility.id },
@@ -823,8 +827,9 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
 
 // ─── Facility: Reject ───────────────────────────────────────────
 
-export async function rejectPendingContract(id: string, reviewedBy: string, notes: string) {
-  const { facility } = await requireFacility()
+export async function rejectPendingContract(id: string, _reviewedByIgnored: string, notes: string) {
+  // Charles audit round-7 CONCERN: reviewedBy from session.
+  const { facility, user } = await requireFacility()
 
   const pending = await prisma.pendingContract.findUniqueOrThrow({
     where: { id, facilityId: facility.id },
@@ -835,7 +840,7 @@ export async function rejectPendingContract(id: string, reviewedBy: string, note
     data: {
       status: "rejected",
       reviewedAt: new Date(),
-      reviewedBy,
+      reviewedBy: user.id,
       reviewNotes: notes,
     },
   })
@@ -853,8 +858,9 @@ export async function rejectPendingContract(id: string, reviewedBy: string, note
 
 // ─── Facility: Request Revision ─────────────────────────────────
 
-export async function requestRevision(id: string, reviewedBy: string, notes: string) {
-  const { facility } = await requireFacility()
+export async function requestRevision(id: string, _reviewedByIgnored: string, notes: string) {
+  // Charles audit round-7 CONCERN: reviewedBy from session.
+  const { facility, user } = await requireFacility()
 
   const pending = await prisma.pendingContract.findUniqueOrThrow({
     where: { id, facilityId: facility.id },
@@ -865,7 +871,7 @@ export async function requestRevision(id: string, reviewedBy: string, notes: str
     data: {
       status: "revision_requested",
       reviewedAt: new Date(),
-      reviewedBy,
+      reviewedBy: user.id,
       reviewNotes: notes,
     },
   })
