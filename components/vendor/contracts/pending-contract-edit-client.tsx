@@ -29,6 +29,7 @@ import Link from "next/link"
 import type { UpdatePendingContractInput } from "@/lib/validators/pending-contracts"
 import { ContractTermsCard } from "./submission/contract-terms-card"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
+import { pendingContractStatusConfig } from "@/lib/constants"
 
 interface PendingContractEditClientProps {
   pendingContractId: string
@@ -152,14 +153,12 @@ function hydrateTermsForForm(termsJson: unknown): TermFormValues[] {
   return out
 }
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  draft: { label: "Draft", variant: "outline" },
-  submitted: { label: "Submitted", variant: "secondary" },
-  approved: { label: "Approved", variant: "default" },
-  rejected: { label: "Rejected", variant: "destructive" },
-  revision_requested: { label: "Revision Requested", variant: "secondary" },
-  withdrawn: { label: "Withdrawn", variant: "outline" },
-}
+// Charles 2026-04-25 (audit follow-up): the local STATUS_CONFIG that
+// previously lived here was a Charles W1.R-style drift hazard — the
+// canonical `pendingContractStatusConfig` already adds className tints
+// for approved/revision_requested that this surface was missing. Use
+// the canonical helper so badges look consistent with every other
+// pending-contract surface (vendor list, facility review).
 
 // Charles 2026-04-25 (audit follow-up): the prior list was bogus —
 // "gpo", "direct", "local", "custom" are NOT members of the
@@ -370,7 +369,9 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
     )
   }
 
-  const cfg = STATUS_CONFIG[contract.status] ?? STATUS_CONFIG.draft
+  const cfg =
+    pendingContractStatusConfig[contract.status] ??
+    pendingContractStatusConfig.draft
 
   return (
     <div className="space-y-6">

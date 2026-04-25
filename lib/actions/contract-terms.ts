@@ -16,6 +16,7 @@ import { z } from "zod"
 import { serialize } from "@/lib/serialize"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
+import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
 
 /**
  * Charles R5.36 P0 — invoke the accrual recompute without letting a
@@ -160,9 +161,12 @@ async function _createContractTermImpl(input: CreateTermInput) {
     include: { tiers: { orderBy: { tierNumber: "asc" } } },
   })
 
-  if (scopedItemNumbers && scopedItemNumbers.length > 0) {
+  const normalizedScopedItemNumbers = normalizeScopedItemNumbers(
+    scopedItemNumbers,
+  )
+  if (normalizedScopedItemNumbers.length > 0) {
     await prisma.contractTermProduct.createMany({
-      data: scopedItemNumbers.map((vendorItemNo) => ({
+      data: normalizedScopedItemNumbers.map((vendorItemNo) => ({
         termId: term.id,
         vendorItemNo,
       })),
@@ -272,9 +276,10 @@ async function _updateContractTermImpl(
   // (undefined = don't touch; [] = clear; non-empty = replace).
   if (scopedItemNumbers !== undefined) {
     await prisma.contractTermProduct.deleteMany({ where: { termId: id } })
-    if (scopedItemNumbers.length > 0) {
+    const normalized = normalizeScopedItemNumbers(scopedItemNumbers)
+    if (normalized.length > 0) {
       await prisma.contractTermProduct.createMany({
-        data: scopedItemNumbers.map((vendorItemNo) => ({
+        data: normalized.map((vendorItemNo) => ({
           termId: id,
           vendorItemNo,
         })),

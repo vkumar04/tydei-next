@@ -35,6 +35,7 @@ import {
 } from "@/lib/contracts/rebate-earned-filter"
 import { buildUnionCategoryWhereClause, buildCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
+import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -911,9 +912,11 @@ async function _createContractImpl(
         data: termCreateData,
       })
 
-      if (scopedItemNumbers && scopedItemNumbers.length > 0) {
+      const normalizedScopedItemNumbers =
+        normalizeScopedItemNumbers(scopedItemNumbers)
+      if (normalizedScopedItemNumbers.length > 0) {
         await tx.contractTermProduct.createMany({
-          data: scopedItemNumbers.map((vendorItemNo) => ({
+          data: normalizedScopedItemNumbers.map((vendorItemNo) => ({
             termId: createdTerm.id,
             vendorItemNo,
           })),

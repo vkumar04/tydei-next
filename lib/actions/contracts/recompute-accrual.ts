@@ -701,6 +701,11 @@ export async function recomputeAccrualForContract(
         term.termType === "market_share"
           ? "currentMarketShare"
           : "complianceRate"
+      // UNITS (audit-confirmed 2026-04-25): both contract columns are
+      // `Decimal(5,2)` storing percent points 0-100 (the form writes a
+      // 0-100 number directly via `setValueAs: Number(v)`), and tier
+      // `spendMin` is also percent points. Pass through verbatim — the
+      // bridge in recompute-threshold-accrual.ts compares them directly.
       const metricValue =
         metric === "currentMarketShare"
           ? contract.currentMarketShare === null ||

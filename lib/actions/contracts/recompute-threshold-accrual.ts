@@ -163,6 +163,14 @@ export async function recomputeThresholdAccrualForTerm(input: {
     return { inserted: 0, sumEarned: 0 }
   }
 
+  // UNITS (audit-confirmed 2026-04-25): both `metricValue`
+  // (Contract.complianceRate / currentMarketShare, schema
+  // `Decimal(5,2)`) and tier `spendMin` are stored as percent points
+  // (0-100), the same shape the form's `<Input min=0 max=100>` writes.
+  // No fraction↔percent conversion is needed — `determineTier` compares
+  // `metricValue` directly against `thresholdMin`. Locked by
+  // `lib/actions/contracts/__tests__/threshold-units.test.ts`.
+  //
   // Tier ladder: spendMin is the threshold percent (0-100);
   // rebateValue is the flat dollar payment when that tier is achieved.
   // payoutForTier handles legacy rebateType=percent_of_spend rows that
