@@ -46,11 +46,11 @@ describe("sumRebateAppliedToCapital (canonical capital-applied aggregate)", () =
     expect(sumRebateAppliedToCapital(rebates, "usage")).toBe(0)
   })
 
-  it("non-tie_in (capital): returns 0", () => {
+  it("capital: now SUMS (audit pass-4 CONCERN 6 — separate-row capital contracts aggregate sibling-usage rebates that retire this capital)", () => {
     const rebates = [
       { rebateCollected: 5_000, collectionDate: new Date("2025-01-01") },
     ]
-    expect(sumRebateAppliedToCapital(rebates, "capital")).toBe(0)
+    expect(sumRebateAppliedToCapital(rebates, "capital")).toBe(5_000)
   })
 
   it("rejects earned-but-uncollected on tie_in", () => {

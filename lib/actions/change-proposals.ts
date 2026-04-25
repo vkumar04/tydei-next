@@ -37,32 +37,11 @@ export async function getChangeProposal(id: string) {
   })
 }
 
-// ─── Get Proposals by Contract ──────────────────────────────────
-
-export async function getChangeProposals(contractId: string) {
-  const session = await requireAuth()
-
-  const member = await prisma.member.findFirst({
-    where: { userId: session.user.id },
-    include: { organization: { include: { facility: true, vendor: true } } },
-  })
-  const facilityId = member?.organization?.facility?.id
-  const vendorId = member?.organization?.vendor?.id
-
-  const proposals = await prisma.contractChangeProposal.findMany({
-    where: {
-      contractId,
-      ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
-    },
-    orderBy: { submittedAt: "desc" },
-  })
-
-  return serialize(proposals.map((p) => ({
-    ...p,
-    submittedAt: p.submittedAt.toISOString(),
-    reviewedAt: p.reviewedAt?.toISOString() ?? null,
-  })))
-}
+// Charles audit pass-4 NIT: removed dead `getChangeProposals` —
+// zero call sites in app/components/hooks. If a future "history"
+// view needs unfiltered proposals for a contract, add it back with
+// an explicit status filter that decides whether to include
+// withdrawn / rejected.
 
 // ─── Get Pending Proposals for Facility ─────────────────────────
 

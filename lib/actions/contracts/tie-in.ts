@@ -20,6 +20,7 @@ import type { AmortizationEntry } from "@/lib/rebates/engine/types"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { sumRebateAppliedToCapital } from "@/lib/contracts/rebate-capital-filter"
+import type { CollectedRebateLike } from "@/lib/contracts/rebate-collected-filter"
 
 export async function getContractTieInBundle(contractId: string) {
   const { facility } = await requireFacility()
@@ -283,6 +284,7 @@ export async function getContractCapitalSchedule(
       effectiveDate: true,
       capitalCost: true,
       downPayment: true,
+      facilityId: true,
       interestRate: true,
       termMonths: true,
       paymentCadence: true,
@@ -392,12 +394,36 @@ export async function getContractCapitalSchedule(
   const today = new Date()
   // Charles 2026-04-25 (Bug 23): bucket collected rebates into amortization
   // periods so the schedule can show how much rebate paid down capital
-  // each period. Only meaningful on tie-in contracts; non-tie-in
-  // collected rebates aren't applied to a capital balance.
+  // each period. Two models supported:
+  //   (a) Single-row "tie_in" contract — its own collected rebates
+  //       retire its own capital.
+  //   (b) Separate-row "capital" contract — sibling usage contracts
+  //       carrying `tieInCapitalContractId === this.id` contribute
+  //       their collected rebates to retire this capital balance.
+  // Charles audit pass-4 CONCERN 6: previously only (a) was handled;
+  // any usage contract pointing at a separate capital row had its
+  // capital silently un-paydown.
   const isTieIn = contract.contractType === "tie_in"
+  const isCapital = contract.contractType === "capital"
   const collectionsByPeriod = new Map<number, number>()
-  if (isTieIn) {
-    for (const r of contract.rebates) {
+  // Aggregate own + sibling rebates so we walk one combined list.
+  const allRebates: CollectedRebateLike[] = isTieIn
+    ? [...contract.rebates]
+    : []
+  if (isCapital) {
+    const siblingRebates = await prisma.rebate.findMany({
+      where: {
+        contract: {
+          tieInCapitalContractId: contract.id,
+          facilityId: contract.facilityId,
+        },
+      },
+      select: { collectionDate: true, rebateCollected: true },
+    })
+    allRebates.push(...siblingRebates)
+  }
+  if (isTieIn || isCapital) {
+    for (const r of allRebates) {
       if (!r.collectionDate) continue
       const collectedMs = new Date(r.collectionDate).getTime()
       const startMs = start.getTime()
@@ -441,12 +467,15 @@ export async function getContractCapitalSchedule(
   // amortization card, the contract-detail header sublabel, and any
   // future tie-in dashboard agree on one number. Non-tie-in contracts
   // return 0 (no capital to retire via rebate).
+  // Use the combined own+sibling rebate list so a separate-row
+  // capital contract's paydown reflects all usage contracts pointing
+  // at it.
   const rebateAppliedToCapital = sumRebateAppliedToCapital(
-    contract.rebates,
-    contract.contractType,
+    allRebates,
+    isCapital ? "tie_in" : contract.contractType,
   )
   const paidToDate = rebateAppliedToCapital
-  const remainingBalance = Math.max(0, capitalCost - paidToDate)
+  const remainingBalance = Math.max(0, financedPrincipal - paidToDate)
 
   // Projected end-of-term balance: how much capital remains at the
   // contract's scheduled expiration given trailing-90-day principal
@@ -677,6 +706,7 @@ export async function getContractCapitalProjection(
       expirationDate: true,
       capitalCost: true,
       downPayment: true,
+      facilityId: true,
       interestRate: true,
       termMonths: true,
       paymentCadence: true,
@@ -740,20 +770,47 @@ export async function getContractCapitalProjection(
   // with `getContractCapitalSchedule`. Legacy behavior summed elapsed
   // `principalDue` (forecast), which was inconsistent with the
   // user-facing amortization card.
+  // Charles audit pass-4 CONCERN 6: aggregate sibling-usage rebates
+  // when this is a separate-row capital contract.
+  const isCapitalRow = contract.contractType === "capital"
+  let allRebates: CollectedRebateLike[] =
+    contract.contractType === "tie_in" ? [...contract.rebates] : []
+  if (isCapitalRow) {
+    const sib = await prisma.rebate.findMany({
+      where: {
+        contract: {
+          tieInCapitalContractId: contract.id,
+          facilityId: facility.id,
+        },
+      },
+      select: { collectionDate: true, rebateCollected: true },
+    })
+    allRebates = sib
+  }
   const paidToDate = sumRebateAppliedToCapital(
-    contract.rebates,
-    contract.contractType,
+    allRebates,
+    isCapitalRow ? "tie_in" : contract.contractType,
   )
-  const remainingBalance = Math.max(0, capitalCost - paidToDate)
+  const remainingBalance = Math.max(0, financedPrincipal - paidToDate)
 
-  // Trailing 90-day rebate velocity.
+  // Trailing 90-day rebate velocity. For separate-row capital
+  // contracts, sum across sibling usage contracts pointing at this
+  // capital row instead of contractId-only.
   const ninetyDaysAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000)
   const rebateAgg = await prisma.rebate.aggregate({
-    where: {
-      contractId,
-      facilityId: facility.id,
-      payPeriodEnd: { gte: ninetyDaysAgo, lte: today },
-    },
+    where: isCapitalRow
+      ? {
+          contract: {
+            tieInCapitalContractId: contractId,
+            facilityId: facility.id,
+          },
+          payPeriodEnd: { gte: ninetyDaysAgo, lte: today },
+        }
+      : {
+          contractId,
+          facilityId: facility.id,
+          payPeriodEnd: { gte: ninetyDaysAgo, lte: today },
+        },
     _sum: { rebateEarned: true },
   })
   const trailing90Rebate = Number(rebateAgg._sum.rebateEarned ?? 0)

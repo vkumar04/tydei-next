@@ -108,6 +108,11 @@ vi.mock("@/lib/db", () => ({
     contractPeriod: {
       aggregate: vi.fn(async () => ({ _sum: { totalSpend: 0 } })),
     },
+    // Charles audit pass-4 CONCERN 6: separate-row capital contracts
+    // aggregate sibling-usage rebates via prisma.rebate.findMany.
+    rebate: {
+      findMany: vi.fn(async () => []),
+    },
   },
 }))
 
@@ -181,7 +186,7 @@ describe("tie-in capital-applied parity (W1.Y-C)", () => {
     )
   })
 
-  it("non-tie_in contracts: rebateAppliedToCapital and paidToDate are 0", async () => {
+  it("capital with no siblings: rebateAppliedToCapital and paidToDate are 0 (post pass-4 CONCERN 6 — own.rebates ignored on capital, only siblings count)", async () => {
     contractRow = {
       id: FIXTURE_CONTRACT_ID,
       contractType: "capital",

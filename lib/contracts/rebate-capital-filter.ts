@@ -41,6 +41,10 @@ export function sumRebateAppliedToCapital(
   rebates: readonly RebateCapitalAppliedLike[],
   contractType: string | null | undefined,
 ): number {
-  if (contractType !== "tie_in") return 0
+  // Charles audit pass-4 CONCERN 6: extend to "capital" so separate-row
+  // capital contracts (whose sibling usage contracts point at them via
+  // tieInCapitalContractId) also count their aggregated rebates.
+  // Single-row "tie_in" remains the most common shape.
+  if (contractType !== "tie_in" && contractType !== "capital") return 0
   return sumCollectedRebates(rebates)
 }
