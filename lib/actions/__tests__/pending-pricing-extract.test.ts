@@ -23,7 +23,21 @@ function coerceString(v: unknown): string | null {
   return null
 }
 function extractPendingPricingItems(pricingData: unknown) {
-  if (!Array.isArray(pricingData)) return []
+  // Matches lib/actions/pending-contracts.ts:56 (audit pass-3 + round-3 + round-4):
+  // accept Array OR {items: [...]} object; LAST-WINS dedup by
+  // case-insensitive trimmed vendorItemNo.
+  let inputArray: unknown[]
+  if (Array.isArray(pricingData)) {
+    inputArray = pricingData
+  } else if (
+    pricingData !== null &&
+    typeof pricingData === "object" &&
+    Array.isArray((pricingData as { items?: unknown }).items)
+  ) {
+    inputArray = (pricingData as { items: unknown[] }).items
+  } else {
+    return []
+  }
   const rows: Array<{
     vendorItemNo: string
     description: string | null
@@ -32,20 +46,29 @@ function extractPendingPricingItems(pricingData: unknown) {
     listPrice: number | null
     uom: string
   }> = []
-  for (const raw of pricingData) {
+  const indexByVendorItemNo = new Map<string, number>()
+  for (const raw of inputArray) {
     if (raw === null || typeof raw !== "object") continue
     const r = raw as Record<string, unknown>
     const vendorItemNo = coerceString(r.vendorItemNo)
     const unitPrice = coerceNumber(r.unitPrice)
     if (!vendorItemNo || unitPrice === null) continue
-    rows.push({
-      vendorItemNo,
+    const normalized = vendorItemNo.trim().toUpperCase()
+    const row = {
+      vendorItemNo: vendorItemNo.trim(),
       description: coerceString(r.description),
       category: coerceString(r.category),
       unitPrice,
       listPrice: coerceNumber(r.listPrice),
       uom: coerceString(r.uom) ?? "EA",
-    })
+    }
+    const existingIdx = indexByVendorItemNo.get(normalized)
+    if (existingIdx !== undefined) {
+      rows[existingIdx] = row
+    } else {
+      indexByVendorItemNo.set(normalized, rows.length)
+      rows.push(row)
+    }
   }
   return rows
 }
@@ -133,5 +156,40 @@ describe("extractPendingPricingItems", () => {
       { vendorItemNo: "C", unitPrice: 20 },
     ])
     expect(rows.map((r) => r.vendorItemNo)).toEqual(["A", "C"])
+  })
+
+  // Charles audit pass-4 round-3 + round-4: shape + dedup regression locks.
+  it("accepts {items: [...]} object shape (round-3 BLOCKER fix)", () => {
+    const rows = extractPendingPricingItems({
+      fileName: "pricing.csv",
+      itemCount: 1,
+      items: [{ vendorItemNo: "X", unitPrice: 5 }],
+      uploadedAt: new Date().toISOString(),
+    })
+    expect(rows.map((r) => r.vendorItemNo)).toEqual(["X"])
+  })
+
+  it("dedupes by case-insensitive trimmed vendorItemNo, LAST-WINS (round-4)", () => {
+    const rows = extractPendingPricingItems([
+      { vendorItemNo: "ABC", unitPrice: 10 },
+      { vendorItemNo: "abc", unitPrice: 12 },
+      { vendorItemNo: " ABC ", unitPrice: 15 },
+    ])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.vendorItemNo).toBe("ABC")
+    expect(rows[0]?.unitPrice).toBe(15)
+  })
+
+  it("preserves insertion order across deduped + new rows", () => {
+    const rows = extractPendingPricingItems([
+      { vendorItemNo: "A", unitPrice: 1 },
+      { vendorItemNo: "B", unitPrice: 2 },
+      { vendorItemNo: "a", unitPrice: 99 },
+      { vendorItemNo: "C", unitPrice: 3 },
+    ])
+    // Last-wins replaces the row entirely, so the casing from the
+    // most recent input ("a") wins, but the slot order is preserved.
+    expect(rows.map((r) => r.vendorItemNo)).toEqual(["a", "B", "C"])
+    expect(rows[0]?.unitPrice).toBe(99)
   })
 })

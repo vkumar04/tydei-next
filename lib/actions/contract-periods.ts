@@ -1,6 +1,7 @@
 "use server"
 
 import type { Prisma } from "@prisma/client"
+import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
@@ -9,6 +10,28 @@ import {
   computeRebateFromPrismaTiers,
   DEFAULT_COLLECTION_RATE,
 } from "@/lib/rebates/calculate"
+
+/**
+ * Charles audit pass-4 round-5 NIT: capital schedule cache invalidation.
+ * After any rebate mutation we revalidate the contract detail route AND
+ * the sibling capital contract's route (if this contract carries a
+ * tieInCapitalContractId), so the cross-contract amortization card
+ * reflects collections without a hard refresh.
+ */
+async function revalidateCapitalRoutes(contractId: string): Promise<void> {
+  try {
+    const c = await prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { tieInCapitalContractId: true },
+    })
+    revalidatePath(`/dashboard/contracts/${contractId}`)
+    if (c?.tieInCapitalContractId) {
+      revalidatePath(`/dashboard/contracts/${c.tieInCapitalContractId}`)
+    }
+  } catch {
+    // best-effort cache hint; never block the mutation on revalidate failure
+  }
+}
 
 /**
  * Fetch all contract periods for a given contract, ordered by periodStart desc.
@@ -426,6 +449,7 @@ export async function createContractTransaction(input: {
     },
   })
 
+  await revalidateCapitalRoutes(input.contractId)
   return serialize({ kind: "period" as const, row: period })
 }
 
@@ -552,6 +576,7 @@ export async function updateContractTransaction(
   // via the `notes` field.
 
   await prisma.rebate.update({ where: { id: input.id }, data })
+  await revalidateCapitalRoutes(input.contractId)
 }
 
 // `deleteContractTransaction` removes a user-logged Rebate row.
@@ -581,4 +606,5 @@ export async function deleteContractTransaction(input: {
     )
   }
   await prisma.rebate.delete({ where: { id: input.id } })
+  await revalidateCapitalRoutes(input.contractId)
 }

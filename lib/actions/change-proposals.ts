@@ -64,7 +64,14 @@ export async function getPendingProposals(_facilityId?: string) {
 
 // ─── Get Vendor's Own Proposals ─────────────────────────────────
 
-export async function getVendorProposals(_vendorId?: string) {
+/**
+ * Charles audit pass-4 round-5 NIT: renamed from `getVendorProposals`
+ * to disambiguate from the unrelated `getVendorProposals` export in
+ * `lib/actions/prospective.ts` (which lists vendor *prospective*
+ * (alert-based) proposals, not change-proposals). The duplicate name
+ * was a future-trap for auto-imports.
+ */
+export async function getVendorChangeProposals(_vendorId?: string) {
   const { vendor } = await requireVendor()
 
   // Charles audit pass-2: hide withdrawn proposals from the active
