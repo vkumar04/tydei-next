@@ -40,6 +40,42 @@ export const extractedContractSchema = z.object({
     z.object({
       termName: z.string().describe("Name of the term/tier structure"),
       termType: z.string().describe("Type: spend_rebate, volume_rebate, etc."),
+      // Charles 2026-04-25 (audit C2): the AI extractor previously only
+      // returned termType — the rest of the term shape (baselineType,
+      // evaluationPeriod, paymentTiming, appliesTo, rebateMethod) was
+      // hardcoded to spend_based / cumulative regardless of what kind
+      // of term the contract described, so volume / market-share /
+      // capitated extracts were silently mistyped. These are optional
+      // hints; the consumer falls back to termType-aware defaults when
+      // omitted.
+      baselineType: z
+        .enum(["spend_based", "volume_based", "growth_based"])
+        .optional()
+        .describe(
+          "Baseline used by the rebate engine. spend_based for $-threshold rebates, volume_based for unit/procedure-count rebates, growth_based when the rebate is keyed off year-over-year growth.",
+        ),
+      evaluationPeriod: z
+        .enum(["monthly", "quarterly", "semi_annual", "annual"])
+        .optional()
+        .describe(
+          "How often performance is evaluated (e.g. quarterly tier achievement).",
+        ),
+      paymentTiming: z
+        .enum(["monthly", "quarterly", "semi_annual", "annual"])
+        .optional()
+        .describe("How often rebates are paid out."),
+      appliesTo: z
+        .string()
+        .optional()
+        .describe(
+          "Scope: typically 'all_products' or a category/product label if the term is restricted.",
+        ),
+      rebateMethod: z
+        .enum(["cumulative", "marginal"])
+        .optional()
+        .describe(
+          "cumulative = top tier's rate applies to the entire qualifying spend; marginal = each tier's rate applies only to the slice within that tier.",
+        ),
       tiers: z.array(
         z.object({
           tierNumber: z.number().describe("Tier number (1 = lowest)"),
