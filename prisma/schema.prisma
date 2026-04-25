@@ -1104,6 +1104,14 @@ model PendingContract {
   downPayment       Decimal? @db.Decimal(14, 2)
   paymentCadence    String?
   amortizationShape String?
+  // Charles 2026-04-25 audit pass-3 C1: vendor selects a parent
+  // contract for tie-in submissions; the validator already accepts
+  // the field but it was being silently dropped because no column
+  // existed. Approve copies it onto Contract.tieInContractId so the
+  // capital amortization tie-in math is wired post-approve.
+  tieInContractId   String?
+  // Vendor's organizational division (e.g. "Surgical", "Cardiology").
+  division          String?
   terms          Json                  @default("[]")
   documents      Json                  @default("[]")
   pricingData    Json?

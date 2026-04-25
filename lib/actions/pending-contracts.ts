@@ -63,7 +63,23 @@ function extractPendingPricingItems(
   listPrice: number | null
   uom: string
 }> {
-  if (!Array.isArray(pricingData)) return []
+  // Charles audit pass-3 BLOCKER: vendor submission writes pricingData
+  // as an OBJECT `{ fileName, itemCount, totalValue, categories,
+  // items, uploadedAt }`. Earlier code only accepted Array shape and
+  // silently dropped every vendor pricing file on approve, breaking
+  // COG match. Accept either shape: array or `{items: [...]}`.
+  let inputArray: unknown[]
+  if (Array.isArray(pricingData)) {
+    inputArray = pricingData
+  } else if (
+    pricingData !== null &&
+    typeof pricingData === "object" &&
+    Array.isArray((pricingData as { items?: unknown }).items)
+  ) {
+    inputArray = (pricingData as { items: unknown[] }).items
+  } else {
+    return []
+  }
   const rows: Array<{
     vendorItemNo: string
     description: string | null
@@ -72,7 +88,7 @@ function extractPendingPricingItems(
     listPrice: number | null
     uom: string
   }> = []
-  for (const raw of pricingData) {
+  for (const raw of inputArray) {
     if (raw === null || typeof raw !== "object") continue
     const r = raw as PendingPricingItem
     const vendorItemNo = coerceString(r.vendorItemNo)
@@ -103,7 +119,7 @@ function extractPendingPricingItems(
  *
  * Defaults mirror createTermSchema in lib/validators/contract-terms.ts.
  */
-function extractPendingTerms(termsJson: unknown): Array<{
+function extractPendingTerms(termsJson: unknown, contractEffectiveDate?: Date | null): Array<{
   termName: string
   termType: string
   baselineType: string
@@ -145,7 +161,11 @@ function extractPendingTerms(termsJson: unknown): Array<{
 }> {
   if (!Array.isArray(termsJson)) return []
   const EVERGREEN = new Date(Date.UTC(9999, 11, 31))
-  const EPOCH = new Date(Date.UTC(1970, 0, 1))
+  // Charles audit pass-3 N1: fall back to the parent contract's
+  // effective date when a vendor omits term-level dates, instead of
+  // the UTC epoch (1970). Reads showing "Effective Jan 1, 1970"
+  // looked broken — the contract date is the right anchor.
+  const EPOCH = contractEffectiveDate ?? new Date(Date.UTC(1970, 0, 1))
   const out: ReturnType<typeof extractPendingTerms> = []
   // Charles 2026-04-25 (audit Bug 4): termType-aware default for
   // rebateMethod. Mirrors the client-side helper in
@@ -221,34 +241,32 @@ function extractPendingTerms(termsJson: unknown): Array<{
 
         // Charles 2026-04-25 (audit Bug 3): mirror dedicated column
         // values into the spendMin/spendMax columns the engine reads
-        // for column-reuse term types, but ONLY when spendMin is
-        // missing or 0 (so users who explicitly populated spendMin
-        // win). Same pattern for market_share.
+        // for column-reuse term types. Charles audit pass-3: prefer
+        // the dedicated column UNCONDITIONALLY for column-reuse term
+        // types — the dedicated column is the user's intent for those
+        // termTypes, and any spendMin in the payload was either left
+        // at its default (0) or accidentally populated. This makes the
+        // engine match exactly what the reviewer's pending-review
+        // dialog renders (which prefers volumeMin/marketShareMin via
+        // ?? spendMin) — eliminates silent dialog-vs-engine drift.
         let spendMin = rawSpendMin ?? 0
         let spendMax = rawSpendMax
         if (
           isVolumeColumnTermType(termType) &&
-          (rawSpendMin === null || rawSpendMin === 0) &&
           rawVolumeMin !== null &&
           rawVolumeMin !== undefined
         ) {
           spendMin = rawVolumeMin
-          if (
-            (spendMax === null || spendMax === undefined) &&
-            rawVolumeMax !== null &&
-            rawVolumeMax !== undefined
-          ) {
+          if (rawVolumeMax !== null && rawVolumeMax !== undefined) {
             spendMax = rawVolumeMax
           }
         } else if (
           isMarketShareColumnTermType(termType) &&
-          (rawSpendMin === null || rawSpendMin === 0) &&
           rawMarketShareMin !== null &&
           rawMarketShareMin !== undefined
         ) {
           spendMin = rawMarketShareMin
           if (
-            (spendMax === null || spendMax === undefined) &&
             rawMarketShareMax !== null &&
             rawMarketShareMax !== undefined
           ) {
@@ -405,6 +423,11 @@ export async function createPendingContract(input: CreatePendingContractInput) {
       ...(data.amortizationShape !== undefined && {
         amortizationShape: data.amortizationShape,
       }),
+      // Charles audit pass-3 C1: tie-in parent + division now persist.
+      ...(data.tieInContractId !== undefined && {
+        tieInContractId: data.tieInContractId,
+      }),
+      ...(data.division !== undefined && { division: data.division }),
       terms: data.terms ?? [],
       documents: data.documents ?? [],
       pricingData: data.pricingData,
@@ -475,6 +498,10 @@ export async function updatePendingContract(id: string, input: UpdatePendingCont
       ...(data.amortizationShape !== undefined && {
         amortizationShape: data.amortizationShape,
       }),
+      ...(data.tieInContractId !== undefined && {
+        tieInContractId: data.tieInContractId,
+      }),
+      ...(data.division !== undefined && { division: data.division }),
       ...(data.terms !== undefined && { terms: data.terms }),
       ...(data.documents !== undefined && { documents: data.documents }),
       ...(data.pricingData !== undefined && { pricingData: data.pricingData }),
@@ -528,7 +555,7 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
   // so accruals computed to $0 forever. The shape of the blob mirrors
   // what the vendor submission form persists; we extract defensively
   // so a malformed blob doesn't blow the approval.
-  const pendingTerms = extractPendingTerms(pending.terms)
+  const pendingTerms = extractPendingTerms(pending.terms, pending.effectiveDate)
 
   // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
   // pre-resolve scoped category IDs → names per term, OUTSIDE the
@@ -611,6 +638,12 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
         amortizationShape:
           pending.amortizationShape as Prisma.ContractCreateInput["amortizationShape"],
       }),
+      // Charles audit pass-3 C1: copy tie-in parent + division so the
+      // capital amortization tie-in math is wired post-approve.
+      ...(pending.tieInContractId != null && {
+        tieInContractId: pending.tieInContractId,
+      }),
+      ...(pending.division != null && { division: pending.division }),
       ...(pricingItems.length > 0 && {
         pricingItems: {
           create: pricingItems,
