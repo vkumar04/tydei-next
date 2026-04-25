@@ -23,6 +23,15 @@ export const createPendingContractSchema = z.object({
   rebatePayPeriod: z.string().optional(),
   autoRenewal: z.boolean().optional(),
   terminationNoticeDays: z.number().int().min(0).optional(),
+  // Charles 2026-04-25 (vendor-mirror Phase 2 cont.): capital tie-in
+  // fields. Persisted as their own columns so vendor submissions of
+  // capital/tie-in contracts carry through approval cleanly.
+  capitalCost: z.number().min(0).optional(),
+  interestRate: z.number().min(0).max(1).optional(),
+  termMonths: z.number().int().min(0).optional(),
+  downPayment: z.number().min(0).optional(),
+  paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  amortizationShape: z.enum(["symmetrical", "custom"]).optional(),
   terms: z.any().optional(),
   documents: z.any().optional(),
   pricingData: z.any().optional(),

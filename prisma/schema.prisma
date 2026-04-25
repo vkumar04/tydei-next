@@ -1046,6 +1046,16 @@ model PendingContract {
   rebatePayPeriod       String?
   autoRenewal           Boolean               @default(false)
   terminationNoticeDays Int?
+  // Charles 2026-04-25 (vendor-mirror Phase 2 cont.): capital tie-in
+  // fields so vendors can submit capital + tie-in contracts without
+  // the financial structure dropping at approval. Mirror the names
+  // on the real Contract model so approve can copy through cleanly.
+  capitalCost       Decimal? @db.Decimal(14, 2)
+  interestRate      Decimal? @db.Decimal(6, 4)
+  termMonths        Int?
+  downPayment       Decimal? @db.Decimal(14, 2)
+  paymentCadence    String?
+  amortizationShape String?
   terms          Json                  @default("[]")
   documents      Json                  @default("[]")
   pricingData    Json?

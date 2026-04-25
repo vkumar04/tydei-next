@@ -240,6 +240,16 @@ export async function createPendingContract(input: CreatePendingContractInput) {
       ...(data.terminationNoticeDays !== undefined && {
         terminationNoticeDays: data.terminationNoticeDays,
       }),
+      ...(data.capitalCost !== undefined && { capitalCost: data.capitalCost }),
+      ...(data.interestRate !== undefined && { interestRate: data.interestRate }),
+      ...(data.termMonths !== undefined && { termMonths: data.termMonths }),
+      ...(data.downPayment !== undefined && { downPayment: data.downPayment }),
+      ...(data.paymentCadence !== undefined && {
+        paymentCadence: data.paymentCadence,
+      }),
+      ...(data.amortizationShape !== undefined && {
+        amortizationShape: data.amortizationShape,
+      }),
       terms: data.terms ?? [],
       documents: data.documents ?? [],
       pricingData: data.pricingData,
@@ -299,6 +309,16 @@ export async function updatePendingContract(id: string, input: UpdatePendingCont
       }),
       ...(data.terminationNoticeDays !== undefined && {
         terminationNoticeDays: data.terminationNoticeDays,
+      }),
+      ...(data.capitalCost !== undefined && { capitalCost: data.capitalCost }),
+      ...(data.interestRate !== undefined && { interestRate: data.interestRate }),
+      ...(data.termMonths !== undefined && { termMonths: data.termMonths }),
+      ...(data.downPayment !== undefined && { downPayment: data.downPayment }),
+      ...(data.paymentCadence !== undefined && {
+        paymentCadence: data.paymentCadence,
+      }),
+      ...(data.amortizationShape !== undefined && {
+        amortizationShape: data.amortizationShape,
       }),
       ...(data.terms !== undefined && { terms: data.terms }),
       ...(data.documents !== undefined && { documents: data.documents }),
@@ -402,6 +422,25 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
       autoRenewal: pending.autoRenewal,
       ...(pending.terminationNoticeDays != null && {
         terminationNoticeDays: pending.terminationNoticeDays,
+      }),
+      // Capital tie-in fields — same name on both models so direct
+      // copy. paymentCadence/amortizationShape are `String?` on
+      // PendingContract but enums on Contract; cast at the boundary.
+      ...(pending.capitalCost != null && { capitalCost: pending.capitalCost }),
+      ...(pending.interestRate != null && {
+        interestRate: pending.interestRate,
+      }),
+      ...(pending.termMonths != null && { termMonths: pending.termMonths }),
+      ...(pending.downPayment != null && {
+        downPayment: pending.downPayment,
+      }),
+      ...(pending.paymentCadence != null && {
+        paymentCadence:
+          pending.paymentCadence as Prisma.ContractCreateInput["paymentCadence"],
+      }),
+      ...(pending.amortizationShape != null && {
+        amortizationShape:
+          pending.amortizationShape as Prisma.ContractCreateInput["amortizationShape"],
       }),
       ...(pricingItems.length > 0 && {
         pricingItems: {
