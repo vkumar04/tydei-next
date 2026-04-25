@@ -399,12 +399,27 @@ function coerceFieldValue(
   }
   if (DECIMAL_FIELDS.has(field)) {
     if (typeof raw === "number" && Number.isFinite(raw)) {
+      // Charles audit pass-4 round-5 vendor CONCERN 2: interestRate
+      // is stored as a fraction (0.05 = 5%). The vendor proposal form
+      // takes a percent input the same way the new-contract submission
+      // form does (which divides by 100 at the form layer). Mirror
+      // that convention here so a vendor typing "5" doesn't write
+      // 500% to Contract.interestRate. Cap at 1.0 (= 100%) to match
+      // the validator on the new-contract path.
+      if (field === "interestRate") {
+        return new Prisma.Decimal(Math.min(1, raw / 100))
+      }
       return new Prisma.Decimal(raw)
     }
     if (typeof raw === "string" && raw.trim().length > 0) {
       const cleaned = raw.replace(/[$,]/g, "")
       const n = Number(cleaned)
-      if (Number.isFinite(n)) return new Prisma.Decimal(cleaned)
+      if (Number.isFinite(n)) {
+        if (field === "interestRate") {
+          return new Prisma.Decimal(Math.min(1, n / 100))
+        }
+        return new Prisma.Decimal(cleaned)
+      }
     }
     return undefined
   }

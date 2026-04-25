@@ -385,6 +385,7 @@ export async function createContractTransaction(input: {
             notes: mergedNotes,
           },
         })
+        await revalidateCapitalRoutes(input.contractId)
         return serialize({ kind: "rebate" as const, row: updated })
       }
       // Fallback: no earned row available (out-of-band collection). Create
@@ -404,6 +405,7 @@ export async function createContractTransaction(input: {
           notes: orphanNotes,
         },
       })
+      await revalidateCapitalRoutes(input.contractId)
       return serialize({ kind: "rebate" as const, row: rebate })
     }
 
@@ -420,6 +422,7 @@ export async function createContractTransaction(input: {
         notes,
       },
     })
+    await revalidateCapitalRoutes(input.contractId)
     return serialize({ kind: "rebate" as const, row: rebate })
   }
 
