@@ -51,6 +51,7 @@ import { ContractCapitalProjectionCard } from "@/components/contracts/contract-c
 import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
 import { OffContractSpendCard } from "@/components/contracts/off-contract-spend-card"
+import { CategoryMarketShareCard } from "@/components/contracts/category-market-share-card"
 import { ContractChangeProposalsCard } from "@/components/contracts/contract-change-proposals-card"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
@@ -1106,6 +1107,15 @@ export function ContractDetailClient({
               </CardContent>
             </Card>
           )}
+
+          {/*
+           * Charles 2026-04-25: per-category market share. Computes
+           * the vendor's share of facility spend in each category
+           * they sell in, from real COG data (no schema migration
+           * required). Renders only on contracts whose vendor has
+           * COG presence.
+           */}
+          <CategoryMarketShareCard vendorId={contract.vendorId} />
 
           {contract.currentMarketShare != null && contract.marketShareCommitment != null && Number(contract.marketShareCommitment) > 0 && (
             <Card>
