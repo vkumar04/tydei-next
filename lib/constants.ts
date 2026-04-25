@@ -97,6 +97,7 @@ export const proposalStatusConfig: Record<string, StatusConfig> = {
   rejected: { label: "Rejected", variant: "destructive" },
   revision_requested: { label: "Revision Requested", variant: "secondary", className: "bg-amber-600 hover:bg-amber-600 text-white" },
   countered: { label: "Counter-proposed", variant: "secondary", className: "bg-indigo-600 hover:bg-indigo-600 text-white" },
+  withdrawn: { label: "Withdrawn", variant: "outline" },
 }
 
 export const invoiceStatusConfig: Record<string, StatusConfig> = {

@@ -185,5 +185,13 @@ export async function withdrawChangeProposal(id: string) {
     where: { id, vendorId: vendor.id, status: "pending" },
     data: { status: "withdrawn", reviewNotes: "Withdrawn by vendor" },
   })
+  if (result.count === 0) {
+    // Charles 2026-04-25 audit re-pass C4: surface "no-op withdraw"
+    // (already approved/rejected, or wrong vendor) instead of a
+    // silent success toast.
+    throw new Error(
+      "Cannot withdraw proposal: not found or already finalized.",
+    )
+  }
   return serialize(result)
 }

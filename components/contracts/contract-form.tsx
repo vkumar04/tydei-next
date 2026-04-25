@@ -1128,11 +1128,17 @@ export function ContractFormBasicInfo({
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                         <SelectContent>
-                          {categories.map((c) => (
-                            <SelectItem key={c.id} value={c.name}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
+                          {categories
+                            .filter((c) =>
+                              selectedCategoryIds.length === 0
+                                ? true
+                                : selectedCategoryIds.includes(c.id),
+                            )
+                            .map((c) => (
+                              <SelectItem key={c.id} value={c.name}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>

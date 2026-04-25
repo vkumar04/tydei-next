@@ -459,10 +459,18 @@ export function VendorContractSubmission({
           const defaultRebateMethodForTermType = (
             tt: TermFormValues["termType"],
           ): TermFormValues["rebateMethod"] => {
-            // Tier-engine `marginal` only makes sense when tiers are
-            // ordered $/unit thresholds; flat-trigger types are always
-            // cumulative-equivalent.
+            // Tier-engine `marginal` makes sense for ordered $/unit
+            // ladders (spend, growth, volume); flat-trigger types are
+            // always cumulative-equivalent. Charles audit re-pass C6:
+            // volume_rebate / growth_rebate previously fell through to
+            // cumulative even when the AI's contract is clearly a
+            // marginal ladder. Bias to `marginal` for those two so
+            // AI-extracted volume/growth contracts compute correctly
+            // when the AI omits the field.
             switch (tt) {
+              case "volume_rebate":
+              case "growth_rebate":
+                return "marginal"
               case "market_share":
               case "compliance_rebate":
               case "fixed_fee":
