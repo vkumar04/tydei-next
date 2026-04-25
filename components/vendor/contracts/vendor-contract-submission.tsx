@@ -560,15 +560,22 @@ export function VendorContractSubmission({
     e.preventDefault()
     setIsSubmitting(true)
 
-    const targetFacilityId = isMultiFacility
-      ? selectedFacilities[0]
+    // Charles audit round-1 vendor C1: multi-facility submission used
+    // to silently take only selectedFacilities[0]. The remaining
+    // selections were dropped — vendor saw "Submitted" but only one
+    // facility got the row. Now: when isMultiFacility, fan out one
+    // PendingContract per selected facility so the GPO membership all
+    // receive it. Single-facility path unchanged.
+    const facilityIdsToSubmit: string[] = isMultiFacility
+      ? selectedFacilities.filter(Boolean)
       : facilityId
-    const targetFacility = facilities.find((f) => f.id === targetFacilityId)
+        ? [facilityId]
+        : []
 
     if (
       !contractName ||
       !contractType ||
-      !targetFacilityId ||
+      facilityIdsToSubmit.length === 0 ||
       !effectiveDate ||
       !expirationDate
     ) {
@@ -577,13 +584,15 @@ export function VendorContractSubmission({
       return
     }
 
-    const payload: CreatePendingContractInput = {
+    const buildPayloadFor = (
+      facId: string,
+    ): CreatePendingContractInput => ({
       vendorId,
       vendorName,
       contractName,
       contractType: contractType as CreatePendingContractInput["contractType"],
-      facilityId: targetFacilityId,
-      facilityName: targetFacility?.name,
+      facilityId: facId,
+      facilityName: facilities.find((f) => f.id === facId)?.name,
       effectiveDate: effectiveDate.toISOString().split("T")[0],
       expirationDate: expirationDate.toISOString().split("T")[0],
       totalValue: contractTotal ? parseFloat(contractTotal) : undefined,
@@ -639,10 +648,14 @@ export function VendorContractSubmission({
             uploadedAt: new Date().toISOString(),
           }
         : undefined,
-    }
+    })
 
     try {
-      await create.mutateAsync(payload)
+      // Fan out one PendingContract per selected facility so the
+      // GPO membership all receive the row.
+      for (const facId of facilityIdsToSubmit) {
+        await create.mutateAsync(buildPayloadFor(facId))
+      }
       router.push("/vendor/contracts")
     } catch {
       setIsSubmitting(false)

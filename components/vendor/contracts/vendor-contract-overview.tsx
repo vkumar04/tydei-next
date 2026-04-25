@@ -57,11 +57,18 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: React.Rea
 export function VendorContractOverview({ contract }: VendorContractOverviewProps) {
   const [activeTab, setActiveTab] = useState("overview")
 
-  // Compute summary values from contract periods
+  // Charles audit round-1 vendor C4: lifetime totals come from the
+  // server-side aggregate over the FULL period table — reducing
+  // over `contract.periods` was capped at the most-recent 4 rows
+  // (the ledger slice) and silently under-reported lifetime numbers.
   const summary = useMemo(() => {
-    const periods = contract.periods ?? []
-    const spendToDate = periods.reduce((sum, p) => sum + Number(p.totalSpend ?? 0), 0)
-    const rebateEarned = periods.reduce((sum, p) => sum + Number(p.rebateEarned ?? 0), 0)
+    const lifetime = contract.lifetimeTotals ?? {
+      spend: 0,
+      rebateEarned: 0,
+      rebateCollected: 0,
+    }
+    const spendToDate = lifetime.spend
+    const rebateEarned = lifetime.rebateEarned
 
     const now = new Date()
     const expiration = new Date(contract.expirationDate)

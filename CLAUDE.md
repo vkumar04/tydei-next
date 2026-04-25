@@ -78,8 +78,8 @@ a new invariant, add a row.
 | Invariant | Canonical helper | File | Used by |
 |---|---|---|---|
 | Rebates Collected (lifetime) | `sumCollectedRebates` | `lib/contracts/rebate-collected-filter.ts` | contracts-list, contract-detail header, Transactions tab, dashboard, reports |
-| Rebates Earned (lifetime) | `sumEarnedRebatesLifetime` | `lib/contracts/rebate-earned-filter.ts` | contract-detail Transactions tab "Total Rebates (Lifetime)" card (`components/contracts/contract-transactions.tsx` via `mapRebateRowsToLedger`), reports overview. Regression-guarded by `lib/actions/__tests__/contracts-list-vs-detail-parity.test.ts` "W2.A.3" block |
-| Rebates Earned (YTD) | `sumEarnedRebatesYTD` | `lib/contracts/rebate-earned-filter.ts` | contract-detail "Earned (YTD)" card, contracts-list earned column |
+| Rebates Earned (lifetime) | `sumEarnedRebatesLifetime` | `lib/contracts/rebate-earned-filter.ts` | **contracts-list earned column** (Charles iMessage 2026-04-20 N13 "make that lifetime"), contract-detail Transactions tab "Total Rebates (Lifetime)" card (`components/contracts/contract-transactions.tsx` via `mapRebateRowsToLedger`), reports overview. Regression-guarded by `lib/actions/__tests__/contracts-list-vs-detail-parity.test.ts` "W2.A.3" block |
+| Rebates Earned (YTD) | `sumEarnedRebatesYTD` | `lib/contracts/rebate-earned-filter.ts` | contract-detail "Earned (YTD)" card |
 | COG in-term-scope | `buildCategoryWhereClause` / `buildUnionCategoryWhereClause` | `lib/contracts/cog-category-filter.ts` | `recomputeAccrualForContract`, `getAccrualTimeline`, contracts-list trailing-12mo cascade |
 | Contract ownership | `contractOwnershipWhere` / `contractsOwnedByFacility` | `lib/actions/contracts-auth.ts` | every read in `lib/actions/` that takes a `contractId` |
 | Rebate-units scaling | `computeRebateFromPrismaTiers` + `formatTierRebateLabel` | `lib/rebates/calculate.ts` + `lib/contracts/tier-rebate-label.ts` | every surface displaying % or earned from `ContractTier.rebateValue` |
@@ -100,9 +100,9 @@ a new invariant, add a row.
      invariants table calls the canonical helper (grep for ad-hoc reducers).
 - **No dual-source metrics.** `getContractMetricsBatch` was removed in
   Charles W1.X-D. The single source for list-row metrics
-  (`rebateEarned` YTD, `rebateCollected` lifetime, `currentSpend`
+  (`rebateEarned` lifetime, `rebateCollected` lifetime, `currentSpend`
   trailing 12mo) is `getContracts` via the canonical helpers
-  (`sumEarnedRebatesYTD`, `sumCollectedRebates`, trailing-12mo
+  (`sumEarnedRebatesLifetime`, `sumCollectedRebates`, trailing-12mo
   cascade). The list column accessors MUST NOT fall back to any
   batch-derived field. Enforced by
   `lib/actions/__tests__/contracts-list-vs-detail-parity.test.ts`.

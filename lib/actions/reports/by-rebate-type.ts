@@ -23,6 +23,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 
 export interface RebateTypeBucket {
   termType: string
@@ -91,6 +92,9 @@ export async function getRebateBreakdownByType(): Promise<RebateTypeBucket[]> {
         contractId: true,
         rebateEarned: true,
         rebateCollected: true,
+        // Charles audit round-1 facility CONCERN-A: needed by
+        // sumCollectedRebates which filters on collectionDate != null.
+        collectionDate: true,
         notes: true,
       },
     })
@@ -137,7 +141,16 @@ export async function getRebateBreakdownByType(): Promise<RebateTypeBucket[]> {
         inferred: false,
       }
       bucket.earned += Number(r.rebateEarned ?? 0)
-      bucket.collected += Number(r.rebateCollected ?? 0)
+      // Charles audit round-1 facility CONCERN-A: route the
+      // collected aggregate through the canonical sumCollectedRebates
+      // helper so the "Collected" filter (collectionDate != null) is
+      // owned by exactly one place. Today every writer pairs
+      // rebateCollected with collectionDate so this is a no-op
+      // numerically; a future writer that sets rebateCollected
+      // without a date would silently drift this surface from the
+      // contracts list / detail / dashboard. See CLAUDE.md
+      // canonical-reducers invariants table.
+      bucket.collected += sumCollectedRebates([r])
       bucket.rowCount += 1
       bucket.contracts.add(r.contractId)
       if (isInferred) bucket.inferred = true

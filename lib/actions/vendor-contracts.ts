@@ -65,9 +65,32 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
         orderBy: { createdAt: "asc" },
       },
       documents: { orderBy: { uploadDate: "desc" } },
+      // `periods` is intentionally a recent-N slice for the ledger
+      // tab; lifetime totals must come from `lifetimeTotals` below
+      // (the prior code reduced over the truncated 4-row slice and
+      // silently under-reported lifetime numbers — Charles audit
+      // round-1 vendor C4).
       periods: { orderBy: { periodEnd: "desc" }, take: 4 },
       changeProposals: { orderBy: { submittedAt: "desc" } },
     },
   })
-  return serialize(contract)
+
+  // Charles audit round-1 vendor C4: aggregate the FULL period table
+  // for lifetime totals so the vendor overview's Spend / Rebate
+  // Earned / Rebate Collected don't truncate at 4 most-recent rows.
+  const lifetimeAgg = await prisma.contractPeriod.aggregate({
+    where: { contractId: id },
+    _sum: {
+      totalSpend: true,
+      rebateEarned: true,
+      rebateCollected: true,
+    },
+  })
+  const lifetimeTotals = {
+    spend: Number(lifetimeAgg._sum.totalSpend ?? 0),
+    rebateEarned: Number(lifetimeAgg._sum.rebateEarned ?? 0),
+    rebateCollected: Number(lifetimeAgg._sum.rebateCollected ?? 0),
+  }
+
+  return serialize({ ...contract, lifetimeTotals })
 }

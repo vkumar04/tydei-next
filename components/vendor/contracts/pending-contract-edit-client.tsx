@@ -96,8 +96,12 @@ function hydrateTermsForForm(termsJson: unknown): TermFormValues[] {
           typeof tier.rebateType === "string"
             ? (tier.rebateType as TermFormValues["tiers"][number]["rebateType"])
             : "percent_of_spend"
+        // Charles audit round-1 vendor C2: tierName must round-trip
+        // too — same data-loss class as the broader hydrate fix.
         return {
           tierNumber,
+          tierName:
+            typeof tier.tierName === "string" ? tier.tierName : null,
           spendMin,
           spendMax,
           volumeMin,

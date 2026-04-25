@@ -12,6 +12,10 @@ import {
 export const tierInputSchema = z.object({
   id: z.string().optional(),
   tierNumber: z.number().int().min(1).default(1),
+  // Charles audit round-1 vendor C2: tierName is on the Prisma
+  // ContractTier model and round-trips via hydrateTermsForForm —
+  // include it here so the form schema doesn't strip it on save.
+  tierName: z.string().nullable().optional(),
   spendMin: z.number().min(0).default(0),
   spendMax: z.number().min(0).optional(),
   volumeMin: z.number().int().min(0).optional(),

@@ -11,7 +11,7 @@
 
 import { prisma } from "@/lib/db"
 import {
-  sumEarnedRebatesYTD,
+  sumEarnedRebatesLifetime,
   sumEarnedRebatesLifetime,
 } from "@/lib/contracts/rebate-earned-filter"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
@@ -158,7 +158,9 @@ async function main() {
 
   for (const c of contracts) {
     // List path (canonical helpers)
-    const listRebateEarned = sumEarnedRebatesYTD(c.rebates ?? [], today)
+    // Charles audit round-1 facility CONCERN-B + iMessage 2026-04-20 N13:
+    // list column is now LIFETIME (was YTD). Doc + diagnose follow.
+    const listRebateEarned = sumEarnedRebatesLifetime(c.rebates ?? [])
     const listRebateCollected = sumCollectedRebates(c.rebates ?? [])
     const periodSpend = periodSpendByContract.get(c.id) ?? 0
     const cogContractSpend = cogSpendByContract.get(c.id) ?? 0
@@ -170,7 +172,7 @@ async function main() {
     // cascade as the list path (per R5.28). So list & detail should
     // always match — any drift on this pair indicates the reducers have
     // forked.
-    const detailRebateEarned = sumEarnedRebatesYTD(c.rebates ?? [], today)
+    const detailRebateEarned = sumEarnedRebatesLifetime(c.rebates ?? [])
     const detailRebateCollected = sumCollectedRebates(c.rebates ?? [])
     const detailCurrentSpend = listCurrentSpend
 

@@ -540,7 +540,7 @@ async function getDemoFacilityId(): Promise<string | null> {
 type ParityTriple = {
   contractId: string
   contractName: string
-  listEarnedYTD: number
+  listEarnedLifetime: number
   headerEarnedYTD: number
   ledgerEarnedYTD: number
   listCollected: number
@@ -580,7 +580,11 @@ async function computeParity(
       },
     },
   })
-  const listEarnedYTD = sumEarnedRebatesYTD(listContract.rebates, today)
+  // Charles audit round-1 facility CONCERN-B + iMessage 2026-04-20 N13:
+  // contracts-list earned column is LIFETIME (not YTD). Smoke now
+  // mirrors that — list value should equal the detail's lifetime card,
+  // not the YTD card.
+  const listEarnedLifetime = sumEarnedRebatesLifetime(listContract.rebates)
   const listCollected = sumCollectedRebates(listContract.rebates)
 
   // Surface 2 — contract-detail header card. getContract() uses the same
@@ -625,7 +629,7 @@ async function computeParity(
   return {
     contractId,
     contractName: listContract.name,
-    listEarnedYTD,
+    listEarnedLifetime,
     headerEarnedYTD,
     ledgerEarnedYTD,
     listCollected,
@@ -682,24 +686,29 @@ async function stepNumericParity(): Promise<CheckOutcome> {
     `    ${DIM}Golden-number table (today=${today.toISOString().slice(0, 10)}):${RESET}`,
   ]
   lines.push(
-    `    ${DIM}${"contract".padEnd(40)}  ${"list.earnedYTD".padStart(16)}  ${"header.earnedYTD".padStart(18)}  ${"ledger.earnedYTD".padStart(18)}  ${"collected".padStart(14)}${RESET}`,
+    `    ${DIM}${"contract".padEnd(40)}  ${"list.earnedLT".padStart(16)}  ${"header.earnedYTD".padStart(18)}  ${"ledger.earnedYTD".padStart(18)}  ${"collected".padStart(14)}${RESET}`,
   )
   for (const t of triples) {
-    const row = `    ${t.contractName.slice(0, 40).padEnd(40)}  ${t.listEarnedYTD
+    const row = `    ${t.contractName.slice(0, 40).padEnd(40)}  ${t.listEarnedLifetime
       .toFixed(2)
       .padStart(16)}  ${t.headerEarnedYTD.toFixed(2).padStart(18)}  ${t.ledgerEarnedYTD
       .toFixed(2)
       .padStart(18)}  ${t.headerCollected.toFixed(2).padStart(14)}`
     lines.push(row)
+    // Charles audit round-1 facility CONCERN-B: list is LIFETIME,
+    // header is YTD. Compare list-lifetime against
+    // header-LIFETIME (separate field), and header-YTD against
+    // ledger-YTD (the YTD parity that still applies between header
+    // card and ledger).
     if (
-      !approxEqual(t.listEarnedYTD, t.headerEarnedYTD) ||
+      !approxEqual(t.listEarnedLifetime, t.headerEarnedLifetime) ||
       !approxEqual(t.headerEarnedYTD, t.ledgerEarnedYTD)
     ) {
       failures.push(
-        `EARNED_YTD drift for ${t.contractName} (${t.contractId}): list=${t.listEarnedYTD} header=${t.headerEarnedYTD} ledger=${t.ledgerEarnedYTD}
+        `EARNED drift for ${t.contractName} (${t.contractId}): list.lifetime=${t.listEarnedLifetime} header.lifetime=${t.headerEarnedLifetime} header.ytd=${t.headerEarnedYTD} ledger.ytd=${t.ledgerEarnedYTD}
         source calls:
-          list   = sumEarnedRebatesYTD(contract.rebates) at lib/actions/contracts.ts:232
-          header = sumEarnedRebatesYTD(contract.rebates) at lib/actions/contracts.ts:495
+          list   = sumEarnedRebatesLifetime(contract.rebates) (lib/actions/contracts.ts contracts-list path)
+          header = sumEarnedRebatesLifetime / sumEarnedRebatesYTD (lib/actions/contracts.ts:495)
           ledger = sumEarnedRebatesYTD(getContractRebates rows) at lib/actions/contract-periods.ts:310`,
       )
     }
