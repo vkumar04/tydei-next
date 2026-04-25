@@ -47,7 +47,7 @@ const CONTRACT_EDIT_FIELD_OPTIONS: ReadonlyArray<{
   { value: "autoRenewal", label: "Auto-renewal" },
   { value: "terminationNoticeDays", label: "Termination notice (days)" },
   { value: "capitalCost", label: "Capital cost ($)" },
-  { value: "interestRate", label: "Interest rate" },
+  { value: "interestRate", label: "Interest rate (%)" },
   { value: "termMonths", label: "Term (months)" },
   { value: "downPayment", label: "Down payment ($)" },
   { value: "paymentCadence", label: "Payment cadence" },
