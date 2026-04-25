@@ -88,8 +88,14 @@ export function calculateTieInCapital(
   const carriedForwardShortfall = options?.carriedForwardShortfall ?? 0
 
   // ── 1. Build schedule in memory ────────────────────────────────
+  // Charles audit pass-4 BLOCKER 1: amortize financed principal
+  // (capitalCost - downPayment), not the gross sticker.
+  const financedPrincipal = Math.max(
+    0,
+    config.capitalCost - (config.downPayment ?? 0),
+  )
   const schedule = buildTieInAmortizationSchedule({
-    capitalCost: config.capitalCost,
+    capitalCost: financedPrincipal,
     interestRate: config.interestRate,
     termMonths: config.termMonths,
     period: config.period,

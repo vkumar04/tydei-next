@@ -638,10 +638,13 @@ export async function approvePendingContract(id: string, reviewedBy: string) {
         amortizationShape:
           pending.amortizationShape as Prisma.ContractCreateInput["amortizationShape"],
       }),
-      // Charles audit pass-3 C1: copy tie-in parent + division so the
-      // capital amortization tie-in math is wired post-approve.
+      // Charles audit pass-3 C1 + pass-4 BLOCKER 2: copy tie-in
+      // parent + division so the capital amortization tie-in math is
+      // wired post-approve. Field on Contract is
+      // `tieInCapitalContractId` (not `tieInContractId` — that's the
+      // PendingContract field name only).
       ...(pending.tieInContractId != null && {
-        tieInContractId: pending.tieInContractId,
+        tieInCapitalContractId: pending.tieInContractId,
       }),
       ...(pending.division != null && { division: pending.division }),
       ...(pricingItems.length > 0 && {

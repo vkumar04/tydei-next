@@ -171,6 +171,10 @@ export interface ContractCapitalScheduleResult {
   /** null → this contract does not have a tie-in capital term yet. */
   hasSchedule: boolean
   capitalCost: number
+  /** Charles audit pass-4: cash put down at signing. */
+  downPayment: number
+  /** Charles audit pass-4: capitalCost − downPayment, what the schedule actually amortizes. */
+  financedPrincipal: number
   interestRate: number
   termMonths: number
   period: "monthly" | "quarterly" | "annual"
@@ -278,6 +282,7 @@ export async function getContractCapitalSchedule(
       vendorId: true,
       effectiveDate: true,
       capitalCost: true,
+      downPayment: true,
       interestRate: true,
       termMonths: true,
       paymentCadence: true,
@@ -315,6 +320,8 @@ export async function getContractCapitalSchedule(
   const empty: ContractCapitalScheduleResult = {
     hasSchedule: false,
     capitalCost: 0,
+    downPayment: 0,
+    financedPrincipal: 0,
     interestRate: 0,
     termMonths: 0,
     period: "monthly",
@@ -341,11 +348,18 @@ export async function getContractCapitalSchedule(
   }
 
   const capitalCost = Number(contract.capitalCost)
+  const downPayment = Number(contract.downPayment ?? 0)
+  // Charles audit pass-4 BLOCKER 1: amortize the financed principal
+  // (capitalCost - downPayment), not the gross sticker. Earlier code
+  // passed capitalCost straight in, overstating PMT/interest/balance
+  // by (capitalCost / financed) ratio. Clamp at 0 to handle the edge
+  // case downPayment > capitalCost.
+  const financedPrincipal = Math.max(0, capitalCost - downPayment)
   const interestRate = Number(contract.interestRate)
   const termMonths = Number(contract.termMonths)
   const period = normalizeCadence(contract.paymentCadence)
 
-  if (capitalCost <= 0 || termMonths <= 0) return empty
+  if (financedPrincipal <= 0 || termMonths <= 0) return empty
 
   // Wave D — custom-shape contracts source rows from the persisted
   // table; symmetrical contracts always compute live so capital /
@@ -365,7 +379,7 @@ export async function getContractCapitalSchedule(
     }))
   } else {
     entries = buildTieInAmortizationSchedule({
-      capitalCost,
+      capitalCost: financedPrincipal,
       interestRate,
       termMonths,
       period,
@@ -567,6 +581,11 @@ export async function getContractCapitalSchedule(
   return {
     hasSchedule: true,
     capitalCost,
+    // Charles audit pass-4: expose financed principal + downPayment so
+    // surfaces like TieInRebateSplit can compute the cash-vs-capital
+    // split honestly.
+    downPayment,
+    financedPrincipal,
     interestRate,
     termMonths,
     period,
@@ -657,6 +676,7 @@ export async function getContractCapitalProjection(
       effectiveDate: true,
       expirationDate: true,
       capitalCost: true,
+      downPayment: true,
       interestRate: true,
       termMonths: true,
       paymentCadence: true,
@@ -688,16 +708,19 @@ export async function getContractCapitalProjection(
     return empty
   }
   const capitalCost = Number(contract.capitalCost)
+  const downPayment = Number(contract.downPayment ?? 0)
+  // Charles audit pass-4 BLOCKER 1: amortize financed principal.
+  const financedPrincipal = Math.max(0, capitalCost - downPayment)
   const interestRate = Number(contract.interestRate)
   const termMonths = Number(contract.termMonths)
-  if (capitalCost <= 0 || termMonths <= 0) return empty
+  if (financedPrincipal <= 0 || termMonths <= 0) return empty
 
   const period = normalizeCadenceLocal(contract.paymentCadence)
 
   // Remaining balance — computed the same way as getContractCapitalSchedule
   // so the two surfaces never disagree.
   const entries = buildTieInAmortizationSchedule({
-    capitalCost,
+    capitalCost: financedPrincipal,
     interestRate,
     termMonths,
     period,

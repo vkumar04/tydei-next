@@ -36,12 +36,16 @@ import { getContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
 
 interface TieInRebateSplitProps {
   contractId: string
-  rebateEarned: number
+  /**
+   * Charles audit pass-4 CONCERN 3: kept for backwards compat at
+   * call sites; cash-rebate math no longer depends on it (collected
+   * vs financed principal is the truth source).
+   */
+  rebateEarned?: number
 }
 
 export function TieInRebateSplit({
   contractId,
-  rebateEarned,
 }: TieInRebateSplitProps) {
   const { data } = useQuery({
     queryKey: ["contract-capital-schedule", contractId],
@@ -52,14 +56,18 @@ export function TieInRebateSplit({
   // non-capital tie-in contracts keep their existing display.
   if (!data || !data.hasSchedule) return null
 
-  // Charles W1.Y-C (C2): `appliedToCapital` now comes from the canonical
-  // helper (via the server action) — collected rebate applied to the
-  // capital balance. The cash-rebate piece is anything earned above the
-  // total capital cost (i.e., once capital is fully retired). Under the
-  // 100%-to-capital rule this is typically $0 while there is still a
-  // balance due.
+  // Charles audit pass-4 CONCERN 3: cash-rebate is collected dollars
+  // above the FINANCED principal (capitalCost − downPayment), not
+  // gross capitalCost. Use earned only as a fallback when the prop
+  // exposes it (collected isn't currently surfaced through the tie-in
+  // schedule action — the canonical sumRebateAppliedToCapital tells
+  // us what's been applied to capital, and any remainder above the
+  // financed amount is the cash piece).
   const appliedToCapital = data.rebateAppliedToCapital
-  const cashRebate = Math.max(0, rebateEarned - data.capitalCost)
+  const cashRebate = Math.max(
+    0,
+    appliedToCapital - data.financedPrincipal,
+  )
 
   return (
     <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">

@@ -208,6 +208,12 @@ export interface TieInCapitalConfig {
   type: "TIE_IN_CAPITAL"
   /** Upfront capital cost amortized by the rebate stream. */
   capitalCost: number
+  /**
+   * Charles audit pass-4: optional cash down payment subtracted from
+   * `capitalCost` to derive the financed principal that the schedule
+   * actually amortizes. Defaults to 0.
+   */
+  downPayment?: number
   /** Annual interest rate (decimal: 0.05 = 5%). */
   interestRate: number
   /** Total repayment term in months. */
