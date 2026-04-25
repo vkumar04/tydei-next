@@ -552,14 +552,13 @@ export async function updateContractTransaction(
     where: contractOwnershipWhere(input.contractId, facility.id),
     select: { id: true },
   })
-  // The Rebate row must also belong to that contract.
-  const rebate = await prisma.rebate.findUniqueOrThrow({
-    where: { id: input.id },
+  // Charles audit deferred-fix: scope the rebate lookup by both id
+  // AND contractId via findFirstOrThrow so cross-tenant existence
+  // probing is removed at the boundary.
+  const rebate = await prisma.rebate.findFirstOrThrow({
+    where: { id: input.id, contractId: input.contractId },
     select: { contractId: true, notes: true },
   })
-  if (rebate.contractId !== input.contractId) {
-    throw new Error("Rebate does not belong to the requested contract")
-  }
 
   const data: Prisma.RebateUpdateInput = {}
   if (input.rebateCollected !== undefined) {
@@ -610,13 +609,12 @@ export async function deleteContractTransaction(input: {
     where: contractOwnershipWhere(input.contractId, facility.id),
     select: { id: true },
   })
-  const rebate = await prisma.rebate.findUniqueOrThrow({
-    where: { id: input.id },
+  // Charles audit deferred-fix: scoped lookup removes the existence
+  // oracle.
+  const rebate = await prisma.rebate.findFirstOrThrow({
+    where: { id: input.id, contractId: input.contractId },
     select: { contractId: true, notes: true },
   })
-  if (rebate.contractId !== input.contractId) {
-    throw new Error("Rebate does not belong to the requested contract")
-  }
   if (rebate.notes && rebate.notes.includes("[auto-accrual]")) {
     throw new Error(
       "Cannot delete an auto-accrual row. Uncollect instead, or run Recompute Earned Rebates.",

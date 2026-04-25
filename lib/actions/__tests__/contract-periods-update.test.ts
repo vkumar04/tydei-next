@@ -131,6 +131,9 @@ vi.mock("@/lib/db", () => ({
     rebate: {
       findUniqueOrThrow: (args: { where: { id: string } }) =>
         rebateFindUniqueOrThrow(args),
+      // Round-12 deferred-fix: scoped lookup uses findFirstOrThrow.
+      findFirstOrThrow: (args: { where: { id: string; contractId?: string } }) =>
+        rebateFindUniqueOrThrow(args),
       findUnique: (args: { where: { id: string } }) =>
         rebateFindUnique(args),
       update: (args: {
