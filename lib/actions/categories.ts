@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireAuth, requireFacility } from "@/lib/actions/auth"
+import { requireAdmin, requireAuth, requireFacility } from "@/lib/actions/auth"
 import type { ProductCategory } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 
@@ -88,7 +88,12 @@ export async function updateCategory(
   id: string,
   input: { name?: string; description?: string; parentId?: string | null }
 ) {
-  await requireFacility()
+  // Charles audit deferred-fix: ProductCategory is a global taxonomy
+  // (no facilityId column). Renaming or reparenting a category
+  // affects every tenant's dropdowns and category-scoped contracts.
+  // Admin-only. createCategory stays facility-accessible because
+  // facility workflows need to add new categories ad-hoc.
+  await requireAdmin()
 
   const category = await prisma.productCategory.update({
     where: { id },
@@ -104,7 +109,9 @@ export async function updateCategory(
 // ─── Delete Category ────────────────────────────────────────────
 
 export async function deleteCategory(id: string) {
-  await requireFacility()
+  // Charles audit deferred-fix: deleting a category orphans every
+  // contract that scopes a term by it. Admin-only.
+  await requireAdmin()
 
   // Re-parent children to null before deleting
   await prisma.productCategory.updateMany({

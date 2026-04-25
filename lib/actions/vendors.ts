@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireAdmin, requireFacility } from "@/lib/actions/auth"
 import {
   vendorFiltersSchema,
   createVendorSchema,
@@ -103,7 +103,11 @@ export async function createVendor(input: CreateVendorInput) {
 // ─── Update Vendor ──────────────────────────────────────────────
 
 export async function updateVendor(id: string, input: UpdateVendorInput) {
-  await requireFacility()
+  // Charles audit deferred-fix: Vendor rows are shared across
+  // facilities, so mutation must be admin-gated. A facility user
+  // changing another vendor's contact info or division would
+  // silently affect every other tenant's view of that vendor.
+  await requireAdmin()
   const data = updateVendorSchema.parse(input)
 
   const vendor = await prisma.vendor.update({
@@ -131,7 +135,9 @@ export async function updateVendor(id: string, input: UpdateVendorInput) {
 // ─── Deactivate Vendor ──────────────────────────────────────────
 
 export async function deactivateVendor(id: string) {
-  await requireFacility()
+  // Charles audit deferred-fix: deactivating a vendor affects every
+  // facility that has a connection to it — admin-only.
+  await requireAdmin()
 
   await prisma.vendor.update({
     where: { id },

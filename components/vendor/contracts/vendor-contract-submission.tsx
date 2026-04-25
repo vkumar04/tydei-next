@@ -601,7 +601,17 @@ export function VendorContractSubmission({
       documents: uploadedDocs.length > 0 ? uploadedDocs : undefined,
       notes: description || undefined,
       division: division || undefined,
-      tieInContractId: tieInRef || undefined,
+      // Charles audit deferred-fix: tieInContractId is facility-scoped
+      // (the parent capital contract belongs to ONE facility). On
+      // multi-facility fan-out, only the facility whose contract was
+      // actually selected as the tie-in target should receive the
+      // reference. For all other facilities in the fan-out, drop it.
+      // The vendor must follow up with a per-facility tie-in once the
+      // approved contracts exist on each facility's side.
+      tieInContractId:
+        isMultiFacility && facilityIdsToSubmit.length > 1
+          ? undefined
+          : tieInRef || undefined,
       // Charles 2026-04-25 (audit follow-up): all Phase-2 fields now
       // sent. The form gathers everything PendingContract supports;
       // approvePendingContract ports them onto the real Contract on

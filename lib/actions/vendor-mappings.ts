@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireAdmin, requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 
 // ─── Get Vendor Name Mappings ───────────────────────────────────
@@ -39,7 +39,12 @@ export async function confirmVendorNameMapping(
   id: string,
   mappedVendorId: string
 ) {
-  await requireFacility()
+  // Charles audit deferred-fix: VendorNameMapping is global taxonomy.
+  // Confirming a mapping changes how every facility's COG imports
+  // resolve that vendor name. Admin-only. createVendorNameMapping
+  // stays facility-accessible (the COG import flow needs to add new
+  // mappings on the fly).
+  await requireAdmin()
 
   const vendor = await prisma.vendor.findUniqueOrThrow({
     where: { id: mappedVendorId },
@@ -80,7 +85,9 @@ export async function createVendorNameMapping(input: {
 // ─── Delete Mapping ─────────────────────────────────────────────
 
 export async function deleteVendorNameMapping(id: string) {
-  await requireFacility()
+  // Charles audit deferred-fix: deleting a mapping reverts all
+  // future COG imports across every facility. Admin-only.
+  await requireAdmin()
 
   await prisma.vendorNameMapping.delete({ where: { id } })
 }

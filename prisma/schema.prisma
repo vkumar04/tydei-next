@@ -613,6 +613,12 @@ model Contract {
   isGrouped              Boolean           @default(false)
   isMultiFacility        Boolean           @default(false)
   tieInCapitalContractId String?
+  // Charles audit deferred-fix: vendor's organizational division
+  // (e.g. "Surgical", "Cardiology"). Persists from PendingContract
+  // on approve so contracts list / search can group by it. Pre-fix
+  // the approve path tried to write this column but it didn't
+  // exist on Contract, which silently dropped the value.
+  division               String?
   // Charles W1.T — tie-in capital is contract-level. One capital entry
   // per contract; rebates earned across all terms pay down one balance.
   capitalCost            Decimal?          @db.Decimal(14, 2)
@@ -854,6 +860,7 @@ model ContractPricing {
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
+  @@unique([contractId, vendorItemNo])
   @@index([contractId])
   @@index([vendorItemNo])
   @@map("contract_pricing")
