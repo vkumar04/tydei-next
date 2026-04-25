@@ -27,9 +27,81 @@ import { ArrowLeft, Save, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { UpdatePendingContractInput } from "@/lib/validators/pending-contracts"
+import { ContractTermsCard } from "./submission/contract-terms-card"
+import type { TermFormValues } from "@/lib/validators/contract-terms"
 
 interface PendingContractEditClientProps {
   pendingContractId: string
+}
+
+/**
+ * Charles 2026-04-25 (audit C3): hydrate the pending contract's
+ * JSON `terms` column into TermFormValues for editing. Mirrors the
+ * defaults used by extractPendingTerms in lib/actions/pending-contracts.ts
+ * so a round-trip through edit -> save preserves the vendor's
+ * original submission shape.
+ */
+function hydrateTermsForForm(termsJson: unknown): TermFormValues[] {
+  if (!Array.isArray(termsJson)) return []
+  const out: TermFormValues[] = []
+  for (const raw of termsJson) {
+    if (!raw || typeof raw !== "object") continue
+    const t = raw as Record<string, unknown>
+    if (typeof t.termName !== "string" || t.termName.length === 0) continue
+    const tiersRaw = Array.isArray(t.tiers) ? t.tiers : []
+    const tiers = tiersRaw
+      .map((rawTier, idx) => {
+        if (!rawTier || typeof rawTier !== "object") return null
+        const tier = rawTier as Record<string, unknown>
+        const tierNumber =
+          typeof tier.tierNumber === "number" ? tier.tierNumber : idx + 1
+        const spendMin =
+          typeof tier.spendMin === "number" ? tier.spendMin : 0
+        const spendMax =
+          typeof tier.spendMax === "number" ? tier.spendMax : undefined
+        const rebateValue =
+          typeof tier.rebateValue === "number" ? tier.rebateValue : 0
+        const rebateType =
+          typeof tier.rebateType === "string"
+            ? (tier.rebateType as TermFormValues["tiers"][number]["rebateType"])
+            : "percent_of_spend"
+        return {
+          tierNumber,
+          spendMin,
+          spendMax,
+          rebateType,
+          rebateValue,
+        } satisfies TermFormValues["tiers"][number]
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+    out.push({
+      termName: t.termName,
+      termType:
+        typeof t.termType === "string"
+          ? (t.termType as TermFormValues["termType"])
+          : "spend_rebate",
+      baselineType:
+        typeof t.baselineType === "string"
+          ? (t.baselineType as TermFormValues["baselineType"])
+          : "spend_based",
+      evaluationPeriod:
+        typeof t.evaluationPeriod === "string" ? t.evaluationPeriod : "annual",
+      paymentTiming:
+        typeof t.paymentTiming === "string" ? t.paymentTiming : "quarterly",
+      appliesTo:
+        typeof t.appliesTo === "string" ? t.appliesTo : "all_products",
+      rebateMethod:
+        typeof t.rebateMethod === "string"
+          ? (t.rebateMethod as TermFormValues["rebateMethod"])
+          : "cumulative",
+      effectiveStart:
+        typeof t.effectiveStart === "string" ? t.effectiveStart : "",
+      effectiveEnd:
+        typeof t.effectiveEnd === "string" ? t.effectiveEnd : "",
+      tiers,
+    })
+  }
+  return out
 }
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -91,6 +163,12 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
   const [amortizationShape, setAmortizationShape] = useState<
     "symmetrical" | "custom"
   >("symmetrical")
+  // Charles 2026-04-25 (audit C3): the prior edit form had no UI for
+  // `terms`, so a vendor responding to "fix tier 2 rebate %" had to
+  // withdraw + resubmit, losing thread continuity. Hydrated from the
+  // pending contract's JSON column on load and persisted via the same
+  // updatePendingContract action (which already accepts `terms`).
+  const [contractTerms, setContractTerms] = useState<TermFormValues[]>([])
   const [saving, setSaving] = useState(false)
 
   // Populate form when contract loads
@@ -148,6 +226,14 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
         (contract.amortizationShape as "symmetrical" | "custom") ??
           "symmetrical",
       )
+      // Charles 2026-04-25 (audit C3): hydrate the JSON `terms` blob
+      // into TermFormValues so ContractTermsEntry can edit it. The
+      // submission UI persists this exact shape, so a round-trip
+      // through the revision form preserves what the vendor sent.
+      // Defensive — we walk the array element-by-element and fall
+      // back to schema defaults rather than throwing on malformed
+      // entries (mirrors extractPendingTerms server-side).
+      setContractTerms(hydrateTermsForForm(contract.terms))
     }
   }, [contract])
 
@@ -187,6 +273,13 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
               amortizationShape,
             }
           : {}),
+        // Charles 2026-04-25 (audit C3): persist edited terms back to
+        // the JSON column. updatePendingContract already accepts
+        // `terms` (validator typed as z.any().optional(); action
+        // forwards verbatim to Prisma). Sending an empty array is
+        // meaningful — it clears all terms — so we always send the
+        // current array rather than gating on length.
+        terms: contractTerms,
       }
       await updatePendingContract(pendingContractId, updates)
       await queryClient.invalidateQueries({
@@ -522,15 +615,40 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
             />
           </Field>
 
-          {isEditable && (
-            <div className="flex justify-end pt-2">
-              <Button onClick={handleSave} disabled={saving || !contractName}>
-                <Save className="size-4" /> {saving ? "Saving..." : "Save Changes"}
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {/*
+       * Charles 2026-04-25 (audit C3): terms editor. When the
+       * contract isn't editable (approved/rejected/withdrawn) we
+       * still want the vendor to SEE the terms — render disabled
+       * via the wrapper container's pointer-events suppression so
+       * the existing ContractTermsEntry component can stay
+       * unchanged. The save button moves below this card so it
+       * commits both Phase-2 scalars and edited terms in one
+       * round-trip.
+       */}
+      {isEditable ? (
+        <ContractTermsCard
+          contractTerms={contractTerms}
+          onContractTermsChange={setContractTerms}
+        />
+      ) : (
+        <div className="pointer-events-none opacity-60">
+          <ContractTermsCard
+            contractTerms={contractTerms}
+            onContractTermsChange={setContractTerms}
+          />
+        </div>
+      )}
+
+      {isEditable && (
+        <div className="flex justify-end pt-2">
+          <Button onClick={handleSave} disabled={saving || !contractName}>
+            <Save className="size-4" /> {saving ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
