@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   createTermSchema,
   createTermSchemaWithTierCheck,
@@ -48,7 +49,12 @@ async function recomputeAccrualSafe(contractId: string): Promise<void> {
 // ─── Get Terms ───────────────────────────────────────────────────
 
 export async function getContractTerms(contractId: string) {
-  await requireFacility()
+  // Charles audit round-9 BLOCKER: scope by contract ownership.
+  const { facility } = await requireFacility()
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(contractId, facility.id),
+    select: { id: true },
+  })
 
   const terms = await prisma.contractTerm.findMany({
     where: { contractId },
@@ -73,7 +79,12 @@ export async function createContractTerm(input: CreateTermInput) {
 }
 
 async function _createContractTermImpl(input: CreateTermInput) {
-  await requireFacility()
+  // Charles audit round-9 BLOCKER: contract must belong to facility.
+  const { facility } = await requireFacility()
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(input.contractId, facility.id),
+    select: { id: true },
+  })
   // Charles 2026-04-25 (Bug 21): use the with-check variant so tier
   // overlaps are rejected at the server boundary even on direct
   // createContractTerm calls (the contract-create path is already
@@ -200,7 +211,17 @@ async function _updateContractTermImpl(
   id: string,
   input: UpdateTermInput,
 ) {
-  await requireFacility()
+  // Charles audit round-9 BLOCKER: resolve contract via term, then
+  // verify ownership.
+  const { facility } = await requireFacility()
+  const ownerLookup = await prisma.contractTerm.findUniqueOrThrow({
+    where: { id },
+    select: { contractId: true },
+  })
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(ownerLookup.contractId, facility.id),
+    select: { id: true },
+  })
   const data = updateTermSchema.parse(input)
   // Charles 2026-04-25 (Bug 21): apply the tier-overlap refinement
   // manually here. updateTermSchema is `.partial()` so it can't carry a
@@ -306,13 +327,20 @@ export async function deleteContractTerm(id: string) {
 }
 
 async function _deleteContractTermImpl(id: string) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   // Capture contractId before the delete cascades the term row away.
   const term = await prisma.contractTerm.findUnique({
     where: { id },
     select: { contractId: true },
   })
+  // Charles audit round-9 BLOCKER: verify ownership before deleting.
+  if (term) {
+    await prisma.contract.findUniqueOrThrow({
+      where: contractOwnershipWhere(term.contractId, facility.id),
+      select: { id: true },
+    })
+  }
 
   await prisma.contractTerm.delete({ where: { id } })
 
@@ -339,7 +367,16 @@ async function _upsertContractTiersImpl(
   termId: string,
   tiers: TierInput[],
 ) {
-  await requireFacility()
+  // Charles audit round-9 BLOCKER: verify ownership via term→contract.
+  const { facility } = await requireFacility()
+  const term = await prisma.contractTerm.findUniqueOrThrow({
+    where: { id: termId },
+    select: { contractId: true },
+  })
+  await prisma.contract.findUniqueOrThrow({
+    where: contractOwnershipWhere(term.contractId, facility.id),
+    select: { id: true },
+  })
   const validated = z.array(tierInputSchema).parse(tiers)
 
   await prisma.contractTier.deleteMany({ where: { termId } })

@@ -205,8 +205,21 @@ export async function getInvoice(id: string) {
 // ─── Import Invoice ─────────────────────────────────────────────
 
 export async function importInvoice(input: ImportInvoiceInput) {
+  // Charles audit round-9 CONCERN: facilityId comes from session, not
+  // client. Verify purchaseOrderId belongs to this facility before
+  // attaching. Pre-fix a facility user could create an Invoice owned
+  // by another facility OR attach a foreign PO id.
   const { facility, user } = await requireFacility()
   const data = importInvoiceSchema.parse(input)
+  if (data.purchaseOrderId) {
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id: data.purchaseOrderId },
+      select: { facilityId: true, vendorId: true },
+    })
+    if (!po || po.facilityId !== facility.id) {
+      throw new Error("Purchase order not found or not owned by this facility")
+    }
+  }
 
   const totalCost = data.lineItems.reduce(
     (sum, item) => sum + item.invoicePrice * item.invoiceQuantity,
@@ -216,7 +229,7 @@ export async function importInvoice(input: ImportInvoiceInput) {
   const invoice = await prisma.invoice.create({
     data: {
       invoiceNumber: data.invoiceNumber,
-      facilityId: data.facilityId,
+      facilityId: facility.id,
       vendorId: data.vendorId,
       purchaseOrderId: data.purchaseOrderId,
       invoiceDate: new Date(data.invoiceDate),

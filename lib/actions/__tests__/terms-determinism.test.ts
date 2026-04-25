@@ -43,11 +43,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
-// ─── Mock auth only — real prisma drives the test ──────────────────
+// ─── Mock auth — facility id is patched in beforeAll to match the
+//     real contract row so the round-9 ownership check passes.
+const facilityIdRef = { current: "test-facility" }
 vi.mock("@/lib/actions/auth", () => ({
   requireFacility: vi.fn(async () => ({
     user: { id: "test-user" },
-    facility: { id: "test-facility" },
+    facility: { id: facilityIdRef.current },
   })),
 }))
 
@@ -71,7 +73,7 @@ describe("terms content determinism (Charles W2.B)", () => {
     // `contractId` only (auth is stubbed above), so any term-bearing
     // contract gives us the ordering surface.
     const term = await prisma.contractTerm.findFirst({
-      select: { id: true, contractId: true },
+      select: { id: true, contractId: true, contract: { select: { facilityId: true } } },
     })
     if (!term) {
       throw new Error(
@@ -80,6 +82,8 @@ describe("terms content determinism (Charles W2.B)", () => {
     }
     contractId = term.contractId
     termId = term.id
+    // Round-9: patch the auth mock so the ownership check passes.
+    facilityIdRef.current = term.contract.facilityId
 
     // Seed multiple ContractTermProduct rows in an order that is NOT
     // naturally sorted — if the action ever decides to sort by

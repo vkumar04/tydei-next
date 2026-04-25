@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { requireAuth } from "@/lib/actions/auth"
 import { sendEmail } from "@/lib/email"
 import {
   alertNotificationEmail,
@@ -132,6 +133,10 @@ async function shouldSendEmail(
 // ─── Send Alert Notification ────────────────────────────────────
 
 export async function sendAlertNotification(alertId: string): Promise<void> {
+  // Charles audit round-9 BLOCKER: notification email actions are
+  // server-internal helpers but were RPC-callable with no auth.
+  // Pre-fix any client could enumerate alertIds and trigger emails.
+  await requireAuth()
   const alert = await prisma.alert.findUnique({
     where: { id: alertId },
     include: {
@@ -171,6 +176,12 @@ export async function sendAlertNotification(alertId: string): Promise<void> {
 export async function sendRenewalReminders(): Promise<{
   sent: number
 }> {
+  // Charles audit round-9 BLOCKER: cron-style fleet-wide email
+  // dispatch must require an authenticated session at minimum
+  // (cron job context can pass through requireAuth via a service
+  // user; if cron needs unauthenticated invocation, move this out
+  // of "use server" into an internal module).
+  await requireAuth()
   const now = new Date()
   let sent = 0
 
@@ -234,6 +245,10 @@ export async function sendRenewalReminders(): Promise<{
 export async function sendWeeklyDigest(
   facilityId: string
 ): Promise<{ sent: number }> {
+  // Charles audit round-9 BLOCKER: gate the weekly-digest email
+  // dispatch. Caller must be authenticated; weekly digest is a
+  // cron-style server action.
+  await requireAuth()
   const emailEnabled = await shouldSendEmail(facilityId)
   if (!emailEnabled) return { sent: 0 }
 
@@ -325,6 +340,12 @@ export async function notifyFacilityOfPendingContract(input: {
   facilityName?: string | null
   pendingId: string
 }): Promise<{ sent: number }> {
+  // Charles audit round-9 BLOCKER: this is intended as a post-write
+  // hook called by createPendingContract (which authenticates).
+  // Adding requireAuth makes the RPC surface non-anonymous so an
+  // attacker can't fire spoofed pending-contract notifications by
+  // enumerating facilityIds.
+  await requireAuth()
   try {
     // In-app: write a Notification row per facility-org member so
     // the top-bar bell surfaces it even if email is misconfigured.
@@ -381,6 +402,11 @@ export async function notifyVendorOfPendingDecision(input: {
   decision: "approved" | "rejected" | "revision_requested"
   reviewNotes?: string | null
 }): Promise<{ sent: number }> {
+  // Charles audit round-9 BLOCKER: post-write hook called by
+  // approve/reject/requestRevision (which authenticate). Adding
+  // requireAuth so anonymous RPC can't fire spoofed decision emails
+  // to vendor inboxes.
+  await requireAuth()
   try {
     const userIds = await getVendorMemberUserIds(input.vendorId)
     if (userIds.length > 0) {

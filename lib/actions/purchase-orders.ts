@@ -111,8 +111,27 @@ export async function getPurchaseOrder(id: string) {
 // ─── Create PO ──────────────────────────────────────────────────
 
 export async function createPurchaseOrder(input: CreatePOInput) {
+  // Charles audit round-9 CONCERN: validate any client-supplied
+  // contractId (header + per-line) belongs to this facility.
+  // Pre-fix a facility could tag its PO/line items with another
+  // facility's contract id, polluting joined views and savings math.
   const { facility } = await requireFacility()
   const data = createPOSchema.parse(input)
+  const contractIds = new Set<string>()
+  if (data.contractId) contractIds.add(data.contractId)
+  for (const item of data.lineItems) {
+    if (item.contractId) contractIds.add(item.contractId)
+  }
+  if (contractIds.size > 0) {
+    const owned = await prisma.contract.count({
+      where: { id: { in: Array.from(contractIds) }, facilityId: facility.id },
+    })
+    if (owned !== contractIds.size) {
+      throw new Error(
+        "One or more referenced contracts are not owned by this facility",
+      )
+    }
+  }
 
   const totalCost = data.lineItems.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,

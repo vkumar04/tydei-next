@@ -28,11 +28,18 @@ const {
 
 vi.mock("@/lib/db", () => ({
   prisma: {
+    contract: {
+      // Round-9 BLOCKER: ownership check before mutate.
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ id: "c-1" }),
+    },
     contractTerm: {
       create: createMock,
       update: updateMock,
       delete: deleteTermMock,
       findUnique: findUniqueTermMock,
+      findUniqueOrThrow: vi
+        .fn()
+        .mockResolvedValue({ contractId: "c-1" }),
     },
     contractTermProduct: {
       createMany: createManyProductMock,

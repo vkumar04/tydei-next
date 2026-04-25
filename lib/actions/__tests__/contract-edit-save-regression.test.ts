@@ -88,6 +88,10 @@ vi.mock("@/lib/db", () => ({
     contractTerm: {
       update: termUpdateMock,
       findUnique: termFindUniqueMock,
+      // Round-9 BLOCKER: contract-terms ownership check.
+      findUniqueOrThrow: vi
+        .fn()
+        .mockResolvedValue({ contractId: "c-1" }),
     },
     contractTier: {
       deleteMany: tierDeleteManyMock,
