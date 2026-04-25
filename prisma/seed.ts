@@ -15,6 +15,7 @@ import { seedBenchmarks } from "./seeds/benchmarks"
 import { seedPendingContracts } from "./seeds/pending-contracts"
 import { seedCOGRecords } from "./seeds/cog-records"
 import { seedCOGForContracts } from "./seeds/cog-for-contracts"
+import { seedContractPricing } from "./seeds/contract-pricing"
 import { seedPricingFiles } from "./seeds/pricing-files"
 import { seedAlerts } from "./seeds/alerts"
 import { seedPurchaseOrders } from "./seeds/purchase-orders"
@@ -48,6 +49,13 @@ async function main() {
   // No dependencies
   await seedBenchmarks(prisma)
 
+  // Charles 2026-04-25: ContractPricing rows must seed BEFORE the COG
+  // recompute pass kicked off by seedCOGRecords / seedCOGForContracts.
+  // Without these rows, every COG row stays at matchStatus=pending
+  // and on-contract %, optimizer projections, and rebate accruals all
+  // read as zero — Charles's "broken engines" perception was actually
+  // missing seed data, not broken code.
+  await seedContractPricing(prisma)
   // Existing seeds
   await seedCOGRecords(prisma, { facilities, vendors })
   await seedCOGForContracts(prisma)
