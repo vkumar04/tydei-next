@@ -43,6 +43,7 @@ next-env.d.ts
 # prisma
 /generated/
 tests/visual/.auth/
+tests/e2e/.auth/
 test-results/
 
 # v0-parity: prod snapshots are regenerated per-run, never committed
