@@ -77,12 +77,45 @@ export async function _hookBeforeRemoveMember(args: {
   }
 }
 
+// ─── trustedOrigins (CSRF mitigation) ────────────────────────────
+//
+// Better-auth validates the Origin/Referer of every auth API call
+// against `trustedOrigins` + `baseURL`. Without this list, the only
+// CSRF mitigation is the proxy.ts cookie-presence check. We include
+// the canonical baseURL plus dev fallbacks; add Railway preview URLs
+// here when those domains are known.
+const trustedOrigins: string[] = [
+  process.env.BETTER_AUTH_URL,
+  process.env.NEXT_PUBLIC_SITE_URL,
+  "http://localhost:3000",
+  "https://tydei-app-production.up.railway.app",
+].filter((o): o is string => typeof o === "string" && o.length > 0)
+
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_SITE_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
+  trustedOrigins: Array.from(new Set(trustedOrigins)),
   rateLimit: {
     window: 60,
     max: 100,
+  },
+  // ─── Cookie hardening ─────────────────────────────────────────
+  //
+  // better-auth 1.6 puts cookie config under `advanced`. The legacy
+  // `session.cookie` block was silently ignored at runtime.
+  // - `useSecureCookies: true` in production auto-prefixes session
+  //   cookies with `__Secure-` (preserved by `cookiePrefix:
+  //   "better-auth"` default), keeping proxy.ts's literal cookie
+  //   names valid.
+  // - `defaultCookieAttributes` apply to ALL better-auth cookies.
+  advanced: {
+    useSecureCookies: process.env.NODE_ENV === "production",
+    cookiePrefix: "better-auth",
+    defaultCookieAttributes: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
@@ -90,11 +123,6 @@ export const auth = betterAuth({
     cookieCache: {
       enabled: true,
       maxAge: 60 * 5, // 5 minutes
-    },
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax" as const,
     },
   },
   emailAndPassword: {
