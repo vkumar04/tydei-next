@@ -46,11 +46,11 @@ const CONTRACT_EDIT_FIELD_OPTIONS: ReadonlyArray<{
   { value: "rebatePayPeriod", label: "Rebate pay period" },
   { value: "autoRenewal", label: "Auto-renewal" },
   { value: "terminationNoticeDays", label: "Termination notice (days)" },
-  { value: "capitalCost", label: "Capital cost ($)" },
-  { value: "interestRate", label: "Interest rate (%)" },
-  { value: "termMonths", label: "Term (months)" },
-  { value: "downPayment", label: "Down payment ($)" },
-  { value: "paymentCadence", label: "Payment cadence" },
+  // Charles audit suggestion #4 (v0-port): legacy capital fields
+  // (capitalCost / interestRate / termMonths / downPayment /
+  // paymentCadence) removed — capital lives in
+  // ContractCapitalLineItem. Edits to capital must go through the
+  // line-item flow (future per-item proposal type).
   { value: "amortizationShape", label: "Amortization shape" },
 ]
 
@@ -137,26 +137,13 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
               ) : (
                 <Input placeholder="Field" value={change.field} onChange={(e) => updateChange(i, "field", e.target.value)} />
               )}
-              {/* Charles audit round-4 vendor CONCERN: hint percent
-                  units when proposing interestRate so a vendor doesn't
-                  type "0.05" thinking fraction (server expects percent
-                  and divides by 100). Same convention as the new-
-                  contract submission form. */}
               <Input
-                placeholder={
-                  change.field === "interestRate"
-                    ? "Current value (%)"
-                    : "Current value"
-                }
+                placeholder="Current value"
                 value={change.currentValue}
                 onChange={(e) => updateChange(i, "currentValue", e.target.value)}
               />
               <Input
-                placeholder={
-                  change.field === "interestRate"
-                    ? "Proposed value (%)"
-                    : "Proposed value"
-                }
+                placeholder="Proposed value"
                 value={change.proposedValue}
                 onChange={(e) => updateChange(i, "proposedValue", e.target.value)}
               />

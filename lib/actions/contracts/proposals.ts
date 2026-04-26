@@ -324,11 +324,10 @@ const ALLOWED_CONTRACT_EDIT_FIELDS: ReadonlySet<ContractEditField> = new Set([
   "rebatePayPeriod",
   "autoRenewal",
   "terminationNoticeDays",
-  "capitalCost",
-  "interestRate",
-  "termMonths",
-  "downPayment",
-  "paymentCadence",
+  // Charles audit suggestion #4 (v0-port): legacy capital fields removed.
+  // Capital lives in ContractCapitalLineItem rows. A vendor proposing a
+  // capital edit must do so per-line-item (future flow). amortizationShape
+  // is the only contract-level capital field that survives.
   "amortizationShape",
 ])
 
@@ -347,11 +346,6 @@ type ContractEditField =
   | "rebatePayPeriod"
   | "autoRenewal"
   | "terminationNoticeDays"
-  | "capitalCost"
-  | "interestRate"
-  | "termMonths"
-  | "downPayment"
-  | "paymentCadence"
   | "amortizationShape"
 
 type ContractEditPatch = Record<string, unknown>
@@ -363,13 +357,9 @@ const DATE_FIELDS = new Set<ContractEditField>([
 const DECIMAL_FIELDS = new Set<ContractEditField>([
   "totalValue",
   "annualValue",
-  "capitalCost",
-  "interestRate",
-  "downPayment",
 ])
 const INT_FIELDS = new Set<ContractEditField>([
   "terminationNoticeDays",
-  "termMonths",
 ])
 const BOOL_FIELDS = new Set<ContractEditField>(["autoRenewal"])
 
@@ -398,26 +388,17 @@ function coerceFieldValue(
     return undefined
   }
   if (DECIMAL_FIELDS.has(field)) {
+    // Charles audit suggestion #4 (v0-port): interestRate moved to
+    // ContractCapitalLineItem; no DECIMAL_FIELDS entries currently
+    // need a percent→fraction conversion (totalValue + annualValue
+    // are both raw dollars).
     if (typeof raw === "number" && Number.isFinite(raw)) {
-      // Charles audit pass-4 round-5 vendor CONCERN 2: interestRate
-      // is stored as a fraction (0.05 = 5%). The vendor proposal form
-      // takes a percent input the same way the new-contract submission
-      // form does (which divides by 100 at the form layer). Mirror
-      // that convention here so a vendor typing "5" doesn't write
-      // 500% to Contract.interestRate. Cap at 1.0 (= 100%) to match
-      // the validator on the new-contract path.
-      if (field === "interestRate") {
-        return new Prisma.Decimal(Math.min(1, raw / 100))
-      }
       return new Prisma.Decimal(raw)
     }
     if (typeof raw === "string" && raw.trim().length > 0) {
       const cleaned = raw.replace(/[$,]/g, "")
       const n = Number(cleaned)
       if (Number.isFinite(n)) {
-        if (field === "interestRate") {
-          return new Prisma.Decimal(Math.min(1, n / 100))
-        }
         return new Prisma.Decimal(cleaned)
       }
     }

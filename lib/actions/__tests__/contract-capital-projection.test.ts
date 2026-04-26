@@ -20,13 +20,24 @@ type RebateRow = {
 }
 type ContractRow = {
   id: string
+  name?: string
   contractType: string
   effectiveDate: Date
   expirationDate: Date | null
-  capitalCost: number | null
-  interestRate: number | null
-  termMonths: number | null
-  paymentCadence: "monthly" | "quarterly" | "annual" | null
+  // Charles audit suggestion #4 (v0-port): capital lives in line items.
+  capitalLineItems: Array<{
+    id: string
+    contractId: string
+    description: string
+    itemNumber: string | null
+    serialNumber: string | null
+    contractTotal: number
+    initialSales: number
+    interestRate: number
+    termMonths: number
+    paymentType: string
+    paymentCadence: string
+  }>
   rebates: RebateRow[]
 }
 
@@ -69,13 +80,11 @@ describe("getContractCapitalProjection", () => {
   it("returns hasProjection=false when the contract has no tie-in term", async () => {
     contractRow = {
       id: "c-1",
+      name: "No Capital",
       contractType: "tie_in",
       effectiveDate: new Date(),
       expirationDate: null,
-      capitalCost: null,
-      interestRate: null,
-      termMonths: null,
-      paymentCadence: null,
+      capitalLineItems: [],
       rebates: [],
     }
     const result = await getContractCapitalProjection("c-1")
@@ -93,13 +102,25 @@ describe("getContractCapitalProjection", () => {
 
     contractRow = {
       id: "c-1",
+      name: "Tie-In",
       contractType: "tie_in",
       effectiveDate: effective,
       expirationDate: expiration,
-      capitalCost: 1_200_000,
-      interestRate: 0, // zero-interest for clean principal math
-      termMonths: 60,
-      paymentCadence: "monthly",
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: "c-1",
+          description: "Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: 1_200_000,
+          initialSales: 0,
+          interestRate: 0,
+          termMonths: 60,
+          paymentType: "fixed",
+          paymentCadence: "monthly",
+        },
+      ],
       // Charles iMessage 2026-04-20 math audit: remainingBalance now
       // reflects ACTUAL collected-rebate paydown (not the forecast
       // principalDue schedule). Seed $600k of collected rebate so the
@@ -141,13 +162,25 @@ describe("getContractCapitalProjection", () => {
 
     contractRow = {
       id: "c-2",
+      name: "Zero-rebate",
       contractType: "tie_in",
       effectiveDate: effective,
       expirationDate: expiration,
-      capitalCost: 500_000,
-      interestRate: 0,
-      termMonths: 24,
-      paymentCadence: "monthly",
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: "c-2",
+          description: "Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: 500_000,
+          initialSales: 0,
+          interestRate: 0,
+          termMonths: 24,
+          paymentType: "fixed",
+          paymentCadence: "monthly",
+        },
+      ],
       rebates: [],
     }
     rebateSumTrailing90 = 0
@@ -169,13 +202,25 @@ describe("getContractCapitalProjection", () => {
 
     contractRow = {
       id: "c-3",
+      name: "High Run-Rate",
       contractType: "tie_in",
       effectiveDate: effective,
       expirationDate: expiration,
-      capitalCost: 120_000,
-      interestRate: 0,
-      termMonths: 24,
-      paymentCadence: "monthly",
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: "c-3",
+          description: "Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: 120_000,
+          initialSales: 0,
+          interestRate: 0,
+          termMonths: 24,
+          paymentType: "fixed",
+          paymentCadence: "monthly",
+        },
+      ],
       rebates: [],
     }
     // $300k / 90 days = $100k/month run-rate — vastly exceeds remaining.

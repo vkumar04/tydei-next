@@ -797,12 +797,10 @@ async function _createContractImpl(
       isMultiFacility: data.isMultiFacility,
       isGrouped: data.isGrouped ?? false,
       tieInCapitalContractId: data.tieInCapitalContractId,
-      // Charles W1.T — tie-in capital lives on Contract now.
-      ...(data.capitalCost != null && { capitalCost: data.capitalCost }),
-      ...(data.interestRate != null && { interestRate: data.interestRate }),
-      ...(data.termMonths != null && { termMonths: data.termMonths }),
-      ...(data.downPayment != null && { downPayment: data.downPayment }),
-      ...(data.paymentCadence != null && { paymentCadence: data.paymentCadence }),
+      // Charles audit suggestion #4 (v0-port): legacy capital fields
+      // removed — capital lives in ContractCapitalLineItem rows now.
+      // amortizationShape is the only contract-level capital field
+      // that survives.
       ...(data.amortizationShape != null && {
         amortizationShape: data.amortizationShape,
       }),
