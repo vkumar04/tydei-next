@@ -157,7 +157,7 @@ export function BundleImpactAnalysisCard({
             + Add scenario
           </Button>
           <Label className="ml-3 text-xs text-muted-foreground">
-            Math matches v0 spec (base + bonus at ≥120% · accelerator at ≥150%).
+            Base + bonus at ≥120% · accelerator at ≥150%.
           </Label>
         </div>
       </CardContent>

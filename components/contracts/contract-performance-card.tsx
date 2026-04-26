@@ -54,7 +54,7 @@ export function ContractPerformanceCard({
           <Activity className="h-4 w-4" /> Contract performance
         </CardTitle>
         <CardDescription>
-          v0 spec §9 — rebate utilization + renewal risk composite.
+          Rebate utilization and renewal risk at a glance.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

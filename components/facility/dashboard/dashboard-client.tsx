@@ -36,7 +36,6 @@ import { DashboardSpendTrendChart } from "./dashboard-spend-trend-chart"
 import { DashboardTopAlerts } from "./dashboard-top-alerts"
 import { DashboardBundleShortfallsCard } from "./dashboard-bundle-shortfalls-card"
 import { DashboardSpendConcentrationCard } from "./dashboard-spend-concentration-card"
-import { DashboardAdminTimeSavingsCard } from "./dashboard-admin-time-savings-card"
 import { DashboardSpendProjection } from "./dashboard-spend-projection"
 
 export interface DashboardInitialData {
@@ -147,7 +146,6 @@ export function DashboardClient({
             </div>
             <DashboardLifecyclePie lifecycle={charts.lifecycle} />
           </div>
-          <DashboardAdminTimeSavingsCard />
         </TabsContent>
 
         <TabsContent value="spend" className="mt-4 space-y-6">

@@ -121,8 +121,7 @@ export function ServiceSlaCard({ contractId }: { contractId: string }) {
         ) : (
           <p className="mt-6 text-xs text-muted-foreground">
             Tydei doesn&apos;t persist SLA targets/actuals on contracts yet —
-            enter them above to score this period&apos;s penalty against the
-            v0 spec.
+            enter them above to score this period&apos;s penalty.
           </p>
         )}
       </CardContent>
