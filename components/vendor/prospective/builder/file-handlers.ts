@@ -208,7 +208,22 @@ export function handlePricingFileUpload(
       })
 
       setFileUploadProgress({ isLoading: false, type: null, progress: 100, message: "" })
-      toast.success(`Loaded ${products.length} products from pricing file`)
+      // Charles 2026-04-26: explicit category-detection feedback. Users
+      // were uploading pricing files and seeing nothing about categories
+      // (#66 wired the wiring, but if the CSV had no Category/Type/Class
+      // column, nothing surfaces and the user thinks validation
+      // silently failed). Tell them either way.
+      if (distinctCategories.length > 0) {
+        toast.success(
+          `Loaded ${products.length} products. Detected ${distinctCategories.length} categor${distinctCategories.length === 1 ? "y" : "ies"}: ${distinctCategories.slice(0, 4).join(", ")}${distinctCategories.length > 4 ? "…" : ""}. Review the Product Categories chips above to confirm.`,
+        )
+      } else {
+        toast.success(`Loaded ${products.length} products from pricing file`)
+        toast.warning(
+          "No category column found in the pricing file (we look for headers like 'Category', 'Type', or 'Class'). Pick a Product Category manually before submitting the proposal so the engine can scope rebates correctly.",
+          { duration: 8_000 },
+        )
+      }
     } catch (err) {
       console.error("Pricing file parse error:", err)
       setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })

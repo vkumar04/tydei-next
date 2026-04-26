@@ -51,6 +51,14 @@ export interface FinancialProjection {
   projectedValue: number
 }
 
+export interface ProposalTermSummary {
+  termType: string
+  name?: string
+  targetType?: string
+  targetValue?: number
+  rebatePercent?: number
+}
+
 export interface VendorProposal {
   id: string
   vendorId: string
@@ -60,6 +68,16 @@ export interface VendorProposal {
   totalProposedCost: number
   dealScore: DealScore | null
   createdAt: string
+  /** Charles 2026-04-26 #67: richer fields from the proposal builder.
+   *  All optional so historic alerts (which lack them) still load. */
+  productCategories?: string[]
+  contractLengthMonths?: number
+  projectedSpend?: number
+  projectedVolume?: number
+  marketShareCommitment?: number
+  gpoFee?: number
+  aiNotes?: string
+  terms?: ProposalTermSummary[]
 }
 
 // ─── Facility: Analyze Proposal ─────────────────────────────────
@@ -272,6 +290,16 @@ export async function createProposal(input: {
   facilityIds: string[]
   pricingItems: ProposedPricingItem[]
   terms: { contractLength: number; startDate: string; paymentTerms?: string; notes?: string }
+  /** Charles 2026-04-26 #67: full proposal-builder state. Optional so the
+   *  facility-side analyzer flow (which only knows pricing + basic terms)
+   *  still works. */
+  productCategories?: string[]
+  projectedSpend?: number
+  projectedVolume?: number
+  marketShareCommitment?: number
+  gpoFee?: number
+  aiNotes?: string
+  proposalTerms?: ProposalTermSummary[]
 }): Promise<VendorProposal> {
   const { vendor } = await requireVendor()
 
@@ -296,6 +324,13 @@ export async function createProposal(input: {
         pricingItems: input.pricingItems,
         terms: input.terms,
         totalCost,
+        productCategories: input.productCategories,
+        projectedSpend: input.projectedSpend,
+        projectedVolume: input.projectedVolume,
+        marketShareCommitment: input.marketShareCommitment,
+        gpoFee: input.gpoFee,
+        aiNotes: input.aiNotes,
+        proposalTerms: input.proposalTerms,
       })),
     },
   })
@@ -309,6 +344,14 @@ export async function createProposal(input: {
     totalProposedCost: totalCost,
     dealScore: null,
     createdAt: alert.createdAt.toISOString(),
+    productCategories: input.productCategories,
+    contractLengthMonths: input.terms.contractLength,
+    projectedSpend: input.projectedSpend,
+    projectedVolume: input.projectedVolume,
+    marketShareCommitment: input.marketShareCommitment,
+    gpoFee: input.gpoFee,
+    aiNotes: input.aiNotes,
+    terms: input.proposalTerms,
   })
 }
 
