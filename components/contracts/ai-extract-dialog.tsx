@@ -129,11 +129,13 @@ export function AIExtractDialog({
       // Step 2: Reading — the server reads the PDF and calls AI step 1
       setStepIndex(1)
 
-      // 2026-04-26: switched to the streaming endpoint. Server sends
-      // partial JSON as Claude emits it; we attempt to parse after each
-      // chunk so the review dialog can paint fields live. Cache hits
-      // come back as a single complete-payload chunk and finish in
-      // <50ms.
+      // 2026-04-26: streaming endpoint, rebuilt on streamObject (the
+      // purpose-built API for streaming structured output). The earlier
+      // streamText+Output.object approach left textStream empty when
+      // structuredOutputMode=jsonTool, producing 200+empty body and a
+      // generic "Extraction failed" toast. streamObject's textStream
+      // emits incrementally-valid JSON chunks the buffer-then-parse loop
+      // below handles correctly.
       const res = await fetch("/api/ai/extract-contract/stream", {
         method: "POST",
         body: formData,

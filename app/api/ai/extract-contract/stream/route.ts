@@ -1,25 +1,24 @@
 /**
  * Streaming variant of /api/ai/extract-contract.
  *
- * Same auth, same archival, same cache lookup as the non-streaming
- * route — but on a cache miss it streams partial JSON via SSE so the
- * client dialog can paint fields as Claude emits them. Cuts the
- * "staring at spinner" UX from 20-30s to perceived-instant.
- *
- * Implementation per ai-sdk.dev (verified via context7):
- *   const result = streamText({ output: Output.object({ schema }), ... })
+ * Implementation per AI SDK 6 docs (context7 /vercel/ai 6.0.0-beta.128):
+ *   const result = streamObject({ schema, ... })
  *   return result.toTextStreamResponse()
  *
- * Uses the same generateStructured helper's provider config
- * (jsonTool mode, prompt cache) but inlined here because streamText
- * needs a different return shape.
+ * Why streamObject (not streamText + Output.object): with Anthropic's
+ * structuredOutputMode='jsonTool' the structured payload comes back via
+ * a tool call, so streamText's `textStream` is empty and
+ * toTextStreamResponse() produces an empty body — that's the silent
+ * failure that bit the previous incarnation of this route. streamObject
+ * is the purpose-built API; its textStream emits incrementally-valid
+ * JSON chunks the client can JSON.parse() as they arrive.
  *
- * Cache hits return the full extract immediately as a single SSE
- * "data:" event then close — same envelope shape as the non-stream
- * route's JSON body.
+ * Cache hits return the full extract immediately as a single chunk and
+ * close — same envelope shape as the non-stream route's JSON body so
+ * the client dialog reads either response identically.
  */
 
-import { streamText, Output } from "ai"
+import { streamObject } from "ai"
 import { headers } from "next/headers"
 import { createHash } from "node:crypto"
 import { auth } from "@/lib/auth-server"
@@ -33,6 +32,8 @@ import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extrac
 
 export const maxDuration = 60
 
+const MAX_BYTES = 10 * 1024 * 1024
+
 export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
@@ -42,8 +43,18 @@ export async function POST(req: Request) {
     return Response.json({ error: "Too many requests" }, { status: 429 })
   }
 
+  const contentLength = req.headers.get("content-length")
+  if (contentLength && parseInt(contentLength) > MAX_BYTES) {
+    return Response.json(
+      { error: "File too large", details: "Maximum size is 10MB." },
+      { status: 413 },
+    )
+  }
+
   const formData = await req.formData()
   const file = formData.get("file") as File | null
+  const userInstructions =
+    (formData.get("userInstructions") as string | null)?.trim() || ""
   if (!file) return Response.json({ error: "No file provided" }, { status: 400 })
   if (!file.name.toLowerCase().endsWith(".pdf")) {
     return Response.json(
@@ -51,13 +62,20 @@ export async function POST(req: Request) {
       { status: 415 },
     )
   }
+  if (file.size > MAX_BYTES) {
+    return Response.json(
+      {
+        error: "File too large",
+        details: `${(file.size / (1024 * 1024)).toFixed(1)}MB; max 10MB.`,
+      },
+      { status: 413 },
+    )
+  }
 
   const fileData = new Uint8Array(await file.arrayBuffer())
   const userId = session.user.id
   const fileHash = createHash("sha256").update(fileData).digest("hex")
 
-  // Cache lookup — return as a single SSE event that the client
-  // consumes the same way as the streamed events.
   const cached = await prisma.contractExtractionCache.findUnique({
     where: { userId_fileHash: { userId, fileHash } },
   })
@@ -81,7 +99,6 @@ export async function POST(req: Request) {
     })
   }
 
-  // Best-effort S3 archival.
   let s3Key: string | undefined
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
   const candidateKey = `contracts/${userId}/${Date.now()}-${safeName}`
@@ -92,10 +109,6 @@ export async function POST(req: Request) {
     console.warn("[extract-contract/stream] S3 archival skipped:", err)
   }
 
-  // Pre-extract the text layer with pdf-parse — when present (most
-  // PDFs), feeding it to Claude alongside the file part dramatically
-  // improves accuracy on tier-ladder + line-item tables. When absent
-  // (scanned doc), Claude falls back to vision-only.
   const pdfText = await extractPdfText(fileData)
   const textHint = pdfText.hasTextLayer
     ? `\n\nFor reference, here is the extracted text layer of the PDF (may help with tabular data):\n\n${pdfText.text}`
@@ -105,13 +118,13 @@ export async function POST(req: Request) {
       `[extract-contract/stream] no text layer in ${file.name} (likely scanned, ${pdfText.pageCount} pages) — vision-only`,
     )
   }
+  const userInstructionsHint = userInstructions
+    ? `\n\nAdditional user instructions:\n${userInstructions}`
+    : ""
 
-  // Stream the extraction. partialOutputStream emits incrementally
-  // valid JSON chunks; the AI SDK's toTextStreamResponse() serializes
-  // them on the wire as plain text the client can parse incrementally.
-  const result = streamText({
+  const result = streamObject({
     model: claudeModel,
-    output: Output.object({ schema: extractedContractSchema }),
+    schema: extractedContractSchema,
     providerOptions: {
       anthropic: { structuredOutputMode: "jsonTool" as const },
     },
@@ -121,7 +134,10 @@ export async function POST(req: Request) {
         content: [
           {
             type: "text",
-            text: getActiveContractExtractPrompt().prompt + textHint,
+            text:
+              getActiveContractExtractPrompt().prompt +
+              textHint +
+              userInstructionsHint,
           },
           {
             type: "file",
@@ -135,35 +151,38 @@ export async function POST(req: Request) {
         ],
       },
     ],
-    onFinish: async ({ text }) => {
-      // Persist on completion — write the cache row + S3 archival key
-      // so subsequent uploads of the same PDF are instant.
+    onError: ({ error }) => {
+      // CLAUDE.md AI-action error path: log full context server-side
+      // before the SDK surfaces the failure to the client.
+      console.error("[extract-contract/stream]", error, {
+        userId,
+        file: file.name,
+        size: file.size,
+      })
+    },
+    onFinish: async ({ object }) => {
+      if (!object) return
       try {
-        const trimmed = text.trim()
-        const parsed = JSON.parse(trimmed)
-        const validated = extractedContractSchema.safeParse(parsed)
-        if (validated.success) {
-          const expiresAt = new Date()
-          expiresAt.setDate(expiresAt.getDate() + 30)
-          await prisma.contractExtractionCache.upsert({
-            where: { userId_fileHash: { userId, fileHash } },
-            create: {
-              userId,
-              fileHash,
-              filename: file.name,
-              extracted: validated.data as object,
-              confidence: 0.9,
-              s3Key,
-              expiresAt,
-            },
-            update: {
-              extracted: validated.data as object,
-              confidence: 0.9,
-              s3Key,
-              expiresAt,
-            },
-          })
-        }
+        const expiresAt = new Date()
+        expiresAt.setDate(expiresAt.getDate() + 30)
+        await prisma.contractExtractionCache.upsert({
+          where: { userId_fileHash: { userId, fileHash } },
+          create: {
+            userId,
+            fileHash,
+            filename: file.name,
+            extracted: object as object,
+            confidence: 0.9,
+            s3Key,
+            expiresAt,
+          },
+          update: {
+            extracted: object as object,
+            confidence: 0.9,
+            s3Key,
+            expiresAt,
+          },
+        })
       } catch (err) {
         console.warn("[extract-contract/stream] cache write skipped:", err)
       }
