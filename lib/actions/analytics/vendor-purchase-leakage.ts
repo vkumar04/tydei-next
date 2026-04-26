@@ -48,16 +48,20 @@ export interface VendorPurchaseLeakageReport {
 export async function getVendorPurchaseLeakage(input: {
   fromDate: string
   toDate: string
-  limit?: number
+  /** Max rows returned in the response (after classification). */
+  rowLimit?: number
 }): Promise<VendorPurchaseLeakageReport> {
   const { vendor } = await requireVendor()
   const from = new Date(input.fromDate)
   const to = new Date(input.toDate)
-  const limit = input.limit ?? 500
+  const rowLimit = input.rowLimit ?? 250
 
-  // All COG attributed to this vendor in window. Includes facilities
-  // we don't have a contract with (off-contract is the headline
-  // story).
+  // Pull every COG attributed to this vendor in window so the
+  // counts (totalRows, byReason) reflect the full population —
+  // truncating before classification would silently sample out
+  // big-vendor / wide-window queries. Postgres caps via take
+  // are still applied as a safety net (Prisma engine bound) but
+  // the bound is well above any realistic vendor-window pair.
   const cog = await prisma.cOGRecord.findMany({
     where: {
       vendorId: vendor.id,
@@ -73,7 +77,7 @@ export async function getVendorPurchaseLeakage(input: {
       quantity: true,
       extendedPrice: true,
     },
-    take: limit,
+    take: 25_000,
     orderBy: { transactionDate: "desc" },
   })
 
@@ -159,21 +163,26 @@ export async function getVendorPurchaseLeakage(input: {
 
     if (reason) {
       counts[reason] += 1
-      rows.push({
-        cogId: r.id,
-        facilityId: r.facilityId,
-        facilityName: facilityName.get(r.facilityId) ?? r.facilityId,
-        vendorItemNo: r.vendorItemNo,
-        inventoryDescription: r.inventoryDescription,
-        transactionDate: r.transactionDate.toISOString(),
-        unitCost: Number(r.unitCost),
-        quantity: r.quantity,
-        extendedPrice: Number(r.extendedPrice ?? 0),
-        reason,
-        band,
-        contractPrice,
-        variancePct,
-      })
+      // Bound the response payload but keep counting against the
+      // full population. The card surfaces a "+X more" hint via
+      // (totalRows − rows.length) when this trips.
+      if (rows.length < rowLimit) {
+        rows.push({
+          cogId: r.id,
+          facilityId: r.facilityId,
+          facilityName: facilityName.get(r.facilityId) ?? r.facilityId,
+          vendorItemNo: r.vendorItemNo,
+          inventoryDescription: r.inventoryDescription,
+          transactionDate: r.transactionDate.toISOString(),
+          unitCost: Number(r.unitCost),
+          quantity: r.quantity,
+          extendedPrice: Number(r.extendedPrice ?? 0),
+          reason,
+          band,
+          contractPrice,
+          variancePct,
+        })
+      }
     }
   }
 

@@ -64,7 +64,7 @@ export function VendorPurchaseLeakageCard() {
   const { data, isLoading } = useQuery({
     queryKey: ["vendor", "purchaseLeakage", { from, to }],
     queryFn: () =>
-      getVendorPurchaseLeakage({ fromDate: from, toDate: to, limit: 250 }),
+      getVendorPurchaseLeakage({ fromDate: from, toDate: to, rowLimit: 250 }),
   })
 
   return (
