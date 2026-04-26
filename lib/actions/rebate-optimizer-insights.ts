@@ -182,6 +182,7 @@ ${JSON.stringify(input, null, 2)}
 Produce the JSON response exactly matching the schema. Include observations only if there is a portfolio-level note worth surfacing beyond the ranked insights.`
 
   let response: RebateInsightsResponse
+  let rawOutput: unknown
   try {
     const result = await generateText({
       model: claudeModel,
@@ -203,18 +204,37 @@ Produce the JSON response exactly matching the schema. Include observations only
         },
       },
     })
-    const raw = result.output
-    response = rebateInsightsResponseSchema.parse(raw)
+    rawOutput = result.output
   } catch (err) {
     // Per CLAUDE.md "AI-action error path": log the raw exception server-side
-    // so prod digests still have a debug trail. Client only sees the sliced
-    // message below.
+    // before re-throwing so prod digests still have a debug trail. The Anthropic
+    // call itself failed (rate-limit, auth, schema-rejected, context exceeded).
     console.error("[getRebateOptimizerInsights]", err, {
       facilityId,
     })
     const message = err instanceof Error ? err.message : "Unknown error"
-    throw new Error(`AI Smart Recommendations generation failed: ${message.slice(0, 300)}`)
+    throw new Error(
+      `AI Smart Recommendations generation failed (AI request error): ${message.slice(0, 300)}`,
+    )
   }
+
+  const parsed = rebateInsightsResponseSchema.safeParse(rawOutput)
+  if (!parsed.success) {
+    // Claude returned a payload that doesn't match our schema. Surface the
+    // first few issue paths so the toast is actionable instead of a generic
+    // "Server Components render" digest. Log the full Zod error server-side.
+    const issues = parsed.error.issues.slice(0, 3).map((i) => {
+      const path = i.path.join(".") || "(root)"
+      return `${path}: ${i.message}`
+    })
+    console.error("[getRebateOptimizerInsights]", parsed.error, {
+      facilityId,
+    })
+    throw new Error(
+      `AI Smart Recommendations generation failed (AI returned an invalid payload: ${issues.join("; ")})`,
+    )
+  }
+  response = parsed.data
 
   // Record usage — only reached on cache MISS, so we don't double-bill.
   try {
