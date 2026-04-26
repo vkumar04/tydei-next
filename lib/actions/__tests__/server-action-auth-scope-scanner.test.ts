@@ -325,15 +325,17 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/reports/schedule.ts:223",
   "lib/actions/reports/schedule.ts:254",
   // settings.ts: assertCallerCanManage / session-derived id
-  "lib/actions/settings.ts:97",
-  "lib/actions/settings.ts:156",
-  "lib/actions/settings.ts:232",
-  "lib/actions/settings.ts:238",
-  "lib/actions/settings.ts:261",
-  "lib/actions/settings.ts:267",
-  "lib/actions/settings.ts:286",
-  "lib/actions/settings.ts:382",
-  "lib/actions/settings.ts:400",
+  // (lines bumped 2026-04-26 after better-auth org-plugin migration
+  // added `import { headers }` + `import { auth }` at the top)
+  "lib/actions/settings.ts:99",
+  "lib/actions/settings.ts:158",
+  "lib/actions/settings.ts:234",
+  "lib/actions/settings.ts:240",
+  "lib/actions/settings.ts:263",
+  "lib/actions/settings.ts:269",
+  "lib/actions/settings.ts:288",
+  "lib/actions/settings.ts:387",
+  "lib/actions/settings.ts:405",
   // vendors.ts: read-only by id (Vendor is a shared resource)
   "lib/actions/vendors.ts:73",
 ])

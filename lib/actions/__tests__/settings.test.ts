@@ -28,6 +28,7 @@ const {
   vendorUpdateMock,
   userFindUniqueMock,
   authGetSessionMock,
+  authCreateInvitationMock,
 } = vi.hoisted(() => ({
   memberFindFirstMock: vi.fn(),
   memberFindManyMock: vi.fn(),
@@ -41,6 +42,7 @@ const {
   vendorUpdateMock: vi.fn(),
   userFindUniqueMock: vi.fn(),
   authGetSessionMock: vi.fn(),
+  authCreateInvitationMock: vi.fn(),
 }))
 
 vi.mock("@/lib/db", () => ({
@@ -64,7 +66,12 @@ vi.mock("@/lib/db", () => ({
 }))
 
 vi.mock("@/lib/auth-server", () => ({
-  auth: { api: { getSession: authGetSessionMock } },
+  auth: {
+    api: {
+      getSession: authGetSessionMock,
+      createInvitation: authCreateInvitationMock,
+    },
+  },
 }))
 
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }))
@@ -109,6 +116,7 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
         }),
       ).rejects.toThrow(/Not authorized: not a member of this organization/)
 
+      expect(authCreateInvitationMock).not.toHaveBeenCalled()
       expect(invitationCreateMock).not.toHaveBeenCalled()
     })
 
@@ -122,6 +130,7 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
           subRole: "owner:owner",
         }),
       ).rejects.toThrow()
+      expect(authCreateInvitationMock).not.toHaveBeenCalled()
       expect(invitationCreateMock).not.toHaveBeenCalled()
     })
   })
@@ -137,13 +146,14 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
         }),
       ).rejects.toThrow()
 
+      expect(authCreateInvitationMock).not.toHaveBeenCalled()
       expect(invitationCreateMock).not.toHaveBeenCalled()
     })
 
     it("accepts role: 'admin' from a member who can manage the org", async () => {
       asUser("u-admin", "facility")
       memberFindFirstMock.mockResolvedValue({ role: "owner" })
-      invitationCreateMock.mockResolvedValue({})
+      authCreateInvitationMock.mockResolvedValue({})
 
       await expect(
         inviteTeamMember({
@@ -153,7 +163,16 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
         }),
       ).resolves.toBeUndefined()
 
-      expect(invitationCreateMock).toHaveBeenCalledOnce()
+      expect(authCreateInvitationMock).toHaveBeenCalledOnce()
+      expect(authCreateInvitationMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            email: "new@example.com",
+            role: "admin",
+            organizationId: "org-1",
+          }),
+        }),
+      )
     })
   })
 

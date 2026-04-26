@@ -1,7 +1,9 @@
 "use server"
 
+import { headers } from "next/headers"
 import { z } from "zod"
 import { prisma } from "@/lib/db"
+import { auth } from "@/lib/auth-server"
 import {
   requireAdmin,
   requireAuth,
@@ -359,21 +361,24 @@ export async function inviteTeamMember(input: {
   email: string
   role: string
 }): Promise<void> {
-  // Charles audit C2: zod enum prevents `role: "owner"` from being
-  // accepted. Owner is reserved for the creator-of-org path.
+  // Migrated to better-auth's `auth.api.createInvitation`. The
+  // beforeCreateInvitation hook in lib/auth-server.ts re-validates
+  // the role enum (admin|member, never owner) — our local zod parse
+  // here is the front-line defense; the hook is the platform-wide
+  // belt that fires even when callers reach the API directly.
+  // assertCallerCanManage remains in place so cross-org C1-style
+  // probes are caught BEFORE we cross into better-auth's surface.
   const parsed = inviteTeamMemberInputSchema.parse(input)
   const session = await requireAuth()
   await assertCallerCanManage(session.user.id, parsed.organizationId)
 
-  await prisma.invitation.create({
-    data: {
-      organizationId: parsed.organizationId,
+  await auth.api.createInvitation({
+    body: {
       email: parsed.email,
       role: parsed.role,
-      status: "pending",
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      inviterId: session.user.id,
+      organizationId: parsed.organizationId,
     },
+    headers: await headers(),
   })
 }
 
@@ -505,14 +510,22 @@ export async function inviteVendorTeamMember(input: {
   const session = await requireAuth()
   await assertCallerCanManage(session.user.id, parsed.organizationId)
 
-  await prisma.invitation.create({
-    data: {
-      organizationId: parsed.organizationId,
+  // Sub-role is concatenated into the stored role with a colon — the
+  // beforeCreateInvitation hook splits on `:` and validates the base
+  // segment ("admin" | "member"), so the colon-injection vector
+  // (`subRole: "owner:owner"`) is rejected by the local zod schema
+  // here AND the platform hook.
+  // better-auth's TS narrows `role` to the default-roles union; the
+  // runtime body schema is `z.string()`. Cast through the narrow
+  // type so vendor sub-roles round-trip — the hook validates the
+  // base segment regardless of TS shape.
+  const concatenatedRole = `${parsed.role}:${parsed.subRole}` as "admin" | "member"
+  await auth.api.createInvitation({
+    body: {
       email: parsed.email,
-      role: `${parsed.role}:${parsed.subRole}`,
-      status: "pending",
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      inviterId: session.user.id,
+      role: concatenatedRole,
+      organizationId: parsed.organizationId,
     },
+    headers: await headers(),
   })
 }
