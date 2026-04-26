@@ -67,9 +67,22 @@ export function ContractPerformanceCard({
   // contract has no productCategory (capital, service), fall back to
   // the highest-share category the vendor sells in at this facility —
   // gives the user something useful instead of an empty row.
+  //
+  // 2026-04-26 (Charles prod feedback): the comparison is normalized
+  // because category strings drift between sources. e.g. a contract
+  // can carry productCategory.name="Ortho-Extremity" while the COG
+  // import stored "ortho-extremity" or "Ortho-Extremity " (trailing
+  // space). Without normalization the standalone Market Share card
+  // surfaced data the contract-narrowed row reported as missing —
+  // the underlying fix is import-time category validation (separate
+  // commit), but this normalization prevents the UI from lying when
+  // the data drift is just whitespace/case.
+  const normalizeCategory = (s: string | null | undefined) =>
+    (s ?? "").trim().toLowerCase()
+  const targetCategory = normalizeCategory(productCategory)
   const shareRow = shareData
     ? productCategory
-      ? shareData.rows.find((r) => r.category === productCategory) ?? null
+      ? shareData.rows.find((r) => normalizeCategory(r.category) === targetCategory) ?? null
       : shareData.rows[0] ?? null
     : null
 
