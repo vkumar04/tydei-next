@@ -296,27 +296,44 @@ export async function importContractPricing(input: {
     }
   }
 
+  // Charles audit round-14 CONCERN: now that
+  // (contractId, vendorItemNo) is unique, a re-import of the same
+  // contract's pricing CSV would throw P2002 on createMany (no
+  // skipDuplicates) and roll back the entire batch — breaking the
+  // standard "vendor sent updated prices, re-import" workflow.
+  // Replace-semantics: delete this contract's existing pricing rows
+  // first, then bulk-insert. Wrapped in a transaction so a mid-flight
+  // failure doesn't leave the contract with empty pricing.
   const BATCH = 500
   let imported = 0
 
-  for (let i = 0; i < dedupedItems.length; i += BATCH) {
-    const batch = dedupedItems.slice(i, i + BATCH)
-    const result = await prisma.contractPricing.createMany({
-      data: batch.map((item) => ({
-        contractId: input.contractId,
-        vendorItemNo: item.vendorItemNo,
-        description: item.description,
-        category: item.category,
-        unitPrice: item.unitPrice,
-        listPrice: item.listPrice,
-        uom: item.uom ?? "EA",
-        carveOutPercent: item.carveOutPercent ?? null,
-        effectiveDate: item.effectiveDate ? new Date(item.effectiveDate) : null,
-        expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
-      })),
+  await prisma.$transaction(async (tx) => {
+    await tx.contractPricing.deleteMany({
+      where: { contractId: input.contractId },
     })
-    imported += result.count
-  }
+    for (let i = 0; i < dedupedItems.length; i += BATCH) {
+      const batch = dedupedItems.slice(i, i + BATCH)
+      const result = await tx.contractPricing.createMany({
+        data: batch.map((item) => ({
+          contractId: input.contractId,
+          vendorItemNo: item.vendorItemNo,
+          description: item.description,
+          category: item.category,
+          unitPrice: item.unitPrice,
+          listPrice: item.listPrice,
+          uom: item.uom ?? "EA",
+          carveOutPercent: item.carveOutPercent ?? null,
+          effectiveDate: item.effectiveDate
+            ? new Date(item.effectiveDate)
+            : null,
+          expirationDate: item.expirationDate
+            ? new Date(item.expirationDate)
+            : null,
+        })),
+      })
+      imported += result.count
+    }
+  })
 
   return { imported }
 }
