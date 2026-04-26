@@ -111,6 +111,19 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
   const session = await requireFacility()
   const data = createCOGRecordSchema.parse(input)
 
+  // Mirror the bulk-import category inference: when the input doesn't
+  // supply a category but does supply a vendorItemNo, look up the
+  // ProductBenchmark for a categorized fallback. Caller's explicit
+  // category always wins.
+  let resolvedCategory = data.category ?? null
+  if (!resolvedCategory && data.vendorItemNo) {
+    const benchmark = await prisma.productBenchmark.findFirst({
+      where: { vendorItemNo: data.vendorItemNo },
+      select: { category: true },
+    })
+    if (benchmark?.category) resolvedCategory = benchmark.category
+  }
+
   const record = await prisma.cOGRecord.create({
     data: {
       facilityId: session.facility.id,
@@ -125,7 +138,7 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
       extendedPrice: data.extendedPrice,
       quantity: data.quantity,
       transactionDate: new Date(data.transactionDate),
-      category: data.category,
+      category: resolvedCategory,
       notes: data.notes,
       createdBy: session.user.id,
     },

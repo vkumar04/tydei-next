@@ -51,6 +51,41 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
     return record.vendorId
   }
 
+  // 2026-04-26: category inference from ProductBenchmark.
+  //
+  // Prod feedback: "Several contracts missing market share — I don't
+  // understand why some do and some do not." Root cause was that some
+  // CSV imports include a category column and some don't. Without a
+  // category, the per-category share card silently hid itself.
+  //
+  // We now backfill `category` at import time from ProductBenchmark
+  // when the CSV didn't supply one — matched on `vendorItemNo`. This
+  // is conservative: only fills when there's a concrete benchmark
+  // row to map from. Manual category overrides in the CSV always
+  // win (we don't overwrite a non-null record.category).
+  const itemsNeedingCategory = data.records
+    .filter((r) => !r.category && r.vendorItemNo)
+    .map((r) => r.vendorItemNo!)
+  const benchmarkCategoryByItem = new Map<string, string>()
+  if (itemsNeedingCategory.length > 0) {
+    const benchmarks = await prisma.productBenchmark.findMany({
+      where: { vendorItemNo: { in: itemsNeedingCategory } },
+      select: { vendorItemNo: true, category: true },
+    })
+    for (const b of benchmarks) {
+      if (b.category) benchmarkCategoryByItem.set(b.vendorItemNo, b.category)
+    }
+  }
+
+  const resolveCategory = (record: (typeof data.records)[number]) => {
+    if (record.category) return record.category
+    if (record.vendorItemNo) {
+      const inferred = benchmarkCategoryByItem.get(record.vendorItemNo)
+      if (inferred) return inferred
+    }
+    return null
+  }
+
   const toCreateData = (record: (typeof data.records)[number]) => ({
     facilityId: session.facility.id,
     vendorId: resolveVendorId(record),
@@ -65,7 +100,7 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
     extendedPrice: record.extendedPrice ?? (record.unitCost * (record.quantity ?? 1)),
     quantity: record.quantity,
     transactionDate: new Date(record.transactionDate),
-    category: record.category,
+    category: resolveCategory(record),
     createdBy: session.user.id,
   })
 
@@ -151,7 +186,7 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
                   unitCost: record.unitCost,
                   extendedPrice: record.extendedPrice,
                   quantity: record.quantity,
-                  category: record.category,
+                  category: resolveCategory(record),
                 },
               }),
             ),

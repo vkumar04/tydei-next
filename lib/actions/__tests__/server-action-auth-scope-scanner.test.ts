@@ -276,7 +276,7 @@ const BASELINE_HITS = new Set<string>([
   // change-proposals.ts: post-mutation re-read
   "lib/actions/change-proposals.ts:175",
   // cog-import.ts: facility-scoped batch by upstream check
-  "lib/actions/cog-import.ts:144",
+  "lib/actions/cog-import.ts:179",
   // contract-periods.ts: post-period-mutation re-reads
   "lib/actions/contract-periods.ts:394",
   "lib/actions/contract-periods.ts:623",
