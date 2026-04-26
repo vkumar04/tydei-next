@@ -27,6 +27,7 @@ import {
 } from "./optimizer-hero"
 import { RebateOptimizerControlBar } from "./optimizer-control-bar"
 import { RebateUtilizationSummary } from "./rebate-utilization-summary"
+import { CrossVendorTieInsCard } from "./cross-vendor-tie-ins-card"
 import { ResultCards } from "./result-cards"
 import { ScenarioBuilder, type RebateScenarioInput } from "./scenario-builder"
 import { SensitivityChart } from "./sensitivity-chart"
@@ -280,6 +281,10 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
       {filtered.length > 0 ? (
         <RebateUtilizationSummary opportunities={filtered} />
       ) : null}
+      {/* v0 doc §4 cross-vendor tie-in (facility GPO bundle). Renders
+          only when at least one active CrossVendorTieIn row exists for
+          the facility — empty result returns null inside the card. */}
+      <CrossVendorTieInsCard />
       {/* Tabs — Contracts / Earnings / Scenarios / Opportunities / Sensitivity */}
       {isLoading && isEngineLoading ? (
         <Skeleton className="h-[480px] rounded-xl" />

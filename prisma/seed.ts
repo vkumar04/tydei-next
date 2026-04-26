@@ -21,6 +21,7 @@ import { seedAlerts } from "./seeds/alerts"
 import { seedPurchaseOrders } from "./seeds/purchase-orders"
 import { seedInvoices } from "./seeds/invoices"
 import { seedCases } from "./seeds/cases"
+import { seedCrossVendorTieIns } from "./seeds/cross-vendor-tie-ins"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const adapter = new PrismaPg(pool)
@@ -64,6 +65,7 @@ async function main() {
   await seedPurchaseOrders(prisma, { facilities, vendors })
   await seedInvoices(prisma, { facilities, vendors })
   await seedCases(prisma, { facilities })
+  await seedCrossVendorTieIns(prisma, { facilities, vendors })
 
   console.log("\nSeed complete!")
   console.log("  Demo logins:")

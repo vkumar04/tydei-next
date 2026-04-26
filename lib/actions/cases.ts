@@ -59,6 +59,12 @@ export interface SurgeonScorecard {
   onContractPercent: number
   trend: "up" | "down"
   topProcedures: { cptCode: string; count: number }[]
+  // v0 doc §8 surgeon score inputs (Tier-3 #20). Null when no cases
+  // have demographics filled in. Avg case time is in minutes.
+  payorMixPct: number | null
+  bmiUnder40Pct: number | null
+  ageUnder65Pct: number | null
+  avgCaseTimeMinutes: number | null
 }
 
 export interface CPTCodeAnalysis {
@@ -403,6 +409,32 @@ export async function getSurgeonScorecards(
     },
   })
 
+  const COMMERCIAL_PAYORS = new Set([
+    "commercial",
+    "blue_cross",
+    "aetna",
+    "united",
+  ])
+
+  function caseDurationMinutes(c: { timeInOr: string | null; timeOutOr: string | null }) {
+    if (!c.timeInOr || !c.timeOutOr) return null
+    const [inH, inM] = c.timeInOr.split(":").map(Number)
+    const [outH, outM] = c.timeOutOr.split(":").map(Number)
+    if ([inH, inM, outH, outM].some((n) => Number.isNaN(n))) return null
+    const start = inH * 60 + inM
+    const end = outH * 60 + outM
+    const diff = end - start
+    if (!Number.isFinite(diff)) return null
+    return diff > 0 ? diff : diff + 24 * 60 // wrap past-midnight
+  }
+
+  function ageAtSurgery(dob: Date | null, surg: Date) {
+    if (!dob) return null
+    const ms = surg.getTime() - dob.getTime()
+    if (ms <= 0) return null
+    return ms / (365.25 * 24 * 60 * 60 * 1000)
+  }
+
   const surgeonMap = new Map<
     string,
     {
@@ -414,6 +446,15 @@ export async function getSurgeonScorecards(
       onContract: number
       totalSupplies: number
       cptCounts: Map<string, number>
+      // demographic accumulators
+      payorTotal: number
+      payorCommercial: number
+      bmiTotal: number
+      bmiUnder40: number
+      ageTotal: number
+      ageUnder65: number
+      timeTotal: number
+      timeCount: number
     }
   >()
 
@@ -429,6 +470,14 @@ export async function getSurgeonScorecards(
         onContract: 0,
         totalSupplies: 0,
         cptCounts: new Map(),
+        payorTotal: 0,
+        payorCommercial: 0,
+        bmiTotal: 0,
+        bmiUnder40: 0,
+        ageTotal: 0,
+        ageUnder65: 0,
+        timeTotal: 0,
+        timeCount: 0,
       })
     }
     const entry = surgeonMap.get(name)!
@@ -445,6 +494,25 @@ export async function getSurgeonScorecards(
 
     for (const p of c.procedures) {
       entry.cptCounts.set(p.cptCode, (entry.cptCounts.get(p.cptCode) ?? 0) + 1)
+    }
+
+    if (c.payorClass) {
+      entry.payorTotal++
+      if (COMMERCIAL_PAYORS.has(c.payorClass)) entry.payorCommercial++
+    }
+    if (c.patientBmi != null) {
+      entry.bmiTotal++
+      if (Number(c.patientBmi) < 40) entry.bmiUnder40++
+    }
+    const age = ageAtSurgery(c.patientDob, c.dateOfSurgery)
+    if (age != null) {
+      entry.ageTotal++
+      if (age < 65) entry.ageUnder65++
+    }
+    const dur = caseDurationMinutes(c)
+    if (dur != null) {
+      entry.timeTotal += dur
+      entry.timeCount++
     }
   }
 
@@ -476,6 +544,22 @@ export async function getSurgeonScorecards(
           : 0,
       trend: (marginPercent >= 25 ? "up" : "down") as "up" | "down",
       topProcedures,
+      payorMixPct:
+        data.payorTotal > 0
+          ? Math.round((data.payorCommercial / data.payorTotal) * 1000) / 10
+          : null,
+      bmiUnder40Pct:
+        data.bmiTotal > 0
+          ? Math.round((data.bmiUnder40 / data.bmiTotal) * 1000) / 10
+          : null,
+      ageUnder65Pct:
+        data.ageTotal > 0
+          ? Math.round((data.ageUnder65 / data.ageTotal) * 1000) / 10
+          : null,
+      avgCaseTimeMinutes:
+        data.timeCount > 0
+          ? Math.round((data.timeTotal / data.timeCount) * 10) / 10
+          : null,
     }
   }))
 }

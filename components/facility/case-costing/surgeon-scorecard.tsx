@@ -31,6 +31,7 @@ import type { SurgeonScorecard } from "@/lib/actions/cases"
 import {
   v0PeerVariancePct,
   v0CMIAdjustedSpend,
+  v0SurgeonScore,
 } from "@/lib/v0-spec/case-costing"
 
 /* ── ScoreIndicator ───────────────────────────────────────────── */
@@ -116,23 +117,52 @@ export function SurgeonDetailDialog({
       : 1
   const cmiAdjustedAvg = v0CMIAdjustedSpend(surgeon.avgSpendPerCase, cmiProxy)
 
-  const radarData = [
-    {
-      metric: "Supply Util",
-      value: Math.round(surgeon.onContractPercent),
-      fullMark: 100,
-    },
-    {
-      metric: "Compliance",
-      value: Math.round(surgeon.complianceRate),
-      fullMark: 100,
-    },
-    {
-      metric: "Margin",
-      value: Math.min(100, Math.max(0, surgeon.marginPercent)),
-      fullMark: 100,
-    },
-  ]
+  // v0 doc §8 5-axis surgeon score. Renders only when the surgeon has
+  // every demographic input filled in; otherwise we fall back to the
+  // legacy 3-axis radar (supply-util / compliance / margin) so the
+  // dialog still has something to show for surgeons whose Cases lack
+  // payor/BMI/age. Score itself is computed locally from the props
+  // already on SurgeonScorecard — no extra round-trip.
+  const hasV0Inputs =
+    surgeon.payorMixPct != null &&
+    surgeon.bmiUnder40Pct != null &&
+    surgeon.ageUnder65Pct != null &&
+    surgeon.avgCaseTimeMinutes != null
+  const v0Score = hasV0Inputs
+    ? v0SurgeonScore({
+        payorMixPct: surgeon.payorMixPct ?? 0,
+        bmiUnder40Pct: surgeon.bmiUnder40Pct ?? 0,
+        ageUnder65Pct: surgeon.ageUnder65Pct ?? 0,
+        avgSpend: surgeon.avgSpendPerCase,
+        avgCaseTimeMinutes: surgeon.avgCaseTimeMinutes ?? 0,
+      })
+    : null
+
+  const radarData = v0Score
+    ? [
+        { metric: "Payor Mix", value: Math.round(v0Score.payor), fullMark: 100 },
+        { metric: "BMI < 40", value: Math.round(v0Score.bmi), fullMark: 100 },
+        { metric: "Age < 65", value: Math.round(v0Score.age), fullMark: 100 },
+        { metric: "Spend", value: Math.round(v0Score.spend), fullMark: 100 },
+        { metric: "OR Time", value: Math.round(v0Score.time), fullMark: 100 },
+      ]
+    : [
+        {
+          metric: "Supply Util",
+          value: Math.round(surgeon.onContractPercent),
+          fullMark: 100,
+        },
+        {
+          metric: "Compliance",
+          value: Math.round(surgeon.complianceRate),
+          fullMark: 100,
+        },
+        {
+          metric: "Margin",
+          value: Math.min(100, Math.max(0, surgeon.marginPercent)),
+          fullMark: 100,
+        },
+      ]
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -222,24 +252,50 @@ export function SurgeonDetailDialog({
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Performance Radar</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">
+                    {v0Score
+                      ? "Surgeon Score (v0 §8 — 5 axes)"
+                      : "Performance Radar"}
+                  </CardTitle>
+                  {v0Score ? (
+                    <Badge
+                      className={
+                        v0Score.overall >= 80
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0"
+                          : v0Score.overall >= 60
+                            ? "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-0"
+                            : "bg-red-500/15 text-red-600 dark:text-red-400 border-0"
+                      }
+                    >
+                      Overall {Math.round(v0Score.overall)}
+                    </Badge>
+                  ) : null}
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={radarData}>
-                      <PolarGrid />
+                      <PolarGrid stroke="#64748b" strokeOpacity={0.45} />
                       <PolarAngleAxis
                         dataKey="metric"
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 12, fill: "#94a3b8" }}
                       />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                      <PolarRadiusAxis
+                        angle={30}
+                        domain={[0, 100]}
+                        tick={{ fontSize: 9, fill: "#94a3b8" }}
+                        stroke="#64748b"
+                        strokeOpacity={0.45}
+                      />
                       <Radar
                         name="Score"
                         dataKey="value"
-                        stroke="var(--primary)"
-                        fill="var(--primary)"
-                        fillOpacity={0.3}
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        fill="#3b82f6"
+                        fillOpacity={0.4}
                       />
                     </RadarChart>
                   </ResponsiveContainer>

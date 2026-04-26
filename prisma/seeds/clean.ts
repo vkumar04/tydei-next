@@ -16,6 +16,8 @@ export async function clean(prisma: PrismaClient) {
   await prisma.invoice.deleteMany()
   await prisma.pOLineItem.deleteMany()
   await prisma.purchaseOrder.deleteMany()
+  await prisma.crossVendorTieInMember.deleteMany()
+  await prisma.crossVendorTieIn.deleteMany()
   await prisma.alert.deleteMany()
   await prisma.contractChangeProposal.deleteMany()
   await prisma.pendingContract.deleteMany()

@@ -507,6 +507,7 @@ model Facility {
   payorContracts     PayorContract[]
   rebateInsightCaches RebateInsightCache[]
   rebateInsightFlags  RebateInsightFlag[]
+  crossVendorTieIns  CrossVendorTieIn[]
 
   @@index([status])
   @@map("facility")
@@ -551,8 +552,57 @@ model Vendor {
   aiCredits          AICredit[]         @relation("VendorAICredits")
   divisions          VendorDivision[]
   productBenchmarks  ProductBenchmark[]
+  crossVendorTieInMembers CrossVendorTieInMember[]
 
   @@map("vendor")
+}
+
+// ─── Cross-Vendor Tie-In (v0 doc §4 — facility GPO bundle) ─────────
+//
+// A facility-level bundle that spans multiple vendors. Each member
+// vendor commits to a minimum spend in exchange for an extra rebate
+// percentage; if every member hits its minimum the facility unlocks
+// an additional bonus on the bundle's total spend. Math lives in
+// `lib/v0-spec/tie-in.ts::v0CrossVendorTieIn` — this model is just
+// persistence.
+
+model CrossVendorTieIn {
+  id                       String   @id @default(cuid())
+  facilityId               String
+  name                     String
+  /** Integer percent (1.0 = 1%). Applied to total spend when bonus criterion is met. */
+  facilityBonusRate        Decimal  @default(0) @db.Decimal(5, 2)
+  /** "all_compliant" or "none". v0 supports more bands; tydei carries the two it actually uses. */
+  facilityBonusRequirement String   @default("all_compliant")
+  status                   String   @default("active") // active | paused | closed
+  effectiveDate            DateTime
+  expirationDate           DateTime
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  facility Facility                 @relation(fields: [facilityId], references: [id])
+  members  CrossVendorTieInMember[]
+
+  @@index([facilityId, status])
+  @@map("cross_vendor_tie_in")
+}
+
+model CrossVendorTieInMember {
+  id                  String  @id @default(cuid())
+  crossVendorTieInId  String
+  vendorId            String
+  /** Annual minimum spend commitment for this vendor in the bundle. */
+  minimumSpend        Decimal @db.Decimal(14, 2)
+  /** Integer percent (2.5 = 2.5%) — vendor's contribution rate when compliant. */
+  rebateContribution  Decimal @db.Decimal(5, 2)
+  createdAt           DateTime @default(now())
+
+  crossVendorTieIn CrossVendorTieIn @relation(fields: [crossVendorTieInId], references: [id], onDelete: Cascade)
+  vendor           Vendor           @relation(fields: [vendorId], references: [id])
+
+  @@index([crossVendorTieInId])
+  @@index([vendorId])
+  @@map("cross_vendor_tie_in_member")
 }
 
 model VendorDivision {
@@ -1607,6 +1657,13 @@ model Case {
   surgeonName        String?
   surgeonId          String?
   patientDob         DateTime? @db.Date
+  /** Patient BMI at time of surgery (v0 §8 surgeon scorecard input). */
+  patientBmi         Decimal?  @db.Decimal(5, 2)
+  /**
+   * Insurance class for payor-mix scoring per v0 doc §8. One of:
+   * commercial / medicare / medicaid / blue_cross / aetna / united / other.
+   */
+  payorClass         String?
   dateOfSurgery      DateTime  @db.Date
   timeInOr           String?
   timeOutOr          String?

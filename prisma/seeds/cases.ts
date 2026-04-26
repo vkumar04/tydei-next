@@ -7,6 +7,106 @@ function surgDate(monthsAgo: number, day: number) {
   return new Date(now.getFullYear(), now.getMonth() - monthsAgo, day)
 }
 
+// ─── Real-world demographic benchmarks (Tier-3 #20 / v0 §8) ────────
+//
+// Sources: CMS National Health Expenditure Accounts (payor mix),
+// CDC obesity prevalence by age/specialty, AAOS volume statistics.
+// Distributions per CPT family — orthopedic / spine / cardiac / sports.
+
+type CptFamily = "tka_tha" | "spine" | "sports" | "cardiac" | "neuro" | "general"
+
+function cptFamily(cpt: string): CptFamily {
+  if (cpt.startsWith("27") && (cpt === "27447" || cpt === "27130")) return "tka_tha"
+  if (cpt.startsWith("27")) return "general" // hip fracture, etc.
+  if (cpt.startsWith("22") || cpt.startsWith("63")) return "spine"
+  if (cpt.startsWith("29")) return "sports"
+  if (cpt.startsWith("33")) return "cardiac"
+  if (cpt.startsWith("61")) return "neuro"
+  return "general"
+}
+
+const PAYOR_DIST: Record<CptFamily, Array<[string, number]>> = {
+  // [payorClass, weight] per family. Weights need not sum to 1.
+  tka_tha:  [["medicare", 60], ["commercial", 20], ["blue_cross", 12], ["aetna", 4], ["united", 3], ["medicaid", 1]],
+  spine:    [["medicare", 35], ["commercial", 30], ["blue_cross", 18], ["aetna", 7], ["united", 6], ["medicaid", 4]],
+  sports:   [["commercial", 35], ["blue_cross", 22], ["aetna", 12], ["united", 12], ["medicare", 12], ["medicaid", 7]],
+  cardiac:  [["medicare", 55], ["commercial", 22], ["blue_cross", 13], ["aetna", 4], ["united", 4], ["medicaid", 2]],
+  neuro:    [["medicare", 45], ["commercial", 25], ["blue_cross", 15], ["aetna", 6], ["united", 5], ["medicaid", 4]],
+  general:  [["medicare", 40], ["commercial", 25], ["blue_cross", 15], ["aetna", 8], ["united", 7], ["medicaid", 5]],
+}
+
+const AGE_DIST: Record<CptFamily, { meanAge: number; pctUnder65: number }> = {
+  tka_tha: { meanAge: 67, pctUnder65: 35 },
+  spine:   { meanAge: 58, pctUnder65: 65 },
+  sports:  { meanAge: 38, pctUnder65: 95 },
+  cardiac: { meanAge: 68, pctUnder65: 30 },
+  neuro:   { meanAge: 60, pctUnder65: 55 },
+  general: { meanAge: 62, pctUnder65: 50 },
+}
+
+const BMI_DIST: Record<CptFamily, { meanBmi: number; pctUnder40: number }> = {
+  tka_tha: { meanBmi: 32, pctUnder40: 75 }, // higher BMI → arthritis risk
+  spine:   { meanBmi: 30, pctUnder40: 82 },
+  sports:  { meanBmi: 27, pctUnder40: 95 },
+  cardiac: { meanBmi: 30, pctUnder40: 85 },
+  neuro:   { meanBmi: 28, pctUnder40: 92 },
+  general: { meanBmi: 29, pctUnder40: 88 },
+}
+
+function pickPayor(family: CptFamily, rng: () => number): string {
+  const dist = PAYOR_DIST[family]
+  const total = dist.reduce((s, [, w]) => s + w, 0)
+  let r = rng() * total
+  for (const [payor, w] of dist) {
+    r -= w
+    if (r <= 0) return payor
+  }
+  return dist[dist.length - 1][0]
+}
+
+function pickAgeYears(family: CptFamily, rng: () => number): number {
+  const { meanAge } = AGE_DIST[family]
+  // Triangular-ish distribution around meanAge ±20 years.
+  const r = rng() + rng() + rng() - 1.5 // ~normal-ish, mean 0
+  const age = meanAge + r * 12
+  return Math.max(18, Math.min(95, Math.round(age)))
+}
+
+function pickBmi(family: CptFamily, rng: () => number): number {
+  const { meanBmi, pctUnder40 } = BMI_DIST[family]
+  // Bias the tail so the under-40 % roughly matches the published value.
+  const tail = rng() * 100 > pctUnder40 ? rng() * 12 : 0 // possibly >40
+  const r = rng() + rng() + rng() - 1.5
+  const bmi = meanBmi + r * 4 + tail
+  return Math.max(18, Math.min(60, Math.round(bmi * 10) / 10))
+}
+
+function dobForAge(age: number, surgDate: Date): Date {
+  const d = new Date(surgDate)
+  d.setFullYear(d.getFullYear() - age)
+  // Random day-of-year offset within the birth year.
+  d.setDate(d.getDate() - Math.floor(Math.random() * 365))
+  return d
+}
+
+// Tiny seedable RNG so reseeds are deterministic per case-number.
+function mulberry32(seed: number) {
+  return function () {
+    let t = (seed += 0x6d2b79f5)
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function seedFromCaseNo(caseNumber: string): number {
+  let h = 0
+  for (let i = 0; i < caseNumber.length; i++) {
+    h = (h * 31 + caseNumber.charCodeAt(i)) | 0
+  }
+  return Math.abs(h)
+}
+
 export async function seedCases(
   prisma: PrismaClient,
   deps: { facilities: Facilities }
@@ -197,13 +297,47 @@ export async function seedCases(
     },
   ]
 
-  for (const c of casesData) {
+  // Build case rows + 7 additional clones per surgeon so the surgeon
+  // dialog has enough volume for the radar/peer-variance surfaces to
+  // be meaningful (12 cases per surgeon × 9 surgeons ≈ 100+ rows).
+  // Each clone shifts the date back a month and tweaks spend ±15%.
+  const allCases: Array<typeof casesData[number]> = []
+  for (const base of casesData) {
+    allCases.push(base)
+    const seed = seedFromCaseNo(base.caseNumber)
+    const rng = mulberry32(seed)
+    for (let i = 1; i <= 7; i++) {
+      const monthShift = i * 2 // every 2 months back
+      const spendJitter = 0.85 + rng() * 0.3 // ±15%
+      const reimbJitter = 0.9 + rng() * 0.2 // ±10%
+      allCases.push({
+        ...base,
+        caseNumber: `${base.caseNumber}-V${i}`,
+        dateOfSurgery: surgDate(monthShift, Math.max(1, Math.floor(rng() * 28))),
+        totalSpend: Math.round(base.totalSpend * spendJitter),
+        totalReimbursement: Math.round(base.totalReimbursement * reimbJitter),
+      })
+    }
+  }
+
+  for (const c of allCases) {
+    const family = cptFamily(c.primaryCptCode)
+    const seed = seedFromCaseNo(c.caseNumber)
+    const rng = mulberry32(seed)
+    const age = pickAgeYears(family, rng)
+    const dob = dobForAge(age, c.dateOfSurgery)
+    const bmi = pickBmi(family, rng)
+    const payor = pickPayor(family, rng)
+
     const margin = c.totalReimbursement - c.totalSpend
     const caseRecord = await prisma.case.create({
       data: {
         caseNumber: c.caseNumber,
         facilityId: c.facilityId,
         surgeonName: c.surgeonName,
+        patientDob: dob,
+        patientBmi: bmi,
+        payorClass: payor,
         dateOfSurgery: c.dateOfSurgery,
         timeInOr: c.timeInOr,
         timeOutOr: c.timeOutOr,
@@ -237,7 +371,7 @@ export async function seedCases(
     count++
   }
 
-  console.log(`  Cases: ${count} (with procedures and supplies)`)
+  console.log(`  Cases: ${count} (with procedures, supplies, demographics)`)
 
   return count
 }
