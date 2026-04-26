@@ -44,10 +44,39 @@ import { ContractPricingTab } from "@/components/contracts/contract-pricing-tab"
 import { ContractInsightsCards } from "@/components/contracts/contract-insights-cards"
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
 import { ContractPerformanceCharts } from "@/components/contracts/contract-performance-charts"
-import { ContractScoreCard } from "@/components/contracts/analytics/contract-score-card"
-import { RebateForecastCard } from "@/components/contracts/analytics/rebate-forecast-card"
-import { TieInComplianceCard } from "@/components/contracts/analytics/tie-in-compliance-card"
-import { ServiceSlaCard } from "@/components/contracts/analytics/service-sla-card"
+// Performance-tab analytics cards are lazy-loaded — they pull in
+// recharts (RadarChart, ComposedChart, AreaChart) which is the
+// heaviest single dep on this page. Dynamic-import keeps them out
+// of the initial bundle when users land on Overview / Transactions.
+import dynamic from "next/dynamic"
+const ContractScoreCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/contract-score-card").then(
+      (m) => m.ContractScoreCard,
+    ),
+  { ssr: false },
+)
+const RebateForecastCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/rebate-forecast-card").then(
+      (m) => m.RebateForecastCard,
+    ),
+  { ssr: false },
+)
+const TieInComplianceCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/tie-in-compliance-card").then(
+      (m) => m.TieInComplianceCard,
+    ),
+  { ssr: false },
+)
+const ServiceSlaCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/service-sla-card").then(
+      (m) => m.ServiceSlaCard,
+    ),
+  { ssr: false },
+)
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
 import { ContractBundleMembershipsCard } from "@/components/contracts/contract-bundle-memberships-card"
 import { ContractPerformanceCard } from "@/components/contracts/contract-performance-card"
@@ -86,11 +115,24 @@ interface ContractDetailClientProps {
   // header-card numbers (currentSpend, rebateEarnedYTD, …). Prevents
   // the "$0 flash" on initial page load.
   initialContract?: Awaited<ReturnType<typeof getContract>>
+  /**
+   * 2026-04-26 perf pass — server-prefetched Performance-tab bundle
+   * (composite score, renewal risk, rebate forecast, tie-in
+   * compliance). Threaded into the analytics cards as `initialData`
+   * so the Performance tab paints from React Query cache without a
+   * client-side waterfall.
+   */
+  initialPerformanceBundle?: Awaited<
+    ReturnType<
+      typeof import("@/lib/actions/analytics/contract-performance-bundle").getContractPerformanceBundle
+    >
+  >
 }
 
 export function ContractDetailClient({
   contractId,
   initialContract,
+  initialPerformanceBundle,
 }: ContractDetailClientProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -1103,14 +1145,24 @@ export function ContractDetailClient({
 
         {/* ── Performance Tab ──────────────────────────────────── */}
         <TabsContent value="performance" className="mt-6 space-y-6">
-          <ContractScoreCard contractId={contractId} />
+          <ContractScoreCard
+            contractId={contractId}
+            initialScore={initialPerformanceBundle?.score}
+            initialRisk={initialPerformanceBundle?.risk}
+          />
           {contract.contractType === "tie_in" ? (
-            <TieInComplianceCard contractId={contractId} />
+            <TieInComplianceCard
+              contractId={contractId}
+              initialData={initialPerformanceBundle?.tieIn ?? undefined}
+            />
           ) : null}
           {contract.contractType === "service" ? (
             <ServiceSlaCard contractId={contractId} />
           ) : null}
-          <RebateForecastCard contractId={contractId} />
+          <RebateForecastCard
+            contractId={contractId}
+            initialData={initialPerformanceBundle?.forecast}
+          />
           <ContractPerformanceCharts contractId={contractId} />
           <ContractInsightsCards contractId={contractId} />
           <ContractAccrualTimeline contractId={contractId} />

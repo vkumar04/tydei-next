@@ -20,6 +20,8 @@ export function VendorTieInMembershipsCard() {
   const { data, isLoading } = useQuery({
     queryKey: ["vendor", "tieInMemberships"],
     queryFn: () => getVendorCrossVendorTieInMemberships(),
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   if (isLoading) {

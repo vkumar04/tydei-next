@@ -10,7 +10,7 @@
  * the filtered table and the two dialogs (details + propose terms).
  */
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Card,
   CardContent,
@@ -112,12 +112,19 @@ export function VendorRenewalPipeline({
   const [proposalNotes, setProposalNotes] = useState("")
 
   // v0-port: batched renewal-risk for the visible row set so each row
-  // can show a Low/Med/High badge without 20 round-trips.
-  const contractIds = contracts.map((c) => c.id)
+  // can show a Low/Med/High badge without 20 round-trips. Sorted +
+  // memo'd so re-orders of the source list don't change the React
+  // Query cache key (otherwise every filter toggle would refetch).
+  const contractIds = useMemo(
+    () => [...contracts.map((c) => c.id)].sort(),
+    [contracts],
+  )
   const { data: riskByContract } = useQuery({
     queryKey: ["vendor", "renewalRiskBatch", contractIds],
     queryFn: () => getVendorRenewalRiskBatch(contractIds),
     enabled: contractIds.length > 0,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const submitProposal = useSubmitRenewalProposal()

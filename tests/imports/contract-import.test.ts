@@ -38,7 +38,7 @@ vi.mock("@/lib/vendors/resolve", () => ({
   }),
 }))
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn(), revalidateTag: vi.fn() }))
 
 import { ingestExtractedContracts } from "@/lib/actions/imports/contract-import"
 import type { RichContractExtractData } from "@/lib/ai/schemas"

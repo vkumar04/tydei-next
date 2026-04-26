@@ -1682,6 +1682,7 @@ model Case {
   @@index([facilityId])
   @@index([surgeonName])
   @@index([dateOfSurgery])
+  @@index([facilityId, payorClass])
   @@map("case_record")
 }
 

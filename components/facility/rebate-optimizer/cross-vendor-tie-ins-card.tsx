@@ -12,6 +12,8 @@ export function CrossVendorTieInsCard() {
   const { data, isLoading } = useQuery({
     queryKey: ["analytics", "crossVendorTieIns"],
     queryFn: () => getCrossVendorTieIns(),
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   if (isLoading) {

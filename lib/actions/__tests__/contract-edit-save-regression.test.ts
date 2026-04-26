@@ -136,6 +136,8 @@ vi.mock("@/lib/actions/contracts-auth", () => ({
 }))
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  updateTag: vi.fn(),
+  revalidateTag: vi.fn(),
 }))
 
 import { updateContract } from "@/lib/actions/contracts"

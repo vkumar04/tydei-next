@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "prisma generate && next build",
+    "build:analyze": "ANALYZE=true bun run build",
     "start": "next start",
     "lint": "oxlint .",
     "db:push": "prisma db push --config prisma/prisma.config.ts",
@@ -74,6 +75,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.4",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^25.6.0",

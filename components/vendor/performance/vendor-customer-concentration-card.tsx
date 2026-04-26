@@ -14,6 +14,8 @@ export function VendorCustomerConcentrationCard() {
     queryKey: ["vendor", "customerConcentration", TRAILING_DAYS],
     queryFn: () =>
       getVendorCustomerConcentration({ trailingDays: TRAILING_DAYS }),
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const levelBadge = (() => {

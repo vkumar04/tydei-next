@@ -14,6 +14,10 @@ import { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
+import {
+  invalidateContractAnalytics,
+  invalidateFacilityAnalytics,
+} from "@/lib/actions/analytics/_cache"
 import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
@@ -175,6 +179,12 @@ export async function getContracts(input: ContractFilters) {
               }),
         ])
 
+  // 2026-04-26: A single-CTE rewrite was attempted but rolled back.
+  // The three groupBys already run in one wall-clock round-trip via
+  // Promise.all (max ≈ one query, not three sequential), and the
+  // existing mock-based parity tests would each need a `$queryRaw`
+  // shim. The clarity-vs-modest-perf trade favored keeping the
+  // groupBys.
   const periodSpendByContract = new Map<string, number>()
   for (const row of periodSpendAgg) {
     periodSpendByContract.set(
@@ -1006,6 +1016,12 @@ async function _createContractImpl(
   revalidatePath("/dashboard/cog")
   revalidatePath("/dashboard/contracts")
   revalidatePath("/dashboard")
+  // New contract → invalidate facility-scoped analytics so spend
+  // concentration / admin time savings counts pick up the row.
+  if (contract.facilityId) {
+    await invalidateFacilityAnalytics(contract.facilityId)
+  }
+  await invalidateContractAnalytics(contract.id)
 
   const result = serialize(contract)
 
@@ -1233,6 +1249,10 @@ async function _updateContractImpl(
   revalidatePath("/dashboard/contracts")
   revalidatePath(`/dashboard/contracts/${id}`)
   revalidatePath("/dashboard")
+  await invalidateContractAnalytics(id)
+  if (contract.facilityId) {
+    await invalidateFacilityAnalytics(contract.facilityId)
+  }
 
   return serialize(contract)
 }
@@ -1350,6 +1370,10 @@ export async function deleteContract(id: string) {
   revalidatePath("/dashboard/cog")
   revalidatePath("/dashboard/contracts")
   revalidatePath("/dashboard")
+  await invalidateContractAnalytics(id)
+  if (existing.facilityId) {
+    await invalidateFacilityAnalytics(existing.facilityId)
+  }
 }
 
 // ─── Compute-heavy actions (split to lib/actions/contracts/*) ───────

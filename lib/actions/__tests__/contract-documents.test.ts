@@ -18,7 +18,7 @@ vi.mock("@/lib/actions/auth", () => ({
   }),
 }))
 vi.mock("@/lib/audit", () => ({ logAudit: vi.fn() }))
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn(), revalidateTag: vi.fn() }))
 
 import { createContractDocument } from "@/lib/actions/contracts/documents"
 

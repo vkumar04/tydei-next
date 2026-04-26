@@ -1,4 +1,5 @@
 import type { NextConfig } from "next"
+import bundleAnalyzer from "@next/bundle-analyzer"
 
 const config: NextConfig = {
   serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "pg"],
@@ -20,4 +21,8 @@ const config: NextConfig = {
   },
 }
 
-export default config
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+})
+
+export default withBundleAnalyzer(config)

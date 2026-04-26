@@ -290,9 +290,12 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/contracts/proposals.ts:220",
   "lib/actions/contracts/proposals.ts:262",
   "lib/actions/contracts/proposals.ts:278",
-  // contracts.ts: post-update facility-set re-read
-  "lib/actions/contracts.ts:1275",
+  // contracts.ts: post-update facility-set re-read + manual ownership
+  // verification before contractDocument.delete (lines drift as the
+  // file grows — bumped 2026-04-26 after analytics cache invalidation
+  // hooks were added).
   "lib/actions/contracts.ts:1295",
+  "lib/actions/contracts.ts:1315",
   // imports/case-costing-import.ts: facility-scoped via upstream batch
   "lib/actions/imports/case-costing-import.ts:243",
   "lib/actions/imports/case-costing-import.ts:380",

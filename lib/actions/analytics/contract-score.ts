@@ -22,6 +22,7 @@ import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
+import { cacheContractAnalytics } from "@/lib/actions/analytics/_cache"
 
 export interface ContractCompositeScore {
   composite: number
@@ -57,7 +58,14 @@ export async function getContractCompositeScore(
   contractId: string,
 ): Promise<ContractCompositeScore> {
   try {
-    return await _getContractCompositeScoreImpl(contractId)
+    // Auth + ownership FIRST (outside the cache) — every caller pays
+    // the gate, but the expensive aggregate is memoized for 10 min
+    // per contract under a `analytics:contract:<id>` tag that write
+    // paths invalidate via `invalidateContractAnalytics`.
+    const scope = await requireContractScope(contractId)
+    return await cacheContractAnalytics(contractId, "compositeScore", () =>
+      _getContractCompositeScoreImpl(contractId, scope.cogScopeFacilityIds),
+    )
   } catch (err) {
     console.error("[getContractCompositeScore]", err, { contractId })
     throw new Error("Composite score is unavailable for this contract.")
@@ -66,8 +74,8 @@ export async function getContractCompositeScore(
 
 async function _getContractCompositeScoreImpl(
   contractId: string,
+  cogScopeFacilityIds: string[],
 ): Promise<ContractCompositeScore> {
-  const scope = await requireContractScope(contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
     where: { id: contractId },
@@ -107,7 +115,7 @@ async function _getContractCompositeScoreImpl(
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
   const cogAgg = await prisma.cOGRecord.aggregate({
     where: {
-      facilityId: { in: scope.cogScopeFacilityIds },
+      facilityId: { in: cogScopeFacilityIds },
       vendorId: contract.vendorId,
       transactionDate: { gte: twelveMonthsAgo, lte: today },
     },

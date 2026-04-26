@@ -15,10 +15,38 @@ import { ContractDocumentsList } from "@/components/contracts/contract-documents
 import { VendorContractOverview } from "@/components/vendor/contracts/vendor-contract-overview"
 import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
-import { ContractScoreCard } from "@/components/contracts/analytics/contract-score-card"
-import { RebateForecastCard } from "@/components/contracts/analytics/rebate-forecast-card"
-import { TieInComplianceCard } from "@/components/contracts/analytics/tie-in-compliance-card"
-import { ServiceSlaCard } from "@/components/contracts/analytics/service-sla-card"
+// Performance-tab analytics cards are lazy-loaded (recharts is the
+// heaviest single dep on this page). Same pattern as the facility
+// detail client.
+import dynamic from "next/dynamic"
+const ContractScoreCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/contract-score-card").then(
+      (m) => m.ContractScoreCard,
+    ),
+  { ssr: false },
+)
+const RebateForecastCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/rebate-forecast-card").then(
+      (m) => m.RebateForecastCard,
+    ),
+  { ssr: false },
+)
+const TieInComplianceCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/tie-in-compliance-card").then(
+      (m) => m.TieInComplianceCard,
+    ),
+  { ssr: false },
+)
+const ServiceSlaCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/service-sla-card").then(
+      (m) => m.ServiceSlaCard,
+    ),
+  { ssr: false },
+)
 import { getVendorContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
 import { toast } from "sonner"
 import type { getVendorContractDetail } from "@/lib/actions/vendor-contracts"
@@ -27,6 +55,11 @@ type ContractDetail = Awaited<ReturnType<typeof getVendorContractDetail>>
 
 interface VendorContractDetailClientProps {
   contract: ContractDetail
+  initialPerformanceBundle?: Awaited<
+    ReturnType<
+      typeof import("@/lib/actions/analytics/contract-performance-bundle").getContractPerformanceBundle
+    >
+  >
 }
 
 /**
@@ -43,6 +76,7 @@ interface VendorContractDetailClientProps {
  */
 export function VendorContractDetailClient({
   contract,
+  initialPerformanceBundle,
 }: VendorContractDetailClientProps) {
   const handleDocumentUpload = useCallback(() => {
     toast.info("Document upload coming soon")
@@ -97,14 +131,24 @@ export function VendorContractDetailClient({
           {/* v0-port: vendors get the same composite score / renewal
               risk / rebate forecast the facility sees, scoped via
               requireContractScope. */}
-          <ContractScoreCard contractId={contract.id} />
+          <ContractScoreCard
+            contractId={contract.id}
+            initialScore={initialPerformanceBundle?.score}
+            initialRisk={initialPerformanceBundle?.risk}
+          />
           {contract.contractType === "tie_in" ? (
-            <TieInComplianceCard contractId={contract.id} />
+            <TieInComplianceCard
+              contractId={contract.id}
+              initialData={initialPerformanceBundle?.tieIn ?? undefined}
+            />
           ) : null}
           {contract.contractType === "service" ? (
             <ServiceSlaCard contractId={contract.id} />
           ) : null}
-          <RebateForecastCard contractId={contract.id} />
+          <RebateForecastCard
+            contractId={contract.id}
+            initialData={initialPerformanceBundle?.forecast}
+          />
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">

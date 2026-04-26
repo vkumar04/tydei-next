@@ -42,6 +42,8 @@ export function ComplianceReportClient({ facilityId }: { facilityId: string }) {
     queryKey: queryKeys.analytics.purchaseCompliance(facilityId, { from, to }),
     queryFn: () =>
       evaluatePurchaseCompliance({ fromDate: from, toDate: to, limit: 500 }),
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   return (

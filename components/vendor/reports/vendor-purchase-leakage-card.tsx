@@ -65,6 +65,8 @@ export function VendorPurchaseLeakageCard() {
     queryKey: ["vendor", "purchaseLeakage", { from, to }],
     queryFn: () =>
       getVendorPurchaseLeakage({ fromDate: from, toDate: to, rowLimit: 250 }),
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   return (

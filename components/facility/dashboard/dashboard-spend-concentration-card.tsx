@@ -19,6 +19,8 @@ export function DashboardSpendConcentrationCard({
     queryKey: queryKeys.analytics.spendConcentration(facilityId, TRAILING_DAYS),
     queryFn: () =>
       getFacilitySpendConcentration({ trailingDays: TRAILING_DAYS }),
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const levelBadge = (() => {

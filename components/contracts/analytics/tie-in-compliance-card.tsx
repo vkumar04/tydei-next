@@ -27,13 +27,25 @@ function bonusBadge(level: "none" | "base" | "bonus" | "accelerator") {
   return <Badge variant="secondary">Base rate</Badge>
 }
 
-export function TieInComplianceCard({ contractId }: { contractId: string }) {
+export function TieInComplianceCard({
+  contractId,
+  initialData,
+}: {
+  contractId: string
+  initialData?: Awaited<ReturnType<typeof getTieInCompliance>>
+}) {
   const [mode, setMode] =
     useState<"all_or_nothing" | "proportional">("all_or_nothing")
 
   const { data, isLoading } = useQuery({
     queryKey: ["analytics", "tieInCompliance", contractId, mode],
     queryFn: () => getTieInCompliance(contractId, mode),
+    // initialData only seeds when the dialog opens in the default
+    // all_or_nothing mode — switching to proportional triggers a
+    // fresh fetch (correct, since the result shape differs).
+    initialData: mode === "all_or_nothing" ? initialData : undefined,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   return (

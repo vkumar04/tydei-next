@@ -1,5 +1,6 @@
 "use server"
 
+import { cache } from "react"
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
@@ -30,7 +31,16 @@ export type ContractScope =
   | { kind: "facility"; facilityId: string; cogScopeFacilityIds: string[] }
   | { kind: "vendor"; vendorId: string; cogScopeFacilityIds: string[] }
 
-export async function requireContractScope(
+/**
+ * Wrapped in React's `cache()` so a single render that triggers
+ * multiple analytics actions (Performance tab fans out to 4-6
+ * actions) only pays the auth + ownership lookup once. Cache key
+ * is the contractId — `requireAuth()` is itself memoized inside,
+ * so the dedupe is exact within a render pass.
+ */
+export const requireContractScope = cache(_requireContractScopeImpl)
+
+async function _requireContractScopeImpl(
   contractId: string,
 ): Promise<ContractScope> {
   const session = await requireAuth()

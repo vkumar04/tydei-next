@@ -109,14 +109,28 @@ function axisBarTw(value: number) {
   return "[&>div]:bg-red-500"
 }
 
-export function ContractScoreCard({ contractId }: { contractId: string }) {
+export function ContractScoreCard({
+  contractId,
+  initialScore,
+  initialRisk,
+}: {
+  contractId: string
+  initialScore?: Awaited<ReturnType<typeof getContractCompositeScore>>
+  initialRisk?: Awaited<ReturnType<typeof getRenewalRisk>>
+}) {
   const { data: score, isLoading: scoreLoading } = useQuery({
     queryKey: queryKeys.analytics.contractScore(contractId),
     queryFn: () => getContractCompositeScore(contractId),
+    initialData: initialScore,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
   const { data: risk, isLoading: riskLoading } = useQuery({
     queryKey: queryKeys.analytics.renewalRisk(contractId),
     queryFn: () => getRenewalRisk(contractId),
+    initialData: initialRisk,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const radarData = score

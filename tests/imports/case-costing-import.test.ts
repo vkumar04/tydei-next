@@ -98,7 +98,7 @@ vi.mock("@/lib/actions/auth", () => ({
 }))
 
 vi.mock("@/lib/audit", () => ({ logAudit: vi.fn(async () => {}) }))
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn(), revalidateTag: vi.fn() }))
 vi.mock("@/lib/actions/imports/shared", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/actions/imports/shared")

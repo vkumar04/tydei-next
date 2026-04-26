@@ -25,13 +25,18 @@ const fmtUsd = (n: number) =>
 export function RebateForecastCard({
   contractId,
   forecastMonths = 12,
+  initialData,
 }: {
   contractId: string
   forecastMonths?: number
+  initialData?: Awaited<ReturnType<typeof getRebateForecast>>
 }) {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.analytics.rebateForecast(contractId, forecastMonths),
     queryFn: () => getRebateForecast(contractId, forecastMonths),
+    initialData,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   })
 
   const series = useMemo(() => {
