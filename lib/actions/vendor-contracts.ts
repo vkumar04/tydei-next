@@ -79,14 +79,28 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
 
   // Charles audit round-1 vendor C4 + round-2 + round-3: lifetime
   // totals come from canonical helpers per the CLAUDE.md invariants
-  // table. Spend = ContractPeriod._sum (period rollup is the canonical
-  // spend source; rebate-table doesn't carry spend). Rebate metrics
-  // come from sumEarnedRebatesLifetime + sumCollectedRebates over the
-  // Rebate rows — same source the facility surfaces use, no drift.
-  const [spendAgg, rebateRows] = await Promise.all([
+  // table. Rebate metrics come from sumEarnedRebatesLifetime +
+  // sumCollectedRebates over the Rebate rows — same source the
+  // facility surfaces use, no drift.
+  //
+  // Charles 2026-04-26 (Bug 3): Spend was being read from
+  // `ContractPeriod._sum(totalSpend)` — but ContractPeriod is sparse
+  // on prod (Stryker at Lighthouse has 0 period rows despite $1.7M+
+  // of categorized COG), so the contract detail page rendered
+  // "Spend to Date $0". Cascade now mirrors `getContract`:
+  //   1. Prefer ContractPeriod._sum(totalSpend) when populated
+  //      (persisted rollup is the canonical spend source when present).
+  //   2. Fall back to cOGRecord.extendedPrice scoped to {contractId}.
+  // CLAUDE.md hard rule: never use ContractPeriod as the SOLE source
+  // of vendor spend.
+  const [spendAgg, cogAgg, rebateRows] = await Promise.all([
     prisma.contractPeriod.aggregate({
       where: { contractId: id },
       _sum: { totalSpend: true },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: { contractId: id, vendorId: vendor.id },
+      _sum: { extendedPrice: true },
     }),
     prisma.rebate.findMany({
       where: { contractId: id },
@@ -98,8 +112,10 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
       },
     }),
   ])
+  const periodSpend = Number(spendAgg._sum.totalSpend ?? 0)
+  const cogSpend = Number(cogAgg._sum.extendedPrice ?? 0)
   const lifetimeTotals = {
-    spend: Number(spendAgg._sum.totalSpend ?? 0),
+    spend: periodSpend > 0 ? periodSpend : cogSpend,
     rebateEarned: sumEarnedRebatesLifetime(rebateRows),
     rebateCollected: sumCollectedRebates(rebateRows),
   }
