@@ -12,10 +12,9 @@
  */
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { v0ServiceSlaPenalty } from "@/lib/v0-spec/tie-in"
+import { requireContractScope } from "@/lib/actions/analytics/_scope"
 
 export interface ServiceSlaInput {
   contractId: string
@@ -28,10 +27,10 @@ export interface ServiceSlaInput {
 }
 
 export async function evaluateServiceSla(input: ServiceSlaInput) {
-  const { facility } = await requireFacility()
+  await requireContractScope(input.contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
-    where: contractOwnershipWhere(input.contractId, facility.id),
+    where: { id: input.contractId },
     select: { annualValue: true, contractType: true },
   })
 

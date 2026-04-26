@@ -8,13 +8,12 @@
  */
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import {
   v0TieInAllOrNothing,
   v0TieInProportional,
 } from "@/lib/v0-spec/rebate-math"
+import { requireContractScope } from "@/lib/actions/analytics/_scope"
 
 export interface TieInComplianceResult {
   mode: "all_or_nothing" | "proportional"
@@ -32,10 +31,10 @@ export async function getTieInCompliance(
   contractId: string,
   mode: "all_or_nothing" | "proportional" = "all_or_nothing",
 ): Promise<TieInComplianceResult> {
-  const { facility } = await requireFacility()
+  const scope = await requireContractScope(contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
-    where: contractOwnershipWhere(contractId, facility.id),
+    where: { id: contractId },
     select: {
       vendorId: true,
       facilityId: true,
@@ -59,7 +58,7 @@ export async function getTieInCompliance(
   const startOfYear = new Date(today.getFullYear(), 0, 1)
   const cog = await prisma.cOGRecord.aggregate({
     where: {
-      facilityId: facility.id,
+      facilityId: scope.cogScopeFacilityId,
       vendorId: contract.vendorId,
       transactionDate: { gte: startOfYear, lte: today },
     },

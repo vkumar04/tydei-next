@@ -8,13 +8,12 @@
  */
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import {
   linearRegression,
   seasonalDecompose,
 } from "@/lib/analysis/forecasting"
+import { requireContractScope } from "@/lib/actions/analytics/_scope"
 
 export interface RebateForecastPoint {
   period: string
@@ -38,10 +37,10 @@ export async function getRebateForecast(
   contractId: string,
   forecastMonths = 12,
 ): Promise<RebateForecast> {
-  const { facility } = await requireFacility()
+  const scope = await requireContractScope(contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
-    where: contractOwnershipWhere(contractId, facility.id),
+    where: { id: contractId },
     select: {
       vendorId: true,
       effectiveDate: true,
@@ -63,7 +62,7 @@ export async function getRebateForecast(
   since.setMonth(since.getMonth() - 24)
   const cog = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: facility.id,
+      facilityId: scope.cogScopeFacilityId,
       vendorId: contract.vendorId,
       transactionDate: { gte: since, lte: today },
     },

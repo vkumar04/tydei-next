@@ -15,17 +15,16 @@
  */
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { v0RenewalRisk } from "@/lib/v0-spec/contract-performance"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { requireContractScope } from "@/lib/actions/analytics/_scope"
 
 export async function getRenewalRisk(contractId: string) {
-  const { facility } = await requireFacility()
+  const scope = await requireContractScope(contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
-    where: contractOwnershipWhere(contractId, facility.id),
+    where: { id: contractId },
     select: {
       id: true,
       expirationDate: true,
@@ -55,7 +54,7 @@ export async function getRenewalRisk(contractId: string) {
   const openIssues = await prisma.alert.count({
     where: {
       contractId,
-      facilityId: facility.id,
+      facilityId: scope.cogScopeFacilityId,
       status: "new_alert",
     },
   })
@@ -63,7 +62,7 @@ export async function getRenewalRisk(contractId: string) {
   // Avg price variance: pull from invoice line variances if any.
   const variances = await prisma.invoiceLineItem.findMany({
     where: {
-      invoice: { facilityId: facility.id },
+      invoice: { facilityId: scope.cogScopeFacilityId },
       variancePercent: { not: null },
     },
     select: { variancePercent: true },

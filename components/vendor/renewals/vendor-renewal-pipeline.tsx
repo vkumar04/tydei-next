@@ -50,10 +50,12 @@ import {
   Send,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useQuery } from "@tanstack/react-query"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { useSubmitRenewalProposal } from "@/hooks/use-renewals"
 import type { ExpiringContract } from "@/lib/actions/renewals"
 import { VendorRenewalNotesTimeline } from "./vendor-renewal-notes-timeline"
+import { getVendorRenewalRiskBatch } from "@/lib/actions/analytics/vendor-renewal-risk-batch"
 
 type UrgencyKey = "critical" | "warning" | "upcoming" | "ok"
 
@@ -108,6 +110,15 @@ export function VendorRenewalPipeline({
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [proposeTermsOpen, setProposeTermsOpen] = useState(false)
   const [proposalNotes, setProposalNotes] = useState("")
+
+  // v0-port: batched renewal-risk for the visible row set so each row
+  // can show a Low/Med/High badge without 20 round-trips.
+  const contractIds = contracts.map((c) => c.id)
+  const { data: riskByContract } = useQuery({
+    queryKey: ["vendor", "renewalRiskBatch", contractIds],
+    queryFn: () => getVendorRenewalRiskBatch(contractIds),
+    enabled: contractIds.length > 0,
+  })
 
   const submitProposal = useSubmitRenewalProposal()
 
@@ -178,6 +189,7 @@ export function VendorRenewalPipeline({
                   <TableHead>Total Spend</TableHead>
                   <TableHead>Rebate Earned</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Renewal Risk</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -230,6 +242,30 @@ export function VendorRenewalPipeline({
                           <StatusIcon className="mr-1 h-3 w-3" />
                           {statusConfig[renewal.urgency].label}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const r = riskByContract?.[renewal.id]
+                          if (!r)
+                            return (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            )
+                          const cls =
+                            r.riskLevel === "high"
+                              ? "bg-red-500/15 text-red-600 dark:text-red-400 border-0"
+                              : r.riskLevel === "medium"
+                                ? "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-0"
+                                : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0"
+                          return (
+                            <Badge className={cls}>
+                              {r.riskLevel.charAt(0).toUpperCase() +
+                                r.riskLevel.slice(1)}{" "}
+                              ({r.riskScore})
+                            </Badge>
+                          )
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">
                         <div

@@ -18,11 +18,10 @@
  */
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { requireContractScope } from "@/lib/actions/analytics/_scope"
 
 export interface ContractCompositeScore {
   composite: number
@@ -57,10 +56,10 @@ const WEIGHTS = {
 export async function getContractCompositeScore(
   contractId: string,
 ): Promise<ContractCompositeScore> {
-  const { facility } = await requireFacility()
+  const scope = await requireContractScope(contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
-    where: contractOwnershipWhere(contractId, facility.id),
+    where: { id: contractId },
     select: {
       id: true,
       effectiveDate: true,
@@ -97,7 +96,7 @@ export async function getContractCompositeScore(
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
   const cogAgg = await prisma.cOGRecord.aggregate({
     where: {
-      facilityId: facility.id,
+      facilityId: scope.cogScopeFacilityId,
       vendorId: contract.vendorId,
       transactionDate: { gte: twelveMonthsAgo, lte: today },
     },
