@@ -9,7 +9,15 @@ export interface SearchResult {
   name: string
   description: string | null
   href: string
-  type: "contract" | "vendor" | "alert" | "purchase_order" | "invoice"
+  type:
+    | "contract"
+    | "vendor"
+    | "alert"
+    | "purchase_order"
+    | "invoice"
+    | "report"
+    | "category"
+    | "cog_item"
 }
 
 export interface GroupedSearchResults {
@@ -18,6 +26,9 @@ export interface GroupedSearchResults {
   alerts: SearchResult[]
   purchaseOrders: SearchResult[]
   invoices: SearchResult[]
+  reports: SearchResult[]
+  categories: SearchResult[]
+  cogItems: SearchResult[]
 }
 
 export async function globalSearch(query: string): Promise<GroupedSearchResults> {
@@ -25,7 +36,16 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
   const trimmed = query.trim()
   if (!trimmed || trimmed.length < 2) {
-    return { contracts: [], vendors: [], alerts: [], purchaseOrders: [], invoices: [] }
+    return {
+      contracts: [],
+      vendors: [],
+      alerts: [],
+      purchaseOrders: [],
+      invoices: [],
+      reports: [],
+      categories: [],
+      cogItems: [],
+    }
   }
 
   // Scope results to user's facility or vendor
@@ -38,7 +58,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
   const search = { contains: trimmed, mode: "insensitive" as const }
 
-  const [contracts, vendors, alerts, purchaseOrders, invoices] = await Promise.all([
+  const [contracts, vendors, alerts, purchaseOrders, invoices, reports, categories, cogItems] = await Promise.all([
     prisma.contract.findMany({
       where: {
         ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
@@ -120,6 +140,51 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       take: 5,
       orderBy: { createdAt: "desc" },
     }),
+
+    // Scheduled reports — facility-scoped only. Filter on enum reportType.
+    facilityId
+      ? prisma.reportSchedule.findMany({
+          where: { facilityId },
+          select: {
+            id: true,
+            reportType: true,
+            frequency: true,
+          },
+          take: 25,
+          orderBy: { updatedAt: "desc" },
+        })
+      : Promise.resolve([]),
+
+    // Product categories — global taxonomy.
+    prisma.productCategory.findMany({
+      where: { OR: [{ name: search }, { description: search }] },
+      select: { id: true, name: true, description: true },
+      take: 5,
+      orderBy: { name: "asc" },
+    }),
+
+    // COG items — facility-scoped, by vendorItemNo + description.
+    facilityId
+      ? prisma.cOGRecord.findMany({
+          where: {
+            facilityId,
+            OR: [
+              { vendorItemNo: search },
+              { inventoryDescription: search },
+              { sku: search },
+            ],
+          },
+          select: {
+            id: true,
+            vendorItemNo: true,
+            inventoryDescription: true,
+            vendorName: true,
+          },
+          take: 5,
+          orderBy: { transactionDate: "desc" },
+          distinct: ["vendorItemNo"],
+        })
+      : Promise.resolve([]),
   ])
 
   return serialize({
@@ -161,6 +226,36 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       description: inv.vendor.name,
       href: `/dashboard/invoice-validation`,
       type: "invoice" as const,
+    })),
+    reports: reports
+      .filter((r) =>
+        `${r.reportType} ${r.frequency}`
+          .toLowerCase()
+          .includes(trimmed.toLowerCase()),
+      )
+      .slice(0, 5)
+      .map((r) => ({
+        id: r.id,
+        name: r.reportType.replace(/_/g, " "),
+        description: `${r.frequency.toLowerCase()} schedule`,
+        href: `/dashboard/reports`,
+        type: "report" as const,
+      })),
+    categories: categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      href: `/dashboard/cog?category=${encodeURIComponent(c.name)}`,
+      type: "category" as const,
+    })),
+    cogItems: cogItems.map((i) => ({
+      id: i.id,
+      name: i.vendorItemNo
+        ? `${i.vendorItemNo} — ${i.inventoryDescription ?? ""}`.trim()
+        : i.inventoryDescription ?? "(no description)",
+      description: i.vendorName,
+      href: `/dashboard/cog?search=${encodeURIComponent(i.vendorItemNo ?? "")}`,
+      type: "cog_item" as const,
     })),
   })
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import Link from "next/link"
-import { Bell } from "lucide-react"
+import { TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
@@ -67,9 +67,9 @@ export function AlertBell({
   const alertsHref = role === "vendor" ? "/vendor/alerts" : "/dashboard/alerts"
 
   return (
-    <Link href={alertsHref}>
+    <Link href={alertsHref} aria-label={`${displayCount} alerts`}>
       <Button variant="ghost" size="icon" className="relative h-9 w-9">
-        <Bell className="h-4 w-4" />
+        <TriangleAlert className="h-4 w-4" />
         {displayCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
             {displayCount > 9 ? "9+" : displayCount}

@@ -9,6 +9,9 @@ import {
   ShoppingCart,
   Receipt,
   Search,
+  BarChart3,
+  FolderTree,
+  Package,
 } from "lucide-react"
 import {
   CommandDialog,
@@ -27,6 +30,9 @@ const TYPE_META = {
   alert: { icon: Bell, label: "Alert" },
   purchase_order: { icon: ShoppingCart, label: "PO" },
   invoice: { icon: Receipt, label: "Invoice" },
+  report: { icon: BarChart3, label: "Report" },
+  category: { icon: FolderTree, label: "Category" },
+  cog_item: { icon: Package, label: "COG" },
 } as const
 
 const EMPTY: GroupedSearchResults = {
@@ -35,6 +41,9 @@ const EMPTY: GroupedSearchResults = {
   alerts: [],
   purchaseOrders: [],
   invoices: [],
+  reports: [],
+  categories: [],
+  cogItems: [],
 }
 
 export function CommandSearch() {
@@ -94,7 +103,10 @@ export function CommandSearch() {
     results.vendors.length > 0 ||
     results.alerts.length > 0 ||
     results.purchaseOrders.length > 0 ||
-    results.invoices.length > 0
+    results.invoices.length > 0 ||
+    results.reports.length > 0 ||
+    results.categories.length > 0 ||
+    results.cogItems.length > 0
 
   return (
     <>
@@ -105,7 +117,7 @@ export function CommandSearch() {
         className="relative flex h-9 w-full items-center rounded-lg border bg-background pl-9 pr-4 text-sm text-muted-foreground hover:bg-accent/50 transition-colors"
       >
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <span>Search contracts, vendors, reports...</span>
+        <span>Search contracts, vendors, COG, POs, invoices, alerts...</span>
         <kbd className="pointer-events-none ml-auto hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
           <span className="text-xs">⌘</span>K
         </kbd>
@@ -116,7 +128,7 @@ export function CommandSearch() {
         open={open}
         onOpenChange={setOpen}
         title="Global Search"
-        description="Search contracts, vendors, alerts, purchase orders, and invoices"
+        description="Search contracts, vendors, alerts, POs, invoices, COG items, categories, and report schedules"
       >
         <CommandInput
           placeholder="Search contracts, vendors, alerts..."
@@ -241,6 +253,84 @@ export function CommandSearch() {
           {!loading && results.invoices.length > 0 && (
             <CommandGroup heading="Invoices">
               {results.invoices.map((item) => {
+                const meta = TYPE_META[item.type]
+                return (
+                  <CommandItem
+                    key={item.id}
+                    value={`${item.name} ${item.description ?? ""}`}
+                    onSelect={() => handleSelect(item.href)}
+                  >
+                    <meta.icon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate">{item.name}</span>
+                    {item.description && (
+                      <span className="ml-2 truncate text-xs text-muted-foreground">
+                        {item.description}
+                      </span>
+                    )}
+                    <Badge variant="secondary" className="ml-2 text-[10px]">
+                      {meta.label}
+                    </Badge>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          )}
+
+          {!loading && results.cogItems.length > 0 && (
+            <CommandGroup heading="COG Items">
+              {results.cogItems.map((item) => {
+                const meta = TYPE_META[item.type]
+                return (
+                  <CommandItem
+                    key={item.id}
+                    value={`${item.name} ${item.description ?? ""}`}
+                    onSelect={() => handleSelect(item.href)}
+                  >
+                    <meta.icon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate">{item.name}</span>
+                    {item.description && (
+                      <span className="ml-2 truncate text-xs text-muted-foreground">
+                        {item.description}
+                      </span>
+                    )}
+                    <Badge variant="secondary" className="ml-2 text-[10px]">
+                      {meta.label}
+                    </Badge>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          )}
+
+          {!loading && results.categories.length > 0 && (
+            <CommandGroup heading="Categories">
+              {results.categories.map((item) => {
+                const meta = TYPE_META[item.type]
+                return (
+                  <CommandItem
+                    key={item.id}
+                    value={`${item.name} ${item.description ?? ""}`}
+                    onSelect={() => handleSelect(item.href)}
+                  >
+                    <meta.icon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate">{item.name}</span>
+                    {item.description && (
+                      <span className="ml-2 truncate text-xs text-muted-foreground">
+                        {item.description}
+                      </span>
+                    )}
+                    <Badge variant="secondary" className="ml-2 text-[10px]">
+                      {meta.label}
+                    </Badge>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          )}
+
+          {!loading && results.reports.length > 0 && (
+            <CommandGroup heading="Reports">
+              {results.reports.map((item) => {
                 const meta = TYPE_META[item.type]
                 return (
                   <CommandItem

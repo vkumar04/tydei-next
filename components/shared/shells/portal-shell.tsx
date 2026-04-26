@@ -107,17 +107,23 @@ export function PortalShell({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6">
+        {/* Charles UI cleanup: 3-zone top bar — sidebar trigger pinned
+            left, global search centered, all actions clustered right.
+            The two bell icons were visually identical; AlertBell now
+            uses TriangleAlert (warnings/expirations/discrepancies) so
+            it's distinguishable from NotificationBell (in-app
+            notification feed) at a glance. */}
+        <header className="grid h-16 grid-cols-[auto_1fr_auto] items-center gap-4 border-b bg-card px-4 lg:px-6">
+          {/* LEFT — sidebar collapse */}
           <SidebarTrigger className="-ml-1" />
 
-          {/* Search — opens Cmd+K command palette */}
-          <div className="flex-1 lg:max-w-md">
+          {/* CENTER — global search (Cmd+K palette spans every entity) */}
+          <div className="mx-auto w-full max-w-xl">
             <CommandSearch />
           </div>
 
-          {/* Header actions */}
-          <div className="flex items-center gap-1">
-            {/* Import button — opens mass upload dialog */}
+          {/* RIGHT — actions cluster */}
+          <div className="flex items-center gap-1 justify-self-end">
             <Button
               variant="outline"
               size="sm"
@@ -133,21 +139,17 @@ export function PortalShell({
               onOpenChange={setImportDialogOpen}
             />
             <ThemeToggle />
-            {/* Alerts bell — polls for new alerts every 30s */}
+            {/* Alerts (triangle): off-contract purchases, price
+                discrepancies, expirations. Polls every 30s. */}
             <AlertBell
               role={role}
               facilityId={facilityId}
               vendorId={vendorId}
               initialCount={alertCount}
             />
-            {/*
-             * Charles 2026-04-25 (audit follow-up): in-app
-             * notification bell — fires on pending-contract events
-             * (submit / approve / reject / revision_requested) so
-             * users without email reach can still see decisions.
-             * Renders for both facility + vendor roles; the underlying
-             * server action figures out which role you are.
-             */}
+            {/* In-app notifications (bell): pending-contract decisions
+                + change-proposal events. Distinct icon from AlertBell
+                so users can tell at a glance which one's lit. */}
             <NotificationBell />
           </div>
         </header>
