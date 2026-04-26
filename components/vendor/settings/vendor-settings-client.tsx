@@ -71,9 +71,6 @@ export function VendorSettingsClient({
     const name = newInviteFacilityName.trim()
     if (!name) return
     sendInvite.mutate({
-      fromType: "vendor",
-      fromId: vendorId,
-      fromName: vendorName,
       toEmail: `admin@${name.toLowerCase().replace(/\s/g, "")}.com`,
       toName: name,
       message: newInviteMessage || undefined,

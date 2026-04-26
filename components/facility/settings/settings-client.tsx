@@ -94,9 +94,6 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
     const name = newInviteVendorName.trim()
     if (!name) return
     sendInvite.mutate({
-      fromType: "facility",
-      fromId: facilityId,
-      fromName: facilityName,
       toEmail: `contact@${name.toLowerCase().replace(/\s/g, "")}.com`,
       toName: name,
       message: newInviteMessage || undefined,
@@ -105,7 +102,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
     setNewInviteMessage("")
     setInviteVendorDialogOpen(false)
     toast.success(`Connection invite sent to ${name}`)
-  }, [newInviteVendorName, newInviteMessage, facilityId, facilityName, sendInvite])
+  }, [newInviteVendorName, newInviteMessage, sendInvite])
 
   const handleUpdateFeatureFlags = useCallback(
     (flagData: Partial<FeatureFlagData>, message: string) => {

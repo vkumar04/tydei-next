@@ -30,9 +30,6 @@ export function useSendConnectionInvite(entityId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: {
-      fromType: "facility" | "vendor"
-      fromId: string
-      fromName: string
       toEmail: string
       toName: string
       message?: string
