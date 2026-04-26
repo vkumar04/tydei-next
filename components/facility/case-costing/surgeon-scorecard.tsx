@@ -28,6 +28,10 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import type { SurgeonScorecard } from "@/lib/actions/cases"
+import {
+  v0PeerVariancePct,
+  v0CMIAdjustedSpend,
+} from "@/lib/v0-spec/case-costing"
 
 /* ── ScoreIndicator ───────────────────────────────────────────── */
 
@@ -78,14 +82,39 @@ interface SurgeonDetailDialogProps {
   surgeon: SurgeonScorecard | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Optional peer set used by v0PeerVariancePct + v0CMIAdjustedSpend. */
+  peers?: SurgeonScorecard[]
 }
 
 export function SurgeonDetailDialog({
   surgeon,
   open,
   onOpenChange,
+  peers,
 }: SurgeonDetailDialogProps) {
   if (!surgeon) return null
+
+  // v0 doc §8 peer-variance + CMI proxy. CMI isn't carried per-case in
+  // tydei's schema, so we approximate via the surgeon's case-mix
+  // weighted by margin (richer-margin cases ≈ higher CMI). When the
+  // proxy can't run (single surgeon, no peers), the display falls
+  // back to the raw avg.
+  const peerSurgeons = (peers ?? []).filter(
+    (p) => p.surgeonName !== surgeon.surgeonName,
+  )
+  const peerAvg =
+    peerSurgeons.length > 0
+      ? peerSurgeons.reduce((s, p) => s + p.avgSpendPerCase, 0) /
+        peerSurgeons.length
+      : 0
+  const peerVariancePct = peerAvg > 0
+    ? v0PeerVariancePct(surgeon.avgSpendPerCase, peerAvg)
+    : 0
+  const cmiProxy =
+    surgeon.totalReimbursement > 0
+      ? Math.max(0.5, surgeon.marginPercent / 100 + 1)
+      : 1
+  const cmiAdjustedAvg = v0CMIAdjustedSpend(surgeon.avgSpendPerCase, cmiProxy)
 
   const radarData = [
     {
@@ -143,6 +172,26 @@ export function SurgeonDetailDialog({
                   </div>
                   <div className="text-2xl font-bold">
                     ${Math.round(surgeon.avgSpendPerCase).toLocaleString()}
+                  </div>
+                  {peerSurgeons.length > 0 ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <Badge
+                        variant="secondary"
+                        className={
+                          Math.abs(peerVariancePct) < 5
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0"
+                            : peerVariancePct > 0
+                              ? "bg-red-500/15 text-red-600 dark:text-red-400 border-0"
+                              : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0"
+                        }
+                      >
+                        {peerVariancePct > 0 ? "+" : ""}
+                        {peerVariancePct.toFixed(1)}% vs peers
+                      </Badge>
+                    </div>
+                  ) : null}
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    CMI-adj: ${Math.round(cmiAdjustedAvg).toLocaleString()}
                   </div>
                 </CardContent>
               </Card>

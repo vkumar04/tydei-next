@@ -331,6 +331,7 @@ export function SurgeonScorecardsGrid({
         surgeon={selectedSurgeon}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        peers={scorecards}
       />
     </div>
   )

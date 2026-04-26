@@ -1,6 +1,6 @@
 # Wire all v0 calculations into the app — spec
 
-**Status:** Tier-1 wired (8 of 9; cross-vendor tie-in deferred). Tier-2 partial: cog price-variance band + spend-trend pill landed.
+**Status:** Tier-1 wired (8 of 9; cross-vendor tie-in deferred). Tier-2 wired (4 of 6 net-new; 2 already covered by existing helpers). Tier-3 intentionally deferred per inventory.
 **Origin:** `lib/v0-spec/` ports the v0 calculation library (~30 helpers) but ZERO are consumed by `lib/actions/`, `components/`, or `app/`. They sit as test oracles only. This spec wires them through to user-facing UI + builds the pieces the v0 doc defines but tydei never had.
 
 ## Inventory
@@ -83,6 +83,10 @@ Every action gates via `requireFacility()` + `contractOwnershipWhere` (auth-scop
 | Per-purchase Compliance | `lib/actions/analytics/purchase-compliance.ts` | `app/dashboard/reports/compliance/page.tsx` (linked from QuickAccessCards) |
 | `v0CogPriceVarianceBand` (Tier-2) | n/a (helper) | new "Severity" column on price-discrepancy table |
 | `v0SpendTrend` (Tier-2) | n/a (helper) | trend pill on dashboard "Monthly Spend & Rebate" header |
+| `v0RebateUtilization` (Tier-2) | helper used in-component | `components/facility/rebate-optimizer/rebate-utilization-summary.tsx` above optimizer tabs (fleet-wide actual ÷ ceiling, missed rebate, spend to ceiling) |
+| `v0PeerVariancePct` + `v0CMIAdjustedSpend` (Tier-2) | helpers in-component | Surgeon detail dialog: peer-variance pill on "Avg Spend/Case" + CMI-adjusted sublabel |
+| `v0Margins` + `v0RebateAllocationToProcedure` (Tier-2) | n/a — already covered | tydei's `lib/case-costing/contract-contribution.ts::calculateMarginsV2` is the same math (standard vs true margin via rebate allocation, allocation by procedure spend share). Treating v0 helpers as oracle equivalents per Tier-3 #16/17 rationale. |
+| Forecast trend categorization (Tier-2) | already in `lib/actions/analytics/rebate-forecast.ts` | returns `trend: 'increasing' \| 'decreasing' \| 'stable'`, `growthRatePct`, `confidencePct` (R² × 100); rendered on RebateForecastCard. |
 
 Cross-vendor tie-in (Tier-1 #6) deferred — the schema doesn't carry per-
 vendor commitments + GPO bonus rates, so the v0 helper would need a UI

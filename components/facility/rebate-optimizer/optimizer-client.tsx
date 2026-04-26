@@ -26,6 +26,7 @@ import {
   type RebateOptimizerHeroStats,
 } from "./optimizer-hero"
 import { RebateOptimizerControlBar } from "./optimizer-control-bar"
+import { RebateUtilizationSummary } from "./rebate-utilization-summary"
 import { ResultCards } from "./result-cards"
 import { ScenarioBuilder, type RebateScenarioInput } from "./scenario-builder"
 import { SensitivityChart } from "./sensitivity-chart"
@@ -273,6 +274,12 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
         onFlag={ai.onFlag}
         onClearFlag={ai.onClearFlag}
       />
+      {/* Fleet-wide rebate utilization (v0 doc §9). Sits above the
+          tabs so the user sees the headline "% of ceiling captured"
+          before diving into per-contract progress. */}
+      {filtered.length > 0 ? (
+        <RebateUtilizationSummary opportunities={filtered} />
+      ) : null}
       {/* Tabs — Contracts / Earnings / Scenarios / Opportunities / Sensitivity */}
       {isLoading && isEngineLoading ? (
         <Skeleton className="h-[480px] rounded-xl" />

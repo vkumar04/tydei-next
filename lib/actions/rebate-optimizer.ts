@@ -18,6 +18,11 @@ export interface RebateOpportunity {
   percentToNextTier: number
   currentRebatePercent: number
   nextRebatePercent: number
+  // Charles 2026-04-25 v0-port Tier-2: ladder ceiling so the UI can
+  // compute v0RebateUtilization without an extra round-trip — actual
+  // rebate at currentRebatePercent vs ceiling at topTierRebatePercent.
+  topTierRebatePercent: number
+  topTierThreshold: number
 }
 
 export interface SpendTarget {
@@ -154,6 +159,15 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
         percentToNextTier,
         currentRebatePercent,
         nextRebatePercent,
+        topTierRebatePercent: (() => {
+          const top = term.tiers[term.tiers.length - 1]
+          return top
+            ? toDisplayRebateValue(top.rebateType, Number(top.rebateValue))
+            : nextRebatePercent
+        })(),
+        topTierThreshold: Number(
+          term.tiers[term.tiers.length - 1]?.spendMin ?? nextThreshold,
+        ),
       })
     }
   }
