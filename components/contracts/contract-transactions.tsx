@@ -604,6 +604,12 @@ function AddTransactionButtons({
       toast.success(
         `Regenerated ${result.inserted} auto-accrual ${result.inserted === 1 ? "row" : "rows"} across closed periods — $${earned.toLocaleString(undefined, { maximumFractionDigits: 2 })} earned.`,
       )
+      if (result.volumeTermsMissingCpt.length > 0) {
+        toast.warning(
+          `Skipped volume terms (no CPT codes): ${result.volumeTermsMissingCpt.join(", ")}. Edit the contract and add CPT codes on each term so the engine can count procedure occurrences from Case Costing.`,
+          { duration: 10_000 },
+        )
+      }
       queryClient.invalidateQueries({
         queryKey: ["contract-periods", contractId],
       })

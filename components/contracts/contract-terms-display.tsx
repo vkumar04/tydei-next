@@ -304,6 +304,35 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-3 pt-2">
+                  {/* Charles 2026-04-26 #75/#76: volume-family terms
+                      compute earnings off CPT-occurrence counts on
+                      Cases.procedures. If no CPT codes are configured
+                      on the term, the engine silently skips it and
+                      no rebates are written — even though the tier
+                      progress card above still renders against spend
+                      and projects a number. Surface that gap up front
+                      so the user knows why "$0 earned" with a $470K
+                      projection is not a math bug. */}
+                  {(term.termType === "volume_rebate" ||
+                    term.termType === "rebate_per_use" ||
+                    term.termType === "capitated_pricing_rebate") &&
+                    (!term.cptCodes || term.cptCodes.length === 0) && (
+                      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                        <p className="font-semibold">
+                          No CPT codes configured on this term.
+                        </p>
+                        <p className="mt-1">
+                          {term.termType.replace(/_/g, " ")} terms count
+                          procedure occurrences from Case Costing — the
+                          engine has nothing to count without at least one
+                          CPT code. Edit the contract and add CPT codes
+                          to this term, then click <em>Recompute Earned
+                          Rebates</em> on the Transactions tab. Tier
+                          progress above is rendered against dollar
+                          spend and is not what the engine evaluates.
+                        </p>
+                      </div>
+                    )}
                   <div className="grid gap-2 text-sm sm:grid-cols-3">
                     <div>
                       <DefinitionTooltip term="baseline_type">

@@ -67,6 +67,13 @@ export interface RecomputeAccrualResult {
   // button in the Transactions tab can toast a real $ figure instead of
   // just row counts.
   sumEarned: number
+  /** Charles 2026-04-26 #75/#76: term names of volume-family terms
+   *  (volume_rebate, rebate_per_use, capitated_pricing_rebate) that
+   *  had ≥1 tier but no CPT codes — the engine silently skips them
+   *  because volume math counts CPT occurrences. Surface so the toast
+   *  can warn the user instead of reporting "$0 earned" with no
+   *  explanation. */
+  volumeTermsMissingCpt: string[]
 }
 
 export async function recomputeAccrualForContract(
@@ -95,8 +102,23 @@ export async function recomputeAccrualForContract(
   // caller already validated the write. This just means we can't
   // recompute (e.g. cross-facility test fixtures).
   if (!contract) {
-    return { deleted: 0, inserted: 0, sumEarned: 0 }
+    return { deleted: 0, inserted: 0, sumEarned: 0, volumeTermsMissingCpt: [] }
   }
+
+  // Charles 2026-04-26 #75/#76: collect volume-family terms with no
+  // CPT codes so the toast can warn the user. Done here (before the
+  // filter strips them) so we have visibility into why the engine
+  // produced no rows for that term.
+  const volumeTermsMissingCpt = contract.terms
+    .filter(
+      (t) =>
+        (t.termType === "volume_rebate" ||
+          t.termType === "rebate_per_use" ||
+          t.termType === "capitated_pricing_rebate") &&
+        t.tiers.length > 0 &&
+        (!Array.isArray(t.cptCodes) || t.cptCodes.length === 0),
+    )
+    .map((t) => t.termName)
 
   // Charles W1.Q — Self-heal future-dated auto-accrual rows first.
   // These are stale artifacts from seed scripts or pre-R5.26 runs that
@@ -178,7 +200,12 @@ export async function recomputeAccrualForContract(
   // writer's domain OR any dispatcher's domain. A contract with only
   // a volume_rebate term still needs the volume dispatcher to fire.
   if (allTermsWithTiers.length === 0) {
-    return { deleted: deleteResult.count, inserted: 0, sumEarned: 0 }
+    return {
+      deleted: deleteResult.count,
+      inserted: 0,
+      sumEarned: 0,
+      volumeTermsMissingCpt,
+    }
   }
 
   // Charles W1.U-A: each term may be scoped to a specific set of product
@@ -771,6 +798,7 @@ export async function recomputeAccrualForContract(
       inserted: 0,
       sumEarned:
         volumeEarned + poEarned + thresholdEarned + invoiceEarned,
+      volumeTermsMissingCpt,
     }
   }
 
@@ -805,6 +833,7 @@ export async function recomputeAccrualForContract(
       thresholdInserted +
       invoiceInserted,
     sumEarned,
+    volumeTermsMissingCpt,
   }
 }
 
