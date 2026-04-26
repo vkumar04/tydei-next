@@ -88,24 +88,49 @@ export async function getVendorMarketShare(input: {
     totalMarket: totalMap.get(r.category) ?? 0,
   }))
 
-  // By facility
-  const facilityRecords = await prisma.cOGRecord.groupBy({
+  // By facility — `share` is the vendor's PERCENTAGE of each facility's
+  // total spend, not the raw dollars. Pre-fix the chart's `${v}%` axis
+  // formatter rendered values like "2,153,450%" because raw dollars
+  // were piped into a percentage axis.
+  const vendorFacilityRecords = await prisma.cOGRecord.groupBy({
     by: ["facilityId"],
     where: { vendorId },
     _sum: { extendedPrice: true },
   })
 
-  const facilityIds = facilityRecords.map((r) => r.facilityId)
+  const facilityIds = vendorFacilityRecords.map((r) => r.facilityId)
   const facilities = await prisma.facility.findMany({
     where: { id: { in: facilityIds } },
     select: { id: true, name: true },
   })
   const facilityMap = new Map(facilities.map((f) => [f.id, f.name]))
 
-  const byFacility = facilityRecords.map((r) => ({
-    facility: facilityMap.get(r.facilityId) ?? "Unknown",
-    share: Number(r._sum.extendedPrice ?? 0),
-  }))
+  // Total spend per facility (across ALL vendors) — denominator for
+  // share %.
+  const totalFacilityRecords =
+    facilityIds.length > 0
+      ? await prisma.cOGRecord.groupBy({
+          by: ["facilityId"],
+          where: { facilityId: { in: facilityIds } },
+          _sum: { extendedPrice: true },
+        })
+      : []
+  const facilityTotalMap = new Map(
+    totalFacilityRecords.map((r) => [
+      r.facilityId,
+      Number(r._sum.extendedPrice ?? 0),
+    ]),
+  )
+
+  const byFacility = vendorFacilityRecords.map((r) => {
+    const vendorAt = Number(r._sum.extendedPrice ?? 0)
+    const total = facilityTotalMap.get(r.facilityId) ?? 0
+    const share = total > 0 ? (vendorAt / total) * 100 : 0
+    return {
+      facility: facilityMap.get(r.facilityId) ?? "Unknown",
+      share: Number(share.toFixed(1)),
+    }
+  })
 
   return serialize({ byCategory, byFacility, trend: [] })
 }
