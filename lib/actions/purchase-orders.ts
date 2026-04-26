@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import {
   createPOSchema,
   poFiltersSchema,
@@ -81,9 +82,13 @@ export async function getPOStats(_facilityId?: string) {
 export async function getFacilityVendors(_facilityId?: string) {
   const { facility } = await requireFacility()
 
+  // Include both primary-facility contracts (Contract.facilityId) AND
+  // multi-facility contracts shared via the ContractFacility join. Prior
+  // version only checked the primary, so vendors attached only via the
+  // join were missing from the dropdown (Charles 2026-04-26).
   const vendors = await prisma.vendor.findMany({
     where: {
-      contracts: { some: { facilityId: facility.id } },
+      contracts: { some: contractsOwnedByFacility(facility.id) },
     },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
