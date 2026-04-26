@@ -1,7 +1,13 @@
 "use server"
 
+import { z } from "zod"
 import { prisma } from "@/lib/db"
-import { requireAuth, requireFacility, requireVendor } from "@/lib/actions/auth"
+import {
+  requireAdmin,
+  requireAuth,
+  requireFacility,
+  requireVendor,
+} from "@/lib/actions/auth"
 import {
   updateFacilityProfileSchema,
   updateVendorProfileSchema,
@@ -10,6 +16,65 @@ import {
   type NotificationPreferences,
 } from "@/lib/validators/settings"
 import { serialize } from "@/lib/serialize"
+
+// ─── Role enums (Charles audit C2/C3) ─────────────────────────────
+//
+// Better-auth's organization plugin recognizes "owner" / "admin" /
+// "member". Owner is reserved for the creator-of-org path and must
+// NEVER be assignable via invite or role-update — that's how a vendor
+// admin chained-displaced the legitimate owner in the audit. The
+// invite/update enums are intentionally narrow (admin | member) to
+// keep the privilege ceiling below "owner".
+const inviteRoleSchema = z.enum(["admin", "member"])
+const updateRoleSchema = z.enum(["admin", "member"])
+
+const inviteTeamMemberInputSchema = z.object({
+  organizationId: z.string().min(1),
+  email: z.string().email(),
+  role: inviteRoleSchema,
+})
+
+// `subRole` is concatenated into the stored role with a colon
+// (`"admin:owner"`). Reject any character that could escape the
+// shape we read back in `getVendorTeamMembers` (split on `:`).
+const safeRoleSegment = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-zA-Z0-9_-]+$/, "Role segments must be alphanumeric")
+
+const inviteVendorTeamMemberInputSchema = z.object({
+  organizationId: z.string().min(1),
+  email: z.string().email(),
+  role: inviteRoleSchema,
+  subRole: safeRoleSegment,
+})
+
+async function assertNotLastAdmin(
+  organizationId: string,
+  targetMemberId: string,
+): Promise<void> {
+  // Count current admins/owners. If the member being demoted/removed
+  // is one of them and they're the only one, refuse — otherwise the
+  // org would be bricked (no one left to manage members or invites).
+  // The caller already passed assertCallerCanManage for organizationId,
+  // and the post-fetch `target.organizationId !== organizationId`
+  // equality check bounds this read to that gated org.
+  // auth-scope-scanner-skip: post-fetch org equality check below.
+  const target = await prisma.member.findUnique({
+    where: { id: targetMemberId },
+    select: { role: true, organizationId: true },
+  })
+  if (!target || target.organizationId !== organizationId) return
+  if (target.role !== "admin" && target.role !== "owner") return
+
+  const adminCount = await prisma.member.count({
+    where: { organizationId, role: { in: ["admin", "owner"] } },
+  })
+  if (adminCount <= 1) {
+    throw new Error("Cannot remove the last admin of this organization")
+  }
+}
 
 // ─── Facility Profile ────────────────────────────────────────────
 
@@ -111,8 +176,22 @@ export async function updateVendorProfile(
   _vendorId: string,
   input: UpdateVendorProfileInput
 ): Promise<void> {
-  const { vendor } = await requireVendor()
+  // Charles audit M1: Vendor is shared-write-restricted per the role
+  // model (`docs/architecture/role-model.md`). Pre-fix: any vendor user
+  // could overwrite contactEmail to intercept facility→vendor invites.
+  // NOTE: this currently breaks the vendor settings UI for non-admin
+  // users. The vendor settings page (components/vendor/settings/...) is
+  // expected to be re-gated to admin or moved server-side; until then
+  // a vendor-side write attempt will fail closed (intentional).
+  await requireAdmin()
   const data = updateVendorProfileSchema.parse(input)
+
+  // Identity must come from the input here because requireAdmin doesn't
+  // resolve a vendor. Look up the vendor by id and update.
+  const vendor = await prisma.vendor.findUniqueOrThrow({
+    where: { id: _vendorId },
+    select: { id: true },
+  })
 
   await prisma.vendor.update({
     where: { id: vendor.id },
@@ -280,14 +359,17 @@ export async function inviteTeamMember(input: {
   email: string
   role: string
 }): Promise<void> {
+  // Charles audit C2: zod enum prevents `role: "owner"` from being
+  // accepted. Owner is reserved for the creator-of-org path.
+  const parsed = inviteTeamMemberInputSchema.parse(input)
   const session = await requireAuth()
-  await assertCallerCanManage(session.user.id, input.organizationId)
+  await assertCallerCanManage(session.user.id, parsed.organizationId)
 
   await prisma.invitation.create({
     data: {
-      organizationId: input.organizationId,
-      email: input.email,
-      role: input.role,
+      organizationId: parsed.organizationId,
+      email: parsed.email,
+      role: parsed.role,
       status: "pending",
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       inviterId: session.user.id,
@@ -302,6 +384,8 @@ export async function removeTeamMember(memberId: string): Promise<void> {
     select: { organizationId: true },
   })
   await assertCallerCanManage(session.user.id, target.organizationId)
+  // Charles audit C3: prevent bricking the org by removing the last admin.
+  await assertNotLastAdmin(target.organizationId, memberId)
   await prisma.member.delete({ where: { id: memberId } })
 }
 
@@ -309,13 +393,23 @@ export async function updateTeamMemberRole(
   memberId: string,
   role: string
 ): Promise<void> {
+  // Charles audit C3: zod enum prevents an admin from self-promoting
+  // to "owner" or being demoted to a string the UI can't render.
+  const parsedRole = updateRoleSchema.parse(role)
   const session = await requireAuth()
   const target = await prisma.member.findUniqueOrThrow({
     where: { id: memberId },
     select: { organizationId: true },
   })
   await assertCallerCanManage(session.user.id, target.organizationId)
-  await prisma.member.update({ where: { id: memberId }, data: { role } })
+  // If the new role is non-admin, ensure we're not demoting the last admin.
+  if (parsedRole !== "admin") {
+    await assertNotLastAdmin(target.organizationId, memberId)
+  }
+  await prisma.member.update({
+    where: { id: memberId },
+    data: { role: parsedRole },
+  })
 }
 
 // ─── Feature Flags ───────────────────────────────────────────────
@@ -366,7 +460,11 @@ export interface VendorTeamMember extends TeamMember {
 export async function getVendorTeamMembers(
   organizationId: string
 ): Promise<VendorTeamMember[]> {
-  await requireVendor()
+  // Charles audit B3: a vendor session alone is not enough — confirm
+  // the caller is a member of the org they're querying. Pre-fix,
+  // Stryker could pass Medtronic's organizationId and read its roster.
+  const session = await requireVendor()
+  await assertCallerIsMember(session.user.id, organizationId)
 
   const members = await prisma.member.findMany({
     where: { organizationId },
@@ -398,13 +496,20 @@ export async function inviteVendorTeamMember(input: {
   role: string
   subRole: string
 }): Promise<void> {
+  // Charles audit C1: pre-fix this had only requireAuth — Stryker's
+  // vendor user successfully created an invitation row in Medtronic's
+  // org with `role: "admin:owner"`. Now we (a) zod-validate the role
+  // segments to block colon-injection / role inflation, and (b) gate
+  // on assertCallerCanManage so foreign organizationId is rejected.
+  const parsed = inviteVendorTeamMemberInputSchema.parse(input)
   const session = await requireAuth()
+  await assertCallerCanManage(session.user.id, parsed.organizationId)
 
   await prisma.invitation.create({
     data: {
-      organizationId: input.organizationId,
-      email: input.email,
-      role: `${input.role}:${input.subRole}`,
+      organizationId: parsed.organizationId,
+      email: parsed.email,
+      role: `${parsed.role}:${parsed.subRole}`,
       status: "pending",
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       inviterId: session.user.id,
