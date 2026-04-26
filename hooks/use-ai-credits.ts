@@ -6,6 +6,7 @@ import {
   getAICredits,
   useAICredits,
   getAIUsageHistory,
+  getAIUsageBreakdown,
   checkAICredits,
   type AICredit,
 } from "@/lib/actions/ai-credits"
@@ -29,6 +30,22 @@ export function useUsageHistory(creditId: string | undefined) {
     queryKey: queryKeys.ai.usageHistory(creditId ?? ""),
     queryFn: () => getAIUsageHistory(creditId!),
     enabled: !!creditId,
+  })
+}
+
+/**
+ * Per-action rollup over the credit's full billing period. The
+ * AI Credits tab's "Total Credits" column previously aggregated
+ * client-side from `useUsageHistory` (which is capped at 50 rows),
+ * which silently UNDER-reported any facility/vendor with >50 calls
+ * in a period. Use this hook for accurate totals.
+ */
+export function useUsageBreakdown(creditId: string | undefined) {
+  return useQuery({
+    queryKey: ["ai", "breakdown", creditId ?? ""],
+    queryFn: () => getAIUsageBreakdown(creditId!),
+    enabled: !!creditId,
+    staleTime: 60_000,
   })
 }
 

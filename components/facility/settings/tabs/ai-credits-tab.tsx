@@ -17,7 +17,11 @@ import {
   FileText,
 } from "lucide-react"
 import { AI_CREDIT_COSTS } from "@/lib/ai/config"
-import type { AICredit, AIUsageRecord } from "@/lib/actions/ai-credits"
+import type {
+  AICredit,
+  AIUsageRecord,
+  AIUsageBreakdown,
+} from "@/lib/actions/ai-credits"
 
 const AI_ACTION_LABELS: Record<string, string> = {
   document_extraction_per_page: "Document Extraction",
@@ -36,6 +40,11 @@ const AI_ACTION_LABELS: Record<string, string> = {
 export interface AICreditsTabProps {
   creditsData: AICredit | null | undefined
   usageData: AIUsageRecord[] | undefined
+  /** Server-computed per-action rollup over the FULL billing period
+   *  (not just the last 50 records). When omitted the table falls
+   *  back to client aggregation over `usageData` — under-reports
+   *  for entities with >50 calls in a period. */
+  breakdownData?: AIUsageBreakdown[] | undefined
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -48,10 +57,17 @@ const PLAN_LABELS: Record<string, string> = {
 export function AICreditsTab({
   creditsData,
   usageData,
+  breakdownData,
 }: AICreditsTabProps) {
-  // Aggregate usage by action for the "Total Credits" column.
+  // Per-action totals. Prefer the server-computed breakdown (full
+  // period); fall back to client aggregation over the truncated
+  // `usageData` window when the breakdown isn't loaded yet.
   const totalByAction = new Map<string, number>()
-  if (usageData) {
+  if (breakdownData && breakdownData.length > 0) {
+    for (const row of breakdownData) {
+      totalByAction.set(row.action, row.totalCredits)
+    }
+  } else if (usageData) {
     for (const rec of usageData) {
       totalByAction.set(
         rec.action,

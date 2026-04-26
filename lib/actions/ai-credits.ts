@@ -162,6 +162,46 @@ export async function getAIUsageHistory(
   })))
 }
 
+// ─── Usage Breakdown by Action ──────────────────────────────────
+
+export interface AIUsageBreakdown {
+  action: string
+  totalCredits: number
+  callCount: number
+  lastUsedAt: string
+}
+
+/**
+ * Per-action rollup over the credit row's billing period. Used by
+ * the AI Usage card on /dashboard/settings to show which actions
+ * are eating the credit budget. Sorted by total credits descending
+ * so the biggest spenders bubble to the top.
+ */
+export async function getAIUsageBreakdown(
+  creditId: string,
+): Promise<AIUsageBreakdown[]> {
+  await requireAuth()
+
+  const grouped = await prisma.aIUsageRecord.groupBy({
+    by: ["action"],
+    where: { creditId },
+    _sum: { creditsUsed: true },
+    _count: { _all: true },
+    _max: { createdAt: true },
+  })
+
+  return serialize(
+    grouped
+      .map((g) => ({
+        action: g.action,
+        totalCredits: g._sum.creditsUsed ?? 0,
+        callCount: g._count._all,
+        lastUsedAt: g._max.createdAt?.toISOString() ?? new Date(0).toISOString(),
+      }))
+      .sort((a, b) => b.totalCredits - a.totalCredits),
+  )
+}
+
 // ─── Check Credits ──────────────────────────────────────────────
 
 export async function checkAICredits(input: {

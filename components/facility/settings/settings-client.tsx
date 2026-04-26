@@ -37,7 +37,11 @@ import {
   useRejectConnection,
   useRemoveConnection,
 } from "@/hooks/use-connections"
-import { useCredits, useUsageHistory } from "@/hooks/use-ai-credits"
+import {
+  useCredits,
+  useUsageBreakdown,
+  useUsageHistory,
+} from "@/hooks/use-ai-credits"
 import type { FeatureFlagData } from "@/lib/actions/settings"
 import { toast } from "sonner"
 
@@ -82,6 +86,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
   const removeConn = useRemoveConnection(facilityId)
   const creditsQuery = useCredits(facilityId, "facility")
   const usageQuery = useUsageHistory(creditsQuery.data?.id)
+  const breakdownQuery = useUsageBreakdown(creditsQuery.data?.id)
 
   const facilityName = profile.data?.name ?? "Facility"
 
@@ -248,6 +253,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
           <AICreditsTab
             creditsData={creditsQuery.data}
             usageData={usageQuery.data}
+            breakdownData={breakdownQuery.data}
           />
         </TabsContent>
 
