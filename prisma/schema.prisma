@@ -352,6 +352,7 @@ model User {
   completedRenewalTasks RenewalTask[] @relation("RenewalTaskCompleter")
   rebateInsightFlags RebateInsightFlag[]
   notifications    Notification[]
+  contractExtractionCache ContractExtractionCache[]
 
   @@index([role])
   @@map("user")
@@ -1901,6 +1902,38 @@ model ReportSchedule {
 }
 
 // ─── Rebate Optimizer AI Smart Recommendations ─────────────────────
+
+// ─── Contract Extraction Cache (2026-04-26) ─────────────────────
+//
+// SHA256(file bytes) → cached AI extraction result. Re-uploads of
+// the same PDF skip the 20-30s Claude round-trip + credit cost.
+// Scoped per-user so two users can't see each other's extracted
+// data even on identical PDFs (defensive — extracted JSON has
+// vendor/contract identifiers a competitor shouldn't see).
+model ContractExtractionCache {
+  id         String   @id @default(cuid())
+  /** SHA-256 hex digest of the uploaded file bytes. */
+  fileHash   String
+  /** User the cache row was generated for (scoping boundary). */
+  userId     String
+  /** Original filename — informational, used when serving back. */
+  filename   String
+  /** Full extracted payload (matches /api/ai/extract-contract response.extracted shape). */
+  extracted  Json
+  /** Confidence score from the extractor at the time of write. */
+  confidence Float?
+  /** S3 key the original file was archived to. Surfaced so the
+   *  cache hit returns the same payload shape as a fresh extract. */
+  s3Key      String?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fileHash])
+  @@index([expiresAt])
+  @@map("contract_extraction_cache")
+}
 
 model RebateInsightCache {
   id         String   @id @default(cuid())

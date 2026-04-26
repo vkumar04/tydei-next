@@ -5,6 +5,7 @@ import type { UseFormReturn } from "react-hook-form"
 import type { CreateContractInput } from "@/lib/validators/contracts"
 import { getVendorCOGSpend } from "@/lib/actions/cog-records"
 import { getContracts } from "@/lib/actions/contracts"
+import { computeContractMetrics } from "@/lib/actions/contracts/derived-metrics"
 import { getFacilities } from "@/lib/actions/facilities"
 import { getVendors } from "@/lib/actions/vendors"
 import { FacilityMultiSelect } from "@/components/contracts/facility-multi-select"
@@ -352,6 +353,53 @@ export function ContractFormBasicInfo({
   const expirationDateStr = watch("expirationDate")
   const effectiveDate = parseDateString(effectiveDateStr)
   const expirationDate = parseDateString(expirationDateStr)
+
+  // Charles 2026-04-26: complianceRate + currentMarketShare are
+  // ALWAYS computed from live COG + pricing data — never user-edited.
+  // Recompute whenever vendor / categories / window changes. Kept in
+  // a separate query so the form fields stay reactive without
+  // re-running the contracts list / COG spend queries.
+  const selectedCategoryNames = useMemo(
+    () =>
+      selectedCategoryIds
+        .map((id) => categories.find((c) => c.id === id)?.name)
+        .filter((name): name is string => Boolean(name)),
+    [selectedCategoryIds, categories],
+  )
+  const metricsQuery = useQuery({
+    queryKey: [
+      "contract-derived-metrics",
+      vendorId,
+      [...selectedCategoryNames].sort(),
+      effectiveDateStr,
+      expirationDateStr,
+    ],
+    queryFn: () =>
+      computeContractMetrics({
+        vendorId: vendorId!,
+        productCategories: selectedCategoryNames,
+        effectiveDate: effectiveDateStr || undefined,
+        expirationDate: expirationDateStr || undefined,
+      }),
+    enabled: !!vendorId && selectedCategoryNames.length > 0,
+    staleTime: 60_000,
+  })
+
+  // Sync the computed values back into the form so the existing save
+  // path (which reads complianceRate + currentMarketShare from the
+  // form payload) keeps working without further changes.
+  useEffect(() => {
+    if (metricsQuery.data) {
+      setValue("complianceRate", metricsQuery.data.complianceRate ?? null, {
+        shouldDirty: false,
+      })
+      setValue(
+        "currentMarketShare",
+        metricsQuery.data.currentMarketShare ?? null,
+        { shouldDirty: false },
+      )
+    }
+  }, [metricsQuery.data, setValue])
 
   // Auto-compute annualValue when totalValue and dates are available.
   // Uses calendar-month math (computeContractYears) so whole-year terms
@@ -1009,54 +1057,50 @@ export function ContractFormBasicInfo({
            * for contracts that don't track compliance or market share.
            */}
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field
-              label="Compliance Rate (%)"
-              error={errors.complianceRate?.message}
-            >
-              <div className="relative">
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  {...register("complianceRate", {
-                    setValueAs: (v) =>
-                      v === "" || v == null ? null : Number(v),
-                  })}
-                  className="pr-8"
-                  placeholder="—"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  %
+            {/* Compliance + Current Market Share are computed from
+                live COG + ContractPricing data within the contract's
+                categories. Never user-edited. The hidden inputs keep
+                the form payload shape stable so the save path is
+                unchanged. */}
+            <input type="hidden" {...register("complianceRate", {
+              setValueAs: (v) => (v === "" || v == null ? null : Number(v)),
+            })} />
+            <input type="hidden" {...register("currentMarketShare", {
+              setValueAs: (v) => (v === "" || v == null ? null : Number(v)),
+            })} />
+            <Field label="Compliance Rate (%)">
+              <div className="flex h-10 items-center justify-between rounded-md border border-input bg-muted/30 px-3 text-sm">
+                <span className="font-medium">
+                  {metricsQuery.isFetching
+                    ? "…"
+                    : metricsQuery.data?.complianceRate != null
+                      ? `${metricsQuery.data.complianceRate.toFixed(1)}%`
+                      : "—"}
                 </span>
+                <span className="text-xs text-muted-foreground">computed</span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Drives Compliance Rebate term accruals
+                {metricsQuery.data
+                  ? `From ${metricsQuery.data.cogRowsOnContract.toLocaleString()} of ${metricsQuery.data.cogRowsTotal.toLocaleString()} COG rows in contract categories`
+                  : "Calculated from COG + pricing files. Pick a vendor + categories."}
               </p>
             </Field>
-            <Field
-              label="Current Market Share (%)"
-              error={errors.currentMarketShare?.message}
-            >
-              <div className="relative">
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  {...register("currentMarketShare", {
-                    setValueAs: (v) =>
-                      v === "" || v == null ? null : Number(v),
-                  })}
-                  className="pr-8"
-                  placeholder="—"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  %
+            <Field label="Current Market Share (%)">
+              <div className="flex h-10 items-center justify-between rounded-md border border-input bg-muted/30 px-3 text-sm">
+                <span className="font-medium">
+                  {metricsQuery.isFetching
+                    ? "…"
+                    : metricsQuery.data?.currentMarketShare != null
+                      ? `${metricsQuery.data.currentMarketShare.toFixed(1)}%`
+                      : "—"}
                 </span>
+                <span className="text-xs text-muted-foreground">computed</span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Drives Market Share term accruals
+                {metricsQuery.data &&
+                metricsQuery.data.totalSpendInCategories > 0
+                  ? `Vendor $${Math.round(metricsQuery.data.vendorSpendInCategories).toLocaleString()} of $${Math.round(metricsQuery.data.totalSpendInCategories).toLocaleString()} category spend`
+                  : "Vendor's category spend ÷ total facility spend in those categories."}
               </p>
             </Field>
             <Field
@@ -1081,7 +1125,8 @@ export function ContractFormBasicInfo({
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Vendor's contractual target
+                Vendor&apos;s contractual target (manual — this is the goal,
+                not the actual)
               </p>
             </Field>
           </div>

@@ -129,33 +129,69 @@ export function AIExtractDialog({
       // Step 2: Reading — the server reads the PDF and calls AI step 1
       setStepIndex(1)
 
-      const res = await fetch("/api/ai/extract-contract", {
+      // 2026-04-26: switched to the streaming endpoint. Server sends
+      // partial JSON as Claude emits it; we attempt to parse after each
+      // chunk so the review dialog can paint fields live. Cache hits
+      // come back as a single complete-payload chunk and finish in
+      // <50ms.
+      const res = await fetch("/api/ai/extract-contract/stream", {
         method: "POST",
         body: formData,
       })
 
-      // Step 3: Structuring — by the time we get the response, both AI steps are done
       setStepIndex(2)
-      setProgress(90)
+      setProgress(40)
 
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as
           | { error?: string; details?: string }
           | null
-        // Surface the SPECIFIC failure (model API error message, schema
-        // mismatch text, file-too-large, etc.) instead of the generic
-        // "AI extraction unavailable" envelope. The route already
-        // truncates `details` to 400 chars on its end.
         const head = body?.error ?? "Extraction failed"
         const tail = body?.details ? ` — ${body.details}` : ""
         throw new Error(`${head}${tail}`)
       }
+      if (!res.body) throw new Error("No response stream")
 
-      const data = await res.json()
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let lastValid: { extracted?: unknown; confidence?: number; s3Key?: string; cached?: boolean } | null = null
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        // Best-effort partial parse — the AI SDK's text stream emits
+        // chunks of valid-but-incremental JSON. We retry parse on each
+        // chunk; failures are normal mid-stream.
+        try {
+          const parsed = JSON.parse(buffer)
+          if (parsed && typeof parsed === "object") {
+            // Cache-hit envelope shape: { extracted, confidence, s3Key, cached, done }
+            if ("extracted" in parsed) {
+              lastValid = parsed
+            } else {
+              // Streaming partial — the JSON is the extracted shape itself.
+              lastValid = { extracted: parsed }
+            }
+            // Update review state progressively.
+            if (lastValid?.extracted) {
+              setExtracted(lastValid.extracted as ExtractedContractData)
+            }
+            const pct = Math.min(95, 40 + (buffer.length / 8000) * 50)
+            setProgress(Math.round(pct))
+          }
+        } catch {
+          // Not yet a valid JSON document — keep reading.
+        }
+      }
+
+      if (!lastValid) throw new Error("Empty response from extractor")
+
       setProgress(100)
-      setExtracted(data.extracted)
-      setS3Key(data.s3Key ?? null)
-      setConfidence(data.confidence)
+      setS3Key(lastValid.s3Key ?? null)
+      setConfidence(lastValid.confidence ?? 0.9)
       setStage("review")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to extract contract data. Please try again.")

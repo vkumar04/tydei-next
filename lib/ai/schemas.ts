@@ -26,6 +26,27 @@ function coerceOptionalNumber() {
   }, z.number().optional())
 }
 
+/**
+ * Fuzzy-match an enum: normalizes the input (lowercase, replace
+ * spaces/dashes with underscores) and tries again before failing.
+ * Lets "spend rebate" map to "spend_rebate", "Tie In" → "tie_in",
+ * etc. Falls back to undefined for optional enum slots so the
+ * downstream consumer can apply its own default.
+ */
+function coerceEnum<T extends readonly [string, ...string[]]>(values: T) {
+  const valueSet = new Set<string>(values)
+  return z.preprocess((v) => {
+    if (typeof v !== "string") return v
+    if (valueSet.has(v)) return v
+    const normalized = v
+      .toLowerCase()
+      .trim()
+      .replace(/[\s-]+/g, "_")
+      .replace(/[^a-z0-9_]/g, "")
+    return valueSet.has(normalized) ? normalized : v
+  }, z.enum(values).optional())
+}
+
 function coerceOptionalString() {
   return z.preprocess((v) => {
     if (v === null || v === undefined) return undefined

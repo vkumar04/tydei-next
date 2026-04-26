@@ -1,18 +1,20 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useMemo, useRef, useState } from "react"
 import {
-  Check,
-  Pencil,
+  AlertTriangle,
   Calendar,
-  Sparkles,
+  Check,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Upload,
   FileSpreadsheet,
-  CheckCircle2,
-  X,
+  Info,
   Loader2,
+  Pencil,
+  Sparkles,
+  Upload,
+  X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,6 +32,7 @@ import {
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
 import { parsePricingFile } from "@/lib/utils/parse-pricing-file"
+import { findContractWarnings } from "@/lib/ai/cross-field-warnings"
 
 interface AIExtractReviewProps {
   extracted: ExtractedContractData
@@ -145,6 +148,10 @@ export function AIExtractReview({
     )
   }
 
+  // 2026-04-26: cross-field warnings re-evaluate as the user edits
+  // (date typo gets flagged; fixing it makes the warning disappear).
+  const warnings = useMemo(() => findContractWarnings(data), [data])
+
   return (
     <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
       {/* Confidence badge */}
@@ -157,6 +164,31 @@ export function AIExtractReview({
           {confidenceLabel} confidence ({Math.round(confidence * 100)}%)
         </Badge>
       </div>
+
+      {/* Cross-field warnings — surfaced inline so the user can fix
+          before saving. Not blockers; "Save" still works. */}
+      {warnings.length > 0 ? (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {warnings.length} {warnings.length === 1 ? "thing to review" : "things to review"}
+          </div>
+          <ul className="space-y-1.5 text-xs">
+            {warnings.map((w, i) => (
+              <li key={i} className="flex items-start gap-2">
+                {w.severity === "warning" ? (
+                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-amber-600 dark:text-amber-500" />
+                ) : (
+                  <Info className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="text-muted-foreground leading-relaxed">
+                  {w.message}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* Key Contract Info */}
       <div className="p-4 rounded-lg border bg-primary/5">

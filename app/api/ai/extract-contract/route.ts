@@ -14,6 +14,7 @@ import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
+import { createHash } from "node:crypto"
 
 const RICH_SYSTEM_PROMPT = `You are an expert at extracting healthcare contract information.
 
@@ -283,10 +284,34 @@ ${text.trim()}`,
       )
     }
     const fileData = new Uint8Array(bytes)
+    const userId = session.user.id
+
+    // 2026-04-26 cache: SHA-256 the file bytes, look up a per-user
+    // cache row. Same PDF re-uploaded → return the previous extract
+    // in <50ms instead of re-spending a 20-30s Claude round-trip.
+    // Per-user scoping prevents cross-tenant leakage even on
+    // identical PDFs (two facilities could both have the same
+    // standard contract template, but their extracted vendor /
+    // facility-specific numbers shouldn't cross).
+    const fileHash = createHash("sha256").update(fileData).digest("hex")
+    const cached = await prisma.contractExtractionCache.findUnique({
+      where: { userId_fileHash: { userId, fileHash } },
+    })
+    if (cached && cached.expiresAt > new Date()) {
+      console.log(
+        `[extract-contract] cache HIT for ${file.name} (hash=${fileHash.slice(0, 12)})`,
+      )
+      return Response.json({
+        success: true,
+        extracted: cached.extracted,
+        confidence: cached.confidence ?? 0.9,
+        s3Key: cached.s3Key,
+        cached: true,
+      })
+    }
 
     // Archive original file to S3 (best-effort).
     let s3Key: string | undefined
-    const userId = session.user.id
     const timestamp = Date.now()
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
     const candidateKey = `contracts/${userId}/${timestamp}-${safeName}`
@@ -412,11 +437,40 @@ ${text.trim()}`,
       session.user.name ?? session.user.email ?? "Unknown",
       `Extracted contract from ${file.name.slice(0, 40)}`,
     )
+
+    // Cache the successful extract (best-effort — failure here
+    // never blocks the user from getting the result).
+    try {
+      const expiresAt = new Date()
+      expiresAt.setDate(expiresAt.getDate() + 30) // 30-day TTL
+      await prisma.contractExtractionCache.upsert({
+        where: { userId_fileHash: { userId, fileHash } },
+        create: {
+          userId,
+          fileHash,
+          filename: file.name,
+          extracted: extracted as object,
+          confidence: 0.9,
+          s3Key,
+          expiresAt,
+        },
+        update: {
+          extracted: extracted as object,
+          confidence: 0.9,
+          s3Key,
+          expiresAt,
+        },
+      })
+    } catch (cacheErr) {
+      console.warn("[extract-contract] cache write failed:", cacheErr)
+    }
+
     return Response.json({
       success: true,
       extracted,
       confidence: 0.9,
       s3Key,
+      cached: false,
     })
   } catch (error) {
     console.error("Contract extraction error:", error)
