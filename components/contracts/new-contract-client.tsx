@@ -37,9 +37,10 @@ import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { ContractPdfDropZone } from "@/components/contracts/contract-pdf-drop-zone"
 import { TieInCapitalPicker } from "@/components/contracts/tie-in-capital-picker"
 import {
-  ContractCapitalEntry,
-  type ContractCapital,
-} from "@/components/contracts/contract-capital-entry"
+  CapitalLineItemsEditor,
+  type CapitalLineItemDraft,
+} from "@/components/contracts/capital-line-items-editor"
+import { createCapitalLineItem } from "@/lib/actions/contracts/capital-line-items"
 import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
 import {
   Accordion,
@@ -110,15 +111,9 @@ export function NewContractClient({
   // or reviewed-but-dropped). Null = no AI populate happened.
   const [aiTermCount, setAiTermCount] = useState<number | null>(null)
 
-  // Charles W1.W-D3 — contract-level tie-in capital state.
-  const [capital, setCapital] = useState<ContractCapital>({
-    capitalCost: null,
-    interestRate: null,
-    termMonths: null,
-    downPayment: null,
-    paymentCadence: null,
-    amortizationShape: "symmetrical",
-  })
+  // Charles audit suggestion #4 (v0-port): per-asset capital line items.
+  // Persisted via createCapitalLineItem after the contract is created.
+  const [capitalItems, setCapitalItems] = useState<CapitalLineItemDraft[]>([])
 
   // Charles W1.W-E1 — one idempotency key per form session.
   const idempotencyKeyRef = useRef<string>(
@@ -596,12 +591,6 @@ export function NewContractClient({
     const contract = await createMutation.mutateAsync({
       ...values,
       idempotencyKey: idempotencyKeyRef.current,
-      capitalCost: capital.capitalCost,
-      interestRate: capital.interestRate,
-      termMonths: capital.termMonths,
-      downPayment: capital.downPayment,
-      paymentCadence: capital.paymentCadence,
-      amortizationShape: capital.amortizationShape,
       // Charles — terms now persist inside createContract in one action.
       // Sending them in the payload eliminates the previous race where a
       // client-side for-loop calling createContractTerm after the contract
@@ -621,6 +610,27 @@ export function NewContractClient({
   }
 
   async function runPostCreateSideEffects(contractId: string) {
+    // Charles audit suggestion #4 (v0-port): persist capital line items
+    // on the freshly-created contract.
+    for (const it of capitalItems) {
+      try {
+        await createCapitalLineItem(contractId, {
+          description: it.description,
+          itemNumber: it.itemNumber || null,
+          serialNumber: it.serialNumber || null,
+          contractTotal: it.contractTotal,
+          initialSales: it.initialSales,
+          interestRate: Math.min(1, Math.max(0, it.interestRatePercent / 100)),
+          termMonths: it.termMonths,
+          paymentType: it.paymentType,
+          paymentCadence: it.paymentCadence,
+        })
+      } catch (err) {
+        console.error("[new-contract] createCapitalLineItem failed", err, { contractId })
+        const msg = err instanceof Error ? err.message : String(err)
+        toast.error(`Contract saved, but a capital line item failed to persist: ${msg}`)
+      }
+    }
     if (pricingItems.length > 0) {
       try {
         await importContractPricing({ contractId, items: pricingItems })
@@ -673,16 +683,9 @@ export function NewContractClient({
       return
     }
 
-    // Carry capital fields AND idempotency on the draft path too.
     const contract = await createMutation.mutateAsync({
       ...values,
       idempotencyKey: idempotencyKeyRef.current,
-      capitalCost: capital.capitalCost,
-      interestRate: capital.interestRate,
-      termMonths: capital.termMonths,
-      downPayment: capital.downPayment,
-      paymentCadence: capital.paymentCadence,
-      amortizationShape: capital.amortizationShape,
       terms,
     })
 
@@ -804,31 +807,16 @@ export function NewContractClient({
           </Card>
         )}
 
-        {/* Charles W1.W-D3 — capital-entry card on create.
-            W1.T moved capital to the Contract row but only wired the
-            entry card into the edit flow, so every new tie-in was
-            born with null capital. This card lets the user fill all
-            six fields at creation so the detail page's capital
-            block isn't blank post-save. */}
+        {/* Charles audit suggestion #4 (v0-port): per-asset capital
+            line items. v0's tie-in supports multi-equipment financing
+            (e.g. MRI + service warranty); each item gets its own
+            description / item # / serial / contract total / down /
+            rate / term / payment type / cadence. */}
         {form.watch("contractType") === "tie_in" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Capital Equipment</CardTitle>
-              <CardDescription>
-                Enter the capital cost, interest rate, and payoff schedule
-                — rebates from the terms below will pay down this balance.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ContractCapitalEntry
-                capital={capital}
-                onChange={(patch) =>
-                  setCapital((prev) => ({ ...prev, ...patch }))
-                }
-                effectiveDate={form.watch("effectiveDate") || null}
-              />
-            </CardContent>
-          </Card>
+          <CapitalLineItemsEditor
+            items={capitalItems}
+            onChange={setCapitalItems}
+          />
         )}
 
         {/* Contract Terms */}

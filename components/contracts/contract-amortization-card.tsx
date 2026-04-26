@@ -110,7 +110,6 @@ export function ContractAmortizationCard({
             the section is hidden behind a smaller header (less visual
             weight when there's nothing to see beyond the summary). */}
         {data.capitalLineItems && data.capitalLineItems.length > 0 && (() => {
-          const isLegacyOnly = data.capitalLineItems.every((i) => i.isLegacy)
           const total = data.capitalLineItems.reduce(
             (acc, i) => acc + Math.max(0, i.contractTotal - i.initialSales),
             0,
@@ -119,15 +118,13 @@ export function ContractAmortizationCard({
             <div className="space-y-2">
               <div className="flex items-baseline justify-between gap-2">
                 <h4 className="text-sm font-medium">
-                  {isLegacyOnly
-                    ? "Capital Item"
-                    : `Leased / Financed Items (${data.capitalLineItems.length})`}
+                  Leased / Financed Items ({data.capitalLineItems.length})
                 </h4>
                 <span className="text-xs tabular-nums text-muted-foreground">
                   {formatCurrency(total)} financed total
                 </span>
               </div>
-              {!isLegacyOnly && (
+              {(
                 <div className="overflow-hidden rounded-md border">
                   <table className="w-full text-xs">
                     <thead className="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">

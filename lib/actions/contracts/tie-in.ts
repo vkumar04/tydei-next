@@ -429,18 +429,11 @@ export async function getContractCapitalSchedule(
 
   if (!contract) return empty
 
-  // Charles audit suggestion #4 (v0-port): aggregate capital from
-  // line items if present, else fall back to legacy contract-level
-  // fields. The synthetic single-item fallback in
-  // normalizeCapitalLineItems keeps existing contracts working.
+  // Charles audit suggestion #4 (v0-port): capital lives in line items.
+  // No items → no schedule. Each item carries its own rate / term /
+  // cadence; the aggregation below sums per-item PMTs.
   const lineItems = normalizeCapitalLineItems(contract)
-  if (
-    lineItems.length === 0 ||
-    contract.interestRate == null ||
-    contract.termMonths == null
-  ) {
-    return empty
-  }
+  if (lineItems.length === 0) return empty
 
   const capitalCost = sumCapitalCost(lineItems)
   const downPayment = sumInitialSales(lineItems)

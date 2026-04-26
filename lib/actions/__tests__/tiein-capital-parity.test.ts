@@ -71,15 +71,26 @@ const EXPECTED_APPLIED_TO_CAPITAL = 195_124
 
 let contractRow: {
   id: string
+  name?: string
   contractType: string
   vendorId: string
   effectiveDate: Date
-  capitalCost: number
-  interestRate: number
-  termMonths: number
-  paymentCadence: string
   amortizationShape: string
   amortizationRows: Array<unknown>
+  // Charles audit suggestion #4 (v0-port): capital lives in line items.
+  capitalLineItems: Array<{
+    id: string
+    contractId: string
+    description: string
+    itemNumber: string | null
+    serialNumber: string | null
+    contractTotal: number
+    initialSales: number
+    interestRate: number
+    termMonths: number
+    paymentType: string
+    paymentCadence: string
+  }>
   rebates: Array<{
     collectionDate: Date | null
     rebateCollected: number
@@ -154,14 +165,26 @@ describe("tie-in capital-applied parity (W1.Y-C)", () => {
     // surfaces are reconciled.
     contractRow = {
       id: FIXTURE_CONTRACT_ID,
+      name: "Fixture",
       contractType: "tie_in",
       effectiveDate: new Date("2024-01-01"),
-      capitalCost: FIXTURE_CAPITAL,
-      interestRate: 0.05,
-      termMonths: 60,
-      paymentCadence: "quarterly",
       amortizationShape: "symmetric",
       amortizationRows: [],
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: FIXTURE_CONTRACT_ID,
+          description: "Fixture Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: FIXTURE_CAPITAL,
+          initialSales: 0,
+          interestRate: 0.05,
+          termMonths: 60,
+          paymentType: "fixed",
+          paymentCadence: "quarterly",
+        },
+      ],
       rebates: FIXTURE_REBATES.map((r) => ({
         collectionDate: r.collectionDate,
         rebateCollected: r.rebateCollected,
@@ -186,22 +209,34 @@ describe("tie-in capital-applied parity (W1.Y-C)", () => {
     )
   })
 
-  it("capital with no siblings BUT own rebates: legacy-compat falls back to own.rebates (round-2 C3)", async () => {
-    // Pre-cross-contract behavior was: separate-row "capital"
-    // contracts could have rebates wired directly to themselves.
-    // Round-2 C3 fix: when there are no siblings BUT own.rebates
-    // are populated, fall back to own. This prevents legacy data
-    // from silently zeroing out paidToDate.
+  it("capital row with line items + own rebates: paidToDate equals own.rebates collected sum", async () => {
+    // Charles audit suggestion #4 (v0-port): legacy capital fallback
+    // was removed. A "capital" row carries a ContractCapitalLineItem
+    // and any rebates collected against the row itself contribute to
+    // paidToDate (cross-contract sibling aggregation is layered on
+    // top via the OR clause in the action).
     contractRow = {
       id: FIXTURE_CONTRACT_ID,
+      name: "Capital",
       contractType: "capital",
       effectiveDate: new Date("2024-01-01"),
-      capitalCost: FIXTURE_CAPITAL,
-      interestRate: 0.05,
-      termMonths: 60,
-      paymentCadence: "quarterly",
       amortizationShape: "symmetric",
       amortizationRows: [],
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: FIXTURE_CONTRACT_ID,
+          description: "Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: FIXTURE_CAPITAL,
+          initialSales: 0,
+          interestRate: 0.05,
+          termMonths: 60,
+          paymentType: "fixed",
+          paymentCadence: "quarterly",
+        },
+      ],
       rebates: FIXTURE_REBATES.map((r) => ({
         collectionDate: r.collectionDate,
         rebateCollected: r.rebateCollected,
@@ -215,7 +250,7 @@ describe("tie-in capital-applied parity (W1.Y-C)", () => {
     )
     const result = await getContractCapitalSchedule(FIXTURE_CONTRACT_ID)
 
-    // Same expected sum as the tie_in case — own.rebates fall through.
+    // Own rebates retire capital under the round-4 UNION model.
     expect(result.rebateAppliedToCapital).toBe(EXPECTED_APPLIED_TO_CAPITAL)
     expect(result.paidToDate).toBe(EXPECTED_APPLIED_TO_CAPITAL)
   })

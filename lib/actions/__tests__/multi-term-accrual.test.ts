@@ -319,7 +319,7 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
   it("monthly cadence emits one Rebate row per non-zero month", async () => {
     contractFindUniqueMock.mockResolvedValue({
       ...baseContract,
-      paymentCadence: "monthly",
+      capitalLineItems: [{ paymentCadence: "monthly" }],
       terms: [flatTerm()],
     })
     cogFindManyMock.mockResolvedValue([
@@ -347,7 +347,7 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
   it("quarterly cadence: three non-zero months in same quarter -> ONE row", async () => {
     contractFindUniqueMock.mockResolvedValue({
       ...baseContract,
-      paymentCadence: "quarterly",
+      capitalLineItems: [{ paymentCadence: "quarterly" }],
       terms: [flatTerm()],
     })
     cogFindManyMock.mockResolvedValue([
@@ -381,7 +381,7 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
   it("quarterly cadence spanning 2 quarters -> 2 rows", async () => {
     contractFindUniqueMock.mockResolvedValue({
       ...baseContract,
-      paymentCadence: "quarterly",
+      capitalLineItems: [{ paymentCadence: "quarterly" }],
       terms: [flatTerm()],
     })
     cogFindManyMock.mockResolvedValue([
@@ -406,7 +406,7 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
   it("annual cadence: 12 non-zero months -> ONE row per year", async () => {
     contractFindUniqueMock.mockResolvedValue({
       ...baseContract,
-      paymentCadence: "annual",
+      capitalLineItems: [{ paymentCadence: "annual" }],
       terms: [flatTerm()],
     })
     const cog: Array<{ transactionDate: Date; extendedPrice: number }> = []

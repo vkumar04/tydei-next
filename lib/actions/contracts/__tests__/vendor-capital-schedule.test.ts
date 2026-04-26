@@ -36,17 +36,30 @@ describe("getVendorContractCapitalSchedule (Charles audit suggestion #3)", () =>
   it("returns the schedule when the vendor owns the contract", async () => {
     findFirstMock.mockResolvedValue({
       id: "c-1",
+      name: "Test Tie-In",
       contractType: "tie_in",
       vendorId: "v-test",
       facilityId: "f-1",
       effectiveDate: new Date("2025-01-01"),
-      capitalCost: { toString: () => "100000" } as unknown as number,
-      downPayment: { toString: () => "20000" } as unknown as number,
-      interestRate: { toString: () => "0.05" } as unknown as number,
-      termMonths: 60,
-      paymentCadence: "monthly",
       amortizationShape: "symmetrical",
       amortizationRows: [],
+      // Charles audit suggestion #4 (v0-port): capital lives in line
+      // items only (legacy contract-level fields were removed).
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: "c-1",
+          description: "Test Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: 100000,
+          initialSales: 20000,
+          interestRate: 0.05,
+          termMonths: 60,
+          paymentType: "fixed",
+          paymentCadence: "monthly",
+        },
+      ],
       rebates: [],
     })
 

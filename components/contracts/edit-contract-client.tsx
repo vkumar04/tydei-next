@@ -16,12 +16,7 @@ import { queryKeys } from "@/lib/query-keys"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import {
-  ContractCapitalEntry,
-  type ContractCapital,
-} from "@/components/contracts/contract-capital-entry"
-import {
   CapitalLineItemsEditor,
-  makeEmptyCapitalLineItem,
   type CapitalLineItemDraft,
 } from "@/components/contracts/capital-line-items-editor"
 import {
@@ -78,18 +73,11 @@ export function EditContractClient({
 
   // Charles W1.T — contract-level tie-in capital state. Lifted out of
   // per-term state so all rebate terms pay down one balance.
-  const [capital, setCapital] = useState<ContractCapital>({
-    capitalCost: null,
-    interestRate: null,
-    termMonths: null,
-    downPayment: null,
-    paymentCadence: null,
-    amortizationShape: "symmetrical",
-  })
-  // Charles audit suggestion #4 (v0-port): per-asset capital line items.
-  // Loaded from getCapitalLineItems on mount; persisted incrementally
-  // via createCapitalLineItem / updateCapitalLineItem /
-  // deleteCapitalLineItem when the user saves the contract.
+  // Charles audit suggestion #4 (v0-port): per-asset capital line items
+  // are the canonical capital shape. Loaded from getCapitalLineItems on
+  // mount; persisted incrementally via createCapitalLineItem /
+  // updateCapitalLineItem / deleteCapitalLineItem on save. Legacy
+  // contract-level capital fields removed.
   const [capitalItems, setCapitalItems] = useState<CapitalLineItemDraft[]>([])
   const initialCapitalItemsRef = useRef<CapitalLineItemDraft[]>([])
 
@@ -135,25 +123,6 @@ export function EditContractClient({
           contract.marketShareCommitment != null
             ? Number(contract.marketShareCommitment)
             : null,
-      })
-
-      // Charles W1.T — seed capital state from the Contract row.
-      setCapital({
-        capitalCost:
-          contract.capitalCost != null ? Number(contract.capitalCost) : null,
-        interestRate:
-          contract.interestRate != null
-            ? Number(contract.interestRate)
-            : null,
-        termMonths: contract.termMonths ?? null,
-        downPayment:
-          contract.downPayment != null ? Number(contract.downPayment) : null,
-        paymentCadence:
-          (contract.paymentCadence as ContractCapital["paymentCadence"]) ??
-          null,
-        amortizationShape:
-          (contract.amortizationShape as ContractCapital["amortizationShape"]) ??
-          "symmetrical",
       })
 
       setTerms(
@@ -319,16 +288,7 @@ export function EditContractClient({
       // columns + ContractAmortizationSchedule rows on the contract.
       await updateMutation.mutateAsync({
         id: contractId,
-        data: {
-          ...values,
-          capitalCost: capital.capitalCost,
-          interestRate: capital.interestRate,
-          termMonths: capital.termMonths,
-          downPayment: capital.downPayment,
-          paymentCadence: capital.paymentCadence,
-          amortizationShape: capital.amortizationShape,
-          customAmortizationRows: capital.customAmortizationRows,
-        },
+        data: values,
       })
 
       // Sync terms: delete removed, create new, update existing tiers
@@ -536,30 +496,15 @@ export function EditContractClient({
               (and any future contractType-dependent behavior) sees a
               stale value. */}
           {form.watch("contractType") === "tie_in" && (
-            <>
-              <ContractCapitalEntry
-                capital={capital}
-                onChange={(patch) =>
-                  setCapital((prev) => ({ ...prev, ...patch }))
-                }
-                effectiveDate={
-                  contract
-                    ? new Date(contract.effectiveDate)
-                        .toISOString()
-                        .split("T")[0]
-                    : null
-                }
-              />
-              {/* Charles audit suggestion #4 (v0-port): per-asset
-                  capital line items. Add to model multi-equipment
-                  financing (e.g. MRI + service warranty in one deal).
-                  Empty by default — vendor/facility opts in by clicking
-                  "Add Item". */}
-              <CapitalLineItemsEditor
-                items={capitalItems}
-                onChange={setCapitalItems}
-              />
-            </>
+            // Charles audit suggestion #4 (v0-port): per-asset capital
+            // line items are the only way to express tie-in capital.
+            // Legacy single-row Contract.capitalCost/etc fields were
+            // migrated to line items via
+            // scripts/migrate-capital-to-line-items.ts.
+            <CapitalLineItemsEditor
+              items={capitalItems}
+              onChange={setCapitalItems}
+            />
           )}
           <ContractTermsEntry
             terms={terms}

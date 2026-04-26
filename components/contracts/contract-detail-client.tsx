@@ -615,11 +615,12 @@ export function ContractDetailClient({
           {/* Wave A: tie-in amortization + capital summary.
               Shows only for tie-in contracts that either link to a capital
               contract or carry capital fields on a term themselves. */}
-          {contract.contractType === "tie_in" &&
-            (contract.tieInCapitalContractId != null ||
-              contract.capitalCost != null) && (
-              <ContractAmortizationCard contractId={contractId} />
-            )}
+          {contract.contractType === "tie_in" && (
+            // Charles audit suggestion #4 (v0-port): always render — the
+            // card itself shows an empty state when no capital line
+            // items exist (the legacy capitalCost null-check was here).
+            <ContractAmortizationCard contractId={contractId} />
+          )}
           {/* Wave C — shortfall handling banner + run-rate projection
               (only for tie-in contracts). */}
           {contract.contractType === "tie_in" &&
@@ -853,9 +854,14 @@ export function ContractDetailClient({
                                       ? Number(term.minimumPurchaseCommitment)
                                       : null
                                   if (mpc == null || mpc <= 0) return null
-                                  // Charles W1.T — paymentCadence is contract-level now.
-                                  const cadence =
-                                    contract.paymentCadence ?? "monthly"
+                                  // Charles audit suggestion #4 (v0-port):
+                                  // paymentCadence moved to capital line items.
+                                  // Default monthly — minimum-purchase-commitment
+                                  // is term-period-scoped, not cadence-scoped, so
+                                  // monthly is a safe display default until the
+                                  // term-level cadence accessor is wired.
+                                  const cadence: "monthly" | "quarterly" | "annual" =
+                                    "monthly" as "monthly" | "quarterly" | "annual"
                                   const cadenceLabel =
                                     cadence === "quarterly"
                                       ? "Quarterly"
@@ -990,92 +996,11 @@ export function ContractDetailClient({
             </Card>
           </div>
 
-          {contract.contractType === "tie_in" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Tie-In Capital</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Charles W1.W-D1 — render all six capital fields the
-                    contract carries at the contract level (W1.T moved them
-                    here from ContractTerm). When capitalCost is null we
-                    show a prominent empty-state card with a direct
-                    "Edit Contract" CTA, not a silent blank block. */}
-                {contract.capitalCost != null ? (
-                  <div className="grid gap-4 sm:grid-cols-3 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Capital Cost</p>
-                      <p className="font-medium">
-                        {formatCurrency(Number(contract.capitalCost))}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Interest Rate</p>
-                      <p className="font-medium">
-                        {contract.interestRate != null
-                          ? `${(Number(contract.interestRate) * 100).toFixed(2)}%`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Term</p>
-                      <p className="font-medium">
-                        {contract.termMonths != null
-                          ? `${contract.termMonths} months`
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Down Payment</p>
-                      <p className="font-medium">
-                        {contract.downPayment != null
-                          ? formatCurrency(Number(contract.downPayment))
-                          : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Payment Cadence</p>
-                      <p className="font-medium capitalize">
-                        {contract.paymentCadence ?? "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">
-                        Amortization Shape
-                      </p>
-                      <p className="font-medium capitalize">
-                        {contract.amortizationShape ?? "symmetrical"}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
-                    <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                      Capital not yet entered
-                    </p>
-                    <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                      This tie-in contract has no capital cost, interest
-                      rate, or payoff schedule on file. Rebates on the
-                      consumable terms can&apos;t pay down a balance until
-                      you add capital below.
-                    </p>
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                    >
-                      <Link
-                        href={`/dashboard/contracts/${contract.id}/edit`}
-                      >
-                        Go to Edit Contract
-                      </Link>
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          {/* Charles audit suggestion #4 (v0-port): the legacy
+              contract-level Tie-In Capital card was removed — capital
+              now lives in ContractCapitalLineItem rows and is rendered
+              by <ContractAmortizationCard> below as a v0-style item
+              table + aggregated schedule. */}
 
           {/* Compliance Status Card */}
           {contract.complianceRate != null && (

@@ -34,15 +34,25 @@ type TermRow = {
 
 type ContractRow = {
   id: string
+  name?: string
   contractType: string
   vendorId: string
   effectiveDate: Date
-  capitalCost: number
-  interestRate: number
-  termMonths: number
-  paymentCadence: string
   amortizationShape: string
   amortizationRows: Array<unknown>
+  capitalLineItems: Array<{
+    id: string
+    contractId: string
+    description: string
+    itemNumber: string | null
+    serialNumber: string | null
+    contractTotal: number
+    initialSales: number
+    interestRate: number
+    termMonths: number
+    paymentType: string
+    paymentCadence: string
+  }>
   rebates: Array<{ collectionDate: Date | null; rebateCollected: number }>
   terms: TermRow[]
 }
@@ -118,12 +128,23 @@ describe("tie-in min-annual + retirement integration", () => {
         d.setMonth(d.getMonth() - 30)
         return d
       })(),
-      capitalCost: CAPITAL,
-      interestRate: 0.05,
-      termMonths: TERM_MONTHS,
-      paymentCadence: "monthly",
       amortizationShape: "symmetrical",
       amortizationRows: [],
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: "c-1",
+          description: "Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: CAPITAL,
+          initialSales: 0,
+          interestRate: 0.05,
+          termMonths: TERM_MONTHS,
+          paymentType: "fixed",
+          paymentCadence: "monthly",
+        },
+      ],
       rebates: [
         {
           rebateCollected: COLLECTED_REBATE,

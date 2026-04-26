@@ -81,6 +81,13 @@ export async function recomputeAccrualForContract(
         include: { tiers: { orderBy: { tierNumber: "asc" } } },
         orderBy: { createdAt: "asc" },
       },
+      // Charles audit suggestion #4 (v0-port): the per-line-item
+      // cadence drives the accrual bucketing now that contract-level
+      // paymentCadence is gone.
+      capitalLineItems: {
+        select: { paymentCadence: true },
+        orderBy: { createdAt: "asc" },
+      },
     },
   })
 
@@ -404,11 +411,20 @@ export async function recomputeAccrualForContract(
     }
   })
 
-  // Charles W1.O: collapse monthly-eval accrual rows into the contract's
-  // `paymentCadence`. Fall back to monthly when unset.
-  const primaryCadence: PaymentCadence =
-    (contract.paymentCadence as PaymentCadence | null | undefined) ??
-    "monthly"
+  // Charles audit suggestion #4 (v0-port): contract-level paymentCadence
+  // was removed when capital moved to line items. Recompute now buckets
+  // monthly-eval accruals into the contract's first capital line item's
+  // cadence (multi-asset deals pick the densest cadence the same way
+  // tie-in.ts aggregates schedules). Falls back to monthly when no
+  // capital is configured.
+  const cadences = contract.capitalLineItems
+    ?.map((i) => (i.paymentCadence ?? "monthly") as PaymentCadence)
+    ?? []
+  const primaryCadence: PaymentCadence = cadences.includes("monthly")
+    ? "monthly"
+    : cadences.includes("quarterly")
+      ? "quarterly"
+      : cadences[0] ?? "monthly"
   const cadenceBuckets = bucketAccrualsByCadence(multiRows, primaryCadence)
 
   // Charles W1.W-C1: preserved collected rows from a prior accrual run

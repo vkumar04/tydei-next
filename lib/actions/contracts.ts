@@ -1077,14 +1077,11 @@ async function _updateContractImpl(
   if (data.isMultiFacility !== undefined) updateData.isMultiFacility = data.isMultiFacility
   if (data.isGrouped !== undefined) updateData.isGrouped = data.isGrouped
 
-  // Charles W1.T — tie-in capital fields on the Contract row. Pass
-  // through nullable values (explicitly setting to null clears the
-  // capital; undefined leaves it alone).
-  if (data.capitalCost !== undefined) updateData.capitalCost = data.capitalCost
-  if (data.interestRate !== undefined) updateData.interestRate = data.interestRate
-  if (data.termMonths !== undefined) updateData.termMonths = data.termMonths
-  if (data.downPayment !== undefined) updateData.downPayment = data.downPayment
-  if (data.paymentCadence !== undefined) updateData.paymentCadence = data.paymentCadence
+  // Charles audit suggestion #4 (v0-port): legacy contract-level
+  // capital fields removed — capital lives in ContractCapitalLineItem
+  // rows now, managed via lib/actions/contracts/capital-line-items.ts.
+  // amortizationShape is the only contract-level capital field that
+  // survives.
   if (data.amortizationShape !== undefined)
     updateData.amortizationShape = data.amortizationShape
   // Charles 2026-04-25 (audit follow-up): contract-level metrics for
@@ -1158,51 +1155,13 @@ async function _updateContractImpl(
     await prisma.contractAmortizationSchedule.deleteMany({
       where: { contractId: id },
     })
-  } else if (
-    data.amortizationShape === "custom" &&
-    data.customAmortizationRows &&
-    data.customAmortizationRows.length > 0
-  ) {
-    const capitalCost = Number(data.capitalCost ?? contract.capitalCost ?? 0)
-    const downPayment = Number(data.downPayment ?? contract.downPayment ?? 0)
-    const interestRate = Number(
-      data.interestRate ?? contract.interestRate ?? 0,
-    )
-    const cadence =
-      data.paymentCadence ?? contract.paymentCadence ?? "monthly"
-    const periodsPerYear =
-      cadence === "annual" ? 1 : cadence === "quarterly" ? 4 : 12
-    const r = interestRate / periodsPerYear
-
-    const sorted = [...data.customAmortizationRows].sort(
-      (a, b) => a.periodNumber - b.periodNumber,
-    )
-    const effectivePrincipal = Math.max(0, capitalCost - downPayment)
-    let opening = effectivePrincipal
-    const rows = sorted.map((row) => {
-      const interestCharge = opening * r
-      const amortizationDue = row.amortizationDue
-      const principalDue = amortizationDue - interestCharge
-      const closingBalance = opening - principalDue
-      const built = {
-        contractId: id,
-        periodNumber: row.periodNumber,
-        openingBalance: opening,
-        interestCharge,
-        principalDue,
-        amortizationDue,
-        closingBalance,
-      }
-      opening = closingBalance
-      return built
-    })
-    await prisma.contractAmortizationSchedule.deleteMany({
-      where: { contractId: id },
-    })
-    if (rows.length > 0) {
-      await prisma.contractAmortizationSchedule.createMany({ data: rows })
-    }
   }
+  // Charles audit suggestion #4 (v0-port): customAmortizationRows
+  // payload is no longer accepted on updateContract — per-asset
+  // payment schedules now live on ContractCapitalLineItem rows
+  // (paymentType="variable"). The custom-shape persisted rows are
+  // either pre-existing legacy data (read-only) or built by the
+  // per-item engine downstream.
 
   await logAudit({
     userId: session.user.id,

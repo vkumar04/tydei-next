@@ -619,13 +619,13 @@ model Contract {
   // the approve path tried to write this column but it didn't
   // exist on Contract, which silently dropped the value.
   division               String?
-  // Charles W1.T — tie-in capital is contract-level. One capital entry
-  // per contract; rebates earned across all terms pay down one balance.
-  capitalCost            Decimal?          @db.Decimal(14, 2)
-  interestRate           Decimal?          @db.Decimal(6, 4)
-  termMonths             Int?
-  downPayment            Decimal?          @db.Decimal(14, 2)
-  paymentCadence         PaymentCadence?
+  // Charles audit suggestion #4 (v0-port): legacy single-item capital
+  // fields removed. Capital lives in ContractCapitalLineItem rows
+  // (1:N), which support multi-asset financing per v0's
+  // LeasedServiceItem[] shape. amortizationShape is the only
+  // contract-level capital field that survives — it gates the
+  // schedule-source choice (custom rows vs computed PMT) for ALL
+  // line items uniformly.
   amortizationShape      AmortizationShape @default(symmetrical)
   complianceRate         Decimal?          @db.Decimal(5, 2)
   currentMarketShare     Decimal?          @db.Decimal(5, 2)

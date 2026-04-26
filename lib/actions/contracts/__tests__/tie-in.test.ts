@@ -76,15 +76,28 @@ describe("getContractCapitalSchedule (Wave A)", () => {
 
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
+      name: "Test Tie-In",
       contractType: "tie_in",
       vendorId: "v-1",
       effectiveDate,
-      capitalCost: 12_000, // $12k over 12 months, 0% → $1k principal/mo
-      interestRate: 0,
-      termMonths: 12,
-      paymentCadence: "monthly",
       amortizationShape: "symmetrical",
       amortizationRows: [],
+      // Charles audit suggestion #4 (v0-port): capital via line items.
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: "c-1",
+          description: "Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: 12_000, // $12k over 12 months, 0% → $1k/mo
+          initialSales: 0,
+          interestRate: 0,
+          termMonths: 12,
+          paymentType: "fixed",
+          paymentCadence: "monthly",
+        },
+      ],
       // Charles W1.Y-C: `paidToDate` now reads from collected rebates.
       // Seed 3 collected rows summing to $3,000 so the assertion below
       // (pre-W1.Y-C had assumed schedule-based paid-to-date) still holds.
@@ -135,14 +148,26 @@ describe("getContractCapitalSchedule (Wave A)", () => {
 
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
+      name: "Custom",
       contractType: "tie_in",
       vendorId: "v-1",
       effectiveDate,
-      capitalCost: 1000,
-      interestRate: 0,
-      termMonths: 2,
-      paymentCadence: "monthly",
       amortizationShape: "custom",
+      capitalLineItems: [
+        {
+          id: "li-1",
+          contractId: "c-1",
+          description: "Equipment",
+          itemNumber: null,
+          serialNumber: null,
+          contractTotal: 1000,
+          initialSales: 0,
+          interestRate: 0,
+          termMonths: 2,
+          paymentType: "variable",
+          paymentCadence: "monthly",
+        },
+      ],
       amortizationRows: [
         {
           periodNumber: 1,

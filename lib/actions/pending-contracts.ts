@@ -664,24 +664,27 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
       ...(pending.terminationNoticeDays != null && {
         terminationNoticeDays: pending.terminationNoticeDays,
       }),
-      // Capital tie-in fields — same name on both models so direct
-      // copy. paymentCadence/amortizationShape are `String?` on
-      // PendingContract but enums on Contract; cast at the boundary.
-      ...(pending.capitalCost != null && { capitalCost: pending.capitalCost }),
-      ...(pending.interestRate != null && {
-        interestRate: pending.interestRate,
-      }),
-      ...(pending.termMonths != null && { termMonths: pending.termMonths }),
-      ...(pending.downPayment != null && {
-        downPayment: pending.downPayment,
-      }),
-      ...(pending.paymentCadence != null && {
-        paymentCadence:
-          pending.paymentCadence as Prisma.ContractCreateInput["paymentCadence"],
-      }),
-      ...(pending.amortizationShape != null && {
-        amortizationShape:
-          pending.amortizationShape as Prisma.ContractCreateInput["amortizationShape"],
+      // Charles audit suggestion #4 (v0-port): capital lives in line
+      // items on the live Contract. Convert pending capital fields
+      // into one ContractCapitalLineItem nested-create. Future work
+      // teaches the vendor submission form to write line items
+      // directly; for now this transitional shim keeps single-item
+      // pending submissions flowing through.
+      ...(pending.capitalCost != null && {
+        capitalLineItems: {
+          create: [
+            {
+              description: pending.contractName,
+              contractTotal: pending.capitalCost,
+              initialSales: pending.downPayment ?? 0,
+              interestRate: pending.interestRate ?? 0,
+              termMonths: pending.termMonths ?? 60,
+              paymentType:
+                pending.amortizationShape === "custom" ? "variable" : "fixed",
+              paymentCadence: pending.paymentCadence ?? "monthly",
+            },
+          ],
+        },
       }),
       // Charles audit pass-3 C1 + pass-4 BLOCKER 2: copy tie-in
       // parent + division so the capital amortization tie-in math is

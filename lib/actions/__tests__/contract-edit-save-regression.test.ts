@@ -223,12 +223,10 @@ describe("contract edit save persists every field domain", () => {
       additionalFacilityIds: ["fac-3"],
       categoryIds: ["cat-1", "cat-2"],
 
-      // Capital / amortization (contract-level per W1.T)
-      capitalCost: 500_000,
-      interestRate: 0.0675,
-      termMonths: 60,
-      downPayment: 50_000,
-      paymentCadence: "quarterly",
+      // Charles audit suggestion #4 (v0-port): legacy capital fields
+      // removed from updateContract — capital lives in
+      // ContractCapitalLineItem rows now. Only amortizationShape
+      // survives at the contract level.
       amortizationShape: "symmetrical",
     })
 
@@ -309,12 +307,8 @@ describe("contract edit save persists every field domain", () => {
     expect(contractData.isGrouped).toBe(false)
     expect(contractData.isMultiFacility).toBeDefined()
 
-    // Capital / amortization
-    expect(contractData.capitalCost).toBe(500_000)
-    expect(contractData.interestRate).toBe(0.0675)
-    expect(contractData.termMonths).toBe(60)
-    expect(contractData.downPayment).toBe(50_000)
-    expect(contractData.paymentCadence).toBe("quarterly")
+    // Capital / amortization — only amortizationShape survives at the
+    // contract level after the v0-port (line items own the rest).
     expect(contractData.amortizationShape).toBe("symmetrical")
 
     // Multi-facility + category join tables — deleteMany + createMany
