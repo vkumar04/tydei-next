@@ -9,8 +9,6 @@ import {
   Eye,
   Hash,
   MoreHorizontal,
-  Send,
-  Trash2,
   TrendingDown,
   TrendingUp,
 } from "lucide-react"
@@ -24,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useDeleteInvoice, useVendorInvoices } from "@/hooks/use-invoices"
+import { useVendorInvoices } from "@/hooks/use-invoices"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { v0InvoicePriority } from "@/lib/v0-spec/invoice-validation"
 import { VendorInvoiceControlBar } from "./vendor-invoice-control-bar"
@@ -49,7 +47,6 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
 
-  const deleteMut = useDeleteInvoice()
 
   const { data, isLoading } = useVendorInvoices(vendorId, (statusFilter !== "all" && statusFilter !== "submitted"
       ? { status: statusFilter as never }
@@ -274,24 +271,13 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
               <Download className="mr-2 h-4 w-4" />
               Download PDF
             </DropdownMenuItem>
-            {row.original.status === "draft" && (
-              <>
-                <DropdownMenuItem>
-                  <Send className="mr-2 h-4 w-4" />
-                  Submit
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    deleteMut.mutate(row.original.id)
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </>
-            )}
+            {/* 2026-04-26 (V1-M4): "Submit" + "Delete" menu items removed
+                from the vendor invoice list. Submit is handled by the
+                Submit Invoice dialog (which calls submitVendorInvoice).
+                Delete called the facility-only deleteInvoice action and
+                always 401'd from a vendor session — pure UX dead-end.
+                A vendor-scoped delete action can be added later if the
+                product needs it; until then the row is just non-destructive. */}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
