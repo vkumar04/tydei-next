@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatCurrency } from "@/lib/formatting"
+import { TieInAmortizationPreview } from "@/components/contracts/tie-in-amortization-preview"
 
 export interface CapitalLineItemDraft {
   /** Optional — server-generated for persisted rows; tempId for unsaved rows. */
@@ -330,6 +331,28 @@ export function CapitalLineItemsEditor({
                           Remove
                         </Button>
                       </div>
+                      {/* Charles 2026-04-26 (Image #73): inline
+                          amortization preview restored. The dead-code
+                          purge removed the contract-capital-entry
+                          wrapper that used to host this; readd at the
+                          per-item level so each capital row shows its
+                          own schedule live as the user types. */}
+                      {financed > 0 && item.termMonths > 0 && (
+                        <div className="border-t pt-3">
+                          <TieInAmortizationPreview
+                            capitalCost={item.contractTotal}
+                            downPayment={item.initialSales}
+                            interestRate={item.interestRatePercent / 100}
+                            termMonths={item.termMonths}
+                            paymentCadence={item.paymentCadence}
+                            effectiveStart={new Date()
+                              .toISOString()
+                              .slice(0, 10)}
+                            amortizationShape="symmetrical"
+                            onCustomRowsChange={() => {}}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
