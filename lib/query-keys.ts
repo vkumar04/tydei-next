@@ -214,6 +214,14 @@ export const queryKeys = {
       ["vendorAnalytics", "marketShare", vendorId, filters] as const,
     performance: (vendorId: string) =>
       ["vendorAnalytics", "performance", vendorId] as const,
+    performanceContracts: (vendorId: string) =>
+      ["vendorAnalytics", "performanceContracts", vendorId] as const,
+    performanceMonthlyTrend: (vendorId: string) =>
+      ["vendorAnalytics", "performanceMonthlyTrend", vendorId] as const,
+    performanceCategories: (vendorId: string) =>
+      ["vendorAnalytics", "performanceCategories", vendorId] as const,
+    performanceTiers: (vendorId: string) =>
+      ["vendorAnalytics", "performanceTiers", vendorId] as const,
     benchmarks: (vendorId: string, category?: string) =>
       ["vendorAnalytics", "benchmarks", vendorId, category] as const,
   },

@@ -25,22 +25,35 @@ export interface ContractPerf {
 
 export interface PerformanceRadarPoint {
   metric: string
-  value: number
+  /**
+   * `null` means "no data source for this axis yet" — e.g. quality /
+   * delivery / pricing / responsiveness, which Charles V2 audit called
+   * out as fake when they were stub `95 / 90 / 85 / 89` values. The
+   * radar UI hides null axes from the polygon and shows an explicit
+   * "—" / "not yet enabled" badge in the surrounding card.
+   */
+  value: number | null
   fullMark: number
 }
 
 export interface MonthlyTrendPoint {
   month: string
   spend: number
-  target: number
+  /** Vendor-scoped earned rebates in the same month (Rebate.payPeriodEnd). */
   rebates: number
 }
 
 export interface CategoryBreakdownRow {
   category: string
+  /** Trailing 12-month vendor-scoped COG spend in this category. */
   spend: number
-  target: number
-  pct: number
+  /** Prior 12-month spend for the same vendor + category. */
+  priorSpend: number
+  /**
+   * `spend / priorSpend * 100` as a percentage. Null when priorSpend is
+   * 0 (no comparable prior period — most often a brand-new category).
+   */
+  pctOfPrior: number | null
 }
 
 /**

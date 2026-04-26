@@ -210,34 +210,47 @@ export function PerformanceRebatesTab({
             <CardDescription>{tierContext}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {displayedRebateTiers.map((tier) => (
-              <div key={tier.tier} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{tier.tier}</span>
-                    <Badge variant="outline">{tier.rebateRate}% rebate</Badge>
-                  </div>
-                  {tier.achieved ? (
-                    <Badge className="bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Achieved
-                    </Badge>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      {formatPerfCurrency(tier.threshold - tier.current)} to go
-                    </span>
-                  )}
-                </div>
-                <Progress
-                  value={Math.min((tier.current / tier.threshold) * 100, 100)}
-                  className="h-3"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{formatPerfCurrency(tier.current)}</span>
-                  <span>{formatPerfCurrency(tier.threshold)}</span>
-                </div>
+            {displayedRebateTiers.length === 0 ? (
+              <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                No rebate tiers are configured on the selected
+                contracts yet. Once a ContractTier row is added in the
+                contract terms, its threshold and trailing-12-month
+                progress will appear here.
               </div>
-            ))}
+            ) : (
+              displayedRebateTiers.map((tier) => (
+                <div key={tier.tier} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{tier.tier}</span>
+                      <Badge variant="outline">{tier.rebateRate}% rebate</Badge>
+                    </div>
+                    {tier.achieved ? (
+                      <Badge className="bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Achieved
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        {formatPerfCurrency(Math.max(tier.threshold - tier.current, 0))} to go
+                      </span>
+                    )}
+                  </div>
+                  <Progress
+                    value={
+                      tier.threshold > 0
+                        ? Math.min((tier.current / tier.threshold) * 100, 100)
+                        : 0
+                    }
+                    className="h-3"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{formatPerfCurrency(tier.current)}</span>
+                    <span>{formatPerfCurrency(tier.threshold)}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -261,17 +274,40 @@ export function PerformanceRebatesTab({
                 <div className="text-sm text-muted-foreground">Effective Rate</div>
               </div>
             </div>
-            <div className="rounded-lg bg-muted/50 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Target className="h-4 w-4 text-primary" />
-                <span className="font-medium">Next Tier Goal</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Achieve {formatPerfCurrency(2000000)} in total spend to unlock Tier 2
-                (4.5% rebate rate). You are {formatPerfCurrency(750000)} away from
-                this target.
-              </p>
-            </div>
+            {(() => {
+              // Charles V2 audit replaced the hard-coded "$2M to unlock
+              // Tier 2 / $750K to go" copy with the real next
+              // unachieved tier from `displayedRebateTiers`. When every
+              // tier is hit (or none are configured), we render
+              // contextual copy instead of a fake target.
+              const nextTier = displayedRebateTiers.find((t) => !t.achieved)
+              if (!nextTier) {
+                return (
+                  <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
+                    {displayedRebateTiers.length === 0
+                      ? "No rebate tiers configured on the selected contracts."
+                      : "All configured tiers achieved for the trailing 12 months."}
+                  </div>
+                )
+              }
+              const remaining = Math.max(
+                nextTier.threshold - nextTier.current,
+                0,
+              )
+              return (
+                <div className="rounded-lg bg-muted/50 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    <span className="font-medium">Next Tier Goal</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Reach {formatPerfCurrency(nextTier.threshold)} in spend to
+                    unlock {nextTier.tier} ({nextTier.rebateRate}% rebate rate).
+                    You are {formatPerfCurrency(remaining)} away.
+                  </p>
+                </div>
+              )
+            })()}
           </CardContent>
         </Card>
       </div>

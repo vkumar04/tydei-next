@@ -3,8 +3,13 @@
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useVendorContracts } from "@/hooks/use-vendor-contracts"
-import { getVendorPerformance } from "@/lib/actions/vendor-analytics"
+import {
+  getVendorPerformance,
+  getVendorPerformanceCategoryBreakdown,
+  getVendorPerformanceContracts,
+  getVendorPerformanceMonthlyTrend,
+  getVendorPerformanceTiers,
+} from "@/lib/actions/vendor-analytics"
 import { queryKeys } from "@/lib/query-keys"
 import { PerformanceHero } from "./performance-hero"
 import { PerformanceControlBar } from "./performance-control-bar"
@@ -14,12 +19,6 @@ import { VendorTieInMembershipsCard } from "./vendor-tie-in-memberships-card"
 import { PerformanceContractsTab } from "./performance-contracts-tab"
 import { PerformanceRebatesTab } from "./performance-rebates-tab"
 import { PerformanceCategoriesTab } from "./performance-categories-tab"
-import {
-  MOCK_CATEGORY_BREAKDOWN,
-  MOCK_CONTRACT_PERFORMANCE,
-  MOCK_DEFAULT_REBATE_TIERS,
-  MOCK_MONTHLY_TREND,
-} from "./performance-mocks"
 import type {
   ContractPerf,
   ContractPerfTier,
@@ -35,68 +34,92 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
   const [rebateContractFilter, setRebateContractFilter] = useState("all")
   const [rebateFacilityFilter, setRebateFacilityFilter] = useState("all")
 
-  // Live data for radar + summary cards (gracefully fall back to mock values)
-  const { data: perfData } = useQuery({
+  // ─── Live data ──────────────────────────────────────────────────
+  // Charles vendor /performance audit (V2): every metric on this page
+  // now comes from a real action against cOGRecord / Rebate /
+  // ContractTier. The previous version mixed in MOCK_* constants
+  // (radar 92/88/96/94/89, MOCK_CATEGORY_BREAKDOWN, etc.) which made
+  // it impossible to tell which numbers were real.
+  const { data: perfData, isLoading: perfLoading } = useQuery({
     queryKey: queryKeys.vendorAnalytics.performance(vendorId),
     queryFn: () => getVendorPerformance(vendorId),
   })
-  const { data: contractsData } = useVendorContracts(vendorId, { status: "active" })
+  const { data: contractRows, isLoading: contractRowsLoading } = useQuery({
+    queryKey: queryKeys.vendorAnalytics.performanceContracts(vendorId),
+    queryFn: () => getVendorPerformanceContracts(vendorId),
+  })
+  const { data: monthlyTrend, isLoading: trendLoading } = useQuery({
+    queryKey: queryKeys.vendorAnalytics.performanceMonthlyTrend(vendorId),
+    queryFn: () => getVendorPerformanceMonthlyTrend(vendorId),
+  })
+  const { data: categories, isLoading: categoriesLoading } = useQuery({
+    queryKey: queryKeys.vendorAnalytics.performanceCategories(vendorId),
+    queryFn: () => getVendorPerformanceCategoryBreakdown(vendorId),
+  })
+  const { data: tierRows, isLoading: tiersLoading } = useQuery({
+    queryKey: queryKeys.vendorAnalytics.performanceTiers(vendorId),
+    queryFn: () => getVendorPerformanceTiers(vendorId),
+  })
 
-  // Build contract perf rows: real contracts first, fall back to mocks when empty
+  // ─── Per-contract perf rows (server-derived) ────────────────────
   const contractPerformance: ContractPerf[] = useMemo(() => {
-    const contracts = contractsData?.contracts
-    if (!Array.isArray(contracts) || contracts.length === 0) {
-      return MOCK_CONTRACT_PERFORMANCE
-    }
-    const avgRate = perfData?.avgRebateRate ?? 4
-    return contracts.map((c: Record<string, unknown>, i) => {
-      const totalValue = Number(c.totalValue ?? c.annualValue ?? 0)
-      const totalSpend = Number(c.totalSpend ?? 0)
-      const compliance = totalValue > 0 ? Math.min((totalSpend / totalValue) * 100, 120) : 0
-      const status: ContractPerf["status"] =
-        compliance >= 100 ? "exceeding" : compliance >= 90 ? "on-track" : "at-risk"
-      const rebatePaid = totalSpend * (avgRate / 100)
+    if (!Array.isArray(contractRows)) return []
+    return contractRows.map((c) => {
+      const tiersForContract = (tierRows ?? []).filter(
+        (t) => t.contractId === c.id,
+      )
       return {
-        id: (c.id as string) ?? `contract-${i}`,
-        name: (c.name as string) ?? "Unnamed Contract",
-        facility:
-          ((c.facility as Record<string, unknown> | null)?.name as string) ??
-          (c.facilityName as string) ??
-          "Facility",
-        targetSpend: totalValue || totalSpend * 1.1,
-        actualSpend: totalSpend,
+        id: c.id,
+        name: c.name,
+        facility: c.facility,
+        targetSpend: c.targetSpend,
+        actualSpend: c.actualSpend,
         targetVolume: 0,
         actualVolume: 0,
-        rebateRate: avgRate,
-        rebatePaid,
-        compliance: Math.round(compliance * 10) / 10,
-        status,
-        rebateTiers: [
-          { tier: "Tier 1", threshold: totalValue * 0.5, current: totalSpend, rebateRate: avgRate * 0.7, achieved: totalSpend >= totalValue * 0.5 },
-          { tier: "Tier 2", threshold: totalValue * 0.8, current: totalSpend, rebateRate: avgRate, achieved: totalSpend >= totalValue * 0.8 },
-          { tier: "Tier 3", threshold: totalValue, current: totalSpend, rebateRate: avgRate * 1.3, achieved: totalSpend >= totalValue },
-        ],
+        rebateRate: c.rebateRate,
+        rebatePaid: c.rebatePaid,
+        compliance: c.compliance,
+        status: c.status,
+        rebateTiers: tiersForContract.map((t) => ({
+          tier: t.tier,
+          threshold: t.threshold,
+          current: t.current,
+          rebateRate: t.rebateRate,
+          achieved: t.achieved,
+        })),
       }
     })
-  }, [contractsData, perfData])
+  }, [contractRows, tierRows])
 
-  // Radar data — prefer live perfData signals when available
+  // ─── Radar: real signals only, null axes render as "—" ──────────
   const performanceRadar = useMemo<PerformanceRadarPoint[]>(() => {
-    if (!perfData) {
-      return [
-        { metric: "Spend Compliance", value: 92, fullMark: 100 },
-        { metric: "Volume Targets", value: 88, fullMark: 100 },
-        { metric: "On-Time Delivery", value: 96, fullMark: 100 },
-        { metric: "Quality Score", value: 94, fullMark: 100 },
-        { metric: "Response Time", value: 89, fullMark: 100 },
-      ]
-    }
+    if (!perfData) return []
     return [
-      { metric: "Spend Compliance", value: Math.round(perfData.compliance), fullMark: 100 },
-      { metric: "Volume Targets", value: Math.round((perfData.compliance + perfData.delivery) / 2), fullMark: 100 },
-      { metric: "On-Time Delivery", value: Math.round(perfData.delivery), fullMark: 100 },
-      { metric: "Quality Score", value: Math.round(perfData.quality), fullMark: 100 },
-      { metric: "Response Time", value: Math.round((perfData.delivery + perfData.quality) / 2), fullMark: 100 },
+      {
+        metric: "Spend Compliance",
+        value: perfData.compliance ?? null,
+        fullMark: 100,
+      },
+      {
+        metric: "On-Time Delivery",
+        value: perfData.delivery ?? null,
+        fullMark: 100,
+      },
+      {
+        metric: "Quality Score",
+        value: perfData.quality ?? null,
+        fullMark: 100,
+      },
+      {
+        metric: "Pricing",
+        value: perfData.pricing ?? null,
+        fullMark: 100,
+      },
+      {
+        metric: "Response Time",
+        value: perfData.responsiveness ?? null,
+        fullMark: 100,
+      },
     ]
   }, [perfData])
 
@@ -115,10 +138,18 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
     [contractPerformance, rebateContractFilter, rebateFacilityFilter],
   )
 
+  // ─── Tier ladder for the Rebate Progress tab ────────────────────
+  // Real ContractTier rows from `getVendorPerformanceTiers`. When a
+  // single contract or single-contract facility is selected, show its
+  // tiers verbatim. Otherwise aggregate by tier-name across the
+  // vendor's contracts (sum threshold + sum current). When the vendor
+  // has no tiers configured we render an empty-state message in the
+  // Rebate Progress tab rather than fabricating numbers.
   const displayedRebateTiers = useMemo<ContractPerfTier[]>(() => {
+    if (!Array.isArray(tierRows) || tierRows.length === 0) return []
     if (rebateContractFilter !== "all") {
       const contract = contractPerformance.find((c) => c.id === rebateContractFilter)
-      return contract?.rebateTiers || MOCK_DEFAULT_REBATE_TIERS
+      return contract?.rebateTiers ?? []
     }
     if (rebateFacilityFilter !== "all") {
       const facilityContracts = contractPerformance.filter(
@@ -127,15 +158,14 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
       if (facilityContracts.length === 1) {
         return facilityContracts[0].rebateTiers
       }
-      const totalSpend = facilityContracts.reduce((sum, c) => sum + c.actualSpend, 0)
-      return [
-        { tier: "Tier 1", threshold: 500000, current: totalSpend, rebateRate: 3.0, achieved: totalSpend >= 500000 },
-        { tier: "Tier 2", threshold: 1000000, current: totalSpend, rebateRate: 4.5, achieved: totalSpend >= 1000000 },
-        { tier: "Tier 3", threshold: 1500000, current: totalSpend, rebateRate: 6.0, achieved: totalSpend >= 1500000 },
-      ]
+      return aggregateTiersByName(
+        facilityContracts.flatMap((c) => c.rebateTiers),
+      )
     }
-    return MOCK_DEFAULT_REBATE_TIERS
-  }, [contractPerformance, rebateContractFilter, rebateFacilityFilter])
+    return aggregateTiersByName(
+      contractPerformance.flatMap((c) => c.rebateTiers),
+    )
+  }, [tierRows, contractPerformance, rebateContractFilter, rebateFacilityFilter])
 
   const totalTargetSpend =
     contractPerformance.reduce((sum, c) => sum + c.targetSpend, 0) || 1
@@ -160,8 +190,11 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
 
   // `timeRange` is retained in state so the control bar can round-trip the
   // selection; the underlying analytics queries will consume it once the
-  // server action accepts a range filter.
+  // server actions accept a range filter.
   void timeRange
+
+  const isLoading =
+    perfLoading || contractRowsLoading || trendLoading || categoriesLoading || tiersLoading
 
   return (
     <div className="flex flex-col gap-6">
@@ -196,8 +229,9 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
 
         <TabsContent value="overview" className="space-y-4">
           <PerformanceOverviewTab
-            monthlyTrend={MOCK_MONTHLY_TREND}
+            monthlyTrend={monthlyTrend ?? []}
             radar={performanceRadar}
+            isLoading={isLoading}
           />
           {/* v0-port: vendor-side mirror of the facility's spend HHI —
               answers "how concentrated is my revenue across customers?". */}
@@ -228,9 +262,47 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
         </TabsContent>
 
         <TabsContent value="categories" className="space-y-4">
-          <PerformanceCategoriesTab categories={MOCK_CATEGORY_BREAKDOWN} />
+          <PerformanceCategoriesTab
+            categories={categories ?? []}
+            isLoading={categoriesLoading}
+          />
         </TabsContent>
       </Tabs>
     </div>
   )
+}
+
+/**
+ * Aggregate ContractTier rows by tierName so the "all contracts" /
+ * multi-contract-facility view of the rebate ladder shows real summed
+ * thresholds and current spend, not a hand-picked $1M / $2M / $3.5M
+ * MOCK_DEFAULT_REBATE_TIERS placeholder. rebateRate is computed as a
+ * weighted average using each tier's threshold as the weight.
+ */
+function aggregateTiersByName(tiers: ContractPerfTier[]): ContractPerfTier[] {
+  if (tiers.length === 0) return []
+  const grouped = new Map<
+    string,
+    { threshold: number; current: number; rateNum: number; rateDen: number }
+  >()
+  for (const t of tiers) {
+    const entry = grouped.get(t.tier) ?? {
+      threshold: 0,
+      current: 0,
+      rateNum: 0,
+      rateDen: 0,
+    }
+    entry.threshold += t.threshold
+    entry.current += t.current
+    entry.rateNum += t.rebateRate * (t.threshold || 1)
+    entry.rateDen += t.threshold || 1
+    grouped.set(t.tier, entry)
+  }
+  return Array.from(grouped.entries()).map(([tier, v]) => ({
+    tier,
+    threshold: v.threshold,
+    current: v.current,
+    rebateRate: v.rateDen > 0 ? Math.round((v.rateNum / v.rateDen) * 100) / 100 : 0,
+    achieved: v.threshold > 0 && v.current >= v.threshold,
+  }))
 }
