@@ -101,6 +101,102 @@ export function ContractAmortizationCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Charles audit suggestion #4 (v0-port): per-asset capital
+            line items rendered v0-style above the aggregate schedule.
+            When a contract finances multiple pieces of equipment, each
+            shows description / item # / serial / financed amount /
+            rate / term / cadence. Legacy single-item contracts show
+            one synthetic row built from the contract-level fields and
+            the section is hidden behind a smaller header (less visual
+            weight when there's nothing to see beyond the summary). */}
+        {data.capitalLineItems && data.capitalLineItems.length > 0 && (() => {
+          const isLegacyOnly = data.capitalLineItems.every((i) => i.isLegacy)
+          const total = data.capitalLineItems.reduce(
+            (acc, i) => acc + Math.max(0, i.contractTotal - i.initialSales),
+            0,
+          )
+          return (
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <h4 className="text-sm font-medium">
+                  {isLegacyOnly
+                    ? "Capital Item"
+                    : `Leased / Financed Items (${data.capitalLineItems.length})`}
+                </h4>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {formatCurrency(total)} financed total
+                </span>
+              </div>
+              {!isLegacyOnly && (
+                <div className="overflow-hidden rounded-md border">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Description</th>
+                        <th className="px-3 py-2 text-left font-medium">Item / Serial</th>
+                        <th className="px-3 py-2 text-right font-medium">Contract</th>
+                        <th className="px-3 py-2 text-right font-medium">Financed</th>
+                        <th className="px-3 py-2 text-right font-medium">Rate</th>
+                        <th className="px-3 py-2 text-right font-medium">Term</th>
+                        <th className="px-3 py-2 text-left font-medium">Schedule</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.capitalLineItems.map((item) => {
+                        const financed = Math.max(
+                          0,
+                          item.contractTotal - item.initialSales,
+                        )
+                        return (
+                          <tr key={item.id} className="border-t">
+                            <td className="px-3 py-2 font-medium">
+                              {item.description}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground">
+                              {item.itemNumber || item.serialNumber ? (
+                                <div className="space-y-0.5">
+                                  {item.itemNumber && <div>{item.itemNumber}</div>}
+                                  {item.serialNumber && (
+                                    <div className="text-[10px]">
+                                      SN: {item.serialNumber}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground/60">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {formatCurrency(item.contractTotal)}
+                              {item.initialSales > 0 && (
+                                <div className="text-[10px] text-muted-foreground">
+                                  −{formatCurrency(item.initialSales)} down
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium tabular-nums">
+                              {formatCurrency(financed)}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {(item.interestRate * 100).toFixed(2)}%
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {item.termMonths} mo
+                            </td>
+                            <td className="px-3 py-2 capitalize text-muted-foreground">
+                              {item.paymentType} · {item.paymentCadence}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         {/* ── Capital summary strip (A2) ───────────────────────────── */}
         <div className="grid gap-4 sm:grid-cols-3">
           <SummaryTile

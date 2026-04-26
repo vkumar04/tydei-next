@@ -21,6 +21,13 @@ import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { sumRebateAppliedToCapital } from "@/lib/contracts/rebate-capital-filter"
 import type { CollectedRebateLike } from "@/lib/contracts/rebate-collected-filter"
+import {
+  normalizeCapitalLineItems,
+  sumCapitalCost,
+  sumFinancedPrincipal,
+  sumInitialSales,
+  type NormalizedCapitalLineItem,
+} from "@/lib/contracts/capital-line-items"
 
 export async function getContractTieInBundle(contractId: string) {
   const { facility } = await requireFacility()
@@ -228,6 +235,13 @@ export interface ContractCapitalScheduleResult {
    * (total − elapsed) expressed in MONTHS. Feeds
    * `computeCapitalRetirementNeeded`. */
   monthsRemaining: number
+  /**
+   * Charles audit suggestion #4 (v0-port): per-asset capital line
+   * items. v0's tie-in card renders one row per leased item. When
+   * there are no real line items, this contains the synthesized
+   * single item from the legacy contract-level fields (isLegacy=true).
+   */
+  capitalLineItems: NormalizedCapitalLineItem[]
 }
 
 function normalizeCadence(
@@ -248,6 +262,73 @@ function addMonths(date: Date, months: number): Date {
   const d = new Date(date)
   d.setMonth(d.getMonth() + months)
   return d
+}
+
+/**
+ * Charles audit suggestion #4 (v0-port): aggregate per-item
+ * amortization schedules into a combined view. Each line item
+ * amortizes independently (its own financedPrincipal × interestRate
+ * × termMonths × cadence) and the rows are summed period-by-period.
+ *
+ * Items with different cadences are first projected onto the longest
+ * cadence's grid (e.g. quarterly + monthly → monthly grid; quarterly
+ * payments land on every 3rd month). Items with different term
+ * lengths produce zero rows past their own end (the longest term
+ * defines schedule length).
+ */
+function aggregatePerItemSchedules(
+  items: ReadonlyArray<NormalizedCapitalLineItem>,
+): AmortizationEntry[] {
+  if (items.length === 0) return []
+
+  // Find the finest cadence (smallest months-per-period) so we render
+  // on the densest possible grid.
+  const cadences = new Set(items.map((i) => i.paymentCadence))
+  const period: "monthly" | "quarterly" | "annual" = cadences.has("monthly")
+    ? "monthly"
+    : cadences.has("quarterly")
+      ? "quarterly"
+      : "annual"
+  const stepMonths = monthsPerPeriod(period)
+
+  // Build each item's schedule on its own cadence, then map onto the
+  // combined cadence's period numbers.
+  const totalMonths = Math.max(...items.map((i) => i.termMonths))
+  const totalPeriods = Math.ceil(totalMonths / stepMonths)
+  const combined = Array.from({ length: totalPeriods }, (_, i) => ({
+    periodNumber: i + 1,
+    openingBalance: 0,
+    interestCharge: 0,
+    principalDue: 0,
+    amortizationDue: 0,
+    closingBalance: 0,
+  }))
+
+  for (const item of items) {
+    const itemFinanced = Math.max(0, item.contractTotal - item.initialSales)
+    if (itemFinanced <= 0 || item.termMonths <= 0) continue
+    const sched = buildTieInAmortizationSchedule({
+      capitalCost: itemFinanced,
+      interestRate: item.interestRate,
+      termMonths: item.termMonths,
+      period: item.paymentCadence,
+    })
+    const itemStep = monthsPerPeriod(item.paymentCadence)
+    // Map item period N → combined period (N * itemStep / stepMonths).
+    for (const row of sched) {
+      const monthsIn = row.periodNumber * itemStep
+      const combinedIdx = Math.ceil(monthsIn / stepMonths) - 1
+      if (combinedIdx < 0 || combinedIdx >= combined.length) continue
+      const target = combined[combinedIdx]
+      target.openingBalance += row.openingBalance
+      target.interestCharge += row.interestCharge
+      target.principalDue += row.principalDue
+      target.amortizationDue += row.amortizationDue
+      target.closingBalance += row.closingBalance
+    }
+  }
+
+  return combined
 }
 
 function monthsPerPeriod(p: "monthly" | "quarterly" | "annual"): number {
@@ -292,6 +373,11 @@ export async function getContractCapitalSchedule(
       amortizationRows: {
         orderBy: { periodNumber: "asc" },
       },
+      // Charles audit suggestion #4 (v0-port): per-asset capital line
+      // items. When present, these override the contract-level
+      // capitalCost/etc. for schedule aggregation.
+      capitalLineItems: { orderBy: { createdAt: "asc" } },
+      name: true,
       rebates: {
         select: {
           collectionDate: true,
@@ -338,28 +424,34 @@ export async function getContractCapitalSchedule(
     rolling12Spend: 0,
     currentTierPercent: 0,
     monthsRemaining: 0,
+    capitalLineItems: [],
   }
 
+  if (!contract) return empty
+
+  // Charles audit suggestion #4 (v0-port): aggregate capital from
+  // line items if present, else fall back to legacy contract-level
+  // fields. The synthetic single-item fallback in
+  // normalizeCapitalLineItems keeps existing contracts working.
+  const lineItems = normalizeCapitalLineItems(contract)
   if (
-    !contract ||
-    contract.capitalCost == null ||
+    lineItems.length === 0 ||
     contract.interestRate == null ||
     contract.termMonths == null
   ) {
     return empty
   }
 
-  const capitalCost = Number(contract.capitalCost)
-  const downPayment = Number(contract.downPayment ?? 0)
-  // Charles audit pass-4 BLOCKER 1: amortize the financed principal
-  // (capitalCost - downPayment), not the gross sticker. Earlier code
-  // passed capitalCost straight in, overstating PMT/interest/balance
-  // by (capitalCost / financed) ratio. Clamp at 0 to handle the edge
-  // case downPayment > capitalCost.
-  const financedPrincipal = Math.max(0, capitalCost - downPayment)
-  const interestRate = Number(contract.interestRate)
-  const termMonths = Number(contract.termMonths)
-  const period = normalizeCadence(contract.paymentCadence)
+  const capitalCost = sumCapitalCost(lineItems)
+  const downPayment = sumInitialSales(lineItems)
+  const financedPrincipal = sumFinancedPrincipal(lineItems)
+  // For aggregation purposes, surface the FIRST item's rate / term /
+  // cadence as the contract-level summary fields. Mixed-rate items
+  // would still amortize correctly per-item below; this is just for
+  // the headline display.
+  const interestRate = lineItems[0]!.interestRate
+  const termMonths = lineItems[0]!.termMonths
+  const period = lineItems[0]!.paymentCadence
 
   if (financedPrincipal <= 0 || termMonths <= 0) return empty
 
@@ -380,12 +472,11 @@ export async function getContractCapitalSchedule(
       closingBalance: Number(r.closingBalance),
     }))
   } else {
-    entries = buildTieInAmortizationSchedule({
-      capitalCost: financedPrincipal,
-      interestRate,
-      termMonths,
-      period,
-    })
+    // Sum per-item PMT schedules so multi-asset capital deals (the v0
+    // shape) aggregate correctly. Each item amortizes against its own
+    // financed principal / rate / term; we add the per-period rows
+    // together to produce the combined view.
+    entries = aggregatePerItemSchedules(lineItems)
   }
 
   // Attach a period date to each row, anchored to contract.effectiveDate.
@@ -640,6 +731,7 @@ export async function getContractCapitalSchedule(
     rolling12Spend,
     currentTierPercent,
     monthsRemaining,
+    capitalLineItems: lineItems,
   }
 }
 
@@ -670,6 +762,7 @@ export async function getVendorContractCapitalSchedule(
     where: { id: contractId, vendorId: vendor.id },
     select: {
       id: true,
+      name: true,
       contractType: true,
       vendorId: true,
       facilityId: true,
@@ -681,6 +774,8 @@ export async function getVendorContractCapitalSchedule(
       paymentCadence: true,
       amortizationShape: true,
       amortizationRows: { orderBy: { periodNumber: "asc" } },
+      // Charles audit suggestion #4 (v0-port): per-asset capital line items.
+      capitalLineItems: { orderBy: { createdAt: "asc" } },
       rebates: { select: { collectionDate: true, rebateCollected: true } },
     },
   })
@@ -704,23 +799,21 @@ export async function getVendorContractCapitalSchedule(
     rolling12Spend: 0,
     currentTierPercent: 0,
     monthsRemaining: 0,
+    capitalLineItems: [],
   }
 
-  if (
-    !contract ||
-    contract.capitalCost == null ||
-    contract.interestRate == null ||
-    contract.termMonths == null
-  ) {
-    return empty
-  }
+  if (!contract) return empty
+  // Charles audit suggestion #4 (v0-port): aggregate from line items
+  // when present, fall back to legacy single-item synthesis.
+  const lineItems = normalizeCapitalLineItems(contract)
+  if (lineItems.length === 0) return empty
 
-  const capitalCost = Number(contract.capitalCost)
-  const downPayment = Number(contract.downPayment ?? 0)
-  const financedPrincipal = Math.max(0, capitalCost - downPayment)
-  const interestRate = Number(contract.interestRate)
-  const termMonths = Number(contract.termMonths)
-  const period = normalizeCadence(contract.paymentCadence)
+  const capitalCost = sumCapitalCost(lineItems)
+  const downPayment = sumInitialSales(lineItems)
+  const financedPrincipal = sumFinancedPrincipal(lineItems)
+  const interestRate = lineItems[0]!.interestRate
+  const termMonths = lineItems[0]!.termMonths
+  const period = lineItems[0]!.paymentCadence
 
   if (financedPrincipal <= 0 || termMonths <= 0) return empty
 
@@ -738,12 +831,7 @@ export async function getVendorContractCapitalSchedule(
       closingBalance: Number(r.closingBalance),
     }))
   } else {
-    entries = buildTieInAmortizationSchedule({
-      capitalCost: financedPrincipal,
-      interestRate,
-      termMonths,
-      period,
-    })
+    entries = aggregatePerItemSchedules(lineItems)
   }
 
   const start = new Date(contract.effectiveDate)
@@ -843,6 +931,7 @@ export async function getVendorContractCapitalSchedule(
       0,
       termMonths - elapsedPeriods * monthsPerPeriod(period),
     ),
+    capitalLineItems: lineItems,
   })
 }
 

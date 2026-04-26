@@ -657,6 +657,7 @@ model Contract {
   documents          ContractDocument[]
   periods            ContractPeriod[]
   amortizationRows   ContractAmortizationSchedule[]
+  capitalLineItems   ContractCapitalLineItem[]
   renewalNotes       RenewalNote[]
   renewalTasks       RenewalTask[]
   rebates            Rebate[]
@@ -864,6 +865,34 @@ model ContractPricing {
   @@index([contractId])
   @@index([vendorItemNo])
   @@map("contract_pricing")
+}
+
+/**
+ * Charles audit suggestion #4 (v0-port): per-asset capital line items.
+ * One Contract can finance multiple pieces of equipment (e.g. an MRI
+ * + service warranty in one master deal). The legacy single-item shape
+ * lives on Contract.capitalCost/etc; line items here override when
+ * present and aggregate to the same schedule downstream.
+ */
+model ContractCapitalLineItem {
+  id              String   @id @default(cuid())
+  contractId      String
+  description     String
+  itemNumber      String?
+  serialNumber    String?
+  contractTotal   Decimal  @db.Decimal(14, 2)
+  initialSales    Decimal  @default(0) @db.Decimal(14, 2)
+  interestRate    Decimal? @db.Decimal(6, 4)
+  termMonths      Int?
+  paymentType     String   @default("fixed")
+  paymentCadence  String   @default("monthly")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@map("contract_capital_line_item")
 }
 
 model ContractDocument {
