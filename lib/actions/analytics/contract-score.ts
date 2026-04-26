@@ -23,20 +23,25 @@
 
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
-import {
-  getContractCompositeScoreImpl,
-  type ContractCompositeScore,
-} from "@/lib/actions/analytics/contract-score-impl"
+import { getCachedContractCompositeScore } from "@/lib/actions/analytics/_cached"
+import type { ContractCompositeScore } from "@/lib/actions/analytics/contract-score-impl"
 
-export type { ContractCompositeScore }
+// NOTE: type re-export deliberately removed. "use server" files can
+// only export async functions in Next 16 (cacheComponents enforces
+// this strictly). Consumers should import the type from
+// contract-score-impl.ts directly. Updated call sites grep'd 2026-04-26.
 
 export async function getContractCompositeScore(
   contractId: string,
 ): Promise<ContractCompositeScore> {
   return withTelemetry("getContractCompositeScore", { contractId }, async () => {
     try {
+      // Auth + ownership FIRST (outside the cache) — every caller pays
+      // the gate. The expensive aggregate is memoized for ~10min per
+      // contract under an `analytics:contract:<id>` tag that write paths
+      // bust via `invalidateContractAnalytics`.
       const scope = await requireContractScope(contractId)
-      return await getContractCompositeScoreImpl(
+      return await getCachedContractCompositeScore(
         contractId,
         scope.cogScopeFacilityIds,
       )

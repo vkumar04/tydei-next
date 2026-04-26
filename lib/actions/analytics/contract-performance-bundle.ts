@@ -13,10 +13,8 @@
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
-import {
-  getContractCompositeScore,
-  type ContractCompositeScore,
-} from "@/lib/actions/analytics/contract-score"
+import { getContractCompositeScore } from "@/lib/actions/analytics/contract-score"
+import type { ContractCompositeScore } from "@/lib/actions/analytics/contract-score-impl"
 import { getRenewalRisk } from "@/lib/actions/analytics/renewal-risk"
 import {
   getRebateForecast,
