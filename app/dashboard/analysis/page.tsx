@@ -1,30 +1,23 @@
+import { redirect } from "next/navigation"
 import { requireFacility } from "@/lib/actions/auth"
-import { AnalysisClient } from "@/components/facility/analysis/analysis-client"
 
 /**
- * Financial Analysis — capital ROI page (subsystems 1-7).
+ * 2026-04-26 (Charles prod feedback): the legacy /dashboard/analysis
+ * surface required picking from the facility's CURRENT active contracts
+ * to run capital ROI on. Charles called this out: "There is no way for
+ * them to enter a contract to analyze here as it should be — they do
+ * not need to look at current contracts because those are being analyzed
+ * in the Contracts tab already."
  *
- * Server shell that resolves the active facility scope and renders the
- * client orchestrator. All heavy lifting (form state, TanStack Query
- * data loading, recharts rendering) lives in the client tree. See
- * docs/superpowers/specs/2026-04-18-financial-analysis-rewrite.md.
+ * The Prospective Analysis surface at /dashboard/analysis/prospective
+ * already supports the right workflow: drop a PDF / fill a form for a
+ * NOT-YET-SIGNED contract and run NPV / IRR / MACRS / spend-pattern
+ * analysis. Redirect /dashboard/analysis there so users land on the
+ * right tool by default. The legacy AnalysisClient (existing-contract
+ * capital ROI) is preserved at lib + components paths in case a future
+ * page wants to mount it again.
  */
 export default async function AnalysisPage() {
-  const { facility } = await requireFacility()
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight text-balance">
-          Financial Analysis
-        </h1>
-        <p className="text-muted-foreground">
-          Capital-contract ROI: NPV, IRR, MACRS depreciation, rebates, and
-          price-lock opportunity cost.
-        </p>
-      </div>
-
-      <AnalysisClient facilityId={facility.id} />
-    </div>
-  )
+  await requireFacility()
+  redirect("/dashboard/analysis/prospective")
 }
