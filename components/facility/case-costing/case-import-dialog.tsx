@@ -367,7 +367,7 @@ export function CaseImportDialog({
                 "itemnumber",
                 "sku",
               ]) ||
-              materialName.match(/ - ([A-Za-z0-9\-\.]+)$/)?.[1] ||
+              materialName.match(/ - ([A-Za-z0-9\-.]+)$/)?.[1] ||
               ""
             const cost =
               parseFloat(

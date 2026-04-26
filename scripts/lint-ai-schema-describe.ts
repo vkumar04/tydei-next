@@ -32,7 +32,7 @@ type Violation = {
 function findSchemaFiles(): string[] {
   const entries = readdirSync(AI_DIR)
   return entries
-    .filter((name) => /-schemas\.ts$/.test(name))
+    .filter((name) => name.endsWith('-schemas.ts'))
     .map((name) => join(AI_DIR, name))
     .filter((p) => statSync(p).isFile())
 }

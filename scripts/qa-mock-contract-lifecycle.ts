@@ -17,7 +17,6 @@ import {
   calculateMarginal,
 } from "@/lib/rebates/calculate"
 import { createContractSchema } from "@/lib/validators/contracts"
-import { termFormSchema } from "@/lib/validators/contract-terms"
 import { EVERGREEN_DATE, isEvergreen } from "@/lib/contracts/evergreen"
 import { computeContractYears } from "@/lib/contracts/term-years"
 

@@ -1,4 +1,4 @@
-import type { PrismaClient, HealthSystem, Facility } from "@prisma/client"
+import type { PrismaClient, Facility } from "@prisma/client"
 
 export async function seedHealthSystems(prisma: PrismaClient) {
   const lighthouse = await prisma.healthSystem.create({

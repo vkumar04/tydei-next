@@ -35,10 +35,22 @@ export type ContractScope =
  * Wrapped in React's `cache()` so a single render that triggers
  * multiple analytics actions (Performance tab fans out to 4-6
  * actions) only pays the auth + ownership lookup once. Cache key
- * is the contractId — `requireAuth()` is itself memoized inside,
- * so the dedupe is exact within a render pass.
+ * is the contractId.
+ *
+ * Why the async-function wrapper instead of `export const x =
+ * cache(impl)`: every export from a `"use server"` file must be an
+ * async function declaration (Next 16 compile-time check). Storing
+ * the cached version in a private const + re-exporting via an
+ * async wrapper keeps the constraint satisfied while preserving
+ * the per-render dedupe.
  */
-export const requireContractScope = cache(_requireContractScopeImpl)
+const _requireContractScopeCached = cache(_requireContractScopeImpl)
+
+export async function requireContractScope(
+  contractId: string,
+): Promise<ContractScope> {
+  return _requireContractScopeCached(contractId)
+}
 
 async function _requireContractScopeImpl(
   contractId: string,

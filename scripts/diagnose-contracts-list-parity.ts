@@ -10,10 +10,7 @@
 // server actions exactly (otherwise this script itself has drift).
 
 import { prisma } from "@/lib/db"
-import {
-  sumEarnedRebatesLifetime,
-  sumEarnedRebatesLifetime,
-} from "@/lib/contracts/rebate-earned-filter"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 

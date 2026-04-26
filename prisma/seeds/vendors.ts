@@ -1,4 +1,4 @@
-import type { PrismaClient, Vendor } from "@prisma/client"
+import type { PrismaClient } from "@prisma/client"
 
 export async function seedVendors(prisma: PrismaClient) {
   const stryker = await prisma.vendor.create({

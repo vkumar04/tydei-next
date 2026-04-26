@@ -9,7 +9,6 @@ import {
   deletePricingFilesByVendor,
   getUploadedPricingFiles,
 } from "@/lib/actions/pricing-files"
-import type { PricingFilters } from "@/lib/validators/pricing-files"
 import { toast } from "sonner"
 
 export function usePricingFiles(

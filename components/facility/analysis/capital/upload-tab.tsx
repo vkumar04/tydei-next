@@ -10,7 +10,6 @@ import {
   Upload,
   FileText,
   Loader2,
-  X,
   Sparkles,
   Calculator,
   TrendingUp,

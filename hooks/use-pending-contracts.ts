@@ -5,7 +5,6 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   getVendorPendingContracts,
   createPendingContract,
-  updatePendingContract,
   withdrawPendingContract,
   getFacilityPendingContracts,
   approvePendingContract,

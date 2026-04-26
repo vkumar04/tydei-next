@@ -1,9 +1,7 @@
 import {
-  AlertTriangle,
   Clock,
   TrendingUp,
   DollarSign,
-  CreditCard,
   AlertCircle,
   ShieldAlert,
   FileX,

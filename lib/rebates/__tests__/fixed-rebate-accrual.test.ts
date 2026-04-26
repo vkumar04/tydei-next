@@ -40,13 +40,13 @@ describe("fixed_rebate tier — flat dollars, not percent (Charles 2026-04-21)",
     },
   ]
 
-  it("cumulative: earns \$30k flat at any qualifying spend", () => {
+  it("cumulative: earns $30k flat at any qualifying spend", () => {
     expect(calculateCumulative(100_000, fixedTier).rebateEarned).toBe(30_000)
     expect(calculateCumulative(1_000_000, fixedTier).rebateEarned).toBe(30_000)
     expect(calculateCumulative(5_000_000, fixedTier).rebateEarned).toBe(30_000)
   })
 
-  it("cumulative: pre-fix bug case — \$100k spend × \$30k tier must NOT be \$30M", () => {
+  it("cumulative: pre-fix bug case — $100k spend × $30k tier must NOT be $30M", () => {
     // The exact Charles report: pre-fix math yielded spend × 30000 / 100
     // = spend × 300. We assert the flat-dollar behavior holds.
     const r = calculateCumulative(100_000, fixedTier).rebateEarned

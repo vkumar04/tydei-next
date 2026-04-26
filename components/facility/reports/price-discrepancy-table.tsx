@@ -27,9 +27,7 @@ import {
   TrendingUp,
   DollarSign,
   FileWarning,
-  ArrowUpDown,
   ExternalLink,
-  Download,
 } from "lucide-react"
 import Link from "next/link"
 

@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
-  createTermSchema,
   createTermSchemaWithTierCheck,
   updateTermSchema,
   tierInputSchema,

@@ -26,7 +26,7 @@ describe("computeNetRebate (roadmap track 4 — GPO admin fee)", () => {
     expect(r.net).toBe(100_000)
   })
 
-  it("3% admin fee on \$100k → \$3k fee, \$97k net", () => {
+  it("3% admin fee on $100k → $3k fee, $97k net", () => {
     const r = computeNetRebate({ gross: 100_000, adminFeePercent: 0.03 })
     expect(r.gross).toBe(100_000)
     expect(r.adminFee).toBe(3_000)

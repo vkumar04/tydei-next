@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireAuth, requireVendor } from "@/lib/actions/auth"
+import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────

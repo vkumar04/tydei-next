@@ -30,7 +30,7 @@ async function main() {
       const card = page.locator('text="On vs Off Contract Spend"').first()
       if ((await card.count()) === 0) throw new Error("card missing")
     })
-    await logStep("On Contract tile shows > \$0 (matcher stamped on_contract rows)", async () => {
+    await logStep("On Contract tile shows > $0 (matcher stamped on_contract rows)", async () => {
       const val = await page.evaluate(() => {
         const labels = Array.from(document.querySelectorAll("p, span, div"))
           .filter((el) => el.textContent?.trim() === "On Contract")
@@ -46,7 +46,7 @@ async function main() {
       const n = parseFloat(val.replace(/[^\d.-]/g, ""))
       if (!Number.isFinite(n) || n <= 0) {
         throw new Error(
-          `On Contract = "${val}" — expected > \$0 after matcher. Matcher did not stamp rows on_contract, or card scope filter drops them.`,
+          `On Contract = "${val}" — expected > $0 after matcher. Matcher did not stamp rows on_contract, or card scope filter drops them.`,
         )
       }
     })

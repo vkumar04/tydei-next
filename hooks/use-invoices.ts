@@ -17,7 +17,7 @@ import {
   flagInvoiceAsDisputed,
   resolveInvoiceDispute,
 } from "@/lib/actions/invoices/dispute"
-import type { InvoiceFilters, ImportInvoiceInput } from "@/lib/validators/invoices"
+import type { InvoiceFilters } from "@/lib/validators/invoices"
 import { toast } from "sonner"
 
 export function useInvoices(entityId: string, filters?: Partial<InvoiceFilters>) {

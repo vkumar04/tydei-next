@@ -26,7 +26,7 @@ describe("monteCarloTierProbability (roadmap track 6)", () => {
     expect(r.tierProbability.get(0)).toBe(1)
   })
 
-  it("steady \$50k/month → deterministic tier 2 (~\$600k annual)", () => {
+  it("steady $50k/month → deterministic tier 2 (~$600k annual)", () => {
     // Every month of history = \$50k → every sampled 12-mo sum = \$600k.
     // Tier 2 qualifies at \$300k, tier 3 at \$600k so this lands exactly
     // at the tier 3 threshold. Under EXCLUSIVE boundary (the default),

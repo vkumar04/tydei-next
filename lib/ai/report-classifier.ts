@@ -114,7 +114,7 @@ export function classifyReportPrompt(prompt: string): ReportType {
  */
 export function buildCSVFilename(title: string, date?: Date): string {
   const safeTitle = (title ?? "")
-    .replace(/[\/\\:*?"<>|]/g, "")
+    .replace(/[/\\:*?"<>|]/g, "")
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "")

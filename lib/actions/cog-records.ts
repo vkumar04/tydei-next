@@ -10,7 +10,6 @@ import {
 } from "@/lib/validators/cog-records"
 import type { Prisma } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
-import { logAudit } from "@/lib/audit"
 
 // ─── List COG Records ───────────────────────────────────────────
 

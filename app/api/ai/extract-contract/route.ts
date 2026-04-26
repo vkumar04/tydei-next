@@ -362,7 +362,7 @@ ${text.trim()}`,
       )
     }
 
-    const mediaType: "application/pdf" = "application/pdf"
+    const mediaType = "application/pdf" as const
 
     // Route PDF through the simpler legacy schema — the rich schema has
     // >16 union-typed fields which Anthropic's tool-input JSON Schema

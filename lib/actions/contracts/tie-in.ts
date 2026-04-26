@@ -244,20 +244,6 @@ export interface ContractCapitalScheduleResult {
   capitalLineItems: NormalizedCapitalLineItem[]
 }
 
-function normalizeCadence(
-  raw: string | null | undefined,
-): "monthly" | "quarterly" | "annual" {
-  switch (raw) {
-    case "monthly":
-    case "quarterly":
-    case "annual":
-      return raw
-    // paymentTiming uses "quarterly" as default; other values fall back.
-    default:
-      return "monthly"
-  }
-}
-
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date)
   d.setMonth(d.getMonth() + months)
@@ -958,21 +944,6 @@ export interface ContractCapitalProjection {
   paidOffBeforeTermEnd: boolean
   /** Capital balance at the moment of projection. */
   remainingBalance: number
-}
-
-// Local helpers — duplicated from the schedule action intentionally so
-// this file is self-contained and we don't churn Wave A's surface.
-function normalizeCadenceLocal(
-  raw: string | null | undefined,
-): "monthly" | "quarterly" | "annual" {
-  switch (raw) {
-    case "monthly":
-    case "quarterly":
-    case "annual":
-      return raw
-    default:
-      return "monthly"
-  }
 }
 
 function addMonthsLocal(date: Date, months: number): Date {

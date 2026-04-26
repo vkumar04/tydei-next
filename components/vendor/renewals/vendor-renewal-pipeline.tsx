@@ -116,7 +116,7 @@ export function VendorRenewalPipeline({
   // memo'd so re-orders of the source list don't change the React
   // Query cache key (otherwise every filter toggle would refetch).
   const contractIds = useMemo(
-    () => [...contracts.map((c) => c.id)].sort(),
+    () => contracts.map((c) => c.id).sort(),
     [contracts],
   )
   const { data: riskByContract } = useQuery({

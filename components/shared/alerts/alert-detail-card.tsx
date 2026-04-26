@@ -1,19 +1,15 @@
 "use client"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { alertTypeIconConfig } from "./alert-config"
-import { formatCurrency } from "@/lib/formatting"
-import { formatDistanceToNow } from "date-fns"
 import {
   Building2,
   Calendar,
   Clock,
   DollarSign,
   FileText,
-  Package,
   TrendingUp,
   ExternalLink,
   CheckCircle,

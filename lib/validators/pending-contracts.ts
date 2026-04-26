@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { ContractTypeSchema, PendingContractStatusSchema } from "@/lib/validators"
+import { ContractTypeSchema } from "@/lib/validators"
 
 export const createPendingContractSchema = z.object({
   vendorId: z.string().min(1, "Vendor is required"),

@@ -7,7 +7,6 @@ import {
   CalendarDays,
   Download,
   Eye,
-  FileText,
   Hash,
   MoreHorizontal,
   Send,
@@ -51,11 +50,9 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
 
   const deleteMut = useDeleteInvoice()
 
-  const { data, isLoading } = useVendorInvoices(vendorId, {
-    ...(statusFilter !== "all" && statusFilter !== "submitted"
+  const { data, isLoading } = useVendorInvoices(vendorId, (statusFilter !== "all" && statusFilter !== "submitted"
       ? { status: statusFilter as never }
-      : {}),
-  })
+      : {}))
 
   const allInvoices = (data?.invoices as unknown as InvoiceRow[]) ?? []
 

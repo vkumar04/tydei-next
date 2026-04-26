@@ -34,7 +34,7 @@ describe("computeProjectedRebate (Charles N14)", () => {
     expect(r.projectedTotalAtYearEnd).toBe(10_000)
   })
 
-  it("below-baseline rolling-12 → \$0 projection", () => {
+  it("below-baseline rolling-12 → $0 projection", () => {
     const r = computeProjectedRebate({
       rolling12Spend: 50_000,
       rebateEarnedYTD: 0,

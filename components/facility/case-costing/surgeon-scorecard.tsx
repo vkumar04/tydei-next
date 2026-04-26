@@ -15,8 +15,6 @@ import {
   User,
   CreditCard,
   DollarSign,
-  Clock,
-  Heart,
   Scale,
 } from "lucide-react"
 import {

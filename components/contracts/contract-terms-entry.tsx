@@ -15,7 +15,6 @@ import {
   Lock,
   Coins,
   HelpCircle,
-  Sparkles,
   AlertTriangle,
 } from "lucide-react"
 import {
@@ -47,7 +46,6 @@ import {
 } from "@/components/ui/accordion"
 import { Field } from "@/components/shared/forms/field"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 import { DefinitionTooltip as EnumDefinitionTooltip } from "@/components/contracts/definition-tooltip"
 import { TERM_TYPE_DEFINITIONS } from "@/lib/contract-definitions"
@@ -56,12 +54,6 @@ import { getCategories } from "@/lib/actions/categories"
 import { queryKeys } from "@/lib/query-keys"
 import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
 import { SpecificItemsPicker, type VendorItem } from "./specific-items-picker"
-import { TieInAmortizationPreview } from "./tie-in-amortization-preview"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import {
-  toDisplayInterestRate,
-  fromDisplayInterestRate,
-} from "@/lib/contracts/interest-rate-normalize"
 
 interface ContractTermsEntryProps {
   terms: TermFormValues[]

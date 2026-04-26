@@ -1,31 +1,11 @@
 "use client"
 
-import { useState, useMemo } from "react"
 import { AlertCard } from "./alert-card"
-import { alertTypeIconConfig, alertSeverityBadgeConfig, statusColors } from "./alert-config"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  BellOff,
-  Search,
-  CheckCircle2,
-  Archive,
-  SlidersHorizontal,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { formatDistanceToNow } from "date-fns"
+import { BellOff, Search, CheckCircle2, Archive } from "lucide-react"
 import type { Alert } from "@prisma/client"
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -35,14 +15,11 @@ type AlertWithRelations = Alert & {
   vendor?: { id: string; name: string } | null
 }
 
-type StatusTab = "all" | "new_alert" | "read" | "resolved"
-
 interface AlertsListProps {
   alerts: AlertWithRelations[]
   onResolve: (id: string) => void
   onDismiss: (id: string) => void
   onNavigate: (id: string) => void
-  onMarkRead?: (id: string) => void
   selectedIds: Set<string>
   onSelect: (id: string, checked: boolean) => void
   onSelectAll: (checked: boolean) => void
@@ -52,41 +29,17 @@ interface AlertsListProps {
   emptyMessage?: string
 }
 
-// ─── Helpers ────────────────────────────────────────────────────
-
-const STATUS_TABS: { value: StatusTab; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "new_alert", label: "New" },
-  { value: "read", label: "In Progress" },
-  { value: "resolved", label: "Resolved" },
-]
-
-const SEVERITY_OPTIONS = [
-  { value: "all", label: "All Severities" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
-]
-
-const TYPE_OPTIONS = [
-  { value: "all", label: "All Types" },
-  { value: "off_contract", label: "Off-Contract" },
-  { value: "expiring_contract", label: "Expiring" },
-  { value: "tier_threshold", label: "Tier Threshold" },
-  { value: "rebate_due", label: "Rebate Due" },
-  { value: "payment_due", label: "Payment Due" },
-  { value: "pricing_error", label: "Pricing Error" },
-  { value: "compliance", label: "Compliance" },
-]
-
-// ─── Component ──────────────────────────────────────────────────
-
+/**
+ * Bulk-action alerts list. Filtering UI was stubbed in earlier but
+ * never wired (the consumer that uses this component does its own
+ * filtering upstream and just passes the already-filtered array).
+ * 2026-04-26: stripped the dead state + imports.
+ */
 export function AlertsList({
   alerts,
   onResolve,
   onDismiss,
   onNavigate,
-  onMarkRead,
   selectedIds,
   onSelect,
   onSelectAll,
@@ -95,61 +48,7 @@ export function AlertsList({
   isLoading,
   emptyMessage,
 }: AlertsListProps) {
-  const [activeTab, setActiveTab] = useState<StatusTab>("all")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [severityFilter, setSeverityFilter] = useState("all")
-  const [typeFilter, setTypeFilter] = useState("all")
-
-  // ── Counts per status ──────────────────────────────────────
-  const statusCounts = useMemo(() => {
-    const counts: Record<StatusTab, number> = {
-      all: alerts.length,
-      new_alert: 0,
-      read: 0,
-      resolved: 0,
-    }
-    for (const a of alerts) {
-      if (a.status === "new_alert") counts.new_alert++
-      else if (a.status === "read") counts.read++
-      else if (a.status === "resolved") counts.resolved++
-    }
-    return counts
-  }, [alerts])
-
-  // ── Filtered alerts ────────────────────────────────────────
-  const filteredAlerts = useMemo(() => {
-    let result = alerts
-
-    // Status tab filter
-    if (activeTab !== "all") {
-      result = result.filter((a) => a.status === activeTab)
-    }
-
-    // Search
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      result = result.filter(
-        (a) =>
-          a.title.toLowerCase().includes(q) ||
-          a.description?.toLowerCase().includes(q) ||
-          a.vendor?.name.toLowerCase().includes(q) ||
-          a.contract?.name.toLowerCase().includes(q)
-      )
-    }
-
-    // Severity
-    if (severityFilter !== "all") {
-      result = result.filter((a) => a.severity === severityFilter)
-    }
-
-    // Type
-    if (typeFilter !== "all") {
-      result = result.filter((a) => a.alertType === typeFilter)
-    }
-
-    return result
-  }, [alerts, activeTab, searchQuery, severityFilter, typeFilter])
-
+  const filteredAlerts = alerts
   const allSelected =
     filteredAlerts.length > 0 &&
     filteredAlerts.every((a) => selectedIds.has(a.id))

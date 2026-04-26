@@ -1,4 +1,4 @@
-import type { PrismaClient, ProductCategory } from "@prisma/client"
+import type { PrismaClient } from "@prisma/client"
 
 export async function seedCategories(prisma: PrismaClient) {
   // --- Parent categories ---

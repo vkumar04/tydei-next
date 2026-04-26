@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery, useMutation } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useRouter } from "next/navigation"
 import { queryKeys } from "@/lib/query-keys"
 import { getVendorContractDetail } from "@/lib/actions/vendor-contracts"

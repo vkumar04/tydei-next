@@ -21,7 +21,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AIExtractReview } from "@/components/contracts/ai-extract-review"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
-import { toast } from "sonner"
 
 interface AIExtractDialogProps {
   open: boolean

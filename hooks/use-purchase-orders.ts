@@ -11,7 +11,7 @@ import {
   getPOStats,
   getFacilityVendors,
 } from "@/lib/actions/purchase-orders"
-import type { POFilters, CreatePOInput } from "@/lib/validators/purchase-orders"
+import type { POFilters } from "@/lib/validators/purchase-orders"
 import type { POStatus } from "@prisma/client"
 import { toast } from "sonner"
 
