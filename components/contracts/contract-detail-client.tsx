@@ -559,8 +559,15 @@ export function ContractDetailClient({
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                   {formatCurrency(stats.rebateEarnedYTD)}
                 </p>
+                {/* Charles 2026-04-26: restored lifetime totals
+                    alongside YTD. Users were losing the running
+                    total when only YTD showed (e.g. a contract that
+                    earned its first rebate in late December would
+                    flip to $0 on Jan 1 even though lifetime earned
+                    was $XX,XXX). */}
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(stats.rebateCollected)} collected (lifetime)
+                  {formatCurrency(stats.rebateEarned)} earned · {formatCurrency(stats.rebateCollected)} collected
+                  <span className="ml-1 opacity-70">(lifetime)</span>
                 </p>
                 {stats.projectedYearEnd != null &&
                   stats.projectedYearEnd.projectedFullYear > 0 && (
