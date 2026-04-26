@@ -32,7 +32,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { formatCurrency } from "@/lib/formatting"
-import { getContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
+import {
+  getContractCapitalSchedule,
+  type ContractCapitalScheduleResult,
+} from "@/lib/actions/contracts/tie-in"
 
 interface TieInRebateSplitProps {
   contractId: string
@@ -42,14 +45,19 @@ interface TieInRebateSplitProps {
    * vs financed principal is the truth source).
    */
   rebateEarned?: number
+  /** Charles audit suggestion #3: vendor variant fetcher. */
+  fetcher?: (contractId: string) => Promise<ContractCapitalScheduleResult>
+  scope?: "facility" | "vendor"
 }
 
 export function TieInRebateSplit({
   contractId,
+  fetcher = getContractCapitalSchedule,
+  scope = "facility",
 }: TieInRebateSplitProps) {
   const { data } = useQuery({
-    queryKey: ["contract-capital-schedule", contractId],
-    queryFn: () => getContractCapitalSchedule(contractId),
+    queryKey: ["contract-capital-schedule", scope, contractId],
+    queryFn: () => fetcher(contractId),
   })
 
   // Without a schedule we can't compute the split — render nothing so

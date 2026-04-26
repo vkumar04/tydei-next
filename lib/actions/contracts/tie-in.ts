@@ -7,7 +7,7 @@
  * debt split). Re-exported from there for backward-compat.
  */
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 import {
   evaluateAllOrNothing,
@@ -641,6 +641,209 @@ export async function getContractCapitalSchedule(
     currentTierPercent,
     monthsRemaining,
   }
+}
+
+/**
+ * Charles audit suggestion #3 — vendor-scoped Capital Amortization view.
+ *
+ * Vendors need to see the same financedPrincipal × interest × termMonths
+ * amortization schedule on their tie-in contracts that the facility
+ * sees. The data is identical; only the auth + scope clause differs.
+ *
+ * This wrapper:
+ *   1. Authenticates as a vendor (requireVendor)
+ *   2. Verifies the contract belongs to that vendor
+ *   3. Re-uses the same downstream computation as the facility variant,
+ *      patching the auth context inline by calling Prisma directly
+ *      with `{id, vendorId: vendor.id}` scope.
+ *
+ * Returns the same ContractCapitalScheduleResult shape so the existing
+ * <ContractAmortizationCard /> + <TieInRebateSplit /> components can
+ * be reused on the vendor portal.
+ */
+export async function getVendorContractCapitalSchedule(
+  contractId: string,
+): Promise<ContractCapitalScheduleResult> {
+  const { vendor } = await requireVendor()
+
+  const contract = await prisma.contract.findFirst({
+    where: { id: contractId, vendorId: vendor.id },
+    select: {
+      id: true,
+      contractType: true,
+      vendorId: true,
+      facilityId: true,
+      effectiveDate: true,
+      capitalCost: true,
+      downPayment: true,
+      interestRate: true,
+      termMonths: true,
+      paymentCadence: true,
+      amortizationShape: true,
+      amortizationRows: { orderBy: { periodNumber: "asc" } },
+      rebates: { select: { collectionDate: true, rebateCollected: true } },
+    },
+  })
+
+  const empty: ContractCapitalScheduleResult = {
+    hasSchedule: false,
+    capitalCost: 0,
+    downPayment: 0,
+    financedPrincipal: 0,
+    interestRate: 0,
+    termMonths: 0,
+    period: "monthly",
+    schedule: [],
+    elapsedPeriods: 0,
+    remainingBalance: 0,
+    paidToDate: 0,
+    rebateAppliedToCapital: 0,
+    projectedEndOfTermBalance: null,
+    contractType: contract?.contractType ?? "usage",
+    minAnnualPurchase: null,
+    rolling12Spend: 0,
+    currentTierPercent: 0,
+    monthsRemaining: 0,
+  }
+
+  if (
+    !contract ||
+    contract.capitalCost == null ||
+    contract.interestRate == null ||
+    contract.termMonths == null
+  ) {
+    return empty
+  }
+
+  const capitalCost = Number(contract.capitalCost)
+  const downPayment = Number(contract.downPayment ?? 0)
+  const financedPrincipal = Math.max(0, capitalCost - downPayment)
+  const interestRate = Number(contract.interestRate)
+  const termMonths = Number(contract.termMonths)
+  const period = normalizeCadence(contract.paymentCadence)
+
+  if (financedPrincipal <= 0 || termMonths <= 0) return empty
+
+  let entries
+  if (
+    contract.amortizationShape === "custom" &&
+    contract.amortizationRows.length > 0
+  ) {
+    entries = contract.amortizationRows.map((r) => ({
+      periodNumber: r.periodNumber,
+      openingBalance: Number(r.openingBalance),
+      interestCharge: Number(r.interestCharge),
+      principalDue: Number(r.principalDue),
+      amortizationDue: Number(r.amortizationDue),
+      closingBalance: Number(r.closingBalance),
+    }))
+  } else {
+    entries = buildTieInAmortizationSchedule({
+      capitalCost: financedPrincipal,
+      interestRate,
+      termMonths,
+      period,
+    })
+  }
+
+  const start = new Date(contract.effectiveDate)
+  const monthsStep = monthsPerPeriod(period)
+  const today = new Date()
+
+  // Cross-contract aggregation: include rebates from sibling usage
+  // contracts pointing at this capital row, scoped by the vendor (the
+  // sibling MUST share this vendor — different vendor's contracts
+  // can't pay down this capital).
+  const isTieIn = contract.contractType === "tie_in"
+  const isCapital = contract.contractType === "capital"
+  const allRebates: CollectedRebateLike[] = isTieIn ? [...contract.rebates] : []
+  if (isCapital) {
+    const siblingRebates = await prisma.rebate.findMany({
+      where: {
+        contract: {
+          tieInCapitalContractId: contract.id,
+          vendorId: vendor.id,
+        },
+      },
+      select: { collectionDate: true, rebateCollected: true },
+    })
+    allRebates.push(...siblingRebates)
+    if (contract.rebates.length > 0) {
+      allRebates.push(...contract.rebates)
+    }
+  }
+
+  const collectionsByPeriod = new Map<number, number>()
+  if (isTieIn || isCapital) {
+    for (const r of allRebates) {
+      if (!r.collectionDate) continue
+      const collectedMs = new Date(r.collectionDate).getTime()
+      const startMs = start.getTime()
+      if (collectedMs < startMs) continue
+      const monthsSinceStart =
+        (collectedMs - startMs) / (1000 * 60 * 60 * 24 * 30.4375)
+      const periodNumber = Math.max(
+        1,
+        Math.min(entries.length, Math.ceil(monthsSinceStart / monthsStep)),
+      )
+      const prior = collectionsByPeriod.get(periodNumber) ?? 0
+      collectionsByPeriod.set(
+        periodNumber,
+        prior + Number(r.rebateCollected ?? 0),
+      )
+    }
+  }
+
+  const schedule: ContractCapitalScheduleRow[] = entries.map((e) => {
+    const periodDate = addMonths(start, e.periodNumber * monthsStep)
+    return {
+      periodNumber: e.periodNumber,
+      periodDate: periodDate.toISOString(),
+      openingBalance: e.openingBalance,
+      interestCharge: e.interestCharge,
+      principalDue: e.principalDue,
+      amortizationDue: e.amortizationDue,
+      closingBalance: e.closingBalance,
+      rebateAppliedThisPeriod: collectionsByPeriod.get(e.periodNumber) ?? 0,
+    }
+  })
+
+  const elapsedPeriods = schedule.filter(
+    (r) => new Date(r.periodDate).getTime() <= today.getTime(),
+  ).length
+
+  const rebateAppliedToCapital = sumRebateAppliedToCapital(
+    allRebates,
+    isCapital ? "tie_in" : contract.contractType,
+  )
+  const paidToDate = rebateAppliedToCapital
+  const remainingBalance = Math.max(0, financedPrincipal - paidToDate)
+
+  // Vendor doesn't get COG / spend metrics — those are facility-side
+  // numbers. Return null/0 for those fields; UI hides them anyway.
+  return serialize({
+    hasSchedule: true,
+    capitalCost,
+    downPayment,
+    financedPrincipal,
+    interestRate,
+    termMonths,
+    period,
+    schedule,
+    elapsedPeriods,
+    remainingBalance,
+    paidToDate,
+    rebateAppliedToCapital,
+    projectedEndOfTermBalance: null,
+    contractType: contract.contractType,
+    minAnnualPurchase: null,
+    rolling12Spend: 0,
+    currentTierPercent: 0,
+    monthsRemaining: Math.max(
+      0,
+      termMonths - elapsedPeriods * monthsPerPeriod(period),
+    ),
+  })
 }
 
 export interface ContractCapitalProjection {

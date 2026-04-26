@@ -7,6 +7,9 @@ import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import { VendorContractOverview } from "@/components/vendor/contracts/vendor-contract-overview"
+import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
+import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
+import { getVendorContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
 import { toast } from "sonner"
 import type { getVendorContractDetail } from "@/lib/actions/vendor-contracts"
 
@@ -47,6 +50,24 @@ export function VendorContractDetailClient({ contract }: VendorContractDetailCli
         }
       />
       <VendorContractOverview contract={contract} />
+      {/* Charles audit suggestion #3: vendors see Capital Amortization
+          + applied-to-capital sublabel for tie-in / capital contracts.
+          Both surfaces use the vendor-scoped fetcher. */}
+      {(contract.contractType === "tie_in" ||
+        contract.contractType === "capital") && (
+        <>
+          <TieInRebateSplit
+            contractId={contract.id}
+            fetcher={getVendorContractCapitalSchedule}
+            scope="vendor"
+          />
+          <ContractAmortizationCard
+            contractId={contract.id}
+            fetcher={getVendorContractCapitalSchedule}
+            scope="vendor"
+          />
+        </>
+      )}
       <ContractDocumentsList documents={contract.documents} contractId={contract.id} onUpload={handleDocumentUpload} />
     </div>
   )

@@ -39,14 +39,24 @@ import { computeCapitalRetirementNeeded } from "@/lib/contracts/capital-retireme
 
 interface ContractAmortizationCardProps {
   contractId: string
+  /**
+   * Charles audit suggestion #3: optional fetcher so the vendor portal
+   * can pass `getVendorContractCapitalSchedule` (vendor-scoped) and
+   * the facility portal keeps the default. Same return shape.
+   */
+  fetcher?: (contractId: string) => Promise<ContractCapitalScheduleResult>
+  /** Cache key suffix to keep facility/vendor caches separate. */
+  scope?: "facility" | "vendor"
 }
 
 export function ContractAmortizationCard({
   contractId,
+  fetcher = getContractCapitalSchedule,
+  scope = "facility",
 }: ContractAmortizationCardProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contract-capital-schedule", contractId],
-    queryFn: () => getContractCapitalSchedule(contractId),
+    queryKey: ["contract-capital-schedule", scope, contractId],
+    queryFn: () => fetcher(contractId),
   })
 
   if (isLoading) {
