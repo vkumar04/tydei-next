@@ -415,8 +415,16 @@ ${text.trim()}`,
         extracted = tryParseLegacy(rawText)
       }
     } catch (aiError: unknown) {
-      const errorMessage = aiError instanceof Error ? aiError.message : "Unknown error"
-      console.warn("[extract-contract] AI extraction failed:", errorMessage)
+      const errorMessage =
+        aiError instanceof Error ? aiError.message : "Unknown error"
+      // CLAUDE.md AI-action error path: log full context server-side
+      // before returning a sanitized envelope to the client. console.error
+      // (not warn) so prod log search picks it up.
+      console.error("[extract-contract] AI extraction failed:", aiError, {
+        fileSize: file.size,
+        mediaType,
+        s3Key,
+      })
       return Response.json(
         {
           error: "AI extraction unavailable",

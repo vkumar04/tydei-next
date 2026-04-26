@@ -139,8 +139,16 @@ export function AIExtractDialog({
       setProgress(90)
 
       if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error((body as { error?: string } | null)?.error || "Extraction failed")
+        const body = (await res.json().catch(() => null)) as
+          | { error?: string; details?: string }
+          | null
+        // Surface the SPECIFIC failure (model API error message, schema
+        // mismatch text, file-too-large, etc.) instead of the generic
+        // "AI extraction unavailable" envelope. The route already
+        // truncates `details` to 400 chars on its end.
+        const head = body?.error ?? "Extraction failed"
+        const tail = body?.details ? ` — ${body.details}` : ""
+        throw new Error(`${head}${tail}`)
       }
 
       const data = await res.json()
@@ -305,7 +313,9 @@ export function AIExtractDialog({
 
         {stage === "error" && (
           <div className="flex flex-col items-center gap-4 py-8">
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-sm text-destructive text-center max-w-md break-words">
+              {error}
+            </p>
             <Button
               variant="outline"
               onClick={() => {

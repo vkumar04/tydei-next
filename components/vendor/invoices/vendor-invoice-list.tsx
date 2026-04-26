@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useDeleteInvoice, useVendorInvoices } from "@/hooks/use-invoices"
 import { formatCurrency, formatDate } from "@/lib/formatting"
+import { v0InvoicePriority } from "@/lib/v0-spec/invoice-validation"
 import { VendorInvoiceControlBar } from "./vendor-invoice-control-bar"
 import { VendorInvoiceDetailDialog } from "./vendor-invoice-detail-dialog"
 import { VendorInvoiceHero } from "./vendor-invoice-hero"
@@ -218,6 +219,29 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
               {pct.toFixed(1)}%
             </span>
           </div>
+        )
+      },
+    },
+    {
+      id: "priority",
+      header: "Priority",
+      // v0 doc invoice-validation §8: classify by |variance|.
+      // |pct| > 5 → high, > 2 → medium, > 0 → low, else none.
+      cell: ({ row }) => {
+        const pct = row.original.variancePercent ?? 0
+        const priority = v0InvoicePriority({ variancePct: pct })
+        if (priority === "none")
+          return <span className="text-sm text-muted-foreground">—</span>
+        const cls =
+          priority === "high"
+            ? "bg-red-500/15 text-red-600 dark:text-red-400 border-0"
+            : priority === "medium"
+              ? "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-0"
+              : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0"
+        return (
+          <Badge className={cls}>
+            {priority.charAt(0).toUpperCase() + priority.slice(1)}
+          </Badge>
         )
       },
     },
