@@ -13,8 +13,19 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { v0SpendConcentration } from "@/lib/v0-spec/contract-performance"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export async function getFacilitySpendConcentration(input?: {
+  trailingDays?: number
+}) {
+  return withTelemetry(
+    "getFacilitySpendConcentration",
+    { trailingDays: input?.trailingDays ?? 365 },
+    () => _getFacilitySpendConcentrationImpl(input),
+  )
+}
+
+async function _getFacilitySpendConcentrationImpl(input?: {
   trailingDays?: number
 }) {
   const { facility } = await requireFacility()

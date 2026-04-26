@@ -64,7 +64,7 @@ vi.mock("@/lib/vendors/resolve", () => ({
   }),
 }))
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn(), revalidateTag: vi.fn() }))
+vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 
 // Mock mapColumnsWithAI; per-test override via mockResolvedValueOnce.
 vi.mock("@/lib/actions/imports/shared", async () => {

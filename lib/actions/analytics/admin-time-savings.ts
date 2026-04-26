@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 interface TaskEstimate {
   manual: number // hours
@@ -72,6 +73,12 @@ export interface AdminTimeSavings {
 }
 
 export async function getAdminTimeSavings(): Promise<AdminTimeSavings> {
+  return withTelemetry("getAdminTimeSavings", {}, () =>
+    _getAdminTimeSavingsImpl(),
+  )
+}
+
+async function _getAdminTimeSavingsImpl(): Promise<AdminTimeSavings> {
   const { facility } = await requireFacility()
 
   const ownership = contractsOwnedByFacility(facility.id)

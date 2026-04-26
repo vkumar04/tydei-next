@@ -14,6 +14,7 @@ import {
   seasonalDecompose,
 } from "@/lib/analysis/forecasting"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface RebateForecastPoint {
   period: string
@@ -37,12 +38,18 @@ export async function getRebateForecast(
   contractId: string,
   forecastMonths = 12,
 ): Promise<RebateForecast> {
-  try {
-    return await _getRebateForecastImpl(contractId, forecastMonths)
-  } catch (err) {
-    console.error("[getRebateForecast]", err, { contractId, forecastMonths })
-    throw new Error("Rebate forecast is unavailable for this contract.")
-  }
+  return withTelemetry(
+    "getRebateForecast",
+    { contractId, forecastMonths },
+    async () => {
+      try {
+        return await _getRebateForecastImpl(contractId, forecastMonths)
+      } catch (err) {
+        console.error("[getRebateForecast]", err, { contractId, forecastMonths })
+        throw new Error("Rebate forecast is unavailable for this contract.")
+      }
+    },
+  )
 }
 
 async function _getRebateForecastImpl(

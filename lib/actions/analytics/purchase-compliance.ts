@@ -18,6 +18,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { v0CogPriceVarianceBand } from "@/lib/v0-spec/cog"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface ComplianceViolation {
   type:
@@ -54,6 +55,18 @@ export interface ComplianceReport {
 
 export async function evaluatePurchaseCompliance(input: {
   fromDate: string // YYYY-MM-DD
+  toDate: string
+  limit?: number
+}): Promise<ComplianceReport> {
+  return withTelemetry(
+    "evaluatePurchaseCompliance",
+    { fromDate: input.fromDate, toDate: input.toDate },
+    () => _evaluatePurchaseComplianceImpl(input),
+  )
+}
+
+async function _evaluatePurchaseComplianceImpl(input: {
+  fromDate: string
   toDate: string
   limit?: number
 }): Promise<ComplianceReport> {

@@ -39,7 +39,7 @@ vi.mock("@/lib/vendors/resolve", () => ({
   }),
 }))
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn(), revalidateTag: vi.fn() }))
+vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 
 import { ingestExtractedInvoices } from "@/lib/actions/imports/invoice-import"
 

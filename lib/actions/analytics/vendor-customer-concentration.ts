@@ -15,8 +15,19 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { v0SpendConcentration } from "@/lib/v0-spec/contract-performance"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export async function getVendorCustomerConcentration(input?: {
+  trailingDays?: number
+}) {
+  return withTelemetry(
+    "getVendorCustomerConcentration",
+    { trailingDays: input?.trailingDays ?? 365 },
+    () => _getVendorCustomerConcentrationImpl(input),
+  )
+}
+
+async function _getVendorCustomerConcentrationImpl(input?: {
   trailingDays?: number
 }) {
   const { vendor } = await requireVendor()

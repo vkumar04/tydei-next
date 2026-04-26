@@ -16,6 +16,7 @@ import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { v0RenewalRisk } from "@/lib/v0-spec/contract-performance"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface VendorRenewalRiskRow {
   contractId: string
@@ -24,6 +25,16 @@ export interface VendorRenewalRiskRow {
 }
 
 export async function getVendorRenewalRiskBatch(
+  contractIds: string[],
+): Promise<Record<string, VendorRenewalRiskRow>> {
+  return withTelemetry(
+    "getVendorRenewalRiskBatch",
+    { count: contractIds.length },
+    () => _getVendorRenewalRiskBatchImpl(contractIds),
+  )
+}
+
+async function _getVendorRenewalRiskBatchImpl(
   contractIds: string[],
 ): Promise<Record<string, VendorRenewalRiskRow>> {
   if (contractIds.length === 0) return {}

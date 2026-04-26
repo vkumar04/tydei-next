@@ -23,6 +23,7 @@ import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { cacheContractAnalytics } from "@/lib/actions/analytics/_cache"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface ContractCompositeScore {
   composite: number
@@ -57,19 +58,21 @@ const WEIGHTS = {
 export async function getContractCompositeScore(
   contractId: string,
 ): Promise<ContractCompositeScore> {
-  try {
-    // Auth + ownership FIRST (outside the cache) — every caller pays
-    // the gate, but the expensive aggregate is memoized for 10 min
-    // per contract under a `analytics:contract:<id>` tag that write
-    // paths invalidate via `invalidateContractAnalytics`.
-    const scope = await requireContractScope(contractId)
-    return await cacheContractAnalytics(contractId, "compositeScore", () =>
-      _getContractCompositeScoreImpl(contractId, scope.cogScopeFacilityIds),
-    )
-  } catch (err) {
-    console.error("[getContractCompositeScore]", err, { contractId })
-    throw new Error("Composite score is unavailable for this contract.")
-  }
+  return withTelemetry("getContractCompositeScore", { contractId }, async () => {
+    try {
+      // Auth + ownership FIRST (outside the cache) — every caller pays
+      // the gate, but the expensive aggregate is memoized for 10 min
+      // per contract under a `analytics:contract:<id>` tag that write
+      // paths invalidate via `invalidateContractAnalytics`.
+      const scope = await requireContractScope(contractId)
+      return await cacheContractAnalytics(contractId, "compositeScore", () =>
+        _getContractCompositeScoreImpl(contractId, scope.cogScopeFacilityIds),
+      )
+    } catch (err) {
+      console.error("[getContractCompositeScore]", err, { contractId })
+      throw new Error("Composite score is unavailable for this contract.")
+    }
+  })
 }
 
 async function _getContractCompositeScoreImpl(

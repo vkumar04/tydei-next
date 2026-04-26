@@ -14,6 +14,7 @@ import {
   v0TieInProportional,
 } from "@/lib/v0-spec/rebate-math"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface TieInComplianceResult {
   mode: "all_or_nothing" | "proportional"
@@ -31,12 +32,18 @@ export async function getTieInCompliance(
   contractId: string,
   mode: "all_or_nothing" | "proportional" = "all_or_nothing",
 ): Promise<TieInComplianceResult> {
-  try {
-    return await _getTieInComplianceImpl(contractId, mode)
-  } catch (err) {
-    console.error("[getTieInCompliance]", err, { contractId, mode })
-    throw new Error("Tie-in compliance is unavailable for this contract.")
-  }
+  return withTelemetry(
+    "getTieInCompliance",
+    { contractId, mode },
+    async () => {
+      try {
+        return await _getTieInComplianceImpl(contractId, mode)
+      } catch (err) {
+        console.error("[getTieInCompliance]", err, { contractId, mode })
+        throw new Error("Tie-in compliance is unavailable for this contract.")
+      }
+    },
+  )
 }
 
 async function _getTieInComplianceImpl(

@@ -134,11 +134,7 @@ vi.mock("@/lib/actions/contracts-auth", () => ({
   contractsOwnedByFacility: () => ({}),
   facilityScopeClause: () => ({}),
 }))
-vi.mock("next/cache", () => ({
-  revalidatePath: vi.fn(),
-  updateTag: vi.fn(),
-  revalidateTag: vi.fn(),
-}))
+vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 
 import { updateContract } from "@/lib/actions/contracts"
 import {

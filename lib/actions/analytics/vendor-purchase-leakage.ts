@@ -28,6 +28,7 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { type V0CogVarianceBand } from "@/lib/v0-spec/cog"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export type LeakageReason =
   | "OFF_CONTRACT"
@@ -76,6 +77,18 @@ export async function getVendorPurchaseLeakage(input: {
   fromDate: string
   toDate: string
   /** Max rows returned in the response (after classification). */
+  rowLimit?: number
+}): Promise<VendorPurchaseLeakageReport> {
+  return withTelemetry(
+    "getVendorPurchaseLeakage",
+    { fromDate: input.fromDate, toDate: input.toDate },
+    () => _getVendorPurchaseLeakageImpl(input),
+  )
+}
+
+async function _getVendorPurchaseLeakageImpl(input: {
+  fromDate: string
+  toDate: string
   rowLimit?: number
 }): Promise<VendorPurchaseLeakageReport> {
   const { vendor } = await requireVendor()

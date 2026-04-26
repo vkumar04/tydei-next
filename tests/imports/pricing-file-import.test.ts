@@ -64,7 +64,7 @@ vi.mock("@/lib/vendors/resolve", () => ({
   resolveVendorIdsBulk: vi.fn(async () => new Map()),
 }))
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn(), revalidateTag: vi.fn() }))
+vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 
 vi.mock("@/lib/actions/imports/shared", async () => {
   const actual = await vi.importActual<

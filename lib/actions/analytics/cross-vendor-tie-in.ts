@@ -15,6 +15,7 @@ import {
   v0CrossVendorTieIn,
   type V0CrossVendorResult,
 } from "@/lib/v0-spec/tie-in"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface CrossVendorTieInRow {
   id: string
@@ -36,6 +37,12 @@ export interface CrossVendorTieInRow {
 }
 
 export async function getCrossVendorTieIns(): Promise<CrossVendorTieInRow[]> {
+  return withTelemetry("getCrossVendorTieIns", {}, () =>
+    _getCrossVendorTieInsImpl(),
+  )
+}
+
+async function _getCrossVendorTieInsImpl(): Promise<CrossVendorTieInRow[]> {
   const { facility } = await requireFacility()
 
   const tieIns = await prisma.crossVendorTieIn.findMany({
@@ -164,6 +171,14 @@ export interface VendorTieInMembershipRow {
  * comment above for the redaction model.
  */
 export async function getVendorCrossVendorTieInMemberships(): Promise<
+  VendorTieInMembershipRow[]
+> {
+  return withTelemetry("getVendorCrossVendorTieInMemberships", {}, () =>
+    _getVendorCrossVendorTieInMembershipsImpl(),
+  )
+}
+
+async function _getVendorCrossVendorTieInMembershipsImpl(): Promise<
   VendorTieInMembershipRow[]
 > {
   const { vendor } = await requireVendor()

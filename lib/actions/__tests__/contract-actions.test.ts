@@ -69,11 +69,7 @@ vi.mock("@/lib/actions/contracts/scoring", () => ({
 vi.mock("@/lib/serialize", () => ({
   serialize: <T,>(v: T) => v,
 }))
-vi.mock("next/cache", () => ({
-  revalidatePath: vi.fn(),
-  updateTag: vi.fn(),
-  revalidateTag: vi.fn(),
-}))
+vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 
 import { createContract, updateContract } from "@/lib/actions/contracts"
 

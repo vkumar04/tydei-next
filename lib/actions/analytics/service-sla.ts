@@ -15,6 +15,7 @@ import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { v0ServiceSlaPenalty } from "@/lib/v0-spec/tie-in"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface ServiceSlaInput {
   contractId: string
@@ -27,12 +28,20 @@ export interface ServiceSlaInput {
 }
 
 export async function evaluateServiceSla(input: ServiceSlaInput) {
-  try {
-    return await _evaluateServiceSlaImpl(input)
-  } catch (err) {
-    console.error("[evaluateServiceSla]", err, { contractId: input.contractId })
-    throw new Error("SLA evaluation is unavailable for this contract.")
-  }
+  return withTelemetry(
+    "evaluateServiceSla",
+    { contractId: input.contractId },
+    async () => {
+      try {
+        return await _evaluateServiceSlaImpl(input)
+      } catch (err) {
+        console.error("[evaluateServiceSla]", err, {
+          contractId: input.contractId,
+        })
+        throw new Error("SLA evaluation is unavailable for this contract.")
+      }
+    },
+  )
 }
 
 async function _evaluateServiceSlaImpl(input: ServiceSlaInput) {

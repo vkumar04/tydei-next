@@ -19,14 +19,17 @@ import { serialize } from "@/lib/serialize"
 import { v0RenewalRisk } from "@/lib/v0-spec/contract-performance"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
+import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export async function getRenewalRisk(contractId: string) {
-  try {
-    return await _getRenewalRiskImpl(contractId)
-  } catch (err) {
-    console.error("[getRenewalRisk]", err, { contractId })
-    throw new Error("Renewal risk is unavailable for this contract.")
-  }
+  return withTelemetry("getRenewalRisk", { contractId }, async () => {
+    try {
+      return await _getRenewalRiskImpl(contractId)
+    } catch (err) {
+      console.error("[getRenewalRisk]", err, { contractId })
+      throw new Error("Renewal risk is unavailable for this contract.")
+    }
+  })
 }
 
 async function _getRenewalRiskImpl(contractId: string) {
