@@ -209,34 +209,113 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
 
       {viewTarget && (
         <Dialog open onOpenChange={() => setViewTarget(null)}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Proposal Details</DialogTitle>
               <DialogDescription>Proposal #{viewTarget.id.slice(0, 8)}</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              {[
-                { label: "Status", node: <StatusBadge status={viewTarget.status} /> },
-                { label: "Created", node: new Date(viewTarget.createdAt).toLocaleDateString() },
-                { label: "Items", node: viewTarget.itemCount },
-                { label: "Facilities", node: viewTarget.facilityIds.length },
-                { label: "Projected Cost", node: formatCurrency(viewTarget.totalProposedCost) },
-                {
-                  label: "Deal Score",
-                  node: viewTarget.dealScore ? (
-                    <span className={`font-semibold ${scoreColor(viewTarget.dealScore.overall)}`}>
-                      {viewTarget.dealScore.overall}/100
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">— not yet computed</span>
-                  ),
-                },
-              ].map((row) => (
-                <div key={row.label}>
-                  <p className="text-muted-foreground">{row.label}</p>
-                  <p className="font-medium">{row.node}</p>
+            <div className="space-y-5">
+              {/* ── Top facts ───────────────────────────────── */}
+              <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+                {[
+                  { label: "Status", node: <StatusBadge status={viewTarget.status} /> },
+                  { label: "Created", node: new Date(viewTarget.createdAt).toLocaleDateString() },
+                  { label: "Items", node: viewTarget.itemCount },
+                  { label: "Facilities", node: viewTarget.facilityIds.length },
+                  { label: "Projected Cost", node: formatCurrency(viewTarget.totalProposedCost) },
+                  ...(viewTarget.contractLengthMonths != null
+                    ? [{ label: "Contract Length", node: `${viewTarget.contractLengthMonths} mo` }]
+                    : []),
+                  ...(viewTarget.projectedSpend != null
+                    ? [{ label: "Projected Spend", node: formatCurrency(viewTarget.projectedSpend) }]
+                    : []),
+                  ...(viewTarget.projectedVolume != null
+                    ? [{ label: "Projected Volume", node: viewTarget.projectedVolume.toLocaleString() }]
+                    : []),
+                  ...(viewTarget.marketShareCommitment != null
+                    ? [{ label: "Market Share", node: `${viewTarget.marketShareCommitment}%` }]
+                    : []),
+                  ...(viewTarget.gpoFee != null
+                    ? [{ label: "GPO Admin Fee", node: `${viewTarget.gpoFee}%` }]
+                    : []),
+                  {
+                    label: "Deal Score",
+                    node: viewTarget.dealScore ? (
+                      <span className={`font-semibold ${scoreColor(viewTarget.dealScore.overall)}`}>
+                        {viewTarget.dealScore.overall}/100
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">— not yet computed</span>
+                    ),
+                  },
+                ].map((row) => (
+                  <div key={row.label}>
+                    <p className="text-xs text-muted-foreground">{row.label}</p>
+                    <p className="font-medium">{row.node}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Product categories ─────────────────────── */}
+              {viewTarget.productCategories && viewTarget.productCategories.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Product Categories</p>
+                  <div className="flex flex-wrap gap-1">
+                    {viewTarget.productCategories.map((c) => (
+                      <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* ── Contract terms ────────────────────────── */}
+              {viewTarget.terms && viewTarget.terms.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Contract Terms</p>
+                  <div className="space-y-2">
+                    {viewTarget.terms.map((t, i) => (
+                      <div key={i} className="rounded-md border p-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">
+                            {t.name || t.termType.replace(/_/g, " ")}
+                          </span>
+                          <Badge variant="outline" className="text-[10px] capitalize">
+                            {t.termType.replace(/_/g, " ")}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
+                          {t.targetType && (
+                            <span>
+                              Target ({t.targetType}):{" "}
+                              <span className="text-foreground">
+                                {t.targetType === "spend"
+                                  ? formatCurrency(t.targetValue ?? 0)
+                                  : (t.targetValue ?? 0).toLocaleString()}
+                              </span>
+                            </span>
+                          )}
+                          {t.rebatePercent != null && (
+                            <span>
+                              Rebate:{" "}
+                              <span className="text-foreground">{t.rebatePercent}%</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── AI deal notes ──────────────────────────── */}
+              {viewTarget.aiNotes && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Deal Notes</p>
+                  <p className="rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
+                    {viewTarget.aiNotes}
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setViewTarget(null)}>

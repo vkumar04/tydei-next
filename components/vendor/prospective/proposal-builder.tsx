@@ -225,6 +225,30 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
           startDate: new Date().toISOString().split("T")[0],
           notes: newProposal.aiNotes || undefined,
         },
+        // Charles 2026-04-26 #67: carry through the rich builder
+        // fields so the proposal detail dialog can render the same
+        // info the builder collected.
+        productCategories:
+          newProposal.productCategories.length > 0
+            ? newProposal.productCategories
+            : newProposal.productCategory
+              ? [newProposal.productCategory]
+              : undefined,
+        projectedSpend: newProposal.projectedSpend || undefined,
+        projectedVolume: newProposal.projectedVolume || undefined,
+        marketShareCommitment: newProposal.marketShareCommitment || undefined,
+        gpoFee: newProposal.gpoFee || undefined,
+        aiNotes: newProposal.aiNotes || undefined,
+        proposalTerms:
+          newProposal.terms.length > 0
+            ? newProposal.terms.map((t) => ({
+                termType: t.termType,
+                name: t.name,
+                targetType: t.targetType,
+                targetValue: t.targetValue,
+                rebatePercent: t.rebatePercent,
+              }))
+            : undefined,
       })
       handleResetAndClose()
     } catch {

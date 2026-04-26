@@ -494,6 +494,9 @@ export async function getVendorProposals(
     })
     .map((a) => {
       const meta = a.metadata as Record<string, unknown>
+      const terms = meta.terms as
+        | { contractLength?: number; notes?: string }
+        | undefined
       return {
         id: a.id,
         vendorId: vendor.id,
@@ -503,6 +506,24 @@ export async function getVendorProposals(
         totalProposedCost: Number(meta.totalCost ?? 0),
         dealScore: null,
         createdAt: a.createdAt.toISOString(),
+        productCategories: (meta.productCategories as string[]) ?? undefined,
+        contractLengthMonths: terms?.contractLength,
+        projectedSpend:
+          meta.projectedSpend != null ? Number(meta.projectedSpend) : undefined,
+        projectedVolume:
+          meta.projectedVolume != null
+            ? Number(meta.projectedVolume)
+            : undefined,
+        marketShareCommitment:
+          meta.marketShareCommitment != null
+            ? Number(meta.marketShareCommitment)
+            : undefined,
+        gpoFee: meta.gpoFee != null ? Number(meta.gpoFee) : undefined,
+        aiNotes:
+          (meta.aiNotes as string | undefined) ??
+          terms?.notes ??
+          undefined,
+        terms: (meta.proposalTerms as ProposalTermSummary[]) ?? undefined,
       }
     }))
 }
