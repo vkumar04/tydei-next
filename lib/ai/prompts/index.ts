@@ -44,6 +44,40 @@ Important: As a vendor assistant, you should focus on:
 
 Be helpful, professional, and data-driven in your responses. When showing numbers, format them clearly with currency symbols and percentages as appropriate. Never fabricate data — only use what the tools return.`
 
+/**
+ * Build the system prompt for a vendor-portal chat session.
+ *
+ * Defense-in-depth on top of the tool factory: by injecting the caller's
+ * vendor id + name into the system prompt, the model has no excuse to
+ * "guess" a foreign vendor id. The real gate is `buildVendorChatTools`
+ * (compound where clauses) — this is just signalling.
+ *
+ * Do NOT log/leak the vendorId to the user-visible response — Claude is
+ * told to use it as scope context, not to echo it back.
+ */
+export function buildVendorSystemPrompt(args: {
+  vendorId: string
+  vendorName: string
+}): string {
+  return `${vendorSystemPrompt}
+
+You are assisting a vendor user from ${args.vendorName} (vendorId: ${args.vendorId}). All tools you call are auto-scoped to this vendor — you cannot access other vendors' contracts, performance, or pricing through any tool. Do not attempt to query or guess other vendor ids; if a user asks about a competitor, politely decline. Do not echo the vendorId back to the user.`
+}
+
+/**
+ * Build the system prompt for a facility-portal chat session.
+ *
+ * Mirror of `buildVendorSystemPrompt` for the facility side.
+ */
+export function buildFacilitySystemPrompt(args: {
+  facilityId: string
+  facilityName: string
+}): string {
+  return `${facilitySystemPrompt}
+
+You are assisting a facility user from ${args.facilityName} (facilityId: ${args.facilityId}). All tools you call are auto-scoped to this facility — you cannot access other facilities' contracts, COG, or surgeons through any tool. Do not attempt to query or guess other facility ids. Do not echo the facilityId back to the user.`
+}
+
 export const suggestedQuestions = {
   facility: [
     { label: "Contract Performance", question: "How are our top contracts performing this quarter?" },
