@@ -9,6 +9,7 @@ import type { TermFormValues } from "@/lib/validators/contract-terms"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import { normalizeAIRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { toast } from "sonner"
 
 import {
@@ -89,8 +90,14 @@ export function VendorContractSubmission({
 
   const [contractFile, setContractFile] = useState<File | null>(null)
   const [contractS3Key, setContractS3Key] = useState<string | null>(null)
-  const [isExtracting, setIsExtracting] = useState(false)
-  const [extractionProgress, setExtractionProgress] = useState(0)
+  // Charles 2026-04-26: vendor PDF tab now uses the real AIExtractDialog
+  // (mirrors facility-side `new-contract-client.tsx`). The stub regex /
+  // setTimeout simulator was deleted — it never actually parsed the PDF
+  // and Charles flagged "Vendor side AI not picking this information up
+  // off the PDF". `droppedFile` is what we feed to AIExtractDialog as
+  // `initialFile`; the dialog auto-extracts on open.
+  const [aiExtractOpen, setAiExtractOpen] = useState(false)
+  const [droppedFile, setDroppedFile] = useState<File | null>(null)
   const [extractionComplete, setExtractionComplete] = useState(false)
 
   const [additionalDocs, setAdditionalDocs] = useState<{ file: File; type: string; name: string }[]>([])
@@ -116,99 +123,17 @@ export function VendorContractSubmission({
     return key
   }, [])
 
-  const handlePDFUpload = useCallback(
-    async (file: File) => {
-      setContractFile(file)
-      setIsExtracting(true)
-      setExtractionProgress(0)
-
-      // Upload the PDF to S3 for document storage
-      let s3Key: string | undefined
-      try {
-        const { uploadUrl, key } = await getUploadUrl({
-          fileName: file.name,
-          contentType: file.type,
-          folder: "contracts",
-        })
-        await fetch(uploadUrl, {
-          method: "PUT",
-          body: file,
-          headers: { "Content-Type": file.type },
-        })
-        s3Key = key
-        setContractS3Key(key)
-      } catch {
-        // S3 upload failed — continue with extraction but without storage
-      }
-
-      const filename = (file.name || "").replace(/\.[^/.]+$/, "")
-
-      // Try to parse dates from filename
-      let extractedEffective: Date | undefined
-      let extractedExpiration: Date | undefined
-      const dateMatch = filename.match(/(\d{2})[-/]?(\d{2})[-/]?(\d{4})/)
-      if (dateMatch) {
-        const month = parseInt(dateMatch[1]) - 1
-        const day = parseInt(dateMatch[2])
-        const year = parseInt(dateMatch[3])
-        extractedEffective = new Date(year, month, day)
-        extractedExpiration = new Date(year + 1, month, day)
-      }
-
-      // Clean up contract name
-      let extractedName = filename
-        .replace(/[-_]/g, " ")
-        .replace(/\d{6,8}/g, "")
-        .replace(/\s+/g, " ")
-        .trim()
-      if (extractedName.length < 5) {
-        extractedName = `${vendorName} Contract ${new Date().getFullYear()}`
-      }
-
-      // Detect contract type from filename
-      const lower = filename.toLowerCase()
-      let extractedType = "usage"
-      if (lower.includes("pricing") || lower.includes("price"))
-        extractedType = "pricing_only"
-      else if (lower.includes("capital") || lower.includes("equipment"))
-        extractedType = "capital"
-      else if (lower.includes("gpo") || lower.includes("group"))
-        extractedType = "grouped"
-
-      // Simulate extraction progress
-      const interval = setInterval(() => {
-        setExtractionProgress((prev) => Math.min(prev + 10, 90))
-      }, 200)
-      await new Promise((r) => setTimeout(r, 2000))
-      clearInterval(interval)
-      setExtractionProgress(100)
-      setExtractionComplete(true)
-      setIsExtracting(false)
-
-      // Auto-fill form
-      setContractName(extractedName)
-      setContractType(extractedType)
-      if (extractedEffective) setEffectiveDate(extractedEffective)
-      if (extractedExpiration) setExpirationDate(extractedExpiration)
-
-      // Auto-select first facility if none selected
-      if (!facilityId && facilities.length > 0) {
-        setFacilityId(facilities[0].id)
-      }
-
-      // Store as uploaded doc if S3 upload succeeded
-      if (s3Key) {
-        setUploadedDocs((prev) => {
-          // Avoid duplicates
-          if (prev.some((d) => d.url === s3Key)) return prev
-          return [...prev, { name: file.name, url: s3Key }]
-        })
-      }
-
-      toast.success(`Contract data extracted: "${extractedName}"`)
-    },
-    [vendorName, facilityId, facilities]
-  )
+  // Charles 2026-04-26: vendor PDF tab now mirrors facility-side flow:
+  // capturing the dropped file opens AIExtractDialog with initialFile so
+  // it auto-runs the streaming /api/ai/extract-contract/stream pipeline.
+  // The dialog calls back into handleAIExtract on accept which fills the
+  // shared form state. No more filename-regex stub.
+  const handlePDFUpload = useCallback((file: File) => {
+    setContractFile(file)
+    setExtractionComplete(false)
+    setDroppedFile(file)
+    setAiExtractOpen(true)
+  }, [])
 
   const handleClearPDF = useCallback(() => {
     // Remove the contract PDF from uploaded docs if it was stored
@@ -217,8 +142,8 @@ export function VendorContractSubmission({
     }
     setContractFile(null)
     setContractS3Key(null)
+    setDroppedFile(null)
     setExtractionComplete(false)
-    setExtractionProgress(0)
   }, [contractS3Key])
 
   const handleMultiFacilityChange = useCallback((checked: boolean) => {
@@ -381,6 +306,9 @@ export function VendorContractSubmission({
         })
       }
     }
+    // Mark the PDF tab as having a successful extraction so the green
+    // checkmark renders alongside the dialog close.
+    setExtractionComplete(true)
 
     setContractName(data.contractName)
     setContractType(data.contractType)
@@ -737,12 +665,25 @@ export function VendorContractSubmission({
 
   return (
     <div className="space-y-6">
+      {/* Charles 2026-04-26: shared AIExtractDialog (same component the
+          facility-side `new-contract-client.tsx` uses) drives the PDF
+          tab. `initialFile` makes the dialog auto-run extraction the
+          moment the vendor drops a PDF; the EntryModeTabs PDF tab just
+          captures the file. */}
+      <AIExtractDialog
+        open={aiExtractOpen}
+        onOpenChange={(o) => {
+          setAiExtractOpen(o)
+          if (!o) setDroppedFile(null)
+        }}
+        onExtracted={handleAIExtract}
+        initialFile={droppedFile}
+      />
+
       <EntryModeTabs
         entryMode={entryMode}
         onEntryModeChange={setEntryMode}
         contractFile={contractFile}
-        isExtracting={isExtracting}
-        extractionProgress={extractionProgress}
         extractionComplete={extractionComplete}
         onPDFUpload={handlePDFUpload}
         onClearPDF={handleClearPDF}

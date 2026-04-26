@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Card,
@@ -19,7 +18,6 @@ import {
   Sparkles,
   CheckCircle2,
   Trash2,
-  Loader2,
   Plus,
   X,
 } from "lucide-react"
@@ -39,9 +37,14 @@ export interface EntryModeTabsProps {
   entryMode: "ai" | "pdf" | "manual"
   onEntryModeChange: (mode: "ai" | "pdf" | "manual") => void
   contractFile: File | null
-  isExtracting: boolean
-  extractionProgress: number
   extractionComplete: boolean
+  /**
+   * Called when the user drops/selects a PDF in the PDF tab. The parent
+   * is expected to open AIExtractDialog with `initialFile=<this file>`
+   * so the streaming extractor runs against the real document — see
+   * `vendor-contract-submission.tsx`. This component does NOT run any
+   * extraction itself.
+   */
   onPDFUpload: (file: File) => void
   onClearPDF: () => void
   onAIExtracted?: (data: ExtractedContractData, s3Key?: string, fileName?: string) => void
@@ -59,8 +62,6 @@ export function EntryModeTabs({
   entryMode,
   onEntryModeChange,
   contractFile,
-  isExtracting,
-  extractionProgress,
   extractionComplete,
   onPDFUpload,
   onClearPDF,
@@ -148,18 +149,6 @@ export function EntryModeTabs({
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                  {isExtracting && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Extracting contract data...
-                      </div>
-                      <Progress
-                        value={extractionProgress}
-                        className="h-2 max-w-xs mx-auto"
-                      />
-                    </div>
-                  )}
                   {extractionComplete && (
                     <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
                       <CheckCircle2 className="h-5 w-5" />
