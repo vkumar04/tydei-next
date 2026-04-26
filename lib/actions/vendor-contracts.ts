@@ -105,11 +105,16 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
     prisma.rebate.findMany({
       where: { contractId: id },
       select: {
+        id: true,
         rebateEarned: true,
         rebateCollected: true,
+        payPeriodStart: true,
         payPeriodEnd: true,
         collectionDate: true,
+        tierAchieved: true,
+        notes: true,
       },
+      orderBy: { payPeriodEnd: "desc" },
     }),
   ])
   const periodSpend = Number(spendAgg._sum.totalSpend ?? 0)
@@ -120,5 +125,5 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
     rebateCollected: sumCollectedRebates(rebateRows),
   }
 
-  return serialize({ ...contract, lifetimeTotals })
+  return serialize({ ...contract, lifetimeTotals, rebates: rebateRows })
 }

@@ -353,12 +353,7 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
               <CardTitle className="text-base">Recent Transactions</CardTitle>
             </CardHeader>
             <CardContent>
-              {(!contract.periods || contract.periods.length === 0) ? (
-                <div className="text-center py-8">
-                  <Receipt className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No transaction data available yet</p>
-                </div>
-              ) : (
+              {contract.periods && contract.periods.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -410,6 +405,63 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
                     ))}
                   </TableBody>
                 </Table>
+              ) : contract.rebates && contract.rebates.length > 0 ? (
+                /* Charles 2026-04-26 #71: ContractPeriod is sparse on
+                   prod (Stryker at Lighthouse has $25K rebate earned but
+                   0 ContractPeriod rows). Fall back to the canonical
+                   Rebate ledger so vendors see the same earnings the
+                   header card sums. */
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Pay Period</TableHead>
+                      <TableHead>Rebate Earned</TableHead>
+                      <TableHead>Collected</TableHead>
+                      <TableHead>Tier</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contract.rebates.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>
+                          <span className="text-sm">
+                            {formatDateRange(r.payPeriodStart, r.payPeriodEnd)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                            {formatCurrency(Number(r.rebateEarned))}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {r.collectionDate
+                              ? formatCurrency(Number(r.rebateCollected))
+                              : <span className="text-muted-foreground">Pending</span>}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {r.tierAchieved ? (
+                            <Badge variant="outline">Tier {r.tierAchieved}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">--</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {r.notes ?? "--"}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8">
+                  <Receipt className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No transaction data available yet</p>
+                </div>
               )}
             </CardContent>
           </Card>
