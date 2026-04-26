@@ -21,7 +21,7 @@ import {
 import { Gauge } from "lucide-react"
 import { formatCurrency } from "@/lib/formatting"
 import { chartTooltipStyle } from "@/lib/chart-config"
-import { RecommendationBadge, generateDealScore, scoreColor } from "./shared"
+import { RecommendationBadge, scoreColor } from "./shared"
 import type { VendorProposal } from "@/lib/actions/prospective"
 
 const RECOMMENDATION_BLURB: Record<string, string> = {
@@ -35,12 +35,18 @@ const RECOMMENDATION_BLURB: Record<string, string> = {
 export function DealScorerSection({ proposals }: { proposals: VendorProposal[] }) {
   const [selectedProposalId, setSelectedProposalId] = useState<string>("")
 
-  const score = useMemo(() => {
-    if (!selectedProposalId) return null
-    const proposal = proposals.find((p) => p.id === selectedProposalId)
-    if (!proposal) return null
-    return proposal.dealScore ?? generateDealScore(proposal.id)
-  }, [selectedProposalId, proposals])
+  const selectedProposal = useMemo(
+    () => proposals.find((p) => p.id === selectedProposalId) ?? null,
+    [selectedProposalId, proposals],
+  )
+
+  // Real `dealScore` is attached server-side by the Deal Scorer pipeline
+  // (see `analyzeProposal` / `scoreDeal` in lib/actions/prospective.ts). The
+  // current `getVendorProposals` action returns `dealScore: null` for stored
+  // proposals because we don't yet persist the score on the proposal row.
+  // Until that pipeline runs and writes back, this stays null and we render
+  // an explicit empty state instead of a fabricated number.
+  const score = selectedProposal?.dealScore ?? null
 
   const radarData = useMemo(() => {
     if (!score) return []
@@ -89,6 +95,23 @@ export function DealScorerSection({ proposals }: { proposals: VendorProposal[] }
           </Select>
         </CardContent>
       </Card>
+
+      {selectedProposal && !score && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Gauge className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+            <p className="font-medium text-muted-foreground">
+              Score not yet computed
+            </p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+              Deal scoring requires running this proposal through the Deal
+              Scorer pipeline (analyze the proposed pricing against the
+              facility's COG and contract data). That pipeline is not yet
+              enabled in this build, so no fabricated score is shown.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {score && (
         <div className="grid gap-4 lg:grid-cols-2">

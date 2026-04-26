@@ -348,6 +348,87 @@ export async function deleteProposal(id: string): Promise<void> {
   await prisma.alert.delete({ where: { id: alert.id } })
 }
 
+// ─── Vendor: Get Benchmarks ─────────────────────────────────────
+
+export interface VendorBenchmarkRow {
+  id: string
+  productName: string
+  itemNumber: string
+  category: string
+  nationalAvgPrice: number
+  percentile25: number
+  percentile50: number
+  percentile75: number
+  minPrice: number
+  maxPrice: number
+  sampleSize: number
+  source: string
+  dataDate: string | null
+}
+
+/**
+ * Returns benchmark rows scoped to the calling vendor's `vendorItemNo`s.
+ * Pulls from `ProductBenchmark` rows tagged with the vendor's id, plus
+ * national-benchmark rows that match item numbers the vendor has actually
+ * sold (i.e. appear in COGRecord under this vendorId). Vendor scoping is
+ * enforced via `requireVendor()` and the `vendorId` filter in both queries.
+ */
+export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
+  const { vendor } = await requireVendor()
+
+  // 1) Direct vendor benchmarks
+  const direct = await prisma.productBenchmark.findMany({
+    where: { vendorId: vendor.id },
+    orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
+  })
+
+  // 2) National benchmarks (no vendorId) that match this vendor's catalog
+  // (item numbers seen in COGRecord under this vendor).
+  const cogItems = await prisma.cOGRecord.findMany({
+    where: { vendorId: vendor.id },
+    select: { vendorItemNo: true },
+    distinct: ["vendorItemNo"],
+    take: 500,
+  })
+  const cogItemNos = cogItems
+    .map((r) => r.vendorItemNo)
+    .filter((n): n is string => typeof n === "string" && n.length > 0)
+
+  const national =
+    cogItemNos.length > 0
+      ? await prisma.productBenchmark.findMany({
+          where: { vendorId: null, vendorItemNo: { in: cogItemNos } },
+          orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
+        })
+      : []
+
+  const seen = new Set<string>()
+  const all = [...direct, ...national].filter((b) => {
+    const k = `${b.vendorItemNo}|${b.source}`
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+
+  return serialize(
+    all.map((b) => ({
+      id: b.id,
+      productName: b.description ?? b.vendorItemNo,
+      itemNumber: b.vendorItemNo,
+      category: b.category ?? "Uncategorized",
+      nationalAvgPrice: Number(b.nationalAvgPrice ?? 0),
+      percentile25: Number(b.percentile25 ?? 0),
+      percentile50: Number(b.percentile50 ?? 0),
+      percentile75: Number(b.percentile75 ?? 0),
+      minPrice: Number(b.minPrice ?? 0),
+      maxPrice: Number(b.maxPrice ?? 0),
+      sampleSize: Number(b.sampleSize ?? 0),
+      source: b.source,
+      dataDate: b.dataDate ? b.dataDate.toISOString().slice(0, 10) : null,
+    })),
+  )
+}
+
 // ─── Vendor: Get Proposals ──────────────────────────────────────
 
 export async function getVendorProposals(

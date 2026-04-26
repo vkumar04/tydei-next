@@ -9,6 +9,7 @@ import {
   createProposal,
   deleteProposal,
   getVendorProposals,
+  getVendorBenchmarks,
 } from "@/lib/actions/prospective"
 import type { ProposedPricingItem } from "@/lib/actions/prospective"
 import { toast } from "sonner"
@@ -60,6 +61,14 @@ export function useVendorProposals(vendorId: string) {
   return useQuery({
     queryKey: queryKeys.prospective.vendorProposals(vendorId),
     queryFn: () => getVendorProposals(vendorId),
+  })
+}
+
+export function useVendorBenchmarks(vendorId: string) {
+  return useQuery({
+    queryKey: ["prospective", "vendorBenchmarks", vendorId],
+    queryFn: () => getVendorBenchmarks(),
+    enabled: !!vendorId,
   })
 }
 

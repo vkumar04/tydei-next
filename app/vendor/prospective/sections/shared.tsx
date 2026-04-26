@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge"
-import type { DealScore } from "@/lib/actions/prospective"
 
 // ─── Status badge configuration ────────────────────────────────
 
@@ -60,35 +59,3 @@ export function scoreColor(score: number): string {
   return "text-red-600 dark:text-red-400"
 }
 
-// ─── Deterministic mock deal score ─────────────────────────────
-
-/**
- * Seeded PRNG score so each proposal has a stable set of dimension
- * scores without persisting them. Used when the server hasn't
- * attached a real dealScore yet.
- */
-export function generateDealScore(seed: string): DealScore {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0
-  const r = (min: number, max: number) => {
-    h = (h * 16807 + 12345) & 0x7fffffff
-    return min + (h % (max - min + 1))
-  }
-  const dims = {
-    financialValue: r(45, 95),
-    rebateEfficiency: r(30, 90),
-    pricingCompetitiveness: r(40, 95),
-    marketShareAlignment: r(35, 85),
-    complianceLikelihood: r(50, 95),
-  }
-  const overall = Math.round(
-    dims.financialValue * 0.3 +
-      dims.rebateEfficiency * 0.15 +
-      dims.pricingCompetitiveness * 0.25 +
-      dims.marketShareAlignment * 0.15 +
-      dims.complianceLikelihood * 0.15,
-  )
-  const recommendation: DealScore["recommendation"] =
-    overall >= 80 ? "strong_accept" : overall >= 65 ? "accept" : overall < 40 ? "reject" : "negotiate"
-  return { overall, ...dims, recommendation }
-}
