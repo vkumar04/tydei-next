@@ -127,8 +127,9 @@ export function AnalysisCashflowChart({
               />
               <Bar
                 dataKey="netCashflow"
-                name="Annual net"
+                name="Annual net (red=outflow, green=inflow)"
                 radius={[3, 3, 0, 0]}
+                fill={POSITIVE}
               >
                 {chartData.map((d, i) => (
                   <Cell
