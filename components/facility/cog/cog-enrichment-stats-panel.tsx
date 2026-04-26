@@ -76,6 +76,33 @@ export function CogEnrichmentStatsPanel({
   const unmatched = data.offContractCount
   const onContractPct = pct(matched, totalRows)
 
+  // Friendly empty state — Charles 2026-04-26: a row of "0 / 0 / 0
+  // / 0%" with an empty progress bar reads as broken when the
+  // facility hasn't loaded any COG yet. Replace with a one-line
+  // pointer so users know what to do next instead of staring at
+  // zeros.
+  if (totalRows === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">
+            Enrichment Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+            <Database className="h-8 w-8 text-muted-foreground/60" />
+            <p className="text-sm font-medium">No COG records yet</p>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Import a COG file (CSV) or wait for the next sync to see match
+              coverage and on-contract %.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">

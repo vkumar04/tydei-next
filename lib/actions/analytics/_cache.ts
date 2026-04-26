@@ -9,19 +9,25 @@ import { unstable_cache, updateTag } from "next/cache"
  * trims the database load substantially while staying fresh enough
  * for the next user navigation. Writes (contract update, COG import,
  * rebate close, etc.) call the matching invalidator below.
+ *
+ * Implementation note: every export from a `"use server"` file must
+ * be `async`. The tag string-builders are private to this module
+ * and inlined into the async helpers, not exported, to satisfy that
+ * constraint. Callers shouldn't need raw tags — invalidate via the
+ * helpers below.
  */
 
-// ─── Tag constants ───────────────────────────────────────────────
+// ─── Tag builders (private, sync) ────────────────────────────────
 
-export function contractAnalyticsTag(contractId: string): string {
+function contractAnalyticsTag(contractId: string): string {
   return `analytics:contract:${contractId}`
 }
 
-export function facilityAnalyticsTag(facilityId: string): string {
+function facilityAnalyticsTag(facilityId: string): string {
   return `analytics:facility:${facilityId}`
 }
 
-export function vendorAnalyticsTag(vendorId: string): string {
+function vendorAnalyticsTag(vendorId: string): string {
   return `analytics:vendor:${vendorId}`
 }
 
@@ -30,13 +36,6 @@ export function vendorAnalyticsTag(vendorId: string): string {
 /**
  * Cache a per-contract analytics read for `revalidateSeconds` (default
  * 600 = 10 minutes) and tag it so writes can invalidate.
- *
- * Usage in an action:
- *   return cacheContractAnalytics(
- *     contractId,
- *     "compositeScore",
- *     () => _impl(contractId),
- *   )
  */
 export async function cacheContractAnalytics<T>(
   contractId: string,
