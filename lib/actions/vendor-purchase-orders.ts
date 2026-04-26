@@ -198,6 +198,23 @@ export async function createVendorPurchaseOrder(input: CreateVendorPOInput) {
     if (input.facilityId && contract.facilityId !== input.facilityId) {
       throw new Error("Contract belongs to a different facility.")
     }
+  } else {
+    // 2026-04-26 (V1-M2): off-contract path was unguarded — vendors
+    // could POST a PO at any facilityId without a contract relationship.
+    // Require evidence of a relationship: an existing contract OR a
+    // prior PO at the same facility. If neither exists, reject.
+    const hasRelationship =
+      (await prisma.contract.count({
+        where: { vendorId: vendor.id, facilityId: input.facilityId },
+      })) > 0 ||
+      (await prisma.purchaseOrder.count({
+        where: { vendorId: vendor.id, facilityId: input.facilityId },
+      })) > 0
+    if (!hasRelationship) {
+      throw new Error(
+        "No relationship with this facility — off-contract POs are only allowed at facilities you already serve.",
+      )
+    }
   }
 
   const totalCost = input.lineItems.reduce(
