@@ -239,14 +239,14 @@ export function AIExtractDialog({
             <Sparkles className="size-5" /> AI Contract Extraction
           </DialogTitle>
           <DialogDescription>
-            Upload a PDF, DOCX, or TXT document to auto-fill the contract fields.
+            Upload a PDF to auto-fill the contract fields.
           </DialogDescription>
         </DialogHeader>
 
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.txt,.docx"
+          accept=".pdf"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]
@@ -260,7 +260,7 @@ export function AIExtractDialog({
               Upload a contract document and AI will extract the key fields
             </p>
             <Button onClick={() => inputRef.current?.click()}>
-              <Upload className="size-4" /> Upload Contract (PDF / DOCX / TXT)
+              <Upload className="size-4" /> Upload Contract (PDF)
             </Button>
 
             <Collapsible
