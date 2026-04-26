@@ -19,6 +19,17 @@ import {
   ContractCapitalEntry,
   type ContractCapital,
 } from "@/components/contracts/contract-capital-entry"
+import {
+  CapitalLineItemsEditor,
+  makeEmptyCapitalLineItem,
+  type CapitalLineItemDraft,
+} from "@/components/contracts/capital-line-items-editor"
+import {
+  getCapitalLineItems,
+  createCapitalLineItem,
+  updateCapitalLineItem,
+  deleteCapitalLineItem,
+} from "@/lib/actions/contracts/capital-line-items"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -75,6 +86,12 @@ export function EditContractClient({
     paymentCadence: null,
     amortizationShape: "symmetrical",
   })
+  // Charles audit suggestion #4 (v0-port): per-asset capital line items.
+  // Loaded from getCapitalLineItems on mount; persisted incrementally
+  // via createCapitalLineItem / updateCapitalLineItem /
+  // deleteCapitalLineItem when the user saves the contract.
+  const [capitalItems, setCapitalItems] = useState<CapitalLineItemDraft[]>([])
+  const initialCapitalItemsRef = useRef<CapitalLineItemDraft[]>([])
 
   // Initialize form when contract data loads
   useEffect(() => {
@@ -184,6 +201,35 @@ export function EditContractClient({
       )
 
       setInitialized(true)
+
+      // Charles audit suggestion #4 (v0-port): hydrate capital line
+      // items if any exist; left empty when this contract uses the
+      // legacy single-item shape (backward compat — display layer
+      // synthesizes one row from contract-level fields when needed).
+      void getCapitalLineItems(contract.id).then((rows) => {
+        const drafts: CapitalLineItemDraft[] = rows.map((r) => ({
+          id: r.id,
+          description: r.description,
+          itemNumber: r.itemNumber ?? "",
+          serialNumber: r.serialNumber ?? "",
+          contractTotal: Number(r.contractTotal),
+          initialSales: Number(r.initialSales ?? 0),
+          interestRatePercent:
+            r.interestRate != null
+              ? Math.round(Number(r.interestRate) * 10000) / 100
+              : 0,
+          termMonths: r.termMonths ?? 60,
+          paymentType: (r.paymentType === "variable"
+            ? "variable"
+            : "fixed") as "fixed" | "variable",
+          paymentCadence: ((r.paymentCadence === "quarterly" ||
+          r.paymentCadence === "annual"
+            ? r.paymentCadence
+            : "monthly") as "monthly" | "quarterly" | "annual"),
+        }))
+        setCapitalItems(drafts)
+        initialCapitalItemsRef.current = drafts
+      })
     }
   }, [contract, initialized, form, setTerms])
 
@@ -366,6 +412,44 @@ export function EditContractClient({
         }),
       ])
 
+      // Charles audit suggestion #4 (v0-port): persist capital line
+      // item changes. Diff against the snapshot loaded on init:
+      //   - new items (no `id`) → createCapitalLineItem
+      //   - existing items still present → updateCapitalLineItem
+      //   - missing existing ids → deleteCapitalLineItem
+      const initialItems = initialCapitalItemsRef.current
+      const currentIds = new Set(
+        capitalItems.filter((i) => i.id).map((i) => i.id as string),
+      )
+      // Deletes
+      for (const old of initialItems) {
+        if (old.id && !currentIds.has(old.id)) {
+          await deleteCapitalLineItem(old.id)
+        }
+      }
+      // Creates + updates
+      for (const it of capitalItems) {
+        const payload = {
+          description: it.description,
+          itemNumber: it.itemNumber || null,
+          serialNumber: it.serialNumber || null,
+          contractTotal: it.contractTotal,
+          initialSales: it.initialSales,
+          interestRate: Math.min(
+            1,
+            Math.max(0, it.interestRatePercent / 100),
+          ),
+          termMonths: it.termMonths,
+          paymentType: it.paymentType,
+          paymentCadence: it.paymentCadence,
+        }
+        if (it.id) {
+          await updateCapitalLineItem(it.id, payload)
+        } else {
+          await createCapitalLineItem(contractId, payload)
+        }
+      }
+
       router.push(`/dashboard/contracts/${contractId}`)
     } catch (err) {
       const message =
@@ -452,19 +536,30 @@ export function EditContractClient({
               (and any future contractType-dependent behavior) sees a
               stale value. */}
           {form.watch("contractType") === "tie_in" && (
-            <ContractCapitalEntry
-              capital={capital}
-              onChange={(patch) =>
-                setCapital((prev) => ({ ...prev, ...patch }))
-              }
-              effectiveDate={
-                contract
-                  ? new Date(contract.effectiveDate)
-                      .toISOString()
-                      .split("T")[0]
-                  : null
-              }
-            />
+            <>
+              <ContractCapitalEntry
+                capital={capital}
+                onChange={(patch) =>
+                  setCapital((prev) => ({ ...prev, ...patch }))
+                }
+                effectiveDate={
+                  contract
+                    ? new Date(contract.effectiveDate)
+                        .toISOString()
+                        .split("T")[0]
+                    : null
+                }
+              />
+              {/* Charles audit suggestion #4 (v0-port): per-asset
+                  capital line items. Add to model multi-equipment
+                  financing (e.g. MRI + service warranty in one deal).
+                  Empty by default — vendor/facility opts in by clicking
+                  "Add Item". */}
+              <CapitalLineItemsEditor
+                items={capitalItems}
+                onChange={setCapitalItems}
+              />
+            </>
           )}
           <ContractTermsEntry
             terms={terms}
