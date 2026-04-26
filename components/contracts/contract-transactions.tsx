@@ -101,14 +101,27 @@ type TransactionType = "rebate" | "credit" | "payment"
 type RebateKind = "earned" | "collected"
 
 function getCollectionStatus(row: PeriodRow): "collected" | "pending" | "overdue" {
-  // A Rebate row with a collectionDate is, by definition, collected —
-  // it's the same rule the detail page's "Rebates Collected" card uses.
+  // 2026-04-26 (F2-M1): the canonical "Rebates Collected" rule (CLAUDE.md
+  // invariants: sumCollectedRebates) gates ONLY on collectionDate. The
+  // previous fallback "rebateCollected >= rebateEarned" returned "collected"
+  // even on rows with collectionDate=null, contradicting the header card
+  // and the Transactions summary card. We keep collectionDate as the sole
+  // source of truth.
   if (row.collectionDate) return "collected"
   const now = new Date()
   const end = new Date(row.periodEnd)
-  if (row.rebateCollected >= row.rebateEarned && row.rebateEarned > 0) return "collected"
-  if (end < now && row.rebateCollected < row.rebateEarned) return "overdue"
+  if (end < now && row.rebateEarned > 0) return "overdue"
   return "pending"
+}
+
+/**
+ * Per-row "Collected" amount — gates on collectionDate per the canonical
+ * sumCollectedRebates rule. Without this, rows with rebateCollected populated
+ * but collectionDate=null silently inflated the per-row column while the
+ * summary card (which DOES gate) read $0. Same drift the F2-M1 audit caught.
+ */
+function rebateCollectedForRow(row: PeriodRow): number {
+  return row.collectionDate ? row.rebateCollected : 0
 }
 
 const collectionStatusConfig: Record<
@@ -327,7 +340,7 @@ function TransactionDialog({
                   </SelectItem>
                   {earnedRows.map((r) => {
                     const outstanding = Math.max(
-                      r.rebateEarned - r.rebateCollected,
+                      r.rebateEarned - rebateCollectedForRow(r),
                       0,
                     )
                     return (
@@ -706,11 +719,12 @@ function TransactionTable({
         <TableBody>
           {filtered.map((row) => {
             // Charles W1.W-C1: Outstanding = max(Earned − Collected, 0)
-            // on a single ledger row. Collections update the existing
-            // earned row in place (see `createContractTransaction`), so
-            // these three columns describe one period's full state.
+            // on a single ledger row. F2-M1 fix: route Collected through
+            // the canonical collectionDate gate so the per-row + summary
+            // numbers agree.
+            const collectedForDisplay = rebateCollectedForRow(row)
             const outstanding = Math.max(
-              row.rebateEarned - row.rebateCollected,
+              row.rebateEarned - collectedForDisplay,
               0,
             )
             const collection = getCollectionStatus(row)
@@ -749,7 +763,7 @@ function TransactionTable({
                   {formatCurrency(row.rebateEarned)}
                 </TableCell>
                 <TableCell className="text-right text-blue-600">
-                  {formatCurrency(row.rebateCollected)}
+                  {formatCurrency(collectedForDisplay)}
                 </TableCell>
                 <TableCell
                   className={`text-right ${
@@ -953,8 +967,14 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
   // and replaces the old "Total Payments" card (which was hardcoded $0
   // post-W1.P and now lives in the credit/payment ledger, out of scope
   // for this card).
+  // F2-M1: route Collected through the canonical collectionDate gate
+  // so the summary matches the per-row column (which also uses
+  // rebateCollectedForRow). Pre-fix the summary undercounted Outstanding
+  // when rebateCollected was populated without collectionDate.
   const totalOutstanding = rows.reduce(
-    (acc, r) => acc + Math.max(r.rebateEarned - r.rebateCollected, 0),
+    (acc, r) =>
+      acc +
+      Math.max(r.rebateEarned - rebateCollectedForRow(r), 0),
     0,
   )
 
