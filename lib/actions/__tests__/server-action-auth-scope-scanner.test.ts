@@ -306,7 +306,7 @@ const BASELINE_HITS = new Set<string>([
   // payor-contracts.ts: admin-managed shared resource
   "lib/actions/payor-contracts.ts:91",
   // pending-contracts.ts: post-mutation re-read after gated approve
-  "lib/actions/pending-contracts.ts:798",
+  "lib/actions/pending-contracts.ts:869",
   // pricing-files.ts: post-fetch contract ownership probe
   "lib/actions/pricing-files.ts:232",
   "lib/actions/pricing-files.ts:361",

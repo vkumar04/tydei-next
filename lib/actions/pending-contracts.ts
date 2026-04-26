@@ -135,6 +135,79 @@ function extractPendingPricingItems(
  *
  * Defaults mirror createTermSchema in lib/validators/contract-terms.ts.
  */
+/**
+ * Charles audit suggestion #4 (v0-port): drain pending capital into
+ * one or more ContractCapitalLineItem nested-create payloads. JSON
+ * multi-item shape wins; single-block legacy capital is the fallback.
+ */
+function buildCapitalLineItemsFromPending(pending: {
+  contractName: string
+  capitalLineItems?: Prisma.JsonValue | null
+  capitalCost: Prisma.Decimal | null
+  downPayment: Prisma.Decimal | null
+  interestRate: Prisma.Decimal | null
+  termMonths: number | null
+  paymentCadence: string | null
+  amortizationShape: string | null
+}): Array<{
+  description: string
+  itemNumber?: string | null
+  serialNumber?: string | null
+  contractTotal: Prisma.Decimal | number
+  initialSales: Prisma.Decimal | number
+  interestRate: Prisma.Decimal | number
+  termMonths: number
+  paymentType: string
+  paymentCadence: string
+}> {
+  // (a) JSON multi-item path.
+  const raw = pending.capitalLineItems
+  if (Array.isArray(raw) && raw.length > 0) {
+    const items: Array<Record<string, unknown>> = []
+    for (const r of raw) {
+      if (r === null || typeof r !== "object" || Array.isArray(r)) continue
+      items.push(r as Record<string, unknown>)
+    }
+    return items.map((r) => {
+      const cadence = r.paymentCadence
+      return {
+        description:
+          typeof r.description === "string" && r.description.trim().length > 0
+            ? r.description
+            : pending.contractName,
+        itemNumber:
+          typeof r.itemNumber === "string" ? r.itemNumber : null,
+        serialNumber:
+          typeof r.serialNumber === "string" ? r.serialNumber : null,
+        contractTotal: Number(r.contractTotal ?? 0),
+        initialSales: Number(r.initialSales ?? 0),
+        interestRate: Number(r.interestRate ?? 0),
+        termMonths: Number(r.termMonths ?? 60),
+        paymentType:
+          r.paymentType === "variable" ? "variable" : "fixed",
+        paymentCadence:
+          cadence === "quarterly" || cadence === "annual"
+            ? (cadence as string)
+            : "monthly",
+      }
+    })
+  }
+  // (b) Single-block fallback.
+  if (pending.capitalCost == null) return []
+  return [
+    {
+      description: pending.contractName,
+      contractTotal: pending.capitalCost,
+      initialSales: pending.downPayment ?? 0,
+      interestRate: pending.interestRate ?? 0,
+      termMonths: pending.termMonths ?? 60,
+      paymentType:
+        pending.amortizationShape === "custom" ? "variable" : "fixed",
+      paymentCadence: pending.paymentCadence ?? "monthly",
+    },
+  ]
+}
+
 function extractPendingTerms(termsJson: unknown, contractEffectiveDate?: Date | null): Array<{
   termName: string
   termType: string
@@ -464,6 +537,10 @@ export async function createPendingContract(input: CreatePendingContractInput) {
       ...(data.amortizationShape !== undefined && {
         amortizationShape: data.amortizationShape,
       }),
+      // Charles audit suggestion #4 (v0-port): multi-item capital JSON.
+      ...(data.capitalLineItems !== undefined && {
+        capitalLineItems: data.capitalLineItems as Prisma.InputJsonValue,
+      }),
       // Charles audit pass-3 C1: tie-in parent + division now persist.
       ...(data.tieInContractId !== undefined && {
         tieInContractId: data.tieInContractId,
@@ -538,6 +615,9 @@ export async function updatePendingContract(id: string, input: UpdatePendingCont
       }),
       ...(data.amortizationShape !== undefined && {
         amortizationShape: data.amortizationShape,
+      }),
+      ...(data.capitalLineItems !== undefined && {
+        capitalLineItems: data.capitalLineItems as Prisma.InputJsonValue,
       }),
       ...(data.tieInContractId !== undefined && {
         tieInContractId: data.tieInContractId,
@@ -664,28 +744,19 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
       ...(pending.terminationNoticeDays != null && {
         terminationNoticeDays: pending.terminationNoticeDays,
       }),
-      // Charles audit suggestion #4 (v0-port): capital lives in line
-      // items on the live Contract. Convert pending capital fields
-      // into one ContractCapitalLineItem nested-create. Future work
-      // teaches the vendor submission form to write line items
-      // directly; for now this transitional shim keeps single-item
-      // pending submissions flowing through.
-      ...(pending.capitalCost != null && {
-        capitalLineItems: {
-          create: [
-            {
-              description: pending.contractName,
-              contractTotal: pending.capitalCost,
-              initialSales: pending.downPayment ?? 0,
-              interestRate: pending.interestRate ?? 0,
-              termMonths: pending.termMonths ?? 60,
-              paymentType:
-                pending.amortizationShape === "custom" ? "variable" : "fixed",
-              paymentCadence: pending.paymentCadence ?? "monthly",
-            },
-          ],
-        },
-      }),
+      // Charles audit suggestion #4 (v0-port): drain capital from
+      // pending → real ContractCapitalLineItem rows. Two sources:
+      //   (a) pending.capitalLineItems JSON — vendor multi-item path.
+      //   (b) Single-block pending.capitalCost — backward-compat for
+      //       older clients that haven't adopted the editor yet.
+      // (a) wins when present; (b) is a fallback so single-item
+      // submissions keep working.
+      ...(() => {
+        const items = buildCapitalLineItemsFromPending(pending)
+        return items.length > 0
+          ? { capitalLineItems: { create: items } }
+          : {}
+      })(),
       // Charles audit pass-3 C1 + pass-4 BLOCKER 2: copy tie-in
       // parent + division so the capital amortization tie-in math is
       // wired post-approve. Field on Contract is

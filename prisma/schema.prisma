@@ -1140,6 +1140,12 @@ model PendingContract {
   downPayment       Decimal? @db.Decimal(14, 2)
   paymentCadence    String?
   amortizationShape String?
+  // Charles audit suggestion #4 (v0-port): multi-item capital on
+  // vendor submission. JSON blob of CapitalLineItemDraft[]. Approve
+  // path drains this into ContractCapitalLineItem rows on the
+  // approved Contract. The single-block capital fields above stay
+  // for backward compat with older clients.
+  capitalLineItems  Json?
   // Charles 2026-04-25 audit pass-3 C1: vendor selects a parent
   // contract for tie-in submissions; the validator already accepts
   // the field but it was being silently dropped because no column

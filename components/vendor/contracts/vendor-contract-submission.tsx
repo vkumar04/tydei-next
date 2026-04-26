@@ -22,6 +22,10 @@ import {
 } from "./submission"
 import type { FacilityOption, PricingFileData, UploadedDoc } from "./submission"
 import { VendorPhase2FieldsCard } from "./submission/vendor-phase2-fields-card"
+import {
+  CapitalLineItemsEditor,
+  type CapitalLineItemDraft,
+} from "@/components/contracts/capital-line-items-editor"
 
 interface VendorContractSubmissionProps {
   vendorId: string
@@ -77,6 +81,11 @@ export function VendorContractSubmission({
   const [amortizationShape, setAmortizationShape] = useState<
     "symmetrical" | "custom"
   >("symmetrical")
+  // Charles audit suggestion #4 (v0-port): vendor multi-item capital
+  // editor. Empty by default; vendor opts in. Submitted as the
+  // PendingContract.capitalLineItems JSON; approve drains it into
+  // ContractCapitalLineItem rows on the live Contract.
+  const [capitalItems, setCapitalItems] = useState<CapitalLineItemDraft[]>([])
 
   const [contractFile, setContractFile] = useState<File | null>(null)
   const [contractS3Key, setContractS3Key] = useState<string | null>(null)
@@ -649,6 +658,21 @@ export function VendorContractSubmission({
             amortizationShape,
           }
         : {}),
+      // Charles audit suggestion #4 (v0-port): multi-item capital
+      // (drained into ContractCapitalLineItem rows on approve).
+      ...(capitalItems.length > 0 && {
+        capitalLineItems: capitalItems.map((it) => ({
+          description: it.description,
+          itemNumber: it.itemNumber || null,
+          serialNumber: it.serialNumber || null,
+          contractTotal: it.contractTotal,
+          initialSales: it.initialSales,
+          interestRate: Math.min(1, Math.max(0, it.interestRatePercent / 100)),
+          termMonths: it.termMonths,
+          paymentType: it.paymentType,
+          paymentCadence: it.paymentCadence,
+        })),
+      }),
       pricingData: pricingItems.length > 0
         ? {
             fileName: pricingFile?.name ?? "pricing",
@@ -813,6 +837,20 @@ export function VendorContractSubmission({
               amortizationShape={amortizationShape}
               onAmortizationShapeChange={setAmortizationShape}
             />
+
+            {/* Charles audit suggestion #4 (v0-port): multi-item
+                capital editor for tie-in / capital submissions.
+                Renders alongside the legacy single-block fields
+                above so vendors can either fill the single block
+                (auto-converted to one line item on approve) or add
+                multiple items. JSON shape persists on
+                PendingContract.capitalLineItems. */}
+            {(contractType === "capital" || contractType === "tie_in") && (
+              <CapitalLineItemsEditor
+                items={capitalItems}
+                onChange={setCapitalItems}
+              />
+            )}
 
             <ContractTermsCard
               contractTerms={contractTerms}

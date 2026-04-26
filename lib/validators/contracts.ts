@@ -56,13 +56,11 @@ const createContractBase = z.object({
   tieInCapitalValue: z.number().optional(),
   tieInPayoffMonths: z.number().int().optional(),
   tieInCapitalContractId: z.string().optional(),
-  // Charles W1.T — tie-in capital is contract-level. These fields live
-  // on Contract directly so all rebate terms pay down one balance.
-  capitalCost: z.number().nullable().optional(),
-  interestRate: z.number().nullable().optional(),
-  termMonths: z.number().int().nullable().optional(),
-  downPayment: z.number().min(0).nullable().optional(),
-  paymentCadence: z.enum(["monthly", "quarterly", "annual"]).nullable().optional(),
+  // Charles audit suggestion #4 (v0-port): legacy contract-level
+  // capital fields removed — capital lives in
+  // ContractCapitalLineItem rows, managed via the dedicated
+  // capital-line-items.ts CRUD actions. Only amortizationShape
+  // survives at the contract level.
   amortizationShape: z.enum(["symmetrical", "custom"]).optional(),
   // Charles 2026-04-25 (audit follow-up): contract-level metrics
   // that drive compliance_rebate + market_share term computations.
@@ -86,14 +84,10 @@ const createContractBase = z.object({
     )
     .nullable()
     .optional(),
-  customAmortizationRows: z
-    .array(
-      z.object({
-        periodNumber: z.number().int().min(1),
-        amortizationDue: z.number().min(0),
-      }),
-    )
-    .optional(),
+  // Charles audit suggestion #4 (v0-port): customAmortizationRows
+  // removed — per-asset payment schedules now live on
+  // ContractCapitalLineItem (paymentType="variable") rather than
+  // a single contract-level table.
   // Charles W1.W-E1 — optional client-generated idempotency key. The
   // server keeps a 30s TTL map of (key → contractId) so a double-click
   // on "Create Contract" returns the original contract instead of

@@ -352,7 +352,6 @@ export async function seedContracts(
       contractType: "usage", status: "active", effectiveDate: oneYearAgo, expirationDate: twoYearsFromNow,
       totalValue: 900000, annualValue: 450000,
       performancePeriod: "monthly", rebatePayPeriod: "monthly",
-      paymentCadence: "monthly",
       description: "Category-scoped (Spine) marginal-tier rebate agreement with monthly evaluation and monthly payment cadence",
     },
   })

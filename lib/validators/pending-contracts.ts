@@ -36,6 +36,26 @@ export const createPendingContractSchema = z.object({
   downPayment: z.number().min(0).optional(),
   paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
   amortizationShape: z.enum(["symmetrical", "custom"]).optional(),
+  // Charles audit suggestion #4 (v0-port): multi-item capital on
+  // vendor submission. Each item mirrors v0's LeasedServiceItem +
+  // tydei's ContractCapitalLineItem.
+  capitalLineItems: z
+    .array(
+      z.object({
+        description: z.string().min(1),
+        itemNumber: z.string().nullable().optional(),
+        serialNumber: z.string().nullable().optional(),
+        contractTotal: z.number().min(0),
+        initialSales: z.number().min(0).default(0),
+        interestRate: z.number().min(0).max(1).nullable().optional(),
+        termMonths: z.number().int().min(0).nullable().optional(),
+        paymentType: z.enum(["fixed", "variable"]).default("fixed"),
+        paymentCadence: z
+          .enum(["monthly", "quarterly", "annual"])
+          .default("monthly"),
+      }),
+    )
+    .optional(),
   // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
   // schema-gate the `terms` blob so a partial term (missing tiers,
   // wrong shape, etc.) can't silently land in the DB and then approve
