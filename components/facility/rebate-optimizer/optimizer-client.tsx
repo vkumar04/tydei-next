@@ -12,6 +12,7 @@ import {
   useRebateOpportunities,
   useRebateOptimizerEngine,
 } from "@/hooks/use-rebate-optimizer"
+import { useFacilityVendors } from "@/hooks/use-purchase-orders"
 import type { RebateOpportunity } from "@/lib/actions/rebate-optimizer"
 import type { RebateOpportunity as EngineRebateOpportunity } from "@/lib/actions/rebate-optimizer-engine"
 import { AiInsightsPanel } from "./ai-insights-panel"
@@ -74,11 +75,22 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
 
   // ─── Data ─────────────────────────────────────────────────────
   const { data: opportunities, isLoading } = useRebateOpportunities(facilityId)
+  // 2026-04-26 (Charles prod feedback "All vendors with a contract should
+  // be here"): the optimizer dropdown was previously derived from
+  // opportunities — i.e., only vendors with TIER-REBATE contracts. Charles
+  // wants every vendor with a contract listed, so a user can pick a vendor
+  // who's currently shown empty and understand WHY (no tiered rebates).
+  const { data: allFacilityVendors } = useFacilityVendors(facilityId)
 
   const vendors = useMemo(() => {
-    if (!opportunities) return []
-    return [...new Set(opportunities.map((o) => o.vendorName))]
-  }, [opportunities])
+    const opportunityVendors = new Set(
+      (opportunities ?? []).map((o) => o.vendorName),
+    )
+    const allNames = (allFacilityVendors ?? []).map((v) => v.name)
+    // Union, preserving alpha sort from getFacilityVendors.
+    for (const name of allNames) opportunityVendors.add(name)
+    return [...opportunityVendors].sort((a, b) => a.localeCompare(b))
+  }, [opportunities, allFacilityVendors])
 
   const filtered = useMemo(() => {
     if (!opportunities) return []
