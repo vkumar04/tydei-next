@@ -18,7 +18,17 @@ import { getCategoryMarketShareForVendor } from "@/lib/actions/cog/category-mark
  * facility. Charles 2026-04-25: "Don't seeing anything for category
  * market share." Computed live from COG (trailing 12 months) so it
  * reflects actual purchase mix without schema changes.
+ *
+ * 2026-04-26: User feedback "several contracts missing market share /
+ * I don't understand why some do and some do not." Root cause was
+ * COG-import variance — some vendors' rows have category=null so the
+ * card silently rendered nothing. We now render explicit empty-state
+ * variants ("no spend recorded" / "spend exists but un-categorized")
+ * and a footnote when un-categorized spend is material.
  */
+
+const UNCATEGORIZED_FOOTNOTE_THRESHOLD = 0.05 // 5% of vendor total
+
 export function CategoryMarketShareCard({
   vendorId,
   contractId,
@@ -48,7 +58,51 @@ export function CategoryMarketShareCard({
       </Card>
     )
   }
-  if (!data || data.length === 0) return null
+  if (!data) return null
+
+  const { rows, uncategorizedSpend, totalVendorSpend } = data
+
+  // ─── Empty-state branch 1: vendor has zero spend in the window ──
+  if (totalVendorSpend === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Market Share by Category</CardTitle>
+          <CardDescription>
+            No spend recorded for this vendor at this facility in the
+            last 12 months.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  // ─── Empty-state branch 2: spend exists but ALL un-categorized ──
+  if (rows.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Market Share by Category</CardTitle>
+          <CardDescription>
+            This vendor has{" "}
+            <span className="font-semibold text-foreground">
+              {formatCurrency(totalVendorSpend)}
+            </span>{" "}
+            of spend in the last 12 months, but none of the COG records
+            are categorized — so we can&apos;t compute share by
+            category. Categorize the COG import (or remap items to
+            categories) and this card will populate.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  // ─── Normal render: show categories + footnote if material gap ──
+  const uncategorizedRatio =
+    totalVendorSpend > 0 ? uncategorizedSpend / totalVendorSpend : 0
+  const showUncategorizedFootnote =
+    uncategorizedRatio > UNCATEGORIZED_FOOTNOTE_THRESHOLD
 
   return (
     <Card>
@@ -60,7 +114,7 @@ export function CategoryMarketShareCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {data.map((row) => {
+        {rows.map((row) => {
           // Charles 2026-04-25 (audit follow-up): when a per-category
           // commitment exists, layer it onto the share progress bar
           // so the user sees met-vs-target at a glance.
@@ -104,6 +158,14 @@ export function CategoryMarketShareCard({
             </div>
           )
         })}
+        {showUncategorizedFootnote && (
+          <p className="border-t pt-2 text-[11px] text-amber-700 dark:text-amber-400">
+            Plus {formatCurrency(uncategorizedSpend)} un-categorized (
+            {(uncategorizedRatio * 100).toFixed(0)}% of vendor total) —
+            shares above only reflect categorized spend. Run COG
+            categorization to capture the full footprint.
+          </p>
+        )}
       </CardContent>
     </Card>
   )

@@ -26,6 +26,18 @@ import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 
+export interface CategoryMarketShareResult {
+  rows: CategoryMarketShareRow[]
+  /** Vendor spend at the facility (trailing window) where the COG row
+   *  has `category IS NULL`. Surfaced so the card can explain why a
+   *  contract with real spend has no per-category breakdown. */
+  uncategorizedSpend: number
+  /** Sum of all vendor COG rows in the window — categorized +
+   *  uncategorized. Useful for the "X% of total is un-categorized"
+   *  footnote and for telling "no spend" apart from "all uncategorized". */
+  totalVendorSpend: number
+}
+
 export interface CategoryMarketShareRow {
   category: string
   vendorSpend: number
@@ -52,7 +64,7 @@ export async function getCategoryMarketShareForVendor(input: {
    * the result rows have `commitmentPct: null`.
    */
   contractId?: string
-}): Promise<CategoryMarketShareRow[]> {
+}): Promise<CategoryMarketShareResult> {
   try {
     const { facility } = await requireFacility()
     const months = input.monthsBack ?? 12
@@ -90,14 +102,14 @@ export async function getCategoryMarketShareForVendor(input: {
       }
     }
 
-    // Pull the facility's COG within the window. Group in-memory
-    // because we need both per-category-per-vendor and per-category
-    // totals from the same row set.
+    // Pull the facility's COG within the window. We DON'T filter on
+    // `category != null` here — un-categorized rows still count toward
+    // `uncategorizedSpend` so the UI can explain "vendor has spend but
+    // none of it is categorized" instead of silently showing nothing.
     const rows = await prisma.cOGRecord.findMany({
       where: {
         facilityId: facility.id,
         transactionDate: { gte: since },
-        category: { not: null },
       },
       select: {
         vendorId: true,
@@ -105,6 +117,18 @@ export async function getCategoryMarketShareForVendor(input: {
         extendedPrice: true,
       },
     })
+
+    // Count un-categorized + total vendor spend up front so we can
+    // return them even when the per-category result list ends up empty.
+    let uncategorizedSpend = 0
+    let totalVendorSpend = 0
+    for (const r of rows) {
+      if (r.vendorId !== input.vendorId) continue
+      const amt = Number(r.extendedPrice ?? 0)
+      if (amt <= 0) continue
+      totalVendorSpend += amt
+      if (!r.category) uncategorizedSpend += amt
+    }
 
     type CatBucket = {
       total: number
@@ -149,7 +173,11 @@ export async function getCategoryMarketShareForVendor(input: {
     // Sort descending by category total so the biggest categories
     // surface first.
     result.sort((a, b) => b.categoryTotal - a.categoryTotal)
-    return serialize(result)
+    return serialize({
+      rows: result,
+      uncategorizedSpend,
+      totalVendorSpend,
+    })
   } catch (err) {
     console.error("[getCategoryMarketShareForVendor]", err, {
       vendorId: input.vendorId,
