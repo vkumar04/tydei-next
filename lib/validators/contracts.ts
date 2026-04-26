@@ -95,18 +95,13 @@ const createContractBase = z.object({
   idempotencyKey: z.string().min(1).optional(),
 })
 
-export const createContractSchema = createContractBase.refine(
-  // Contract Total is the lifetime ceiling; Annual Value is at most
-  // one year of that ceiling. A multi-year contract has
-  // totalValue = annualValue × years, so annual > total is
-  // definitionally impossible. Catches stale auto-compute that
-  // doesn't re-fire after the user manually edits one of the two.
-  (v) => v.annualValue <= v.totalValue + 0.01,
-  {
-    message: "Annual Value cannot exceed Contract Total. For a multi-year contract, Contract Total should be Annual × years.",
-    path: ["annualValue"],
-  },
-)
+// Charles 2026-04-26: dropped the `annualValue <= totalValue` refine.
+// The form now ALWAYS computes annualValue from totalValue ÷ contract
+// years (and clamps it server-side too — see _createContractImpl /
+// _updateContractImpl). Surfacing a validation error to the user when
+// the system itself owns the field made the form feel broken when
+// auto-compute lagged or the user pasted a multi-year total.
+export const createContractSchema = createContractBase
 
 export type CreateContractInput = z.infer<typeof createContractSchema>
 

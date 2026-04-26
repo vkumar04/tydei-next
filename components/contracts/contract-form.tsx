@@ -401,18 +401,25 @@ export function ContractFormBasicInfo({
     }
   }, [metricsQuery.data, setValue])
 
-  // Auto-compute annualValue when totalValue and dates are available.
-  // Uses calendar-month math (computeContractYears) so whole-year terms
-  // produce clean integers — a Jan 1 → Dec 31 contract is 1.0 years, not
-  // 0.999 that only avoided bad output via Math.max(1, …) flooring.
+  // Charles 2026-04-26: annualValue is ALWAYS computed from
+  // totalValue ÷ contract years. Earlier behavior preserved manual
+  // edits which let the two diverge (Annual > Total) and triggered
+  // a confusing "Annual cannot exceed Total" validation error. The
+  // system owns this field — recompute on every change so it can
+  // never go out of sync.
   useEffect(() => {
-    const current = form.getValues("annualValue")
-    if (current && current !== 0) return // don't overwrite manual entry
-    if (!totalValue || totalValue === 0) return
+    if (!totalValue || totalValue === 0) {
+      setValue("annualValue", 0, { shouldDirty: false })
+      return
+    }
     if (!effectiveDateStr || !expirationDateStr) return
     const years = computeContractYears(effectiveDateStr, expirationDateStr)
-    setValue("annualValue", Math.round((totalValue / years) * 100) / 100)
-  }, [totalValue, effectiveDateStr, expirationDateStr, form, setValue])
+    setValue(
+      "annualValue",
+      Math.round((totalValue / years) * 100) / 100,
+      { shouldDirty: false },
+    )
+  }, [totalValue, effectiveDateStr, expirationDateStr, setValue])
 
   return (
     <div className="space-y-6">
@@ -1028,22 +1035,27 @@ export function ContractFormBasicInfo({
               )}
             </Field>
 
-            <Field
-              label="Annual Value"
-              error={errors.annualValue?.message}
-            >
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  $
+            <Field label="Annual Value">
+              {/* Computed from Contract Total ÷ contract years.
+                  Read-only — registered as hidden so the form
+                  payload still includes the value. */}
+              <input
+                type="hidden"
+                {...register("annualValue", { valueAsNumber: true })}
+              />
+              <div className="flex h-10 items-center justify-between rounded-md border border-input bg-muted/30 px-3 text-sm">
+                <span className="font-medium">
+                  {watch("annualValue")
+                    ? `$${Number(watch("annualValue")).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                    : "—"}
                 </span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  {...register("annualValue", { valueAsNumber: true })}
-                  className="pl-7"
-                  placeholder="0"
-                />
+                <span className="text-xs text-muted-foreground">
+                  computed
+                </span>
               </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Contract Total ÷ contract years
+              </p>
             </Field>
           </div>
           {/*

@@ -118,10 +118,13 @@ describe("Bug 7 regression — multi-term AI-extract payload round-trip", () => 
     expect(terms[1].tiers[0].tierNumber).toBe(1)
   })
 
-  it("createContractSchema refine: annualValue > totalValue rejected", () => {
-    const bad = { ...validContractPayload, annualValue: 6_000_000 }
-    expect(() => createContractSchema.parse(bad)).toThrow(
-      /Annual Value cannot exceed Contract Total/,
-    )
+  // Charles 2026-04-26: dropped the `annualValue <= totalValue` refine.
+  // The form now ALWAYS computes annualValue from totalValue ÷ contract
+  // years (read-only computed field), so the refine error became
+  // confusing — the system owns the field, no need to gate it. Test
+  // now asserts the schema is permissive on this dimension.
+  it("createContractSchema accepts annualValue > totalValue (computed by form)", () => {
+    const formerlyBad = { ...validContractPayload, annualValue: 6_000_000 }
+    expect(() => createContractSchema.parse(formerlyBad)).not.toThrow()
   })
 })
