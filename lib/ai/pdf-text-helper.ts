@@ -34,9 +34,12 @@ export async function extractPdfText(
 ): Promise<PdfTextResult> {
   let parser: PDFParse | null = null
   try {
-    const data = Buffer.isBuffer(pdfBytes)
-      ? new Uint8Array(pdfBytes)
-      : pdfBytes
+    // Defensive copy: pdf-parse transfers the underlying ArrayBuffer to a
+    // worker, which detaches the caller's view. Without this copy, anyone
+    // reusing `pdfBytes` after this helper sees a zero-length buffer —
+    // the streaming extract route hit exactly that and Anthropic 400'd
+    // with "PDF cannot be empty".
+    const data = new Uint8Array(pdfBytes)
     parser = new PDFParse({ data })
     const result = await parser.getText()
     const raw = (result.text ?? "").trim()
