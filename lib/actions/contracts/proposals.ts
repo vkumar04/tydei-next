@@ -21,8 +21,8 @@ async function notifyVendorOfProposalDecision(input: {
   reviewNotes: string | null
 }): Promise<void> {
   try {
-    const { createInAppNotifications } = await import(
-      "@/lib/actions/notifications/in-app"
+    const { createInAppNotificationsInternal } = await import(
+      "@/lib/notifications/in-app-helper"
     )
     const vendor = await prisma.vendor.findUnique({
       where: { id: input.vendorId },
@@ -41,7 +41,7 @@ async function notifyVendorOfProposalDecision(input: {
         : input.decision === "rejected"
           ? "rejected"
           : "needs revision"
-    await createInAppNotifications({
+    await createInAppNotificationsInternal({
       userIds,
       type: `contract_change_proposal_${input.decision}`,
       title: `Your contract change proposal was ${decisionLabel}`,

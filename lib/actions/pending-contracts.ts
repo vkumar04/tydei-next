@@ -875,7 +875,6 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
   // the vendor — they need to know their submission landed as a real
   // contract.
   void notifyVendorOfPendingDecision({
-    vendorId: pending.vendorId,
     contractName: pending.contractName,
     vendorName: pending.vendorName,
     facilityName: pending.facilityName,
@@ -920,7 +919,6 @@ export async function rejectPendingContract(id: string, _reviewedByIgnored: stri
   })
 
   void notifyVendorOfPendingDecision({
-    vendorId: pending.vendorId,
     contractName: pending.contractName,
     vendorName: pending.vendorName,
     facilityName: pending.facilityName,
@@ -951,7 +949,6 @@ export async function requestRevision(id: string, _reviewedByIgnored: string, no
   })
 
   void notifyVendorOfPendingDecision({
-    vendorId: pending.vendorId,
     contractName: pending.contractName,
     vendorName: pending.vendorName,
     facilityName: pending.facilityName,

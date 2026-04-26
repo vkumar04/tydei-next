@@ -5,6 +5,54 @@ import { requireAuth } from "@/lib/actions/auth"
 import type { ConnectionStatus } from "@prisma/client"
 import { serialize } from "@/lib/serialize"
 
+/**
+ * Resolve the caller's session to their facility/vendor identity by
+ * looking up their Member row and its organization. Used by
+ * `getConnections` and `sendConnectionInvite` to derive scope from
+ * the SESSION rather than trusting client-supplied ids.
+ *
+ * Charles audit Iter4-B1/B2: pre-fix both actions accepted scope
+ * (`facilityId` / `vendorId` for read; `fromType` / `fromId` /
+ * `fromName` for write) directly from the wire under requireAuth()
+ * only — Stryker user could enumerate the entire Connection table
+ * by calling `getConnections({})` and could mint a Connection row
+ * that appeared to originate from Lighthouse. Both surfaces now
+ * derive their scope from this helper instead.
+ */
+async function resolveCallerOrgIdentity(userId: string): Promise<
+  | {
+      kind: "facility"
+      facilityId: string
+      facilityName: string
+    }
+  | {
+      kind: "vendor"
+      vendorId: string
+      vendorName: string
+    }
+  | null
+> {
+  const member = await prisma.member.findFirst({
+    where: { userId },
+    include: {
+      organization: { include: { facility: true, vendor: true } },
+    },
+  })
+  const facility = member?.organization?.facility
+  if (facility) {
+    return {
+      kind: "facility",
+      facilityId: facility.id,
+      facilityName: facility.name,
+    }
+  }
+  const vendor = member?.organization?.vendor
+  if (vendor) {
+    return { kind: "vendor", vendorId: vendor.id, vendorName: vendor.name }
+  }
+  return null
+}
+
 export interface ConnectionData {
   id: string
   facilityId: string
@@ -26,12 +74,28 @@ export async function getConnections(input: {
   vendorId?: string
   status?: ConnectionStatus
 }): Promise<ConnectionData[]> {
-  await requireAuth()
-
-  const { facilityId, vendorId, status } = input
+  // Charles audit Iter4-B1 (BLOCKER): pre-fix the where clause was
+  // built directly from input under requireAuth() only — passing
+  // `{}` returned every Connection on the platform, and passing a
+  // foreign tenant's id returned that tenant's connections. Scope
+  // is now derived from the session; the input fields for
+  // facilityId/vendorId are deliberately ignored. The `status`
+  // filter is fine to pass through (it's a row-level filter, not
+  // a tenant boundary).
+  const session = await requireAuth()
+  const identity = await resolveCallerOrgIdentity(session.user.id)
+  if (!identity) {
+    throw new Error(
+      "Not authorized: caller is not a member of any facility or vendor org",
+    )
+  }
+  const { status } = input
+  const scopeWhere =
+    identity.kind === "facility"
+      ? { facilityId: identity.facilityId }
+      : { vendorId: identity.vendorId }
   const where = {
-    ...(facilityId ? { facilityId } : {}),
-    ...(vendorId ? { vendorId } : {}),
+    ...scopeWhere,
     ...(status ? { status } : {}),
   }
 
@@ -58,17 +122,30 @@ export async function getConnections(input: {
 // ─── Send Connection Invite ──────────────────────────────────────
 
 export async function sendConnectionInvite(input: {
-  fromType: "facility" | "vendor"
-  fromId: string
-  fromName: string
+  // Charles audit Iter4-B2 (BLOCKER): the previous shape accepted
+  // `fromType` / `fromId` / `fromName` from the wire and let
+  // Medtronic's user mint a Connection row that appeared to
+  // originate from Lighthouse. Those three fields are now ignored
+  // (kept on the type only for back-compat with the existing client
+  // hook signature) and the invite's origin is derived from the
+  // caller's session.
+  fromType?: "facility" | "vendor"
+  fromId?: string
+  fromName?: string
   toEmail: string
   toName: string
   message?: string
 }): Promise<ConnectionData> {
   const session = await requireAuth()
+  const identity = await resolveCallerOrgIdentity(session.user.id)
+  if (!identity) {
+    throw new Error(
+      "Not authorized: caller is not a member of any facility or vendor org",
+    )
+  }
 
   const inviteType =
-    input.fromType === "facility" ? "facility_to_vendor" : "vendor_to_facility"
+    identity.kind === "facility" ? "facility_to_vendor" : "vendor_to_facility"
 
   // For a facility inviting a vendor, we need to find or create the vendor
   // For now, create a placeholder connection
@@ -77,9 +154,9 @@ export async function sendConnectionInvite(input: {
   let vendorId: string
   let vendorName: string
 
-  if (input.fromType === "facility") {
-    facilityId = input.fromId
-    facilityName = input.fromName
+  if (identity.kind === "facility") {
+    facilityId = identity.facilityId
+    facilityName = identity.facilityName
     // Look up vendor by email
     const vendor = await prisma.vendor.findFirst({
       where: { contactEmail: input.toEmail },
@@ -90,8 +167,8 @@ export async function sendConnectionInvite(input: {
       throw new Error("Vendor not found with that email")
     }
   } else {
-    vendorId = input.fromId
-    vendorName = input.fromName
+    vendorId = identity.vendorId
+    vendorName = identity.vendorName
     const facility = await prisma.facility.findFirst({
       where: {
         organization: { members: { some: { user: { email: input.toEmail } } } },

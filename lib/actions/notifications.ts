@@ -1,7 +1,8 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireAuth } from "@/lib/actions/auth"
+import { requireAuth, requireFacility } from "@/lib/actions/auth"
+import { createInAppNotificationsInternal } from "@/lib/notifications/in-app-helper"
 import { sendEmail } from "@/lib/email"
 import {
   alertNotificationEmail,
@@ -352,10 +353,7 @@ export async function notifyFacilityOfPendingContract(input: {
     // Charles 2026-04-25 (audit follow-up).
     const userIds = await getFacilityMemberUserIds(input.facilityId)
     if (userIds.length > 0) {
-      const { createInAppNotifications } = await import(
-        "@/lib/actions/notifications/in-app"
-      )
-      void createInAppNotifications({
+      void createInAppNotificationsInternal({
         userIds,
         type: "pending_contract_submitted",
         title: `${input.vendorName} submitted a contract`,
@@ -388,7 +386,6 @@ export async function notifyFacilityOfPendingContract(input: {
  * contract. Best-effort. Charles 2026-04-25.
  */
 export async function notifyVendorOfPendingDecision(input: {
-  vendorId: string
   contractName: string
   vendorName: string
   facilityName?: string | null
@@ -402,24 +399,40 @@ export async function notifyVendorOfPendingDecision(input: {
   decision: "approved" | "rejected" | "revision_requested"
   reviewNotes?: string | null
 }): Promise<{ sent: number }> {
-  // Charles audit round-9 BLOCKER: post-write hook called by
-  // approve/reject/requestRevision (which authenticate). Adding
-  // requireAuth so anonymous RPC can't fire spoofed decision emails
-  // to vendor inboxes.
-  await requireAuth()
+  // Charles audit Iter3-B1 (CRITICAL — confirmed exploit): pre-fix
+  // this action accepted `vendorId` from input under requireAuth()
+  // only, so Stryker user wrote a fake "Submission approved:
+  // SPOOF-FROM-STRYKER" notification + email into Medtronic's inbox
+  // via a direct Server Action call.
+  //
+  // Hardened path: the caller MUST be a member of the facility-org
+  // that owns the pending contract referenced by `pendingId`. The
+  // `vendorId` is then DERIVED from the row, never trusted from the
+  // wire. This matches the actual call sites
+  // (approve/reject/requestRevision in pending-contracts.ts) which
+  // are all `requireFacility()`-gated and operate on a row they just
+  // looked up by `{ id, facilityId: facility.id }`.
+  const session = await requireFacility()
+  const pending = await prisma.pendingContract.findUniqueOrThrow({
+    where: { id: input.pendingId },
+    select: { vendorId: true, facilityId: true },
+  })
+  if (pending.facilityId !== session.facility.id) {
+    throw new Error(
+      "Not authorized: pending contract belongs to a different facility",
+    )
+  }
+  const vendorId = pending.vendorId
   try {
-    const userIds = await getVendorMemberUserIds(input.vendorId)
+    const userIds = await getVendorMemberUserIds(vendorId)
     if (userIds.length > 0) {
-      const { createInAppNotifications } = await import(
-        "@/lib/actions/notifications/in-app"
-      )
       const decisionLabel =
         input.decision === "approved"
           ? "approved"
           : input.decision === "rejected"
             ? "rejected"
             : "needs revision"
-      void createInAppNotifications({
+      void createInAppNotificationsInternal({
         userIds,
         type: `pending_contract_${input.decision}`,
         title: `Submission ${decisionLabel}: ${input.contractName}`,
@@ -435,7 +448,7 @@ export async function notifyVendorOfPendingDecision(input: {
             : `/vendor/contracts/pending/${input.pendingId}/edit`,
       })
     }
-    const emails = await getVendorMemberEmails(input.vendorId)
+    const emails = await getVendorMemberEmails(vendorId)
     if (emails.length === 0) return { sent: 0 }
     const { subject, html } = pendingContractDecisionEmail({
       contractName: input.contractName,
