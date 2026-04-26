@@ -16,6 +16,7 @@ import {
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import { resolveVendorIdsBulk } from "@/lib/vendors/resolve"
+import { resolveCategoryNamesBulk } from "@/lib/categories/resolve"
 
 // How far back (ms) to look when scoping "this import" stats without a
 // FileImport row. Matches the plan's interim approximation — replace with
@@ -77,11 +78,31 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
     }
   }
 
+  // 2026-04-26 (Charles prod feedback): canonicalize the category
+  // string AGAINST the ProductCategory table so two imports that
+  // type "Ortho-Extremity" / "ortho-extremity" / "Ortho Extremity"
+  // collapse to one canonical name. Mirrors the resolveVendorIdsBulk
+  // pattern. createMissing=true tags new categories with source=cog
+  // so admins can audit/dedupe in Settings later.
+  const allRawCategories: Array<string | null | undefined> = [
+    ...data.records.map((r) => r.category),
+    ...benchmarkCategoryByItem.values(),
+  ]
+  const canonicalCategoryMap = await resolveCategoryNamesBulk(
+    allRawCategories,
+    { createMissing: true, source: "cog" },
+  )
+  const canonicalize = (raw: string | null | undefined): string | null => {
+    if (!raw) return null
+    const key = raw.trim().toLowerCase().replace(/\s+/g, " ")
+    return canonicalCategoryMap.get(key) ?? (raw.trim() || null)
+  }
+
   const resolveCategory = (record: (typeof data.records)[number]) => {
-    if (record.category) return record.category
+    if (record.category) return canonicalize(record.category)
     if (record.vendorItemNo) {
       const inferred = benchmarkCategoryByItem.get(record.vendorItemNo)
-      if (inferred) return inferred
+      if (inferred) return canonicalize(inferred)
     }
     return null
   }

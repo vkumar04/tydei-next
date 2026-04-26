@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { resolveCategoryNamesBulk } from "@/lib/categories/resolve"
 import {
   pricingFiltersSchema,
   bulkImportPricingSchema,
@@ -54,6 +55,22 @@ export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
   let imported = 0
   let errors = 0
 
+  // 2026-04-26 (Charles prod feedback): "When you enter a price file
+  // the categories need to be validated like when you do COGs and it
+  // validates the vendor names." Canonicalize every category string
+  // against the ProductCategory table so two imports of "Ortho-
+  // Extremity" / "ortho-extremity" / "Ortho Extremity " collapse
+  // to one canonical name. Mirror of the cog-import.ts wiring.
+  const canonicalCategoryMap = await resolveCategoryNamesBulk(
+    data.records.map((r) => r.category),
+    { createMissing: true, source: "pricing_file" },
+  )
+  const canonicalize = (raw: string | null | undefined): string | null => {
+    if (!raw) return null
+    const key = raw.trim().toLowerCase().replace(/\s+/g, " ")
+    return canonicalCategoryMap.get(key) ?? (raw.trim() || null)
+  }
+
   for (let i = 0; i < data.records.length; i += PRICING_BATCH_SIZE) {
     const batch = data.records.slice(i, i + PRICING_BATCH_SIZE)
     try {
@@ -70,7 +87,7 @@ export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
           expirationDate: record.expirationDate
             ? new Date(record.expirationDate)
             : null,
-          category: record.category,
+          category: canonicalize(record.category),
           uom: record.uom,
         })),
       })

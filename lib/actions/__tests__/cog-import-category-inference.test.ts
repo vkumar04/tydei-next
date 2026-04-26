@@ -44,6 +44,11 @@ vi.mock("@/lib/db", () => ({
       findMany: (a: unknown) => benchmarkFindManyMock(a as never),
       findFirst: (a: unknown) => benchmarkFindFirstMock(a as never),
     },
+    productCategory: {
+      findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
+      create: vi.fn(async ({ data }: { data: { name: string } }) => ({ name: data.name })),
+    },
     $transaction: vi.fn().mockResolvedValue([0, 0, 0]),
     fileImport: { create: vi.fn().mockResolvedValue({ id: "fi-1" }) },
   },

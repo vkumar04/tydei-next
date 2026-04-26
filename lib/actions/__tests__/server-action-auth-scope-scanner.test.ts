@@ -276,7 +276,7 @@ const BASELINE_HITS = new Set<string>([
   // change-proposals.ts: post-mutation re-read
   "lib/actions/change-proposals.ts:175",
   // cog-import.ts: facility-scoped batch by upstream check
-  "lib/actions/cog-import.ts:179",
+  "lib/actions/cog-import.ts:200",
   // contract-periods.ts: post-period-mutation re-reads
   "lib/actions/contract-periods.ts:394",
   "lib/actions/contract-periods.ts:623",
@@ -312,8 +312,8 @@ const BASELINE_HITS = new Set<string>([
   // pending-contracts.ts: post-mutation re-read after gated approve
   "lib/actions/pending-contracts.ts:869",
   // pricing-files.ts: post-fetch contract ownership probe
-  "lib/actions/pricing-files.ts:232",
-  "lib/actions/pricing-files.ts:361",
+  "lib/actions/pricing-files.ts:249",
+  "lib/actions/pricing-files.ts:378",
   // renewals: post-fetch facility ownership equality check
   "lib/actions/renewals/notes.ts:175",
   "lib/actions/renewals/proposals.ts:212",

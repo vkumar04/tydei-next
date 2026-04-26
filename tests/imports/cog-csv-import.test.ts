@@ -38,6 +38,11 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(async () => []),
       findFirst: vi.fn(async () => null),
     },
+    productCategory: {
+      findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
+      create: vi.fn(async ({ data }: { data: { name: string } }) => ({ name: data.name })),
+    },
     $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
 }))
