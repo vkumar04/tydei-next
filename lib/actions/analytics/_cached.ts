@@ -1,19 +1,21 @@
 /**
- * 'use cache' helpers for analytics. Stable replacement for the
- * unstable_cache wrappers previously in _cache.ts. Tag builders are
- * shared with _cache.ts's invalidators so read/write sides cannot
- * drift on tag string values.
+ * Analytics cache helpers + tag builders.
  *
- * NO `"use server"` directive at the top — `'use cache'` and
- * `"use server"` cannot coexist in the same file. Server-action
- * entrypoints live in contract-score.ts and call these helpers.
+ * 2026-04-26: this file was originally written to use the 'use cache'
+ * directive from Cache Components (Next 16). That rollout was rolled
+ * back the same day because `cacheComponents: true` requires every
+ * uncached data access in page.tsx files to be inside a Suspense
+ * boundary, and our pages all do `await requireFacility()` at the
+ * top level. The directive is gone; the helper is now a plain
+ * pass-through. Tag builders still live here so _cache.ts's
+ * write-side invalidators have a single source of truth.
  *
- * Requires `experimental.cacheComponents: true` in next.config.ts.
- * See docs/superpowers/plans/2026-04-26-cache-components-rollout.md
- * for the rollout plan + the previous failure mode this avoids.
+ * Future Cache Components rollout: see
+ * docs/superpowers/plans/2026-04-26-cache-components-rollout.md and
+ * the retro for the rollback. Re-enabling means wrapping every page
+ * in <Suspense> first.
  */
 
-import { cacheLife, cacheTag } from "next/cache"
 import {
   getContractCompositeScoreImpl,
   type ContractCompositeScore,
@@ -36,20 +38,15 @@ export function vendorAnalyticsTag(vendorId: string): string {
 // ─── Cached reads ────────────────────────────────────────────────
 
 /**
- * Cached read for contract composite score. Cache key is derived
- * automatically from the function's args + closure. Tagged so write
- * paths can invalidate via `invalidateContractAnalytics(contractId)`.
- *
- * cacheLife profile: stale 60s (CDN serve-stale window), revalidate
- * 600s (10min refresh), expire 3600s (1h hard cap). Mirrors the
- * previous `unstable_cache(..., { revalidate: 600 })` behavior.
+ * Pass-through (no caching) until Cache Components rolls out properly.
+ * The auth gate in `contract-score.ts` runs first; this just calls
+ * through to the pure impl. When we re-enable `cacheComponents`,
+ * restore the 'use cache' directive + cacheLife + cacheTag inside
+ * this function body.
  */
 export async function getCachedContractCompositeScore(
   contractId: string,
   cogScopeFacilityIds: string[],
 ): Promise<ContractCompositeScore> {
-  "use cache"
-  cacheLife({ stale: 60, revalidate: 600, expire: 3600 })
-  cacheTag(contractAnalyticsTag(contractId))
   return getContractCompositeScoreImpl(contractId, cogScopeFacilityIds)
 }
