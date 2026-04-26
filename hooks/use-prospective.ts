@@ -7,6 +7,7 @@ import {
   scoreDeal,
   getFinancialProjections,
   createProposal,
+  deleteProposal,
   getVendorProposals,
 } from "@/lib/actions/prospective"
 import type { ProposedPricingItem } from "@/lib/actions/prospective"
@@ -59,5 +60,17 @@ export function useVendorProposals(vendorId: string) {
   return useQuery({
     queryKey: queryKeys.prospective.vendorProposals(vendorId),
     queryFn: () => getVendorProposals(vendorId),
+  })
+}
+
+export function useDeleteProposal() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => deleteProposal(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["prospective"] })
+      toast.success("Proposal deleted")
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete proposal"),
   })
 }

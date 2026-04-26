@@ -312,6 +312,42 @@ export async function createProposal(input: {
   })
 }
 
+// ─── Vendor: Delete Proposal ────────────────────────────────────
+
+/**
+ * Delete a vendor's own proposal. Vendor proposals are persisted as
+ * `Alert` rows with `metadata.type === "vendor_proposal"` (see
+ * `createProposal` above). This action enforces vendor ownership of
+ * the underlying alert before deleting.
+ *
+ * The constraints in CLAUDE.md / V1 audit reserved `withdrawPendingContract`
+ * for `PendingContract` rows submitted via the contract-submission flow;
+ * those are a different table from the prospective proposals shown here.
+ */
+export async function deleteProposal(id: string): Promise<void> {
+  const { vendor } = await requireVendor()
+
+  // Look up the alert tenant-scoped to this vendor. A non-vendor row
+  // or a row owned by another vendor is invisible here, which gives
+  // us the auth gate in a single query.
+  const alert = await prisma.alert.findFirst({
+    where: { id, vendorId: vendor.id },
+    select: { id: true, metadata: true },
+  })
+
+  if (!alert) {
+    throw new Error("Proposal not found")
+  }
+
+  const meta = alert.metadata as Record<string, unknown> | null
+  if (meta?.type !== "vendor_proposal") {
+    throw new Error("Not a vendor proposal")
+  }
+
+  // auth-scope-scanner-skip: row authorized via vendor-scoped findFirst above
+  await prisma.alert.delete({ where: { id: alert.id } })
+}
+
 // ─── Vendor: Get Proposals ──────────────────────────────────────
 
 export async function getVendorProposals(

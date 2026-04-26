@@ -20,6 +20,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   FileText,
   DollarSign,
   Plus,
@@ -27,15 +33,13 @@ import {
   Pencil,
   Trash2,
   MoreHorizontal,
-  AlertTriangle,
-  Lightbulb,
   Package,
   Calendar,
   Building2,
 } from "lucide-react"
 import { formatCurrency } from "@/lib/formatting"
-import { RecommendationBadge, StatusBadge, generateDealScore, scoreColor } from "./shared"
-import { generateInsights } from "./insights"
+import { StatusBadge, RecommendationBadge, scoreColor } from "./shared"
+import { useDeleteProposal } from "@/hooks/use-prospective"
 import type { VendorProposal } from "@/lib/actions/prospective"
 
 interface Props {
@@ -47,17 +51,25 @@ interface Props {
 export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<VendorProposal | null>(null)
   const [viewTarget, setViewTarget] = useState<VendorProposal | null>(null)
+  const deleteMut = useDeleteProposal()
 
-  const enrichedProposals = useMemo(() => {
-    return proposals.map((p) => {
-      const score = p.dealScore ?? generateDealScore(p.id)
-      const insights = generateInsights(p.id)
-      return { ...p, computedScore: score, ...insights }
+  // Only proposals that have a real, server-attached deal score are
+  // eligible to show a numeric score. Previously this list rendered a
+  // deterministic mock score seeded by id which Charles correctly
+  // flagged as "all hard coded." Real scoring lives in the Deal
+  // Scorer pipeline (`scoreDeal` in lib/actions/prospective.ts) and
+  // is attached to the proposal once computed.
+  const enrichedProposals = useMemo(() => proposals, [proposals])
+
+  function handleConfirmDelete() {
+    if (!deleteTarget) return
+    deleteMut.mutate(deleteTarget.id, {
+      onSuccess: () => setDeleteTarget(null),
     })
-  }, [proposals])
+  }
 
   return (
-    <>
+    <TooltipProvider delayDuration={150}>
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -93,27 +105,44 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
                       <span className="font-mono text-sm font-medium text-muted-foreground">
                         #{p.id.slice(0, 8)}
                       </span>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                          p.computedScore.overall >= 80
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : p.computedScore.overall >= 65
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-                              : p.computedScore.overall >= 40
-                                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                                : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                        }`}
-                      >
-                        Score: {p.computedScore.overall}
-                      </span>
-                      <RecommendationBadge recommendation={p.computedScore.recommendation} />
+                      {p.dealScore ? (
+                        <>
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                              p.dealScore.overall >= 80
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                : p.dealScore.overall >= 65
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                  : p.dealScore.overall >= 40
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                                    : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                            }`}
+                          >
+                            Score: {p.dealScore.overall}
+                          </span>
+                          <RecommendationBadge recommendation={p.dealScore.recommendation} />
+                        </>
+                      ) : (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                              Score: —
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Score not yet computed. Run this proposal through
+                            the Deal Scorer to attach one.
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                       <StatusBadge status={p.status} />
                     </div>
 
                     <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Building2 className="h-3.5 w-3.5" />
-                        {p.facilityIds.length} facilities
+                        {p.facilityIds.length} facilit
+                        {p.facilityIds.length === 1 ? "y" : "ies"}
                       </span>
                       <span className="flex items-center gap-1">
                         <Package className="h-3.5 w-3.5" />
@@ -127,35 +156,6 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
                         <DollarSign className="h-3.5 w-3.5" />
                         {formatCurrency(p.totalProposedCost)}
                       </span>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      {p.warnings.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {p.warnings.map((w) => (
-                            <span
-                              key={w}
-                              className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:ring-amber-800/40"
-                            >
-                              <AlertTriangle className="h-3 w-3" />
-                              {w}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {p.opportunities.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {p.opportunities.map((o) => (
-                            <span
-                              key={o}
-                              className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-xs text-green-800 ring-1 ring-inset ring-green-200 dark:bg-green-900/20 dark:text-green-400 dark:ring-green-800/40"
-                            >
-                              <Lightbulb className="h-3 w-3" />
-                              {o}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -172,7 +172,7 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                        <DropdownMenuItem disabled>
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
@@ -223,14 +223,12 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
                 { label: "Projected Cost", node: formatCurrency(viewTarget.totalProposedCost) },
                 {
                   label: "Deal Score",
-                  node: (
-                    <span
-                      className={`font-semibold ${scoreColor(
-                        viewTarget.dealScore?.overall ?? generateDealScore(viewTarget.id).overall,
-                      )}`}
-                    >
-                      {viewTarget.dealScore?.overall ?? generateDealScore(viewTarget.id).overall}/100
+                  node: viewTarget.dealScore ? (
+                    <span className={`font-semibold ${scoreColor(viewTarget.dealScore.overall)}`}>
+                      {viewTarget.dealScore.overall}/100
                     </span>
+                  ) : (
+                    <span className="text-muted-foreground">— not yet computed</span>
                   ),
                 },
               ].map((row) => (
@@ -250,23 +248,39 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
       )}
 
       {deleteTarget && (
-        <Dialog open onOpenChange={() => setDeleteTarget(null)}>
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !deleteMut.isPending) setDeleteTarget(null)
+          }}
+        >
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Delete Proposal</DialogTitle>
-              <DialogDescription>Are you sure? This action cannot be undone.</DialogDescription>
+              <DialogDescription>
+                Are you sure you want to delete proposal #{deleteTarget.id.slice(0, 8)}?
+                This action cannot be undone.
+              </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteMut.isPending}
+              >
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={() => setDeleteTarget(null)}>
-                Delete
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDelete}
+                disabled={deleteMut.isPending}
+              >
+                {deleteMut.isPending ? "Deleting…" : "Delete"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
-    </>
+    </TooltipProvider>
   )
 }
