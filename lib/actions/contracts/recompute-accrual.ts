@@ -570,7 +570,7 @@ export async function recomputeAccrualForContract(
   )
   if (volumeTerms.length > 0) {
     const { recomputeVolumeAccrualForTerm } = await import(
-      "@/lib/actions/contracts/recompute-volume-accrual"
+      "@/lib/contracts/recompute/volume"
     )
     for (const term of volumeTerms) {
       try {
@@ -609,7 +609,7 @@ export async function recomputeAccrualForContract(
   )
   if (poTerms.length > 0) {
     const { recomputePoAccrualForTerm } = await import(
-      "@/lib/actions/contracts/recompute-po-accrual"
+      "@/lib/contracts/recompute/po"
     )
     for (const term of poTerms) {
       try {
@@ -651,7 +651,7 @@ export async function recomputeAccrualForContract(
   )
   if (invoiceTerms.length > 0) {
     const { recomputeInvoiceAccrualForTerm } = await import(
-      "@/lib/actions/contracts/recompute-invoice-accrual"
+      "@/lib/contracts/recompute/invoice"
     )
     for (const term of invoiceTerms) {
       try {
@@ -694,7 +694,7 @@ export async function recomputeAccrualForContract(
   )
   if (thresholdTerms.length > 0) {
     const { recomputeThresholdAccrualForTerm } = await import(
-      "@/lib/actions/contracts/recompute-threshold-accrual"
+      "@/lib/contracts/recompute/threshold"
     )
     for (const term of thresholdTerms) {
       const metric: "complianceRate" | "currentMarketShare" =

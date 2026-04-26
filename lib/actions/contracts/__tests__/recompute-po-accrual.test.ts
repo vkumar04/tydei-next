@@ -16,7 +16,7 @@ vi.mock("@/lib/db", () => ({
   },
 }))
 
-import { recomputePoAccrualForTerm } from "@/lib/actions/contracts/recompute-po-accrual"
+import { recomputePoAccrualForTerm } from "@/lib/contracts/recompute/po"
 
 const TERM_BASE = {
   id: "term-1",

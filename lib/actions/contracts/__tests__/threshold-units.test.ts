@@ -24,7 +24,7 @@ vi.mock("@/lib/db", () => ({
   },
 }))
 
-import { recomputeThresholdAccrualForTerm } from "@/lib/actions/contracts/recompute-threshold-accrual"
+import { recomputeThresholdAccrualForTerm } from "@/lib/contracts/recompute/threshold"
 
 const baseTerm = {
   id: "term-units",

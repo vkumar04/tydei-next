@@ -26,7 +26,7 @@ vi.mock("@/lib/db", () => ({
   },
 }))
 
-import { recomputeVolumeAccrualForTerm } from "@/lib/actions/contracts/recompute-volume-accrual"
+import { recomputeVolumeAccrualForTerm } from "@/lib/contracts/recompute/volume"
 
 const TERM_BASE = {
   id: "term-1",
