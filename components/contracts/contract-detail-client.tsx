@@ -44,6 +44,8 @@ import { ContractPricingTab } from "@/components/contracts/contract-pricing-tab"
 import { ContractInsightsCards } from "@/components/contracts/contract-insights-cards"
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
 import { ContractPerformanceCharts } from "@/components/contracts/contract-performance-charts"
+import { ContractScoreCard } from "@/components/contracts/analytics/contract-score-card"
+import { RebateForecastCard } from "@/components/contracts/analytics/rebate-forecast-card"
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
 import { ContractBundleMembershipsCard } from "@/components/contracts/contract-bundle-memberships-card"
 import { ContractPerformanceCard } from "@/components/contracts/contract-performance-card"
@@ -1099,6 +1101,8 @@ export function ContractDetailClient({
 
         {/* ── Performance Tab ──────────────────────────────────── */}
         <TabsContent value="performance" className="mt-6 space-y-6">
+          <ContractScoreCard contractId={contractId} />
+          <RebateForecastCard contractId={contractId} />
           <ContractPerformanceCharts contractId={contractId} />
           <ContractInsightsCards contractId={contractId} />
           <ContractAccrualTimeline contractId={contractId} />

@@ -232,4 +232,16 @@ export const queryKeys = {
     rebate: (facilityId: string, input?: Record<string, unknown>) =>
       ["forecasting", "rebate", facilityId, input] as const,
   },
+  analytics: {
+    contractScore: (contractId: string) =>
+      ["analytics", "contractScore", contractId] as const,
+    renewalRisk: (contractId: string) =>
+      ["analytics", "renewalRisk", contractId] as const,
+    rebateForecast: (contractId: string, months: number) =>
+      ["analytics", "rebateForecast", contractId, months] as const,
+    spendConcentration: (facilityId: string, trailingDays: number) =>
+      ["analytics", "spendConcentration", facilityId, trailingDays] as const,
+    purchaseCompliance: (facilityId: string, range: DateRange) =>
+      ["analytics", "purchaseCompliance", facilityId, range] as const,
+  },
 } as const

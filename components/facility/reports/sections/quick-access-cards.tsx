@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   ArrowRight,
   DollarSign,
+  ShieldCheck,
   TrendingUp,
 } from "lucide-react"
 
@@ -18,7 +19,7 @@ import {
 
 export function QuickAccessCards() {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <Link href="/dashboard/reports/price-discrepancy">
         <Card className="cursor-pointer transition-colors hover:bg-accent/50 border-red-200 dark:border-red-900">
           <CardHeader className="pb-2">
@@ -55,6 +56,25 @@ export function QuickAccessCards() {
             </p>
             <div className="flex items-center gap-1 mt-3 text-sm text-primary font-medium">
               View Analysis <ArrowRight className="h-4 w-4" />
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+      <Link href="/dashboard/reports/compliance">
+        <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              <Badge variant="outline">Compliance</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <h3 className="font-semibold">Per-Purchase Audit</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Off-contract vendors, out-of-period purchases, unapproved items
+            </p>
+            <div className="flex items-center gap-1 mt-3 text-sm text-primary font-medium">
+              Run Audit <ArrowRight className="h-4 w-4" />
             </div>
           </CardContent>
         </Card>

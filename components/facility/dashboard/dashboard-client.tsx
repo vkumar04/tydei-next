@@ -35,6 +35,7 @@ import { DashboardLifecyclePie } from "./dashboard-lifecycle-pie"
 import { DashboardSpendTrendChart } from "./dashboard-spend-trend-chart"
 import { DashboardTopAlerts } from "./dashboard-top-alerts"
 import { DashboardBundleShortfallsCard } from "./dashboard-bundle-shortfalls-card"
+import { DashboardSpendConcentrationCard } from "./dashboard-spend-concentration-card"
 import { DashboardSpendProjection } from "./dashboard-spend-projection"
 
 export interface DashboardInitialData {
@@ -159,6 +160,7 @@ export function DashboardClient({
               spend-focused summary strip (On-contract %, rebate yield,
               off-contract gap) so Spend has content Overview doesn't. */}
           <DashboardSpendSummaryStrip kpi={kpi} />
+          <DashboardSpendConcentrationCard facilityId={facilityId} />
         </TabsContent>
 
         <TabsContent value="alerts" className="mt-4 space-y-6">
