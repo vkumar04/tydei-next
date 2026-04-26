@@ -866,6 +866,39 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
     },
   })
 
+  // Charles 2026-04-26 (#59): copy vendor-attached PDFs from
+  // PendingContract.documents (JSON array of {name, url}) into real
+  // ContractDocument rows so the vendor's Documents tab on the
+  // approved contract isn't empty. Without this, every approval
+  // dropped the vendor-uploaded contract PDF on the floor.
+  if (Array.isArray(pending.documents) && pending.documents.length > 0) {
+    type AttachedDoc = { name?: unknown; url?: unknown; type?: unknown }
+    const docs = (pending.documents as AttachedDoc[])
+      .filter(
+        (d): d is { name: string; url: string; type?: string } =>
+          d != null &&
+          typeof d === "object" &&
+          typeof (d as AttachedDoc).url === "string",
+      )
+      .map((d) => {
+        const allowed = ["main", "amendment", "addendum", "exhibit", "pricing"] as const
+        type Allowed = (typeof allowed)[number]
+        const raw = typeof d.type === "string" ? d.type : ""
+        const type: Allowed = (allowed as readonly string[]).includes(raw)
+          ? (raw as Allowed)
+          : "main"
+        return {
+          contractId: contract.id,
+          name: typeof d.name === "string" && d.name ? d.name : "Contract document",
+          url: d.url as string,
+          type,
+        }
+      })
+    if (docs.length > 0) {
+      await prisma.contractDocument.createMany({ data: docs })
+    }
+  }
+
   await prisma.pendingContract.update({
     where: { id },
     data: { status: "approved", reviewedAt: new Date(), reviewedBy },

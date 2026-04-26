@@ -121,7 +121,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
   }
 
   const handlePricingFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    doPricingUpload(e, setFileUploadProgress, setNewProposal)
+    doPricingUpload(e, setFileUploadProgress, setNewProposal, setCustomCategories)
   }
 
   const handleUsageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -24,6 +24,14 @@ export function handlePricingFileUpload(
   e: React.ChangeEvent<HTMLInputElement>,
   setFileUploadProgress: React.Dispatch<React.SetStateAction<FileUploadProgressState>>,
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>,
+  /**
+   * Charles 2026-04-26 (#66): when supplied, every distinct category
+   * found in the pricing file is appended to the user's custom-
+   * category list AND auto-selected on the proposal — so the vendor
+   * doesn't have to manually retype categories that the upload
+   * already discovered.
+   */
+  setCustomCategories?: React.Dispatch<React.SetStateAction<string[]>>,
 ) {
   const file = e.target.files?.[0]
   if (!file) return
@@ -124,7 +132,8 @@ export function handlePricingFileUpload(
         totalVolume += qty
       }
 
-      if (Object.keys(categoryCounts).length > 0) {
+      const distinctCategories = Object.keys(categoryCounts).filter(Boolean)
+      if (distinctCategories.length > 0) {
         detectedCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0][0]
       }
 
@@ -132,6 +141,19 @@ export function handlePricingFileUpload(
         setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
         toast.error("No valid products found in pricing file")
         return
+      }
+
+      // Charles 2026-04-26 (#66): append every distinct category from
+      // the pricing file to the proposal's selected categories so the
+      // vendor doesn't have to re-add them manually.
+      if (distinctCategories.length > 0 && setCustomCategories) {
+        setCustomCategories((prev) => {
+          const existing = new Set(prev.map((c) => c.toLowerCase()))
+          const additions = distinctCategories.filter(
+            (c) => !existing.has(c.toLowerCase()),
+          )
+          return additions.length > 0 ? [...prev, ...additions] : prev
+        })
       }
 
       setNewProposal(prev => {
@@ -166,12 +188,22 @@ export function handlePricingFileUpload(
           toast.success(`Merged pricing with usage: ${matched} matched of ${products.length} products`)
         }
 
+        // Auto-select every distinct category from the pricing file
+        // alongside whatever the vendor already had selected.
+        const mergedCategories = Array.from(
+          new Set([...prev.productCategories, ...distinctCategories]),
+        )
         return {
           ...prev,
           products: products,
           projectedSpend: totalSpend,
           projectedVolume: totalVolume,
-          productCategory: prev.productCategory || detectedCategory || prev.productCategory,
+          productCategory:
+            prev.productCategory ||
+            detectedCategory ||
+            mergedCategories[0] ||
+            "",
+          productCategories: mergedCategories,
         }
       })
 

@@ -86,7 +86,7 @@ export function VendorDashboardHero({
           sublabel="With active contracts"
         />
         <HeroStat
-          label="Total Spend on Contract"
+          label="Total Sales on Contract"
           value={isLoading ? null : formatCurrency(totalSpend)}
           sublabel={`${marketSharePercent.toFixed(1)}% market share`}
           tone={marketSharePercent >= 10 ? "positive" : "muted"}

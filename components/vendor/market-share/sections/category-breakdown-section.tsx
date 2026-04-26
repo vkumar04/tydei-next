@@ -46,7 +46,7 @@ export function CategoryBreakdownSection({ categoryRows }: { categoryRows: Categ
               <CollapsibleContent>
                 <div className="ml-4 mt-2 mb-3 grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4 text-sm">
                   <div>
-                    <p className="text-muted-foreground text-xs">Vendor Spend</p>
+                    <p className="text-muted-foreground text-xs">Your Sales</p>
                     <p className="text-lg font-semibold">{formatCurrency(row.yourSpend)}</p>
                   </div>
                   <div>

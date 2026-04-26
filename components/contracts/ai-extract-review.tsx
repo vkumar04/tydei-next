@@ -38,14 +38,26 @@ interface AIExtractReviewProps {
   extracted: ExtractedContractData
   confidence: number
   onAccept: (data: ExtractedContractData, pricingItems?: ContractPricingItem[], pricingCategories?: string[]) => void
+  /**
+   * Vendor-side use: forces the Vendor field to a fixed name (the
+   * logged-in vendor) and renders it read-only. Prevents a vendor
+   * submitting a contract attributed to another vendor when the
+   * AI lifts a counter-party / affiliate name from the PDF.
+   */
+  lockedVendorName?: string
 }
 
 export function AIExtractReview({
   extracted,
   confidence,
   onAccept,
+  lockedVendorName,
 }: AIExtractReviewProps) {
-  const [data, setData] = useState(extracted)
+  const [data, setData] = useState(() =>
+    lockedVendorName
+      ? { ...extracted, vendorName: lockedVendorName }
+      : extracted,
+  )
   const [editField, setEditField] = useState<string | null>(null)
   const [showTerms, setShowTerms] = useState(false)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
@@ -219,11 +231,21 @@ export function AIExtractReview({
             label="Contract Name"
             value={data.contractName}
           />
-          <EditableField
-            field="vendorName"
-            label="Vendor"
-            value={data.vendorName}
-          />
+          {lockedVendorName ? (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Vendor</p>
+              <p className="text-sm font-medium">{lockedVendorName}</p>
+              <p className="text-[11px] text-muted-foreground">
+                Locked to your vendor profile.
+              </p>
+            </div>
+          ) : (
+            <EditableField
+              field="vendorName"
+              label="Vendor"
+              value={data.vendorName}
+            />
+          )}
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Contract Type</p>
             <Select

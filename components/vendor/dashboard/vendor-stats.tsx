@@ -42,7 +42,7 @@ export function VendorStats({ stats }: VendorStatsProps) {
         description={`of ${stats.totalContracts} total contracts`}
       />
       <MetricCard
-        title="Total Spend on Contract"
+        title="Total Sales on Contract"
         value={formatCurrencyShort(stats.totalSpend)}
         icon={DollarSign}
         description="current period"
@@ -51,7 +51,7 @@ export function VendorStats({ stats }: VendorStatsProps) {
         title="Market Share"
         value={`${stats.marketSharePercent.toFixed(1)}%`}
         icon={PieChart}
-        description="of total facility spend"
+        description="of total facility spend (your share)"
       />
       <MetricCard
         title="Rebates Paid"

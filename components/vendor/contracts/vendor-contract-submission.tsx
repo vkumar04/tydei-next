@@ -678,6 +678,7 @@ export function VendorContractSubmission({
         }}
         onExtracted={handleAIExtract}
         initialFile={droppedFile}
+        lockedVendorName={vendorName}
       />
 
       <EntryModeTabs

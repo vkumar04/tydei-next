@@ -128,13 +128,9 @@ export function VendorContractDetailClient({
         </TabsContent>
 
         <TabsContent value="performance" className="mt-6 space-y-6">
-          {/* v0-port: vendors get the same composite score / renewal
-              risk / rebate forecast the facility sees, scoped via
-              requireContractScope. */}
           <ContractScoreCard
             contractId={contract.id}
             initialScore={initialPerformanceBundle?.score}
-            initialRisk={initialPerformanceBundle?.risk}
           />
           {contract.contractType === "tie_in" ? (
             <TieInComplianceCard

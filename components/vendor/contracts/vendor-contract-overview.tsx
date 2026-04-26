@@ -139,7 +139,7 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-green-500" />
-              <span className="text-sm text-muted-foreground">Spend to Date</span>
+              <span className="text-sm text-muted-foreground">Sales to Date</span>
             </div>
             <div className="text-2xl font-bold mt-1">{formatCurrency(summary.spendToDate)}</div>
             {Number(contract.totalValue) > 0 && (
@@ -363,7 +363,7 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
                   <TableHeader>
                     <TableRow>
                       <TableHead>Period</TableHead>
-                      <TableHead>Spend</TableHead>
+                      <TableHead>Sales</TableHead>
                       <TableHead>Volume</TableHead>
                       <TableHead>Rebate Earned</TableHead>
                       <TableHead>Payment</TableHead>

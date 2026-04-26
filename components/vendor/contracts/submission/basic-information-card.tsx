@@ -30,17 +30,15 @@ const CONTRACT_TYPE_OPTIONS = [
   { value: "service", label: "Service", hint: "Service agreements" },
 ] as const
 
-const DIVISION_OPTIONS = [
-  "Orthopedic Implants",
-  "Spine",
-  "Trauma",
-  "Sports Medicine",
-  "Biologics",
-  "Robotics & Navigation",
-  "Instruments",
-  "General",
-  "Other",
-] as const
+/**
+ * Charles 2026-04-26: Division was a hardcoded select. Different
+ * vendors (Stryker, Arthrex, DJO…) have different internal product
+ * divisions, and the demo list was misleading every vendor outside
+ * orthopedics. Switched to a free-text input until we ship a
+ * vendor-managed division catalog (Vendor.division is currently a
+ * single string column on the Vendor row in Settings → Organization;
+ * a multi-division catalog is the follow-up the iMessage flagged).
+ */
 
 export interface FacilityOption {
   id: string
@@ -130,18 +128,16 @@ export function BasicInformationCard({
           </div>
           <div className="space-y-2">
             <Label htmlFor="division">Division</Label>
-            <Select value={division} onValueChange={onDivisionChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select division" />
-              </SelectTrigger>
-              <SelectContent>
-                {DIVISION_OPTIONS.map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              id="division"
+              value={division}
+              onChange={(e) => onDivisionChange(e.target.value)}
+              placeholder="e.g., Joint Replacement, Sports Medicine"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Your internal division for this contract. Manage your
+              default in Settings → Organization.
+            </p>
           </div>
         </div>
 

@@ -35,9 +35,9 @@ export function VendorSpendChart({ data }: VendorSpendChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Aggregate Spend Trend</CardTitle>
+        <CardTitle>Aggregate Sales Trend</CardTitle>
         <CardDescription>
-          Total on-contract spend across all facilities
+          Total on-contract sales across all facilities
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -49,7 +49,7 @@ export function VendorSpendChart({ data }: VendorSpendChartProps) {
               <YAxis tickFormatter={formatCurrency} className="text-xs" />
               <Tooltip
                 contentStyle={chartTooltipStyle}
-                formatter={(value) => [formatCurrency(Number(value)), "Spend"]}
+                formatter={(value) => [formatCurrency(Number(value)), "Sales"]}
                 labelFormatter={(label) => `Month: ${label}`}
               />
               <Line
@@ -64,9 +64,9 @@ export function VendorSpendChart({ data }: VendorSpendChartProps) {
         ) : (
           <div className="flex flex-col items-center justify-center h-[280px] text-muted-foreground">
             <DollarSign className="h-12 w-12 mb-4 opacity-50" />
-            <p className="text-lg font-medium">No spend data available</p>
+            <p className="text-lg font-medium">No sales data available</p>
             <p className="text-sm">
-              Spend trends will appear once COG data is loaded
+              Sales trends will appear once COG data is loaded
             </p>
           </div>
         )}

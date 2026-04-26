@@ -12,11 +12,9 @@ import {
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { queryKeys } from "@/lib/query-keys"
 import { getContractCompositeScore } from "@/lib/actions/analytics/contract-score"
-import { getRenewalRisk } from "@/lib/actions/analytics/renewal-risk"
 
 const AXIS_LABELS: Record<string, string> = {
   rebateEfficiency: "Rebate Efficiency",
@@ -73,62 +71,17 @@ function gradeBadge(grade: "A" | "B" | "C" | "D" | "F") {
   )
 }
 
-const RISK_PALETTE = {
-  low: {
-    hex: "#10b981",
-    tw: "text-emerald-500",
-    badgeTw: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-    barTw: "[&>div]:bg-emerald-500",
-  },
-  medium: {
-    hex: "#eab308",
-    tw: "text-yellow-500",
-    badgeTw: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400",
-    barTw: "[&>div]:bg-yellow-500",
-  },
-  high: {
-    hex: "#ef4444",
-    tw: "text-red-500",
-    badgeTw: "bg-red-500/15 text-red-600 dark:text-red-400",
-    barTw: "[&>div]:bg-red-500",
-  },
-} as const
-
-function riskBadge(level: "low" | "medium" | "high") {
-  return (
-    <Badge className={`${RISK_PALETTE[level].badgeTw} border-0`}>
-      {level === "low" ? "Low risk" : level === "medium" ? "Medium risk" : "High risk"}
-    </Badge>
-  )
-}
-
-// Per-axis health → score >= 80 green, >= 60 amber, else red.
-function axisBarTw(value: number) {
-  if (value >= 80) return "[&>div]:bg-emerald-500"
-  if (value >= 60) return "[&>div]:bg-yellow-500"
-  return "[&>div]:bg-red-500"
-}
-
 export function ContractScoreCard({
   contractId,
   initialScore,
-  initialRisk,
 }: {
   contractId: string
   initialScore?: Awaited<ReturnType<typeof getContractCompositeScore>>
-  initialRisk?: Awaited<ReturnType<typeof getRenewalRisk>>
 }) {
   const { data: score, isLoading: scoreLoading } = useQuery({
     queryKey: queryKeys.analytics.contractScore(contractId),
     queryFn: () => getContractCompositeScore(contractId),
     initialData: initialScore,
-    staleTime: 5 * 60_000,
-    gcTime: 30 * 60_000,
-  })
-  const { data: risk, isLoading: riskLoading } = useQuery({
-    queryKey: queryKeys.analytics.renewalRisk(contractId),
-    queryFn: () => getRenewalRisk(contractId),
-    initialData: initialRisk,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
   })
@@ -141,7 +94,7 @@ export function ContractScoreCard({
     : []
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -219,57 +172,6 @@ export function ContractScoreCard({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Renewal Risk</CardTitle>
-            {risk ? riskBadge(risk.riskLevel) : null}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {riskLoading || !risk ? (
-            <Skeleton className="h-64 w-full" />
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-baseline gap-2">
-                <span
-                  className={`text-5xl font-bold ${RISK_PALETTE[risk.riskLevel].tw}`}
-                >
-                  {risk.riskScore}
-                </span>
-                <span className="text-sm text-muted-foreground">/ 100</span>
-              </div>
-              <Progress
-                value={risk.riskScore}
-                className={RISK_PALETTE[risk.riskLevel].barTw}
-              />
-              <p className="text-xs text-muted-foreground">
-                Composite of days-to-expiration, compliance, price variance,
-                vendor responsiveness, rebate utilization, and open issues.
-                Higher = more renewal risk.
-              </p>
-              {score ? (
-                <div className="space-y-2 pt-2">
-                  {Object.entries(score.axes).map(([k, v]) => (
-                    <div key={k}>
-                      <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          {AXIS_LABELS[k] ?? k}
-                        </span>
-                        <span className="font-mono">{v}</span>
-                      </div>
-                      <Progress
-                        value={v}
-                        className={`h-1.5 ${axisBarTw(v)}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }

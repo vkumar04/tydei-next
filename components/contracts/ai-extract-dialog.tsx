@@ -33,6 +33,15 @@ interface AIExtractDialogProps {
    * retriggers; pass a fresh `File` each time the user drops.
    */
   initialFile?: File | null
+  /**
+   * Vendor-side use: lock the Vendor field to the logged-in vendor.
+   * The AI may extract any vendor name from the PDF (counter-party,
+   * affiliate, etc.) — vendors should never be able to submit a
+   * contract attributed to a different vendor. When set, the review
+   * step shows the vendor as read-only and overrides the extracted
+   * value before accept. Charles 2026-04-26.
+   */
+  lockedVendorName?: string
 }
 
 type Stage = "upload" | "extracting" | "review" | "error"
@@ -48,6 +57,7 @@ export function AIExtractDialog({
   onOpenChange,
   onExtracted,
   initialFile,
+  lockedVendorName,
 }: AIExtractDialogProps) {
   const [stage, setStage] = useState<Stage>("upload")
   const [progress, setProgress] = useState(0)
@@ -346,6 +356,7 @@ export function AIExtractDialog({
             extracted={extracted}
             confidence={confidence}
             onAccept={handleAccept}
+            lockedVendorName={lockedVendorName}
           />
         )}
 

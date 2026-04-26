@@ -60,7 +60,7 @@ export function VendorMarketShareChart({ data }: VendorMarketShareChartProps) {
         <CardContent>
           <div className="flex flex-col items-center justify-center h-[240px] text-muted-foreground">
             <PieChartIcon className="h-12 w-12 mb-4 opacity-50" />
-            <p className="text-lg font-medium">No spend data</p>
+            <p className="text-lg font-medium">No sales data</p>
             <p className="text-sm">
               Once COG is loaded for your contracts, share by category
               will appear here.
@@ -102,7 +102,7 @@ export function VendorMarketShareChart({ data }: VendorMarketShareChartProps) {
     <Card>
       <CardHeader>
         <CardTitle>Your Market Share by Category</CardTitle>
-        <CardDescription>Percentage of total category spend</CardDescription>
+        <CardDescription>Your sales as a share of facility category spend</CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={280}>

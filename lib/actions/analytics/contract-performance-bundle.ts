@@ -15,7 +15,6 @@ import { serialize } from "@/lib/serialize"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { getContractCompositeScore } from "@/lib/actions/analytics/contract-score"
 import type { ContractCompositeScore } from "@/lib/actions/analytics/contract-score-impl"
-import { getRenewalRisk } from "@/lib/actions/analytics/renewal-risk"
 import {
   getRebateForecast,
   type RebateForecast,
@@ -29,7 +28,6 @@ export interface ContractPerformanceBundle {
   contractId: string
   contractType: string
   score: ContractCompositeScore
-  risk: Awaited<ReturnType<typeof getRenewalRisk>>
   forecast: RebateForecast
   tieIn: TieInComplianceResult | null
 }
@@ -53,9 +51,8 @@ export async function getContractPerformanceBundle(
   // perform their own ownership check via requireContractScope,
   // which the React cache wrapper deduplicates back to one
   // database hit.
-  const [score, risk, forecast, tieIn] = await Promise.all([
+  const [score, forecast, tieIn] = await Promise.all([
     getContractCompositeScore(contractId),
-    getRenewalRisk(contractId),
     getRebateForecast(contractId),
     contractType === "tie_in"
       ? getTieInCompliance(contractId)
@@ -66,7 +63,6 @@ export async function getContractPerformanceBundle(
     contractId,
     contractType,
     score,
-    risk,
     forecast,
     tieIn,
   })

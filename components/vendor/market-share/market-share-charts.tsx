@@ -171,7 +171,7 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
 
       {/* Category Breakdown with PieChart */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Market Share by Category" description="Your share of total spend by product category">
+        <ChartCard title="Market Share by Category" description="Your sales as a share of facility category spend">
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -236,7 +236,7 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
                     {expandedCategory === item.category && (
                       <div className="ml-8 mt-2 p-4 rounded-lg bg-muted/30 border">
                         <div className="flex items-center justify-between py-2">
-                          <span className="text-sm text-muted-foreground">Vendor Spend</span>
+                          <span className="text-sm text-muted-foreground">Your Sales</span>
                           <span className="text-sm font-medium">
                             {formatCurrency(item.vendorShare)}
                           </span>

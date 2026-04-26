@@ -21,8 +21,8 @@ export function CategoryTableSection({ categoryRows, stats, mergedCount }: Props
       {/* Pie Chart */}
       <Card className="lg:col-span-2">
         <CardHeader>
-          <CardTitle>Spend by Category</CardTitle>
-          <CardDescription>Your vendor spend distribution</CardDescription>
+          <CardTitle>Sales by Category</CardTitle>
+          <CardDescription>Your sales distribution by category</CardDescription>
         </CardHeader>
         <CardContent>
           {pieData.length === 0 ? (
@@ -62,7 +62,7 @@ export function CategoryTableSection({ categoryRows, stats, mergedCount }: Props
         <CardHeader>
           <CardTitle>Market Share by Product Category</CardTitle>
           <CardDescription>
-            Your spend vs total market across product categories
+            Your sales vs total market across product categories
             {mergedCount > 0 && (
               <Badge variant="secondary" className="ml-2">
                 {mergedCount} merged
@@ -75,7 +75,7 @@ export function CategoryTableSection({ categoryRows, stats, mergedCount }: Props
             <TableHeader>
               <TableRow>
                 <TableHead>Category</TableHead>
-                <TableHead className="text-right">Your Spend</TableHead>
+                <TableHead className="text-right">Your Sales</TableHead>
                 <TableHead className="text-right">Total Market</TableHead>
                 <TableHead className="text-right">Share %</TableHead>
                 <TableHead className="text-center">Trend</TableHead>
@@ -116,7 +116,7 @@ export function CategoryTableSection({ categoryRows, stats, mergedCount }: Props
           {categoryRows.length > 0 && (
             <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm text-muted-foreground">
               <span>
-                {categoryRows.length} categories | Vendor spend: {formatCurrency(stats.totalVendorSpend)}
+                {categoryRows.length} categories | Your sales: {formatCurrency(stats.totalVendorSpend)}
               </span>
               <span>
                 Market: {formatCurrency(stats.totalMarketSpend)} | Share: {stats.overallSharePct}%

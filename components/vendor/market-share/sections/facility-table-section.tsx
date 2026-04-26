@@ -11,15 +11,15 @@ export function FacilityTableSection({ facilityRows }: { facilityRows: FacilityR
     <Card>
       <CardHeader>
         <CardTitle>Market Share by Facility &amp; Category</CardTitle>
-        <CardDescription>Your spend distribution across facilities</CardDescription>
+        <CardDescription>Your sales distribution across facilities</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Facility Name</TableHead>
-              <TableHead className="text-right">Your Spend</TableHead>
-              <TableHead className="text-right">Total Spend</TableHead>
+              <TableHead className="text-right">Your Sales</TableHead>
+              <TableHead className="text-right">Facility Spend</TableHead>
               <TableHead className="text-right">Share %</TableHead>
             </TableRow>
           </TableHeader>
@@ -52,7 +52,7 @@ export function FacilityTableSection({ facilityRows }: { facilityRows: FacilityR
         </Table>
         {facilityRows.length > 0 && (
           <div className="mt-4 pt-4 border-t text-sm text-muted-foreground">
-            {facilityRows.length} facilities | Total vendor spend: {formatCurrency(totalVendorSpend)}
+            {facilityRows.length} facilities | Your total sales: {formatCurrency(totalVendorSpend)}
           </div>
         )}
       </CardContent>

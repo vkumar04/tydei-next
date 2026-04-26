@@ -531,43 +531,34 @@ export function ContractDetailClient({
               </div>
               <div>
                 <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-                  Rebates Earned (YTD)
+                  Rebates Earned
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="inline-flex cursor-help items-center">
                           <HelpCircle
                             className="h-3.5 w-3.5 text-muted-foreground"
-                            aria-label="Rebates Earned (YTD) help"
+                            aria-label="Rebates Earned help"
                           />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-[320px] p-3 text-xs">
                         <p>
-                          <span className="font-semibold">YTD only:</span>{" "}
-                          sums closed rebate periods whose end date falls
-                          between Jan&nbsp;1 of this year and today.
-                          &quot;Closed&quot; means the period&apos;s end date
-                          has passed. The Transactions tab below shows the
-                          full lifetime ledger, so individual rows there can
-                          be larger than this YTD total.
+                          <span className="font-semibold">Lifetime earned:</span>{" "}
+                          sums every closed rebate period
+                          (payPeriodEnd&nbsp;≤&nbsp;today) on this contract.
+                          The YTD figure below the total covers Jan&nbsp;1 of
+                          this year through today.
                         </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </p>
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(stats.rebateEarnedYTD)}
+                  {formatCurrency(stats.rebateEarned)}
                 </p>
-                {/* Charles 2026-04-26: restored lifetime totals
-                    alongside YTD. Users were losing the running
-                    total when only YTD showed (e.g. a contract that
-                    earned its first rebate in late December would
-                    flip to $0 on Jan 1 even though lifetime earned
-                    was $XX,XXX). */}
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(stats.rebateEarned)} earned · {formatCurrency(stats.rebateCollected)} collected
-                  <span className="ml-1 opacity-70">(lifetime)</span>
+                  {formatCurrency(stats.rebateEarnedYTD)} YTD · {formatCurrency(stats.rebateCollected)} collected
                 </p>
                 {stats.projectedYearEnd != null &&
                   stats.projectedYearEnd.projectedFullYear > 0 && (
@@ -1157,7 +1148,6 @@ export function ContractDetailClient({
           <ContractScoreCard
             contractId={contractId}
             initialScore={initialPerformanceBundle?.score}
-            initialRisk={initialPerformanceBundle?.risk}
           />
           {contract.contractType === "tie_in" ? (
             <TieInComplianceCard
