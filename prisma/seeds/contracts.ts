@@ -79,6 +79,25 @@ export async function seedContracts(
       tieInCapitalContractId: contracts.strykerMako.id,
     },
   })
+  // Tie-in members surface from contract.terms in
+  // lib/actions/analytics/tie-in-compliance.ts. Without these the
+  // TieInComplianceCard renders an empty body.
+  await addTerm(prisma, contracts.strykerTieIn.id, {
+    termName: "Joint Implant Commitment", termType: "compliance_rebate", baselineType: "spend_based",
+    effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow,
+    minimumPurchaseCommitment: 1_500_000,
+  }, [
+    { tierNumber: 1, spendMin: 0, spendMax: 1_500_000, rebateType: "percent_of_spend", rebateValue: 0.02 },
+    { tierNumber: 2, spendMin: 1_500_000, rebateType: "percent_of_spend", rebateValue: 0.035 },
+  ])
+  await addTerm(prisma, contracts.strykerTieIn.id, {
+    termName: "Capital Coverage", termType: "compliance_rebate", baselineType: "spend_based",
+    effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow,
+    minimumPurchaseCommitment: 500_000,
+  }, [
+    { tierNumber: 1, spendMin: 0, spendMax: 500_000, rebateType: "percent_of_spend", rebateValue: 0.015 },
+    { tierNumber: 2, spendMin: 500_000, rebateType: "percent_of_spend", rebateValue: 0.025 },
+  ])
 
   // 4. Stryker Pricing Only (pricing_only, active)
   contracts.strykerPricing = await prisma.contract.create({
@@ -329,6 +348,18 @@ export async function seedContracts(
       contractType: "service", status: "active", effectiveDate: oneYearAgo, expirationDate: twoYearsFromNow,
       totalValue: 180000, annualValue: 60000,
       description: "Genius 3D mammography system service and maintenance agreement",
+    },
+  })
+
+  // 18b. Stryker Mako Service Plan (service, active) — for Lighthouse
+  // Surgical Center so the ServiceSlaCard renders on the demo facility.
+  contracts.strykerMakoService = await prisma.contract.create({
+    data: {
+      contractNumber: "STK-2025-MKS", name: "Stryker Mako Service Plan",
+      vendorId: v.stryker.id, facilityId: f.lighthouseSurgical.id, productCategoryId: c.surgicalInstruments.id,
+      contractType: "service", status: "active", effectiveDate: oneYearAgo, expirationDate: twoYearsFromNow,
+      totalValue: 240000, annualValue: 120000,
+      description: "Annual service + uptime SLA for the Mako SmartRobotics system. 4-hour response, 99.9% uptime target.",
     },
   })
 

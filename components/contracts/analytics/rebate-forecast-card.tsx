@@ -93,31 +93,67 @@ export function RebateForecastCard({
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={series}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtUsd} />
+                {/* Recharts SVG attrs don't resolve hsl(var(--*)) tokens
+                    (the project's --primary is oklch, so wrapping it in
+                    hsl(...) emits invalid CSS and the chart renders
+                    invisible). Sticking to literal slate/blue hex like
+                    the cashflow + score cards to keep dark-mode legibility. */}
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#64748b"
+                  strokeOpacity={0.35}
+                />
+                <XAxis
+                  dataKey="period"
+                  tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  stroke="#64748b"
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  tickFormatter={fmtUsd}
+                  stroke="#64748b"
+                />
                 <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#0f172a",
+                    border: "1px solid #334155",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    padding: "8px 12px",
+                  }}
+                  labelStyle={{
+                    color: "#e2e8f0",
+                    fontWeight: 600,
+                    marginBottom: 4,
+                  }}
+                  itemStyle={{ color: "#e2e8f0" }}
                   formatter={(value) =>
                     value == null || typeof value !== "number"
                       ? "—"
                       : fmtUsd(value)
                   }
                 />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
                 {lastHistoryPeriod ? (
                   <ReferenceLine
                     x={lastHistoryPeriod}
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="#94a3b8"
+                    strokeOpacity={0.6}
                     strokeDasharray="4 2"
-                    label={{ value: "Today", fontSize: 10 }}
+                    label={{
+                      value: "Today",
+                      fontSize: 10,
+                      fill: "#94a3b8",
+                    }}
                   />
                 ) : null}
                 <Area
                   type="monotone"
                   dataKey="actual"
                   name="Actual rebate"
-                  stroke="hsl(var(--primary))"
-                  fill="hsl(var(--primary))"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fill="#3b82f6"
                   fillOpacity={0.4}
                   connectNulls
                 />
@@ -125,8 +161,9 @@ export function RebateForecastCard({
                   type="monotone"
                   dataKey="forecast"
                   name="Forecast rebate"
-                  stroke="hsl(var(--primary))"
-                  fill="hsl(var(--primary))"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fill="#3b82f6"
                   fillOpacity={0.15}
                   strokeDasharray="4 4"
                   connectNulls
