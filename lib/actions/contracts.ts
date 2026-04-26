@@ -66,6 +66,16 @@ export async function getContracts(input: ContractFilters) {
 
   const where: Prisma.ContractWhereInput = { AND: conditions }
 
+  // Perf: Prisma's `include` issues ONE batched query per relation
+  // (`WHERE relationFK IN (...)`), not one per row — so the include
+  // here is O(R) queries (R = number of relations), not O(N×R). The
+  // tighter cleanup is removing dead-code joins. `tiers: { select: { id } }`
+  // (formerly under `terms`) was never read from the returned shape; it
+  // contributed an extra batched query per page for nothing. Removed.
+  // The `rebates` and `terms` joins below ARE consumed (canonical
+  // reducers + category-scoped spend cascade respectively); they stay.
+  // We strip them from the per-row return shape after deriving the
+  // aggregates so callers don't pay the serialization cost downstream.
   const [contracts, total] = await Promise.all([
     prisma.contract.findMany({
       where,
@@ -87,8 +97,13 @@ export async function getContracts(input: ContractFilters) {
         // actually scoped to. Without this join, a contract whose only
         // term is scoped to ["Extremities & Trauma"] would show every
         // vendor dollar in its "Current Spend (Last 12 Months)" column.
+        // Charles 2026-04-26 perf pass: removed the dead `tiers:
+        // { select: { id } }` sub-include — never read in this function
+        // and not part of the public return shape (consumers fetch tier
+        // data via getContract for the detail page). Saves one batched
+        // tier query per list page.
         terms: {
-          select: { appliesTo: true, categories: true, tiers: { select: { id: true } } },
+          select: { appliesTo: true, categories: true },
         },
       },
       orderBy: { updatedAt: "desc" },
@@ -216,33 +231,72 @@ export async function getContracts(input: ContractFilters) {
   // a vendor (an intentional fuzziness documented in the block comment
   // above). For contracts whose terms are ALL scoped to specific
   // categories we want the tier-3 fallback to reflect only that slice.
-  // One extra batched aggregate per category-scoped contract — only
-  // when the outer `contract_id`-tier returned $0.
+  //
+  // Charles 2026-04-26 perf pass: this used to issue ONE
+  // `cOGRecord.aggregate` per category-scoped contract (true N+1
+  // proportional to page size). Replaced with ONE batched
+  // `groupBy(['vendorId','category'])` query over the union of
+  // category-scoped vendors; the per-contract sum is computed in JS
+  // by summing the buckets that fall in each contract's category union.
+  // For a 20-row page where every row was category-scoped this collapses
+  // ~20 round-trips into 1.
   const perContractCategorySpend = new Map<string, number>()
-  await Promise.all(
-    contracts.map(async (c) => {
-      if (!c.vendorId) return
-      const termScopes = (c.terms ?? []).map((t) => ({
-        appliesTo: t.appliesTo,
-        categories: t.categories,
-      }))
-      const unionWhere = buildUnionCategoryWhereClause(termScopes)
-      if (!unionWhere.category) return
-      const agg = await prisma.cOGRecord.aggregate({
-        where: {
-          facilityId: facility.id,
-          vendorId: c.vendorId,
-          transactionDate: { gte: windowStart, lte: windowEnd },
-          ...unionWhere,
-        },
-        _sum: { extendedPrice: true },
-      })
-      perContractCategorySpend.set(
-        c.id,
-        Number(agg._sum?.extendedPrice ?? 0),
+  const categoryScopedContracts: Array<{
+    id: string
+    vendorId: string
+    categories: Set<string>
+  }> = []
+  for (const c of contracts) {
+    if (!c.vendorId) continue
+    const termScopes = (c.terms ?? []).map((t) => ({
+      appliesTo: t.appliesTo,
+      categories: t.categories,
+    }))
+    const unionWhere = buildUnionCategoryWhereClause(termScopes)
+    const cats = unionWhere.category?.in
+    if (!cats || cats.length === 0) continue
+    categoryScopedContracts.push({
+      id: c.id,
+      vendorId: c.vendorId,
+      categories: new Set(cats),
+    })
+  }
+  if (categoryScopedContracts.length > 0) {
+    const scopedVendorIds = Array.from(
+      new Set(categoryScopedContracts.map((c) => c.vendorId)),
+    )
+    const scopedCategorySet = new Set<string>()
+    for (const c of categoryScopedContracts) {
+      for (const cat of c.categories) scopedCategorySet.add(cat)
+    }
+    const scopedCategories = Array.from(scopedCategorySet)
+    const cogByVendorCategory = await prisma.cOGRecord.groupBy({
+      by: ["vendorId", "category"],
+      where: {
+        facilityId: facility.id,
+        vendorId: { in: scopedVendorIds },
+        category: { in: scopedCategories },
+        transactionDate: { gte: windowStart, lte: windowEnd },
+      },
+      _sum: { extendedPrice: true },
+    })
+    // Index buckets as `${vendorId}::${category}` → sum.
+    const bucket = new Map<string, number>()
+    for (const row of cogByVendorCategory) {
+      if (!row.vendorId || row.category == null) continue
+      bucket.set(
+        `${row.vendorId}::${row.category}`,
+        Number(row._sum?.extendedPrice ?? 0),
       )
-    }),
-  )
+    }
+    for (const c of categoryScopedContracts) {
+      let sum = 0
+      for (const cat of c.categories) {
+        sum += bucket.get(`${c.vendorId}::${cat}`) ?? 0
+      }
+      perContractCategorySpend.set(c.id, sum)
+    }
+  }
 
   const withDerived = contracts.map((c) => {
     // Charles W1.U-B: canonical YTD helper — matches the detail header
@@ -274,7 +328,17 @@ export async function getContracts(input: ContractFilters) {
           ? cogContractSpend
           : cogVendorSpend
 
-    return { ...c, rebateEarned, rebateCollected, currentSpend }
+    // Charles 2026-04-26 perf pass: strip `rebates` and `terms` from
+    // the per-row payload. Both are internal-only inputs to the
+    // aggregations above (canonical reducers + category cascade); no
+    // list-page consumer reads them off the returned shape (verified by
+    // grep across components/ and hooks/). Keeping them inflated the
+    // serialized payload to the client by ~the entire rebate ledger
+    // per contract — visible on contracts with hundreds of rebate rows.
+    const { rebates: _r, terms: _t, ...scalar } = c
+    void _r
+    void _t
+    return { ...scalar, rebateEarned, rebateCollected, currentSpend }
   })
 
   return serialize({ contracts: withDerived, total })

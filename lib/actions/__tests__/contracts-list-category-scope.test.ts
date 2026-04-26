@@ -64,18 +64,21 @@ type GroupByCogVendor = Array<{
   vendorId: string | null
   _sum: { extendedPrice: number | null }
 }>
+type GroupByCogVendorCategory = Array<{
+  vendorId: string | null
+  category: string | null
+  _sum: { extendedPrice: number | null }
+}>
 
 let contractRows: ContractShape[] = []
 let periodGroupBy: GroupByPeriod = []
 let cogByContract: GroupByCogContract = []
 let cogByVendor: GroupByCogVendor = []
-// Per-contract category-scoped aggregate. The production code runs
-// `prisma.cOGRecord.aggregate` once per category-scoped contract with a
-// `{ category: { in: [...] } }` where-fragment; the mock returns this
-// value only when the caller passes a non-empty category filter
-// (otherwise we fall through to $0 so the test doesn't accidentally
-// double-count with the vendor-wide aggregate).
-let categoryAggregate = 0
+// Per (vendorId, category) bucket. Charles 2026-04-26 perf pass replaced
+// the per-contract `cOGRecord.aggregate` loop with ONE batched
+// `groupBy(['vendorId','category'])` query; the production code sums
+// the buckets that fall in each contract's category union.
+let cogByVendorCategory: GroupByCogVendorCategory = []
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -88,24 +91,14 @@ vi.mock("@/lib/db", () => ({
     },
     cOGRecord: {
       groupBy: vi.fn(async ({ by }: { by: string[] }) => {
+        // Two-key groupBy → category-scoped batched query.
+        if (by.includes("vendorId") && by.includes("category")) {
+          return cogByVendorCategory
+        }
         if (by.includes("contractId")) return cogByContract
         if (by.includes("vendorId")) return cogByVendor
         return []
       }),
-      aggregate: vi.fn(
-        async (arg: {
-          where: { category?: { in: string[] } }
-        }) => {
-          // Only return the category-scoped number when the caller
-          // actually supplied the category filter. This mirrors the
-          // production guard in `getContracts` (runs aggregate ONLY
-          // when `unionCategoryWhere.category` is truthy).
-          if (!arg?.where?.category?.in?.length) {
-            return { _sum: { extendedPrice: 0 } }
-          }
-          return { _sum: { extendedPrice: categoryAggregate } }
-        },
-      ),
     },
   },
 }))
@@ -143,7 +136,7 @@ beforeEach(() => {
   periodGroupBy = []
   cogByContract = []
   cogByVendor = []
-  categoryAggregate = 0
+  cogByVendorCategory = []
 })
 
 describe("getContracts — category-scoped trailing-12mo cascade (Charles W1.U-A)", () => {
@@ -162,7 +155,10 @@ describe("getContracts — category-scoped trailing-12mo cascade (Charles W1.U-A
     periodGroupBy = []
     cogByContract = []
     cogByVendor = [{ vendorId: "v-1", _sum: { extendedPrice: 30000 } }]
-    categoryAggregate = 10000
+    // Category bucket — sum of Cat A spend on vendor v-1 is $10K.
+    cogByVendorCategory = [
+      { vendorId: "v-1", category: "Cat A", _sum: { extendedPrice: 10000 } },
+    ]
 
     const { contracts } = (await getContracts({})) as {
       contracts: Array<{ id: string; currentSpend: number }>
@@ -173,21 +169,34 @@ describe("getContracts — category-scoped trailing-12mo cascade (Charles W1.U-A
     expect(contracts[0].currentSpend).toBe(10000)
     expect(contracts[0].currentSpend).not.toBe(30000)
 
-    // Verify the aggregate call used the category filter — confirms the
-    // read path actually routes through `buildUnionCategoryWhereClause`.
+    // Verify the category-scoped batched groupBy call routed the right
+    // category filter — confirms the read path actually threads through
+    // `buildUnionCategoryWhereClause`. Charles 2026-04-26 perf pass
+    // replaced the per-contract aggregate with ONE batched groupBy.
     const { prisma } = (await import("@/lib/db")) as unknown as {
       prisma: {
         cOGRecord: {
-          aggregate: ReturnType<typeof vi.fn>
+          groupBy: ReturnType<typeof vi.fn>
         }
       }
     }
-    expect(prisma.cOGRecord.aggregate).toHaveBeenCalled()
-    const aggArg = prisma.cOGRecord.aggregate.mock.calls[0][0] as {
-      where: { category?: { in: string[] }; vendorId?: string }
-    }
-    expect(aggArg.where.category).toEqual({ in: ["Cat A"] })
-    expect(aggArg.where.vendorId).toBe("v-1")
+    const calls = prisma.cOGRecord.groupBy.mock.calls as Array<
+      [
+        {
+          by: string[]
+          where: {
+            category?: { in: string[] }
+            vendorId?: { in: string[] }
+          }
+        },
+      ]
+    >
+    const categoryCall = calls.find(
+      ([arg]) => arg.by.includes("vendorId") && arg.by.includes("category"),
+    )
+    expect(categoryCall).toBeDefined()
+    expect(categoryCall![0].where.category).toEqual({ in: ["Cat A"] })
+    expect(categoryCall![0].where.vendorId).toEqual({ in: ["v-1"] })
   })
 
   it("all_products term: currentSpend reflects full vendor spend ($30K)", async () => {
@@ -203,27 +212,32 @@ describe("getContracts — category-scoped trailing-12mo cascade (Charles W1.U-A
     periodGroupBy = []
     cogByContract = []
     cogByVendor = [{ vendorId: "v-1", _sum: { extendedPrice: 30000 } }]
-    // categoryAggregate stays 0 — even if the production code called
-    // aggregate with no category filter, our mock returns 0 for that
-    // case. The expected behavior is that aggregate is NOT called for
-    // all-products contracts (the union helper returns {}).
-    categoryAggregate = 0
+    // No buckets needed — the all-products path is guarded so the
+    // `vendorId, category` groupBy should never fire.
+    cogByVendorCategory = []
 
     const { contracts } = (await getContracts({})) as {
       contracts: Array<{ currentSpend: number }>
     }
     expect(contracts[0].currentSpend).toBe(30000)
 
-    // The per-contract category aggregate path is guarded by
-    // `if (!unionWhere.category) return` — on an all-products term the
-    // union helper returns {}, so aggregate should NOT be called.
+    // The category-scoped groupBy path is guarded by
+    // `if (categoryScopedContracts.length === 0)` — on an all-products
+    // term the union helper returns {}, no contract qualifies, so the
+    // batched `vendorId, category` groupBy should NOT be called.
     const { prisma } = (await import("@/lib/db")) as unknown as {
       prisma: {
         cOGRecord: {
-          aggregate: ReturnType<typeof vi.fn>
+          groupBy: ReturnType<typeof vi.fn>
         }
       }
     }
-    expect(prisma.cOGRecord.aggregate).not.toHaveBeenCalled()
+    const calls = prisma.cOGRecord.groupBy.mock.calls as Array<
+      [{ by: string[] }]
+    >
+    const categoryCall = calls.find(
+      ([arg]) => arg.by.includes("vendorId") && arg.by.includes("category"),
+    )
+    expect(categoryCall).toBeUndefined()
   })
 })
