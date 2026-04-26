@@ -661,8 +661,12 @@ export function ContractDetailClient({
           <ContractTieInCard contractId={contractId} />
           {/* v0 bundled-multi-product tie-in memberships card. */}
           <ContractBundleMembershipsCard contractId={contractId} />
-          {/* v0 §9 performance card — rebate utilization + renewal risk. */}
-          <ContractPerformanceCard contractId={contractId} />
+          {/* Performance card — rebate utilization, market share, renewal risk. */}
+          <ContractPerformanceCard
+            contractId={contractId}
+            vendorId={contract.vendorId}
+            productCategory={contract.productCategory?.name ?? null}
+          />
           {/* Wave A: tie-in amortization + capital summary.
               Shows only for tie-in contracts that either link to a capital
               contract or carry capital fields on a term themselves. */}

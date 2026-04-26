@@ -11,8 +11,9 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { formatCurrency } from "@/lib/formatting"
-import { Activity, AlertTriangle, Target } from "lucide-react"
+import { Activity, AlertTriangle, PieChart, Target } from "lucide-react"
 import { getContractPerformance } from "@/lib/actions/contracts/performance-read"
+import { getCategoryMarketShareForVendor } from "@/lib/actions/cog/category-market-share"
 
 /**
  * Surfaces the v0-aligned performance helpers on the contract detail
@@ -26,19 +27,51 @@ import { getContractPerformance } from "@/lib/actions/contracts/performance-read
  */
 export function ContractPerformanceCard({
   contractId,
+  vendorId,
+  productCategory,
 }: {
   contractId: string
+  /** Optional — when present, the card adds a Market Share row scoped
+   *  to this vendor at the active facility. Pulled from COG live so
+   *  the metric reflects actual purchase mix. */
+  vendorId?: string
+  /** Optional — when present, narrows the Market Share row to the
+   *  contract's product category (instead of summing across all
+   *  categories the vendor sells in). */
+  productCategory?: string | null
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ["contract-performance", contractId],
     queryFn: () => getContractPerformance(contractId),
   })
 
+  // Market share is fetched independently so it can degrade to a "—"
+  // row when the vendor has no categorized COG, without blocking the
+  // utilization + risk render.
+  const { data: shareData } = useQuery({
+    queryKey: ["contract-performance-share", vendorId, contractId],
+    queryFn: () =>
+      vendorId
+        ? getCategoryMarketShareForVendor({ vendorId, contractId })
+        : Promise.resolve(null),
+    enabled: !!vendorId,
+  })
+
   if (isLoading || !data) return null
-  if (!data.utilization && !data.renewalRisk) return null
+  if (!data.utilization && !data.renewalRisk && !vendorId) return null
 
   const util = data.utilization
   const risk = data.renewalRisk
+
+  // Resolve the market-share row for this contract's category. If the
+  // contract has no productCategory (capital, service), fall back to
+  // the highest-share category the vendor sells in at this facility —
+  // gives the user something useful instead of an empty row.
+  const shareRow = shareData
+    ? productCategory
+      ? shareData.rows.find((r) => r.category === productCategory) ?? null
+      : shareData.rows[0] ?? null
+    : null
 
   const riskBadgeVariant =
     risk?.riskLevel === "high"
@@ -54,7 +87,7 @@ export function ContractPerformanceCard({
           <Activity className="h-4 w-4" /> Contract performance
         </CardTitle>
         <CardDescription>
-          Rebate utilization and renewal risk at a glance.
+          Rebate utilization, market share, and renewal risk at a glance.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -127,6 +160,64 @@ export function ContractPerformanceCard({
                 </>
               )}
             </p>
+          </div>
+        )}
+        {vendorId && (
+          <div className="space-y-2 rounded-md border bg-card p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <PieChart className="h-3.5 w-3.5" />
+                Market share
+                {productCategory && (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    · {productCategory}
+                  </span>
+                )}
+              </div>
+              {shareRow ? (
+                <span className="text-lg font-semibold tabular-nums">
+                  {shareRow.sharePct.toFixed(1)}%
+                </span>
+              ) : (
+                <span className="text-sm text-muted-foreground">—</span>
+              )}
+            </div>
+            {shareRow ? (
+              <>
+                <Progress value={Math.min(100, shareRow.sharePct)} />
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(shareRow.vendorSpend)} of{" "}
+                  {formatCurrency(shareRow.categoryTotal)} ·{" "}
+                  {shareRow.competingVendors === 1
+                    ? "Sole supplier"
+                    : `${shareRow.competingVendors} vendors competing`}
+                  {shareRow.commitmentPct != null && (
+                    <>
+                      {" "}
+                      · target {shareRow.commitmentPct.toFixed(1)}%
+                      {shareRow.sharePct >= shareRow.commitmentPct ? (
+                        <span className="text-emerald-600"> (met)</span>
+                      ) : (
+                        <span className="text-amber-600">
+                          {" "}
+                          ({(shareRow.commitmentPct - shareRow.sharePct).toFixed(1)}% short)
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {!shareData
+                  ? "Loading…"
+                  : shareData.totalVendorSpend === 0
+                    ? "No spend recorded for this vendor at this facility in the last 12 months."
+                    : productCategory
+                      ? `No categorized COG for ${productCategory}. Total un-categorized vendor spend: ${formatCurrency(shareData.uncategorizedSpend)}.`
+                      : "Vendor spend exists but isn't categorized — categorize the COG import to see share by category."}
+              </p>
+            )}
           </div>
         )}
         {risk && (
