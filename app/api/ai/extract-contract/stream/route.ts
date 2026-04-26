@@ -28,6 +28,8 @@ import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
 import { claudeModel } from "@/lib/ai/config"
 import { extractedContractSchema } from "@/lib/ai/schemas"
+import { extractPdfText } from "@/lib/ai/pdf-text-helper"
+import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
 
 export const maxDuration = 60
 
@@ -90,6 +92,20 @@ export async function POST(req: Request) {
     console.warn("[extract-contract/stream] S3 archival skipped:", err)
   }
 
+  // Pre-extract the text layer with pdf-parse — when present (most
+  // PDFs), feeding it to Claude alongside the file part dramatically
+  // improves accuracy on tier-ladder + line-item tables. When absent
+  // (scanned doc), Claude falls back to vision-only.
+  const pdfText = await extractPdfText(fileData)
+  const textHint = pdfText.hasTextLayer
+    ? `\n\nFor reference, here is the extracted text layer of the PDF (may help with tabular data):\n\n${pdfText.text}`
+    : ""
+  if (!pdfText.hasTextLayer) {
+    console.warn(
+      `[extract-contract/stream] no text layer in ${file.name} (likely scanned, ${pdfText.pageCount} pages) — vision-only`,
+    )
+  }
+
   // Stream the extraction. partialOutputStream emits incrementally
   // valid JSON chunks; the AI SDK's toTextStreamResponse() serializes
   // them on the wire as plain text the client can parse incrementally.
@@ -105,7 +121,7 @@ export async function POST(req: Request) {
         content: [
           {
             type: "text",
-            text: `Extract every field of the attached contract into the structured schema. Be thorough — capture all rebate terms, every tier, every product category. For optional numeric fields you can't determine, omit them or use null (not the string "null").`,
+            text: getActiveContractExtractPrompt().prompt + textHint,
           },
           {
             type: "file",

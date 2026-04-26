@@ -107,9 +107,30 @@ export function AIExtractReview({
     multiline?: boolean
   }) {
     const isEditing = editField === field
+    // 2026-04-26: per-field confidence surfaced as a small dot.
+    // Red <0.5, amber <0.8, green ≥0.8. No dot = no rating from
+    // the model (older extracts).
+    const fc = (data.fieldConfidences ?? {}) as Record<string, number>
+    const confidenceForField = fc[field]
+    const dotClass =
+      confidenceForField == null
+        ? null
+        : confidenceForField >= 0.8
+          ? "bg-emerald-500"
+          : confidenceForField >= 0.5
+            ? "bg-amber-500"
+            : "bg-red-500"
     return (
       <div className="space-y-1">
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+          {label}
+          {dotClass ? (
+            <span
+              className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`}
+              title={`AI confidence: ${(confidenceForField! * 100).toFixed(0)}%`}
+            />
+          ) : null}
+        </p>
         {isEditing ? (
           multiline ? (
             <Textarea

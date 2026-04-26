@@ -97,6 +97,21 @@ export const extractedContractSchema = z.object({
     .describe(
       "All product categories covered by this contract - contracts often cover multiple categories like Ortho Spine, Ortho Trauma, Sports Medicine, etc."
     ),
+  /**
+   * Per-field confidence map (0-1). The model self-rates which fields
+   * it's least certain about, so the review dialog can highlight low-
+   * confidence fields in red and the user reviews those first.
+   * Optional — older extracts won't have it.
+   * Keys: contractName, contractNumber, vendorName, contractType,
+   * effectiveDate, expirationDate, totalValue, productCategories,
+   * description, terms.
+   */
+  fieldConfidences: z
+    .record(z.string(), z.number().min(0).max(1))
+    .optional()
+    .describe(
+      "Per-field confidence between 0 and 1 — your honest self-rating per top-level field. Higher = more confident the extracted value matches the source PDF.",
+    ),
   terms: z.array(
     z.object({
       termName: z.string().describe("Name of the term/tier structure"),
