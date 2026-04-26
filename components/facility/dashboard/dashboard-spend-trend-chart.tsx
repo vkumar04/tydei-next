@@ -18,7 +18,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
-import { TrendingUpIcon } from "lucide-react"
+import { TrendingUpIcon, TrendingDownIcon, MinusIcon } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -26,8 +26,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { chartTooltipStyle } from "@/lib/chart-config"
 import type { MonthlyTrendPoint } from "@/lib/reports/monthly-trend"
+import { v0SpendTrend } from "@/lib/v0-spec/cog"
 
 interface DashboardSpendTrendChartProps {
   data: MonthlyTrendPoint[]
@@ -57,17 +59,50 @@ export function DashboardSpendTrendChart({
   const total = data.reduce((sum, p) => sum + p.spend + p.rebate, 0)
   const hasData = total > 0
 
+  // v0 doc §6 spend trend (last 3mo avg vs prior 3mo avg). Pass the
+  // chronologically-sorted spend series; helper returns "stable" when
+  // < 6 months are available so it's safe to call unconditionally.
+  const trend = v0SpendTrend(data.map((p) => p.spend))
+  const trendBadge = (() => {
+    const sign = trend.changePct > 0 ? "+" : ""
+    if (trend.trend === "up")
+      return (
+        <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0 gap-1">
+          <TrendingUpIcon className="h-3 w-3" />
+          {sign}
+          {trend.changePct.toFixed(1)}%
+        </Badge>
+      )
+    if (trend.trend === "down")
+      return (
+        <Badge className="bg-red-500/15 text-red-600 dark:text-red-400 border-0 gap-1">
+          <TrendingDownIcon className="h-3 w-3" />
+          {sign}
+          {trend.changePct.toFixed(1)}%
+        </Badge>
+      )
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <MinusIcon className="h-3 w-3" />
+        Stable
+      </Badge>
+    )
+  })()
+
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <TrendingUpIcon className="h-5 w-5 text-muted-foreground" />
-          <div>
-            <CardTitle>Monthly Spend & Rebate</CardTitle>
-            <CardDescription>
-              Rolling 12-month spend alongside rebate earned
-            </CardDescription>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <TrendingUpIcon className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <CardTitle>Monthly Spend & Rebate</CardTitle>
+              <CardDescription>
+                Rolling 12-month spend alongside rebate earned
+              </CardDescription>
+            </div>
           </div>
+          {hasData ? trendBadge : null}
         </div>
       </CardHeader>
       <CardContent>

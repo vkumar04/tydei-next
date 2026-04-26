@@ -15,6 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
+import {
+  v0CogPriceVarianceBand,
+  type V0CogVarianceBand,
+} from "@/lib/v0-spec/cog"
 import { cn } from "@/lib/utils"
 import {
   Search,
@@ -67,6 +71,44 @@ function classifyDiscrepancy(d: PriceDiscrepancy): DiscrepancyType {
 function getVarianceDollar(d: PriceDiscrepancy): number | null {
   if (d.contractPrice == null) return null
   return d.invoicePrice - d.contractPrice
+}
+
+// v0 doc §6 banding: ±0.5% = at_contract, <±5% = minor_*, ≥±5% = significant_*.
+function getVarianceBand(d: PriceDiscrepancy): V0CogVarianceBand | null {
+  if (d.contractPrice == null) return null
+  return v0CogPriceVarianceBand(d.invoicePrice, d.contractPrice).band
+}
+
+function bandBadge(band: V0CogVarianceBand | null) {
+  if (band == null) return <span className="text-muted-foreground">—</span>
+  switch (band) {
+    case "significant_overcharge":
+      return (
+        <Badge className="bg-red-500/15 text-red-600 dark:text-red-400 border-0">
+          Significant overcharge
+        </Badge>
+      )
+    case "minor_overcharge":
+      return (
+        <Badge className="bg-orange-500/15 text-orange-600 dark:text-orange-400 border-0">
+          Minor overcharge
+        </Badge>
+      )
+    case "at_contract":
+      return <Badge variant="secondary">At contract</Badge>
+    case "minor_discount":
+      return (
+        <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0">
+          Minor discount
+        </Badge>
+      )
+    case "significant_discount":
+      return (
+        <Badge className="bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 border-0">
+          Significant discount
+        </Badge>
+      )
+  }
 }
 
 function getTypeBadge(type: DiscrepancyType) {
@@ -190,7 +232,13 @@ function SummaryCards({
 
 // ─── Table Columns ──────────────────────────────────────────────
 
-function buildColumns(): ColumnDef<PriceDiscrepancy & { _type: DiscrepancyType; _varianceDollar: number | null }>[] {
+function buildColumns(): ColumnDef<
+  PriceDiscrepancy & {
+    _type: DiscrepancyType
+    _varianceDollar: number | null
+    _band: V0CogVarianceBand | null
+  }
+>[] {
   return [
     {
       accessorKey: "itemDescription",
@@ -299,6 +347,11 @@ function buildColumns(): ColumnDef<PriceDiscrepancy & { _type: DiscrepancyType; 
       cell: ({ getValue }) => getTypeBadge(getValue<DiscrepancyType>()),
     },
     {
+      accessorKey: "_band",
+      header: "Severity",
+      cell: ({ getValue }) => bandBadge(getValue<V0CogVarianceBand | null>()),
+    },
+    {
       id: "actions",
       header: "",
       cell: ({ row }) => (
@@ -332,6 +385,7 @@ export function PriceDiscrepancyTable({
         ...d,
         _type: classifyDiscrepancy(d),
         _varianceDollar: getVarianceDollar(d),
+        _band: getVarianceBand(d),
       })),
     [discrepancies]
   )

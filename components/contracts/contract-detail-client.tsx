@@ -47,6 +47,7 @@ import { ContractPerformanceCharts } from "@/components/contracts/contract-perfo
 import { ContractScoreCard } from "@/components/contracts/analytics/contract-score-card"
 import { RebateForecastCard } from "@/components/contracts/analytics/rebate-forecast-card"
 import { TieInComplianceCard } from "@/components/contracts/analytics/tie-in-compliance-card"
+import { ServiceSlaCard } from "@/components/contracts/analytics/service-sla-card"
 import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
 import { ContractBundleMembershipsCard } from "@/components/contracts/contract-bundle-memberships-card"
 import { ContractPerformanceCard } from "@/components/contracts/contract-performance-card"
@@ -1105,6 +1106,9 @@ export function ContractDetailClient({
           <ContractScoreCard contractId={contractId} />
           {contract.contractType === "tie_in" ? (
             <TieInComplianceCard contractId={contractId} />
+          ) : null}
+          {contract.contractType === "service" ? (
+            <ServiceSlaCard contractId={contractId} />
           ) : null}
           <RebateForecastCard contractId={contractId} />
           <ContractPerformanceCharts contractId={contractId} />

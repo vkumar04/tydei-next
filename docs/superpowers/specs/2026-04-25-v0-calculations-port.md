@@ -1,6 +1,6 @@
 # Wire all v0 calculations into the app — spec
 
-**Status:** in-progress
+**Status:** Tier-1 wired (8 of 9; cross-vendor tie-in deferred). Tier-2 partial: cog price-variance band + spend-trend pill landed.
 **Origin:** `lib/v0-spec/` ports the v0 calculation library (~30 helpers) but ZERO are consumed by `lib/actions/`, `components/`, or `app/`. They sit as test oracles only. This spec wires them through to user-facing UI + builds the pieces the v0 doc defines but tydei never had.
 
 ## Inventory
@@ -68,6 +68,26 @@ Every action gates via `requireFacility()` + `contractOwnershipWhere` (auth-scop
 - **New report** `/dashboard/reports/compliance`:
   - Per-purchase compliance audit
   - Violations list with severity buckets
+
+## Wired surfaces (2026-04-25)
+
+| Calc | Server action | UI surface |
+|---|---|---|
+| Composite Score | `lib/actions/analytics/contract-score.ts` | `components/contracts/analytics/contract-score-card.tsx` on Performance tab |
+| Renewal Risk | `lib/actions/analytics/renewal-risk.ts` | merged into ContractScoreCard (right pane) |
+| Rebate Forecast | `lib/actions/analytics/rebate-forecast.ts` | `components/contracts/analytics/rebate-forecast-card.tsx` on Performance tab |
+| Tie-in Compliance | `lib/actions/analytics/tie-in-compliance.ts` | `components/contracts/analytics/tie-in-compliance-card.tsx` (when `contractType=tie_in`) |
+| Service SLA | `lib/actions/analytics/service-sla.ts` | `components/contracts/analytics/service-sla-card.tsx` (when `contractType=service`) |
+| Spend Concentration (HHI) | `lib/actions/analytics/spend-concentration.ts` | `components/facility/dashboard/dashboard-spend-concentration-card.tsx` on Spend tab |
+| Admin Time Savings | `lib/actions/analytics/admin-time-savings.ts` | `components/facility/dashboard/dashboard-admin-time-savings-card.tsx` on Overview tab |
+| Per-purchase Compliance | `lib/actions/analytics/purchase-compliance.ts` | `app/dashboard/reports/compliance/page.tsx` (linked from QuickAccessCards) |
+| `v0CogPriceVarianceBand` (Tier-2) | n/a (helper) | new "Severity" column on price-discrepancy table |
+| `v0SpendTrend` (Tier-2) | n/a (helper) | trend pill on dashboard "Monthly Spend & Rebate" header |
+
+Cross-vendor tie-in (Tier-1 #6) deferred — the schema doesn't carry per-
+vendor commitments + GPO bonus rates, so the v0 helper would need a UI
+that collects them as input. Skipped until the contract data model
+grows that field.
 
 ## What the agents test
 
