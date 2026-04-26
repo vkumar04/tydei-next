@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
-import { Loader2 } from "lucide-react"
+import { Loader2, ExternalLink, FileText, FileSpreadsheet } from "lucide-react"
+import { toast } from "sonner"
+import { getDownloadUrl } from "@/lib/actions/uploads"
 
 type PendingContractWithVendor = PendingContract & {
   vendor: Pick<Vendor, "id" | "name" | "logoUrl">
@@ -223,6 +225,7 @@ export function PendingReviewDialog({
         >
           <TabsList>
             <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="action">Action</TabsTrigger>
           </TabsList>
 
@@ -306,6 +309,16 @@ export function PendingReviewDialog({
           </TabsContent>
 
           <TabsContent
+            value="documents"
+            className="min-h-0 flex-1 space-y-4 overflow-y-auto text-sm"
+          >
+            <PendingDocumentsSection
+              documents={contract.documents}
+              pricingData={contract.pricingData}
+            />
+          </TabsContent>
+
+          <TabsContent
             value="action"
             className="min-h-0 flex-1 space-y-4 overflow-y-auto"
           >
@@ -339,5 +352,160 @@ export function PendingReviewDialog({
         </Tabs>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ─── Documents tab — surfaces vendor-attached PDFs + the pricing file ──
+//
+// 2026-04-26 (Charles prod feedback): "approvals needs to have more
+// information for them to approve it including the PDF and Pricing
+// documents to view." The PendingContract row carries `documents: Json`
+// (array of {name, url}) and `pricingData: Json?` (file metadata +
+// line items). Both were captured at submission time but never surfaced
+// here, so approvers had to take the vendor's word for it.
+//
+// View flow: getDownloadUrl(key) issues a per-request signed URL (15
+// min default), gated by assertKeyVisibleToUser. We open it in a new
+// tab so the dialog state stays put.
+
+interface AttachedDoc {
+  name?: string | null
+  url?: string | null  // S3 key; not a public URL
+}
+
+interface PricingDataShape {
+  fileName?: string
+  itemCount?: number
+  totalValue?: number
+  categories?: string[]
+  items?: unknown[]
+}
+
+function PendingDocumentsSection({
+  documents,
+  pricingData,
+}: {
+  documents: unknown
+  pricingData: unknown
+}) {
+  const docs: AttachedDoc[] = Array.isArray(documents)
+    ? (documents as AttachedDoc[]).filter(
+        (d) => d && typeof d === "object" && typeof d.url === "string",
+      )
+    : []
+  const pricing = (pricingData ?? null) as PricingDataShape | null
+
+  async function openSigned(key: string, label: string) {
+    try {
+      const url = await getDownloadUrl(key)
+      window.open(url, "_blank", "noopener,noreferrer")
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? `Could not open ${label}: ${err.message}`
+          : `Could not open ${label}`,
+      )
+    }
+  }
+
+  if (docs.length === 0 && !pricing) {
+    return (
+      <p className="text-muted-foreground">
+        No documents or pricing file attached to this submission.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {docs.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="font-medium">Contract documents ({docs.length})</h3>
+          <ul className="space-y-1.5">
+            {docs.map((d, i) => (
+              <li
+                key={`${d.url}-${i}`}
+                className="flex items-center justify-between rounded-md border bg-card p-3"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">
+                    {d.name ?? d.url ?? "Untitled document"}
+                  </span>
+                </div>
+                {d.url && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openSigned(d.url!, d.name ?? "document")}
+                  >
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                    View
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {pricing && (
+        <div className="space-y-2">
+          <h3 className="font-medium">Pricing file</h3>
+          <div className="rounded-md border bg-card p-3 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileSpreadsheet className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate font-medium">
+                  {pricing.fileName ?? "(no file name)"}
+                </span>
+              </div>
+              {/*
+               * Pricing file usually isn't S3-archived as a single key —
+               * the parsed line items live on PendingContract.pricingData.items.
+               * If a file URL is added later (mirror of contract docs),
+               * surface a View button here too.
+               */}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+              <div>
+                <p>Items</p>
+                <p className="font-medium text-foreground tabular-nums">
+                  {pricing.itemCount ?? pricing.items?.length ?? "—"}
+                </p>
+              </div>
+              <div>
+                <p>Total value</p>
+                <p className="font-medium text-foreground tabular-nums">
+                  {pricing.totalValue != null
+                    ? formatCurrency(pricing.totalValue)
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <p>Categories</p>
+                <p className="font-medium text-foreground">
+                  {pricing.categories?.length ?? 0}
+                </p>
+              </div>
+            </div>
+            {pricing.categories && pricing.categories.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {pricing.categories.slice(0, 8).map((c) => (
+                  <Badge key={c} variant="outline" className="text-[11px]">
+                    {c}
+                  </Badge>
+                ))}
+                {pricing.categories.length > 8 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    +{pricing.categories.length - 8} more
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
