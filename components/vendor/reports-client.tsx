@@ -13,6 +13,7 @@ import { VendorReportsControlBar } from "@/components/vendor/reports/reports-con
 import { ReportTypeGrid } from "@/components/vendor/reports/report-type-grid"
 import { RecentReportsTable } from "@/components/vendor/reports/recent-reports-table"
 import { GenerateReportDialog } from "@/components/vendor/reports/generate-report-dialog"
+import { VendorPurchaseLeakageCard } from "@/components/vendor/reports/vendor-purchase-leakage-card"
 import type {
   RecentReport,
   ReportType,
@@ -214,6 +215,11 @@ export function VendorReportsClient(_props: VendorReportsClientProps) {
         category={category}
         onDownload={handleDownload}
       />
+
+      {/* v0-port: vendor-side leakage audit (off-contract /
+          out-of-period / price-variance purchases of this vendor's
+          product). */}
+      <VendorPurchaseLeakageCard />
 
       <GenerateReportDialog
         open={isGenerateDialogOpen}

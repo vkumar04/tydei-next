@@ -10,6 +10,7 @@ import { PerformanceHero } from "./performance-hero"
 import { PerformanceControlBar } from "./performance-control-bar"
 import { PerformanceOverviewTab } from "./performance-overview-tab"
 import { VendorCustomerConcentrationCard } from "./vendor-customer-concentration-card"
+import { VendorTieInMembershipsCard } from "./vendor-tie-in-memberships-card"
 import { PerformanceContractsTab } from "./performance-contracts-tab"
 import { PerformanceRebatesTab } from "./performance-rebates-tab"
 import { PerformanceCategoriesTab } from "./performance-categories-tab"
@@ -201,6 +202,9 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
           {/* v0-port: vendor-side mirror of the facility's spend HHI —
               answers "how concentrated is my revenue across customers?". */}
           <VendorCustomerConcentrationCard />
+          {/* v0-port: cross-vendor tie-in bundles this vendor is a member
+              of (returns null when there are none). */}
+          <VendorTieInMembershipsCard />
         </TabsContent>
 
         <TabsContent value="contracts" className="space-y-4">
