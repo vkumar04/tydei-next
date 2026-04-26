@@ -1,6 +1,9 @@
 import { generateText, Output } from "ai"
+import {
+  generateStructured,
+  withCacheControl,
+} from "@/lib/ai/generate-structured"
 import { headers } from "next/headers"
-import mammoth from "mammoth"
 import { auth } from "@/lib/auth-server"
 import { claudeModel } from "@/lib/ai/config"
 import {
@@ -294,69 +297,18 @@ ${text.trim()}`,
       console.warn("[extract-contract] S3 archival skipped:", uploadErr)
     }
 
-    // Classify incoming file. PDFs are sent to Claude as a file part;
-    // DOCX is converted to plain text server-side via mammoth; TXT is
-    // read directly. DOC (legacy binary Word) is not natively supported
-    // and is rejected with a helpful message.
+    // 2026-04-26: contracts are PDF-only. The previous DOCX (mammoth)
+    // and TXT paths have been removed — they were rarely used and the
+    // dual-input branching obscured the main code path. Any other
+    // format is rejected with a clear pointer to convert to PDF.
     const lowerName = file.name.toLowerCase()
     const isPdf = lowerName.endsWith(".pdf") || file.type === "application/pdf"
-    const isDocx =
-      lowerName.endsWith(".docx") ||
-      file.type ===
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    const isDoc = lowerName.endsWith(".doc") && !isDocx
-    const isTxt = lowerName.endsWith(".txt") || file.type === "text/plain"
-
-    if (isDoc) {
+    if (!isPdf) {
       return Response.json(
         {
-          error: "Legacy .doc format not supported",
+          error: "Contract uploads must be PDF",
           details:
-            "Please save the file as PDF or .docx and try again. Mammoth can only read .docx.",
-        },
-        { status: 415 },
-      )
-    }
-
-    // For non-PDF inputs we convert to plain text and feed the existing
-    // text-extraction path to reuse one code path per input.
-    let docText: string | null = null
-    if (isDocx) {
-      try {
-        const { value } = await mammoth.extractRawText({
-          buffer: Buffer.from(fileData),
-        })
-        docText = value.trim()
-      } catch (err) {
-        console.error("[extract-contract] docx conversion failed:", err)
-        return Response.json(
-          {
-            error: "Could not read .docx file",
-            details: err instanceof Error ? err.message : "Unknown error",
-          },
-          { status: 400 },
-        )
-      }
-      if (!docText) {
-        return Response.json(
-          { error: "The .docx file contained no readable text." },
-          { status: 400 },
-        )
-      }
-    } else if (isTxt) {
-      docText = new TextDecoder().decode(fileData).trim()
-      if (!docText) {
-        return Response.json(
-          { error: "The .txt file was empty." },
-          { status: 400 },
-        )
-      }
-    } else if (!isPdf) {
-      return Response.json(
-        {
-          error: "Unsupported file type",
-          details:
-            "Supported: PDF, DOCX, TXT. CSV / Excel pricing files should go through the Pricing import flow.",
+            "Only PDF files are supported for contract extraction. Convert your DOCX/DOC/TXT to PDF and try again. CSV / Excel pricing files use a separate Pricing import flow.",
         },
         { status: 415 },
       )
@@ -372,7 +324,15 @@ ${text.trim()}`,
     try {
       const userContent: Array<
         | { type: "text"; text: string }
-        | { type: "file"; data: Uint8Array; mediaType: "application/pdf"; filename: string }
+        | {
+            type: "file"
+            data: Uint8Array
+            mediaType: "application/pdf"
+            filename: string
+            providerOptions?: {
+              anthropic?: { cacheControl?: { type: "ephemeral" } }
+            }
+          }
       > = [
         {
           type: "text",
@@ -380,34 +340,34 @@ ${text.trim()}`,
             RICH_SYSTEM_PROMPT +
             (userInstructions
               ? `\n\nAdditional user instructions:\n${userInstructions}`
-              : "") +
-            (docText ? `\n\nContract document (extracted text):\n${docText}` : ""),
+              : ""),
         },
-      ]
-      if (isPdf) {
-        userContent.push({
+        {
           type: "file",
           data: fileData,
           mediaType,
           filename: file.name,
-        })
-      }
+          // Cache the PDF representation for ~5 min — re-uploads /
+          // retries hit the cache instead of re-parsing the file.
+          ...withCacheControl(),
+        },
+      ]
 
-      const result = await generateText({
-        model: claudeModel,
-        output: Output.object({ schema: extractedContractSchema }),
-        messages: [
-          {
-            role: "user",
-            content: userContent,
-          },
-        ],
+      // generateStructured handles:
+      //   - Anthropic structuredOutputMode='jsonTool' (avoids the
+      //     24-optional-param limit + grammar overload)
+      //   - Opus → Sonnet fallback on transient errors
+      //   - Logging the model used so retries are observable.
+      const structured = await generateStructured({
+        schema: extractedContractSchema,
+        messages: [{ role: "user", content: userContent }],
+        actionName: "extract-contract",
       })
 
       try {
-        extracted = result.output
+        extracted = structured.output
       } catch {
-        const rawText = result.text ?? ""
+        const rawText = structured.text
         console.error(
           "[extract-contract] Schema validation failed. Raw AI response:",
           rawText.slice(0, 2000)

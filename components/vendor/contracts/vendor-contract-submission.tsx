@@ -529,15 +529,19 @@ export function VendorContractSubmission({
               tierNumber: tier.tierNumber,
               tierName: tier.tierName ?? null,
               spendMin: tier.spendMin ?? 0,
-              spendMax: tier.spendMax,
+              // 2026-04-26: AI no longer extracts spendMax /
+              // volumeMax / marketShareMax (Anthropic 24-optional-
+              // param schema limit). Engine derives each tier's
+              // ceiling from the next tier's min anyway.
+              spendMax: undefined,
               // Charles 2026-04-25 (audit Bug 2): per-tier volume /
               // market-share thresholds. Without these the volume +
               // market-share engines collapse the ladder to a single
               // tier (every tier starts at 0).
               volumeMin: tier.volumeMin,
-              volumeMax: tier.volumeMax,
+              volumeMax: undefined,
               marketShareMin: tier.marketShareMin,
-              marketShareMax: tier.marketShareMax,
+              marketShareMax: undefined,
               // Charles 2026-04-25 audit pass-2 B2: honor the AI's
               // tier.rebateType (the schema accepts percent_of_spend /
               // fixed_rebate / fixed_rebate_per_unit / per_procedure_rebate).

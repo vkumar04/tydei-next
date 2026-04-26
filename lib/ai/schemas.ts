@@ -1,10 +1,54 @@
 import { z } from "zod"
 
+// ─── Helpers ──────────────────────────────────────────────────────
+
+/**
+ * Some Claude responses return literal string "null" / "N/A" / ""
+ * for optional fields instead of JSON null. The structured-output
+ * tool-mode is more permissive than outputFormat, so we sanitize
+ * before validation. Use as `coerceOptionalNumber()` in any
+ * `.optional()` number slot the model commonly stringifies.
+ */
+function coerceOptionalNumber() {
+  return z.preprocess((v) => {
+    if (v === null || v === undefined) return undefined
+    if (typeof v === "string") {
+      const trimmed = v.trim().toLowerCase()
+      if (trimmed === "" || trimmed === "null" || trimmed === "n/a") {
+        return undefined
+      }
+      // Strip $ and commas; let Number() handle the rest.
+      const cleaned = v.replace(/[$,]/g, "").trim()
+      const n = Number(cleaned)
+      return Number.isFinite(n) ? n : undefined
+    }
+    return v
+  }, z.number().optional())
+}
+
+function coerceOptionalString() {
+  return z.preprocess((v) => {
+    if (v === null || v === undefined) return undefined
+    if (typeof v === "string") {
+      const trimmed = v.trim()
+      if (
+        trimmed === "" ||
+        trimmed.toLowerCase() === "null" ||
+        trimmed.toLowerCase() === "n/a"
+      ) {
+        return undefined
+      }
+      return v
+    }
+    return String(v)
+  }, z.string().optional())
+}
+
 // ─── Contract Extraction Schema ──────────────────────────────────
 
 export const extractedContractSchema = z.object({
   contractName: z.string().describe("The name or title of the contract"),
-  contractNumber: z.string().optional().describe("Contract number, agreement number, or reference ID if present"),
+  contractNumber: coerceOptionalString().describe("Contract number, agreement number, or reference ID if present"),
   vendorName: z.string().describe("The vendor/manufacturer name"),
   contractType: z
     .enum(["usage", "capital", "service", "tie_in", "grouped", "pricing_only"])
@@ -19,17 +63,13 @@ export const extractedContractSchema = z.object({
     .describe(
       "Expiration date in YYYY-MM-DD format, or null if the contract is evergreen / auto-renewing / 'continues until terminated'. Do NOT invent the initial-term end date for an evergreen contract.",
     ),
-  totalValue: z
-    .number()
-    .optional()
-    .describe(
-      "Total committed or expected contract value in dollars (Total Contract Value, ceiling, or commitment over the full term). Do NOT use rebate tier thresholds, minimum spend qualifications (e.g. 'minimum QAS threshold of $5,300,000'), tier breakpoints, capital costs, or rebate dollar caps. If only a threshold appears and no committed total is stated, return null instead of guessing.",
-    ),
-  description: z.string().optional().describe("Brief description of the contract"),
-  productCategory: z
-    .string()
-    .optional()
-    .describe("Primary product category like Ortho Spine, Medical Supplies, etc."),
+  totalValue: coerceOptionalNumber().describe(
+    "Total committed or expected contract value in dollars (Total Contract Value, ceiling, or commitment over the full term). Do NOT use rebate tier thresholds, minimum spend qualifications (e.g. 'minimum QAS threshold of $5,300,000'), tier breakpoints, capital costs, or rebate dollar caps. If only a threshold appears and no committed total is stated, return null instead of guessing.",
+  ),
+  description: coerceOptionalString().describe("Brief description of the contract"),
+  productCategory: coerceOptionalString().describe(
+    "Primary product category like Ortho Spine, Medical Supplies, etc.",
+  ),
   productCategories: z
     .array(z.string())
     .optional()
@@ -86,30 +126,18 @@ export const extractedContractSchema = z.object({
         .describe(
           "Volume measurement type for volume_rebate / rebate_per_use terms.",
         ),
-      spendBaseline: z
-        .number()
-        .optional()
-        .describe(
-          "Prior-year baseline spend for growth_rebate terms (dollars).",
-        ),
-      volumeBaseline: z
-        .number()
-        .optional()
-        .describe(
-          "Prior-year baseline procedure / unit count for volume-based growth.",
-        ),
-      growthBaselinePercent: z
-        .number()
-        .optional()
-        .describe(
-          "Required year-over-year growth percent for the rebate to trigger.",
-        ),
-      desiredMarketShare: z
-        .number()
-        .optional()
-        .describe(
-          "Target market share percent for market_share / market_share_price_reduction terms.",
-        ),
+      spendBaseline: coerceOptionalNumber().describe(
+        "Prior-year baseline spend for growth_rebate terms (dollars).",
+      ),
+      volumeBaseline: coerceOptionalNumber().describe(
+        "Prior-year baseline procedure / unit count for volume-based growth.",
+      ),
+      growthBaselinePercent: coerceOptionalNumber().describe(
+        "Required year-over-year growth percent for the rebate to trigger.",
+      ),
+      desiredMarketShare: coerceOptionalNumber().describe(
+        "Target market share percent for market_share / market_share_price_reduction terms.",
+      ),
       scopedCategoryIds: z
         .array(z.string())
         .optional()
@@ -142,30 +170,27 @@ export const extractedContractSchema = z.object({
             .describe(
               "Optional human-readable tier label like 'Bronze', 'Silver', 'Gold'. Null/omitted when the contract uses unnamed numeric tiers.",
             ),
-          spendMin: z.number().optional().describe("Minimum spend threshold"),
-          spendMax: z.number().optional().describe("Maximum spend threshold"),
+          spendMin: coerceOptionalNumber().describe("Minimum spend threshold"),
           // Charles 2026-04-25 (audit Bug 2): per-tier volume + market-
           // share thresholds. Without these, volume_rebate /
           // market_share extracts collapse to a single tier on
           // submission.
-          volumeMin: z
-            .number()
-            .optional()
-            .describe("Minimum unit / procedure count for this tier."),
-          volumeMax: z
-            .number()
-            .optional()
-            .describe("Maximum unit / procedure count for this tier."),
-          marketShareMin: z
-            .number()
-            .optional()
-            .describe("Minimum market share percent for this tier."),
-          marketShareMax: z
-            .number()
-            .optional()
-            .describe("Maximum market share percent for this tier."),
-          rebateType: z.string().optional().describe("Rebate type"),
-          rebateValue: z.number().optional().describe("Rebate value (percentage or fixed)"),
+          volumeMin: coerceOptionalNumber().describe(
+            "Minimum unit / procedure count for this tier.",
+          ),
+          marketShareMin: coerceOptionalNumber().describe(
+            "Minimum market share percent for this tier.",
+          ),
+          rebateType: coerceOptionalString().describe("Rebate type"),
+          rebateValue: coerceOptionalNumber().describe(
+            "Rebate value (percentage or fixed)",
+          ),
+          // 2026-04-26: removed spendMax / volumeMax / marketShareMax —
+          // Anthropic structured-output caps optional params at 24 across
+          // a nested schema. The full schema had 27 (3 over). The consumer
+          // (contract-extract-mapper) defaulted these to undefined anyway
+          // and the rebate engine derives each tier's ceiling from the
+          // next tier's min, so dropping them is functionally equivalent.
         })
       ),
     })

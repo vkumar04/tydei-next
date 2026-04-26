@@ -1,8 +1,8 @@
-import { generateText, Output } from "ai"
+import { generateStructured } from "@/lib/ai/generate-structured"
+import { claudeSonnet } from "@/lib/ai/config"
 import { headers } from "next/headers"
 import { z } from "zod"
 import { auth } from "@/lib/auth-server"
-import { claudeModel } from "@/lib/ai/config"
 import { rateLimit } from "@/lib/rate-limit"
 
 const requestSchema = z.object({
@@ -70,10 +70,14 @@ export async function POST(request: Request) {
       sampleContext = `\n\nSample data rows:\n${rows}`
     }
 
-    const result = await generateText({
-      model: claudeModel,
-      output: Output.object({ schema: mappingSchema }),
-      prompt: `You are a data mapping assistant. Given a set of source CSV/Excel column headers and target database fields, determine which source column best maps to each target field.
+    const result = await generateStructured({
+      schema: mappingSchema,
+      actionName: "map-columns",
+      primary: claudeSonnet,
+      messages: [
+        {
+          role: "user",
+          content: `You are a data mapping assistant. Given a set of source CSV/Excel column headers and target database fields, determine which source column best maps to each target field.
 
 Source column headers:
 ${body.sourceHeaders.map((h) => `- "${h}"`).join("\n")}
@@ -88,6 +92,8 @@ Rules:
 - A source column can map to at most one target field. If two target fields could match the same source column, pick the best fit.
 - Use the sample data rows (if provided) to help disambiguate when column names are ambiguous.
 - For required fields, try harder to find a match.`,
+        },
+      ],
     })
 
     // Filter out empty-string mappings

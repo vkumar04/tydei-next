@@ -1,8 +1,10 @@
-import { generateText, Output } from "ai"
+import {
+  generateStructured,
+  withCacheControl,
+} from "@/lib/ai/generate-structured"
 import { headers } from "next/headers"
 import { z } from "zod"
 import { auth } from "@/lib/auth-server"
-import { claudeModel } from "@/lib/ai/config"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
@@ -292,9 +294,9 @@ export async function POST(request: Request) {
       const fileData = new Uint8Array(arrayBuffer)
 
       try {
-        const result = await generateText({
-          model: claudeModel,
-          output: Output.object({ schema: richClassificationSchema }),
+        const result = await generateStructured({
+          schema: richClassificationSchema,
+          actionName: "classify-document",
           messages: [
             {
               role: "user",
@@ -327,6 +329,7 @@ Return all fields, using null for any you cannot determine.`,
                   type: "file",
                   data: fileData,
                   mediaType: "application/pdf",
+                  ...withCacheControl(),
                 },
               ],
             },

@@ -1,4 +1,8 @@
-import { generateText, Output } from "ai"
+import { generateText } from "ai"
+import {
+  generateStructured,
+  withCacheControl,
+} from "@/lib/ai/generate-structured"
 import { headers } from "next/headers"
 import { z } from "zod"
 import { auth } from "@/lib/auth-server"
@@ -112,6 +116,9 @@ Return all details as structured text.`,
               type: "file",
               data: fileData,
               mediaType,
+              // Cache the PDF for 5min — step 2 below re-uploads
+              // overlapping context; ephemeral cache cuts cost.
+              ...withCacheControl(),
             },
           ],
         },
@@ -127,10 +134,13 @@ Return all details as structured text.`,
     }
 
     // ── Step 2: Compare against current contract ───────────────
-    const result = await generateText({
-      model: claudeModel,
-      output: Output.object({ schema: extractedAmendmentSchema }),
-      prompt: `You are comparing a contract amendment against the current contract data. Identify every change the amendment makes.
+    const result = await generateStructured({
+      schema: extractedAmendmentSchema,
+      actionName: "extract-amendment",
+      messages: [
+        {
+          role: "user",
+          content: `You are comparing a contract amendment against the current contract data. Identify every change the amendment makes.
 
 CURRENT CONTRACT DATA:
 ${currentSummary}
@@ -148,6 +158,8 @@ For each change, determine:
 Also extract the amendment's effective date if stated (in YYYY-MM-DD format), or null if not specified.
 
 Return valid JSON only — no markdown fences.`,
+        },
+      ],
     })
 
     let extracted: ExtractedAmendment | undefined

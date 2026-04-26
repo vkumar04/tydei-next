@@ -1,4 +1,8 @@
-import { generateText, Output } from "ai"
+import { generateText } from "ai"
+import {
+  generateStructured,
+  withCacheControl,
+} from "@/lib/ai/generate-structured"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { claudeModel } from "@/lib/ai/config"
@@ -69,6 +73,7 @@ Be thorough - extract EVERY CPT code and rate you can find. Return all informati
               type: "file",
               data: fileData,
               mediaType,
+              ...withCacheControl(),
             },
           ],
         },
@@ -81,15 +86,20 @@ Be thorough - extract EVERY CPT code and rate you can find. Return all informati
     }
 
     // Step 2: Parse into structured data
-    const result = await generateText({
-      model: claudeModel,
-      output: Output.object({ schema: extractedPayorContractSchema }),
-      prompt: `Parse this payor contract information into structured data. Extract ALL CPT codes and their reimbursement rates. For dates use YYYY-MM-DD format. If a field is not clearly present, use null.
+    const result = await generateStructured({
+      schema: extractedPayorContractSchema,
+      actionName: "extract-payor-contract",
+      messages: [
+        {
+          role: "user",
+          content: `Parse this payor contract information into structured data. Extract ALL CPT codes and their reimbursement rates. For dates use YYYY-MM-DD format. If a field is not clearly present, use null.
 
 Return valid JSON only — no markdown fences.
 
 Contract information:
 ${extractedText}`,
+        },
+      ],
     })
 
     let extracted: ExtractedPayorContractData | undefined

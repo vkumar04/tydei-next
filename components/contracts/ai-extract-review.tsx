@@ -336,12 +336,7 @@ export function AIExtractReview({
                             Tier {tier.tierNumber}
                           </span>
                           {tier.spendMin != null && (
-                            <span>
-                              ${(tier.spendMin / 1000).toFixed(0)}K
-                              {tier.spendMax
-                                ? ` - $${(tier.spendMax / 1000).toFixed(0)}K`
-                                : "+"}
-                            </span>
+                            <span>${(tier.spendMin / 1000).toFixed(0)}K+</span>
                           )}
                         </div>
                         {tier.rebateValue != null && (

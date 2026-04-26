@@ -53,7 +53,12 @@ describe("extractedContractSchema — 3-tier usage contract (W1.W-E2)", () => {
     expect(parsed.terms[0].tiers).toHaveLength(3)
     expect(parsed.terms[0].tiers.map((t) => t.rebateValue)).toEqual([3, 5, 7])
     expect(parsed.terms[0].tiers[0].spendMin).toBe(0)
-    expect(parsed.terms[0].tiers[2].spendMax).toBeUndefined()
+    // spendMax was removed from the schema (Anthropic 24-optional limit).
+    // The rebate engine derives each tier's ceiling from the next tier's
+    // spendMin instead. Verify the field doesn't surface.
+    expect(
+      (parsed.terms[0].tiers[2] as Record<string, unknown>).spendMax,
+    ).toBeUndefined()
   })
 
   it("rejects a response that is missing the required `terms` array", () => {

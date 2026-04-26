@@ -504,7 +504,11 @@ export function NewContractClient({
           const normalizedTiers = t.tiers.map((tier) => ({
             tierNumber: tier.tierNumber,
             spendMin: tier.spendMin ?? 0,
-            spendMax: tier.spendMax,
+            // 2026-04-26: AI no longer returns spendMax (Anthropic
+            // 24-optional-param limit). The rebate engine derives
+            // each tier's ceiling from the next tier's spendMin, so
+            // undefined here is equivalent to "open upper bound".
+            spendMax: undefined,
             rebateType: "percent_of_spend" as const,
             rebateValue: normalizeAIRebateValue("percent_of_spend", tier.rebateValue),
           }))

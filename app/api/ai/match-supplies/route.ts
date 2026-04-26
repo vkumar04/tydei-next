@@ -1,8 +1,7 @@
-import { generateText, Output } from "ai"
+import { generateStructured } from "@/lib/ai/generate-structured"
 import { z } from "zod"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import { claudeModel } from "@/lib/ai/config"
 import { supplyMatchSchema } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
@@ -47,10 +46,13 @@ export async function POST(request: Request) {
       )
       .join("\n")
 
-    const result = await generateText({
-      model: claudeModel,
-      output: Output.object({ schema: supplyMatchSchema }),
-      prompt: `Match this surgical supply to the closest item in the contract pricing list.
+    const result = await generateStructured({
+      schema: supplyMatchSchema,
+      actionName: "match-supplies",
+      messages: [
+        {
+          role: "user",
+          content: `Match this surgical supply to the closest item in the contract pricing list.
 
 Supply to match:
 - Material Name: ${supplyName}
@@ -61,6 +63,8 @@ ${pricingContext}
 
 If no reasonable match exists (confidence < 0.3), return null for matchedVendorItemNo and matchedDescription.
 Explain your reasoning for the match or lack thereof.`,
+        },
+      ],
     })
 
     try {
