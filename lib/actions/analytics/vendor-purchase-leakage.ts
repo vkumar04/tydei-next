@@ -62,6 +62,15 @@ export async function getVendorPurchaseLeakage(input: {
   // big-vendor / wide-window queries. Postgres caps via take
   // are still applied as a safety net (Prisma engine bound) but
   // the bound is well above any realistic vendor-window pair.
+  //
+  // Disclosure surface (security audit Medium 2026-04-26): facility
+  // names returned here are for ANY facility that purchased this
+  // vendor's product, including facilities the vendor doesn't
+  // currently have a contract with (the OFF_CONTRACT branch is
+  // exactly that — chase off-contract leakage). Acceptable per
+  // vendor-side use case ("which customer is buying from us off
+  // contract?"), but worth flagging in the spec since it discloses
+  // facility identity beyond the explicit contract relationship.
   const cog = await prisma.cOGRecord.findMany({
     where: {
       vendorId: vendor.id,

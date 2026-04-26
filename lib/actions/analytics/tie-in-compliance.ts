@@ -31,6 +31,18 @@ export async function getTieInCompliance(
   contractId: string,
   mode: "all_or_nothing" | "proportional" = "all_or_nothing",
 ): Promise<TieInComplianceResult> {
+  try {
+    return await _getTieInComplianceImpl(contractId, mode)
+  } catch (err) {
+    console.error("[getTieInCompliance]", err, { contractId, mode })
+    throw new Error("Tie-in compliance is unavailable for this contract.")
+  }
+}
+
+async function _getTieInComplianceImpl(
+  contractId: string,
+  mode: "all_or_nothing" | "proportional",
+): Promise<TieInComplianceResult> {
   const scope = await requireContractScope(contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
@@ -58,7 +70,7 @@ export async function getTieInCompliance(
   const startOfYear = new Date(today.getFullYear(), 0, 1)
   const cog = await prisma.cOGRecord.aggregate({
     where: {
-      facilityId: scope.cogScopeFacilityId,
+      facilityId: { in: scope.cogScopeFacilityIds },
       vendorId: contract.vendorId,
       transactionDate: { gte: startOfYear, lte: today },
     },

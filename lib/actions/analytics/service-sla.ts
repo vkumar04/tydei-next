@@ -27,6 +27,15 @@ export interface ServiceSlaInput {
 }
 
 export async function evaluateServiceSla(input: ServiceSlaInput) {
+  try {
+    return await _evaluateServiceSlaImpl(input)
+  } catch (err) {
+    console.error("[evaluateServiceSla]", err, { contractId: input.contractId })
+    throw new Error("SLA evaluation is unavailable for this contract.")
+  }
+}
+
+async function _evaluateServiceSlaImpl(input: ServiceSlaInput) {
   await requireContractScope(input.contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({

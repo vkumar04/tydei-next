@@ -52,6 +52,20 @@ export async function getVendorRenewalRiskBatch(
     },
   })
 
+  // Reject explicitly when any caller-supplied id isn't owned by this
+  // vendor. Silent omission means a UI that loops the original
+  // contractIds array would hit `undefined` for unauthorized rows;
+  // failing loud catches client mistakes (and surface-level probing)
+  // early. Security audit Info finding 2026-04-26 — silent-drop
+  // hardening.
+  const ownedIds = new Set(contracts.map((c) => c.id))
+  const unowned = contractIds.filter((id) => !ownedIds.has(id))
+  if (unowned.length > 0) {
+    throw new Error(
+      `Renewal-risk batch rejected — ${unowned.length} contract id(s) not accessible.`,
+    )
+  }
+
   // Per-contract open-issue + price-variance pulls. Batched to avoid
   // N round-trips across the 20-row renewals page.
   const facilityIds = Array.from(

@@ -11,15 +11,24 @@ import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
  * vendor portal blind to its own contracts; this helper lets the
  * same action serve both sides without duplicating the math.
  *
- * For COG aggregates, the helper returns `cogScopeFacilityId` — the
- * contract's primary facility — so both sides see the same single-
- * facility numbers (vendors don't get to aggregate across every
- * facility they sell to via this entry point; that's a separate
- * cross-facility analytics surface).
+ * For COG aggregates, downstream actions filter `cOGRecord` rows by
+ * `facilityId IN cogScopeFacilityIds`. The list is built per-side:
+ *
+ *   - **vendor:** the contract's primary `facilityId` only. Vendors
+ *     see one facility's COG per contract; they don't aggregate
+ *     across every facility they sell to via this entry point.
+ *   - **facility:** the union of `Contract.facilityId` (primary)
+ *     plus every `ContractFacility.facilityId` (shared). This way a
+ *     sister facility user sharing a contract sees TRUE shared
+ *     spend across every facility on the contract, not just the
+ *     primary owner's slice (security audit Medium 2026-04-26
+ *     fix — previously pinned to primary, which leaked the primary
+ *     facility's spend to sister facilities and hid the sister's
+ *     own spend in the same view).
  */
 export type ContractScope =
-  | { kind: "facility"; facilityId: string; cogScopeFacilityId: string }
-  | { kind: "vendor"; vendorId: string; cogScopeFacilityId: string }
+  | { kind: "facility"; facilityId: string; cogScopeFacilityIds: string[] }
+  | { kind: "vendor"; vendorId: string; cogScopeFacilityIds: string[] }
 
 export async function requireContractScope(
   contractId: string,
@@ -34,6 +43,17 @@ export async function requireContractScope(
   const facility = member?.organization?.facility
   const vendor = member?.organization?.vendor
 
+  // Defense in depth: if a future Member/Organization restructure
+  // ever lets a single user belong to BOTH a facility and a vendor
+  // org, the implicit "vendor wins" branch ordering would silently
+  // route through the wrong scope. Reject explicitly so it surfaces
+  // as an error instead of a data leak.
+  if (facility && vendor) {
+    throw new Error(
+      "Ambiguous membership: user has both facility and vendor scope",
+    )
+  }
+
   if (vendor) {
     const contract = await prisma.contract.findFirst({
       where: { id: contractId, vendorId: vendor.id },
@@ -45,26 +65,36 @@ export async function requireContractScope(
     return {
       kind: "vendor",
       vendorId: vendor.id,
-      cogScopeFacilityId: contract.facilityId,
+      cogScopeFacilityIds: [contract.facilityId],
     }
   }
 
   if (facility) {
     const contract = await prisma.contract.findFirst({
       where: contractOwnershipWhere(contractId, facility.id),
-      select: { facilityId: true },
+      select: {
+        facilityId: true,
+        contractFacilities: { select: { facilityId: true } },
+      },
     })
-    // contract may live on a sister facility (multi-facility
-    // sharing). For COG we pin to its primary owner so the spend
-    // window is consistent regardless of which facility the user
-    // is signed into.
     if (!contract) {
       throw new Error("Contract not found or not accessible")
+    }
+    // Union of primary + every shared facility on the contract.
+    const facilityIds = new Set<string>()
+    if (contract.facilityId) facilityIds.add(contract.facilityId)
+    for (const cf of contract.contractFacilities) {
+      facilityIds.add(cf.facilityId)
+    }
+    if (facilityIds.size === 0) {
+      // Truly orphaned — fall back to the caller's facility so the
+      // query returns nothing rather than blowing up.
+      facilityIds.add(facility.id)
     }
     return {
       kind: "facility",
       facilityId: facility.id,
-      cogScopeFacilityId: contract.facilityId ?? facility.id,
+      cogScopeFacilityIds: Array.from(facilityIds),
     }
   }
 

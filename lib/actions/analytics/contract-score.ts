@@ -56,6 +56,17 @@ const WEIGHTS = {
 export async function getContractCompositeScore(
   contractId: string,
 ): Promise<ContractCompositeScore> {
+  try {
+    return await _getContractCompositeScoreImpl(contractId)
+  } catch (err) {
+    console.error("[getContractCompositeScore]", err, { contractId })
+    throw new Error("Composite score is unavailable for this contract.")
+  }
+}
+
+async function _getContractCompositeScoreImpl(
+  contractId: string,
+): Promise<ContractCompositeScore> {
   const scope = await requireContractScope(contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
@@ -96,7 +107,7 @@ export async function getContractCompositeScore(
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
   const cogAgg = await prisma.cOGRecord.aggregate({
     where: {
-      facilityId: scope.cogScopeFacilityId,
+      facilityId: { in: scope.cogScopeFacilityIds },
       vendorId: contract.vendorId,
       transactionDate: { gte: twelveMonthsAgo, lte: today },
     },

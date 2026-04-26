@@ -37,6 +37,18 @@ export async function getRebateForecast(
   contractId: string,
   forecastMonths = 12,
 ): Promise<RebateForecast> {
+  try {
+    return await _getRebateForecastImpl(contractId, forecastMonths)
+  } catch (err) {
+    console.error("[getRebateForecast]", err, { contractId, forecastMonths })
+    throw new Error("Rebate forecast is unavailable for this contract.")
+  }
+}
+
+async function _getRebateForecastImpl(
+  contractId: string,
+  forecastMonths: number,
+): Promise<RebateForecast> {
   const scope = await requireContractScope(contractId)
 
   const contract = await prisma.contract.findFirstOrThrow({
@@ -62,7 +74,7 @@ export async function getRebateForecast(
   since.setMonth(since.getMonth() - 24)
   const cog = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: scope.cogScopeFacilityId,
+      facilityId: { in: scope.cogScopeFacilityIds },
       vendorId: contract.vendorId,
       transactionDate: { gte: since, lte: today },
     },

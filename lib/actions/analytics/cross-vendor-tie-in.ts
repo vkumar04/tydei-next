@@ -112,14 +112,59 @@ export async function getCrossVendorTieIns(): Promise<CrossVendorTieInRow[]> {
 }
 
 /**
+ * Vendor-side membership row. Critically, this shape is NOT the
+ * facility's `CrossVendorTieInRow` — we deliberately redact every
+ * co-member's spend + dollar commitment so a vendor enrolled in a
+ * GPO bundle can't read its competitors' YTD revenue at the same
+ * facility (security audit High finding 2026-04-25). Co-members
+ * surface only as: vendorName, rebateContribution %, and a
+ * compliant boolean. The bundle's own compliance + bonus are
+ * still computed against true values internally.
+ */
+export interface VendorTieInMembershipRow {
+  id: string
+  name: string
+  status: string
+  effectiveDate: string
+  expirationDate: string
+  facilityName: string
+  facilityBonusRate: number
+  facilityBonusRequirement: "all_compliant" | "none"
+  /** Bundle-level compliance + bundle bonus state (vendors are told
+   *  whether the bundle is compliant; they don't need every member's
+   *  spend to know that). */
+  bundleCompliant: boolean
+  membersCompliant: number
+  membersTotal: number
+  /** This vendor's own row — full visibility. */
+  self: {
+    vendorId: string
+    vendorName: string
+    minimumSpend: number
+    rebateContribution: number
+    currentSpend: number
+    metPct: number
+    compliant: boolean
+  }
+  /** Co-members — names + rebate% + compliance only. Spend redacted. */
+  coMembers: Array<{
+    vendorId: string
+    vendorName: string
+    rebateContribution: number
+    compliant: boolean
+  }>
+}
+
+/**
  * Vendor-side mirror — list every active CrossVendorTieIn the
- * vendor is a member of, so vendors can see their compliance vs
- * the bundle minimum across each facility that signed them onto a
- * GPO bundle. Bundle bonus % is shown for context but it's a
- * facility-side payout (not vendor revenue).
+ * vendor is a member of, so vendors can see their own compliance
+ * vs the bundle minimum across each facility that signed them onto
+ * a GPO bundle. Bundle bonus % is shown for context but it's a
+ * facility-side payout (not vendor revenue). See response-shape
+ * comment above for the redaction model.
  */
 export async function getVendorCrossVendorTieInMemberships(): Promise<
-  Array<CrossVendorTieInRow & { facilityName: string }>
+  VendorTieInMembershipRow[]
 > {
   const { vendor } = await requireVendor()
 
@@ -163,8 +208,8 @@ export async function getVendorCrossVendorTieInMemberships(): Promise<
     )
   }
 
-  const rows = tieIns.map((t) => {
-    const members = t.members.map((m) => ({
+  const rows: VendorTieInMembershipRow[] = tieIns.map((t) => {
+    const memberInputs = t.members.map((m) => ({
       vendorId: m.vendorId,
       vendorName: m.vendor.name,
       minimumSpend: Number(m.minimumSpend),
@@ -172,7 +217,7 @@ export async function getVendorCrossVendorTieInMemberships(): Promise<
       currentSpend: spendByPair.get(`${t.facilityId}:${m.vendorId}`) ?? 0,
     }))
 
-    const result = v0CrossVendorTieIn(members, {
+    const result = v0CrossVendorTieIn(memberInputs, {
       rate: Number(t.facilityBonusRate),
       requirement:
         t.facilityBonusRequirement === "all_compliant"
@@ -180,25 +225,69 @@ export async function getVendorCrossVendorTieInMemberships(): Promise<
           : "none",
     })
 
+    // Self row pulls real numbers; co-members are redacted to just
+    // (name, rebate%, compliant). v0CrossVendorTieIn returns one
+    // result.vendorRebates entry per member in the same order — pair
+    // them up so we don't expose `spend` / `rebate` $ for others.
+    const selfInput = memberInputs.find((m) => m.vendorId === vendor.id)
+    const selfResult = result.vendorRebates.find(
+      (r) => r.vendor === selfInput?.vendorName,
+    )
+    const self = selfInput
+      ? {
+          vendorId: selfInput.vendorId,
+          vendorName: selfInput.vendorName,
+          minimumSpend: selfInput.minimumSpend,
+          rebateContribution: selfInput.rebateContribution,
+          currentSpend: selfInput.currentSpend,
+          metPct:
+            selfInput.minimumSpend > 0
+              ? Math.min(100, (selfInput.currentSpend / selfInput.minimumSpend) * 100)
+              : 100,
+          compliant: selfResult?.compliant ?? false,
+        }
+      : {
+          vendorId: vendor.id,
+          vendorName: "",
+          minimumSpend: 0,
+          rebateContribution: 0,
+          currentSpend: 0,
+          metPct: 0,
+          compliant: false,
+        }
+
+    const coMembers = memberInputs
+      .filter((m) => m.vendorId !== vendor.id)
+      .map((m) => {
+        const r = result.vendorRebates.find((vr) => vr.vendor === m.vendorName)
+        return {
+          vendorId: m.vendorId,
+          vendorName: m.vendorName,
+          rebateContribution: m.rebateContribution,
+          compliant: r?.compliant ?? false,
+        }
+      })
+
+    const membersCompliant = result.vendorRebates.filter(
+      (vr) => vr.compliant,
+    ).length
+
     return {
       id: t.id,
       name: t.name,
       status: t.status,
       effectiveDate: t.effectiveDate.toISOString(),
       expirationDate: t.expirationDate.toISOString(),
+      facilityName: t.facility.name,
       facilityBonusRate: Number(t.facilityBonusRate),
       facilityBonusRequirement: (t.facilityBonusRequirement === "all_compliant"
         ? "all_compliant"
         : "none") as "all_compliant" | "none",
-      facilityName: t.facility.name,
-      result,
-      members: members.map((m) => ({
-        ...m,
-        metPct:
-          m.minimumSpend > 0
-            ? Math.min(100, (m.currentSpend / m.minimumSpend) * 100)
-            : 100,
-      })),
+      bundleCompliant: result.allCompliant,
+      membersCompliant,
+      membersTotal: memberInputs.length,
+      self,
+      coMembers,
     }
   })
 
