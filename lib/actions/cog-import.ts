@@ -29,6 +29,26 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
   const session = await requireFacility()
   const data = bulkImportSchema.parse(input)
 
+  try {
+    return await runBulkImport(session, data)
+  } catch (err) {
+    // Charles W2.C-B: top-level guard. Without this, any throw from
+    // pre-loop resolvers, post-loop recompute, or the final stats
+    // Promise.all surfaces in prod as the generic "Server Components
+    // render" digest with no server-side trace. Log the full error
+    // before re-throwing so ops can debug from Vercel logs.
+    console.error("[bulkImportCOGRecords]", err, {
+      facilityId: session.facility.id,
+      totalRecords: data.records.length,
+    })
+    throw err
+  }
+}
+
+async function runBulkImport(
+  session: Awaited<ReturnType<typeof requireFacility>>,
+  data: BulkImportInput,
+) {
   let imported = 0
   let skipped = 0
   let errors = 0
@@ -64,17 +84,30 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
   // is conservative: only fills when there's a concrete benchmark
   // row to map from. Manual category overrides in the CSV always
   // win (we don't overwrite a non-null record.category).
-  const itemsNeedingCategory = data.records
-    .filter((r) => !r.category && r.vendorItemNo)
-    .map((r) => r.vendorItemNo!)
+  // Dedupe before the IN query — a 46k-row import typically has far
+  // fewer distinct vendorItemNos, and Postgres caps `IN (...)` at
+  // 32,767 parameters. We additionally chunk to stay safely under
+  // that limit even when distinct count is high (Charles 2026-04-26
+  // prod failure: 46,512-row import threw before the batch loop).
+  const itemsNeedingCategory = Array.from(
+    new Set(
+      data.records
+        .filter((r) => !r.category && r.vendorItemNo)
+        .map((r) => r.vendorItemNo!),
+    ),
+  )
   const benchmarkCategoryByItem = new Map<string, string>()
   if (itemsNeedingCategory.length > 0) {
-    const benchmarks = await prisma.productBenchmark.findMany({
-      where: { vendorItemNo: { in: itemsNeedingCategory } },
-      select: { vendorItemNo: true, category: true },
-    })
-    for (const b of benchmarks) {
-      if (b.category) benchmarkCategoryByItem.set(b.vendorItemNo, b.category)
+    const PG_IN_CHUNK = 5000
+    for (let i = 0; i < itemsNeedingCategory.length; i += PG_IN_CHUNK) {
+      const chunk = itemsNeedingCategory.slice(i, i + PG_IN_CHUNK)
+      const benchmarks = await prisma.productBenchmark.findMany({
+        where: { vendorItemNo: { in: chunk } },
+        select: { vendorItemNo: true, category: true },
+      })
+      for (const b of benchmarks) {
+        if (b.category) benchmarkCategoryByItem.set(b.vendorItemNo, b.category)
+      }
     }
   }
 
