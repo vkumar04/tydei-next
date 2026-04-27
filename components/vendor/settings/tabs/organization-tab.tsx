@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { VendorProfileForm } from "@/components/vendor/settings/vendor-profile-form"
+import { VendorDivisionsCard } from "@/components/vendor/settings/vendor-divisions-card"
 import type { VendorProfile } from "@/lib/actions/settings"
 import type { UpdateVendorProfileInput } from "@/lib/validators/settings"
 
@@ -23,12 +24,15 @@ export function OrganizationTab({
   if (!profileData) return null
 
   return (
-    <VendorProfileForm
-      vendor={profileData}
-      onSave={async (data) => {
-        onSaveProfile(data)
-      }}
-      isPending={isSavingProfile}
-    />
+    <div className="space-y-6">
+      <VendorProfileForm
+        vendor={profileData}
+        onSave={async (data) => {
+          onSaveProfile(data)
+        }}
+        isPending={isSavingProfile}
+      />
+      <VendorDivisionsCard />
+    </div>
   )
 }

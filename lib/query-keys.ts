@@ -186,6 +186,7 @@ export const queryKeys = {
       ["settings", "featureFlags", facilityId] as const,
     connections: (entityId: string) =>
       ["settings", "connections", entityId] as const,
+    vendorDivisions: () => ["vendor-divisions"] as const,
   },
   ai: {
     credits: (entityId: string) => ["ai", "credits", entityId] as const,
