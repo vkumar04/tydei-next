@@ -221,6 +221,13 @@ export async function recomputeAccrualForContract(
     "payment_rebate",
     "compliance_rebate",
     "market_share",
+    // Charles 2026-04-26 #55: carve_out now routes through its own
+    // dispatcher (recomputeCarveOutAccrualForTerm) so the per-line
+    // carveOutPercent rates are honored. The earlier comment in this
+    // file said carve_out kept the spend writer's math; that was the
+    // bug — the spend writer ignored carve-out rates and applied tier
+    // math to total spend instead.
+    "carve_out",
   ])
   const allTermsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
   const termsWithTiers = allTermsWithTiers.filter(
@@ -713,6 +720,46 @@ export async function recomputeAccrualForContract(
     }
   }
 
+  // Charles 2026-04-26 #55: carve_out dispatcher. Routes through the
+  // canonical carve-out engine in lib/rebates/engine/carve-out.ts so
+  // per-line carveOutPercent rates from ContractPricing are honored.
+  // Pre-fix the spend writer ran tier math against full vendor spend,
+  // ignoring per-line rates entirely.
+  let carveOutInserted = 0
+  let carveOutEarned = 0
+  const carveOutDispatcherTerms = contract.terms.filter(
+    (t) => t.termType === "carve_out",
+  )
+  if (carveOutDispatcherTerms.length > 0) {
+    const { recomputeCarveOutAccrualForTerm } = await import(
+      "@/lib/contracts/recompute/carve-out"
+    )
+    for (const term of carveOutDispatcherTerms) {
+      try {
+        const r = await recomputeCarveOutAccrualForTerm({
+          contractId,
+          vendorId: contract.vendorId,
+          facilityId: facility.id,
+          contractEffectiveDate: contract.effectiveDate,
+          contractExpirationDate: contract.expirationDate,
+          term: {
+            id: term.id,
+            evaluationPeriod: term.evaluationPeriod ?? null,
+            effectiveStart: term.effectiveStart ?? null,
+            effectiveEnd: term.effectiveEnd ?? null,
+          },
+        })
+        carveOutInserted += r.inserted
+        carveOutEarned += r.sumEarned
+      } catch (err) {
+        console.warn(
+          `[recomputeAccrualForContract] carve-out-accrual term ${term.id} failed:`,
+          err,
+        )
+      }
+    }
+  }
+
   // Charles 2026-04-25: payment_rebate via invoice bridge.
   // Counts qualifying invoices (matching vendor + facility + within
   // window + non-cancelled) per evaluation period. Tier ladder =
@@ -822,13 +869,18 @@ export async function recomputeAccrualForContract(
     volumeInserted === 0 &&
     poInserted === 0 &&
     thresholdInserted === 0 &&
-    invoiceInserted === 0
+    invoiceInserted === 0 &&
+    carveOutInserted === 0
   ) {
     return {
       deleted: deleteResult.count,
       inserted: 0,
       sumEarned:
-        volumeEarned + poEarned + thresholdEarned + invoiceEarned,
+        volumeEarned +
+        poEarned +
+        thresholdEarned +
+        invoiceEarned +
+        carveOutEarned,
       volumeTermsMissingCpt,
       carveOutTermsMissingPricing,
     }
@@ -854,7 +906,8 @@ export async function recomputeAccrualForContract(
     volumeEarned +
     poEarned +
     thresholdEarned +
-    invoiceEarned
+    invoiceEarned +
+    carveOutEarned
 
   return {
     deleted: deleteResult.count,
@@ -863,7 +916,8 @@ export async function recomputeAccrualForContract(
       volumeInserted +
       poInserted +
       thresholdInserted +
-      invoiceInserted,
+      invoiceInserted +
+      carveOutInserted,
     sumEarned,
     volumeTermsMissingCpt,
     carveOutTermsMissingPricing,
