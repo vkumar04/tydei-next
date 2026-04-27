@@ -10,8 +10,18 @@
 import { defineOracle } from "./_shared/runner"
 import { runScenario, checkExpectations } from "./source/_shared/runner"
 import syntheticSpendRebate from "./source/_scenarios/synthetic-spend-rebate"
+import syntheticTieInCapital from "./source/_scenarios/synthetic-tie-in-capital"
+import syntheticCarveOut from "./source/_scenarios/synthetic-carve-out"
+import syntheticMarketShare from "./source/_scenarios/synthetic-market-share-commitment"
+import syntheticGrowthRebate from "./source/_scenarios/synthetic-growth-rebate"
 
-const SCENARIOS = [syntheticSpendRebate]
+const SCENARIOS = [
+  syntheticSpendRebate,
+  syntheticTieInCapital,
+  syntheticCarveOut,
+  syntheticMarketShare,
+  syntheticGrowthRebate,
+]
 
 export default defineOracle("source-scenarios", async (ctx) => {
   for (const s of SCENARIOS) {
