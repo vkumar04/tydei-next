@@ -52,6 +52,21 @@ export default defineScenario({
     ],
   },
 
+  // 2026-04-27: harness now seeds capitalLineItems so tie-in
+  // contracts have a real amortization schedule the
+  // ContractAmortizationCard can render.
+  capitalLineItems: [
+    {
+      description: "Synthetic capital asset A",
+      itemNumber: "ASSET-A",
+      contractTotal: 250_000,
+      initialSales: 50_000,
+      interestRate: 0.05,
+      termMonths: 60,
+      paymentCadence: "monthly",
+    },
+  ],
+
   pricingRows: [
     { vendorItemNo: "TIE-001", unitCost: 10_000.0 },
     { vendorItemNo: "TIE-002", unitCost: 10_000.0 },

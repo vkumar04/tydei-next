@@ -72,9 +72,33 @@ export async function runScenario(s: Scenario): Promise<ScenarioActuals> {
         expirationDate: new Date(s.contract.expirationDate),
         totalValue: s.contract.totalValue,
         annualValue: s.contract.annualValue,
+        marketShareCommitmentByCategory: s.contract.marketShareCommitments
+          ? s.contract.marketShareCommitments.map((c) => ({
+              category: c.category,
+              commitmentPct: c.commitmentPct,
+            }))
+          : undefined,
       },
       select: { id: true },
     })
+
+    // 4b. Capital line items (tie_in / capital contracts).
+    if (s.contract.capitalLineItems && s.contract.capitalLineItems.length > 0) {
+      await prisma.contractCapitalLineItem.createMany({
+        data: s.contract.capitalLineItems.map((li) => ({
+          contractId: contract.id,
+          description: li.description,
+          itemNumber: li.itemNumber,
+          serialNumber: li.serialNumber,
+          contractTotal: li.contractTotal,
+          initialSales: li.initialSales ?? 0,
+          interestRate: li.interestRate,
+          termMonths: li.termMonths,
+          paymentType: li.paymentType ?? "fixed",
+          paymentCadence: li.paymentCadence ?? "monthly",
+        })),
+      })
+    }
 
     // 5. Terms + tiers.
     for (const t of s.contract.terms) {
@@ -116,6 +140,7 @@ export async function runScenario(s: Scenario): Promise<ScenarioActuals> {
           vendorItemNo: p.vendorItemNo,
           unitPrice: p.unitCost,
           category: p.category,
+          carveOutPercent: p.carveOutPercent,
         })),
       })
     }

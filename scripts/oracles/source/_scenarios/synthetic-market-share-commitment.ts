@@ -53,6 +53,13 @@ export default defineScenario({
     ],
   },
 
+  // 2026-04-27: harness now seeds Contract.marketShareCommitmentByCategory
+  // so the per-category share card displays the committed targets.
+  marketShareCommitments: [
+    { category: "Spine", commitmentPct: 60 },
+    { category: "Joint Replacement", commitmentPct: 40 },
+  ],
+
   pricingRows: [
     { vendorItemNo: "MS-001", unitCost: 8_000.0, category: "Spine" },
     { vendorItemNo: "MS-002", unitCost: 8_000.0, category: "Spine" },

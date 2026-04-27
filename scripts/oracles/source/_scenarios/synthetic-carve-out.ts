@@ -47,11 +47,13 @@ export default defineScenario({
     ],
   },
 
+  // 2026-04-27: harness now threads per-line carveOutPercent so the
+  // carve_out recompute path applies a per-SKU rate.
   pricingRows: [
-    { vendorItemNo: "CO-001", unitCost: 1_250.0 },
-    { vendorItemNo: "CO-002", unitCost: 1_250.0 },
-    { vendorItemNo: "CO-003", unitCost: 1_250.0 },
-    { vendorItemNo: "CO-004", unitCost: 1_250.0 },
+    { vendorItemNo: "CO-001", unitCost: 1_250.0, carveOutPercent: 0.05 },
+    { vendorItemNo: "CO-002", unitCost: 1_250.0, carveOutPercent: 0.05 },
+    { vendorItemNo: "CO-003", unitCost: 1_250.0, carveOutPercent: 0.05 },
+    { vendorItemNo: "CO-004", unitCost: 1_250.0, carveOutPercent: 0.05 },
   ],
 
   cogRows: [

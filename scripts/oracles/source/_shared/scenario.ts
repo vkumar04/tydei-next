@@ -26,6 +26,37 @@ export interface ScenarioContractTerm {
   tiers: ScenarioContractTier[]
 }
 
+/**
+ * Capital line items for tie_in / capital contracts. The harness
+ * inserts these as ContractCapitalLineItem rows so the per-asset
+ * amortization schedule has data to render.
+ */
+export interface ScenarioCapitalLineItem {
+  description: string
+  itemNumber?: string
+  serialNumber?: string
+  contractTotal: number
+  initialSales?: number
+  /** Stored as DECIMAL fraction in DB (0.05 = 5%). */
+  interestRate?: number
+  termMonths: number
+  paymentType?: string
+  paymentCadence?: string
+}
+
+/**
+ * Optional per-category market-share commitment overlay.
+ *
+ * Persisted to Contract.marketShareCommitmentByCategory JSON. Schema
+ * accepts `[{category, commitmentPct}, ...]`. The
+ * computeCategoryMarketShare helper reads it as the "committed share"
+ * line on the per-category card.
+ */
+export interface ScenarioCategoryCommitment {
+  category: string
+  commitmentPct: number
+}
+
 export interface ScenarioContractSpec {
   /** Suffix appended after `[ORACLE-<scenario-name>]` to keep contract
    *  numbers unique within a scenario family. */
@@ -39,6 +70,10 @@ export interface ScenarioContractSpec {
   totalValue: number
   annualValue: number
   terms: ScenarioContractTerm[]
+  /** Optional capital line items (tie_in / capital). */
+  capitalLineItems?: ScenarioCapitalLineItem[]
+  /** Optional per-category commitment overlay. */
+  marketShareCommitments?: ScenarioCategoryCommitment[]
 }
 
 export interface ScenarioPricingRow {
@@ -46,6 +81,10 @@ export interface ScenarioPricingRow {
   unitCost: number
   category?: string
   manufacturer?: string
+  /** Optional per-line carve-out rate (DECIMAL fraction, 0.03 = 3%).
+   *  Persisted to ContractPricing.carveOutPercent so the carve_out
+   *  recompute path applies a per-SKU rate. */
+  carveOutPercent?: number
 }
 
 export interface ScenarioCogRow {
