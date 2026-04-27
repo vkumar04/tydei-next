@@ -67,6 +67,39 @@ export async function seedContracts(
       description: "Capital lease agreement for Mako robotic-arm assisted surgery system",
     },
   })
+  // 2026-04-26: oracle capital-amortization needs at least one
+  // ContractCapitalLineItem with contractTotal>0 + termMonths>0 to
+  // exercise the PMT-formula comparison. Seed two financed line items
+  // on the Mako contract so the amortization card on contract-detail
+  // also has data to render.
+  await prisma.contractCapitalLineItem.createMany({
+    data: [
+      {
+        contractId: contracts.strykerMako.id,
+        description: "Mako robotic arm system",
+        itemNumber: "MAKO-RA-2024",
+        serialNumber: "STR-MAKO-001",
+        contractTotal: 1_200_000,
+        initialSales: 200_000,
+        interestRate: 0.05,
+        termMonths: 60,
+        paymentType: "fixed",
+        paymentCadence: "monthly",
+      },
+      {
+        contractId: contracts.strykerMako.id,
+        description: "Mako navigation cart + workstation",
+        itemNumber: "MAKO-NAV-2024",
+        serialNumber: "STR-NAV-001",
+        contractTotal: 300_000,
+        initialSales: 50_000,
+        interestRate: 0.05,
+        termMonths: 36,
+        paymentType: "fixed",
+        paymentCadence: "monthly",
+      },
+    ],
+  })
 
   // 3. Stryker Tie-In (tie_in, active)
   contracts.strykerTieIn = await prisma.contract.create({
@@ -230,11 +263,23 @@ export async function seedContracts(
       contractNumber: "ART-2024-002", name: "Arthrex Arthroscopy - Austin Spine & Joint",
       vendorId: v.arthrex.id, facilityId: f.austinSpine.id, productCategoryId: c.arthroscopy.id,
       contractType: "usage", status: "expiring", effectiveDate: twoYearsAgo, expirationDate: sixMonthsFromNow,
-      totalValue: 420000, annualValue: 210000,
+      totalValue: 420000, annualValue: 168000,
       performancePeriod: "quarterly", rebatePayPeriod: "annual",
       description: "Arthroscopy supplies and suture anchors for sports medicine program",
     },
   })
+  // 2026-04-26: oracle full-sweep flagged this contract as "0 terms" —
+  // a working contract demo should have at least one term so accruals
+  // can compute. Add a simple spend-rebate term.
+  await addTerm(prisma, contracts.arthrexAustin.id, {
+    termName: "Spend Rebate", termType: "spend_rebate", baselineType: "spend_based",
+    evaluationPeriod: "annual", paymentTiming: "annual",
+    effectiveStart: twoYearsAgo, effectiveEnd: sixMonthsFromNow,
+  }, [
+    { tierNumber: 1, spendMin: 0, spendMax: 250000, rebateType: "percent_of_spend", rebateValue: 0.02 },
+    { tierNumber: 2, spendMin: 250000, spendMax: 500000, rebateType: "percent_of_spend", rebateValue: 0.03 },
+    { tierNumber: 3, spendMin: 500000, rebateType: "percent_of_spend", rebateValue: 0.04 },
+  ])
 
   // 12. DePuy Synthes Trauma (usage, active)
   contracts.depuyTrauma = await prisma.contract.create({
@@ -284,7 +329,7 @@ export async function seedContracts(
       contractNumber: "ZB-2025-KN", name: "Zimmer Biomet Persona Knee",
       vendorId: v.zimmerBiomet.id, facilityId: f.heritageRegional.id, productCategoryId: c.jointReplacement.id,
       contractType: "usage", status: "active", effectiveDate: oneYearAgo, expirationDate: twoYearsFromNow,
-      totalValue: 1600000, annualValue: 800000,
+      totalValue: 1600000, annualValue: 533000,
       performancePeriod: "quarterly", rebatePayPeriod: "quarterly",
       description: "Persona total knee system with tiered rebate structure",
     },
@@ -358,7 +403,7 @@ export async function seedContracts(
       contractNumber: "STK-2025-MKS", name: "Stryker Mako Service Plan",
       vendorId: v.stryker.id, facilityId: f.lighthouseSurgical.id, productCategoryId: c.surgicalInstruments.id,
       contractType: "service", status: "active", effectiveDate: oneYearAgo, expirationDate: twoYearsFromNow,
-      totalValue: 240000, annualValue: 120000,
+      totalValue: 240000, annualValue: 80000,
       description: "Annual service + uptime SLA for the Mako SmartRobotics system. 4-hour response, 99.9% uptime target.",
     },
   })
@@ -381,7 +426,7 @@ export async function seedContracts(
       contractNumber: "MDT-2025-SPSURG", name: "Medtronic Spine Category Rebate - Lighthouse Surgical",
       vendorId: v.medtronic.id, facilityId: f.lighthouseSurgical.id, productCategoryId: c.spine.id,
       contractType: "usage", status: "active", effectiveDate: oneYearAgo, expirationDate: twoYearsFromNow,
-      totalValue: 900000, annualValue: 450000,
+      totalValue: 900000, annualValue: 300000,
       performancePeriod: "monthly", rebatePayPeriod: "monthly",
       description: "Category-scoped (Spine) marginal-tier rebate agreement with monthly evaluation and monthly payment cadence",
     },
