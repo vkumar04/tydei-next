@@ -74,6 +74,14 @@ export interface RecomputeAccrualResult {
    *  can warn the user instead of reporting "$0 earned" with no
    *  explanation. */
   volumeTermsMissingCpt: string[]
+  /** Charles 2026-04-26 #55: term names of carve_out terms that have
+   *  no ContractPricing rows with `carveOutPercent` set. The carve-out
+   *  engine in `lib/rebates/engine/carve-out.ts` computes per-line
+   *  rebates only when pricing rows carry the percent; without them
+   *  the spend-writer falls through to plain tier math and the
+   *  carve-out rates are effectively ignored. Surfacing the term name
+   *  lets the recompute toast tell the user where to set the percent. */
+  carveOutTermsMissingPricing: string[]
 }
 
 export async function recomputeAccrualForContract(
@@ -102,7 +110,13 @@ export async function recomputeAccrualForContract(
   // caller already validated the write. This just means we can't
   // recompute (e.g. cross-facility test fixtures).
   if (!contract) {
-    return { deleted: 0, inserted: 0, sumEarned: 0, volumeTermsMissingCpt: [] }
+    return {
+      deleted: 0,
+      inserted: 0,
+      sumEarned: 0,
+      volumeTermsMissingCpt: [],
+      carveOutTermsMissingPricing: [],
+    }
   }
 
   // Charles 2026-04-26 #75/#76: collect volume-family terms with no
@@ -119,6 +133,22 @@ export async function recomputeAccrualForContract(
         (!Array.isArray(t.cptCodes) || t.cptCodes.length === 0),
     )
     .map((t) => t.termName)
+
+  // Charles 2026-04-26 #55: detect carve_out terms that have no
+  // pricing-row carve-out percent set. Without that, the per-line
+  // engine has no rates to apply.
+  const carveOutTerms = contract.terms.filter(
+    (t) => t.termType === "carve_out",
+  )
+  let carveOutTermsMissingPricing: string[] = []
+  if (carveOutTerms.length > 0) {
+    const carvePricingCount = await prisma.contractPricing.count({
+      where: { contractId, carveOutPercent: { not: null } },
+    })
+    if (carvePricingCount === 0) {
+      carveOutTermsMissingPricing = carveOutTerms.map((t) => t.termName)
+    }
+  }
 
   // Charles W1.Q — Self-heal future-dated auto-accrual rows first.
   // These are stale artifacts from seed scripts or pre-R5.26 runs that
@@ -205,6 +235,7 @@ export async function recomputeAccrualForContract(
       inserted: 0,
       sumEarned: 0,
       volumeTermsMissingCpt,
+      carveOutTermsMissingPricing,
     }
   }
 
@@ -799,6 +830,7 @@ export async function recomputeAccrualForContract(
       sumEarned:
         volumeEarned + poEarned + thresholdEarned + invoiceEarned,
       volumeTermsMissingCpt,
+      carveOutTermsMissingPricing,
     }
   }
 
@@ -834,6 +866,7 @@ export async function recomputeAccrualForContract(
       invoiceInserted,
     sumEarned,
     volumeTermsMissingCpt,
+    carveOutTermsMissingPricing,
   }
 }
 

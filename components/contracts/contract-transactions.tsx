@@ -610,6 +610,12 @@ function AddTransactionButtons({
           { duration: 10_000 },
         )
       }
+      if (result.carveOutTermsMissingPricing.length > 0) {
+        toast.warning(
+          `Carve-out terms missing pricing rates: ${result.carveOutTermsMissingPricing.join(", ")}. Set carveOutPercent on the contract's pricing rows so the engine can apply per-line carve-out rates.`,
+          { duration: 10_000 },
+        )
+      }
       queryClient.invalidateQueries({
         queryKey: ["contract-periods", contractId],
       })

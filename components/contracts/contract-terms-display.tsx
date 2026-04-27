@@ -333,6 +333,28 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                         </p>
                       </div>
                     )}
+                  {/* Charles 2026-04-26 #55: same banner pattern for
+                      carve-out terms. The engine reads the per-line
+                      carveOutPercent from ContractPricing rows; if the
+                      pricing file didn't carry that column, every line
+                      gets a 0% rate and the term computes nothing. */}
+                  {term.termType === "carve_out" && (
+                    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                      <p className="font-semibold">
+                        Carve-out engine reads per-line rates from pricing.
+                      </p>
+                      <p className="mt-1">
+                        For each carved-out SKU, the engine applies the
+                        <code className="mx-1">carveOutPercent</code>
+                        column on the contract&apos;s pricing rows. If
+                        your uploaded pricing file lacks that column,
+                        edit each pricing row to set the percent — then
+                        click <em>Recompute Earned Rebates</em>. The toast
+                        will name carve-out terms that still have no
+                        per-line rates configured.
+                      </p>
+                    </div>
+                  )}
                   <div className="grid gap-2 text-sm sm:grid-cols-3">
                     <div>
                       <DefinitionTooltip term="baseline_type">
