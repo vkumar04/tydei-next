@@ -3,57 +3,28 @@
 /**
  * Per-category market share for a vendor at a facility.
  *
- * Charles 2026-04-25: "Don't seeing anything for category market
- * share … it's going to carry everywhere once you are really using
- * categories everywhere." Today `Contract.currentMarketShare` is
- * one number — vendor's share of facility spend in aggregate. But
- * vendor commitments are usually per-category ("you'll get 60% of
- * our Joint Replacement, 40% of our Spine"). Without a per-category
- * breakdown, market_share rebates can't be evaluated at the level
- * the contract was actually written.
+ * Charles 2026-04-25: vendor commitments are usually per-category
+ * ("60% of Joint Replacement, 40% of Spine"). This action computes
+ * per-category share on the fly from COG. Time-windowed: trailing 12
+ * months by default.
  *
- * This action computes it on the fly from COG instead of requiring
- * a schema migration. For each category the vendor sells in, we
- * sum the vendor's spend and the facility's TOTAL spend in that
- * category (across all vendors), then `share = vendorSpend / catTotal`.
- *
- * Time-windowed: trailing 12 months by default so the share moves
- * with the actual purchase mix. Caller can override the window via
- * `monthsBack` for a different lookback.
+ * 2026-04-26: math extracted to `computeCategoryMarketShare` in
+ * `lib/contracts/market-share-filter.ts` so the vendor-portal action
+ * shares the same effectiveCategory + bucket logic. See spec
+ * `2026-04-26-v0-parity-engines-design.md` Bucket A1.
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import {
+  computeCategoryMarketShare,
+  type MarketShareResult,
+  type MarketShareRow,
+} from "@/lib/contracts/market-share-filter"
 
-export interface CategoryMarketShareResult {
-  rows: CategoryMarketShareRow[]
-  /** Vendor spend at the facility (trailing window) where the COG row
-   *  has `category IS NULL`. Surfaced so the card can explain why a
-   *  contract with real spend has no per-category breakdown. */
-  uncategorizedSpend: number
-  /** Sum of all vendor COG rows in the window — categorized +
-   *  uncategorized. Useful for the "X% of total is un-categorized"
-   *  footnote and for telling "no spend" apart from "all uncategorized". */
-  totalVendorSpend: number
-}
-
-export interface CategoryMarketShareRow {
-  category: string
-  vendorSpend: number
-  categoryTotal: number
-  /** vendorSpend / categoryTotal × 100. 0–100. */
-  sharePct: number
-  /** Number of vendors competing in this category at the facility. */
-  competingVendors: number
-  /**
-   * Optional per-category commitment % from
-   * `Contract.marketShareCommitmentByCategory` JSON. Null when the
-   * contract didn't set a commitment for this category. The UI
-   * uses this to render "X% / Y% commitment" with progress.
-   */
-  commitmentPct: number | null
-}
+export type CategoryMarketShareRow = MarketShareRow
+export type CategoryMarketShareResult = MarketShareResult
 
 export async function getCategoryMarketShareForVendor(input: {
   vendorId: string
@@ -71,13 +42,12 @@ export async function getCategoryMarketShareForVendor(input: {
     const since = new Date()
     since.setMonth(since.getMonth() - months)
 
-    // Optional commitment overlay per category. Schema stores the
-    // user-set targets as `[{category, commitmentPct}, ...]` JSON
-    // on Contract. We tolerate any non-array shape (old contracts
-    // / hand-edits) by treating it as an empty map.
+    // Optional commitment overlay per category. Schema stores user-set
+    // targets as `[{category, commitmentPct}, ...]` JSON on Contract.
+    // Tolerate any non-array shape (old contracts / hand-edits) by
+    // treating it as an empty map.
     const commitmentByCategory = new Map<string, number>()
     if (input.contractId) {
-      // Charles audit round-12 CONCERN: scope by ownership.
       const c = await prisma.contract.findFirst({
         where: contractOwnershipWhere(input.contractId, facility.id),
         select: { marketShareCommitmentByCategory: true },
@@ -102,20 +72,7 @@ export async function getCategoryMarketShareForVendor(input: {
       }
     }
 
-    // Pull the facility's COG within the window. We DON'T filter on
-    // `category != null` here — un-categorized rows still count toward
-    // `uncategorizedSpend` so the UI can explain "vendor has spend but
-    // none of it is categorized" instead of silently showing nothing.
-    //
-    // Charles 2026-04-26 #58: also pull each row's matched-contract
-    // productCategory so an un-categorized COG row can inherit its
-    // category from the contract it's linked to. Pricing files often
-    // tag the contract with "Ortho-Extremity" while the raw COG
-    // import leaves `category=null`; without this fallback the
-    // contract's market-share card said "no categorized COG" even
-    // though every line item under that contract clearly belonged to
-    // a single category.
-    const rows = await prisma.cOGRecord.findMany({
+    const cogRows = await prisma.cOGRecord.findMany({
       where: {
         facilityId: facility.id,
         transactionDate: { gte: since },
@@ -128,11 +85,8 @@ export async function getCategoryMarketShareForVendor(input: {
       },
     })
 
-    // Pull the productCategory for every contract referenced by these
-    // rows in a single round-trip, then build a contractId → category
-    // map so the inner loop stays O(1).
     const contractIds = Array.from(
-      new Set(rows.map((r) => r.contractId).filter((v): v is string => !!v)),
+      new Set(cogRows.map((r) => r.contractId).filter((v): v is string => !!v)),
     )
     const contractCategoryRows =
       contractIds.length > 0
@@ -144,75 +98,18 @@ export async function getCategoryMarketShareForVendor(input: {
             },
           })
         : []
-    const contractCategoryMap = new Map(
+    const contractCategoryMap = new Map<string, string | null>(
       contractCategoryRows.map((c) => [c.id, c.productCategory?.name ?? null]),
     )
 
-    /** Resolve a COG row's effective category: explicit text first,
-     *  then matched-contract productCategory.name. */
-    const effectiveCategory = (r: (typeof rows)[number]): string | null =>
-      r.category ?? (r.contractId ? contractCategoryMap.get(r.contractId) ?? null : null)
-
-    // Count un-categorized + total vendor spend up front so we can
-    // return them even when the per-category result list ends up empty.
-    let uncategorizedSpend = 0
-    let totalVendorSpend = 0
-    for (const r of rows) {
-      if (r.vendorId !== input.vendorId) continue
-      const amt = Number(r.extendedPrice ?? 0)
-      if (amt <= 0) continue
-      totalVendorSpend += amt
-      if (!effectiveCategory(r)) uncategorizedSpend += amt
-    }
-
-    type CatBucket = {
-      total: number
-      byVendor: Map<string, number>
-    }
-    const byCategory = new Map<string, CatBucket>()
-    for (const r of rows) {
-      const cat = effectiveCategory(r)
-      if (!cat) continue
-      const bucket = byCategory.get(cat) ?? {
-        total: 0,
-        byVendor: new Map<string, number>(),
-      }
-      const amount = Number(r.extendedPrice ?? 0)
-      bucket.total += amount
-      if (r.vendorId) {
-        bucket.byVendor.set(
-          r.vendorId,
-          (bucket.byVendor.get(r.vendorId) ?? 0) + amount,
-        )
-      }
-      byCategory.set(cat, bucket)
-    }
-
-    const result: CategoryMarketShareRow[] = []
-    for (const [category, bucket] of byCategory.entries()) {
-      const vendorSpend = bucket.byVendor.get(input.vendorId) ?? 0
-      // Skip categories the vendor doesn't sell in — keeps the
-      // result list short and meaningful.
-      if (vendorSpend <= 0) continue
-      result.push({
-        category,
-        vendorSpend,
-        categoryTotal: bucket.total,
-        sharePct:
-          bucket.total > 0 ? (vendorSpend / bucket.total) * 100 : 0,
-        competingVendors: bucket.byVendor.size,
-        commitmentPct: commitmentByCategory.get(category) ?? null,
-      })
-    }
-
-    // Sort descending by category total so the biggest categories
-    // surface first.
-    result.sort((a, b) => b.categoryTotal - a.categoryTotal)
-    return serialize({
-      rows: result,
-      uncategorizedSpend,
-      totalVendorSpend,
+    const computed = computeCategoryMarketShare({
+      rows: cogRows,
+      contractCategoryMap,
+      vendorId: input.vendorId,
+      commitmentByCategory,
     })
+
+    return serialize(computed)
   } catch (err) {
     console.error("[getCategoryMarketShareForVendor]", err, {
       vendorId: input.vendorId,
