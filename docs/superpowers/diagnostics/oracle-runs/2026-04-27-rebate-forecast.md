@@ -1,44 +1,51 @@
-# Oracle: rebate-forecast — PASS
+# Oracle: rebate-forecast — FAIL
 
-**Run:** 2026-04-27T01:54:30.540Z
-**Duration:** 1ms
-**Checks:** 18/18 passed
+**Run:** 2026-04-27T01:42:55.725Z
+**Duration:** 12ms
+**Checks:** 0/1 passed
 
 ## Results
 
-- ✅ **[spend_rebate only (baseline)] forecast has 12 monthly points**
-  - got 12
-- ✅ **[spend_rebate only (baseline)] history points are flagged isForecast=false**
-  - 0 of 18 wrongly flagged forecast
-- ✅ **[spend_rebate only (baseline)] forecast points are flagged isForecast=true**
-  - 0 of 12 wrongly flagged history
-- ✅ **[spend_rebate only (baseline)] forecast spend ≥ 50% of trailing extrapolation**
-  - app=$938893 oracle-min=$364413 (trailing-avg=$60735/mo)
-- ✅ **[spend_rebate only (baseline)] forecast rebate sum is non-zero (PR #82 silent-zero detector)**
-  - app rebate sum=$30679.92 (spend sum=$938893)
-- ✅ **[spend_rebate only (baseline)] cumulativeYtdSpend resets across year boundaries**
-  - cumulative YTD spend should reset at Jan and never decrease within a year
-- ✅ **[volume_rebate first + spend_rebate second (PR #82 regression)] forecast has 12 monthly points**
-  - got 12
-- ✅ **[volume_rebate first + spend_rebate second (PR #82 regression)] history points are flagged isForecast=false**
-  - 0 of 18 wrongly flagged forecast
-- ✅ **[volume_rebate first + spend_rebate second (PR #82 regression)] forecast points are flagged isForecast=true**
-  - 0 of 12 wrongly flagged history
-- ✅ **[volume_rebate first + spend_rebate second (PR #82 regression)] forecast spend ≥ 50% of trailing extrapolation**
-  - app=$938893 oracle-min=$364413 (trailing-avg=$60735/mo)
-- ✅ **[volume_rebate first + spend_rebate second (PR #82 regression)] forecast rebate sum is non-zero (PR #82 silent-zero detector)**
-  - app rebate sum=$30679.92 (spend sum=$938893)
-- ✅ **[volume_rebate first + spend_rebate second (PR #82 regression)] cumulativeYtdSpend resets across year boundaries**
-  - cumulative YTD spend should reset at Jan and never decrease within a year
-- ✅ **[no spend_rebate term (engine falls back to first w/ tiers)] forecast has 12 monthly points**
-  - got 12
-- ✅ **[no spend_rebate term (engine falls back to first w/ tiers)] history points are flagged isForecast=false**
-  - 0 of 18 wrongly flagged forecast
-- ✅ **[no spend_rebate term (engine falls back to first w/ tiers)] forecast points are flagged isForecast=true**
-  - 0 of 12 wrongly flagged history
-- ✅ **[no spend_rebate term (engine falls back to first w/ tiers)] forecast spend ≥ 50% of trailing extrapolation**
-  - app=$938893 oracle-min=$364413 (trailing-avg=$60735/mo)
-- ✅ **[no spend_rebate term (engine falls back to first w/ tiers)] cumulativeYtdSpend resets across year boundaries**
-  - cumulative YTD spend should reset at Jan and never decrease within a year
-- ✅ **[<3 months history (engine returns empty)] short-history returns empty forecast**
-  - forecast.length=0 history.length=0
+- ❌ **oracle threw**
+  - 
+Invalid `prisma.contractPeriod.findMany()` invocation in
+/Users/vickkumar/code/tydei-next/scripts/oracles/rebate-forecast.ts:48:49
+
+  45 // ── Naive oracle baseline: trailing 12mo period spend ──────
+  46 const since = new Date()
+  47 since.setMonth(since.getMonth() - 12)
+→ 48 const periods = await prisma.contractPeriod.findMany({
+       where: {
+         contractId: "cmof7h07z0029xehl7a2wv7ct",
+         payPeriodEnd: {
+         ~~~~~~~~~~~~
+           gte: new Date("2025-04-27T01:42:55.724Z")
+         },
+     ?   AND?: ContractPeriodWhereInput | ContractPeriodWhereInput[],
+     ?   OR?: ContractPeriodWhereInput[],
+     ?   NOT?: ContractPeriodWhereInput | ContractPeriodWhereInput[],
+     ?   id?: StringFilter | String,
+     ?   facilityId?: StringNullableFilter | String | Null,
+     ?   periodStart?: DateTimeFilter | DateTime,
+     ?   periodEnd?: DateTimeFilter | DateTime,
+     ?   totalSpend?: DecimalFilter | Decimal,
+     ?   totalVolume?: IntFilter | Int,
+     ?   rebateEarned?: DecimalFilter | Decimal,
+     ?   rebateCollected?: DecimalFilter | Decimal,
+     ?   paymentExpected?: DecimalFilter | Decimal,
+     ?   paymentActual?: DecimalFilter | Decimal,
+     ?   balanceExpected?: DecimalFilter | Decimal,
+     ?   balanceActual?: DecimalFilter | Decimal,
+     ?   tierAchieved?: IntNullableFilter | Int | Null,
+     ?   createdAt?: DateTimeFilter | DateTime,
+     ?   updatedAt?: DateTimeFilter | DateTime,
+     ?   contract?: ContractScalarRelationFilter | ContractWhereInput,
+     ?   facility?: FacilityNullableScalarRelationFilter | FacilityWhereInput | Null,
+     ?   rebates?: RebateListRelationFilter
+       },
+       select: {
+         totalSpend: true
+       }
+     })
+
+Unknown argument `payPeriodEnd`. Did you mean `periodEnd`? Available options are marked with ?.

@@ -1,23 +1,19 @@
-# Oracle: full-sweep — PASS
+# Oracle: full-sweep — FAIL
 
-**Run:** 2026-04-27T01:54:30.529Z
-**Duration:** 39ms
-**Checks:** 12/12 passed
+**Run:** 2026-04-27T01:42:55.713Z
+**Duration:** 49ms
+**Checks:** 7/9 passed
 
 ## Results
 
 - ✅ **status ∈ {active, expiring} so recompute will load this contract**
   - status=expiring
 - ✅ **annualValue ≤ totalValue (Bug 1 refine)**
-  - annual=$168,000.00  total=$420,000.00
-- ✅ **annualValue within ±25% of (total / years) — broken-seed detector**
-  - expected ~$162,580.65  got $168,000.00  years=2.583
-- ✅ **contract has at least one term**
-  - 1 terms
-- ✅ **term "Spend Rebate" has at least one tier**
-  - 3 tiers
-- ✅ **term "Spend Rebate" dates non-sentinel on effectiveStart unless intended**
-  - start=2024-04-01  end=2026-10-01
+  - annual=$210,000.00  total=$420,000.00
+- ❌ **annualValue within ±1% of (total / years) — calendar math**
+  - expected ~$162,580.65  got $210,000.00  years=2.583
+- ❌ **contract has at least one term**
+  - 0 terms
 - ✅ **On-contract rows oracle == app**
   - oracle=2  app=2
 - ✅ **On-contract spend oracle == app (penny)**
@@ -25,8 +21,6 @@
 - ✅ **Off-contract rows oracle == app**
   - oracle=160  app=160
 - ✅ **Off-contract spend oracle == app (penny)**
-  - oracle=$464,100.00  app=$464,100.00
-- ✅ **term "Spend Rebate" Retroactive rebate > 0 for $4,075 spend**
-  - rebate=$81.50
+  - oracle=$531,400.00  app=$531,400.00
 - ✅ **no contract has BOTH effectiveDate=1970-01-01 AND expirationDate=9999-12-31**
   - 0 contracts would fail this check

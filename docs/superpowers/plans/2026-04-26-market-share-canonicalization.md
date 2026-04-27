@@ -815,6 +815,269 @@ Expected: clean fast-forward push.
 
 ---
 
+---
+
+## Task 8: Rebase worktree on latest main
+
+**Files:** none (git operation)
+
+While Tasks 1–7 were being written, two more fixes landed on `origin/main`:
+- `c555730` fix(ai-extract): #80 derive tier spendMax from next tier's spendMin
+- `93d4dd0` fix(analytics): #81 #82 forecast tier selection + period tier fallback
+
+These do NOT touch any market-share file but the worktree branched from `acd65cf` which precedes them. Pull them in before the verify+push step so the worktree mirrors prod.
+
+- [ ] **Step 1: Fetch + rebase**
+
+```bash
+cd /Users/vickkumar/code/tydei-next/.claude/worktrees/market-share-20260426-202358
+git fetch origin main
+git rebase origin/main
+```
+
+Expected: clean rebase. No conflicts (Tasks 1–6 touch `lib/contracts/market-share-filter.ts`, `lib/contracts/__tests__/market-share-filter.test.ts`, `lib/actions/cog/category-market-share.ts`, `lib/actions/vendor-dashboard.ts`, `lib/actions/__tests__/market-share-parity.test.ts`, `CLAUDE.md`. The new commits touch `lib/ai/*`, `lib/actions/analytics/rebate-forecast.ts`, `components/contracts/contract-detail-client.tsx`. Disjoint sets.)
+
+- [ ] **Step 2: Re-run market-share tests**
+
+```bash
+bunx vitest run lib/contracts/__tests__/market-share-filter.test.ts lib/actions/__tests__/market-share-parity.test.ts
+```
+
+Expected: all pass.
+
+---
+
+## Task 9: Verify PO complaints #15–#17 against latest main
+
+**Files:** none — verification only.
+
+PO sent three new complaints (#15 AI tier Spend Max empty, #16 Rebate Forecast empty, #17 accrual ledger N/A on single-tier hit). Research showed all three are **already fixed** in commits that landed during planning:
+
+| # | Complaint | Fixed by | File |
+|---|---|---|---|
+| 15 | AI not filling tier Spend Max | `c555730` | `lib/ai/contract-extract-mapper.ts:40-53` — derives `spendMax = nextTier.spendMin - 1` |
+| 16 | Rebate Forecast curve empty | `93d4dd0` | `lib/actions/analytics/rebate-forecast.ts:142-150` — picks first SPEND-based term instead of `terms[0]` |
+| 17 | Accrual ledger N/A when 1 tier hit | `93d4dd0` | `components/contracts/contract-detail-client.tsx:1395-1442` — single-tier + earned-rebate fallback to Tier 1 |
+
+Action: confirm against the deployed Vercel build, not just main.
+
+- [ ] **Step 1: Confirm both commits are in `origin/main`**
+
+```bash
+git log --oneline origin/main | grep -E "c555730|93d4dd0"
+```
+
+Expected: both commits printed.
+
+- [ ] **Step 2: Trigger / confirm a fresh prod deploy**
+
+If the user has Vercel CLI: `vercel inspect <deployment-url>` for the current prod deploy and confirm SHA matches `93d4dd0` or newer. If not, ask the user to confirm in the Vercel dashboard.
+
+- [ ] **Step 3: Ask the PO to re-screenshot**
+
+Send the PO: "Two of the three issues (Forecast empty + accrual N/A) and the AI tier Spend Max regression are fixed in `c555730`/`93d4dd0`. Could you re-test against the current prod deploy and confirm — or send a fresh screenshot if anything still reproduces?"
+
+No commit needed for this task — it's a verification gate.
+
+---
+
+## Task 10: Decompose `contract-detail-client.tsx` — extract Overview tab
+
+**Files:**
+- Create: `components/contracts/tabs/overview-tab.tsx`
+- Modify: `components/contracts/contract-detail-client.tsx` (lines 648–1141 lifted out)
+
+**Why this target:** `contract-detail-client.tsx` is 1,449 lines and is the component the PO has cited the most (Performance tab, Transactions tab, Terms, Tiers, Rebate forecast all live in it). Decomposing along tab boundaries gives each tab its own file (~50–500 lines), unlocks vendor-side reuse (the vendor contract overview re-implements parts of these tabs today), and makes future edits boundable.
+
+The Overview tab is the biggest single chunk (lines 648–1141, ~493 lines). Other tabs are already small or already delegate to imported components (`ContractTransactions`, `ContractPricingTab`, `ContractDocumentsList`). Extract Overview first; the others can follow in a separate plan if needed.
+
+- [ ] **Step 1: Read lines 648–1141 of `contract-detail-client.tsx`**
+
+```bash
+sed -n '648,1141p' components/contracts/contract-detail-client.tsx
+```
+
+Note every variable, prop, callback, and helper the Overview tab body references. The extracted component takes them all as props (no shared module state).
+
+- [ ] **Step 2: Create the new file**
+
+Create `components/contracts/tabs/overview-tab.tsx`. The exact contents depend on the closure references found in Step 1 — for each `useMemo` value, hook result, or local function the JSX uses, declare a corresponding prop on `OverviewTabProps`. Move the JSX block (lines 648–1141) into the new component's return. Keep all styling, conditional rendering, and structure identical.
+
+Skeleton (fill in props from Step 1's audit):
+
+```tsx
+// components/contracts/tabs/overview-tab.tsx
+"use client"
+
+import { TabsContent } from "@/components/ui/tabs"
+import { ContractInsightsCards } from "@/components/contracts/contract-insights-cards"
+import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
+import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
+import { formatCurrency, formatCalendarDate, formatPercent } from "@/lib/formatting"
+// ...other imports referenced by the moved JSX
+
+export interface OverviewTabProps {
+  // Fill in from Step 1 audit. One prop per closure reference.
+  // Example shape:
+  // contract: NonNullable<Awaited<ReturnType<typeof getContract>>>
+  // periods: Array<{ id: string; ... }>
+  // tierProgress: ReturnType<typeof calculateTierProgress> | null
+  // onRefreshPeriods: () => void
+}
+
+export function OverviewTab(props: OverviewTabProps) {
+  return (
+    <TabsContent value="overview" className="mt-6 space-y-6">
+      {/* Paste lines 649–1140 from contract-detail-client.tsx here, replacing
+          local references with `props.<name>`. */}
+    </TabsContent>
+  )
+}
+```
+
+- [ ] **Step 3: Replace the inline block in `contract-detail-client.tsx`**
+
+Replace lines 648–1141 with:
+
+```tsx
+<OverviewTab
+  // Pass every prop declared in OverviewTabProps. The list mirrors
+  // the closure-reference audit from Step 1.
+/>
+```
+
+Add the import at the top of `contract-detail-client.tsx`:
+
+```tsx
+import { OverviewTab } from "@/components/contracts/tabs/overview-tab"
+```
+
+- [ ] **Step 4: Typecheck**
+
+```bash
+bunx tsc --noEmit
+```
+
+Expected: 0 errors. If `OverviewTabProps` is missing a field the JSX references, TypeScript will flag it as `Cannot find name '<x>'` inside `overview-tab.tsx` — add the prop and pass it from `contract-detail-client.tsx`.
+
+- [ ] **Step 5: Smoke the page**
+
+```bash
+rm -rf .next
+bun run dev
+```
+
+Open a contract at `http://localhost:3000/dashboard/contracts/<id>`. Click through the Overview tab and confirm:
+- All cards render (commitment progress, tier progress, projected rebate, term summaries)
+- Numbers match what's in the screenshot of the same contract before the refactor
+- No console errors
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add components/contracts/tabs/overview-tab.tsx components/contracts/contract-detail-client.tsx
+git commit -m "refactor(contract-detail): extract Overview tab into composable module
+
+contract-detail-client.tsx was 1,449 lines and is the most-cited
+component in PO complaints (Performance, Transactions, Terms, Tiers,
+Forecast all live here). Pulling each tab body into its own file
+gives clear boundaries, unlocks vendor-side reuse, and makes future
+edits boundable. Overview tab (~493 lines) extracted first; remaining
+tabs are either already small or already delegate to imports.
+
+No behavior change: the moved JSX is byte-identical except for the
+closure-to-props rewrite.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 11: Decompose — extract `DetailRow` and `PerformanceSummary` helpers
+
+**Files:**
+- Create: `components/contracts/tabs/_detail-row.tsx`
+- Create: `components/contracts/tabs/_performance-summary.tsx`
+- Modify: `components/contracts/contract-detail-client.tsx` (delete lines 1261+ helper definitions)
+- Modify: `components/contracts/tabs/overview-tab.tsx` (import `DetailRow` from new path)
+
+These two helpers are defined at the bottom of `contract-detail-client.tsx` (line 1261+) and are used by the Overview tab. Now that Overview is in its own file, the helpers should live next to their consumer, not in the parent.
+
+- [ ] **Step 1: Move `DetailRow`**
+
+Cut the `function DetailRow(...)` block from `contract-detail-client.tsx` (around line 1261). Paste into a new file `components/contracts/tabs/_detail-row.tsx` with `"use client"` directive and a default-exported or named export. Add the necessary imports (likely none — it's pure JSX over primitives).
+
+```tsx
+// components/contracts/tabs/_detail-row.tsx
+"use client"
+
+export function DetailRow({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  // Paste the original implementation here.
+}
+```
+
+(Match the original signature exactly — copy from the source.)
+
+- [ ] **Step 2: Move `PerformanceSummary`**
+
+Same operation for `function PerformanceSummary(...)` (around line 1278). Target file: `components/contracts/tabs/_performance-summary.tsx`.
+
+- [ ] **Step 3: Update imports in `overview-tab.tsx`**
+
+```tsx
+import { DetailRow } from "@/components/contracts/tabs/_detail-row"
+import { PerformanceSummary } from "@/components/contracts/tabs/_performance-summary"
+```
+
+If the parent `contract-detail-client.tsx` still references either helper (it shouldn't after Task 10, but check), add the same imports there too.
+
+- [ ] **Step 4: Typecheck**
+
+```bash
+bunx tsc --noEmit
+```
+
+Expected: 0 errors.
+
+- [ ] **Step 5: Run full test suite**
+
+```bash
+bunx vitest run --exclude '**/.claude/**' --exclude '**/.worktrees/**'
+```
+
+Expected: all tests pass.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add components/contracts/tabs/_detail-row.tsx components/contracts/tabs/_performance-summary.tsx components/contracts/contract-detail-client.tsx components/contracts/tabs/overview-tab.tsx
+git commit -m "refactor(contract-detail): co-locate DetailRow + PerformanceSummary helpers
+
+Move the two presentational helpers out of contract-detail-client.tsx
+into the tabs/ folder next to their only consumer (OverviewTab).
+No behavior change.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Updated execution order
+
+1. **Tasks 1–7** — market-share canonicalization (Task 1 is DONE in worktree, uncommitted).
+2. **Task 8** — rebase worktree on latest main (pulls in `c555730` + `93d4dd0`).
+3. **Task 9** — verification of #15/#16/#17 against latest deploy + PO confirmation. No code.
+4. **Tasks 10–11** — decompose `contract-detail-client.tsx`. Each task is its own commit.
+5. Final cherry-pick / push step (was Task 7 Step 4) runs after all tasks above.
+
+---
+
 ## Out of scope / follow-up plans
 
 These were in the spec but blocked or deferred:
@@ -824,6 +1087,7 @@ These were in the spec but blocked or deferred:
 - **#12 Optimizer empty-state UX** — blocked on confirming whether commit `9482840` resolved it for the demo data.
 - **#13 Case Costing "anything new"** — needs PO clarification on what they were asking.
 - **B1 E2E test for vendor amortization** — separate Playwright plan; not blocked, just not the highest leverage.
-- **D4 Shared contract-detail component** — explicitly deferred per spec Section 4 (v0 has parallel trees too; output parity > maintenance refactor).
+- **D4 Shared contract-detail component** — Tasks 10–11 are the first move toward this. Once Overview, Performance, Transactions tabs each live in their own file, vendor-contract-overview can import them with a `viewerRole` prop. Plan as a follow-up after Tasks 10–11 land.
+- **Other large-component decompositions** (`mass-upload.tsx` 1,454L, `contract-form.tsx` 1,299L, `contract-transactions.tsx` 1,180L, `contract-terms-entry.tsx` 1,176L) — separate plans. Don't batch them with this one; refactors are easiest to review one component at a time.
 
 When PO unblocks any of the above, write a sibling plan in `docs/superpowers/plans/`.
