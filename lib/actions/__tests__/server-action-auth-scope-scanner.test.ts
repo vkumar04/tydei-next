@@ -275,8 +275,6 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/categories.ts:142",
   // change-proposals.ts: post-mutation re-read
   "lib/actions/change-proposals.ts:175",
-  // cog-import.ts: facility-scoped batch by upstream check
-  "lib/actions/cog-import.ts:200",
   // contract-periods.ts: post-period-mutation re-reads
   "lib/actions/contract-periods.ts:394",
   "lib/actions/contract-periods.ts:623",
@@ -309,8 +307,6 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/invoices.ts:375",
   // payor-contracts.ts: admin-managed shared resource
   "lib/actions/payor-contracts.ts:91",
-  // pending-contracts.ts: post-mutation re-read after gated approve
-  "lib/actions/pending-contracts.ts:869",
   // pricing-files.ts: post-fetch contract ownership probe
   "lib/actions/pricing-files.ts:249",
   "lib/actions/pricing-files.ts:378",

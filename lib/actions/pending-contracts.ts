@@ -899,6 +899,9 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
     }
   }
 
+  // id was already validated by the facility-scoped findUniqueOrThrow at the
+  // top of approvePendingContract (where: { id, facilityId: facility.id }).
+  // auth-scope-scanner-skip: gated mutation following the authorized read.
   await prisma.pendingContract.update({
     where: { id },
     data: { status: "approved", reviewedAt: new Date(), reviewedBy },

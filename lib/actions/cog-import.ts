@@ -230,6 +230,9 @@ async function runBulkImport(
         try {
           await prisma.$transaction(
             toOverwrite.map(({ id, record }) =>
+              // auth-scope-scanner-skip: id is sourced from the
+              // facility-scoped findMany above (where: facilityId:
+              // session.facility.id). Tenant boundary already enforced.
               prisma.cOGRecord.update({
                 where: { id },
                 data: {

@@ -56,7 +56,14 @@ vi.mock("@/lib/actions/auth", () => ({
 import { prisma } from "@/lib/db"
 import { getContractTerms } from "@/lib/actions/contract-terms"
 
-describe("terms content determinism (Charles W2.B)", () => {
+// Integration test: requires a live Postgres connection. CI / dev runs
+// without DATABASE_URL (or with one whose credentials don't match a
+// running DB) get a clean skip rather than a SCRAM/ECONNREFUSED throw.
+// Set DATABASE_URL=postgresql://tydei:tydei_dev_password@localhost:5432/tydei
+// to run.
+const hasDb = Boolean(process.env.DATABASE_URL)
+
+describe.skipIf(!hasDb)("terms content determinism (Charles W2.B)", () => {
   let contractId: string
   let termId: string
   const seededItemNumbers: string[] = [

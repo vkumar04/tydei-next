@@ -442,8 +442,8 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
                           </span>
                         </TableCell>
                         <TableCell>
-                          {r.tierAchieved ? (
-                            <Badge variant="outline">Tier {r.tierAchieved}</Badge>
+                          {r.period?.tierAchieved ? (
+                            <Badge variant="outline">Tier {r.period.tierAchieved}</Badge>
                           ) : (
                             <span className="text-muted-foreground text-sm">--</span>
                           )}

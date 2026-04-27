@@ -7,8 +7,21 @@ import Stripe from "stripe"
 import { Resend } from "resend"
 import { prisma } from "@/lib/db"
 
-const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!)
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Conditional init: previously these were unconditional `new Stripe(...)` /
+// `new Resend(...)` at module-load time, which threw
+// `Neither apiKey nor config.authenticator provided` when
+// STRIPE_SECRET_KEY was missing — breaking every test file that
+// transitively imports lib/auth-server.ts (e.g.
+// lib/__tests__/auth-server-org-hooks.test.ts). Now we skip the
+// integration entirely when its env var is missing; prod has the var,
+// tests don't, and the hook functions exported from this module work
+// without either client.
+const stripeClient = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null
 
 // ─── Org-plugin defense-in-depth ─────────────────────────────────
 //
@@ -128,6 +141,9 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     sendResetPassword: async ({ user, url }) => {
+      if (!resend) {
+        throw new Error("Resend not configured: RESEND_API_KEY missing")
+      }
       await resend.emails.send({
         from: "TYDEi <noreply@tydei.com>",
         to: user.email,
@@ -138,6 +154,9 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
+      if (!resend) {
+        throw new Error("Resend not configured: RESEND_API_KEY missing")
+      }
       await resend.emails.send({
         from: "TYDEi <noreply@tydei.com>",
         to: user.email,
@@ -170,9 +189,13 @@ export const auth = betterAuth({
         },
       },
     }),
-    stripe({
-      stripeClient,
-      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
-    }),
+    ...(stripeClient && process.env.STRIPE_WEBHOOK_SECRET
+      ? [
+          stripe({
+            stripeClient,
+            stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+          }),
+        ]
+      : []),
   ],
 })

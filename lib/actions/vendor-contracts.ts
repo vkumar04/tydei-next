@@ -111,8 +111,14 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
         payPeriodStart: true,
         payPeriodEnd: true,
         collectionDate: true,
-        tierAchieved: true,
         notes: true,
+        // tierAchieved lives on ContractPeriod, not Rebate — pull it
+        // through the relation so the vendor-overview Tier column has
+        // a value to render. Pre-fix this was selected as
+        // `tierAchieved: true` directly on Rebate, which the
+        // prisma-select-schema-scanner rightly flagged as a runtime
+        // bug (Unknown field).
+        period: { select: { tierAchieved: true } },
       },
       orderBy: { payPeriodEnd: "desc" },
     }),
