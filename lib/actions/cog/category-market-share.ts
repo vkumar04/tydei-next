@@ -106,6 +106,15 @@ export async function getCategoryMarketShareForVendor(input: {
     // `category != null` here — un-categorized rows still count toward
     // `uncategorizedSpend` so the UI can explain "vendor has spend but
     // none of it is categorized" instead of silently showing nothing.
+    //
+    // Charles 2026-04-26 #58: also pull each row's matched-contract
+    // productCategory so an un-categorized COG row can inherit its
+    // category from the contract it's linked to. Pricing files often
+    // tag the contract with "Ortho-Extremity" while the raw COG
+    // import leaves `category=null`; without this fallback the
+    // contract's market-share card said "no categorized COG" even
+    // though every line item under that contract clearly belonged to
+    // a single category.
     const rows = await prisma.cOGRecord.findMany({
       where: {
         facilityId: facility.id,
@@ -115,8 +124,34 @@ export async function getCategoryMarketShareForVendor(input: {
         vendorId: true,
         category: true,
         extendedPrice: true,
+        contractId: true,
       },
     })
+
+    // Pull the productCategory for every contract referenced by these
+    // rows in a single round-trip, then build a contractId → category
+    // map so the inner loop stays O(1).
+    const contractIds = Array.from(
+      new Set(rows.map((r) => r.contractId).filter((v): v is string => !!v)),
+    )
+    const contractCategoryRows =
+      contractIds.length > 0
+        ? await prisma.contract.findMany({
+            where: { id: { in: contractIds } },
+            select: {
+              id: true,
+              productCategory: { select: { name: true } },
+            },
+          })
+        : []
+    const contractCategoryMap = new Map(
+      contractCategoryRows.map((c) => [c.id, c.productCategory?.name ?? null]),
+    )
+
+    /** Resolve a COG row's effective category: explicit text first,
+     *  then matched-contract productCategory.name. */
+    const effectiveCategory = (r: (typeof rows)[number]): string | null =>
+      r.category ?? (r.contractId ? contractCategoryMap.get(r.contractId) ?? null : null)
 
     // Count un-categorized + total vendor spend up front so we can
     // return them even when the per-category result list ends up empty.
@@ -127,7 +162,7 @@ export async function getCategoryMarketShareForVendor(input: {
       const amt = Number(r.extendedPrice ?? 0)
       if (amt <= 0) continue
       totalVendorSpend += amt
-      if (!r.category) uncategorizedSpend += amt
+      if (!effectiveCategory(r)) uncategorizedSpend += amt
     }
 
     type CatBucket = {
@@ -136,7 +171,7 @@ export async function getCategoryMarketShareForVendor(input: {
     }
     const byCategory = new Map<string, CatBucket>()
     for (const r of rows) {
-      const cat = r.category
+      const cat = effectiveCategory(r)
       if (!cat) continue
       const bucket = byCategory.get(cat) ?? {
         total: 0,

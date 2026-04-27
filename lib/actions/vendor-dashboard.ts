@@ -97,10 +97,40 @@ export async function getVendorMarketShareByCategory(
 
   // Pull all the vendor's COG (no `category != null` pre-filter) so we
   // can compute uncategorized spend up-front for the empty-state UI.
+  //
+  // Charles 2026-04-26 #58: also pull the row's matched-contract
+  // productCategory, then fall back to it when the COG row has no
+  // explicit category. Pricing files frequently leave COG.category
+  // null while the contract carries the category, which made the
+  // vendor dashboard show "all uncategorized" for vendors whose
+  // contracts were perfectly tagged.
   const vendorRows = await prisma.cOGRecord.findMany({
     where: { vendorId },
-    select: { category: true, extendedPrice: true },
+    select: {
+      category: true,
+      extendedPrice: true,
+      contractId: true,
+    },
   })
+
+  const contractIds = Array.from(
+    new Set(
+      vendorRows.map((r) => r.contractId).filter((v): v is string => !!v),
+    ),
+  )
+  const contractCategoryRows =
+    contractIds.length > 0
+      ? await prisma.contract.findMany({
+          where: { id: { in: contractIds } },
+          select: {
+            id: true,
+            productCategory: { select: { name: true } },
+          },
+        })
+      : []
+  const contractCategoryMap = new Map(
+    contractCategoryRows.map((c) => [c.id, c.productCategory?.name ?? null]),
+  )
 
   let totalVendorSpend = 0
   let uncategorizedSpend = 0
@@ -109,13 +139,18 @@ export async function getVendorMarketShareByCategory(
     const amt = Number(r.extendedPrice ?? 0)
     if (amt <= 0) continue
     totalVendorSpend += amt
-    if (!r.category) {
+    const effective =
+      r.category ??
+      (r.contractId
+        ? contractCategoryMap.get(r.contractId) ?? null
+        : null)
+    if (!effective) {
       uncategorizedSpend += amt
       continue
     }
     vendorByCategory.set(
-      r.category,
-      (vendorByCategory.get(r.category) ?? 0) + amt,
+      effective,
+      (vendorByCategory.get(effective) ?? 0) + amt,
     )
   }
 
