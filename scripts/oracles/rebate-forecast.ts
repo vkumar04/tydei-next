@@ -46,7 +46,7 @@ export default defineOracle("rebate-forecast", async (ctx) => {
     const since = new Date()
     since.setMonth(since.getMonth() - 12)
     const periods = await prisma.contractPeriod.findMany({
-      where: { contractId: contract.id, payPeriodEnd: { gte: since } },
+      where: { contractId: contract.id, periodEnd: { gte: since } },
       select: { totalSpend: true },
     })
     const trailingSpend = periods.reduce(
