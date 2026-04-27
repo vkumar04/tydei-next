@@ -105,6 +105,13 @@ export function VendorContractDetailClient({
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          {/* Charles 2026-04-26 #65: dedicated Amortization tab for
+              capital-like contracts so vendors get the same surface
+              the facility side has. Previously the schedule was
+              tucked at the bottom of Overview and easy to miss. */}
+          {isCapitalLike && (
+            <TabsTrigger value="amortization">Amortization</TabsTrigger>
+          )}
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
@@ -112,20 +119,28 @@ export function VendorContractDetailClient({
         <TabsContent value="overview" className="mt-6 space-y-6">
           <VendorContractOverview contract={contract} />
           {isCapitalLike && (
-            <>
-              <TieInRebateSplit
-                contractId={contract.id}
-                fetcher={getVendorContractCapitalSchedule}
-                scope="vendor"
-              />
-              <ContractAmortizationCard
-                contractId={contract.id}
-                fetcher={getVendorContractCapitalSchedule}
-                scope="vendor"
-              />
-            </>
+            <TieInRebateSplit
+              contractId={contract.id}
+              fetcher={getVendorContractCapitalSchedule}
+              scope="vendor"
+            />
           )}
         </TabsContent>
+
+        {isCapitalLike && (
+          <TabsContent value="amortization" className="mt-6 space-y-6">
+            <TieInRebateSplit
+              contractId={contract.id}
+              fetcher={getVendorContractCapitalSchedule}
+              scope="vendor"
+            />
+            <ContractAmortizationCard
+              contractId={contract.id}
+              fetcher={getVendorContractCapitalSchedule}
+              scope="vendor"
+            />
+          </TabsContent>
+        )}
 
         <TabsContent value="performance" className="mt-6 space-y-6">
           <ContractScoreCard
