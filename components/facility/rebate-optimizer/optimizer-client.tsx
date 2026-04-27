@@ -303,8 +303,16 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
       ) : !hasContracts && !hasScenarios && !hasOpportunities ? (
         <EmptyState
           icon={Sparkles}
-          title="No optimizable contracts"
-          description="Add contracts with tiered spend rebates to start maximizing rebate earnings."
+          title={
+            vendorFilter === "all"
+              ? "No optimizable contracts"
+              : `${vendorFilter} has no tier-rebate contracts`
+          }
+          description={
+            vendorFilter === "all"
+              ? "Add contracts with tiered spend rebates to start maximizing rebate earnings."
+              : `${vendorFilter} appears in the dropdown because they have at least one contract at this facility, but none of those contracts have tier-rebate terms configured. Add a tiered spend-rebate term to their contract to surface optimization opportunities here, or pick a different vendor.`
+          }
           action={
             <Button asChild>
               <Link href="/dashboard/contracts">Go to Contracts</Link>

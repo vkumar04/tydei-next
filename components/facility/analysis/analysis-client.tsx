@@ -20,6 +20,7 @@ import { AnalysisCashflowChart } from "./analysis-cashflow-chart"
 import { AnalysisClauseRiskCard } from "./analysis-clause-risk-card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { UploadTab } from "./capital/upload-tab"
 
 /**
  * Financial-analysis orchestrator.
@@ -164,13 +165,28 @@ export function AnalysisClient({ facilityId }: AnalysisClientProps) {
       )}
 
       {!form.contractId && !contractsQuery.isLoading && (
-        <Alert>
-          <AlertTitle>Select a contract</AlertTitle>
-          <AlertDescription>
-            Pick an active contract from the control bar to run a capital ROI
-            analysis.
-          </AlertDescription>
-        </Alert>
+        <>
+          <Alert>
+            <AlertTitle>Pick a contract or upload a hypothetical</AlertTitle>
+            <AlertDescription>
+              Select an active contract from the control bar to run analysis,
+              or upload a contract document below to extract values into the
+              form. (Charles 2026-04-26 #11.)
+            </AlertDescription>
+          </Alert>
+          <UploadTab
+            onExtracted={(data) => {
+              setForm((prev) => ({
+                ...prev,
+                annualSpend:
+                  data.contractTotal && data.contractLength
+                    ? Math.round(data.contractTotal / data.contractLength)
+                    : prev.annualSpend,
+                rebateRate: data.rebatePercent ?? prev.rebateRate,
+              }))
+            }}
+          />
+        </>
       )}
 
       {analyzeQuery.isFetching && !result && (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Upload, Loader2, Download } from "lucide-react"
 import { toast } from "sonner"
@@ -122,7 +122,22 @@ export function ContractPricingTab({
     }
   }
 
-  const rows = pricing ?? []
+  const rows = useMemo(() => pricing ?? [], [pricing])
+
+  // Client-side pagination. Default 50/page; pricing files routinely
+  // run into the thousands and rendering all rows tanks the page.
+  const PAGE_SIZE = 50
+  const [page, setPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  // Reset to page 1 when the underlying data changes (e.g. after import).
+  useEffect(() => {
+    setPage(1)
+  }, [rows.length])
+  const safePage = Math.min(page, pageCount)
+  const pagedRows = useMemo(
+    () => rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [rows, safePage],
+  )
 
   return (
     <Card>
@@ -189,7 +204,7 @@ export function ContractPricingTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r) => (
+              {pagedRows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">
                     {r.vendorItemNo}
@@ -212,6 +227,44 @@ export function ContractPricingTab({
             </TableBody>
           </Table>
         )}
+        {rows.length > PAGE_SIZE ? (
+          <div className="mt-4 flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              Showing{" "}
+              <span className="font-medium text-foreground">
+                {(safePage - 1) * PAGE_SIZE + 1}
+                –
+                {Math.min(safePage * PAGE_SIZE, rows.length)}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium text-foreground">
+                {rows.length.toLocaleString()}
+              </span>{" "}
+              rows
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+              >
+                Previous
+              </Button>
+              <span className="text-muted-foreground">
+                Page {safePage} of {pageCount}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                disabled={safePage >= pageCount}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </CardContent>
 
       <PricingColumnMapper
