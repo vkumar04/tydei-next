@@ -15,13 +15,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 type CogRow = {
-  transactionDate: Date
+  transactionDate?: Date
   extendedPrice: number
   category?: string | null
   vendorId?: string | null
+  facilityId?: string | null
+  contractId?: string | null
 }
 
+// Rows returned for getVendorSpendTrend / getVendorContractDetail calls
+// (keyed on transactionDate / vendorId filter).
 let cogFindMany: CogRow[] = []
+// All-facility rows returned on the SECOND findMany call inside
+// getVendorMarketShareByCategory (the denominator fetch). When set,
+// this array is returned for call[1]; cogFindMany is returned for
+// call[0] (the distinct-facilityId probe). When null, both calls
+// share cogFindMany (covers tests that don't exercise market share).
+let cogAllFacilityRows: CogRow[] | null = null
 let cogAgg: { _sum: { extendedPrice: number | null } } = {
   _sum: { extendedPrice: 0 },
 }
@@ -40,10 +50,21 @@ let rebateFindMany: Array<{
 }> = []
 let contractRow: Record<string, unknown> | null = null
 
+// Call counter for findMany — reset in beforeEach. The market-share
+// action calls findMany twice: call[0] = vendor facilityId probe,
+// call[1] = all-facility COG rows. cogAllFacilityRows drives call[1].
+let findManyCallCount = 0
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     cOGRecord: {
-      findMany: vi.fn(async () => cogFindMany),
+      findMany: vi.fn(async () => {
+        findManyCallCount++
+        if (cogAllFacilityRows !== null && findManyCallCount > 1) {
+          return cogAllFacilityRows
+        }
+        return cogFindMany
+      }),
       aggregate: vi.fn(async () => cogAgg),
       groupBy: vi.fn(async () => cogGroupBy),
     },
@@ -54,6 +75,7 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(async () => rebateFindMany),
     },
     contract: {
+      findMany: vi.fn(async () => []),
       findUniqueOrThrow: vi.fn(async () => {
         if (!contractRow) throw new Error("not found")
         return contractRow
@@ -75,7 +97,9 @@ vi.mock("@/lib/serialize", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  findManyCallCount = 0
   cogFindMany = []
+  cogAllFacilityRows = null
   cogAgg = { _sum: { extendedPrice: 0 } }
   cogGroupBy = []
   periodAgg = { _sum: { totalSpend: 0 } }
@@ -218,9 +242,12 @@ describe("getVendorContractDetail — spendToDate cOG fallback (Bug 3)", () => {
 
 describe("getVendorMarketShareByCategory — rich empty-state shape (Bug 5)", () => {
   it("returns {rows, uncategorizedSpend, totalVendorSpend} when ALL spend is uncategorized", async () => {
-    cogFindMany = [
-      { transactionDate: new Date(), extendedPrice: 500_000, category: null },
-      { transactionDate: new Date(), extendedPrice: 12_964, category: null },
+    // Call 1 (facilityId probe): vendor has COG at f-1.
+    cogFindMany = [{ facilityId: "f-1", extendedPrice: 0 }]
+    // Call 2 (all-facility COG): all vendor rows, no category.
+    cogAllFacilityRows = [
+      { vendorId: "v-stryker", facilityId: "f-1", extendedPrice: 500_000, category: null, contractId: null },
+      { vendorId: "v-stryker", facilityId: "f-1", extendedPrice: 12_964, category: null, contractId: null },
     ]
     const { getVendorMarketShareByCategory } = await import(
       "@/lib/actions/vendor-dashboard"
@@ -236,23 +263,17 @@ describe("getVendorMarketShareByCategory — rich empty-state shape (Bug 5)", ()
   })
 
   it("returns categorized rows + uncategorized spend in mixed case", async () => {
-    cogFindMany = [
-      {
-        transactionDate: new Date(),
-        extendedPrice: 100,
-        category: "Joint Replacement",
-      },
-      {
-        transactionDate: new Date(),
-        extendedPrice: 50,
-        category: null,
-      },
-    ]
-    cogGroupBy = [
-      {
-        category: "Joint Replacement",
-        _sum: { extendedPrice: 200 },
-      },
+    // Call 1 (facilityId probe): vendor has COG at f-1.
+    cogFindMany = [{ facilityId: "f-1", extendedPrice: 0 }]
+    // Call 2 (all-facility COG): vendor rows + a competing vendor row so
+    // category total = 200 → vendor share = 100/200 = 50%.
+    // This tests that the denominator includes competing-vendor rows
+    // (the drift bug: old code queried groupBy on raw category only,
+    // new code uses all rows from the same facility via the helper).
+    cogAllFacilityRows = [
+      { vendorId: "v-stryker", facilityId: "f-1", extendedPrice: 100, category: "Joint Replacement", contractId: null },
+      { vendorId: "v-stryker", facilityId: "f-1", extendedPrice: 50, category: null, contractId: null },
+      { vendorId: "v-other", facilityId: "f-1", extendedPrice: 100, category: "Joint Replacement", contractId: null },
     ]
     const { getVendorMarketShareByCategory } = await import(
       "@/lib/actions/vendor-dashboard"
@@ -269,6 +290,7 @@ describe("getVendorMarketShareByCategory — rich empty-state shape (Bug 5)", ()
   })
 
   it("returns zeros when vendor has no COG at all", async () => {
+    // cogFindMany = [] (default) → call 1 returns [] → early-exit zeros.
     const { getVendorMarketShareByCategory } = await import(
       "@/lib/actions/vendor-dashboard"
     )

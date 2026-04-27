@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
 
 // ─── Vendor Dashboard Stats ─────────────────────────────────────
 
@@ -95,18 +96,27 @@ export async function getVendorMarketShareByCategory(
   const { vendor: sessionVendor } = await requireVendor()
   const vendorId = sessionVendor.id
 
-  // Pull all the vendor's COG (no `category != null` pre-filter) so we
-  // can compute uncategorized spend up-front for the empty-state UI.
-  //
-  // Charles 2026-04-26 #58: also pull the row's matched-contract
-  // productCategory, then fall back to it when the COG row has no
-  // explicit category. Pricing files frequently leave COG.category
-  // null while the contract carries the category, which made the
-  // vendor dashboard show "all uncategorized" for vendors whose
-  // contracts were perfectly tagged.
-  const vendorRows = await prisma.cOGRecord.findMany({
+  // Pull the vendor's facility set so we can compute correct category
+  // totals (denominator) at every facility this vendor sells into.
+  // Previously this action sliced facility-wide COG with `category IN
+  // (...)` which (a) lost the contract-category fallback for the
+  // denominator and (b) leaked spend across facilities the vendor
+  // doesn't actually sell at.
+  const vendorFacilityRows = await prisma.cOGRecord.findMany({
     where: { vendorId },
+    select: { facilityId: true },
+    distinct: ["facilityId"],
+  })
+  const facilityIds = vendorFacilityRows.map((r) => r.facilityId)
+
+  if (facilityIds.length === 0) {
+    return serialize({ rows: [], uncategorizedSpend: 0, totalVendorSpend: 0 })
+  }
+
+  const cogRows = await prisma.cOGRecord.findMany({
+    where: { facilityId: { in: facilityIds } },
     select: {
+      vendorId: true,
       category: true,
       extendedPrice: true,
       contractId: true,
@@ -114,9 +124,7 @@ export async function getVendorMarketShareByCategory(
   })
 
   const contractIds = Array.from(
-    new Set(
-      vendorRows.map((r) => r.contractId).filter((v): v is string => !!v),
-    ),
+    new Set(cogRows.map((r) => r.contractId).filter((v): v is string => !!v)),
   )
   const contractCategoryRows =
     contractIds.length > 0
@@ -128,66 +136,31 @@ export async function getVendorMarketShareByCategory(
           },
         })
       : []
-  const contractCategoryMap = new Map(
+  const contractCategoryMap = new Map<string, string | null>(
     contractCategoryRows.map((c) => [c.id, c.productCategory?.name ?? null]),
   )
 
-  let totalVendorSpend = 0
-  let uncategorizedSpend = 0
-  const vendorByCategory = new Map<string, number>()
-  for (const r of vendorRows) {
-    const amt = Number(r.extendedPrice ?? 0)
-    if (amt <= 0) continue
-    totalVendorSpend += amt
-    const effective =
-      r.category ??
-      (r.contractId
-        ? contractCategoryMap.get(r.contractId) ?? null
-        : null)
-    if (!effective) {
-      uncategorizedSpend += amt
-      continue
-    }
-    vendorByCategory.set(
-      effective,
-      (vendorByCategory.get(effective) ?? 0) + amt,
-    )
-  }
-
-  const categories = Array.from(vendorByCategory.keys())
-  if (categories.length === 0) {
-    return serialize({
-      rows: [],
-      uncategorizedSpend,
-      totalVendorSpend,
-    })
-  }
-
-  const totalByCategory = await prisma.cOGRecord.groupBy({
-    by: ["category"],
-    where: { category: { in: categories } },
-    _sum: { extendedPrice: true },
+  const computed = computeCategoryMarketShare({
+    rows: cogRows,
+    contractCategoryMap,
+    vendorId,
   })
 
-  const totalMap = new Map(
-    totalByCategory.map((t) => [t.category, Number(t._sum.extendedPrice ?? 0)]),
-  )
-
-  const rows: VendorMarketShareCategoryRow[] = Array.from(
-    vendorByCategory.entries(),
-  )
-    .map(([cat, vendorSpend]) => {
-      const totalSpend = totalMap.get(cat) ?? 0
-      const display = cat.length > 15 ? cat.substring(0, 12) + "..." : cat
-      return {
-        category: display,
-        share: totalSpend > 0 ? (vendorSpend / totalSpend) * 100 : 0,
-      }
-    })
-    .sort((a, b) => b.share - a.share)
+  // Map to the existing UI-compatible row shape. The chart uses `share`
+  // (0–100 percentage), so map from `sharePct` (same semantics, different name).
+  const rows: VendorMarketShareCategoryRow[] = computed.rows
     .slice(0, 5)
+    .map((r) => ({
+      category:
+        r.category.length > 15 ? r.category.substring(0, 12) + "..." : r.category,
+      share: r.sharePct,
+    }))
 
-  return serialize({ rows, uncategorizedSpend, totalVendorSpend })
+  return serialize({
+    rows,
+    uncategorizedSpend: computed.uncategorizedSpend,
+    totalVendorSpend: computed.totalVendorSpend,
+  })
 }
 
 // ─── Vendor Contract Status Breakdown ───────────────────────────
