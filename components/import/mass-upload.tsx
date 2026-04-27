@@ -13,11 +13,12 @@ import {
 import { ingestCOGRecordsCSV } from "@/lib/actions/imports/cog-csv-import"
 import { ingestPricingFile } from "@/lib/actions/imports/pricing-import"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
+import { generateId, calculateSimilarity } from "./_mass-upload-helpers"
+import { renderStatusBadge } from "./_mass-upload-status-badge"
 import {
   FileTextIcon,
   UploadIcon,
   CheckCircle2Icon,
-  AlertCircleIcon,
   XIcon,
   FileStackIcon,
   SparklesIcon,
@@ -28,7 +29,6 @@ import {
   ReceiptIcon,
   FileSignatureIcon,
   PackageIcon,
-  ClockIcon,
   RotateCcwIcon,
 } from "lucide-react"
 
@@ -58,80 +58,14 @@ import {
 
 // ─── Types (ported from v0) ──────────────────────────────────────
 
-export type DocumentType =
-  | "contract"
-  | "amendment"
-  | "invoice"
-  | "purchase_order"
-  | "pricing_schedule"
-  | "pricing_file"
-  | "cog_report"
-  | "cog_data"
-  | "case_data"
-  | "case_procedures"
-  | "case_supplies"
-  | "unknown"
-
-interface DocumentClassification {
-  type: DocumentType
-  confidence: number
-  vendorName: string | null
-  documentDate: string | null
-  contractName: string | null
-  invoiceNumber: string | null
-  poNumber: string | null
-  suggestedCategory: string | null
-  extractedData: Record<string, unknown> | null
-  dataPeriod: string | null
-  year: number | null
-  quarter: number | null
-  month: number | null
-  recordCount: number | null
-  totalValue: number | null
-  isDuplicate: boolean
-  duplicateOf: string | null
-}
-
-export interface QueuedDocument {
-  id: string
-  file: File
-  status:
-    | "pending"
-    | "classifying"
-    | "needs_input"
-    | "extracting"
-    | "processing"
-    | "completed"
-    | "error"
-  classification: DocumentClassification | null
-  extracted: Record<string, unknown> | null
-  userOverrides: Partial<DocumentClassification> | null
-  error: string | null
-  progress: number
-  questions: DocumentQuestion[] | null
-  answers: Record<string, string>
-}
-
-interface DocumentQuestion {
-  id: string
-  question: string
-  type: "text" | "select" | "date" | "confirm"
-  options?: { value: string; label: string }[]
-  required: boolean
-  field: string
-}
-
-// ─── Props — additive over the existing tydei signature ─────────
-
-interface MassUploadProps {
-  facilityId: string
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  acceptedTypes?: DocumentType[]
-  onComplete?: (documents: QueuedDocument[]) => void
-  title?: string
-  description?: string
-}
+export type { DocumentType, QueuedDocument } from "./_mass-upload-types"
+import type {
+  DocumentType,
+  DocumentClassification,
+  DocumentQuestion,
+  QueuedDocument,
+  MassUploadProps,
+} from "./_mass-upload-types"
 
 const DOCUMENT_TYPE_INFO: Record<
   DocumentType,
@@ -262,8 +196,6 @@ export function MassUpload({
   const documentsRef = useRef<QueuedDocument[]>([])
   documentsRef.current = documents
 
-  const generateId = () => Math.random().toString(36).substring(2, 9)
-
   // ── File input handling ────────────────────────────────────────
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -334,20 +266,6 @@ export function MassUpload({
   }
 
   // ── Duplicate detection ────────────────────────────────────────
-  const calculateSimilarity = (str1: string, str2: string): number => {
-    const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, "")
-    const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, "")
-    if (s1 === s2) return 1
-    const longer = s1.length > s2.length ? s1 : s2
-    const shorter = s1.length > s2.length ? s2 : s1
-    if (longer.length === 0) return 1
-    let matches = 0
-    for (let i = 0; i < shorter.length; i++) {
-      if (longer.includes(shorter[i])) matches++
-    }
-    return matches / longer.length
-  }
-
   const checkForDuplicates = (
     doc: QueuedDocument,
     classification: DocumentClassification
@@ -974,55 +892,6 @@ export function MassUpload({
     ).length,
     completed: documents.filter((d) => d.status === "completed").length,
     error: documents.filter((d) => d.status === "error").length,
-  }
-
-  const renderStatusBadge = (status: QueuedDocument["status"]) => {
-    switch (status) {
-      case "pending":
-        return (
-          <Badge variant="outline" className="gap-1">
-            <ClockIcon className="h-3 w-3" /> Pending
-          </Badge>
-        )
-      case "classifying":
-        return (
-          <Badge variant="secondary" className="gap-1">
-            <Loader2Icon className="h-3 w-3 animate-spin" /> Classifying
-          </Badge>
-        )
-      case "needs_input":
-        return (
-          <Badge variant="default" className="gap-1 bg-amber-500">
-            <HelpCircleIcon className="h-3 w-3" /> Needs Input
-          </Badge>
-        )
-      case "extracting":
-        return (
-          <Badge variant="secondary" className="gap-1">
-            <Loader2Icon className="h-3 w-3 animate-spin" /> Extracting
-          </Badge>
-        )
-      case "processing":
-        return (
-          <Badge variant="secondary" className="gap-1">
-            <Loader2Icon className="h-3 w-3 animate-spin" /> Processing
-          </Badge>
-        )
-      case "completed":
-        return (
-          <Badge variant="default" className="gap-1 bg-green-500">
-            <CheckCircle2Icon className="h-3 w-3" /> Done
-          </Badge>
-        )
-      case "error":
-        return (
-          <Badge variant="destructive" className="gap-1">
-            <AlertCircleIcon className="h-3 w-3" /> Error
-          </Badge>
-        )
-      default:
-        return null
-    }
   }
 
   return (
