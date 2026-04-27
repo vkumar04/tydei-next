@@ -10,14 +10,21 @@ import { getAccrualTimeline } from "@/lib/actions/contracts/accrual"
 
 interface ContractAccrualTimelineProps {
   contractId: string
+  /** Charles 2026-04-26 #62: optional override so the vendor portal
+   *  can pass `getVendorAccrualTimeline` (vendor-scoped) and reuse
+   *  this whole UI. Defaults to the facility-scoped action. */
+  fetcher?: (
+    contractId: string,
+  ) => ReturnType<typeof getAccrualTimeline>
 }
 
 export function ContractAccrualTimeline({
   contractId,
+  fetcher = getAccrualTimeline,
 }: ContractAccrualTimelineProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["contract-accrual-timeline", contractId],
-    queryFn: () => getAccrualTimeline(contractId),
+    queryFn: () => fetcher(contractId),
   })
 
   if (isLoading || !data) {

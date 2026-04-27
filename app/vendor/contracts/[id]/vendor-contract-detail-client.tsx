@@ -15,6 +15,8 @@ import { ContractDocumentsList } from "@/components/contracts/contract-documents
 import { VendorContractOverview } from "@/components/vendor/contracts/vendor-contract-overview"
 import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
+import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
+import { getVendorAccrualTimeline } from "@/lib/actions/contracts/accrual"
 // Performance-tab analytics cards are lazy-loaded (recharts is the
 // heaviest single dep on this page). Same pattern as the facility
 // detail client.
@@ -105,6 +107,11 @@ export function VendorContractDetailClient({
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          {/* Charles 2026-04-26 #62: Accruals tab for vendor parity
+              with the facility surface. Pulls the same monthly
+              accrual timeline the facility sees, scoped through
+              getVendorAccrualTimeline. */}
+          <TabsTrigger value="accruals">Accruals</TabsTrigger>
           {/* Charles 2026-04-26 #65: dedicated Amortization tab for
               capital-like contracts so vendors get the same surface
               the facility side has. Previously the schedule was
@@ -125,6 +132,13 @@ export function VendorContractDetailClient({
               scope="vendor"
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="accruals" className="mt-6 space-y-6">
+          <ContractAccrualTimeline
+            contractId={contract.id}
+            fetcher={getVendorAccrualTimeline}
+          />
         </TabsContent>
 
         {isCapitalLike && (

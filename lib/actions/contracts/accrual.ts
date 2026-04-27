@@ -5,9 +5,17 @@
  *
  * Extracted from lib/actions/contracts.ts during subsystem F5 (tech
  * debt split). Re-exported from there for backward-compat.
+ *
+ * Charles 2026-04-26 #62: split the auth + contract-resolution out
+ * of the body so vendors can read the same timeline scoped through
+ * their session via `getVendorAccrualTimeline` below. The body is
+ * facility-id-pinned (COG queries hang off facilityId), but the
+ * contract's primary facility is the same data point in either
+ * scope, so the inner helper is reusable.
  */
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   buildMonthlyAccruals,
@@ -38,6 +46,55 @@ export async function getAccrualTimeline(contractId: string) {
       },
     },
   })
+  return _buildAccrualTimelineForContract(contract, facility.id)
+}
+
+/**
+ * Vendor-scoped read of the accrual timeline. The vendor session
+ * authorizes on `Contract.vendorId === session.vendor.id`; the COG
+ * query underneath still keys off the contract's primary facilityId
+ * (the canonical "this contract's spend lives at this facility"
+ * pivot — same one the facility-side caller uses).
+ *
+ * Charles 2026-04-26 #62: paired with the new vendor Accruals tab in
+ * `vendor-contract-detail-client.tsx` to bring the vendor surface to
+ * facility parity.
+ */
+export async function getVendorAccrualTimeline(contractId: string) {
+  const { vendor } = await requireVendor()
+  const contract = await prisma.contract.findFirstOrThrow({
+    where: { id: contractId, vendorId: vendor.id },
+    include: {
+      terms: {
+        include: { tiers: { orderBy: { tierNumber: "asc" } } },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  })
+  return _buildAccrualTimelineForContract(contract, contract.facilityId)
+}
+
+type _AccrualContract = Prisma.ContractGetPayload<{
+  include: { terms: { include: { tiers: true } } }
+}>
+
+async function _buildAccrualTimelineForContract(
+  contract: _AccrualContract,
+  facilityId: string | null,
+) {
+  if (!facilityId) {
+    // No primary facility — fall through with empty result. Matches
+    // the early-return shape below.
+    return serialize({
+      rows: [],
+      method: "cumulative" as RebateMethodName,
+      termLabels: [] as Array<{
+        termIndex: number
+        termName: string
+        evaluationPeriod: string
+      }>,
+    })
+  }
 
   // Charles R5.6: pricing-only contracts are not rebate-bearing. The
   // accrual ledger must be empty for them — no phantom rows from COG.
@@ -129,7 +186,7 @@ export async function getAccrualTimeline(contractId: string) {
   // one column and every other month as $0.
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: facility.id,
+      facilityId,
       vendorId: contract.vendorId,
       transactionDate: {
         gte: contract.effectiveDate,
