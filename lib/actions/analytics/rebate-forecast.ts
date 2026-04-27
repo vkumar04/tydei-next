@@ -65,12 +65,20 @@ async function _getRebateForecastImpl(
       effectiveDate: true,
       terms: {
         select: {
+          termType: true,
           tiers: {
             select: { tierNumber: true, spendMin: true, rebateValue: true },
             orderBy: { spendMin: "asc" },
           },
         },
-        take: 1,
+        // Charles 2026-04-26 #81: load every term — the forecast was
+        // hard-pinning to terms[0] (no orderBy), which silently picked
+        // a price_reduction or volume_rebate term whose tier ladder
+        // doesn't apply to dollar spend, producing a flat $0 forecast
+        // even when the contract had a spend-rebate term that would
+        // project real numbers. We now filter to spend-based rebate
+        // terms below and use the lowest-threshold ladder.
+        orderBy: { createdAt: "asc" },
       },
     },
   })
@@ -123,7 +131,27 @@ async function _getRebateForecastImpl(
 
   // Tier helper — cumulative method matches tydei's spend-rebate
   // engine default.
-  const tiers = contract.terms[0]?.tiers ?? []
+  //
+  // Charles 2026-04-26 #81: pick the first SPEND-based rebate term
+  // with tiers. Volume / market_share / price_reduction terms have
+  // tier thresholds in non-dollar units and would force the forecast
+  // to $0 (cumulative YTD spend never crosses a 5,300,000-unit volume
+  // threshold). Falls through to the contract's first term if none
+  // are spend-based, preserving prior behavior for contracts where
+  // the only rebate is an unusual type.
+  const SPEND_BASED_TERM_TYPES = new Set([
+    "spend_rebate",
+    "growth_rebate",
+    "tie_in",
+    "carve_out",
+  ])
+  const spendTerm =
+    contract.terms.find(
+      (t) => SPEND_BASED_TERM_TYPES.has(t.termType) && t.tiers.length > 0,
+    ) ??
+    contract.terms.find((t) => t.tiers.length > 0) ??
+    contract.terms[0]
+  const tiers = spendTerm?.tiers ?? []
   const projectTier = (cumulativeYtd: number) => {
     let achievedTier = 0
     let rate = 0

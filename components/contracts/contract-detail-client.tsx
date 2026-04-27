@@ -1397,6 +1397,7 @@ function PerformanceSummary({
               // Falls back to p.tierAchieved if the contract has no
               // tiers (rare; legacy data).
               const periodSpend = Number(p.totalSpend)
+              const periodEarned = Number(p.rebateEarned ?? 0)
               const sortedLadder = [...contractTiers].sort(
                 (a, b) => a.spendMin - b.spendMin,
               )
@@ -1405,8 +1406,25 @@ function PerformanceSummary({
                 for (const t of sortedLadder) {
                   if (periodSpend >= t.spendMin) derivedTier = t.tierNumber
                 }
-              } else if (p.tierAchieved != null) {
+              }
+              // Charles 2026-04-26 #82: fall back to the persisted
+              // tierAchieved when the spend-vs-ladder walk produced
+              // null. Volume-family terms (volume_rebate, rebate_per_use,
+              // capitated_pricing_rebate) tier on CPT-occurrence counts
+              // not dollar spend, so periodSpend < tier.spendMin doesn't
+              // mean "no tier hit" — the tier was achieved via
+              // occurrences and persisted on the period row.
+              if (derivedTier == null && p.tierAchieved != null) {
                 derivedTier = p.tierAchieved
+              }
+              // And when there's a single tier on the ladder and the
+              // period earned rebate, the user expects Tier 1 — not N/A.
+              if (
+                derivedTier == null &&
+                sortedLadder.length === 1 &&
+                periodEarned > 0
+              ) {
+                derivedTier = sortedLadder[0].tierNumber
               }
               return (
                 <div
