@@ -239,13 +239,15 @@ scenarios exercise the same engines as a side effect.
    without going through `requireFacility`. Migration of
    `scripts/verify-app-against-oracle.ts` deferred to Plan #2 because
    of XLSX-loader complexity.
-2. **`source-oracle-fixture-loaders.md`** — XLSX + CSV loaders that work
-   from `fixtures/oracle/<name>/` paths. Move Charles's desktop files into
-   the repo (gitignored if too large; use an env-var pointer to override
-   per-machine). ~half day.
-3. **`source-oracle-coverage-fill.md`** — N more scenarios (tie-in,
-   carve-out, market-share, capital amortization). One scenario per
-   contract type. ~1-2 days, parallelizable.
+2. ~~**`source-oracle-fixture-loaders.md`**~~ — DONE 2026-04-26. CSV
+   loaders + `fixtures/oracle/` convention + README. XLSX deferred
+   (only consumer is the deferred `verify-app-against-oracle.ts`
+   migration).
+3. ~~**`source-oracle-coverage-fill.md`**~~ — DONE 2026-04-26. Four new
+   scenarios: tie-in-capital, carve-out, market-share-commitment,
+   growth-rebate. Live smoke: 9/9 checks across 5 scenarios. Surfaced
+   one real finding (tie-in auto-collects rebates — root cause
+   investigation deferred).
 
 ## 7. Tradeoffs / risks
 
