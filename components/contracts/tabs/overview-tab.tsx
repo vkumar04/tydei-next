@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { TabsContent } from "@/components/ui/tabs"
+import { DetailRow } from "@/components/contracts/tabs/_detail-row"
 
 type ContractData = NonNullable<Awaited<ReturnType<typeof getContract>>>
 
@@ -570,19 +571,3 @@ export function OverviewTab({
   )
 }
 
-/* ── Helper Components ──────────────────────────────────────────── */
-
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string
-  value: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
-    </div>
-  )
-}
