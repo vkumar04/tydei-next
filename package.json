@@ -23,6 +23,7 @@
     "qa:v0-ledger-check": "bun run scripts/build-v0-feature-ledger.ts --check",
     "smoke": "bun run scripts/pre-ship-smoke.ts",
     "lint:ai": "bun run scripts/lint-ai-action-error-paths.ts",
+    "oracles": "bun scripts/oracles/index.ts",
     "lint:ai-schema": "bun run scripts/lint-ai-schema-describe.ts",
     "test:unit": "bunx vitest run --exclude '**/.claude/**' --exclude '**/.worktrees/**' --exclude '**/*.integration.test.ts'",
     "test:integration": "RUN_INTEGRATION=1 bunx vitest run '**/*.integration.test.ts'",
