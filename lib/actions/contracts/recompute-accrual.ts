@@ -88,9 +88,22 @@ export async function recomputeAccrualForContract(
   contractId: string,
 ): Promise<RecomputeAccrualResult> {
   const { facility } = await requireFacility()
+  return _recomputeAccrualForContractWithFacility(contractId, facility.id)
+}
 
+/**
+ * Auth-bypassing engine. Same logic as `recomputeAccrualForContract`
+ * but with the facility id passed in directly instead of resolved from
+ * the session. Used by the source-oracle harness, which runs without
+ * a session. Production code should call `recomputeAccrualForContract`
+ * (the auth-gated entry point) instead.
+ */
+export async function _recomputeAccrualForContractWithFacility(
+  contractId: string,
+  facilityId: string,
+): Promise<RecomputeAccrualResult> {
   const contract = await prisma.contract.findUnique({
-    where: contractOwnershipWhere(contractId, facility.id),
+    where: contractOwnershipWhere(contractId, facilityId),
     include: {
       terms: {
         include: { tiers: { orderBy: { tierNumber: "asc" } } },
@@ -342,7 +355,7 @@ export async function recomputeAccrualForContract(
   // per-term filtering happens below, in memory.
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: facility.id,
+      facilityId: facilityId,
       vendorId: contract.vendorId,
       transactionDate: { gte: contract.effectiveDate, lte: end },
       ...unionCategoryWhere,
@@ -551,7 +564,7 @@ export async function recomputeAccrualForContract(
           : `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)}`
       return {
         contractId,
-        facilityId: facility.id,
+        facilityId: facilityId,
         rebateEarned: b.rebateEarned,
         rebateCollected: autoStampCollectionForTieIn ? b.rebateEarned : 0,
         payPeriodStart: b.periodStart,
@@ -612,7 +625,7 @@ export async function recomputeAccrualForContract(
       const noteBody = `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)} (${config.evaluationPeriod}-eval)`
       toInsert.push({
         contractId,
-        facilityId: facility.id,
+        facilityId: facilityId,
         rebateEarned: b.rebateEarned,
         rebateCollected: autoStampCollectionForTieIn ? b.rebateEarned : 0,
         payPeriodStart: b.periodStart,
@@ -657,7 +670,7 @@ export async function recomputeAccrualForContract(
       try {
         const r = await recomputeVolumeAccrualForTerm({
           contractId,
-          facilityId: facility.id,
+          facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
           term: {
@@ -697,7 +710,7 @@ export async function recomputeAccrualForContract(
         const r = await recomputePoAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
-          facilityId: facility.id,
+          facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
           term: {
@@ -739,7 +752,7 @@ export async function recomputeAccrualForContract(
         const r = await recomputeCarveOutAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
-          facilityId: facility.id,
+          facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
           term: {
@@ -779,7 +792,7 @@ export async function recomputeAccrualForContract(
         const r = await recomputeInvoiceAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
-          facilityId: facility.id,
+          facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
           term: {
@@ -840,7 +853,7 @@ export async function recomputeAccrualForContract(
       try {
         const r = await recomputeThresholdAccrualForTerm({
           contractId,
-          facilityId: facility.id,
+          facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
           metric,
