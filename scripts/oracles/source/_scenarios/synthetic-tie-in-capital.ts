@@ -64,10 +64,12 @@ export default defineScenario({
 
   expectations: {
     currentSpend: 40_000,
-    // 2026-04-26: rebateCollected for tie-in contracts is non-zero
-    // after recompute even when no UI collection event fires —
-    // surfaced by the oracle, root cause not yet investigated.
-    // Don't pin the value here until that's understood; engine-input
-    // oracles cover the math precisely.
+    // tie_in contracts auto-stamp `collectionDate = payPeriodEnd` and
+    // `rebateCollected = rebateEarned` by design — see
+    // recompute-accrual.ts:540 ("no manual collect needed experience they
+    // asked for"). For this fixture: $40K spend × 2.5% Tier 1 = $1000
+    // earned which auto-collects.
+    rebateCollected: 1000,
+    rebateRowCount: 1,
   },
 })
