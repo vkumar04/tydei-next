@@ -230,9 +230,15 @@ scenarios exercise the same engines as a side effect.
 
 ## 6. Sequencing (3 plans on top of this spec)
 
-1. **`source-oracle-harness.md`** — `defineScenario` + `runScenario` +
-   transactional rollback. Migrate `verify-app-against-oracle.ts` as the
-   first scenario. ~1 day.
+1. ~~**`source-oracle-harness.md`**~~ — DONE 2026-04-26. Harness +
+   cleanup-by-name (NOT tx-rollback — `bulkImportCOGRecords` uses the
+   global Prisma client, see Risks §7) + first synthetic scenario.
+   Smoke run on local DB: 2/2 PASS in 274ms with zero residue.
+   `_recomputeAccrualForContractWithFacility` extracted from
+   `recomputeAccrualForContract` so the harness can call recompute
+   without going through `requireFacility`. Migration of
+   `scripts/verify-app-against-oracle.ts` deferred to Plan #2 because
+   of XLSX-loader complexity.
 2. **`source-oracle-fixture-loaders.md`** — XLSX + CSV loaders that work
    from `fixtures/oracle/<name>/` paths. Move Charles's desktop files into
    the repo (gitignored if too large; use an env-var pointer to override
