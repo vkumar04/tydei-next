@@ -11,7 +11,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * the client).
  *
  * The five actions verified here:
- *   - getContractCompositeScore
  *   - getRenewalRisk
  *   - getRebateForecast
  *   - getTieInCompliance
@@ -61,7 +60,6 @@ vi.mock("@/lib/actions/auth", () => ({
 vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 vi.mock("@/lib/serialize", () => ({ serialize: <T,>(v: T) => v }))
 
-import { getContractCompositeScore } from "@/lib/actions/analytics/contract-score"
 import { getRenewalRisk } from "@/lib/actions/analytics/renewal-risk"
 import { getRebateForecast } from "@/lib/actions/analytics/rebate-forecast"
 import { getTieInCompliance } from "@/lib/actions/analytics/tie-in-compliance"
@@ -131,13 +129,6 @@ describe("analytics scope gates", () => {
         else asVendor()
       })
 
-      it("getContractCompositeScore throws sanitized when contract is unowned", async () => {
-        unownedContract()
-        await expect(getContractCompositeScore("c-other")).rejects.toThrow(
-          /Composite score is unavailable/,
-        )
-      })
-
       it("getRenewalRisk throws sanitized when contract is unowned", async () => {
         unownedContract()
         await expect(getRenewalRisk("c-other")).rejects.toThrow(
@@ -172,14 +163,6 @@ describe("analytics scope gates", () => {
         ).rejects.toThrow(/SLA evaluation is unavailable/)
       })
 
-      it("getContractCompositeScore returns a grade when contract is owned", async () => {
-        ownedContract()
-        const result = await getContractCompositeScore("c-owned")
-        expect(result.composite).toBeGreaterThanOrEqual(0)
-        expect(result.composite).toBeLessThanOrEqual(100)
-        expect(["A", "B", "C", "D", "F"]).toContain(result.grade)
-      })
-
       it("evaluateServiceSla returns a penalty triple when contract is owned", async () => {
         ownedContract()
         const result = await evaluateServiceSla({
@@ -204,8 +187,8 @@ describe("analytics scope gates", () => {
     memberFindFirstMock.mockResolvedValue({
       organization: { facility: null, vendor: null },
     })
-    await expect(getContractCompositeScore("c-1")).rejects.toThrow(
-      /Composite score is unavailable/,
+    await expect(getRenewalRisk("c-1")).rejects.toThrow(
+      /Renewal risk is unavailable/,
     )
   })
 
@@ -216,8 +199,8 @@ describe("analytics scope gates", () => {
         vendor: { id: "vendor-1" },
       },
     })
-    await expect(getContractCompositeScore("c-1")).rejects.toThrow(
-      /Composite score is unavailable/,
+    await expect(getRenewalRisk("c-1")).rejects.toThrow(
+      /Renewal risk is unavailable/,
     )
   })
 })

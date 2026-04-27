@@ -21,13 +21,6 @@ import { getVendorAccrualTimeline } from "@/lib/actions/contracts/accrual"
 // heaviest single dep on this page). Same pattern as the facility
 // detail client.
 import dynamic from "next/dynamic"
-const ContractScoreCard = dynamic(
-  () =>
-    import("@/components/contracts/analytics/contract-score-card").then(
-      (m) => m.ContractScoreCard,
-    ),
-  { ssr: false },
-)
 const RebateForecastCard = dynamic(
   () =>
     import("@/components/contracts/analytics/rebate-forecast-card").then(
@@ -157,10 +150,6 @@ export function VendorContractDetailClient({
         )}
 
         <TabsContent value="performance" className="mt-6 space-y-6">
-          <ContractScoreCard
-            contractId={contract.id}
-            initialScore={initialPerformanceBundle?.score}
-          />
           {contract.contractType === "tie_in" ? (
             <TieInComplianceCard
               contractId={contract.id}

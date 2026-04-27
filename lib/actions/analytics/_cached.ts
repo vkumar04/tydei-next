@@ -10,16 +10,9 @@
  * pass-through. Tag builders still live here so _cache.ts's
  * write-side invalidators have a single source of truth.
  *
- * Future Cache Components rollout: see
- * docs/superpowers/plans/2026-04-26-cache-components-rollout.md and
- * the retro for the rollback. Re-enabling means wrapping every page
- * in <Suspense> first.
+ * 2026-04-27: getCachedContractCompositeScore removed when the
+ * composite-score feature was deleted.
  */
-
-import {
-  getContractCompositeScoreImpl,
-  type ContractCompositeScore,
-} from "./contract-score-impl"
 
 // ─── Tag builders (shared with _cache.ts invalidators) ──────────
 
@@ -33,20 +26,4 @@ export function facilityAnalyticsTag(facilityId: string): string {
 
 export function vendorAnalyticsTag(vendorId: string): string {
   return `analytics:vendor:${vendorId}`
-}
-
-// ─── Cached reads ────────────────────────────────────────────────
-
-/**
- * Pass-through (no caching) until Cache Components rolls out properly.
- * The auth gate in `contract-score.ts` runs first; this just calls
- * through to the pure impl. When we re-enable `cacheComponents`,
- * restore the 'use cache' directive + cacheLife + cacheTag inside
- * this function body.
- */
-export async function getCachedContractCompositeScore(
-  contractId: string,
-  cogScopeFacilityIds: string[],
-): Promise<ContractCompositeScore> {
-  return getContractCompositeScoreImpl(contractId, cogScopeFacilityIds)
 }

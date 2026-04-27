@@ -47,13 +47,6 @@ import { ContractPerformanceCharts } from "@/components/contracts/contract-perfo
 // heaviest single dep on this page. Dynamic-import keeps them out
 // of the initial bundle when users land on Overview / Transactions.
 import dynamic from "next/dynamic"
-const ContractScoreCard = dynamic(
-  () =>
-    import("@/components/contracts/analytics/contract-score-card").then(
-      (m) => m.ContractScoreCard,
-    ),
-  { ssr: false },
-)
 const RebateForecastCard = dynamic(
   () =>
     import("@/components/contracts/analytics/rebate-forecast-card").then(
@@ -661,10 +654,6 @@ export function ContractDetailClient({
 
         {/* ── Performance Tab ──────────────────────────────────── */}
         <TabsContent value="performance" className="mt-6 space-y-6">
-          <ContractScoreCard
-            contractId={contractId}
-            initialScore={initialPerformanceBundle?.score}
-          />
           {contract.contractType === "tie_in" ? (
             <TieInComplianceCard
               contractId={contractId}
