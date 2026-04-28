@@ -269,6 +269,45 @@ export default defineOracle("schema-invariants", async (ctx) => {
         ? `${capitalItems.length} capital items checked`
         : `${itemsBadRate.length} item(s) outside fraction range — likely stored as percent`,
     )
+
+    // ── Rebate consistency ──────────────────────────────────────
+    // rebateCollected can never exceed rebateEarned. The collection
+    // ledger draws from earned; over-collected = math bug or manual
+    // entry error. (Tie-in auto-stamp sets collected = earned, so
+    // equality is fine — only flag strictly-greater.)
+    const allRebates = await prisma.rebate.findMany({
+      select: { id: true, rebateEarned: true, rebateCollected: true },
+    })
+    const overCollected = allRebates.filter(
+      (r) =>
+        Number(r.rebateCollected ?? 0) - Number(r.rebateEarned ?? 0) > 0.01,
+    )
+    ctx.check(
+      "no Rebate has rebateCollected > rebateEarned",
+      overCollected.length === 0,
+      overCollected.length === 0
+        ? `${allRebates.length} rebate rows checked`
+        : `${overCollected.length} row(s) with collected > earned: ${overCollected.slice(0, 3).map((r) => r.id).join(", ")}`,
+    )
+
+    // status=expiring should match expirationDate within 90 days.
+    // Drift means contracts-list "Expiring Soon" counts and
+    // dashboard alerts mislead. Past-expiry rows still tagged
+    // "expiring" indicate a stale cron run.
+    const ninetyDaysOut = new Date(today)
+    ninetyDaysOut.setDate(ninetyDaysOut.getDate() + 90)
+    const expiringWeird = allContracts.filter((c) => {
+      if (c.status !== "expiring") return false
+      const exp = c.expirationDate.getTime()
+      return exp < today.getTime() || exp > ninetyDaysOut.getTime()
+    })
+    ctx.check(
+      "status=expiring contracts have expirationDate within 90 days",
+      expiringWeird.length === 0,
+      expiringWeird.length === 0
+        ? `${allContracts.filter((c) => c.status === "expiring").length} expiring contracts checked`
+        : `${expiringWeird.length} contract(s) tagged expiring with stale dates`,
+    )
   } finally {
     await prisma.$disconnect()
   }
