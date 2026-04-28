@@ -224,8 +224,9 @@ function AddTransactionButtons({
       <div className="flex flex-col items-start gap-2">
         <p className="text-xs text-muted-foreground">
           Earned rebates are computed automatically from spend &times; tier
-          rate each time a rebate period closes. Click Recompute to refresh
-          from current tier settings.
+          rate each time a rebate period closes. Compliance rate, market
+          share, and annual value also refresh on this click. Use Recompute
+          to resync after seed/COG changes outside the normal import path.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button
