@@ -56,12 +56,22 @@ vi.mock("@/lib/actions/auth", () => ({
 import { prisma } from "@/lib/db"
 import { getContractTerms } from "@/lib/actions/contract-terms"
 
-// Integration test: requires a live Postgres connection. CI / dev runs
-// without DATABASE_URL (or with one whose credentials don't match a
-// running DB) get a clean skip rather than a SCRAM/ECONNREFUSED throw.
+// Integration test: requires a live, REACHABLE Postgres connection.
+// Env-var-only check is insufficient — DATABASE_URL can point at a
+// host that's down (laptop with Postgres stopped, CI without a DB
+// service). Probe with a no-op SELECT at module load and skip cleanly
+// when the connection fails, instead of the suite throwing
+// SCRAM/ECONNREFUSED at beforeAll.
 // Set DATABASE_URL=postgresql://tydei:tydei_dev_password@localhost:5432/tydei
 // to run.
-const hasDb = Boolean(process.env.DATABASE_URL)
+let hasDb = Boolean(process.env.DATABASE_URL)
+if (hasDb) {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+  } catch {
+    hasDb = false
+  }
+}
 
 describe.skipIf(!hasDb)("terms content determinism (Charles W2.B)", () => {
   let contractId: string
@@ -75,6 +85,11 @@ describe.skipIf(!hasDb)("terms content determinism (Charles W2.B)", () => {
   ]
 
   beforeAll(async () => {
+    // describe.skipIf skips the inner `it()` cases but still runs
+    // beforeAll/afterAll under vitest 4.x. Bail explicitly when the
+    // DB is unreachable so we don't throw before the suite even
+    // gets to the skip path.
+    if (!hasDb) return
     // Find any contract that has at least one ContractTerm. We don't
     // care which facility owns it — `getContractTerms` scopes by
     // `contractId` only (auth is stubbed above), so any term-bearing
@@ -109,6 +124,11 @@ describe.skipIf(!hasDb)("terms content determinism (Charles W2.B)", () => {
   })
 
   afterAll(async () => {
+    // describe.skipIf skips the inner tests but still runs afterAll
+    // (vitest 4.x behavior). When the suite skipped because the DB is
+    // unreachable, beforeAll never set termId and the cleanup query
+    // would just throw again. Guard so a clean skip stays clean.
+    if (!hasDb || !termId) return
     // Best-effort cleanup — the test seeds 5 rows that we own by prefix.
     await prisma.contractTermProduct.deleteMany({
       where: {
