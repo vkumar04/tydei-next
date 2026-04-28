@@ -13,6 +13,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client"
 import {
   matchCOGRecordToContract,
+  PRICE_VARIANCE_THRESHOLD,
   type ContractForMatch,
   type ContractPricingItemForMatch,
   type MatchResult,
@@ -163,6 +164,40 @@ export async function recomputeMatchStatusesForVendor(
 
   const contracts = await loadContractsForVendor(db, vendorId, facilityId)
 
+  // Charles 2026-04-28 (#G/#I): also load the vendor's PricingFile rows
+  // at this facility. The strict matcher only consults ContractPricing,
+  // so when a contract has no priced catalog but the vendor has a
+  // PricingFile uploaded, COG rows that match a SKU in the file are
+  // misclassified as off_contract_item and the variance/savings columns
+  // stay null. After the strict match we consult this map to populate
+  // priceVariance + matchedCategory from the PricingFile.
+  const pricingFileBySku = new Map<
+    string,
+    { unitPrice: number; category: string | null }
+  >()
+  // Test mocks may not include pricingFile on the Db shim; guard so
+  // the variance fallback is opt-in for runtime, no-op for unit tests.
+  if (typeof db.pricingFile?.findMany === "function") {
+    const rows = await db.pricingFile.findMany({
+      where: { vendorId, facilityId },
+      select: { vendorItemNo: true, contractPrice: true, category: true },
+    })
+    for (const p of rows) {
+      if (!p.vendorItemNo || p.contractPrice == null) continue
+      const sku = p.vendorItemNo.toLowerCase()
+      // First write wins — pricing files have effectiveDate ordering
+      // we don't replay here; assume the latest-imported is acceptable
+      // for the variance signal until proper effective-date routing
+      // lands as a follow-up plan.
+      if (!pricingFileBySku.has(sku)) {
+        pricingFileBySku.set(sku, {
+          unitPrice: Number(p.contractPrice),
+          category: p.category ?? null,
+        })
+      }
+    }
+  }
+
   // ─── Build cascade lookup maps once (Task 5, subsystem 10.5) ───
   // The pure resolver in lib/cog/match.ts expects pre-built maps so we
   // avoid O(records × contracts) scans in the row loop.
@@ -310,13 +345,57 @@ export async function recomputeMatchStatusesForVendor(
     // really on an Arthrex contract. Strict matcher's off_contract_item
     // result is correct; honor it.
     const catalogPresent = contracts.some((c) => c.pricingItems.length > 0)
-    const effectiveResult: MatchResult =
+
+    // Charles 2026-04-28 (#G/#I): when ContractPricing didn't have the
+    // SKU but the vendor's PricingFile does, treat it as a
+    // price_variance (or on_contract if equal) using the PricingFile
+    // unitPrice. Drives the savings/variance + category-mapping cards
+    // the PO flagged.
+    const skuLower = r.vendorItemNo?.toLowerCase()
+    const pricingFileHit =
+      result.status === "off_contract_item" && skuLower
+        ? pricingFileBySku.get(skuLower)
+        : undefined
+    let effectiveResult: MatchResult
+    if (pricingFileHit && cascade.contractId) {
+      const variancePct =
+        pricingFileHit.unitPrice === 0
+          ? 0
+          : ((Number(r.unitCost) - pricingFileHit.unitPrice) /
+              pricingFileHit.unitPrice) *
+            100
+      effectiveResult =
+        Math.abs(variancePct) > PRICE_VARIANCE_THRESHOLD
+          ? {
+              status: "price_variance",
+              contractId: cascade.contractId,
+              contractPrice: pricingFileHit.unitPrice,
+              variancePercent: variancePct,
+              matchedCategory: pricingFileHit.category,
+            }
+          : {
+              status: "on_contract",
+              contractId: cascade.contractId,
+              contractPrice: pricingFileHit.unitPrice,
+              savings:
+                (pricingFileHit.unitPrice - Number(r.unitCost)) * r.quantity,
+              matchedCategory: pricingFileHit.category,
+            }
+    } else if (
       result.status === "off_contract_item" &&
       !catalogPresent &&
       cascade.contractId !== null &&
       (cascade.mode === "vendorAndDate" || cascade.mode === "fuzzyVendorName")
-        ? { status: "on_contract", contractId: cascade.contractId, contractPrice: 0, savings: 0 }
-        : result
+    ) {
+      effectiveResult = {
+        status: "on_contract",
+        contractId: cascade.contractId,
+        contractPrice: 0,
+        savings: 0,
+      }
+    } else {
+      effectiveResult = result
+    }
 
     const cols = enrichCOGRecord(effectiveResult, {
       quantity: r.quantity,

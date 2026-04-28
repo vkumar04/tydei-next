@@ -190,6 +190,19 @@ export async function recomputeThresholdAccrualForTerm(input: {
     .sort((a, b) => a.thresholdMin - b.thresholdMin)
   if (tiers.length === 0) return { inserted: 0, sumEarned: 0 }
 
+  // Charles 2026-04-28: when the contract's metricValue is null
+  // (Contract.currentMarketShare or .complianceRate not set yet),
+  // skip the recompute entirely instead of writing a fleet of $0
+  // Rebate rows. The user-facing fix is to set the metric on the
+  // contract; in the meantime, no rows is more honest than a
+  // confusing "$0 earned" surface. Follow-up: derive
+  // currentMarketShare dynamically from `computeCategoryMarketShare`
+  // for the contract's vendor + category instead of requiring manual
+  // entry.
+  if (input.metricValue == null) {
+    return { inserted: 0, sumEarned: 0 }
+  }
+
   const achieved = determineTier(input.metricValue, tiers, "EXCLUSIVE")
   const perPeriodPayment = achieved ? achieved.rebateValue : 0
 

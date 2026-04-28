@@ -474,8 +474,20 @@ export function ContractDetailClient({
                   </TooltipProvider>
                 </p>
                 <p className="text-2xl font-bold">
-                  {formatCurrency(stats.totalValue)}
+                  {/* Charles 2026-04-28 #K: when totalValue is 0/unset,
+                      "$0" reads as a confident value when the truth is
+                      "no committed value captured". Show an explicit
+                      placeholder so a usage contract with no totalValue
+                      doesn't look like a $0 contract. */}
+                  {stats.totalValue > 0
+                    ? formatCurrency(stats.totalValue)
+                    : "—"}
                 </p>
+                {stats.totalValue === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Not specified on contract
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>

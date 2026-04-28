@@ -501,21 +501,29 @@ export function NewContractClient({
           // models frequently return "3" for 3%; the DB wants 0.03.
           // Normalize at ingest so downstream math + display are both
           // correct.
-          const normalizedTiers = t.tiers.map((tier) => ({
-            tierNumber: tier.tierNumber,
-            spendMin: tier.spendMin ?? 0,
-            // 2026-04-28: keep the mapper's derived spendMax so the
-            // form's "Spend Max" column shows the implied ceiling
-            // pre-filled. The mapper (lib/ai/contract-extract-mapper.ts)
-            // derives `nextTier.spendMin - 1` since the AI Zod schema
-            // dropped spendMax to fit Anthropic's 24-optional-param
-            // limit on structured output. Hard-coding undefined here
-            // (the prior 2026-04-26 fix) discarded the derivation —
-            // Charles 2026-04-28 reported the column was empty again.
-            spendMax: tier.spendMax,
-            rebateType: "percent_of_spend" as const,
-            rebateValue: normalizeAIRebateValue("percent_of_spend", tier.rebateValue),
-          }))
+          // 2026-04-28: derive spendMax inline from next tier's spendMin
+          // (-1). The AI Zod schema dropped spendMax to fit Anthropic's
+          // 24-optional-param limit; the toLegacyExtractedContract mapper
+          // does this derivation but is only used by tests, not the live
+          // ai-extract path. Top tier stays undefined (open-ended).
+          // Charles 2026-04-28 — Spend Max column was empty in the form
+          // after the c555730 "fix" because that fix only updated the
+          // dead-code mapper.
+          const sortedTiers = [...t.tiers].sort(
+            (a, b) => (a.tierNumber ?? 0) - (b.tierNumber ?? 0),
+          )
+          const normalizedTiers = sortedTiers.map((tier, idx) => {
+            const next = sortedTiers[idx + 1]
+            const derivedSpendMax =
+              next?.spendMin != null ? next.spendMin - 1 : undefined
+            return {
+              tierNumber: tier.tierNumber,
+              spendMin: tier.spendMin ?? 0,
+              spendMax: derivedSpendMax,
+              rebateType: "percent_of_spend" as const,
+              rebateValue: normalizeAIRebateValue("percent_of_spend", tier.rebateValue),
+            }
+          })
           // Generate smart term name from the denormalized display
           // value so the label reads "(3%)" not "(0.03%)".
           const displayRebates = normalizedTiers.map((tr) =>
