@@ -345,6 +345,29 @@ async function runBulkImport(
           err,
         )
       }
+
+      // Strategic-direction Plan #1 (2026-04-28): persisted derived
+      // metrics (Contract.complianceRate, currentMarketShare,
+      // annualValue) drift after every COG import. Refresh them on
+      // every contract owned by an affected vendor so the contract-
+      // detail surfaces stay in sync without requiring a manual edit.
+      // Best-effort — one bad contract doesn't poison the whole import.
+      const { refreshContractMetricsForVendor } = await import(
+        "@/lib/actions/contracts/refresh-metrics"
+      )
+      for (const vendorId of vendorIds) {
+        try {
+          await refreshContractMetricsForVendor({
+            vendorId,
+            facilityId: session.facility.id,
+          })
+        } catch (err) {
+          console.warn(
+            `[cog-import] refreshContractMetricsForVendor failed for vendor ${vendorId}`,
+            err,
+          )
+        }
+      }
     }
   }
 

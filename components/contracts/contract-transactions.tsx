@@ -169,6 +169,19 @@ function AddTransactionButtons({
   const recompute = useMutation({
     mutationFn: async () => {
       const result = await recomputeAccrualForContract(contractId)
+      // 2026-04-28 strategic-direction Plan #1: refresh persisted
+      // derived metrics (complianceRate, currentMarketShare,
+      // annualValue) on the same click so the contract-detail header
+      // never falls behind the recompute. Best-effort — a metrics
+      // failure shouldn't surface a recompute success as an error.
+      try {
+        const { refreshContractMetrics } = await import(
+          "@/lib/actions/contracts/refresh-metrics"
+        )
+        await refreshContractMetrics(contractId)
+      } catch (err) {
+        console.warn("[recompute] refreshContractMetrics failed", err)
+      }
       return result
     },
     onSuccess: (result) => {
