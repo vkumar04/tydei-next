@@ -129,25 +129,64 @@ export function RebateOptimizerHero({
             Best opportunity
           </div>
           {bestOpportunity ? (
-            <>
-              <p
-                className="mt-2 truncate text-sm font-semibold"
-                title={bestOpportunity.contractName}
-              >
-                {bestOpportunity.contractName}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {bestOpportunity.vendorName}
-              </p>
-              <p className="mt-2 text-sm">
-                <span className="font-semibold tabular-nums">
-                  {formatCurrency(bestOpportunity.projectedAdditionalRebate)}
-                </span>{" "}
-                <span className="text-muted-foreground">
-                  potential by reaching Tier {bestOpportunity.nextTier}
-                </span>
-              </p>
-            </>
+            (() => {
+              // 2026-04-28 strategic-direction §2.4 v0 UX port:
+              // surface "spend $X → unlock $Y" + ROI prominently. The
+              // action's RebateOpportunity type doesn't carry roi or
+              // urgency, so compute inline; thresholds match v0's
+              // (high <$100K, medium <$250K, else low).
+              const spend = bestOpportunity.spendGap
+              const upside = bestOpportunity.projectedAdditionalRebate
+              const roi = spend > 0 ? (upside / spend) * 100 : 0
+              const urgency: "high" | "medium" | "low" =
+                spend < 100_000
+                  ? "high"
+                  : spend < 250_000
+                    ? "medium"
+                    : "low"
+              return (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <p
+                      className="mt-1 truncate text-sm font-semibold"
+                      title={bestOpportunity.contractName}
+                    >
+                      {bestOpportunity.contractName}
+                    </p>
+                    {urgency === "high" && (
+                      <Badge
+                        variant="secondary"
+                        className="bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100"
+                      >
+                        Act now
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {bestOpportunity.vendorName}
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed">
+                    Spend{" "}
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {formatCurrency(spend)}
+                    </span>{" "}
+                    more →{" "}
+                    <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                      {formatCurrency(upside)}
+                    </span>{" "}
+                    <span className="text-muted-foreground">
+                      rebate at Tier {bestOpportunity.nextTier}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    ROI{" "}
+                    <span className="font-semibold tabular-nums">
+                      {roi.toFixed(1)}%
+                    </span>
+                  </p>
+                </>
+              )
+            })()
           ) : (
             <p className="mt-2 text-sm text-muted-foreground">
               No standout opportunity right now.

@@ -13,12 +13,44 @@ interface AlertCardProps {
   alert: Alert & {
     contract?: { id: string; name: string } | null
     vendor?: { id: string; name: string } | null
+    facility?: { id: string; name: string } | null
   }
   onResolve: () => void
   onDismiss: () => void
   onNavigate: () => void
   selected?: boolean
   onSelect?: (checked: boolean) => void
+}
+
+// 2026-04-28 strategic-direction §2.4 v0 UX port: show dollar amounts
+// inline on alert rows so urgency reads at a glance ("$18K off-contract"
+// instead of "click to see"). The amount lives in alert.metadata under
+// any of these conventional keys.
+function extractAlertAmount(metadata: unknown): number | null {
+  if (!metadata || typeof metadata !== "object") return null
+  const m = metadata as Record<string, unknown>
+  const candidates = [
+    m.amount,
+    m.dollarAmount,
+    m.totalAmount,
+    m.value,
+    m.spend,
+    m.spendAmount,
+  ]
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isFinite(c) && c > 0) return c
+    if (typeof c === "string") {
+      const n = Number(c)
+      if (Number.isFinite(n) && n > 0) return n
+    }
+  }
+  return null
+}
+
+function formatAlertAmount(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
+  return `$${n.toFixed(0)}`
 }
 
 export function AlertCard({
@@ -81,6 +113,22 @@ export function AlertCard({
               {alert.contract.name}
             </Badge>
           )}
+          {alert.facility?.name && (
+            <Badge variant="outline" className="text-xs">
+              {alert.facility.name}
+            </Badge>
+          )}
+          {(() => {
+            const amount = extractAlertAmount(alert.metadata)
+            return amount != null ? (
+              <Badge
+                variant="outline"
+                className="text-xs font-semibold tabular-nums"
+              >
+                {formatAlertAmount(amount)}
+              </Badge>
+            ) : null
+          })()}
         </div>
 
         {/* Action buttons */}
