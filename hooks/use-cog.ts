@@ -48,6 +48,11 @@ export function useCreateCOGRecord() {
     mutationFn: createCOGRecord,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      // Charles 2026-04-28 #H follow-up: COG mutations change the
+      // per-category share denominator. Invalidate the market-share
+      // card explicitly so the contract-detail Performance tab and
+      // vendor dashboard widget refetch.
+      qc.invalidateQueries({ queryKey: ["category-market-share"] })
       toast.success("COG record created")
     },
     onError: (err) => toast.error(err.message || "Failed to create record"),
@@ -60,6 +65,11 @@ export function useImportCOGRecords() {
     mutationFn: bulkImportCOGRecords,
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      // Charles 2026-04-28 #H follow-up: COG mutations change the
+      // per-category share denominator. Invalidate the market-share
+      // card explicitly so the contract-detail Performance tab and
+      // vendor dashboard widget refetch.
+      qc.invalidateQueries({ queryKey: ["category-market-share"] })
       toast.success(
         `Imported ${result.imported} records (${result.skipped} skipped, ${result.errors} errors)`
       )
@@ -74,6 +84,11 @@ export function useDeleteCOGRecord() {
     mutationFn: deleteCOGRecord,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      // Charles 2026-04-28 #H follow-up: COG mutations change the
+      // per-category share denominator. Invalidate the market-share
+      // card explicitly so the contract-detail Performance tab and
+      // vendor dashboard widget refetch.
+      qc.invalidateQueries({ queryKey: ["category-market-share"] })
       toast.success("Record deleted")
     },
     onError: (err) => toast.error(err.message || "Failed to delete record"),
@@ -86,6 +101,11 @@ export function useBulkDeleteCOGRecords() {
     mutationFn: bulkDeleteCOGRecords,
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      // Charles 2026-04-28 #H follow-up: COG mutations change the
+      // per-category share denominator. Invalidate the market-share
+      // card explicitly so the contract-detail Performance tab and
+      // vendor dashboard widget refetch.
+      qc.invalidateQueries({ queryKey: ["category-market-share"] })
       toast.success(`Deleted ${result.deleted} records`)
     },
     onError: (err) => toast.error(err.message || "Failed to delete records"),
@@ -98,6 +118,11 @@ export function useClearAllCOGRecords() {
     mutationFn: clearAllCOGRecords,
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      // Charles 2026-04-28 #H follow-up: COG mutations change the
+      // per-category share denominator. Invalidate the market-share
+      // card explicitly so the contract-detail Performance tab and
+      // vendor dashboard widget refetch.
+      qc.invalidateQueries({ queryKey: ["category-market-share"] })
       toast.success(`Cleared all ${result.deleted.toLocaleString()} COG records`)
     },
     onError: (err) => toast.error(err.message || "Failed to clear records"),
@@ -110,6 +135,11 @@ export function useDeleteCOGFile() {
     mutationFn: deleteCOGFileByDate,
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      // Charles 2026-04-28 #H follow-up: COG mutations change the
+      // per-category share denominator. Invalidate the market-share
+      // card explicitly so the contract-detail Performance tab and
+      // vendor dashboard widget refetch.
+      qc.invalidateQueries({ queryKey: ["category-market-share"] })
       toast.success(`Deleted ${result.deleted} records`)
     },
     onError: (err) => toast.error(err.message || "Failed to delete file"),
@@ -123,6 +153,11 @@ export function useUpdateCOGRecord() {
       updateCOGRecord(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      // Charles 2026-04-28 #H follow-up: COG mutations change the
+      // per-category share denominator. Invalidate the market-share
+      // card explicitly so the contract-detail Performance tab and
+      // vendor dashboard widget refetch.
+      qc.invalidateQueries({ queryKey: ["category-market-share"] })
       toast.success("Record updated")
     },
     onError: (err) => toast.error(err.message || "Failed to update record"),
@@ -135,6 +170,11 @@ export function useBackfillCOGEnrichment() {
     mutationFn: backfillCOGEnrichment,
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
+      // Charles 2026-04-28 #H follow-up: COG mutations change the
+      // per-category share denominator. Invalidate the market-share
+      // card explicitly so the contract-detail Performance tab and
+      // vendor dashboard widget refetch.
+      qc.invalidateQueries({ queryKey: ["category-market-share"] })
       qc.invalidateQueries({ queryKey: ["cog"] })
       toast.success(
         `Enriched ${r.enriched} records (${r.pendingAfter} still pending)`,

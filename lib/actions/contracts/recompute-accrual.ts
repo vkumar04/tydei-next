@@ -840,7 +840,7 @@ export async function _recomputeAccrualForContractWithFacility(
       // 0-100 number directly via `setValueAs: Number(v)`), and tier
       // `spendMin` is also percent points. Pass through verbatim — the
       // bridge in recompute-threshold-accrual.ts compares them directly.
-      const metricValue =
+      let metricValue: number | null =
         metric === "currentMarketShare"
           ? contract.currentMarketShare === null ||
             contract.currentMarketShare === undefined
@@ -850,6 +850,72 @@ export async function _recomputeAccrualForContractWithFacility(
               contract.complianceRate === undefined
             ? null
             : Number(contract.complianceRate)
+
+      // Charles 2026-04-28: derive currentMarketShare dynamically from
+      // computeCategoryMarketShare when the contract field isn't set,
+      // so market_share terms can recompute without manual entry. Uses
+      // the vendor's highest-spend category share as a stand-in;
+      // category-scoped terms can pick a specific category in a future
+      // revision. complianceRate has no derivable analog (it's a
+      // workflow signal), so that path is unchanged.
+      if (metric === "currentMarketShare" && metricValue == null) {
+        try {
+          const since = new Date()
+          since.setMonth(since.getMonth() - 12)
+          const cogRows = await prisma.cOGRecord.findMany({
+            where: {
+              facilityId,
+              transactionDate: { gte: since },
+            },
+            select: {
+              vendorId: true,
+              category: true,
+              extendedPrice: true,
+              contractId: true,
+            },
+          })
+          const contractIds = Array.from(
+            new Set(
+              cogRows
+                .map((r) => r.contractId)
+                .filter((v): v is string => !!v),
+            ),
+          )
+          const contractCategoryRows =
+            contractIds.length > 0
+              ? await prisma.contract.findMany({
+                  where: { id: { in: contractIds } },
+                  select: {
+                    id: true,
+                    productCategory: { select: { name: true } },
+                  },
+                })
+              : []
+          const contractCategoryMap = new Map<string, string | null>(
+            contractCategoryRows.map((c) => [
+              c.id,
+              c.productCategory?.name ?? null,
+            ]),
+          )
+          const { computeCategoryMarketShare } = await import(
+            "@/lib/contracts/market-share-filter"
+          )
+          if (contract.vendorId) {
+            const result = computeCategoryMarketShare({
+              rows: cogRows,
+              contractCategoryMap,
+              vendorId: contract.vendorId,
+            })
+            const top = result.rows[0]
+            if (top) metricValue = top.sharePct
+          }
+        } catch (err) {
+          console.warn(
+            `[recomputeAccrualForContract] currentMarketShare derivation failed for ${contractId}:`,
+            err,
+          )
+        }
+      }
       try {
         const r = await recomputeThresholdAccrualForTerm({
           contractId,

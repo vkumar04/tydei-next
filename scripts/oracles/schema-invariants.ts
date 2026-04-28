@@ -161,6 +161,114 @@ export default defineOracle("schema-invariants", async (ctx) => {
         ? `${withCollection.length} collected rebates checked`
         : `${collectedTooEarly.length} collections recorded before period started`,
     )
+
+    // ── Tier sanity ─────────────────────────────────────────────
+    // ContractTier.rebateValue is stored as a fraction (0.02 = 2%).
+    // Per CLAUDE.md "Rebate engine units" rule, valid range is
+    // [0, 1]. Anything outside means a unit-conversion bug crept in
+    // during import or a manual edit set the wrong scale.
+    const allTiers = await prisma.contractTier.findMany({
+      select: {
+        id: true,
+        tierNumber: true,
+        rebateValue: true,
+        rebateType: true,
+      },
+    })
+    const outOfRangeTiers = allTiers.filter((t) => {
+      // Only enforce the [0,1] band on percent_of_spend rows;
+      // flat-amount tiers (rebate_per_use, fixed) can legitimately
+      // exceed 1.
+      if (t.rebateType !== "percent_of_spend") return false
+      const v = Number(t.rebateValue)
+      return v < 0 || v > 1
+    })
+    ctx.check(
+      "ContractTier.rebateValue (percent_of_spend) within [0, 1]",
+      outOfRangeTiers.length === 0,
+      outOfRangeTiers.length === 0
+        ? `${allTiers.length} tier rows checked`
+        : `${outOfRangeTiers.length} percent_of_spend tier(s) outside [0,1] — likely percent-vs-fraction unit mix-up`,
+    )
+
+    // Tier number sanity: every term's tiers must have unique
+    // tierNumber + at least 1 starting at 1 or 0. Duplicates suggest
+    // an import that didn't clear prior rows.
+    const termsWithTiers = await prisma.contractTerm.findMany({
+      where: { tiers: { some: {} } },
+      select: {
+        id: true,
+        tiers: { select: { tierNumber: true } },
+      },
+    })
+    const termsWithDupTiers = termsWithTiers.filter((term) => {
+      const seen = new Set<number>()
+      for (const t of term.tiers) {
+        if (seen.has(t.tierNumber)) return true
+        seen.add(t.tierNumber)
+      }
+      return false
+    })
+    ctx.check(
+      "no ContractTerm has duplicate tierNumber values",
+      termsWithDupTiers.length === 0,
+      termsWithDupTiers.length === 0
+        ? `${termsWithTiers.length} terms-with-tiers checked`
+        : `${termsWithDupTiers.length} term(s) have duplicate tierNumbers`,
+    )
+
+    // ── ContractCapitalLineItem invariants ──────────────────────
+    const capitalItems = await prisma.contractCapitalLineItem.findMany({
+      select: {
+        id: true,
+        contractTotal: true,
+        initialSales: true,
+        termMonths: true,
+        interestRate: true,
+      },
+    })
+
+    // Every line item should have termMonths > 0 (else amortization
+    // engine returns []). 0/null is allowed schema-wise but breaks the
+    // amortization card.
+    const itemsWithBadTerm = capitalItems.filter(
+      (i) => i.termMonths === null || i.termMonths <= 0,
+    )
+    ctx.check(
+      "every ContractCapitalLineItem has termMonths > 0",
+      itemsWithBadTerm.length === 0,
+      itemsWithBadTerm.length === 0
+        ? `${capitalItems.length} capital line items checked`
+        : `${itemsWithBadTerm.length} item(s) with null/zero termMonths`,
+    )
+
+    // initialSales must not exceed contractTotal (financed = total -
+    // initial, can't be negative).
+    const itemsOverpaid = capitalItems.filter(
+      (i) => Number(i.initialSales ?? 0) > Number(i.contractTotal ?? 0),
+    )
+    ctx.check(
+      "no ContractCapitalLineItem with initialSales > contractTotal",
+      itemsOverpaid.length === 0,
+      itemsOverpaid.length === 0
+        ? `${capitalItems.length} capital items checked`
+        : `${itemsOverpaid.length} item(s) with initialSales over total`,
+    )
+
+    // interestRate stored as fraction (0.05 = 5%). Anything ≥ 1
+    // is almost certainly the percent-vs-fraction mix-up.
+    const itemsBadRate = capitalItems.filter((i) => {
+      if (i.interestRate == null) return false
+      const r = Number(i.interestRate)
+      return r < 0 || r >= 1
+    })
+    ctx.check(
+      "ContractCapitalLineItem.interestRate within [0, 1)",
+      itemsBadRate.length === 0,
+      itemsBadRate.length === 0
+        ? `${capitalItems.length} capital items checked`
+        : `${itemsBadRate.length} item(s) outside fraction range — likely stored as percent`,
+    )
   } finally {
     await prisma.$disconnect()
   }

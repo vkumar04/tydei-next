@@ -44,12 +44,9 @@ export function CategoryMarketShareCard({
     queryKey: ["category-market-share", vendorId, contractId ?? null],
     queryFn: () =>
       getCategoryMarketShareForVendor({ vendorId, contractId }),
-    // Charles 2026-04-28: PO reported that share% didn't update after
-    // adding more vendors with the same category. The card cached
-    // forever since no mutation invalidated this query. staleTime=0
-    // means every mount/focus refetches — cheap fix until we wire
-    // invalidation tags from cog-import → category-market-share.
-    staleTime: 0,
+    // 2026-04-28: invalidation is now wired from every COG mutation
+    // (use-cog.ts), so default staleTime is fine — the prior
+    // staleTime: 0 hack is no longer needed.
   })
 
   if (isLoading) {
