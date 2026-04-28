@@ -53,8 +53,10 @@ const createContractBase = z.object({
   isGrouped: z.boolean().optional(),
   facilityIds: z.array(z.string()),
   additionalFacilityIds: z.array(z.string()).optional(),
-  tieInCapitalValue: z.number().optional(),
-  tieInPayoffMonths: z.number().int().optional(),
+  // 2026-04-28: tieInCapitalValue + tieInPayoffMonths removed —
+  // they were stale validator fields with no Prisma column and no
+  // action write-path (surfaced by contract-schema-parity.test.ts).
+  // Capital lives on ContractCapitalLineItem rows.
   tieInCapitalContractId: z.string().optional(),
   // Charles audit suggestion #4 (v0-port): legacy contract-level
   // capital fields removed — capital lives in

@@ -369,11 +369,7 @@ export function ContractFormBasicInfo({
                     type="button"
                     variant="outline"
                     size="icon"
-                    onClick={() => {
-                      setLinkedContractId("")
-                      setValue("tieInCapitalValue", undefined as never)
-                      setValue("tieInPayoffMonths", undefined as never)
-                    }}
+                    onClick={() => setLinkedContractId("")}
                     aria-label="Unlink contract"
                     title="Unlink contract"
                   >
@@ -383,34 +379,12 @@ export function ContractFormBasicInfo({
               </div>
             </Field>
 
-            {/* Tie-in contracts: pay-down amount + period so rebates on
-                this contract can be applied to the capital contract's
-                outstanding balance. */}
-            {contractType === "tie_in" && linkedContractId && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Capital Equipment Value">
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                      $
-                    </span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      className="pl-7"
-                      placeholder="0"
-                      {...register("tieInCapitalValue", { valueAsNumber: true })}
-                    />
-                  </div>
-                </Field>
-                <Field label="Expected Pay-off (months)">
-                  <Input
-                    type="number"
-                    placeholder="36"
-                    {...register("tieInPayoffMonths", { valueAsNumber: true })}
-                  />
-                </Field>
-              </div>
-            )}
+            {/* 2026-04-28: Capital Equipment Value + Expected Pay-off
+                inputs were removed. Capital details now live on
+                ContractCapitalLineItem rows (managed via the dedicated
+                capital-line-items editor). The fields here were silently
+                dropped at the action layer because Prisma doesn't carry
+                them — surfaced by the schema-parity test. */}
           </CardContent>
         </Card>
       )}

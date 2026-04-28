@@ -96,14 +96,6 @@ describe("createContractBase ↔ updateContract action parity", () => {
     "isMultiFacility",
     "isGrouped",
     "productCategoryId",
-    // 2026-04-28 finding via this test: tieInCapitalValue +
-    // tieInPayoffMonths exist in the schema but neither the Prisma
-    // model nor the action references them. They're stale validator
-    // fields from before capital migrated to ContractCapitalLineItem.
-    // Tracking here as known-stale; removing from the schema is a
-    // separate cleanup PR (touches the form too).
-    "tieInCapitalValue",
-    "tieInPayoffMonths",
   ])
 
   it("every createContractBase field is referenced in updateContract", () => {
