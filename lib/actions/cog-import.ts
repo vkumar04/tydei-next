@@ -302,10 +302,13 @@ async function runBulkImport(
   //
   // For every distinct vendorId in the persisted batch, recompute
   // match statuses so newly-imported rows pick up contract pricing
-  // immediately. Errors are swallowed with a console.warn — audit /
-  // import success must not regress if a single vendor's recompute
-  // fails (e.g. malformed contract pricing). Dynamic import avoids a
-  // static cycle with lib/cog/recompute → lib/contracts/*.
+  // immediately. Strategic-direction Plan #3 light: instead of
+  // swallowing failures with console.warn, track them in a
+  // structured result so the import action surfaces "succeeded but N
+  // recompute steps failed" to the caller. The UI can then prompt
+  // the user to retry via the contract-detail Refresh button instead
+  // of silently displaying stale numbers.
+  const recomputeFailures: { step: string; reason: string }[] = []
   if (imported > 0) {
     const vendorIds = new Set<string>()
     for (const record of data.records) {
@@ -324,10 +327,16 @@ async function runBulkImport(
             facilityId: session.facility.id,
           })
         } catch (err) {
-          console.warn(
-            `[cog-import] recompute failed for vendor ${vendorId}`,
+          const reason = err instanceof Error ? err.message : String(err)
+          console.error(
+            "[bulkImportCOGRecords] recomputeMatchStatusesForVendor failed",
             err,
+            { facilityId: session.facility.id, vendorId },
           )
+          recomputeFailures.push({
+            step: `match-statuses (vendor ${vendorId})`,
+            reason,
+          })
         }
       }
       // Charles 2026-04-25 (Bug 27 part 2): after a COG import we have
@@ -340,10 +349,16 @@ async function runBulkImport(
         )
         await recomputeCaseSupplyContractStatus(prisma, session.facility.id)
       } catch (err) {
-        console.warn(
-          `[cog-import] recomputeCaseSupplyContractStatus failed for facility ${session.facility.id}`,
+        const reason = err instanceof Error ? err.message : String(err)
+        console.error(
+          "[bulkImportCOGRecords] recomputeCaseSupplyContractStatus failed",
           err,
+          { facilityId: session.facility.id },
         )
+        recomputeFailures.push({
+          step: "case-supply-contract-status",
+          reason,
+        })
       }
 
       // Strategic-direction Plan #1 (2026-04-28): persisted derived
@@ -351,7 +366,6 @@ async function runBulkImport(
       // annualValue) drift after every COG import. Refresh them on
       // every contract owned by an affected vendor so the contract-
       // detail surfaces stay in sync without requiring a manual edit.
-      // Best-effort — one bad contract doesn't poison the whole import.
       const { refreshContractMetricsForVendor } = await import(
         "@/lib/actions/contracts/refresh-metrics"
       )
@@ -362,10 +376,16 @@ async function runBulkImport(
             facilityId: session.facility.id,
           })
         } catch (err) {
-          console.warn(
-            `[cog-import] refreshContractMetricsForVendor failed for vendor ${vendorId}`,
+          const reason = err instanceof Error ? err.message : String(err)
+          console.error(
+            "[bulkImportCOGRecords] refreshContractMetricsForVendor failed",
             err,
+            { facilityId: session.facility.id, vendorId },
           )
+          recomputeFailures.push({
+            step: `refresh-metrics (vendor ${vendorId})`,
+            reason,
+          })
         }
       }
     }
@@ -408,5 +428,10 @@ async function runBulkImport(
     matched: matchedCount,
     unmatched: Math.max(0, totalForFile - matchedCount),
     onContractRate: totalForFile > 0 ? onContractCount / totalForFile : 0,
+    // 2026-04-28 strategic-direction Plan #3 light: surface recompute
+    // failures so the import UI can warn that the contract-detail
+    // numbers may be stale until the user clicks Refresh on the
+    // affected contracts. Empty array = everything succeeded.
+    recomputeFailures,
   })
 }

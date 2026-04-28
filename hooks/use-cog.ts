@@ -73,6 +73,17 @@ export function useImportCOGRecords() {
       toast.success(
         `Imported ${result.imported} records (${result.skipped} skipped, ${result.errors} errors)`
       )
+      // 2026-04-28 strategic-direction Plan #3 light: surface
+      // recompute step failures so users learn the import succeeded
+      // but downstream contract numbers may be stale until they
+      // click Refresh / Recompute on the affected contract.
+      const failures = result.recomputeFailures ?? []
+      if (failures.length > 0) {
+        toast.warning(
+          `Import succeeded but ${failures.length} recompute step${failures.length === 1 ? "" : "s"} failed. Contract-detail numbers may be stale — open each affected contract and click Recompute Earned Rebates. Failures: ${failures.slice(0, 3).map((f) => f.step).join("; ")}${failures.length > 3 ? `; …+${failures.length - 3} more` : ""}`,
+          { duration: 12_000 },
+        )
+      }
     },
     onError: (err) => toast.error(err.message || "Import failed"),
   })
