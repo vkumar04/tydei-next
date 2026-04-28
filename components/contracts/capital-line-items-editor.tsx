@@ -348,7 +348,16 @@ export function CapitalLineItemsEditor({
                             effectiveStart={new Date()
                               .toISOString()
                               .slice(0, 10)}
-                            amortizationShape="symmetrical"
+                            // 2026-04-28: respect paymentType — Charles
+                            // reported "Variable does not work on the
+                            // schedule only fixed". Pre-fix the preview
+                            // was hardcoded to symmetrical regardless
+                            // of the picker.
+                            amortizationShape={
+                              item.paymentType === "variable"
+                                ? "custom"
+                                : "symmetrical"
+                            }
                             onCustomRowsChange={() => {}}
                           />
                         </div>

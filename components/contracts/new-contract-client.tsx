@@ -504,11 +504,15 @@ export function NewContractClient({
           const normalizedTiers = t.tiers.map((tier) => ({
             tierNumber: tier.tierNumber,
             spendMin: tier.spendMin ?? 0,
-            // 2026-04-26: AI no longer returns spendMax (Anthropic
-            // 24-optional-param limit). The rebate engine derives
-            // each tier's ceiling from the next tier's spendMin, so
-            // undefined here is equivalent to "open upper bound".
-            spendMax: undefined,
+            // 2026-04-28: keep the mapper's derived spendMax so the
+            // form's "Spend Max" column shows the implied ceiling
+            // pre-filled. The mapper (lib/ai/contract-extract-mapper.ts)
+            // derives `nextTier.spendMin - 1` since the AI Zod schema
+            // dropped spendMax to fit Anthropic's 24-optional-param
+            // limit on structured output. Hard-coding undefined here
+            // (the prior 2026-04-26 fix) discarded the derivation —
+            // Charles 2026-04-28 reported the column was empty again.
+            spendMax: tier.spendMax,
             rebateType: "percent_of_spend" as const,
             rebateValue: normalizeAIRebateValue("percent_of_spend", tier.rebateValue),
           }))

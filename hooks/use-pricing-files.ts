@@ -21,6 +21,13 @@ export function usePricingFiles(
       getPricingFiles({
         facilityId,
         ...(vendorId && { vendorId }),
+        // 2026-04-28: Charles "All price files still not here and no
+        // pagination". The action defaults to pageSize 20 and the
+        // client passes no page state, so only the first 20 ever
+        // load. Bump to 5000 so the shared DataTable's pagination
+        // (20/page client-side) shows the full set. Real server-side
+        // pagination is the follow-up if files grow past ~5000.
+        pageSize: 5000,
       }),
   })
 }

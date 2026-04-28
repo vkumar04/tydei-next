@@ -91,8 +91,8 @@ export interface AnalyzeProposalResult {
 export async function analyzeProposal(
   input: AnalyzeProposalInput,
 ): Promise<AnalyzeProposalResult> {
-  await requireFacility()
-
+  const session = await requireFacility()
+  try {
   const scoringInput: ProposalInput = {
     proposedAnnualSpend: input.proposedAnnualSpend,
     currentSpend: input.currentSpend,
@@ -121,6 +121,12 @@ export async function analyzeProposal(
   })
 
   return serialize({ scores, recommendation, dynamicTiers })
+  } catch (err) {
+    console.error("[analyzeProposal]", err, {
+      facilityId: session.facility.id,
+    })
+    throw err
+  }
 }
 
 // ─── getVendorCOGPatterns ──────────────────────────────────────────
@@ -134,7 +140,7 @@ export async function getVendorCOGPatterns(
   vendorId: string,
 ): Promise<SpendPatternAnalysis> {
   const { facility } = await requireFacility()
-
+  try {
   const twelveMonthsAgo = new Date()
   twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1)
 
@@ -201,6 +207,13 @@ export async function getVendorCOGPatterns(
   })
 
   return serialize(analysis)
+  } catch (err) {
+    console.error("[getVendorCOGPatterns]", err, {
+      facilityId: facility.id,
+      vendorId,
+    })
+    throw err
+  }
 }
 
 // ─── analyzeUploadedPDF ────────────────────────────────────────────
@@ -219,7 +232,7 @@ export async function analyzeUploadedPDF(
   input: AnalyzeUploadedPDFInput,
 ): Promise<ClauseAnalysis> {
   const session = await requireFacility()
-
+  try {
   const analysis = analyzePDFContract(input.pdfText)
 
   await logAudit({
@@ -236,6 +249,14 @@ export async function analyzeUploadedPDF(
   })
 
   return serialize(analysis)
+  } catch (err) {
+    console.error("[analyzeUploadedPDF]", err, {
+      facilityId: session.facility.id,
+      fileName: input.fileName ?? null,
+      textLength: input.pdfText.length,
+    })
+    throw err
+  }
 }
 
 // ─── compareStoredProposals (placeholder) ───────────────────────────

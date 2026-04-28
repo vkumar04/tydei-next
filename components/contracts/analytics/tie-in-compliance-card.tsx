@@ -6,6 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Info } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   Select,
   SelectContent,
@@ -51,7 +58,34 @@ export function TieInComplianceCard({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-4">
-          <CardTitle>Tie-In Bundle Compliance</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>Tie-In Bundle Compliance</CardTitle>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="What does the compliance mode mean?"
+                  >
+                    <Info className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-sm space-y-2 text-sm">
+                  <p>
+                    <strong>All-or-Nothing:</strong> rebate applies only when
+                    every member of the tie-in bundle hits its commitment. Miss
+                    one and the whole rebate is forfeit.
+                  </p>
+                  <p>
+                    <strong>Proportional:</strong> each member earns its own
+                    share of the rebate independently — partial compliance
+                    earns partial rebate.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <Select
             value={mode}
             onValueChange={(v) =>
