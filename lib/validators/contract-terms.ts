@@ -39,37 +39,50 @@ export function refineTierOrdering(
   tiers: TierInput[],
   ctx: z.RefinementCtx,
 ): void {
+  // Boundary policy (Charles 2026-04-28 Bug #3 — "had to get rid of a
+  // couple tiers it did not like them"). Adjacent tiers like
+  //   Tier 1: $0-$50,000
+  //   Tier 2: $50,000-∞
+  // are valid — neither engine double-counts at the boundary:
+  //   - cumulative `determineTier` keeps scanning for a higher match
+  //     (engine/shared/determine-tier.ts:51) so the boundary dollar
+  //     resolves to the higher tier
+  //   - marginal owns brackets as `[tier.thresholdMin, nextTier.thresholdMin)`
+  //     half-open (engine/shared/marginal.ts), so the boundary dollar
+  //     belongs to the upper bracket
+  // Therefore strict overlap (`cur.spendMin < prev.spendMax`) is the
+  // real error condition; equality is fine.
   const sorted = [...tiers].sort((a, b) => a.tierNumber - b.tierNumber)
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1]
     const cur = sorted[i]
-    if (prev.spendMax != null && cur.spendMin <= prev.spendMax) {
+    if (prev.spendMax != null && cur.spendMin < prev.spendMax) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["tiers", i, "spendMin"],
-        message: `Tier ${cur.tierNumber} spendMin ($${cur.spendMin.toLocaleString()}) must be greater than Tier ${prev.tierNumber} spendMax ($${prev.spendMax.toLocaleString()}). Overlapping tiers cause the boundary dollar to be rebated twice — set spendMin to $${(prev.spendMax + 1).toLocaleString()} or higher.`,
+        message: `Tier ${cur.tierNumber} spendMin ($${cur.spendMin.toLocaleString()}) overlaps Tier ${prev.tierNumber}'s spendMax ($${prev.spendMax.toLocaleString()}). Set Tier ${cur.tierNumber}.spendMin to $${prev.spendMax.toLocaleString()} or higher (equal is OK — the engine resolves the boundary to the higher tier).`,
       })
     }
     if (
       prev.volumeMax != null &&
       cur.volumeMin != null &&
-      cur.volumeMin <= prev.volumeMax
+      cur.volumeMin < prev.volumeMax
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["tiers", i, "volumeMin"],
-        message: `Tier ${cur.tierNumber} volumeMin (${cur.volumeMin}) must be greater than Tier ${prev.tierNumber} volumeMax (${prev.volumeMax}).`,
+        message: `Tier ${cur.tierNumber} volumeMin (${cur.volumeMin}) overlaps Tier ${prev.tierNumber}'s volumeMax (${prev.volumeMax}). Equal is OK; strict overlap is not.`,
       })
     }
     if (
       prev.marketShareMax != null &&
       cur.marketShareMin != null &&
-      cur.marketShareMin <= prev.marketShareMax
+      cur.marketShareMin < prev.marketShareMax
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["tiers", i, "marketShareMin"],
-        message: `Tier ${cur.tierNumber} marketShareMin (${cur.marketShareMin}%) must be greater than Tier ${prev.tierNumber} marketShareMax (${prev.marketShareMax}%).`,
+        message: `Tier ${cur.tierNumber} marketShareMin (${cur.marketShareMin}%) overlaps Tier ${prev.tierNumber}'s marketShareMax (${prev.marketShareMax}%). Equal is OK; strict overlap is not.`,
       })
     }
   }
