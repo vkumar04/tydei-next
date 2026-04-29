@@ -388,6 +388,68 @@ async function runBulkImport(
           })
         }
       }
+
+      // Charles 2026-04-28 Bug #6 ("only Spend rebate is working"):
+      // the Rebate ledger is written by recomputeAccrualForContract,
+      // which only fires on contract create + term edit — NOT after a
+      // COG import. So:
+      //   - new spend never re-emits Rebate rows for the spend writer
+      //   - the threshold engine (market_share / compliance_rebate)
+      //     emitted 0 rebates on the create path because
+      //     Contract.currentMarketShare was null; refresh-metrics
+      //     above just updated it, but no second recompute fires
+      //
+      // Fan out a recompute over every active contract owned by an
+      // affected vendor. Per-contract failures are collected so one
+      // bad contract doesn't poison the import result.
+      const { _recomputeAccrualForContractWithFacility } = await import(
+        "@/lib/actions/contracts/recompute-accrual"
+      )
+      let affectedContracts: { id: string; name: string | null }[] = []
+      try {
+        affectedContracts = await prisma.contract.findMany({
+          where: {
+            facilityId: session.facility.id,
+            vendorId: { in: [...vendorIds] },
+            status: { in: ["active", "expiring"] },
+          },
+          select: { id: true, name: true },
+        })
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err)
+        console.error(
+          "[bulkImportCOGRecords] failed to load contracts for accrual fan-out",
+          err,
+          { facilityId: session.facility.id },
+        )
+        recomputeFailures.push({
+          step: "accrual-recompute (contract lookup)",
+          reason,
+        })
+      }
+      for (const contract of affectedContracts) {
+        try {
+          await _recomputeAccrualForContractWithFacility(
+            contract.id,
+            session.facility.id,
+          )
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err)
+          console.error(
+            "[bulkImportCOGRecords] recomputeAccrualForContract failed",
+            err,
+            {
+              facilityId: session.facility.id,
+              contractId: contract.id,
+              contractName: contract.name,
+            },
+          )
+          recomputeFailures.push({
+            step: `accrual-recompute (${contract.name ?? contract.id})`,
+            reason,
+          })
+        }
+      }
     }
   }
 
