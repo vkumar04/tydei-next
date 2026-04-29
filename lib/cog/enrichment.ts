@@ -69,7 +69,8 @@ export function enrichCOGRecord(
     case "price_variance": {
       // savingsAmount for a variance record: (contract - actual) × quantity.
       // If facility overpaid (variancePercent > 0), savings will be negative.
-      const savings = (result.contractPrice - record.unitCost) * record.quantity
+      const rawSavings =
+        (result.contractPrice - record.unitCost) * record.quantity
       // Clamp to the `Decimal(6,2)` range the schema allows. Real-world data
       // occasionally has extreme mismatches (placeholder $0 contract prices,
       // wildly stale XLSX prices, etc.) that compute to millions-of-percent
@@ -80,6 +81,28 @@ export function enrichCOGRecord(
         -VARIANCE_CLAMP,
         Math.min(VARIANCE_CLAMP, result.variancePercent),
       )
+
+      // Charles 2026-04-29: kit-vs-component sanity cap. When the
+      // matched contract price is many multiples of the actual unit
+      // cost (e.g., contract row is for a kit, COG row is for a single
+      // component), the algebraic identity
+      //     savings/extended = contractPrice/unitCost - 1
+      // produces a fictional "+$946 saved" on a $37 line. That number
+      // is a false positive — there's no real savings, the matcher
+      // just compared apples to oranges.
+      //
+      // When |savings/extended| > SAVINGS_RATIO_SANITY, null out the
+      // savings claim. The variance percent is still surfaced so the
+      // user sees "something is off"; we just don't fabricate a
+      // dollar number. SANITY=10 means we tolerate up to a 10×
+      // overpay/discount, which covers any real contract dispute
+      // while flagging unit-mismatch as untrusted.
+      const SAVINGS_RATIO_SANITY = 10
+      const extendedPrice = record.unitCost * record.quantity
+      const ratio =
+        extendedPrice > 0 ? Math.abs(rawSavings) / extendedPrice : Infinity
+      const savings =
+        ratio > SAVINGS_RATIO_SANITY ? null : rawSavings
       return {
         matchStatus: "price_variance",
         contractId: result.contractId,

@@ -52,6 +52,41 @@ describe("enrichCOGRecord", () => {
     expect(cols.variancePercent).toBe(0)
   })
 
+  it("Charles 2026-04-29 Bug C: nulls savings when ratio implies kit-vs-component mismatch", () => {
+    // AR-8727-42 from Charles's screenshot: extended $37 (qty 8 × ~$4.625),
+    // matched against a contract priced ~$123/unit. Algebraic identity:
+    //   savings/extended = contractPrice/unitCost - 1
+    //   = 123/4.625 - 1 ≈ 25.6
+    // Pre-fix this rendered as "+$946 saved" on a $37 line — fictional.
+    // Post-fix: variance still surfaces, savings nulls out.
+    const result: MatchResult = {
+      status: "price_variance",
+      contractId: "c-1",
+      contractPrice: 123,
+      variancePercent: -86.7,
+    }
+    const cols = enrichCOGRecord(result, { quantity: 8, unitCost: 4.625 })
+    expect(cols.matchStatus).toBe("price_variance")
+    expect(cols.variancePercent).toBeCloseTo(-86.7, 1)
+    expect(cols.savingsAmount).toBeNull()
+  })
+
+  it("Charles 2026-04-29 Bug C: keeps savings when ratio is plausible (≤10×)", () => {
+    // AR-4541 from same screenshot: extended $342 (qty 1 × $342),
+    // matched against contract ~$393. Ratio = 393/342 - 1 ≈ 0.15.
+    // Real overpay; should NOT be nulled.
+    const result: MatchResult = {
+      status: "price_variance",
+      contractId: "c-1",
+      contractPrice: 393.56,
+      variancePercent: -13.1,
+    }
+    const cols = enrichCOGRecord(result, { quantity: 1, unitCost: 342 })
+    expect(cols.savingsAmount).not.toBeNull()
+    // (393.56 - 342) × 1 ≈ 51.56
+    expect(Number(cols.savingsAmount)).toBeCloseTo(51.56, 1)
+  })
+
   it("maps price_variance to populated columns with positive variancePercent", () => {
     const result: MatchResult = {
       status: "price_variance",
