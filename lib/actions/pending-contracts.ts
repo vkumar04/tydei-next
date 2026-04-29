@@ -478,7 +478,30 @@ export async function createPendingContract(input: CreatePendingContractInput) {
   // Facility identity is also looked up from the Facility row when
   // facilityId is provided so the displayed name matches reality.
   const { vendor } = await requireVendor()
-  const data = createPendingContractSchema.parse(input)
+  let data: CreatePendingContractInput
+  try {
+    data = createPendingContractSchema.parse(input)
+  } catch (err) {
+    // Charles 2026-04-29 Bug A: vendor reports green-toast-but-no-
+    // contract. If the schema parse throws, the mutation rejects and
+    // the caller's allSettled triggers an error toast (not green) —
+    // BUT in prod, the digest is opaque. Log the parse issue with
+    // the vendor + payload shape so we can pin field-shape regressions
+    // (e.g., contractType not in the enum, capitalLineItems with
+    // unexpected nested types) immediately.
+    console.error("[createPendingContract] schema parse failed", err, {
+      vendorId: vendor.id,
+      contractName: input?.contractName,
+      contractType: input?.contractType,
+      hasPricingData: input?.pricingData != null,
+      pricingItemCount:
+        (input?.pricingData as { items?: unknown[] } | undefined)?.items
+          ?.length ?? 0,
+      capitalLineItemCount: input?.capitalLineItems?.length ?? 0,
+      termCount: input?.terms?.length ?? 0,
+    })
+    throw err
+  }
 
   // Resolve facility name from the Facility row so a vendor can't
   // forge a facilityName independent of facilityId.
@@ -491,7 +514,9 @@ export async function createPendingContract(input: CreatePendingContractInput) {
     resolvedFacilityName = facility?.name ?? data.facilityName
   }
 
-  const contract = await prisma.pendingContract.create({
+  let contract: Awaited<ReturnType<typeof prisma.pendingContract.create>>
+  try {
+    contract = await prisma.pendingContract.create({
     data: {
       vendorId: vendor.id,
       vendorName: vendor.name,
@@ -553,6 +578,21 @@ export async function createPendingContract(input: CreatePendingContractInput) {
       status: "submitted",
     },
   })
+  } catch (err) {
+    console.error("[createPendingContract] prisma.create failed", err, {
+      vendorId: vendor.id,
+      facilityId: data.facilityId,
+      contractName: data.contractName,
+      contractType: data.contractType,
+      hasPricingData: data.pricingData != null,
+      pricingItemCount:
+        (data.pricingData as { items?: unknown[] } | undefined)?.items
+          ?.length ?? 0,
+      capitalLineItemCount: data.capitalLineItems?.length ?? 0,
+      termCount: data.terms?.length ?? 0,
+    })
+    throw err
+  }
   // Charles 2026-04-25 (vendor-mirror Phase 1): notify the facility
   // so a human knows there's a submission to review. Best-effort; if
   // emails are unconfigured the submission still succeeds.
