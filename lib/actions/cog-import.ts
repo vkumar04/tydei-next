@@ -28,9 +28,22 @@ const BATCH_SIZE = 500
 export async function bulkImportCOGRecords(input: BulkImportInput) {
   const session = await requireFacility()
   const data = bulkImportSchema.parse(input)
+  const t0 = Date.now()
+  // Charles 2026-04-29: 46,512-record imports were silently failing
+  // with the generic "Server Components render" overlay because the
+  // 10mb body cap was rejecting before the action ran (now bumped to
+  // 50mb). Log the count up-front so future large-import diagnostics
+  // (timing, where it died) are traceable in server logs.
+  console.log(
+    `[bulkImportCOGRecords] start: ${data.records.length} records, facility=${session.facility.id}`,
+  )
 
   try {
-    return await runBulkImport(session, data)
+    const result = await runBulkImport(session, data)
+    console.log(
+      `[bulkImportCOGRecords] done in ${Date.now() - t0}ms — imported=${"imported" in result ? result.imported : "?"}`,
+    )
+    return result
   } catch (err) {
     // Charles W2.C-B: top-level guard. Without this, any throw from
     // pre-loop resolvers, post-loop recompute, or the final stats
@@ -40,6 +53,7 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
     console.error("[bulkImportCOGRecords]", err, {
       facilityId: session.facility.id,
       totalRecords: data.records.length,
+      elapsedMs: Date.now() - t0,
     })
     throw err
   }

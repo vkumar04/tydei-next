@@ -15,7 +15,13 @@ const config: NextConfig = {
   // cacheComponents: true,
   experimental: {
     serverActions: {
-      bodySizeLimit: "10mb",
+      // Charles 2026-04-29: 46,512-record COG import was hitting the
+      // 10mb cap (~250B/row × 46K ≈ 11-15MB JSON) and surfacing as the
+      // generic "Server Components render" overlay because the body
+      // never reached the action. 50mb gives ~4× headroom for the
+      // largest realistic import (200K rows ≈ 50MB). On Vercel Fluid
+      // Compute the platform tolerates this.
+      bodySizeLimit: "50mb",
     },
   },
   async redirects() {
