@@ -1,6 +1,6 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { ErrorBoundaryCard } from "@/components/shared/error-boundary-card"
 
 export default function AdminError({
   error,
@@ -9,13 +9,5 @@ export default function AdminError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 gap-4">
-      <h2 className="text-xl font-semibold">Something went wrong</h2>
-      <p className="text-sm text-muted-foreground max-w-md text-center">
-        {error.message || "An unexpected error occurred. Please try again."}
-      </p>
-      <Button onClick={reset}>Try Again</Button>
-    </div>
-  )
+  return <ErrorBoundaryCard error={error} reset={reset} segment="admin" />
 }
