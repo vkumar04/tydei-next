@@ -17,6 +17,7 @@ export function PerformanceSummary({
   periods,
   totalValue,
   contractTiers,
+  evaluationPeriod,
 }: {
   periods: PeriodData[]
   totalValue: number
@@ -28,6 +29,14 @@ export function PerformanceSummary({
    * which can be stale or inconsistent with the timeline.
    */
   contractTiers: Array<{ tierNumber: number; spendMin: number }>
+  /**
+   * Charles 2026-04-28: drives the subtitle so a quarterly contract
+   * doesn't read "Monthly spend on this contract." The synthetic-
+   * periods fallback in `getContractPeriods` still buckets monthly;
+   * this prop makes the cadence label match the term's evaluation
+   * period the user actually configured.
+   */
+  evaluationPeriod?: "monthly" | "quarterly" | "semi_annual" | "annual" | null
 }) {
   if (periods.length === 0) {
     return (
@@ -63,9 +72,17 @@ export function PerformanceSummary({
         <CardHeader>
           <CardTitle>Spend by Period</CardTitle>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Monthly spend on this contract (last {sorted.length}{" "}
-            {sorted.length === 1 ? "period" : "periods"}). Bar length is % of
-            total contract value; dollar amount is actual spend this period.
+            {(() => {
+              const cadenceLabel =
+                evaluationPeriod === "quarterly"
+                  ? "Monthly spend on this contract; tiers evaluate per quarter"
+                  : evaluationPeriod === "semi_annual"
+                    ? "Monthly spend on this contract; tiers evaluate twice a year"
+                    : evaluationPeriod === "annual"
+                      ? "Monthly spend on this contract; tiers evaluate annually"
+                      : "Monthly spend on this contract"
+              return `${cadenceLabel} (last ${sorted.length} ${sorted.length === 1 ? "period" : "periods"}). Bar length is % of total contract value; dollar amount is actual spend this period.`
+            })()}
           </p>
         </CardHeader>
         <CardContent>
@@ -126,10 +143,86 @@ export function PerformanceSummary({
       <Card>
         <CardHeader>
           <CardTitle>Tier Achievement</CardTitle>
+          {evaluationPeriod && evaluationPeriod !== "monthly" && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Tiers evaluate{" "}
+              {evaluationPeriod === "quarterly"
+                ? "per quarter"
+                : evaluationPeriod === "semi_annual"
+                  ? "every six months"
+                  : "annually"}
+              ; rolled-up rows below combine the underlying monthly buckets so
+              tier qualification matches the term cadence.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {sorted.map((p) => {
+            {(() => {
+              // Charles 2026-04-28: when the term is quarterly/semi/annual,
+              // roll the (monthly) period rows up into evaluation-period
+              // buckets so tier qualification matches what the engine
+              // actually does. Without this, a quarterly term with $86K/mo
+              // looks like every month is below a $50K-but-quarterly tier
+              // (it's not — quarterly spend is $258K).
+              if (
+                !evaluationPeriod ||
+                evaluationPeriod === "monthly" ||
+                sorted.length === 0
+              ) {
+                return sorted
+              }
+              const widthMonths =
+                evaluationPeriod === "quarterly"
+                  ? 3
+                  : evaluationPeriod === "semi_annual"
+                    ? 6
+                    : 12
+              const buckets = new Map<
+                string,
+                {
+                  id: string
+                  periodStart: Date
+                  periodEnd: Date
+                  totalSpend: number
+                  rebateEarned: number
+                  tierAchieved: number | null
+                }
+              >()
+              for (const p of sorted) {
+                const start = new Date(p.periodStart)
+                const y = start.getUTCFullYear()
+                const m = start.getUTCMonth() // 0-11
+                let bucketIdx: number
+                if (widthMonths === 3) bucketIdx = Math.floor(m / 3)
+                else if (widthMonths === 6) bucketIdx = Math.floor(m / 6)
+                else bucketIdx = 0
+                const key = `${y}-${bucketIdx}`
+                const bStartMonth = bucketIdx * widthMonths
+                const bStart = new Date(Date.UTC(y, bStartMonth, 1))
+                const bEnd = new Date(
+                  Date.UTC(y, bStartMonth + widthMonths, 0),
+                )
+                const existing = buckets.get(key)
+                if (existing) {
+                  existing.totalSpend += Number(p.totalSpend ?? 0)
+                  existing.rebateEarned += Number(p.rebateEarned ?? 0)
+                } else {
+                  buckets.set(key, {
+                    id: `rollup-${key}`,
+                    periodStart: bStart,
+                    periodEnd: bEnd,
+                    totalSpend: Number(p.totalSpend ?? 0),
+                    rebateEarned: Number(p.rebateEarned ?? 0),
+                    tierAchieved: null,
+                  })
+                }
+              }
+              return Array.from(buckets.values()).sort(
+                (a, b) =>
+                  a.periodStart.getTime() - b.periodStart.getTime(),
+              )
+            })().map((p) => {
               // Charles 2026-04-25: derive tier from this period's
               // actual totalSpend against the contract's ladder.
               // Falls back to p.tierAchieved if the contract has no

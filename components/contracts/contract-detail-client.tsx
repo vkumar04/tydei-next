@@ -685,6 +685,15 @@ export function ContractDetailClient({
           <PerformanceSummary
             periods={periods ?? []}
             totalValue={stats?.totalValue ?? 0}
+            evaluationPeriod={
+              (contract.terms?.find((t) => t.tiers.length > 0)
+                ?.evaluationPeriod ?? null) as
+                | "monthly"
+                | "quarterly"
+                | "semi_annual"
+                | "annual"
+                | null
+            }
             contractTiers={
               // Charles 2026-04-25: feed the contract's first-term tier
               // ladder into the Tier Achievement panel so it computes

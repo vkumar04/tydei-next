@@ -34,6 +34,21 @@ export async function POST(request: Request) {
       )
     }
 
+    // ExcelJS only supports .xlsx (zip-based). Legacy .xls (BIFF binary)
+    // throws an opaque "end of central directory" error from the zip
+    // loader — give the user actionable guidance instead.
+    // Charles 2026-04-28: "will not allow XLS files to be loaded".
+    const lowerName = file.name.toLowerCase()
+    if (lowerName.endsWith(".xls") && !lowerName.endsWith(".xlsx")) {
+      return NextResponse.json(
+        {
+          error:
+            "Legacy .xls workbooks are not supported. Open the file and save as .xlsx (or export as .csv), then re-upload.",
+        },
+        { status: 400 },
+      )
+    }
+
     const arrayBuffer = await file.arrayBuffer()
     const workbook = new ExcelJS.Workbook()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
