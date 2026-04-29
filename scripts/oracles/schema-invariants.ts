@@ -290,19 +290,20 @@ export default defineOracle("schema-invariants", async (ctx) => {
         : `${overCollected.length} row(s) with collected > earned: ${overCollected.slice(0, 3).map((r) => r.id).join(", ")}`,
     )
 
-    // status=expiring should match expirationDate within 90 days.
-    // Drift means contracts-list "Expiring Soon" counts and
-    // dashboard alerts mislead. Past-expiry rows still tagged
-    // "expiring" indicate a stale cron run.
-    const ninetyDaysOut = new Date(today)
-    ninetyDaysOut.setDate(ninetyDaysOut.getDate() + 90)
+    // status=expiring should match expirationDate within 180 days
+    // (the app's "expiring soon" window — see lib/contracts/compare-
+    // cards.ts:308 `daysRemaining < 180`). Drift means contracts-list
+    // "Expiring Soon" counts and dashboard alerts mislead. Past-expiry
+    // rows still tagged "expiring" indicate a stale cron run.
+    const expiringWindowOut = new Date(today)
+    expiringWindowOut.setDate(expiringWindowOut.getDate() + 180)
     const expiringWeird = allContracts.filter((c) => {
       if (c.status !== "expiring") return false
       const exp = c.expirationDate.getTime()
-      return exp < today.getTime() || exp > ninetyDaysOut.getTime()
+      return exp < today.getTime() || exp > expiringWindowOut.getTime()
     })
     ctx.check(
-      "status=expiring contracts have expirationDate within 90 days",
+      "status=expiring contracts have expirationDate within 180 days",
       expiringWeird.length === 0,
       expiringWeird.length === 0
         ? `${allContracts.filter((c) => c.status === "expiring").length} expiring contracts checked`
