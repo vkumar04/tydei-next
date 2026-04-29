@@ -28,11 +28,18 @@ Charles 2026-04-29 Bug B: capital PDFs were dropping financing details.
 When contractType is "capital" or "tie_in", you MUST populate
 tieInDetails with EVERY available value:
 
-- capitalEquipmentValue: one-time equipment / system price ($).
+- capitalEquipmentValue: one-time equipment / system price ($) —
+  the FINANCED PRINCIPAL. When the document shows multiple totals
+  (List Price, Discounted Price / Subtotal, Total with Interest),
+  capitalEquipmentValue is the **discounted price / subtotal /
+  net principal**, NOT the list/MSRP and NOT the total-with-
+  interest. Example: List $1,465,000, Discounted $651,900,
+  Total with 8.5% Interest $865,384 → capitalEquipmentValue = 651900.
   Look for "purchase price", "system cost", "equipment cost",
-  "capital amount". Distinct from totalValue — capitalEquipmentValue is
-  the upfront price; totalValue (if present) is the running
-  multi-year commitment ceiling.
+  "capital amount", "discounted price", "net price", "subtotal".
+  Distinct from totalValue — capitalEquipmentValue is the upfront
+  financed price; totalValue (if present) is the running multi-year
+  commitment ceiling.
 - payoffPeriodMonths: financing term in months. Convert years→months
   (5 years → 60).
 - interestRatePercent: financing rate as percent (5 = 5%). null only
