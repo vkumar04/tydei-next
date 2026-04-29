@@ -339,6 +339,49 @@ async function runBulkImport(
           })
         }
       }
+      // Charles 2026-04-28 Bug #5: dashboard category-spend card
+      // ("only categories from the first contract show up"). Root
+      // cause: when a COG file lacks a category column AND the items
+      // aren't covered by ProductBenchmark or ContractPricing, every
+      // row lands with category=null → aggregates into "uncategorized"
+      // instead of the contract's category bucket. The contract
+      // already carries an explicit productCategory; backfill it onto
+      // any matched-but-uncategorized COG rows so the dashboard
+      // pivot lights up. Best-effort — failures here don't block the
+      // import or the downstream recomputes.
+      try {
+        const contractsWithCategory = await prisma.contract.findMany({
+          where: {
+            facilityId: session.facility.id,
+            vendorId: { in: [...vendorIds] },
+            productCategoryId: { not: null },
+          },
+          select: { id: true, productCategory: { select: { name: true } } },
+        })
+        for (const c of contractsWithCategory) {
+          if (!c.productCategory?.name) continue
+          await prisma.cOGRecord.updateMany({
+            where: {
+              facilityId: session.facility.id,
+              contractId: c.id,
+              category: null,
+            },
+            data: { category: c.productCategory.name },
+          })
+        }
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err)
+        console.error(
+          "[bulkImportCOGRecords] category backfill from Contract.productCategory failed",
+          err,
+          { facilityId: session.facility.id },
+        )
+        recomputeFailures.push({
+          step: "category-backfill (contract-level)",
+          reason,
+        })
+      }
+
       // Charles 2026-04-25 (Bug 27 part 2): after a COG import we have
       // potentially new vendor → contract bindings; refresh the
       // case-supply on-contract flags so Case Costing's compliance
