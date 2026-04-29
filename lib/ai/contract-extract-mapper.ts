@@ -19,7 +19,18 @@ export function toLegacyExtractedContract(rich: RichContractExtractData) {
     // with today's date and expire by end of day.
     effectiveDate: rich.effectiveDate ?? null,
     expirationDate: rich.expirationDate ?? null,
-    totalValue: rich.tieInDetails?.capitalEquipmentValue ?? undefined,
+    // Charles 2026-04-29 Bug B: don't squash equipment price into
+    // totalValue. totalValue is the spend-commitment ceiling; the
+    // equipment cost belongs in capitalCost (separate field). Pre-fix
+    // this was the only way to surface the value at all, but the
+    // form's capital input was always empty as a result.
+    totalValue: undefined,
+    capitalCost: rich.tieInDetails?.capitalEquipmentValue ?? undefined,
+    termMonths: rich.tieInDetails?.payoffPeriodMonths ?? undefined,
+    interestRatePercent:
+      rich.tieInDetails?.interestRatePercent ?? undefined,
+    paymentCadence: rich.tieInDetails?.paymentCadence ?? undefined,
+    downPayment: rich.tieInDetails?.downPayment ?? undefined,
     description: rich.specialConditions?.join(" ") || undefined,
     terms: (rich.terms ?? []).map((t) => {
       // Charles 2026-04-26 (#80): the AI schema dropped spendMax /

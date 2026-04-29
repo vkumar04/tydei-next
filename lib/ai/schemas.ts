@@ -87,6 +87,30 @@ export const extractedContractSchema = z.object({
   totalValue: coerceOptionalNumber().describe(
     "Total committed or expected contract value in dollars (Total Contract Value, ceiling, or commitment over the full term). Do NOT use rebate tier thresholds, minimum spend qualifications (e.g. 'minimum QAS threshold of $5,300,000'), tier breakpoints, capital costs, or rebate dollar caps. If only a threshold appears and no committed total is stated, return null instead of guessing.",
   ),
+  // Charles 2026-04-29 Bug B: capital/tie-in PDFs were silently dropped
+  // on the floor — the rich schema's tieInDetails had only
+  // capitalEquipmentValue + payoffPeriodMonths, and the mapper squashed
+  // capitalEquipmentValue into totalValue. Now the legacy shape exposes
+  // granular capital fields the form actually has inputs for.
+  capitalCost: coerceOptionalNumber().describe(
+    "Cost / purchase price of the capital equipment in dollars. Use for capital and tie_in contract types. Look for 'purchase price', 'equipment cost', 'capital amount', 'system cost'. Distinct from totalValue — totalValue is the multi-year commitment ceiling; capitalCost is the one-time equipment price.",
+  ),
+  interestRatePercent: coerceOptionalNumber().describe(
+    "Financing interest rate as a percent (e.g. 5 for 5%). Look for 'interest rate', 'APR', 'finance charge'. Return null if zero-interest or not financed.",
+  ),
+  termMonths: coerceOptionalNumber().describe(
+    "Capital payoff/financing term in months. Look for 'term', 'payoff period', 'amortization period', '60-month financing'. Convert years→months (5 years = 60).",
+  ),
+  paymentCadence: z
+    .enum(["monthly", "quarterly", "annual"])
+    .nullable()
+    .optional()
+    .describe(
+      "Capital payment cadence. Look for 'monthly payments', 'quarterly installments', 'annual draw'.",
+    ),
+  downPayment: coerceOptionalNumber().describe(
+    "Up-front payment on a capital contract before financing kicks in (dollars).",
+  ),
   description: coerceOptionalString().describe("Brief description of the contract"),
   productCategory: coerceOptionalString().describe(
     "Primary product category like Ortho Spine, Medical Supplies, etc.",
@@ -352,15 +376,21 @@ export const richContractExtractSchema = z.object({
     .nullable()
     .describe("Contract terms and rebate structures"),
 
-  // Tie-In specific
+  // Tie-In / Capital specific (Charles 2026-04-29 Bug B: the prior
+  // shape had only capitalEquipmentValue + payoffPeriodMonths so the
+  // form's interestRate/termMonths/paymentCadence/downPayment inputs
+  // never auto-filled from the PDF — users had to retype every value.)
   tieInDetails: z
     .object({
       capitalEquipmentValue: z.number().nullable().describe("Value of capital equipment to pay off"),
       payoffPeriodMonths: z.number().nullable().describe("Expected payoff period in months"),
+      interestRatePercent: z.number().nullable().describe("Financing interest rate as percent (5 = 5%); null if zero-interest or not financed"),
+      paymentCadence: z.enum(["monthly", "quarterly", "annual"]).nullable().describe("Cadence of capital payments"),
+      downPayment: z.number().nullable().describe("Up-front payment in dollars before financing"),
       linkedProductCategories: z.array(z.string()).nullable(),
     })
     .nullable()
-    .describe("Details for tie-in contracts"),
+    .describe("Details for tie-in / capital contracts"),
 
   // Additional notes
   specialConditions: z.array(z.string()).nullable().describe("Any special conditions or notes"),

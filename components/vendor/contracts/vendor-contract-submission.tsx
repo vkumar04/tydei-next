@@ -324,6 +324,21 @@ export function VendorContractSubmission({
     if (data.totalValue) setContractTotal(String(data.totalValue))
     if (data.description) setDescription(data.description)
 
+    // Charles 2026-04-29 Bug B: capital/tie-in PDFs now auto-fill the
+    // capital fields. Pre-fix the form's capital inputs stayed empty
+    // because the mapper squashed equipment value into totalValue and
+    // dropped interest / term / cadence / downPayment entirely.
+    if (data.capitalCost) {
+      setCapitalCost(String(data.capitalCost))
+      setCapitalTieIn(true)
+    }
+    if (data.termMonths) setTermMonths(String(data.termMonths))
+    if (data.interestRatePercent) {
+      setInterestRate(String(data.interestRatePercent))
+    }
+    if (data.paymentCadence) setPaymentCadence(data.paymentCadence)
+    if (data.downPayment) setDownPayment(String(data.downPayment))
+
     // Auto-select first facility if none selected
     if (!facilityId && facilities.length > 0) {
       setFacilityId(facilities[0].id)

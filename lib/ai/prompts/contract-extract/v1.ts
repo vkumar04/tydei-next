@@ -17,11 +17,35 @@ KEY THINGS TO EXTRACT:
 - Types of rebates: spend-based, volume-based, market share, capitated pricing, etc.
 - Facilities covered by the contract
 - Special conditions or carve-outs
-- For tie_in contracts: capital equipment values and payoff terms
+- For tie_in / capital contracts: capital equipment values and payoff terms (see CAPITAL EXTRACTION below)
 - For pricing_only contracts: locked pricing details and any price protection clauses
 - Procedure codes or catalog numbers if listed
 
 Be thorough - extract every tier, product, and condition mentioned. Use null for fields not found in the document.
+
+── CAPITAL EXTRACTION (CRITICAL for capital + tie_in) ──
+Charles 2026-04-29 Bug B: capital PDFs were dropping financing details.
+When contractType is "capital" or "tie_in", you MUST populate
+tieInDetails with EVERY available value:
+
+- capitalEquipmentValue: one-time equipment / system price ($).
+  Look for "purchase price", "system cost", "equipment cost",
+  "capital amount". Distinct from totalValue — capitalEquipmentValue is
+  the upfront price; totalValue (if present) is the running
+  multi-year commitment ceiling.
+- payoffPeriodMonths: financing term in months. Convert years→months
+  (5 years → 60).
+- interestRatePercent: financing rate as percent (5 = 5%). null only
+  if explicitly zero-interest or not financed.
+- paymentCadence: "monthly" | "quarterly" | "annual" — driven by
+  phrases like "monthly installments", "quarterly draws".
+- downPayment: upfront payment in dollars before financing.
+- linkedProductCategories: for tie_in only — consumable categories
+  the capital purchase is tied to.
+
+Do NOT leave tieInDetails as null on a capital/tie-in contract;
+populate every field you can support and use per-field null for
+truly missing data.
 
 ── EVERGREEN / AUTO-RENEWING CONTRACTS (BE STRICT) ──
 Return expirationDate: null ONLY when the contract *explicitly*
