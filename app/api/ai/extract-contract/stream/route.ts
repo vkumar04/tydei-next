@@ -189,5 +189,22 @@ export async function POST(req: Request) {
     },
   })
 
-  return result.toTextStreamResponse()
+  // Charles 2026-04-30 bug doc — "No documents here for a faculty
+  // to review". Root cause: this stream route uploaded the PDF to
+  // S3 (above) AND wrote the s3Key into the cache row, but the
+  // response stream itself never told the client what the key was.
+  // The client (ai-extract-dialog.tsx:205) expected `lastValid.s3Key`
+  // from the streamed JSON and got undefined every time, so vendor
+  // submissions landed with documents:[] on the PendingContract
+  // row — the facility-side review then correctly showed the "No
+  // documents…" empty state.
+  //
+  // Fix: use the `X-S3-Key` response header to surface the archived
+  // PDF location alongside the streaming JSON body. Header-based
+  // metadata avoids changing the existing JSON-parse loop on the
+  // client (which assembles a single progressive JSON object across
+  // chunks); the client reads the header before consuming the body.
+  const response = result.toTextStreamResponse()
+  if (s3Key) response.headers.set("X-S3-Key", s3Key)
+  return response
 }

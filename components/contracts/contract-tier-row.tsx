@@ -69,6 +69,27 @@ const rebateTypes = [
   { value: "per_procedure_rebate", label: "Per Procedure" },
 ] as const
 
+/**
+ * Charles 2026-04-30: per-termType filter for the rebate-type picker.
+ * For price_reduction the "tier" is just "% off contract price" — there
+ * is no Fixed/Unit or Per-Procedure variant. Locking the picker to
+ * percent_of_spend (which the engine treats as the % discount) cuts
+ * off a class of misconfigured price_reduction terms where the user
+ * picked Fixed Rebate by mistake.
+ *
+ * Returning the full menu for other termTypes preserves the existing
+ * picker. Volume-family termTypes (volume_rebate / rebate_per_use)
+ * naturally use Fixed/Unit or Per-Procedure, so they stay open.
+ */
+function rebateTypesForTerm(
+  termType: string | undefined,
+): readonly { value: TierInput["rebateType"]; label: string }[] {
+  if (termType === "price_reduction") {
+    return [{ value: "percent_of_spend", label: "% off contract price" }]
+  }
+  return rebateTypes
+}
+
 export function ContractTierRow({
   tier,
   index,
@@ -180,7 +201,7 @@ export function ContractTierRow({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {rebateTypes.map((rt) => (
+            {rebateTypesForTerm(termType).map((rt) => (
               <SelectItem key={rt.value} value={rt.value}>
                 {rt.label}
               </SelectItem>

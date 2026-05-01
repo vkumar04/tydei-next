@@ -80,6 +80,23 @@ interface ContractTermsEntryProps {
  * matrix. `disabled` is reserved for future types whose semantics
  * aren't defined yet (currently none).
  */
+/**
+ * Charles 2026-04-30: per the bug doc, the visible term-type picker
+ * should be restricted to:
+ *   spend_rebate, volume_rebate, market_share, po_rebate, carve_out,
+ *   price_reduction, growth_rebate
+ *
+ * The remaining 8 (capitated_*, market_share_price_reduction,
+ * payment_rebate, compliance_rebate, fixed_fee, locked_pricing,
+ * rebate_per_use) stay in the Prisma enum for back-compat with
+ * existing rows but are hidden from new-term creation. `hidden: true`
+ * is the sole filter; the renderer below skips entries with that flag.
+ *
+ * Carve Out is enabled here even though prior commits flagged it
+ * disabled — the carve_out dispatcher in recompute-accrual.ts is now
+ * live (Charles 2026-04-26 #55) so the picker should let users select
+ * it directly.
+ */
 const termTypes = [
   { value: "spend_rebate", label: "Spend Rebate", icon: DollarSign, description: "Rebate based on spend thresholds", disabled: false },
   // Charles 2026-04-25: volume rebate now wired through
@@ -101,15 +118,15 @@ const termTypes = [
   // Charles 2026-04-25: pricing-only — discount applies once market
   // share target is met. Configured via ContractPricing rows; no
   // separate rebate accrual.
-  { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Pricing-only — discounted prices once market share target is met. Configure prices on the Pricing tab.", disabled: false },
+  { value: "market_share_price_reduction", label: "Market Share Price Reduction", icon: PieChart, description: "Pricing-only — discounted prices once market share target is met. Configure prices on the Pricing tab.", disabled: false, hidden: true },
   // Charles 2026-04-25: pricing-only — procedure-spend trigger.
   // Same model as market_share_price_reduction; discount applies via
   // ContractPricing once the trigger is met.
-  { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Pricing-only — discounted procedures once spend threshold is met. Configure prices on the Pricing tab.", disabled: false },
+  { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Pricing-only — discounted procedures once spend threshold is met. Configure prices on the Pricing tab.", disabled: false, hidden: true },
   // Charles 2026-04-25: per-procedure rebate. Routes through the
   // volume bridge — set CPT codes + tier ladder where rebateValue
   // is dollars per procedure at the achieved tier.
-  { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Per-procedure rebate when CPT count crosses tier. Set CPT codes; tier rebateValue is $/procedure.", disabled: false },
+  { value: "capitated_pricing_rebate", label: "Capitated Pricing Rebate", icon: BarChart3, description: "Per-procedure rebate when CPT count crosses tier. Set CPT codes; tier rebateValue is $/procedure.", disabled: false, hidden: true },
   // Charles 2026-04-25: growth-baseline math now wired through
   // `recomputeAccrualForContract` → `buildEvaluationPeriodAccruals`.
   // When `baselineType === "growth_based"` AND `spendBaseline > 0`,
@@ -119,38 +136,38 @@ const termTypes = [
   // Charles 2026-04-25: compliance_rebate pays a flat tier dollar
   // amount per evaluation period when `Contract.complianceRate`
   // crosses the tier's threshold (same shape as market_share).
-  { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Flat per-period rebate when compliance % crosses tier threshold. Update Compliance Rate on the contract.", disabled: false },
+  { value: "compliance_rebate", label: "Compliance Rebate", icon: Shield, description: "Flat per-period rebate when compliance % crosses tier threshold. Update Compliance Rate on the contract.", disabled: false, hidden: true },
   // Charles 2026-04-25: fixed_fee works through the existing spend
   // writer when the user adds a single tier with rebateType=fixed_rebate
   // (the spend writer reads `t.rebateType === "fixed_rebate"` and emits
   // the flat dollar amount per evaluation period — see
   // recompute-accrual.ts ~line 175). One tier with spendMin=0 +
   // fixed_rebate $X gives the user a flat $X each period.
-  { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate per period. Add one tier with rebate type Fixed Rebate and the dollar amount.", disabled: false },
+  { value: "fixed_fee", label: "Fixed Fee", icon: Coins, description: "Fixed dollar rebate per period. Add one tier with rebate type Fixed Rebate and the dollar amount.", disabled: false, hidden: true },
   // Charles 2026-04-25: locked_pricing has no rebate computation —
   // it's a pricing catalog (ContractPricing rows lock prices for the
   // contract duration). The contract's pricing-file import + the COG
   // matcher already enforce locked prices via `escalatorPercent: null`.
   // No engine wiring needed; just enable so users can categorize
   // their pricing-only contracts correctly.
-  { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price catalog locked for the contract duration. Pricing rows are managed via the Pricing tab; no separate rebate accrual.", disabled: false },
+  { value: "locked_pricing", label: "Locked Pricing", icon: Lock, description: "Price catalog locked for the contract duration. Pricing rows are managed via the Pricing tab; no separate rebate accrual.", disabled: false, hidden: true },
   // Charles 2026-04-25: rebate_per_use shares the volume bridge —
   // counts CPT occurrences and pays a flat $/occurrence (no tier
   // ladder needed; configure with one tier at threshold 0).
-  { value: "rebate_per_use", label: "Rebate Per Use", icon: Coins, description: "Per-procedure rebate. Set CPT codes and add one tier at threshold 0 with the dollars per occurrence.", disabled: false },
+  { value: "rebate_per_use", label: "Rebate Per Use", icon: Coins, description: "Per-procedure rebate. Set CPT codes and add one tier at threshold 0 with the dollars per occurrence.", disabled: false, hidden: true },
   // Charles 2026-04-25: po_rebate counts qualifying PurchaseOrder
   // rows (status submitted | approved | received) at the contract's
   // vendor + facility within the term's evaluation period. Tier
   // thresholds are PO COUNTS, rebateValue is dollars-per-PO at the
   // achieved tier.
   { value: "po_rebate", label: "PO Rebate", icon: DollarSign, description: "Per-purchase-order rebate. Tier thresholds are PO counts; rebate values are dollars per PO.", disabled: false },
-  { value: "carve_out", label: "Carve Out", icon: Shield, description: "Specific items excluded from the broader contract terms", disabled: true },
+  { value: "carve_out", label: "Carve Out", icon: Shield, description: "Specific items excluded from the broader contract terms — per-line carve-out percent applied via the Pricing tab.", disabled: false },
   // Charles 2026-04-25: per-invoice rebate. Counts qualifying
   // Invoice rows (matching vendor + facility + within window +
   // non-cancelled status); tier rebateValue is dollars per invoice.
   // v2 will add on-time-payment threshold once Invoice gains a
   // paidDate field.
-  { value: "payment_rebate", label: "Payment Rebate", icon: Coins, description: "Per-invoice rebate. Tier thresholds are invoice counts; rebate values are dollars per invoice.", disabled: false },
+  { value: "payment_rebate", label: "Payment Rebate", icon: Coins, description: "Per-invoice rebate. Tier thresholds are invoice counts; rebate values are dollars per invoice.", disabled: false, hidden: true },
 ] as const
 
 const baselineTypes = [
@@ -411,7 +428,13 @@ export function ContractTermsEntry({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {termTypes.map((tt) => (
+                          {termTypes
+                            .filter(
+                              (tt) =>
+                                !(tt as { hidden?: boolean }).hidden ||
+                                tt.value === term.termType,
+                            )
+                            .map((tt) => (
                             <SelectItem
                               key={tt.value}
                               value={tt.value}

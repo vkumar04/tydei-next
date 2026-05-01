@@ -195,6 +195,27 @@ export function getCOGColumns({
       ),
     },
     {
+      // Charles 2026-04-30 bug doc: "no column that shows the 'contract'
+      // price as a reference" \u2014 the Variance / Savings columns are
+      // computed against the matched contract's pricing entry, but
+      // there's nothing on screen to anchor what they're being compared
+      // to. Show contractPrice next to Unit Price; em-dash when the row
+      // didn't match a contract entry.
+      id: "contractPrice",
+      header: "Contract Price",
+      cell: ({ row }) => {
+        const raw = row.original.contractPrice
+        if (raw === null || raw === undefined) {
+          return <span className="text-muted-foreground text-right">\u2014</span>
+        }
+        return (
+          <span className="text-right font-medium tabular-nums">
+            {formatCurrency(Number(raw))}
+          </span>
+        )
+      },
+    },
+    {
       id: "savings",
       header: "Savings",
       cell: ({ row }) => {

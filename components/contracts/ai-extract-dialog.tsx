@@ -164,6 +164,14 @@ export function AIExtractDialog({
       }
       if (!res.body) throw new Error("No response stream")
 
+      // Charles 2026-04-30: the streaming endpoint surfaces the
+      // archived PDF's S3 key as an HTTP response header so the
+      // facility-side review can show the PDF as an attached
+      // document. Pre-fix the body emitted only the AI extraction
+      // JSON (no s3Key field), so vendor submissions landed with
+      // empty documents:[] on the PendingContract row.
+      const headerS3Key = res.headers.get("X-S3-Key") || undefined
+
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
@@ -202,7 +210,11 @@ export function AIExtractDialog({
       if (!lastValid) throw new Error("Empty response from extractor")
 
       setProgress(100)
-      setS3Key(lastValid.s3Key ?? null)
+      // Cache-hit envelope already carries s3Key in the body; for the
+      // streaming-MISS path we read it from the X-S3-Key header. Prefer
+      // the body's value when present (cache hits) since it's already
+      // correlated with the cached extracted output.
+      setS3Key(lastValid.s3Key ?? headerS3Key ?? null)
       setConfidence(lastValid.confidence ?? 0.9)
       setStage("review")
     } catch (err) {
