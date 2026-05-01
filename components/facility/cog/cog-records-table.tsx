@@ -25,6 +25,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import { ChevronDown, Check } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   Empty,
@@ -223,32 +237,17 @@ export function COGRecordsTable({
                 }}
                 className="w-[320px]"
               />
-              <Select
-                value={vendorFilter || "all"}
-                onValueChange={(v) => {
+              <VendorFilterCombobox
+                vendors={vendorData?.vendors ?? []}
+                value={vendorFilter}
+                onChange={(v) => {
                   // Filter changes reset to page 1 so the user sees
                   // the first page of the new filtered result set
                   // rather than a potentially-empty page N.
                   setPage(1)
-                  setVendorFilter(v === "all" ? "" : v)
+                  setVendorFilter(v)
                 }}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="All vendors" />
-                </SelectTrigger>
-                {/* Charles W1.L — facilities with many vendors (~100+)
-                    made the dropdown taller than the viewport with no
-                    scroll, cutting off vendors below the fold. Cap the
-                    popover height + enable internal scrolling. */}
-                <SelectContent className="max-h-[320px] overflow-y-auto">
-                  <SelectItem value="all">All vendors</SelectItem>
-                  {vendorData?.vendors.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
               <Select
                 value={matchFilter}
                 onValueChange={(v) => {
@@ -446,5 +445,78 @@ export function COGRecordsTable({
         variant="destructive"
       />
     </div>
+  )
+}
+
+
+// Charles 2026-04-30 bug doc: "vendor list you still cannot scroll
+// through it stops and you can't search through vendors". The
+// previous radix Select with overflow-y-auto worked for a few hundred
+// rows but fell over on real-data facilities with thousands of
+// vendors AND offered no search. Combobox replacement: Popover +
+// Command (cmdk) — built-in search, virtual list scrolls cleanly,
+// keyboard nav, accessible. Same single-select semantics as before.
+function VendorFilterCombobox({
+  vendors,
+  value,
+  onChange,
+}: {
+  vendors: Array<{ id: string; name: string }>
+  value: string
+  onChange: (next: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selected = value
+    ? vendors.find((v) => v.id === value)?.name ?? "Selected vendor"
+    : null
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-[200px] justify-between font-normal"
+        >
+          <span className="truncate text-left">
+            {selected ?? "All vendors"}
+          </span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search vendors…" />
+          <CommandList className="max-h-[320px]">
+            <CommandEmpty>No vendor matches.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__all__"
+                onSelect={() => {
+                  onChange("")
+                  setOpen(false)
+                }}
+              >
+                <span>All vendors</span>
+                {!value && <Check className="ml-auto h-4 w-4" />}
+              </CommandItem>
+              {vendors.map((v) => (
+                <CommandItem
+                  key={v.id}
+                  value={v.name}
+                  onSelect={() => {
+                    onChange(v.id)
+                    setOpen(false)
+                  }}
+                >
+                  <span className="truncate">{v.name}</span>
+                  {value === v.id && <Check className="ml-auto h-4 w-4" />}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }

@@ -12,6 +12,18 @@ CONTRACT TYPES TO IDENTIFY:
 
 KEY THINGS TO EXTRACT:
 - Contract name, vendor, vendor division, product categories
+  · vendorName ranking (Charles 2026-04-30): when multiple entity
+    names appear, prefer the customer-facing PARENT BRAND over a
+    legal subsidiary. Examples:
+      "MAKO Surgical Corp, a wholly-owned subsidiary of Stryker
+       Sales, LLC" → vendorName = "Stryker" (vendorDivision = "Mako")
+      "Ethicon Endo-Surgery, Inc, a Johnson & Johnson company"
+       → vendorName = "Johnson & Johnson" (vendorDivision = "Ethicon")
+      "Smith & Nephew Inc, Endoscopy Division"
+       → vendorName = "Smith & Nephew" (vendorDivision = "Endoscopy")
+    The downstream vendor list is keyed on the parent brand, so
+    returning the subsidiary creates duplicates that don't match
+    existing rows. If only one entity is named, use that.
 - Effective and expiration dates
 - Rebate structures with tiers (spend thresholds, volume thresholds, market share requirements)
 - Types of rebates: spend-based, volume-based, market share, capitated pricing, etc.
