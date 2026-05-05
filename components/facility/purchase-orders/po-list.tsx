@@ -142,8 +142,6 @@ export function POList({ facilityId }: POListProps) {
             vendorId={vendorId}
             onVendorIdChange={setVendorId}
             vendors={vendorList}
-            onScan={() => toast.info("Scan feature coming soon")}
-            onExport={() => toast.info("Export coming soon")}
             onNewPO={() => setNewPOOpen(true)}
           />
 
