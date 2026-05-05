@@ -92,8 +92,8 @@ const MANIFEST: EngineWiring[] = [
   {
     fn: "calculateTieInCapital",
     source: "lib/rebates/engine/tie-in-capital.ts",
-    status: "internal",
-    note: "Composes SPEND_REBATE + amortization; display path uses buildTieInAmortizationSchedule directly from lib/actions/contracts/tie-in.ts.",
+    status: "wired",
+    note: "Per-period evaluator reachable via getTieInCapitalForContractPeriod in lib/actions/contracts/tie-in-period.ts. Lifetime 'rebate applied to capital' aggregates continue to route through the canonical sumRebateAppliedToCapital helper (CLAUDE.md invariants table) — the engine path is for future per-period dashboards. Schedule side already wired via buildTieInAmortizationSchedule from lib/actions/contracts/tie-in.ts.",
   },
   {
     fn: "calculateTierPriceReduction",
