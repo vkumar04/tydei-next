@@ -73,7 +73,7 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
         </TabsContent>
 
         <TabsContent value="deal-scorer" className="mt-4 space-y-4">
-          <DealScorerSection proposals={proposals ?? []} />
+          <DealScorerSection facilities={facilities} />
         </TabsContent>
 
         <TabsContent value="benchmarks" className="mt-4 space-y-4">
