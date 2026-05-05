@@ -5,12 +5,11 @@ import { PriceDiscrepancyTable } from "@/components/facility/reports/price-discr
 import { PriceVarianceDashboard } from "@/components/facility/reports/price-variance-dashboard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, Download } from "lucide-react"
+import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
 import { getPriceDiscrepancies } from "@/lib/actions/reports"
-import { toast } from "sonner"
 
 export default function PriceDiscrepancyPage() {
   // facilityId is validated upstream by the facility dashboard layout
@@ -18,10 +17,6 @@ export default function PriceDiscrepancyPage() {
     queryKey: queryKeys.reports.priceDiscrepancies("current"),
     queryFn: () => getPriceDiscrepancies("current"),
   })
-
-  const exportReport = () => {
-    toast.success("Price discrepancy report exported")
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,12 +37,6 @@ export default function PriceDiscrepancyPage() {
               files, and actual purchases
             </p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportReport}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Report
-          </Button>
         </div>
       </div>
 
