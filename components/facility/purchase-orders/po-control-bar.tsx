@@ -1,6 +1,6 @@
 "use client"
 
-import { Plus, Search } from "lucide-react"
+import { Download, Plus, Search } from "lucide-react"
 import type { POStatus } from "@prisma/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +36,8 @@ export interface POControlBarProps {
   vendorId: string
   onVendorIdChange: (next: string) => void
   vendors: POVendorOption[]
+  onExport: () => void
+  exportDisabled?: boolean
   onNewPO: () => void
 }
 
@@ -57,6 +59,8 @@ export function POControlBar({
   vendorId,
   onVendorIdChange,
   vendors,
+  onExport,
+  exportDisabled = false,
   onNewPO,
 }: POControlBarProps) {
   return (
@@ -105,6 +109,15 @@ export function POControlBar({
 
         <Separator orientation="vertical" className="hidden h-6 sm:block" />
 
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onExport}
+          disabled={exportDisabled}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Export
+        </Button>
         <Button size="sm" onClick={onNewPO}>
           <Plus className="mr-2 h-4 w-4" />
           New PO

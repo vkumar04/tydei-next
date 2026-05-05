@@ -17,6 +17,11 @@ import { POControlBar } from "./po-control-bar"
 import { POTable, type POTableRow } from "./po-table"
 import { toast } from "sonner"
 import type { POStatus } from "@prisma/client"
+import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
+import {
+  formatExportDate,
+  formatExportDollars,
+} from "@/lib/reports/export-formatters"
 
 interface POListProps {
   facilityId: string
@@ -104,6 +109,60 @@ export function POList({ facilityId }: POListProps) {
     (v: { id: string; name: string }) => ({ id: v.id, name: v.name }),
   )
 
+  const handleExport = () => {
+    if (visibleOrders.length === 0) {
+      toast.info("No purchase orders to export.")
+      return
+    }
+    const exportRows: Record<string, unknown>[] = visibleOrders.map((po) => ({
+      poNumber: po.poNumber,
+      vendorName: po.vendor?.name ?? "",
+      contractName: po.contract?.name ?? "",
+      status: po.status,
+      orderDate: po.orderDate,
+      lineItems: po._count?.lineItems ?? 0,
+      totalCost: po.totalCost,
+    }))
+    const csv = toCSV({
+      columns: [
+        { key: "poNumber", label: "PO #" },
+        { key: "vendorName", label: "Vendor" },
+        { key: "contractName", label: "Contract" },
+        { key: "status", label: "Status" },
+        {
+          key: "orderDate",
+          label: "Order Date",
+          format: (v) => {
+            if (!v) return ""
+            const d = v instanceof Date ? v : new Date(v as string)
+            return formatExportDate(d)
+          },
+        },
+        {
+          key: "lineItems",
+          label: "Line Items",
+          format: (v) => String(v ?? 0),
+        },
+        {
+          key: "totalCost",
+          label: "Total Cost",
+          format: (v) => {
+            const n = typeof v === "number" ? v : Number(v ?? 0)
+            return Number.isFinite(n) ? formatExportDollars(n) : ""
+          },
+        },
+      ],
+      rows: exportRows,
+    })
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = buildReportFilename("Purchase Orders")
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-6">
       <POHero
@@ -142,6 +201,8 @@ export function POList({ facilityId }: POListProps) {
             vendorId={vendorId}
             onVendorIdChange={setVendorId}
             vendors={vendorList}
+            onExport={handleExport}
+            exportDisabled={isLoading || visibleOrders.length === 0}
             onNewPO={() => setNewPOOpen(true)}
           />
 
