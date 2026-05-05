@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -407,6 +408,7 @@ export async function getVendorPerformanceTiers(
               tierName: true,
               spendMin: true,
               rebateValue: true,
+              rebateType: true,
             },
           },
         },
@@ -447,9 +449,10 @@ export async function getVendorPerformanceTiers(
           tier: t.tierName ?? `Tier ${t.tierNumber}`,
           threshold,
           current,
-          // Stored as fraction (0.05 = 5%) — scale by 100 at the
-          // boundary per CLAUDE.md "Rebate engine units" rule.
-          rebateRate: Number(t.rebateValue ?? 0) * 100,
+          // Stored as fraction (0.05 = 5%) — route through the canonical
+          // boundary helper per CLAUDE.md "Rebate engine units" rule
+          // (Charles 2026-05-04 DRIFT-3).
+          rebateRate: scaleRebateValueForEngine(t.rebateValue ?? 0, t.rebateType),
           achieved: threshold > 0 && current >= threshold,
         })
       }
