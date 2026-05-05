@@ -1,12 +1,19 @@
 # Morning. Here's what to do.
 
-> **Update from second overnight session:** I dispatched a port pass on a separate branch
-> (`claude/v1-port-deferred-features`). It (a) restored the **facility AI Agent Documents +
-> Reports tabs** that were incorrectly hidden — those were real, fully-built features wired to
-> Claude + Prisma; the polish subagent treated them like the vendor placeholders by mistake,
-> and (b) wired **real CSV exports** for Price Discrepancy, Invoice list, PO list, and
-> Admin Billing using the existing `lib/reports/csv-export.ts` utility. **None of this is on
-> `main` yet** — see "How to land it" below.
+> **All overnight work is now on `main` AND pushed to origin.** No branch dance needed.
+> See "All commits ahead of origin/main" below for the full list. Your 6 WIP files
+> (`pricing-files.ts` etc.) remain uncommitted in the working tree — untouched.
+
+> **Recap of the overnight passes:**
+> 1. v1 polish (hide stub buttons across 5 surfaces) — already on main
+> 2. Restored facility AI Agent Documents + Reports tabs (incorrectly hidden) — wired to real Claude + Prisma backend
+> 3. Real CSV exports for Price Discrepancy, Invoice list, PO list, Admin Billing
+> 4. Vendor + rebates audit — 4 single-line drift findings + Charles canonical-engine diff
+> 5. Drift fixes landed: vendor dashboard hero, vendor performance label, vendor-analytics scaling, renewals pipeline reducer, vendor-PO defense-depth comment
+> 6. Prospective-analysis canonical-engine diff
+> 7. Ported Charles's `analyzeVendorProspective` — wired to /vendor/prospective Deal Scorer (was empty state)
+> 8. Built canonical PDF clause-risk-analyzer module (24 clause categories, REQUIRED_CLAUSES per variant, MISSING_CLAUSE_SUGGESTIONS, regulatory cross-checks)
+> 9. Cleaned up legacy orphan `analyzeProposal` (0-100 path, proposal-upload.tsx, proposal-comparison-table.tsx)
 
 ## Start the app
 
@@ -20,31 +27,11 @@ PORT=3001 bun run dev
 
 (If you stop rural-health first, `bun run dev` defaults to 3000.)
 
-## How to land the port work
+## Already on main — nothing to merge
 
-The port branch has 5 new commits sitting on top of `main`. Two ways to land:
+Everything was pushed to `origin/main` already. `claude/v1-port-deferred-features` is a backup branch on origin (not needed for testing). You don't need to do any branch dance.
 
-```bash
-# Option A — merge the whole branch (recommended if you like everything):
-git checkout main
-git merge claude/v1-port-deferred-features
-# → main now has the AI un-hide + 4 CSV exports
-
-# Option B — cherry-pick just the pieces you want:
-git checkout main
-git cherry-pick 24ec42a   # facility AI un-hide
-git cherry-pick 3a872c6   # price discrepancy CSV
-git cherry-pick 3016273   # invoice CSV
-git cherry-pick 67c1f02   # PO CSV
-git cherry-pick 8c4decb   # admin billing CSV
-```
-
-If you'd rather review the branch in isolation first:
-
-```bash
-git checkout claude/v1-port-deferred-features
-# test on http://localhost:3001, then decide
-```
+If you want to revert any individual commit, see "If something's broken" below.
 
 ## Test order
 
@@ -71,34 +58,43 @@ The CSV exports default to "what you're currently looking at" — i.e., active f
 
 If you want "export everything regardless of filters" for any of these, the subagent flagged the exact variable swap to make it. See the commit message for `3016273` and `67c1f02`.
 
-## All commits ahead of `origin/main`
+## All commits on main since `5e536dc`
+
+Run `git log --oneline 5e536dc..main` for the full list. Highlights (newest first):
 
 ```
-ON BRANCH: claude/v1-port-deferred-features (5 ahead of main)
+1f4a60f test(vendor-performance): add rebateType to tier fixtures after DRIFT-3 fix
+e6f7374 feat(contracts): expose canonical analyzePDFContract via server action
+f4c6eba feat(clauses): cover analyzePDFContract with happy-path/critical/side tests
+69cfd05 feat(vendor-prospective): add smoke tests for the canonical analyzer
+d3942cc feat(vendor-prospective): wire Deal Scorer to canonical analyzer
+cc2797d feat(clauses): add canonical analyzePDFContract module per Charles spec
+84ce97c feat(vendor-prospective): add server action wrapping the analyzer
+9b9790a feat(vendor-prospective): port Charles canonical analyzer
+64a2cf0 docs(reference): Charles canonical prospective-analysis engine snapshot
+d639a4a docs(audit): prospective-analysis canonical vs tydei diff
+7f73c86 chore(vendor-po): annotate auth-scope-scanner-skip on defense-in-depth raw findUnique
+45b605b fix(renewals): route pipeline totalRebate through sumEarnedRebatesLifetime
+23c81ea fix(vendor-analytics): route tier-rebate scaling through canonical helper
+3584e9f fix(vendor-performance): correct "Total Paid YTD" label — value is lifetime
+fdb9149 fix(vendor-dashboard): route Rebates Paid hero through sumEarnedRebatesLifetime
+01e9a33 docs(audit): vendor portal + Charles canonical-engine diff
+82edb69 docs: refresh morning note with port-branch progress
 8c4decb feat(admin): real CSV export for billing invoices
 67c1f02 feat(purchase-orders): real CSV export for PO list
 3016273 feat(invoices): real CSV export for invoice validation list
 3a872c6 feat(reports): real CSV export for price-discrepancy
 24ec42a Revert "chore(v1): hide facility AI Agent Documents + Reports tabs for v1 ship"
-
-ON main (10 ahead of origin/main, none pushed):
-ea58614 chore(v1): morning test plan + verify summary
-227defb chore(v1): hide vendor contract document upload + admin billing export for v1 ship
-93f8f48 chore(v1): hide price-discrepancy report export button for v1 ship
-5bf0f35 chore(v1): hide PO scan + export buttons for v1 ship
-218d333 chore(v1): hide invoice-validation bulk-dispute + export buttons for v1 ship
-cbcae4d chore(v1): hide facility AI Agent Documents + Reports tabs for v1 ship  ← reverted on port branch
-f421c07 chore(v1): hide vendor AI Agent Documents + Reports tabs for v1 ship
-474d2e7 docs(spec+plan): tydei v1 ship — declare done, hide stubs, ship
-e019386 docs(specs): clear all specs to start v1-ship cycle
-e603772 docs(spec): v0 parity inventory — turn the prototype into a checkable spec
 ```
 
-## Verify results (port branch tip)
+(The 6 v1 polish hides + spec deletion + initial v1 spec are below these.)
+
+## Verify results (main tip)
 
 - `bunx tsc --noEmit` → ✅ 0 errors
-- `bunx vitest run` → ✅ 2542 pass / 5 skipped (with your WIP stashed; with WIP unstashed the auth-scope scanner test trips on `pricing-files.ts` — that's your work, not mine)
-- `bun run build` → ✅ all 70+ routes compiled
+- `bunx vitest run` → ✅ 2551 pass / 5 skipped (with your WIP stashed; with WIP unstashed the auth-scope scanner test trips on `pricing-files.ts` — that's your work, not mine)
+- `bun run build` → ✅ all routes compiled
+- Pushed to `origin/main` at `1f4a60f`
 
 ## One thing for you to look at (unchanged from earlier note)
 
@@ -160,18 +156,21 @@ The single biggest unblock: the **facility AI Agent Documents + Reports tabs are
 
 ---
 
-## Vendor + rebates audit (run after the morning sweep)
+## Audits (read if you want the full picture)
 
-I also did a read-only audit of every `/vendor/*` surface AND a diff of Charles's canonical Unified Rebate Calculation Engine vs tydei's current implementation. Full report: [docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md](docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md).
+Two audit docs landed in `docs/superpowers/audits/`:
+- [2026-05-04-vendor-rebate-audit.md](docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md) — every /vendor/* route + Charles canonical Unified Rebate Engine diff
+- [2026-05-04-prospective-analysis-audit.md](docs/superpowers/audits/2026-05-04-prospective-analysis-audit.md) — Charles canonical Prospective Analysis Engine diff
 
-**Bottom line:** no ship blockers. Math is correct on wired surfaces, auth is clean across all 17 vendor routes.
+**Bottom line:** no ship blockers. Math is correct on wired surfaces, auth is clean across all 17 vendor routes. The 4 drift findings I called out earlier are all FIXED.
 
-**Drift findings to fix (single-line each):**
-- `lib/actions/vendor-dashboard.ts:31,60` — vendor dashboard "Rebates Paid" hero KPI under-reports (uses sparse `ContractPeriod._sum` instead of `sumEarnedRebatesLifetime`)
-- `lib/actions/renewals.ts:90,138` — renewals pipeline `totalRebate` per card under-reports (same shape — affects FACILITY + VENDOR renewals)
-- `components/vendor/performance/performance-rebates-tab.tsx:268` — labels lifetime data as "Total Paid YTD"
-- `lib/actions/vendor-analytics.ts:452` — direct `* 100` scaling instead of `scaleRebateValueForEngine`
+## What's still pending (needs your decisions, not overnight work)
 
-**Bigger architectural finding:** 7 of 8 per-type rebate engines in `lib/rebates/engine/*.ts` are **dead code** — they look like Charles's canonical engine but no production caller invokes them. Display + recompute paths re-derive tier math by hand. Decision needed: wire them or delete them. CARVE_OUT is the only one that's actually called. `allocateRebatesToProcedures` (true-margin) is also dead.
+1. **7 of 8 per-type rebate engines are dead code** in `lib/rebates/engine/*.ts` — they look like Charles's canonical engine but no production caller invokes them. CARVE_OUT is the only one that's wired. Display + recompute paths re-derive tier math by hand. Decision: wire them or delete them.
+2. **`allocateRebatesToProcedures` (true-margin) is dead** — exported, tested, no UI consumer. Wire to a true-margin page or delete.
+3. **Vendor /reports is static sample data** — `getVendorReportData` exists but consumes sparse `ContractPeriod` data; needs both action cleanup AND client wiring (paired fix). Skipped overnight because it's two concerns.
+4. **PDF clause analyzer T2 wiring stub** — the canonical `analyzePDFContract` module + server action exist but the UI surface (Upload Proposal flow) wasn't refactored to use the richer result. There's a TODO in the code.
+5. **`scaleRebateValueForEngine` correctness:** the helper only multiplies by 100 when `rebateType === "percent_of_spend"`. Other rebate types (`fixed_rebate_per_unit`, `per_procedure_rebate`) return raw value. If real production data has tiers without explicit rebateType set, those will scale incorrectly. Worth a one-time audit of `ContractTier.rebateType` distribution.
+6. **6 WIP files** (your `pricing-files.ts` etc.) untouched. The auth-scope scanner failures at `pricing-files.ts:380, 509` are still real — wrap with `{ id, facilityId: facility.id }`.
 
-**Charles's full canonical engine source** came in via email 2026-04-18; partial copy at `/tmp/charles-canonical.b64`. Future Claude sessions should ask for the full file before any engine work.
+**Charles's full canonical engine source** came in via email 2026-04-18 (rebate engine) and 2026-05-04 (prospective analysis). Header summaries saved at `docs/superpowers/charles-canonical-engines/prospective-analysis.ts`. Future sessions should ask for the full source before extending the engines.
