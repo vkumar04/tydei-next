@@ -84,7 +84,7 @@ describe("deletePricingFile", () => {
       },
     })
     expect(pricingDeleteMock).toHaveBeenCalledWith({
-      where: { id: "pricing-1" },
+      where: { id: "pricing-1", facilityId: "fac-1" },
     })
     expect(logAuditMock).toHaveBeenCalledWith(
       expect.objectContaining({

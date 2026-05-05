@@ -16,32 +16,94 @@ import { logAudit } from "@/lib/audit"
 
 // ─── List Pricing Files ─────────────────────────────────────────
 
+export type UnifiedPricingRow = {
+  id: string
+  source: "file" | "contract"
+  vendorItemNo: string
+  productDescription: string
+  vendor: { id: string; name: string }
+  category: string | null
+  listPrice: string | null
+  contractPrice: string | null
+  carveOutPercent: string | null
+  contractId: string | null
+  contractName: string | null
+}
+
 export async function getPricingFiles(input: PricingFilters) {
   const { facility } = await requireFacility()
   const filters = pricingFiltersSchema.parse(input)
 
-  const conditions: Prisma.PricingFileWhereInput[] = [
-    { facilityId: facility.id },
-  ]
+  // Source 1: facility-level PricingFile rows (uploaded via the COG page's
+  // "Pricing Files" tab).
+  const fileWhere: Prisma.PricingFileWhereInput = {
+    facilityId: facility.id,
+    ...(filters.vendorId ? { vendorId: filters.vendorId } : {}),
+  }
 
-  if (filters.vendorId) conditions.push({ vendorId: filters.vendorId })
+  // Source 2: ContractPricing rows attached to facility-owned contracts
+  // (uploaded via the contract-detail pricing-file uploader). Same
+  // contracted SKU/price universe — users expect both surfaces to feed
+  // the global Pricing List.
+  const contractPricingWhere: Prisma.ContractPricingWhereInput = {
+    contract: {
+      facilityId: facility.id,
+      ...(filters.vendorId ? { vendorId: filters.vendorId } : {}),
+    },
+  }
 
-  const where: Prisma.PricingFileWhereInput = { AND: conditions }
-  const page = filters.page ?? 1
-  const pageSize = filters.pageSize ?? 20
-
-  const [files, total] = await Promise.all([
+  const [files, contractRows] = await Promise.all([
     prisma.pricingFile.findMany({
-      where,
+      where: fileWhere,
       include: { vendor: { select: { id: true, name: true } } },
       orderBy: { createdAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
     }),
-    prisma.pricingFile.count({ where }),
+    prisma.contractPricing.findMany({
+      where: contractPricingWhere,
+      include: {
+        contract: {
+          select: {
+            id: true,
+            name: true,
+            vendor: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ])
 
-  return serialize({ files, total })
+  const fileRows: UnifiedPricingRow[] = files.map((f) => ({
+    id: f.id,
+    source: "file",
+    vendorItemNo: f.vendorItemNo,
+    productDescription: f.productDescription,
+    vendor: f.vendor,
+    category: f.category,
+    listPrice: f.listPrice ? f.listPrice.toString() : null,
+    contractPrice: f.contractPrice ? f.contractPrice.toString() : null,
+    carveOutPercent: f.carveOutPercent ? f.carveOutPercent.toString() : null,
+    contractId: null,
+    contractName: null,
+  }))
+
+  const contractPricingRows: UnifiedPricingRow[] = contractRows.map((r) => ({
+    id: r.id,
+    source: "contract",
+    vendorItemNo: r.vendorItemNo,
+    productDescription: r.description ?? r.vendorItemNo,
+    vendor: r.contract.vendor,
+    category: r.category,
+    listPrice: r.listPrice ? r.listPrice.toString() : null,
+    contractPrice: r.unitPrice.toString(),
+    carveOutPercent: r.carveOutPercent ? r.carveOutPercent.toString() : null,
+    contractId: r.contract.id,
+    contractName: r.contract.name,
+  }))
+
+  const merged = [...fileRows, ...contractPricingRows]
+
+  return { files: merged, total: merged.length }
 }
 
 // ─── Bulk Import Pricing File Entries ───────────────────────────
@@ -175,49 +237,118 @@ export async function getUploadedPricingFiles(): Promise<
 > {
   const { facility } = await requireFacility()
 
-  const grouped = await prisma.pricingFile.groupBy({
-    by: ["vendorId"],
-    where: { facilityId: facility.id },
-    _count: { _all: true },
-    _max: { createdAt: true, expirationDate: true },
-    _min: { effectiveDate: true },
-  })
-
-  if (grouped.length === 0) return []
-
-  const vendorIds = grouped.map((g) => g.vendorId)
-  const [vendors, uniqueItems] = await Promise.all([
-    prisma.vendor.findMany({
-      where: { id: { in: vendorIds } },
-      select: { id: true, name: true },
+  // Source 1: facility-level PricingFile rows (uploaded via the COG page's
+  // Pricing Files tab).
+  const [fileGroups, fileUniqueItems] = await Promise.all([
+    prisma.pricingFile.groupBy({
+      by: ["vendorId"],
+      where: { facilityId: facility.id },
+      _count: { _all: true },
+      _max: { createdAt: true, expirationDate: true },
+      _min: { effectiveDate: true },
     }),
     prisma.pricingFile.groupBy({
       by: ["vendorId", "vendorItemNo"],
-      where: { facilityId: facility.id, vendorId: { in: vendorIds } },
+      where: { facilityId: facility.id },
     }),
   ])
-  const vendorById = new Map(vendors.map((v) => [v.id, v.name]))
-  const uniqueByVendor = new Map<string, number>()
-  for (const row of uniqueItems) {
-    uniqueByVendor.set(
-      row.vendorId,
-      (uniqueByVendor.get(row.vendorId) ?? 0) + 1,
-    )
+
+  // Source 2: ContractPricing rows uploaded via the contract-detail
+  // pricing-file uploader. Group by the parent contract's vendorId so
+  // the Pricing Files tab reflects every pricing surface, not just
+  // facility-level imports.
+  const contractRows = await prisma.contractPricing.findMany({
+    where: { contract: { facilityId: facility.id } },
+    select: {
+      vendorItemNo: true,
+      effectiveDate: true,
+      expirationDate: true,
+      createdAt: true,
+      contract: { select: { vendorId: true } },
+    },
+  })
+
+  // Aggregate by vendorId across both sources.
+  type Aggregate = {
+    vendorId: string
+    recordCount: number
+    uniqueItemNos: Set<string>
+    latestUpload: Date | null
+    earliestEffective: Date | null
+    latestExpiration: Date | null
+  }
+  const byVendor = new Map<string, Aggregate>()
+  const ensure = (vendorId: string): Aggregate => {
+    let agg = byVendor.get(vendorId)
+    if (!agg) {
+      agg = {
+        vendorId,
+        recordCount: 0,
+        uniqueItemNos: new Set(),
+        latestUpload: null,
+        earliestEffective: null,
+        latestExpiration: null,
+      }
+      byVendor.set(vendorId, agg)
+    }
+    return agg
   }
 
-  const rows: UploadedPricingFileRow[] = grouped.map((g) => ({
-    vendorId: g.vendorId,
-    vendorName: vendorById.get(g.vendorId) ?? "Unknown vendor",
-    recordCount: g._count._all,
-    uniqueItems: uniqueByVendor.get(g.vendorId) ?? 0,
-    latestUploadDate: (g._max.createdAt ?? new Date()).toISOString(),
-    earliestEffectiveDate: g._min.effectiveDate
-      ? g._min.effectiveDate.toISOString()
-      : null,
-    latestExpirationDate: g._max.expirationDate
-      ? g._max.expirationDate.toISOString()
-      : null,
-  }))
+  for (const g of fileGroups) {
+    const agg = ensure(g.vendorId)
+    agg.recordCount += g._count._all
+    if (g._max.createdAt && (!agg.latestUpload || g._max.createdAt > agg.latestUpload)) {
+      agg.latestUpload = g._max.createdAt
+    }
+    if (g._min.effectiveDate && (!agg.earliestEffective || g._min.effectiveDate < agg.earliestEffective)) {
+      agg.earliestEffective = g._min.effectiveDate
+    }
+    if (g._max.expirationDate && (!agg.latestExpiration || g._max.expirationDate > agg.latestExpiration)) {
+      agg.latestExpiration = g._max.expirationDate
+    }
+  }
+  for (const u of fileUniqueItems) {
+    ensure(u.vendorId).uniqueItemNos.add(u.vendorItemNo)
+  }
+  for (const r of contractRows) {
+    const agg = ensure(r.contract.vendorId)
+    agg.recordCount += 1
+    agg.uniqueItemNos.add(r.vendorItemNo)
+    if (r.createdAt && (!agg.latestUpload || r.createdAt > agg.latestUpload)) {
+      agg.latestUpload = r.createdAt
+    }
+    if (r.effectiveDate && (!agg.earliestEffective || r.effectiveDate < agg.earliestEffective)) {
+      agg.earliestEffective = r.effectiveDate
+    }
+    if (r.expirationDate && (!agg.latestExpiration || r.expirationDate > agg.latestExpiration)) {
+      agg.latestExpiration = r.expirationDate
+    }
+  }
+
+  if (byVendor.size === 0) return []
+
+  const vendorIds = Array.from(byVendor.keys())
+  const vendors = await prisma.vendor.findMany({
+    where: { id: { in: vendorIds } },
+    select: { id: true, name: true },
+  })
+  const vendorById = new Map(vendors.map((v) => [v.id, v.name]))
+
+  const rows: UploadedPricingFileRow[] = Array.from(byVendor.values()).map(
+    (agg) => ({
+      vendorId: agg.vendorId,
+      vendorName: vendorById.get(agg.vendorId) ?? "Unknown vendor",
+      recordCount: agg.recordCount,
+      uniqueItems: agg.uniqueItemNos.size,
+      latestUploadDate: (agg.latestUpload ?? new Date()).toISOString(),
+      earliestEffectiveDate: agg.earliestEffective
+        ? agg.earliestEffective.toISOString()
+        : null,
+      latestExpirationDate: agg.latestExpiration
+        ? agg.latestExpiration.toISOString()
+        : null,
+    }),
+  )
 
   rows.sort(
     (a, b) =>
@@ -246,7 +377,7 @@ export async function deletePricingFile(id: string): Promise<{ id: string }> {
       vendorItemNo: row.vendorItemNo,
     },
   })
-  await prisma.pricingFile.delete({ where: { id } })
+  await prisma.pricingFile.delete({ where: { id, facilityId: facility.id } })
 
   await logAudit({
     userId: user.id,
@@ -375,6 +506,7 @@ export async function updateContractPricing(id: string, data: {
     where: contractOwnershipWhere(existing.contractId, facility.id),
     select: { id: true },
   })
+  // auth-scope-scanner-skip: contractOwnershipWhere already verified ownership above
   const record = await prisma.contractPricing.update({
     where: { id },
     data: {

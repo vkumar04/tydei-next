@@ -307,9 +307,6 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/invoices.ts:375",
   // payor-contracts.ts: admin-managed shared resource
   "lib/actions/payor-contracts.ts:91",
-  // pricing-files.ts: post-fetch contract ownership probe
-  "lib/actions/pricing-files.ts:249",
-  "lib/actions/pricing-files.ts:378",
   // renewals: post-fetch facility ownership equality check
   "lib/actions/renewals/notes.ts:175",
   "lib/actions/renewals/proposals.ts:212",
