@@ -24,7 +24,11 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { CostDistributionChart } from "@/components/facility/case-costing/cost-distribution-chart"
-import { useCaseCostingReport, useCases } from "@/hooks/use-case-costing"
+import {
+  useCaseCostingReport,
+  useCases,
+  useTrueMarginReport,
+} from "@/hooks/use-case-costing"
 import {
   BarChart,
   Bar,
@@ -50,6 +54,7 @@ import {
   User,
   Activity,
   BarChart3,
+  Sparkles,
 } from "lucide-react"
 
 interface CaseCostingReportsClientProps {
@@ -61,6 +66,7 @@ type ReportTab =
   | "procedure-analysis"
   | "cost-trends"
   | "rebate-contribution"
+  | "true-margin"
 
 type DateRange =
   | "1month"
@@ -97,12 +103,26 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
   const [activeTab, setActiveTab] = useState<ReportTab>("surgeon-comparison")
 
   const dateFrom = getDateFrom(dateRange)
+  const todayIso = new Date().toISOString().slice(0, 10)
+  // True-margin needs an explicit window. When the user picks
+  // "All Time" we still need a lower bound — fall back to a wide
+  // 5-year window so stale rebates don't get pulled into the
+  // attribution. Period start defaults to dateFrom, end is today.
+  const trueMarginPeriodStart =
+    dateFrom ??
+    (() => {
+      const d = new Date()
+      d.setFullYear(d.getFullYear() - 5)
+      return d.toISOString().slice(0, 10)
+    })()
 
   const { data: report, isLoading } = useCaseCostingReport(facilityId)
   const { data: casesData } = useCases(facilityId, {
     pageSize: 500,
     ...(dateFrom ? { dateFrom } : {}),
   })
+  const { data: trueMargin, isLoading: trueMarginLoading } =
+    useTrueMarginReport(facilityId, trueMarginPeriodStart, todayIso)
 
   const cases = casesData?.cases ?? []
 
@@ -322,6 +342,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                   <SelectItem value="rebate-contribution">
                     Rebate Contribution
                   </SelectItem>
+                  <SelectItem value="true-margin">True Margin</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -470,6 +491,10 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
           <TabsTrigger value="rebate-contribution" className="gap-2">
             <DollarSign className="h-4 w-4" />
             Rebate Contribution
+          </TabsTrigger>
+          <TabsTrigger value="true-margin" className="gap-2">
+            <Sparkles className="h-4 w-4" />
+            True Margin
           </TabsTrigger>
         </TabsList>
 
@@ -731,6 +756,203 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                       </p>
                     </div>
                   </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── Tab 5: True Margin ────────────────────────────────── */}
+        <TabsContent value="true-margin" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>True Margin (per procedure)</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Per-procedure margin with proportional rebate
+                allocation. Rebates are split across procedures by each
+                vendor&apos;s spend share, sourced through the canonical
+                <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
+                  allocateRebatesToProcedures
+                </code>
+                helper. Window: {trueMarginPeriodStart} → {todayIso}.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {trueMarginLoading ? (
+                <Skeleton className="h-[300px] rounded-xl" />
+              ) : !trueMargin ? (
+                <p className="text-sm text-muted-foreground">
+                  No true-margin data available.
+                </p>
+              ) : trueMargin.procedures.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No cases in the selected window.
+                </p>
+              ) : (
+                <>
+                  {/* Aggregate summary row */}
+                  <div className="mb-4 grid gap-4 sm:grid-cols-3">
+                    <div className="rounded-lg border bg-muted/50 p-3">
+                      <p className="text-xs text-muted-foreground">
+                        Standard Margin
+                      </p>
+                      <p className="text-xl font-bold">
+                        $
+                        {Math.round(
+                          trueMargin.summary.standardMargin,
+                        ).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {trueMargin.summary.standardMarginPercent != null
+                          ? `${trueMargin.summary.standardMarginPercent.toFixed(1)}%`
+                          : "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-green-50 p-3 dark:bg-green-950/30">
+                      <p className="text-xs text-muted-foreground">
+                        True Margin (with rebates)
+                      </p>
+                      <p className="text-xl font-bold text-green-700 dark:text-green-400">
+                        $
+                        {Math.round(
+                          trueMargin.summary.trueMargin,
+                        ).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {trueMargin.summary.trueMarginPercent != null
+                          ? `${trueMargin.summary.trueMarginPercent.toFixed(1)}%`
+                          : "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/50 p-3">
+                      <p className="text-xs text-muted-foreground">
+                        Rebate Allocation
+                      </p>
+                      <p className="text-xl font-bold text-green-700 dark:text-green-400">
+                        +$
+                        {Math.round(
+                          trueMargin.summary.totalRebateAllocation,
+                        ).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {trueMargin.summary.marginImprovementPercent != null
+                          ? `+${trueMargin.summary.marginImprovementPercent.toFixed(2)} pp`
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Procedure</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                        <TableHead className="text-right">
+                          Direct Cost
+                        </TableHead>
+                        <TableHead className="text-right">
+                          Rebate Allocation
+                        </TableHead>
+                        <TableHead className="text-right">
+                          Effective Cost
+                        </TableHead>
+                        <TableHead className="text-right">Standard %</TableHead>
+                        <TableHead className="text-right">True %</TableHead>
+                        <TableHead className="text-right">
+                          Improvement
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {trueMargin.procedures.map((p) => (
+                        <TableRow key={p.procedureId}>
+                          <TableCell className="font-medium">
+                            <div>{p.procedureName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {p.caseNumber}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${Math.round(p.totalRevenue).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${Math.round(p.directCost).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right text-green-700 dark:text-green-400">
+                            +${Math.round(p.rebateAllocation).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${Math.round(p.effectiveCost).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {p.standardMarginPercent != null
+                              ? `${p.standardMarginPercent.toFixed(1)}%`
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span
+                              className={
+                                p.trueMarginPercent != null &&
+                                p.trueMarginPercent >= 0
+                                  ? "text-green-600 dark:text-green-400"
+                                  : "text-red-600 dark:text-red-400"
+                              }
+                            >
+                              {p.trueMarginPercent != null
+                                ? `${p.trueMarginPercent.toFixed(1)}%`
+                                : "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {p.marginImprovementPercent != null ? (
+                              <Badge variant="secondary">
+                                +{p.marginImprovementPercent.toFixed(2)} pp
+                              </Badge>
+                            ) : (
+                              "—"
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  {trueMargin.vendors.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="mb-2 text-sm font-medium">
+                        Vendor Roll-up
+                      </h4>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Vendor</TableHead>
+                            <TableHead className="text-right">
+                              Total Spend
+                            </TableHead>
+                            <TableHead className="text-right">
+                              Earned Rebate (window)
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {trueMargin.vendors.map((v) => (
+                            <TableRow key={v.vendorId}>
+                              <TableCell className="font-medium">
+                                {v.vendorName}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                ${Math.round(v.totalSpend).toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-right text-green-700 dark:text-green-400">
+                                +$
+                                {Math.round(v.earnedRebate).toLocaleString()}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
                 </>
               )}
             </CardContent>

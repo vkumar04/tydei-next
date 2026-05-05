@@ -17,6 +17,7 @@ import {
   getFacilityPayorContracts,
   calculatePayorMargins,
 } from "@/lib/actions/payor-contracts"
+import { getTrueMarginReport } from "@/lib/actions/case-costing/true-margin"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { toast } from "sonner"
 
@@ -125,5 +126,22 @@ export function usePayorMargins(payorContractId: string | null) {
     queryKey: queryKeys.cases.payorMargins(payorContractId ?? ""),
     queryFn: () => calculatePayorMargins({ payorContractId: payorContractId! }),
     enabled: !!payorContractId,
+  })
+}
+
+/**
+ * True-margin report — per-procedure margin with proportional rebate
+ * allocation per the canonical `allocateRebatesToProcedures` helper.
+ */
+export function useTrueMarginReport(
+  facilityId: string,
+  periodStart: string,
+  periodEnd: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.cases.trueMargin(facilityId, periodStart, periodEnd),
+    queryFn: () =>
+      getTrueMarginReport({ facilityId, periodStart, periodEnd }),
+    enabled: !!facilityId && !!periodStart && !!periodEnd,
   })
 }

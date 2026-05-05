@@ -142,6 +142,11 @@ export const queryKeys = {
       ["cases", "payorContracts", facilityId] as const,
     payorMargins: (contractId: string) =>
       ["cases", "payorMargins", contractId] as const,
+    trueMargin: (
+      facilityId: string,
+      periodStart: string,
+      periodEnd: string,
+    ) => ["cases", "trueMargin", facilityId, periodStart, periodEnd] as const,
   },
   renewals: {
     expiring: (entityId: string, windowDays: number) =>
