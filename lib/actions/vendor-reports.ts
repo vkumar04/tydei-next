@@ -104,12 +104,6 @@ export interface VendorRebateStatementRow {
   earnedThisPeriod: number
   collectedThisPeriod: number
   outstanding: number
-  // Index signature so the row is structurally assignable to
-  // `Record<string, unknown>` — required by the `toCSV` type
-  // constraint on the client. Values are still strongly typed
-  // through the named keys above; the index signature only widens
-  // assignability, it does not lose type info on direct property
-  // access.
   [key: string]: unknown
 }
 
