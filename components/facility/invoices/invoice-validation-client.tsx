@@ -199,20 +199,7 @@ export function InvoiceValidationClient({
         disputeFilter={disputeFilter}
         onDisputeFilterChange={setDisputeFilter}
         onImportClick={() => setImportOpen(true)}
-        onExportClick={() => toast.info("Export coming soon")}
       />
-
-      {selectedInvoices.length > 0 && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2">
-          <span className="text-sm text-muted-foreground">
-            {selectedInvoices.length} selected
-          </span>
-          <Button size="sm" onClick={handleBulkDispute}>
-            <Flag className="mr-2 h-4 w-4" />
-            Dispute Selected
-          </Button>
-        </div>
-      )}
 
       <Tabs
         value={activeTab}
