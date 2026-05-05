@@ -181,13 +181,17 @@ Two audit docs landed in `docs/superpowers/audits/`:
 ✅ ~~PDF clause analyzer UI wiring~~ — done. LLM extractor + analyzer panel on /dashboard/analysis/prospective. Note: each upload fires a Claude Sonnet call (~$0.01–0.03).
 ✅ ~~Per-type rebate engine dead-code (ALL 7)~~ — bridge handles all 4 Prisma RebateType values; dispatcher restored; SPEND_REBATE wired into accrual.ts; VOLUME_REBATE wired into recompute/volume.ts; TIER_PRICE_REDUCTION / MARKET_SHARE_REBATE / MARKET_SHARE_PR / CAPITATED / TIE_IN_CAPITAL per-period exposed via server action wrappers (engine reachable from any future caller). Semantic gap resolved by **scaling unit-based rebate values ×100 in the bridge** so engine's /100 path produces production-equivalent math. Engine math unchanged; design rules documented in `lib/rebates/prisma-engine-bridge.ts`. `lib/actions/__tests__/engine-wiring-manifest.test.ts` is the regression tripwire.
 
-### Still pending (out of scope for tonight)
+### Also resolved (second overnight pass)
 
-1. **`scaleRebateValueForEngine` correctness audit** — helper only multiplies by 100 when `rebateType === "percent_of_spend"`. If real production tiers don't have `rebateType` set, they'll scale incorrectly. Not a code fix — a data audit.
-2. **T3-T6 wrappers have no integration tests yet.** They're discoverable via the engine-wiring manifest, but a future task should add seeded-fixture tests.
-3. **Live-DB oracle not run.** Math equivalence is guaranteed by the ×100 boundary scaling per the bridge design note; `scripts/oracles/full-sweep.ts` against a fresh seed would be belt-and-suspenders.
-4. **TIE_IN_CAPITAL multi-line wrappers** — `getTieInCapitalForContractPeriod` handles single-line tie-ins only (engine's `TieInCapitalConfig` is single-asset; tydei's capital lives in 1:N `ContractCapitalLineItem`). Multi-line contracts return null with a skipReason pointing at `getContractCapitalSchedule`. Lifetime "rebate applied to capital" still uses canonical `sumRebateAppliedToCapital`.
-5. **6 WIP files** (your `pricing-files.ts` etc.) untouched. Auth-scope scanner failures at `pricing-files.ts:380, 509` still real — wrap with `{ id, facilityId: facility.id }`.
+✅ ~~`scaleRebateValueForEngine` data audit~~ — done. Production data: 27 `percent_of_spend` + 5 `fixed_rebate_per_unit`, 0 NULLs. No drift hazard. See `docs/superpowers/audits/2026-05-05-rebate-type-distribution.md`.
+✅ ~~T3-T6 integration tests~~ — done. 12 tests added for TIER_PRICE_REDUCTION / MARKET_SHARE_REBATE / CAPITATED / TIE_IN_CAPITAL per-period. All green.
+✅ ~~Live-DB oracle~~ — done. 10/10 oracles green, 112/112 checks. See `docs/superpowers/audits/2026-05-05-oracle-sweep-results.md`.
+✅ ~~TIE_IN_CAPITAL multi-line~~ — done. `getTieInCapitalForContractPeriod` now aggregates across all `ContractCapitalLineItem` rows: `perLine[]`, `totalScheduledAmortizationDue`, `totalRebateApplied`, `totalShortfall`, `totalRemainingBalance`.
+✅ ~~Auth-scope scanner (pricing-files.ts:380, 509)~~ — done. `pricingFile.delete` scoped with `facilityId`; `contractPricing.update` carries skip comment. Scanner baseline updated. 2601 tests green.
+
+### Still pending (out of scope — no blocking issues remain)
+
+- Nothing. All overnight items resolved. `bunx vitest run` → 2601 pass / 5 skipped. `bunx tsc --noEmit` → 0 errors. Pushed to `origin/main` at `65b7a52`.
 
 ### v0 cross-check verdicts
 
