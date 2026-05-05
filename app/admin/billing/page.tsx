@@ -2,7 +2,7 @@ import { requireAdmin } from "@/lib/actions/auth"
 import { BillingClient } from "@/components/admin/billing-client"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Download } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 
 export default async function AdminBillingPage() {
   await requireAdmin()
@@ -25,10 +25,6 @@ export default async function AdminBillingPage() {
             </p>
           </div>
         </div>
-        <Button className="gap-2">
-          <Download className="h-4 w-4" />
-          Export Report
-        </Button>
       </div>
       <BillingClient />
     </div>

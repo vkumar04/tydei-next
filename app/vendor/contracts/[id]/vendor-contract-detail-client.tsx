@@ -1,6 +1,5 @@
 "use client"
 
-import { useCallback } from "react"
 import Link from "next/link"
 import { Pencil } from "lucide-react"
 import { PageHeader } from "@/components/shared/page-header"
@@ -43,7 +42,6 @@ const ServiceSlaCard = dynamic(
   { ssr: false },
 )
 import { getVendorContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
-import { toast } from "sonner"
 import type { getVendorContractDetail } from "@/lib/actions/vendor-contracts"
 
 type ContractDetail = Awaited<ReturnType<typeof getVendorContractDetail>>
@@ -73,10 +71,6 @@ export function VendorContractDetailClient({
   contract,
   initialPerformanceBundle,
 }: VendorContractDetailClientProps) {
-  const handleDocumentUpload = useCallback(() => {
-    toast.info("Document upload coming soon")
-  }, [])
-
   const isCapitalLike =
     contract.contractType === "tie_in" || contract.contractType === "capital"
 
@@ -169,7 +163,6 @@ export function VendorContractDetailClient({
           <ContractDocumentsList
             documents={contract.documents}
             contractId={contract.id}
-            onUpload={handleDocumentUpload}
           />
         </TabsContent>
       </Tabs>
