@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect, type FormEvent } from "react"
 import {
-  Bot, Send, Loader2, Sparkles, MessageSquare, FileText, TrendingUp,
-  DollarSign, PieChart, Plus, Copy, Clock, Target, Handshake, BarChart,
+  Bot, Send, Loader2, Sparkles, MessageSquare, TrendingUp,
+  DollarSign, PieChart, Plus, Copy, Clock, Target, Handshake,
 } from "lucide-react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -93,26 +93,6 @@ function ThinkingBubble() {
   )
 }
 
-function EmptyStatePlaceholder({ icon: Icon, title, body }: {
-  icon: React.ComponentType<{ className?: string }>
-  title: string
-  body: string
-}) {
-  return (
-    <Card>
-      <CardContent className="py-16">
-        <div className="flex flex-col items-center justify-center text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted mb-4">
-            <Icon className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <h3 className="text-base font-semibold mb-1">{title}</h3>
-          <p className="text-sm text-muted-foreground max-w-sm">{body}</p>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 interface VendorAIAgentClientProps {
   vendorId: string
 }
@@ -190,8 +170,6 @@ export function VendorAIAgentClient({ vendorId: _vendorId }: VendorAIAgentClient
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         <TabsList className="w-fit mb-4">
           <TabsTrigger value="chat" className="gap-2"><MessageSquare className="h-4 w-4" />Chat</TabsTrigger>
-          <TabsTrigger value="documents" className="gap-2"><FileText className="h-4 w-4" />Documents</TabsTrigger>
-          <TabsTrigger value="reports" className="gap-2"><BarChart className="h-4 w-4" />Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="chat" className="flex-1 flex flex-col overflow-hidden mt-0">
@@ -271,21 +249,6 @@ export function VendorAIAgentClient({ vendorId: _vendorId }: VendorAIAgentClient
           </Card>
         </TabsContent>
 
-        <TabsContent value="documents" className="flex-1 overflow-auto mt-0">
-          <EmptyStatePlaceholder
-            icon={FileText}
-            title="Documents"
-            body="Coming soon — upload contracts, spec sheets, and reference material for the AI assistant to analyze."
-          />
-        </TabsContent>
-
-        <TabsContent value="reports" className="flex-1 overflow-auto mt-0">
-          <EmptyStatePlaceholder
-            icon={BarChart}
-            title="Reports"
-            body="Coming soon — AI-generated reports on market share, renewals, and performance will appear here."
-          />
-        </TabsContent>
       </Tabs>
     </div>
   )
