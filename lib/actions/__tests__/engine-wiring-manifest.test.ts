@@ -74,14 +74,14 @@ const MANIFEST: EngineWiring[] = [
   {
     fn: "calculateMarketSharePriceReduction",
     source: "lib/rebates/engine/market-share-price-reduction.ts",
-    status: "unwired",
-    note: "No caller constructs MarketSharePriceReductionConfig from Prisma today. See audit.",
+    status: "wired",
+    note: "Reachable via getMarketShareRebateForContract in lib/actions/contracts/market-share-rebate.ts (handles both market_share + market_share_price_reduction term types). Routes through calculateRebate dispatcher + buildRebateConfigFromPrisma.",
   },
   {
     fn: "calculateMarketShareRebate",
     source: "lib/rebates/engine/market-share-rebate.ts",
-    status: "unwired",
-    note: "No caller constructs MarketShareRebateConfig from Prisma today. See audit.",
+    status: "wired",
+    note: "Reachable via getMarketShareRebateForContract in lib/actions/contracts/market-share-rebate.ts; routes through calculateRebate dispatcher + buildRebateConfigFromPrisma. Existing recompute path still uses recomputeThresholdAccrualForTerm (flat per-period payout) for persisted Rebate rows; this wrapper exposes the canonical engine for future Performance + reports surfaces.",
   },
   {
     fn: "calculateSpendRebate",
