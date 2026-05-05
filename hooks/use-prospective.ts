@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import {
-  analyzeProposal,
   scoreDeal,
   getFinancialProjections,
   createProposal,
@@ -11,19 +10,7 @@ import {
   getVendorProposals,
   getVendorBenchmarks,
 } from "@/lib/actions/prospective"
-import type { ProposedPricingItem } from "@/lib/actions/prospective"
 import { toast } from "sonner"
-
-export function useAnalyzeProposal() {
-  return useMutation({
-    mutationFn: (input: {
-      facilityId: string
-      proposedPricing: ProposedPricingItem[]
-      vendorId?: string
-    }) => analyzeProposal(input),
-    onError: (err) => toast.error(err.message || "Analysis failed"),
-  })
-}
 
 export function useScoreDeal() {
   return useMutation({
