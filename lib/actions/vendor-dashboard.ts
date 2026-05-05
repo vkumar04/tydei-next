@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 
 // ─── Vendor Dashboard Stats ─────────────────────────────────────
 
@@ -15,7 +16,7 @@ export async function getVendorDashboardStats(_vendorId?: string) {
     activeContracts,
     totalContracts,
     contractAgg,
-    rebateAgg,
+    rebateRows,
     activeFacilities,
     vendorSpendAgg,
     totalSpendAgg,
@@ -26,9 +27,13 @@ export async function getVendorDashboardStats(_vendorId?: string) {
       where: { vendorId },
       _sum: { totalValue: true },
     }),
-    prisma.contractPeriod.aggregate({
+    // Charles 2026-05-04 DRIFT-1: route through canonical helper instead of
+    // ContractPeriod._sum(rebateEarned) — sparse on prod, drifts from the
+    // explicit `Rebate` rows that drive every other "Earned" surface
+    // (CLAUDE.md "Rebates Earned (lifetime)" invariant).
+    prisma.rebate.findMany({
       where: { contract: { vendorId } },
-      _sum: { rebateEarned: true },
+      select: { rebateEarned: true, payPeriodEnd: true },
     }),
     prisma.contract.groupBy({
       by: ["facilityId"],
@@ -57,7 +62,7 @@ export async function getVendorDashboardStats(_vendorId?: string) {
     activeContracts,
     totalContracts: totalContracts + pendingCount,
     totalSpend: vendorCogSpend > 0 ? vendorCogSpend : Number(contractAgg._sum.totalValue ?? 0),
-    totalRebates: Number(rebateAgg._sum.rebateEarned ?? 0),
+    totalRebates: sumEarnedRebatesLifetime(rebateRows),
     activeFacilities: activeFacilities.length,
     marketSharePercent,
   })
