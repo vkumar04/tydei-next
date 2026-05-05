@@ -324,7 +324,109 @@ describe("getTieInCapitalForContractPeriod", () => {
     expect(r.perLine[1]?.lineItemId).toBe("cli-2")
     // 120k @ 0% over 12m → 10k/m; 60k @ 0% over 12m → 5k/m. Total = 15k.
     expect(r.totalScheduledAmortizationDue).toBeCloseTo(15_000, 2)
+    // 50% rebate on $1M spend per line >> per-line amorts → no shortfall on either line.
+    expect(r.perLine[0]?.engineResult.trueUpAdjustment).toBeLessThanOrEqual(0)
+    expect(r.perLine[1]?.engineResult.trueUpAdjustment).toBeLessThanOrEqual(0)
+    expect(r.totalShortfall).toBe(0)
+    // result deep-equals perLine[0].engineResult — backward-compat
+    // single-result handle. Use toStrictEqual not toBe: the wrapper
+    // passes the return value through `serialize`, which deep-clones,
+    // so reference equality won't hold.
+    expect(r.result).toStrictEqual(r.perLine[0]?.engineResult)
     // diagnostics carry no skipReason on the eligible-multi-line path.
     expect(r.diagnostics.skipReason).toBeUndefined()
+  })
+
+  it("multi-line mixed: line A fully rebated, line B has shortfall → totalShortfall reflects only the deficit line", async () => {
+    contractFixture = {
+      id: "c-1",
+      name: "Tie-in c-1",
+      vendorId: "v-1",
+      contractType: "tie_in",
+      effectiveDate: new Date("2026-01-01"),
+      expirationDate: new Date("2026-12-31"),
+      terms: [
+        makeSpendTerm([
+          makeTier({
+            tierNumber: 1,
+            spendMin: 0,
+            spendMax: null,
+            rebateValue: 0.01, // 1% rebate
+          }),
+        ]),
+      ],
+      capitalLineItems: [
+        // Line A: $12k / 12mo → 1k/mo. With 1% rebate on 100k spend
+        // = $1k earned. EXACTLY covers line A amort.
+        makeCapitalItem({
+          id: "cli-A",
+          description: "Cheap device",
+          contractTotal: 12_000,
+          interestRate: 0,
+          termMonths: 12,
+        }),
+        // Line B: $120k / 12mo → 10k/mo. 1% on 100k spend = $1k →
+        // 9k shortfall vs B's 10k amort.
+        makeCapitalItem({
+          id: "cli-B",
+          description: "Expensive device",
+          contractTotal: 120_000,
+          interestRate: 0,
+          termMonths: 12,
+        }),
+      ],
+    }
+    cogFixture = [
+      {
+        inventoryNumber: "SKU-A",
+        category: null,
+        quantity: 1,
+        unitCost: 100_000,
+        extendedPrice: 100_000, // 1% = $1000 earned per line
+        transactionDate: new Date("2026-02-01"),
+      },
+    ]
+    const r = await getTieInCapitalForContractPeriod({
+      contractId: "c-1",
+      periodNumber: 1,
+    })
+    expect(r.perLine).toHaveLength(2)
+    // Line A: 1k earned vs 1k amort → trueUp = 0
+    expect(r.perLine[0]?.engineResult.trueUpAdjustment).toBeCloseTo(0, 2)
+    // Line B: 1k earned vs 10k amort → trueUp = +9k (shortfall)
+    expect(r.perLine[1]?.engineResult.trueUpAdjustment).toBeCloseTo(9_000, 2)
+    // Total shortfall sums positive trueUps only: 9k from B.
+    expect(r.totalShortfall).toBeCloseTo(9_000, 2)
+    // Total amort: 1k + 10k = 11k.
+    expect(r.totalScheduledAmortizationDue).toBeCloseTo(11_000, 2)
+    // Total rebate applied is the SUM across lines (each line evals
+    // the same shared engine on the same COG). 1k * 2 = 2k.
+    expect(r.totalRebateApplied).toBeCloseTo(2_000, 2)
+    // Warnings include the carry-forward for line B.
+    expect(r.warnings.some((w) => w.includes("carried forward"))).toBe(true)
+  })
+
+  it("zero capital line items → returns empty perLine and skipReason", async () => {
+    contractFixture = {
+      id: "c-1",
+      name: "Tie-in c-1",
+      vendorId: "v-1",
+      contractType: "tie_in",
+      effectiveDate: new Date("2026-01-01"),
+      expirationDate: new Date("2026-12-31"),
+      terms: [
+        makeSpendTerm([
+          makeTier({ tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 0.05 }),
+        ]),
+      ],
+      capitalLineItems: [],
+    }
+    const r = await getTieInCapitalForContractPeriod({ contractId: "c-1" })
+    expect(r.result).toBeNull()
+    expect(r.perLine).toEqual([])
+    expect(r.totalScheduledAmortizationDue).toBe(0)
+    expect(r.totalShortfall).toBe(0)
+    expect(r.totalRemainingBalance).toBe(0)
+    expect(r.diagnostics.skipReason).toMatch(/no ContractCapitalLineItem rows/)
   })
 })
