@@ -164,6 +164,16 @@ export async function recomputeThresholdAccrualForTerm(input: {
     return { inserted: 0, sumEarned: 0 }
   }
 
+  // TODO (Charles canonical engine wiring 2026-05-05): the canonical
+  // `calculateRebate(SPEND_REBATE)` engine evaluates a single ladder
+  // and returns one tierResult; the threshold writer instead emits
+  // one Rebate row per evaluation period at a flat per-period payout
+  // (`achievedTier.rebateValue`). The engine has no per-period
+  // emission concept and would treat `metricValue` as dollars rather
+  // than percent. Wiring requires either an engine result-shape
+  // change or a thin per-period adapter. Skipped per "DO NOT change
+  // engine math; just call it." Audit gap #1.
+  //
   // UNITS (audit-confirmed 2026-04-25): both `metricValue`
   // (Contract.complianceRate / currentMarketShare, schema
   // `Decimal(5,2)`) and tier `spendMin` are stored as percent points

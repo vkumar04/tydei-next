@@ -207,6 +207,15 @@ export async function recomputeVolumeAccrualForTerm(input: {
    *
    * Marginal volume splits across tier brackets at each tier's
    * own per-occurrence rate.
+   *
+   * TODO (Charles canonical engine wiring 2026-05-05): the canonical
+   * `calculateRebate(VOLUME_REBATE)` engine treats `rebateValue` as
+   * percent. To wire it here we'd need either (a) a new engine
+   * `tierRebateUnit: "DOLLARS_PER_UNIT" | "PERCENT"` flag, or (b) a
+   * per-tier scaling pass that multiplies rebateValue by 100 to undo
+   * the engine's /100. Both ripple beyond this file. Skipped per
+   * instruction "DO NOT change engine math; just call it." See
+   * docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md gap #1.
    */
   function computeVolumeRebate(
     occurrences: number,
