@@ -150,10 +150,10 @@ export async function getMarketShareRebateForContract(
     },
     select: {
       vendorId: true,
-      referenceNumber: true,
+      inventoryNumber: true,
       category: true,
       quantity: true,
-      unitPrice: true,
+      unitCost: true,
       extendedPrice: true,
       transactionDate: true,
     },
@@ -170,10 +170,10 @@ export async function getMarketShareRebateForContract(
   )
 
   const purchases: PurchaseRecord[] = vendorRows.map((r) => ({
-    referenceNumber: r.referenceNumber,
+    referenceNumber: r.inventoryNumber,
     productCategory: r.category ?? null,
     quantity: Number(r.quantity ?? 0),
-    unitPrice: Number(r.unitPrice ?? 0),
+    unitPrice: Number(r.unitCost ?? 0),
     extendedPrice: Number(r.extendedPrice ?? 0),
     purchaseDate: r.transactionDate,
   }))

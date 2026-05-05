@@ -133,20 +133,20 @@ export async function getTierPriceReductionForContract(
       matchStatus: { in: ["on_contract", "price_variance"] },
     },
     select: {
-      referenceNumber: true,
+      inventoryNumber: true,
       category: true,
       quantity: true,
-      unitPrice: true,
+      unitCost: true,
       extendedPrice: true,
       transactionDate: true,
     },
   })
 
   const purchases: PurchaseRecord[] = cog.map((r) => ({
-    referenceNumber: r.referenceNumber,
+    referenceNumber: r.inventoryNumber,
     productCategory: r.category ?? null,
     quantity: Number(r.quantity ?? 0),
-    unitPrice: Number(r.unitPrice ?? 0),
+    unitPrice: Number(r.unitCost ?? 0),
     extendedPrice: Number(r.extendedPrice ?? 0),
     purchaseDate: r.transactionDate,
   }))
