@@ -15,11 +15,36 @@
  * callers should fall back to their existing hand-rolled path and
  * surface a warning.
  *
- * UNIT CONVENTION (CLAUDE.md "Rebate engine units"): Prisma stores
- * `ContractTier.rebateValue` as a fraction (0.02 = 2%) for
- * `percent_of_spend` tiers. The engine expects integer percent (2).
- * We route ALL scaling through `scaleRebateValueForEngine` so the
- * convention is owned by one helper.
+ * ─── UNIT-CONVERSION RULES (CLAUDE.md "Rebate engine units") ──────
+ *
+ * The engine's shared cumulative + marginal helpers ALWAYS interpret
+ * `tier.rebateValue` as integer percent (e.g. `2` = 2%) and divide by
+ * 100 internally (`(eligibleAmount * tier.rebateValue) / 100`). This is
+ * the engine math we MUST NOT change.
+ *
+ * Tydei's Prisma `ContractTier.rebateValue` storage shape depends on
+ * `rebateType`:
+ *
+ *   | Prisma rebateType         | Storage shape           | Engine field       | Conversion in this bridge                                   |
+ *   |---------------------------|-------------------------|--------------------|-------------------------------------------------------------|
+ *   | `percent_of_spend`        | fraction (0.02 = 2%)    | tier.rebateValue   | `× 100` via `scaleRebateValueForEngine` (engine then /100)  |
+ *   | `fixed_rebate`            | dollars per period      | fixedRebateAmount  | pass-through; engine short-circuits (cumulative.ts:20)      |
+ *   | `fixed_rebate_per_unit`   | dollars per unit/event  | tier.rebateValue   | `× 100` so engine's /100 yields `count × $X` (production parity) |
+ *   | `per_procedure_rebate`    | dollars per procedure   | tier.rebateValue   | same as fixed_rebate_per_unit                               |
+ *
+ * Why ×100 for unit-based types: the production VOLUME / PO / invoice
+ * writers compute `count × Number(tier.rebateValue)` (no /100 — see
+ * `lib/contracts/recompute/volume.ts:244`, `recompute/po.ts:97`,
+ * `recompute/invoice.ts:115`). To get the same dollar number out of the
+ * canonical engine — which ALWAYS divides by 100 in its tier helpers —
+ * the bridge multiplies the per-unit dollar value by 100. The engine
+ * then performs `(count × ($X × 100)) / 100 = count × $X`. Math-
+ * equivalent, engine math unchanged. This is the "scale at the writer
+ * boundary" approach the prior subagent flagged.
+ *
+ * This convention is OWNED by `scaleRebateValueForEngine` in
+ * `lib/rebates/calculate.ts` — extend it there, not here, when adding
+ * a new rebateType.
  */
 import type {
   ContractTerm as PrismaContractTerm,
