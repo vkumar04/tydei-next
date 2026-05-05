@@ -40,8 +40,13 @@
  *   - Baseline support (PRIOR_YEAR_ACTUAL on procedure counts).
  */
 import { prisma } from "@/lib/db"
-import type { PurchaseRecord, RebateTier } from "@/lib/rebates/engine/types"
-import { determineTier } from "@/lib/rebates/engine/shared/determine-tier"
+import { calculateRebate } from "@/lib/rebates/engine"
+import type {
+  PeriodData,
+  PurchaseRecord,
+  RebateTier,
+  VolumeRebateConfig,
+} from "@/lib/rebates/engine/types"
 
 const AUTO_VOLUME_PREFIX = "[auto-volume-accrual]"
 
@@ -58,6 +63,16 @@ interface VolumeRebateTermLike {
     spendMin: unknown
     spendMax: unknown
     rebateValue: unknown
+    /**
+     * Charles canonical-engine wiring 2026-05-05: required so the
+     * VOLUME_REBATE engine path can scale unit-based dollar values
+     * (`fixed_rebate_per_unit`, `per_procedure_rebate`) by ×100 to
+     * undo the engine's internal /100 — see the rules table in
+     * `lib/rebates/prisma-engine-bridge.ts`. Optional/unknown is
+     * tolerated for legacy callers; we default to treating the value
+     * as raw dollars-per-unit (the prior writer behavior).
+     */
+    rebateType?: string | null
   }>
 }
 
@@ -180,69 +195,59 @@ export async function recomputeVolumeAccrualForTerm(input: {
     }
   }
 
-  // Build the engine config from the term's tier ladder. Volume
-  // tier thresholds are in OCCURRENCES (not dollars) — `spendMin` /
-  // `spendMax` columns are reused but interpreted as counts.
-  // `rebateValue` is dollars-per-occurrence at this tier.
+  // Build the canonical-engine VOLUME_REBATE config from the term's
+  // tier ladder.
+  //
+  // Charles canonical-engine wiring 2026-05-05: this writer used to
+  // hand-roll cumulative + marginal math (raw `count × rebateValue`)
+  // because the engine's shared cumulative/marginal helpers always
+  // divide by 100 (inherited percent semantics). We now wire through
+  // `calculateRebate(VOLUME_REBATE)`. Math equivalence is preserved by
+  // the bridge boundary: `mapTier` in `lib/rebates/prisma-engine-bridge.ts`
+  // multiplies unit-based dollar values (`fixed_rebate_per_unit`,
+  // `per_procedure_rebate`) by 100, so the engine's /100 yields the
+  // original `count × tier.rebateValue` formula. See the rules table
+  // at the top of the bridge for the full conversion contract.
+  //
+  // Replicates the bridge's `mapTier` logic inline (without invoking
+  // the bridge directly) because the writer's `term.tiers` shape is a
+  // narrow subset of `PrismaContractTier`. The conversion is
+  // intentionally kept identical to the bridge so future audits land
+  // in one obvious place.
   const tiers: RebateTier[] = term.tiers
-    .map((t) => ({
-      tierNumber: t.tierNumber,
-      tierName: t.tierName,
-      thresholdMin: Number(t.spendMin ?? 0),
-      thresholdMax:
-        t.spendMax === null || t.spendMax === undefined
-          ? null
-          : Number(t.spendMax),
-      rebateValue: Number(t.rebateValue ?? 0),
-    }))
-    .sort((a, b) => a.thresholdMin - b.thresholdMin)
-
-  /**
-   * Volume rebate calculator. We DON'T delegate to
-   * `calculateVolumeRebate` here because its tier path uses the
-   * shared cumulative helper which divides by 100 (percent
-   * semantics inherited from spend rebate). Volume tiers store
-   * `rebateValue` as DOLLARS per occurrence at the achieved tier,
-   * not a percent — so rebate = occurrences × tier.rebateValue.
-   *
-   * Marginal volume splits across tier brackets at each tier's
-   * own per-occurrence rate.
-   *
-   * TODO (Charles canonical engine wiring 2026-05-05): the canonical
-   * `calculateRebate(VOLUME_REBATE)` engine treats `rebateValue` as
-   * percent. To wire it here we'd need either (a) a new engine
-   * `tierRebateUnit: "DOLLARS_PER_UNIT" | "PERCENT"` flag, or (b) a
-   * per-tier scaling pass that multiplies rebateValue by 100 to undo
-   * the engine's /100. Both ripple beyond this file. Skipped per
-   * instruction "DO NOT change engine math; just call it." See
-   * docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md gap #1.
-   */
-  function computeVolumeRebate(
-    occurrences: number,
-    tierLadder: RebateTier[],
-    method: "cumulative" | "marginal",
-  ): number {
-    if (occurrences <= 0 || tierLadder.length === 0) return 0
-    if (method === "marginal") {
-      let total = 0
-      for (let i = 0; i < tierLadder.length; i++) {
-        const t = tierLadder[i]
-        if (occurrences <= t.thresholdMin) break
-        const next = tierLadder[i + 1]
-        const upper = next ? next.thresholdMin : Infinity
-        const inThisTier = Math.max(
-          0,
-          Math.min(occurrences, upper) - t.thresholdMin,
-        )
-        total += inThisTier * t.rebateValue
+    .map((t) => {
+      const rebateValueRaw = Number(t.rebateValue ?? 0)
+      const isUnitBased =
+        t.rebateType === "fixed_rebate_per_unit" ||
+        t.rebateType === "per_procedure_rebate"
+      const isFixedRebate = t.rebateType === "fixed_rebate"
+      // For unit-based: ×100 to undo engine's internal /100.
+      // For fixed-rebate (period flat): force rebateValue=0 and
+      // surface the dollars via fixedRebateAmount so the engine
+      // short-circuits to the flat amount on tier qualification.
+      // For unknown/null/legacy `rebateType`: fall back to the
+      // pre-wiring behavior (treat as raw dollars-per-occurrence,
+      // ×100 so engine math yields the same number). This keeps
+      // older seed contracts (which omit rebateType on volume tiers)
+      // numerically identical to the prior writer.
+      const rebateValueForEngine = isFixedRebate
+        ? 0
+        : isUnitBased
+          ? rebateValueRaw * 100
+          : rebateValueRaw * 100
+      return {
+        tierNumber: t.tierNumber,
+        tierName: t.tierName,
+        thresholdMin: Number(t.spendMin ?? 0),
+        thresholdMax:
+          t.spendMax === null || t.spendMax === undefined
+            ? null
+            : Number(t.spendMax),
+        rebateValue: rebateValueForEngine,
+        fixedRebateAmount: isFixedRebate ? rebateValueRaw : null,
       }
-      return total
-    }
-    // cumulative: achieved tier's $/occurrence × total occurrences.
-    const achieved = determineTier(occurrences, tierLadder, "EXCLUSIVE")
-    if (!achieved) return 0
-    return occurrences * achieved.rebateValue
-  }
+    })
+    .sort((a, b) => a.thresholdMin - b.thresholdMin)
 
   // Bucket purchases by evaluation period. Iterate from start through
   // end in evaluation-period steps, computing rebate per bucket.
@@ -273,32 +278,51 @@ export async function recomputeVolumeAccrualForTerm(input: {
     cursor = next
   }
 
-  // Compute rebate per bucket — volume engine semantics are
-  // "$X per occurrence at the achieved tier" (cumulative) or
-  // "$X per occurrence per bracket" (marginal).
+  // Compute rebate per bucket via the canonical engine. The engine
+  // performs its own [A5] dedup (caseId+cptCode → date+cptCode fallback)
+  // and handles cumulative vs marginal — we hand it the per-bucket
+  // PurchaseRecord slice and let it produce the dollar number.
   type BucketResult = {
     periodStart: Date
     periodEnd: Date
     occurrences: number
     rebateEarned: number
   }
-  const method: "cumulative" | "marginal" =
-    term.rebateMethod === "marginal" ? "marginal" : "cumulative"
+  const volumeConfig: VolumeRebateConfig = {
+    type: "VOLUME_REBATE",
+    method: term.rebateMethod === "marginal" ? "MARGINAL" : "CUMULATIVE",
+    boundaryRule: "EXCLUSIVE",
+    tiers,
+    cptCodes: term.cptCodes,
+    baselineType: "NONE",
+    negotiatedBaseline: null,
+    growthOnly: false,
+    fixedRebatePerOccurrence: null,
+  }
   const results: BucketResult[] = buckets.map((b) => {
-    // Dedup occurrences by caseId+cptCode (the engine docs' [A5] rule).
+    // Reproduce the [A5] dedup so the diagnostic notes string can
+    // continue to display the occurrence count alongside the engine's
+    // dollar number.
     const seen = new Set<string>()
     for (const p of b.purchases) {
+      if (p.cptCode == null) continue
+      if (!new Set(term.cptCodes).has(p.cptCode)) continue
       const key = p.caseId
         ? `case:${p.caseId}|cpt:${p.cptCode ?? ""}`
         : `date:${p.purchaseDate.toISOString().slice(0, 10)}|cpt:${p.cptCode ?? ""}`
       seen.add(key)
     }
     const occurrences = seen.size
+    const periodData: PeriodData = {
+      purchases: b.purchases,
+      totalSpend: 0,
+    }
+    const result = calculateRebate(volumeConfig, periodData)
     return {
       periodStart: b.periodStart,
       periodEnd: b.periodEnd,
       occurrences,
-      rebateEarned: computeVolumeRebate(occurrences, tiers, method),
+      rebateEarned: result.rebateEarned,
     }
   })
 
