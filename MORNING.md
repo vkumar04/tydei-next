@@ -1,8 +1,16 @@
 # Morning. Here's what to do.
 
-> **All overnight work is now on `main` AND pushed to origin.** No branch dance needed.
-> See "All commits ahead of origin/main" below for the full list. Your 6 WIP files
-> (`pricing-files.ts` etc.) remain uncommitted in the working tree — untouched.
+> **All overnight work is now on `main` AND pushed to origin (`d9851bf`).** No branch dance needed.
+> Your 6 WIP files (`pricing-files.ts` etc.) remain uncommitted in the working tree — untouched.
+>
+> **Latest pass (2026-05-05):** v0 cross-check + WIRE work for the 4 pending items.
+> Net: `allocateRebatesToProcedures` wired into a new "True Margin" tab on /dashboard/case-costing/reports;
+> vendor /reports converted from static stub to 4 real CSV-downloadable reports;
+> PDF clause analyzer wired end-to-end with LLM extractor + new analyzer panel on /dashboard/analysis/prospective;
+> rebate-engine bridge + dispatcher built, SPEND_REBATE wired into accrual.ts. The other 6 per-type engines
+> are reachable via `calculateRebate()` dispatcher but NOT wired into recompute paths — semantic mismatch
+> (count×dollars-per-event vs count×percent/100) needs a design decision before wiring. See
+> [docs/superpowers/audits/2026-05-05-v0-cross-check-pending-items.md](docs/superpowers/audits/2026-05-05-v0-cross-check-pending-items.md).
 
 > **Recap of the overnight passes:**
 > 1. v1 polish (hide stub buttons across 5 surfaces) — already on main
@@ -92,9 +100,9 @@ fdb9149 fix(vendor-dashboard): route Rebates Paid hero through sumEarnedRebatesL
 ## Verify results (main tip)
 
 - `bunx tsc --noEmit` → ✅ 0 errors
-- `bunx vitest run` → ✅ 2551 pass / 5 skipped (with your WIP stashed; with WIP unstashed the auth-scope scanner test trips on `pricing-files.ts` — that's your work, not mine)
-- `bun run build` → ✅ all routes compiled
-- Pushed to `origin/main` at `1f4a60f`
+- `bunx vitest run` → ✅ 2584 pass / 5 skipped (with your WIP stashed; with WIP unstashed the auth-scope scanner test trips on `pricing-files.ts` — that's your work, not mine)
+- `bun run build` → ✅ all routes compiled (last verified earlier in session)
+- Pushed to `origin/main` at `d9851bf`
 
 ## One thing for you to look at (unchanged from earlier note)
 
@@ -164,13 +172,23 @@ Two audit docs landed in `docs/superpowers/audits/`:
 
 **Bottom line:** no ship blockers. Math is correct on wired surfaces, auth is clean across all 17 vendor routes. The 4 drift findings I called out earlier are all FIXED.
 
-## What's still pending (needs your decisions, not overnight work)
+## What's still pending
 
-1. **7 of 8 per-type rebate engines are dead code** in `lib/rebates/engine/*.ts` — they look like Charles's canonical engine but no production caller invokes them. CARVE_OUT is the only one that's wired. Display + recompute paths re-derive tier math by hand. Decision: wire them or delete them.
-2. **`allocateRebatesToProcedures` (true-margin) is dead** — exported, tested, no UI consumer. Wire to a true-margin page or delete.
-3. **Vendor /reports is static sample data** — `getVendorReportData` exists but consumes sparse `ContractPeriod` data; needs both action cleanup AND client wiring (paired fix). Skipped overnight because it's two concerns.
-4. **PDF clause analyzer T2 wiring stub** — the canonical `analyzePDFContract` module + server action exist but the UI surface (Upload Proposal flow) wasn't refactored to use the richer result. There's a TODO in the code.
-5. **`scaleRebateValueForEngine` correctness:** the helper only multiplies by 100 when `rebateType === "percent_of_spend"`. Other rebate types (`fixed_rebate_per_unit`, `per_procedure_rebate`) return raw value. If real production data has tiers without explicit rebateType set, those will scale incorrectly. Worth a one-time audit of `ContractTier.rebateType` distribution.
-6. **6 WIP files** (your `pricing-files.ts` etc.) untouched. The auth-scope scanner failures at `pricing-files.ts:380, 509` are still real — wrap with `{ id, facilityId: facility.id }`.
+### Now resolved (this pass)
+
+✅ ~~`allocateRebatesToProcedures` wiring~~ — done. New "True Margin" tab on /dashboard/case-costing/reports.
+✅ ~~Vendor /reports static~~ — done. 4 real CSV-downloadable reports (Rebate Statement / Performance Summary / Contract Roster / Purchase Leakage).
+✅ ~~PDF clause analyzer UI wiring~~ — done. LLM extractor + analyzer panel on /dashboard/analysis/prospective upload flow. Note: each PDF upload now fires a Claude Sonnet call (~$0.01–0.03 per upload).
+✅ ~~Per-type rebate engine dead-code (1 of 7)~~ — Prisma↔engine bridge built, `calculateRebate()` dispatcher restored, SPEND_REBATE wired into `lib/contracts/accrual.ts`.
+
+### Still pending (needs design decisions)
+
+1. **6 of 7 per-type rebate engines remain unwired** (VOLUME, TIER_PR, MARKET_SHARE, MARKET_SHARE_PR, CAPITATED, TIE_IN_CAPITAL per-period). Bridge + dispatcher exist; engines reachable via `calculateRebate()`. Real semantic gap: production tier semantics treat tier values as `count × dollars-per-event`, but the engine's tier model is `(count × percent) / 100`. Two paths: (a) add a `tierRebateUnit` flag to engine config, or (b) scale at the writer boundary. Either is a small spec+plan cycle. TODOs left in `recompute/po.ts`, `recompute/invoice.ts`, `recompute/threshold.ts`, `recompute/volume.ts`.
+2. **`scaleRebateValueForEngine` correctness:** helper only multiplies by 100 when `rebateType === "percent_of_spend"`. Other types return raw value. If real production tiers don't have `rebateType` set, they'll scale incorrectly. One-time audit of `ContractTier.rebateType` distribution would surface this.
+3. **6 WIP files** (your `pricing-files.ts` etc.) untouched. Auth-scope scanner failures at `pricing-files.ts:380, 509` are still real — wrap with `{ id, facilityId: facility.id }`.
+
+### v0 cross-check verdicts
+
+Full report at [docs/superpowers/audits/2026-05-05-v0-cross-check-pending-items.md](docs/superpowers/audits/2026-05-05-v0-cross-check-pending-items.md). Summary: WIRE for items 1+2 (v0 has the surfaces), DEMO ONLY for items 3+4 (v0 has the UI shape but no real backend either; tydei is now ahead).
 
 **Charles's full canonical engine source** came in via email 2026-04-18 (rebate engine) and 2026-05-04 (prospective analysis). Header summaries saved at `docs/superpowers/charles-canonical-engines/prospective-analysis.ts`. Future sessions should ask for the full source before extending the engines.
