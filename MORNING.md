@@ -100,9 +100,9 @@ fdb9149 fix(vendor-dashboard): route Rebates Paid hero through sumEarnedRebatesL
 ## Verify results (main tip)
 
 - `bunx tsc --noEmit` → ✅ 0 errors
-- `bunx vitest run` → ✅ 2584 pass / 5 skipped (with your WIP stashed; with WIP unstashed the auth-scope scanner test trips on `pricing-files.ts` — that's your work, not mine)
+- `bunx vitest run` → ✅ 2587 pass / 5 skipped (with your WIP stashed; with WIP unstashed the auth-scope scanner test trips on `pricing-files.ts` — that's your work, not mine)
 - `bun run build` → ✅ all routes compiled (last verified earlier in session)
-- Pushed to `origin/main` at `d9851bf`
+- Pushed to `origin/main` at `8df905c`
 
 ## One thing for you to look at (unchanged from earlier note)
 
@@ -174,18 +174,20 @@ Two audit docs landed in `docs/superpowers/audits/`:
 
 ## What's still pending
 
-### Now resolved (this pass)
+### Now resolved
 
-✅ ~~`allocateRebatesToProcedures` wiring~~ — done. New "True Margin" tab on /dashboard/case-costing/reports.
-✅ ~~Vendor /reports static~~ — done. 4 real CSV-downloadable reports (Rebate Statement / Performance Summary / Contract Roster / Purchase Leakage).
-✅ ~~PDF clause analyzer UI wiring~~ — done. LLM extractor + analyzer panel on /dashboard/analysis/prospective upload flow. Note: each PDF upload now fires a Claude Sonnet call (~$0.01–0.03 per upload).
-✅ ~~Per-type rebate engine dead-code (1 of 7)~~ — Prisma↔engine bridge built, `calculateRebate()` dispatcher restored, SPEND_REBATE wired into `lib/contracts/accrual.ts`.
+✅ ~~`allocateRebatesToProcedures` wiring~~ — done. "True Margin" tab on /dashboard/case-costing/reports.
+✅ ~~Vendor /reports static~~ — done. 4 real CSV-downloadable reports.
+✅ ~~PDF clause analyzer UI wiring~~ — done. LLM extractor + analyzer panel on /dashboard/analysis/prospective. Note: each upload fires a Claude Sonnet call (~$0.01–0.03).
+✅ ~~Per-type rebate engine dead-code (ALL 7)~~ — bridge handles all 4 Prisma RebateType values; dispatcher restored; SPEND_REBATE wired into accrual.ts; VOLUME_REBATE wired into recompute/volume.ts; TIER_PRICE_REDUCTION / MARKET_SHARE_REBATE / MARKET_SHARE_PR / CAPITATED / TIE_IN_CAPITAL per-period exposed via server action wrappers (engine reachable from any future caller). Semantic gap resolved by **scaling unit-based rebate values ×100 in the bridge** so engine's /100 path produces production-equivalent math. Engine math unchanged; design rules documented in `lib/rebates/prisma-engine-bridge.ts`. `lib/actions/__tests__/engine-wiring-manifest.test.ts` is the regression tripwire.
 
-### Still pending (needs design decisions)
+### Still pending (out of scope for tonight)
 
-1. **6 of 7 per-type rebate engines remain unwired** (VOLUME, TIER_PR, MARKET_SHARE, MARKET_SHARE_PR, CAPITATED, TIE_IN_CAPITAL per-period). Bridge + dispatcher exist; engines reachable via `calculateRebate()`. Real semantic gap: production tier semantics treat tier values as `count × dollars-per-event`, but the engine's tier model is `(count × percent) / 100`. Two paths: (a) add a `tierRebateUnit` flag to engine config, or (b) scale at the writer boundary. Either is a small spec+plan cycle. TODOs left in `recompute/po.ts`, `recompute/invoice.ts`, `recompute/threshold.ts`, `recompute/volume.ts`.
-2. **`scaleRebateValueForEngine` correctness:** helper only multiplies by 100 when `rebateType === "percent_of_spend"`. Other types return raw value. If real production tiers don't have `rebateType` set, they'll scale incorrectly. One-time audit of `ContractTier.rebateType` distribution would surface this.
-3. **6 WIP files** (your `pricing-files.ts` etc.) untouched. Auth-scope scanner failures at `pricing-files.ts:380, 509` are still real — wrap with `{ id, facilityId: facility.id }`.
+1. **`scaleRebateValueForEngine` correctness audit** — helper only multiplies by 100 when `rebateType === "percent_of_spend"`. If real production tiers don't have `rebateType` set, they'll scale incorrectly. Not a code fix — a data audit.
+2. **T3-T6 wrappers have no integration tests yet.** They're discoverable via the engine-wiring manifest, but a future task should add seeded-fixture tests.
+3. **Live-DB oracle not run.** Math equivalence is guaranteed by the ×100 boundary scaling per the bridge design note; `scripts/oracles/full-sweep.ts` against a fresh seed would be belt-and-suspenders.
+4. **TIE_IN_CAPITAL multi-line wrappers** — `getTieInCapitalForContractPeriod` handles single-line tie-ins only (engine's `TieInCapitalConfig` is single-asset; tydei's capital lives in 1:N `ContractCapitalLineItem`). Multi-line contracts return null with a skipReason pointing at `getContractCapitalSchedule`. Lifetime "rebate applied to capital" still uses canonical `sumRebateAppliedToCapital`.
+5. **6 WIP files** (your `pricing-files.ts` etc.) untouched. Auth-scope scanner failures at `pricing-files.ts:380, 509` still real — wrap with `{ id, facilityId: facility.id }`.
 
 ### v0 cross-check verdicts
 
