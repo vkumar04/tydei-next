@@ -9,6 +9,7 @@ import {
   buildRealPerformanceHistory,
   type PerformanceHistoryRow,
 } from "@/lib/renewals/performance-history"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 
 export interface ExpiringContract {
   id: string
@@ -77,17 +78,21 @@ export async function getExpiringContracts(input: {
       vendor: { select: { id: true, name: true } },
       facility: { select: { id: true, name: true } },
       periods: {
-        select: { totalSpend: true, rebateEarned: true, tierAchieved: true },
+        select: { totalSpend: true, tierAchieved: true },
         orderBy: { periodEnd: "desc" },
         take: 4,
       },
+      // Charles 2026-05-04 DRIFT-4: route totalRebate through canonical
+      // helper (CLAUDE.md "Rebates Earned (lifetime)" invariant) instead
+      // of the sparse `ContractPeriod.rebateEarned` reducer.
+      rebates: { select: { rebateEarned: true, payPeriodEnd: true } },
     },
     orderBy: { expirationDate: "asc" },
   })
 
   return serialize(contracts.map((c) => {
     const totalSpend = c.periods.reduce((sum, p) => sum + Number(p.totalSpend), 0)
-    const totalRebate = c.periods.reduce((sum, p) => sum + Number(p.rebateEarned), 0)
+    const totalRebate = sumEarnedRebatesLifetime(c.rebates)
     const latestTier = c.periods[0]?.tierAchieved ?? null
     const daysUntilExpiry = Math.ceil(
       (c.expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
@@ -124,9 +129,13 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
     include: {
       vendor: { select: { name: true } },
       periods: {
-        select: { totalSpend: true, rebateEarned: true, tierAchieved: true },
+        select: { totalSpend: true, tierAchieved: true },
         orderBy: { periodEnd: "desc" },
       },
+      // Charles 2026-05-04 DRIFT-4: route totalRebate through canonical
+      // helper (CLAUDE.md "Rebates Earned (lifetime)" invariant) instead
+      // of the sparse `ContractPeriod.rebateEarned` reducer.
+      rebates: { select: { rebateEarned: true, payPeriodEnd: true } },
     },
   })
 
@@ -135,7 +144,7 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
     (contract.expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
   )
   const totalSpend = contract.periods.reduce((s, p) => s + Number(p.totalSpend), 0)
-  const totalRebate = contract.periods.reduce((s, p) => s + Number(p.rebateEarned), 0)
+  const totalRebate = sumEarnedRebatesLifetime(contract.rebates)
   const tierAchieved = contract.periods[0]?.tierAchieved ?? null
 
   let recommendation = "Review terms and consider renewal."
