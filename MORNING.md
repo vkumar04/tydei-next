@@ -157,3 +157,21 @@ Pick these up in a future cycle.
 5. If anything's broken, `git revert <SHA>` for that one commit
 
 The single biggest unblock: the **facility AI Agent Documents + Reports tabs are real** and were hidden by mistake. Merging the port branch (or cherry-picking `24ec42a`) gets them back.
+
+---
+
+## Vendor + rebates audit (run after the morning sweep)
+
+I also did a read-only audit of every `/vendor/*` surface AND a diff of Charles's canonical Unified Rebate Calculation Engine vs tydei's current implementation. Full report: [docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md](docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md).
+
+**Bottom line:** no ship blockers. Math is correct on wired surfaces, auth is clean across all 17 vendor routes.
+
+**Drift findings to fix (single-line each):**
+- `lib/actions/vendor-dashboard.ts:31,60` — vendor dashboard "Rebates Paid" hero KPI under-reports (uses sparse `ContractPeriod._sum` instead of `sumEarnedRebatesLifetime`)
+- `lib/actions/renewals.ts:90,138` — renewals pipeline `totalRebate` per card under-reports (same shape — affects FACILITY + VENDOR renewals)
+- `components/vendor/performance/performance-rebates-tab.tsx:268` — labels lifetime data as "Total Paid YTD"
+- `lib/actions/vendor-analytics.ts:452` — direct `* 100` scaling instead of `scaleRebateValueForEngine`
+
+**Bigger architectural finding:** 7 of 8 per-type rebate engines in `lib/rebates/engine/*.ts` are **dead code** — they look like Charles's canonical engine but no production caller invokes them. Display + recompute paths re-derive tier math by hand. Decision needed: wire them or delete them. CARVE_OUT is the only one that's actually called. `allocateRebatesToProcedures` (true-margin) is also dead.
+
+**Charles's full canonical engine source** came in via email 2026-04-18; partial copy at `/tmp/charles-canonical.b64`. Future Claude sessions should ask for the full file before any engine work.
