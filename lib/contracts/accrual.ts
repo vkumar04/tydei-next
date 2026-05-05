@@ -17,9 +17,57 @@ import {
   type TierLike,
   type RebateMethodName,
 } from "@/lib/rebates/calculate"
+import { calculateRebate } from "@/lib/rebates/engine"
+import type {
+  RebateTier,
+  SpendRebateConfig,
+  TierMethod,
+} from "@/lib/rebates/engine/types"
 
 function engine(method: RebateMethodName) {
   return method === "marginal" ? calculateMarginal : calculateCumulative
+}
+
+/**
+ * Convert flat-shaped TierLike rows + RebateMethodName into the
+ * canonical engine's SpendRebateConfig so production callers can route
+ * through `calculateRebate(config, periodData)` (the canonical
+ * dispatcher) instead of bypassing the engine via the flat-tier facade.
+ *
+ * Provenance: Charles canonical engine wiring 2026-05-05. Wires
+ * SPEND_REBATE engine into the per-evaluation-period accrual path
+ * (audit gap #1: "7 of 8 per-type rebate engines are unreachable from
+ * production"). Math is identical to the flat-tier path because both
+ * routes converge on `calculateCumulativeRebate` /
+ * `calculateMarginalRebate` from `lib/rebates/engine/shared`.
+ */
+function toSpendRebateConfig(
+  tiers: TierLike[],
+  method: RebateMethodName,
+): SpendRebateConfig {
+  const engineMethod: TierMethod = method === "marginal" ? "MARGINAL" : "CUMULATIVE"
+  const rebateTiers: RebateTier[] = tiers.map((t) => ({
+    tierNumber: t.tierNumber,
+    tierName: t.tierName ?? null,
+    thresholdMin: Number(t.spendMin),
+    thresholdMax:
+      t.spendMax === null || t.spendMax === undefined
+        ? null
+        : Number(t.spendMax),
+    rebateValue: Number(t.rebateValue),
+    fixedRebateAmount:
+      t.fixedRebateAmount === null || t.fixedRebateAmount === undefined
+        ? null
+        : Number(t.fixedRebateAmount),
+  }))
+  return {
+    type: "SPEND_REBATE",
+    method: engineMethod,
+    boundaryRule: "EXCLUSIVE",
+    tiers: rebateTiers,
+    spendBasis: "ALL_SPEND",
+    baselineType: "NONE",
+  }
 }
 
 /**
@@ -710,14 +758,29 @@ export function buildEvaluationPeriodAccruals(
     // uses the growth slice.
     const tierSpend =
       proRatedBaseline > 0 ? Math.max(0, totalSpend - proRatedBaseline) : totalSpend
-    const result = fn(tierSpend, tiers)
+
+    // Charles canonical engine wiring 2026-05-05: route the per-period
+    // rebate through `calculateRebate(SPEND_REBATE)` so the per-type
+    // engine is reachable from production (audit gap #1). Math is
+    // identical to the prior `fn(tierSpend, tiers)` call because both
+    // paths terminate at `calculateCumulativeRebate` / `calculateMarginalRebate`.
+    const config = toSpendRebateConfig(tiers, method)
+    const engineResult = calculateRebate(config, {
+      purchases: [],
+      totalSpend: tierSpend,
+    })
+    // Preserve the existing return shape — pull tierAchieved /
+    // rebatePercent from the engine's TierResult, falling back to the
+    // flat-tier facade for the no-tier-qualified case so we keep
+    // bit-compat with prior buckets.
+    const fallback = fn(tierSpend, tiers)
     buckets.push({
       periodStart: cursorStart,
       periodEnd,
       totalSpend,
-      rebateEarned: result.rebateEarned,
-      tierAchieved: result.tierAchieved,
-      rebatePercent: result.rebatePercent,
+      rebateEarned: engineResult.rebateEarned,
+      tierAchieved: engineResult.tierResult?.tier.tierNumber ?? fallback.tierAchieved,
+      rebatePercent: engineResult.tierResult?.tier.rebateValue ?? fallback.rebatePercent,
       label: formatPeriodLabel(cursorStart, evaluationPeriod),
     })
 
