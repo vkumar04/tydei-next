@@ -5,11 +5,17 @@ import { PriceDiscrepancyTable } from "@/components/facility/reports/price-discr
 import { PriceVarianceDashboard } from "@/components/facility/reports/price-variance-dashboard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, Download } from "lucide-react"
 import Link from "next/link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
 import { getPriceDiscrepancies } from "@/lib/actions/reports"
+import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
+import {
+  formatExportDollars,
+  formatExportPercent,
+} from "@/lib/reports/export-formatters"
+import { toast } from "sonner"
 
 export default function PriceDiscrepancyPage() {
   // facilityId is validated upstream by the facility dashboard layout
@@ -17,6 +23,62 @@ export default function PriceDiscrepancyPage() {
     queryKey: queryKeys.reports.priceDiscrepancies("current"),
     queryFn: () => getPriceDiscrepancies("current"),
   })
+
+  const handleExport = () => {
+    const rows = data ?? []
+    if (rows.length === 0) {
+      toast.info("No price discrepancies to export.")
+      return
+    }
+    const csv = toCSV({
+      columns: [
+        { key: "invoiceNumber", label: "Invoice #" },
+        { key: "vendorName", label: "Vendor" },
+        { key: "itemDescription", label: "Item" },
+        { key: "vendorItemNo", label: "Vendor Item #" },
+        {
+          key: "invoicePrice",
+          label: "Invoice Price",
+          format: (v) => formatExportDollars(v as number),
+        },
+        {
+          key: "contractPrice",
+          label: "Contract Price",
+          format: (v) =>
+            v == null ? "" : formatExportDollars(v as number),
+        },
+        {
+          key: "variancePercent",
+          label: "Variance %",
+          format: (v) =>
+            v == null ? "" : formatExportPercent(v as number),
+        },
+        {
+          key: "quantity",
+          label: "Quantity",
+          format: (v) => String(v ?? ""),
+        },
+        {
+          key: "totalLineCost",
+          label: "Total Line Cost",
+          format: (v) => formatExportDollars(v as number),
+        },
+        {
+          key: "isFlagged",
+          label: "Flagged",
+          format: (v) => (v ? "true" : "false"),
+        },
+      ],
+      rows,
+    })
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = buildReportFilename("Price Discrepancy")
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -37,6 +99,16 @@ export default function PriceDiscrepancyPage() {
               files, and actual purchases
             </p>
           </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={isLoading || (data?.length ?? 0) === 0}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export Report
+          </Button>
         </div>
       </div>
 
