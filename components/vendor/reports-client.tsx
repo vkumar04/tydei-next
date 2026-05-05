@@ -2,18 +2,29 @@
 
 import { useMemo, useState } from "react"
 import {
-  BarChart3,
-  CheckCircle2,
+  AlertTriangle,
+  ClipboardList,
   DollarSign,
   TrendingUp,
 } from "lucide-react"
+import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { VendorReportsHero } from "@/components/vendor/reports/reports-hero"
 import { VendorReportsControlBar } from "@/components/vendor/reports/reports-control-bar"
 import { ReportTypeGrid } from "@/components/vendor/reports/report-type-grid"
 import { RecentReportsTable } from "@/components/vendor/reports/recent-reports-table"
-import { GenerateReportDialog } from "@/components/vendor/reports/generate-report-dialog"
 import { VendorPurchaseLeakageCard } from "@/components/vendor/reports/vendor-purchase-leakage-card"
+import {
+  getVendorRebateStatement,
+  getVendorPerformanceSummary,
+  getVendorContractRoster,
+} from "@/lib/actions/vendor-reports"
+import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
+import {
+  formatExportDate,
+  formatExportDollars,
+  formatExportPercent,
+} from "@/lib/reports/export-formatters"
 import type {
   RecentReport,
   ReportType,
@@ -21,125 +32,251 @@ import type {
 } from "@/components/vendor/reports/reports-types"
 
 /**
- * Vendor Reports hub ("hero + tabs" pattern).
+ * Vendor Reports hub.
  *
- *   1. Hero KPIs: Generated (MTD) · Scheduled · Last Sent · Facilities Reached
- *   2. ControlBar: facility select, search, category chip group, "New Report"
- *   3. ReportTypeGrid (filtered by category)
- *   4. RecentReportsTable (filtered by category + search)
+ * Cards (4):
+ *   1. Rebate Statement     — getVendorRebateStatement(start, end) → CSV
+ *   2. Performance Summary  — getVendorPerformanceSummary(start, end) → CSV
+ *   3. Contract Roster      — getVendorContractRoster() → CSV
+ *   4. Purchase Leakage     — anchor scroll to the existing leakage
+ *      card below (the real audit lives there with its own date range).
  *
- * Reference: components/facility/reports/* for the facility-side twin.
- * Data is currently static v0 sample content until server-action wiring
- * lands for the vendor side.
+ * Each generate-button immediately fetches via a TanStack mutation +
+ * downloads a CSV using the canonical `toCSV` + `buildReportFilename`
+ * helpers (same pattern as the price-discrepancy export, commit
+ * 3a872c6). On success, the report is appended to the
+ * RecentReportsTable so the user can see what they generated this
+ * session — no fake setInterval progress, no fake .pdf size.
  */
 
 const reportTypes: ReportType[] = [
   {
-    id: "performance",
-    name: "Performance Summary",
-    description: "Contract performance metrics and compliance",
-    icon: TrendingUp,
-    frequency: "Monthly",
-  },
-  {
     id: "rebates",
     name: "Rebate Statement",
-    description: "Rebates earned and paid by contract",
+    description:
+      "Per-contract rebate statement: earned this period, collected this period, outstanding balance.",
     icon: DollarSign,
     frequency: "Quarterly",
   },
   {
-    id: "spend",
-    name: "Spend Analysis",
-    description: "Spend breakdown by facility and category",
-    icon: BarChart3,
+    id: "performance",
+    name: "Performance Summary",
+    description:
+      "Per-facility roll-up: spend, earned, collected, compliance %, market share %.",
+    icon: TrendingUp,
     frequency: "Monthly",
   },
   {
-    id: "compliance",
-    name: "Compliance Report",
-    description: "Contract compliance and tier achievement",
-    icon: CheckCircle2,
-    frequency: "Quarterly",
+    id: "roster",
+    name: "Contract Roster",
+    description:
+      "All contracts with key terms — start/end, rebate method, status, last activity, lifetime + YTD earned.",
+    icon: ClipboardList,
+    frequency: "On demand",
+  },
+  {
+    id: "leakage",
+    name: "Purchase Leakage",
+    description:
+      "Off-contract, out-of-period, or significantly off-price purchases of your products.",
+    icon: AlertTriangle,
+    frequency: "On demand",
   },
 ]
 
-const defaultRecentReports: RecentReport[] = [
-  { id: "1", name: "Q1 2024 Performance Summary", type: "performance", date: "2024-04-05", status: "ready", size: "2.4 MB" },
-  { id: "2", name: "Q1 2024 Rebate Statement", type: "rebates", date: "2024-04-02", status: "ready", size: "1.8 MB" },
-  { id: "3", name: "March 2024 Spend Analysis", type: "spend", date: "2024-04-01", status: "ready", size: "3.1 MB" },
-  { id: "4", name: "February 2024 Spend Analysis", type: "spend", date: "2024-03-01", status: "ready", size: "2.9 MB" },
-  { id: "5", name: "Q4 2023 Compliance Report", type: "compliance", date: "2024-01-15", status: "ready", size: "1.5 MB" },
-]
-
 interface VendorReportsClientProps {
-  // vendorId is accepted for future server-action integration but is not
-  // currently consumed — v0 parity renders static sample data.
+  // vendorId is read by the server actions via the auth gate
+  // (`requireVendor`), so we don't pass it through — kept on the prop
+  // for future per-vendor UI customization.
   vendorId: string
+}
+
+// Default window: trailing 90 days. Each card uses this; future work
+// can hoist a per-card date picker.
+function defaultPeriod(): { start: Date; end: Date } {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(start.getDate() - 90)
+  return { start, end }
+}
+
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
 export function VendorReportsClient(_props: VendorReportsClientProps) {
   const [selectedFacility, setSelectedFacility] = useState("all")
-  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false)
-  const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [generateProgress, setGenerateProgress] = useState(0)
-  const [reportPeriod, setReportPeriod] = useState("current")
-  const [generatedReports, setGeneratedReports] = useState<RecentReport[]>(defaultRecentReports)
+  const [generatedReports, setGeneratedReports] = useState<RecentReport[]>([])
   const [category, setCategory] = useState<"all" | ReportTypeId>("all")
   const [searchQuery, setSearchQuery] = useState("")
 
+  const generateMutation = useMutation({
+    mutationFn: async (report: ReportType) => {
+      const { start, end } = defaultPeriod()
+      const startISO = start.toISOString().slice(0, 10)
+      const endISO = end.toISOString().slice(0, 10)
+
+      let csv: string
+      let title: string
+
+      if (report.id === "rebates") {
+        const rows = await getVendorRebateStatement(startISO, endISO)
+        title = "Vendor Rebate Statement"
+        csv = toCSV({
+          columns: [
+            { key: "contractName", label: "Contract" },
+            { key: "facilityName", label: "Facility" },
+            {
+              key: "earnedThisPeriod",
+              label: "Earned This Period",
+              format: (v) => formatExportDollars(v as number),
+            },
+            {
+              key: "collectedThisPeriod",
+              label: "Collected This Period",
+              format: (v) => formatExportDollars(v as number),
+            },
+            {
+              key: "outstanding",
+              label: "Outstanding",
+              format: (v) => formatExportDollars(v as number),
+            },
+          ],
+          rows,
+        })
+      } else if (report.id === "performance") {
+        const rows = await getVendorPerformanceSummary(startISO, endISO)
+        title = "Vendor Performance Summary"
+        csv = toCSV({
+          columns: [
+            { key: "facilityName", label: "Facility" },
+            {
+              key: "spend",
+              label: "Spend",
+              format: (v) => formatExportDollars(v as number),
+            },
+            {
+              key: "earned",
+              label: "Rebate Earned",
+              format: (v) => formatExportDollars(v as number),
+            },
+            {
+              key: "collected",
+              label: "Rebate Collected",
+              format: (v) => formatExportDollars(v as number),
+            },
+            {
+              key: "compliancePercent",
+              label: "Compliance %",
+              format: (v) => formatExportPercent(v as number),
+            },
+            {
+              key: "marketSharePercent",
+              label: "Market Share %",
+              format: (v) => formatExportPercent(v as number),
+            },
+          ],
+          rows,
+        })
+      } else if (report.id === "roster") {
+        const rows = await getVendorContractRoster()
+        title = "Vendor Contract Roster"
+        csv = toCSV({
+          columns: [
+            { key: "contractName", label: "Contract" },
+            { key: "contractNumber", label: "Contract #" },
+            { key: "facilityName", label: "Facility" },
+            { key: "status", label: "Status" },
+            {
+              key: "effectiveDate",
+              label: "Effective Date",
+              format: (v) => formatExportDate(new Date(v as string | Date)),
+            },
+            {
+              key: "expirationDate",
+              label: "Expiration Date",
+              format: (v) => formatExportDate(new Date(v as string | Date)),
+            },
+            { key: "rebateMethod", label: "Rebate Method" },
+            {
+              key: "lastActivity",
+              label: "Last Activity",
+              format: (v) =>
+                v == null ? "" : formatExportDate(new Date(v as string | Date)),
+            },
+            {
+              key: "rebateEarnedYTD",
+              label: "Earned YTD",
+              format: (v) => formatExportDollars(v as number),
+            },
+            {
+              key: "rebateEarnedLifetime",
+              label: "Earned Lifetime",
+              format: (v) => formatExportDollars(v as number),
+            },
+          ],
+          rows,
+        })
+      } else {
+        // Leakage card: scroll the user to the existing card (which has
+        // its own date controls and live table). Throw a sentinel so
+        // the onSuccess path skips the download.
+        const el = document.getElementById("vendor-purchase-leakage")
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+        throw new Error("__leakage_scroll__")
+      }
+
+      const filename = buildReportFilename(title)
+      downloadCSV(csv, filename)
+      return {
+        report: {
+          id: `gen-${Date.now()}`,
+          name: `${report.name} — ${startISO} → ${endISO}`,
+          type: report.id,
+          date: new Date().toISOString().slice(0, 10),
+          status: "ready",
+          size: formatBytes(new Blob([csv]).size),
+        } satisfies RecentReport,
+      }
+    },
+    onSuccess: ({ report }) => {
+      setGeneratedReports((prev) => [report, ...prev])
+      toast.success(`Generated ${report.name}`, {
+        description: "CSV saved to your downloads folder.",
+      })
+    },
+    onError: (err: unknown) => {
+      if (err instanceof Error && err.message === "__leakage_scroll__") {
+        toast.info("Scrolled to the live Purchase Leakage audit below.")
+        return
+      }
+      const msg = err instanceof Error ? err.message : "Unknown error"
+      toast.error("Could not generate report", { description: msg })
+    },
+  })
+
   const handleGenerateReport = (report: ReportType) => {
-    setSelectedReportType(report)
-    setIsGenerateDialogOpen(true)
+    generateMutation.mutate(report)
   }
 
   const handleDownload = (report: RecentReport) => {
-    toast.success("Download started", {
-      description: `Downloading ${report.name}...`,
+    // Recent-reports table re-download: not stored server-side, so we
+    // hint the user to regenerate from the card above.
+    toast.info("Re-generate from the card above to download again.", {
+      description: report.name,
     })
-  }
-
-  const startGenerating = () => {
-    setIsGenerating(true)
-    setGenerateProgress(0)
-
-    const interval = setInterval(() => {
-      setGenerateProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          return 100
-        }
-        return prev + Math.random() * 15
-      })
-    }, 200)
-
-    setTimeout(() => {
-      clearInterval(interval)
-      setGenerateProgress(100)
-
-      setTimeout(() => {
-        const newReport: RecentReport = {
-          id: `new-${Date.now()}`,
-          name: `${selectedReportType?.name} - ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}`,
-          type: selectedReportType?.id ?? "performance",
-          date: new Date().toISOString().split("T")[0],
-          status: "ready",
-          size: `${(Math.random() * 3 + 1).toFixed(1)} MB`,
-        }
-        setGeneratedReports((prev) => [newReport, ...prev])
-        setIsGenerating(false)
-        setIsGenerateDialogOpen(false)
-        setGenerateProgress(0)
-        toast.success("Report generated successfully", {
-          description: `${newReport.name} is ready for download`,
-          action: {
-            label: "Download",
-            onClick: () => handleDownload(newReport),
-          },
-        })
-      }, 500)
-    }, 2000)
   }
 
   const heroStats = useMemo(() => {
@@ -157,7 +294,7 @@ export function VendorReportsClient(_props: VendorReportsClientProps) {
       generatedThisMonth,
       scheduledCount: reportTypes.length,
       lastSentAt: sorted[0]?.date ?? null,
-      facilitiesReached: 3,
+      facilitiesReached: 0,
     }
   }, [generatedReports])
 
@@ -218,26 +355,11 @@ export function VendorReportsClient(_props: VendorReportsClientProps) {
 
       {/* v0-port: vendor-side leakage audit (off-contract /
           out-of-period / price-variance purchases of this vendor's
-          product). */}
-      <VendorPurchaseLeakageCard />
-
-      <GenerateReportDialog
-        open={isGenerateDialogOpen}
-        onOpenChange={(open) => {
-          if (!isGenerating) {
-            setIsGenerateDialogOpen(open)
-          }
-        }}
-        reportType={selectedReportType}
-        isGenerating={isGenerating}
-        progress={generateProgress}
-        reportPeriod={reportPeriod}
-        onReportPeriodChange={setReportPeriod}
-        selectedFacility={selectedFacility}
-        onSelectedFacilityChange={setSelectedFacility}
-        onConfirm={startGenerating}
-        onCancel={() => setIsGenerateDialogOpen(false)}
-      />
+          product). The Purchase Leakage card on the type grid scrolls
+          here. */}
+      <div id="vendor-purchase-leakage">
+        <VendorPurchaseLeakageCard />
+      </div>
     </div>
   )
 }

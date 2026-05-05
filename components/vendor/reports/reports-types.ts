@@ -11,8 +11,8 @@ import type { LucideIcon } from "lucide-react"
 export type ReportTypeId =
   | "performance"
   | "rebates"
-  | "spend"
-  | "compliance"
+  | "roster"
+  | "leakage"
 
 export interface ReportType {
   id: ReportTypeId
