@@ -1,15 +1,11 @@
 "use client"
 
 import type { ColumnDef } from "@tanstack/react-table"
-import type { PricingFile } from "@prisma/client"
+import type { UnifiedPricingRow } from "@/lib/actions/pricing-files"
 import { Loader2, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/formatting"
-
-type PricingFileWithVendor = PricingFile & {
-  vendor: { id: string; name: string }
-}
 
 export interface PricingColumnOptions {
   onDelete?: (id: string) => void
@@ -18,7 +14,7 @@ export interface PricingColumnOptions {
 
 export function getPricingColumns(
   options: PricingColumnOptions = {},
-): ColumnDef<PricingFileWithVendor>[] {
+): ColumnDef<UnifiedPricingRow>[] {
   const { onDelete, pendingDeleteId } = options
   return [
     {
@@ -99,8 +95,7 @@ export function getPricingColumns(
       id: "carveOutPercent",
       header: "Carve-Out",
       cell: ({ row }) => {
-        const raw = (row.original as { carveOutPercent?: number | string | null })
-          .carveOutPercent
+        const raw = row.original.carveOutPercent
         if (raw == null) return <span className="text-muted-foreground">{"\u2014"}</span>
         const pct = Number(raw) * 100
         return (
@@ -146,7 +141,7 @@ export function getPricingColumns(
                 </Button>
               )
             },
-          } satisfies ColumnDef<PricingFileWithVendor>,
+          } satisfies ColumnDef<UnifiedPricingRow>,
         ]
       : []),
   ]
