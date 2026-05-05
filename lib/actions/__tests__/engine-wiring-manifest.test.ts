@@ -98,8 +98,8 @@ const MANIFEST: EngineWiring[] = [
   {
     fn: "calculateTierPriceReduction",
     source: "lib/rebates/engine/tier-price-reduction.ts",
-    status: "unwired",
-    note: "No action dispatches to TIER_PRICE_REDUCTION today. See audit row for trigger/referenceNumbers.",
+    status: "wired",
+    note: "Reachable via getTierPriceReductionForContract in lib/actions/contracts/tier-price-reduction.ts; routes through calculateRebate dispatcher + buildRebateConfigFromPrisma. No UI consumer yet — engine is invocable from any future caller.",
   },
   {
     fn: "calculateVolumeRebate",
