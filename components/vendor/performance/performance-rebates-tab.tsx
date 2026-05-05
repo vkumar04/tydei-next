@@ -265,7 +265,7 @@ export function PerformanceRebatesTab({
                 <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                   {formatPerfCurrency(totalRebatesPaid)}
                 </div>
-                <div className="text-sm text-muted-foreground">Total Paid YTD</div>
+                <div className="text-sm text-muted-foreground">Total Paid (Lifetime)</div>
               </div>
               <div className="rounded-lg border p-4 text-center">
                 <div className="text-2xl font-bold">
