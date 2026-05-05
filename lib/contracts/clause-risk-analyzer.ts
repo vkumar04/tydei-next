@@ -562,8 +562,12 @@ export const CLAUSE_RISK_LIBRARY: Record<ClauseCategory, ClauseLibraryEntry> = {
     ],
   },
   ANTI_KICKBACK: {
+    // baseRisk reflects the risk when the clause IS present (i.e., the
+    // representation has been made). The CRITICAL exposure for ABSENT
+    // ANTI_KICKBACK reps is handled via REQUIRED_CLAUSES + the cross-clause
+    // criticalFlags path so we don't double-count.
     category: "ANTI_KICKBACK",
-    baseRisk: "CRITICAL",
+    baseRisk: "MEDIUM",
     isStandard: true,
     regulatoryImplication:
       "Federal Anti-Kickback Statute (42 U.S.C. § 1320a-7b). Violations carry criminal penalties, civil monetary penalties, and exclusion from federal healthcare programs.",
@@ -586,8 +590,12 @@ export const CLAUSE_RISK_LIBRARY: Record<ClauseCategory, ClauseLibraryEntry> = {
     ],
   },
   STARK_LAW: {
+    // baseRisk = risk when the Stark exception is identified (clause IS
+    // present). Strict-liability CRITICAL exposure for ABSENT Stark
+    // language is handled by the cross-clause flag for capital/tie-in
+    // variants.
     category: "STARK_LAW",
-    baseRisk: "CRITICAL",
+    baseRisk: "MEDIUM",
     isStandard: true,
     regulatoryImplication:
       "Physician Self-Referral Law (42 U.S.C. § 1395nn). Strict-liability statute — even unintentional violations create overpayment + False Claims Act exposure.",
