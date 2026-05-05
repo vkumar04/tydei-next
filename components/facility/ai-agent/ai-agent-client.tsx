@@ -17,6 +17,8 @@ import {
   Bot,
   Lock,
   MessageSquare,
+  Search,
+  ClipboardList,
 } from "lucide-react"
 import {
   Card,
@@ -25,6 +27,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChatTab } from "./chat-tab"
+import { DocumentsTab } from "./documents-tab"
+import { ReportsTab } from "./reports-tab"
 
 export interface AIAgentContractOption {
   id: string
@@ -39,8 +43,11 @@ export interface AIAgentClientProps {
 
 export function AIAgentClient({
   enabled,
+  contracts,
 }: AIAgentClientProps) {
-  const [activeTab, setActiveTab] = useState<"chat">("chat")
+  const [activeTab, setActiveTab] = useState<"chat" | "documents" | "reports">(
+    "chat",
+  )
 
   if (!enabled) {
     return (
@@ -97,13 +104,23 @@ export function AIAgentClient({
 
       <Tabs
         value={activeTab}
-        onValueChange={(v) => setActiveTab(v as "chat")}
+        onValueChange={(v) =>
+          setActiveTab(v as "chat" | "documents" | "reports")
+        }
         className="flex-1 flex flex-col overflow-hidden"
       >
         <TabsList className="w-fit mb-4">
           <TabsTrigger value="chat" className="gap-2">
             <MessageSquare className="h-4 w-4" />
             Chat
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2">
+            <Search className="h-4 w-4" />
+            Documents
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-2">
+            <ClipboardList className="h-4 w-4" />
+            Reports
           </TabsTrigger>
         </TabsList>
 
@@ -112,6 +129,14 @@ export function AIAgentClient({
           className="flex-1 flex flex-col overflow-hidden mt-0"
         >
           <ChatTab />
+        </TabsContent>
+
+        <TabsContent value="documents" className="flex-1 overflow-auto mt-0">
+          <DocumentsTab contracts={contracts} />
+        </TabsContent>
+
+        <TabsContent value="reports" className="flex-1 overflow-auto mt-0">
+          <ReportsTab contracts={contracts} />
         </TabsContent>
       </Tabs>
     </div>
