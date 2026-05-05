@@ -1,6 +1,6 @@
 "use client"
 
-import { Flag, Package, Search, Upload } from "lucide-react"
+import { Download, Flag, Package, Search, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -37,6 +37,8 @@ export interface InvoiceValidationControlBarProps {
   disputeFilter: "all" | "disputed"
   onDisputeFilterChange: (next: "all" | "disputed") => void
   onImportClick: () => void
+  onExportClick: () => void
+  exportDisabled?: boolean
 }
 
 export function InvoiceValidationControlBar({
@@ -48,6 +50,8 @@ export function InvoiceValidationControlBar({
   disputeFilter,
   onDisputeFilterChange,
   onImportClick,
+  onExportClick,
+  exportDisabled = false,
 }: InvoiceValidationControlBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 shadow-xs">
@@ -122,6 +126,15 @@ export function InvoiceValidationControlBar({
         <Button variant="outline" size="sm" className="gap-2" onClick={onImportClick}>
           <Upload className="h-4 w-4" />
           Upload invoice
+        </Button>
+        <Button
+          size="sm"
+          className="gap-2"
+          onClick={onExportClick}
+          disabled={exportDisabled}
+        >
+          <Download className="h-4 w-4" />
+          Export
         </Button>
       </div>
     </div>

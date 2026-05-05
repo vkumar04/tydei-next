@@ -1,11 +1,15 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Flag } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useInvoiceSummary, useInvoices } from "@/hooks/use-invoices"
 import { toast } from "sonner"
+import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
+import {
+  formatExportDate,
+  formatExportDollars,
+  formatExportPercent,
+} from "@/lib/reports/export-formatters"
 import { InvoiceImportDialog } from "./invoice-import-dialog"
 import { InvoiceDisputeDialog } from "./invoice-dispute-dialog"
 import { InvoiceDetailsDialog } from "./invoice-details-dialog"
@@ -159,6 +163,80 @@ export function InvoiceValidationClient({
     setSelectedInvoices([])
   }
 
+  const handleExport = () => {
+    if (searchFiltered.length === 0) {
+      toast.info("No invoices to export.")
+      return
+    }
+    const csv = toCSV({
+      columns: [
+        { key: "invoiceNumber", label: "Invoice #" },
+        {
+          key: "vendor",
+          label: "Vendor",
+          format: (v) => (v as { name: string } | null)?.name ?? "",
+        },
+        {
+          key: "invoiceDate",
+          label: "Invoice Date",
+          format: (v) => {
+            if (!v) return ""
+            const d = v instanceof Date ? v : new Date(v as string)
+            return formatExportDate(d)
+          },
+        },
+        {
+          key: "totalInvoiceCost",
+          label: "Invoiced Amount",
+          format: (v) => {
+            if (v == null) return ""
+            const n = typeof v === "number" ? v : Number(v)
+            return Number.isFinite(n) ? formatExportDollars(n) : ""
+          },
+        },
+        {
+          key: "totalContractCost",
+          label: "Contract Amount",
+          format: (v) => formatExportDollars(v as number),
+        },
+        {
+          key: "variance",
+          label: "Variance",
+          format: (v) => formatExportDollars(v as number),
+        },
+        {
+          key: "variancePercent",
+          label: "Variance %",
+          format: (v) => formatExportPercent(v as number),
+        },
+        { key: "status", label: "Status" },
+        {
+          key: "disputeStatus",
+          label: "Dispute Status",
+          format: (v) => (v as string | undefined) ?? "none",
+        },
+        {
+          key: "lineItemCount",
+          label: "Line Items",
+          format: (v) => String(v ?? 0),
+        },
+        {
+          key: "flaggedCount",
+          label: "Flagged Items",
+          format: (v) => String(v ?? 0),
+        },
+      ],
+      rows: searchFiltered,
+    })
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = buildReportFilename("Invoice Validation")
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleToggleSelectAll = (checked: boolean) => {
     if (checked) {
       setSelectedInvoices(awaitingInvoices.map((i) => i.id))
@@ -199,6 +277,8 @@ export function InvoiceValidationClient({
         disputeFilter={disputeFilter}
         onDisputeFilterChange={setDisputeFilter}
         onImportClick={() => setImportOpen(true)}
+        onExportClick={handleExport}
+        exportDisabled={tableLoading || searchFiltered.length === 0}
       />
 
       <Tabs
