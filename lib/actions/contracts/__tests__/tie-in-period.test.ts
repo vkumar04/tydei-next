@@ -2,13 +2,14 @@
  * Integration tests for `getTieInCapitalForContractPeriod`.
  *
  * Mocks Prisma + auth at the module boundary. The wrapper builds a
- * `TieInCapitalConfig` from the contract's first capital line item +
- * first SPEND_REBATE-shaped term, runs the per-period evaluator, and
- * returns the standardized RebateResult.
+ * `TieInCapitalConfig` per capital line item + the contract's first
+ * SPEND_REBATE-shaped term, runs the per-period evaluator per line,
+ * and aggregates the per-line results.
  *
  * Engine math correctness is covered by per-engine unit tests; these
- * assertions just lock down that the wrapper assembles the right
- * config + correctly handles the multi-line guard.
+ * assertions lock down (a) that the wrapper assembles the right
+ * config(s), (b) that the multi-line aggregation totals are correct,
+ * and (c) the no-line / wrong-type guards.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -222,6 +223,12 @@ describe("getTieInCapitalForContractPeriod", () => {
     expect(
       r.result?.warnings.some((w) => w.includes("carried forward")),
     ).toBe(false)
+    // Multi-line aggregation shape — single-line case populates a
+    // 1-entry perLine and totals that match the single line.
+    expect(r.perLine).toHaveLength(1)
+    expect(r.perLine[0]?.lineItemId).toBe("cli-1")
+    expect(r.totalScheduledAmortizationDue).toBeCloseTo(10_000, 2)
+    expect(r.totalShortfall).toBe(0)
   })
 
   it("single-line capital + insufficient rebate (CARRY_FORWARD) → shortfall warning emitted", async () => {
@@ -272,7 +279,11 @@ describe("getTieInCapitalForContractPeriod", () => {
     ).toBe(true)
   })
 
-  it("multi-line capital → returns null with skipReason pointing at getContractCapitalSchedule", async () => {
+  it("multi-line capital → per-line breakdown + aggregated totals", async () => {
+    // Note: a parallel commit (0812f29 "feat(rebates): multi-line tie-in
+    // capital per-period wrapper") replaced the original "skip with
+    // skipReason" behavior with per-line iteration + aggregation. This
+    // test pins the new aggregated-totals shape.
     contractFixture = {
       id: "c-1",
       name: "Tie-in c-1",
@@ -282,17 +293,38 @@ describe("getTieInCapitalForContractPeriod", () => {
       expirationDate: new Date("2026-12-31"),
       terms: [
         makeSpendTerm([
-          makeTier({ tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 0.05 }),
+          makeTier({ tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 0.5 }),
         ]),
       ],
       capitalLineItems: [
-        makeCapitalItem({ id: "cli-1" }),
-        makeCapitalItem({ id: "cli-2", description: "Second device" }),
+        makeCapitalItem({ id: "cli-1", contractTotal: 120_000, termMonths: 12 }),
+        makeCapitalItem({
+          id: "cli-2",
+          description: "Second device",
+          contractTotal: 60_000,
+          termMonths: 12,
+        }),
       ],
     }
+    cogFixture = [
+      {
+        inventoryNumber: "SKU-A",
+        category: null,
+        quantity: 1,
+        unitCost: 1_000_000,
+        extendedPrice: 1_000_000,
+        transactionDate: new Date("2026-02-01"),
+      },
+    ]
     const r = await getTieInCapitalForContractPeriod({ contractId: "c-1" })
-    expect(r.result).toBeNull()
-    expect(r.diagnostics.skipReason).toMatch(/multi-line capital/i)
-    expect(r.diagnostics.skipReason).toMatch(/getContractCapitalSchedule/)
+    // result is now the FIRST line's engineResult (backward shape).
+    expect(r.result).not.toBeNull()
+    expect(r.perLine).toHaveLength(2)
+    expect(r.perLine[0]?.lineItemId).toBe("cli-1")
+    expect(r.perLine[1]?.lineItemId).toBe("cli-2")
+    // 120k @ 0% over 12m → 10k/m; 60k @ 0% over 12m → 5k/m. Total = 15k.
+    expect(r.totalScheduledAmortizationDue).toBeCloseTo(15_000, 2)
+    // diagnostics carry no skipReason on the eligible-multi-line path.
+    expect(r.diagnostics.skipReason).toBeUndefined()
   })
 })
