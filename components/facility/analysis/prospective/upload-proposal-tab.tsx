@@ -36,11 +36,37 @@ import type {
   ScoredProposal,
   VendorOption,
 } from "./types"
-import { useAnalyzePDFClauses, useAnalyzeProspectiveProposal } from "./hooks"
+import {
+  useAnalyzePDFClauses,
+  useAnalyzeProspectiveProposal,
+  useExtractAndAnalyzeCanonical,
+} from "./hooks"
 import { ScoredProposalCard } from "./scored-proposal-card"
 import { CogSpendPatternCard } from "./cog-spend-pattern-card"
 import { PdfClauseAnalyzerPanel } from "./pdf-clause-analyzer-panel"
+import { CanonicalClauseAnalyzerPanel } from "./canonical-clause-analyzer-panel"
 import type { AnalyzeProposalInput } from "@/lib/actions/prospective-analysis"
+import type {
+  ContractVariant,
+  PDFContractAnalysisResult,
+  UserSide,
+} from "@/lib/contracts/clause-risk-analyzer"
+
+const CONTRACT_VARIANT_OPTIONS: { value: ContractVariant; label: string }[] = [
+  { value: "USAGE_SPEND", label: "Usage — Spend tiers" },
+  { value: "USAGE_VOLUME", label: "Usage — Volume tiers" },
+  { value: "USAGE_CARVEOUT", label: "Usage — Carve-out" },
+  { value: "USAGE_MARKET_SHARE", label: "Usage — Market share" },
+  { value: "USAGE_CAPITATED", label: "Usage — Capitated" },
+  { value: "USAGE_TIEIN", label: "Usage — Tie-in" },
+  { value: "CAPITAL_PURCHASE", label: "Capital — Purchase" },
+  { value: "CAPITAL_LEASE", label: "Capital — Lease" },
+  { value: "CAPITAL_TIEIN", label: "Capital — Tie-in" },
+  { value: "SERVICE_MAINTENANCE", label: "Service — Maintenance" },
+  { value: "SERVICE_FULL", label: "Service — Full-service" },
+  { value: "GPO", label: "GPO" },
+  { value: "PRICING_ONLY", label: "Pricing only" },
+]
 
 interface UploadProposalTabProps {
   vendors: VendorOption[]
@@ -139,9 +165,18 @@ export function UploadProposalTab({
   )
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [clauseText, setClauseText] = useState("")
+  const [side, setSide] = useState<UserSide>("FACILITY")
+  const [contractVariant, setContractVariant] =
+    useState<ContractVariant>("USAGE_SPEND")
+  const [canonicalResult, setCanonicalResult] = useState<{
+    analysis: PDFContractAnalysisResult
+    extractedClauseCount: number
+    truncated: boolean
+  } | null>(null)
 
   const analyzeMutation = useAnalyzeProspectiveProposal()
   const clauseMutation = useAnalyzePDFClauses()
+  const canonicalMutation = useExtractAndAnalyzeCanonical()
 
   const handleAnalyzeClauses = useCallback(async () => {
     const trimmed = clauseText.trim()
@@ -149,17 +184,44 @@ export function UploadProposalTab({
       toast.error("Paste contract text first.")
       return
     }
-    try {
-      const result = await clauseMutation.mutateAsync({
+    // Run both analyzers in parallel — legacy 0-10 panel + canonical
+    // 0-100 panel — so the user sees both views from one click.
+    const legacy = clauseMutation
+      .mutateAsync({
         pdfText: trimmed,
         fileName: uploadedFileName ?? undefined,
       })
-      setClauseAnalysis(result)
-      toast.success("Clause analysis complete")
-    } catch {
-      // handled by mutation toast
-    }
-  }, [clauseMutation, clauseText, uploadedFileName])
+      .then((result) => {
+        setClauseAnalysis(result)
+      })
+      .catch(() => {
+        // mutation toast handles user-facing error
+      })
+
+    const canonical = canonicalMutation
+      .mutateAsync({
+        pdfText: trimmed,
+        side,
+        contractVariant,
+        contractName: uploadedFileName ?? "Pasted contract text",
+      })
+      .then((result) => {
+        setCanonicalResult(result)
+      })
+      .catch(() => {
+        // mutation toast handles user-facing error
+      })
+
+    await Promise.all([legacy, canonical])
+    toast.success("Clause analysis complete")
+  }, [
+    canonicalMutation,
+    clauseMutation,
+    clauseText,
+    contractVariant,
+    side,
+    uploadedFileName,
+  ])
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -171,6 +233,7 @@ export function UploadProposalTab({
 
       onPhaseChange("analyzing")
       setUploadedFileName(file.name)
+      setCanonicalResult(null)
 
       try {
         const formData = new FormData()
@@ -191,6 +254,7 @@ export function UploadProposalTab({
         }
         const json = (await res.json()) as {
           extracted: ExtractedContract
+          pdfText?: string
         }
         const extracted = json.extracted
         // Use proposed total as current-spend fallback (spec §2: no external
@@ -212,13 +276,52 @@ export function UploadProposalTab({
         onProposalScored(scored)
         onPhaseChange("complete")
         toast.success("Proposal scored")
+
+        // Kick off the canonical (24-category, side-aware) clause
+        // analyzer in the background so the user gets the rich clause
+        // breakdown without a second click. Failures are toasted but
+        // do not roll back the scoring step above.
+        const pdfText = json.pdfText?.trim() ?? ""
+        if (pdfText.length > 0) {
+          try {
+            const contractName =
+              extracted.contractName ||
+              extracted.vendorName ||
+              file.name.replace(/\.pdf$/i, "")
+            const canonical = await canonicalMutation.mutateAsync({
+              pdfText,
+              side,
+              contractVariant,
+              contractName,
+            })
+            setCanonicalResult(canonical)
+            toast.success(
+              `Canonical clause analysis: ${canonical.extractedClauseCount} clause${
+                canonical.extractedClauseCount === 1 ? "" : "s"
+              } extracted`,
+            )
+          } catch {
+            // useExtractAndAnalyzeCanonical surfaces a toast already.
+          }
+        } else {
+          toast.message(
+            "PDF had no recoverable text layer — canonical clause analyzer skipped (paste text below to run manually).",
+          )
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Analysis failed"
         toast.error(msg)
         onPhaseChange("error")
       }
     },
-    [analyzeMutation, onPhaseChange, onProposalScored],
+    [
+      analyzeMutation,
+      canonicalMutation,
+      contractVariant,
+      onPhaseChange,
+      onProposalScored,
+      side,
+    ],
   )
 
   const onDrop = useCallback(
@@ -256,7 +359,7 @@ export function UploadProposalTab({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Vendor (for spend-pattern sidebar)</Label>
                 <Select
@@ -270,6 +373,41 @@ export function UploadProposalTab({
                     {vendors.map((v) => (
                       <SelectItem key={v.id} value={v.id}>
                         {v.displayName ?? v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Analyze as</Label>
+                <Select
+                  value={side}
+                  onValueChange={(v) => setSide(v as UserSide)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FACILITY">Facility</SelectItem>
+                    <SelectItem value="VENDOR">Vendor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Contract variant</Label>
+                <Select
+                  value={contractVariant}
+                  onValueChange={(v) =>
+                    setContractVariant(v as ContractVariant)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONTRACT_VARIANT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -335,9 +473,13 @@ export function UploadProposalTab({
             />
             <Button
               onClick={handleAnalyzeClauses}
-              disabled={clauseMutation.isPending || clauseText.trim().length === 0}
+              disabled={
+                clauseMutation.isPending ||
+                canonicalMutation.isPending ||
+                clauseText.trim().length === 0
+              }
             >
-              {clauseMutation.isPending ? (
+              {clauseMutation.isPending || canonicalMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Analyzing…
@@ -348,6 +490,21 @@ export function UploadProposalTab({
             </Button>
           </CardContent>
         </Card>
+
+        {canonicalResult ? (
+          <CanonicalClauseAnalyzerPanel
+            result={canonicalResult.analysis}
+            extractedClauseCount={canonicalResult.extractedClauseCount}
+            truncated={canonicalResult.truncated}
+          />
+        ) : canonicalMutation.isPending ? (
+          <Card>
+            <CardContent className="flex items-center gap-3 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Running canonical clause analyzer…
+            </CardContent>
+          </Card>
+        ) : null}
 
         {clauseAnalysis ? (
           <PdfClauseAnalyzerPanel

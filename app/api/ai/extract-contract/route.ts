@@ -163,6 +163,19 @@ ${text.trim()}`,
     const fileData = new Uint8Array(bytes)
     const userId = session.user.id
 
+    // Best-effort plain-text extraction so downstream features (e.g.
+    // the canonical clause analyzer) can run a second pass without a
+    // re-upload. Failure here never blocks the AI extraction; we just
+    // omit pdfText from the response.
+    let pdfTextLayer = ""
+    try {
+      const { extractPdfText } = await import("@/lib/ai/pdf-text-helper")
+      const pdfRes = await extractPdfText(fileData)
+      pdfTextLayer = pdfRes.text
+    } catch (pdfErr) {
+      console.warn("[extract-contract] pdf-text-layer extraction failed:", pdfErr)
+    }
+
     // 2026-04-26 cache: SHA-256 the file bytes, look up a per-user
     // cache row. Same PDF re-uploaded → return the previous extract
     // in <50ms instead of re-spending a 20-30s Claude round-trip.
@@ -178,12 +191,16 @@ ${text.trim()}`,
       console.log(
         `[extract-contract] cache HIT for ${file.name} (hash=${fileHash.slice(0, 12)})`,
       )
+      // Re-extract the text layer so cached responses still expose
+      // pdfText for clause-analysis follow-ups; the cache row itself
+      // doesn't store text. Done above as `pdfTextLayer`.
       return Response.json({
         success: true,
         extracted: cached.extracted,
         confidence: cached.confidence ?? 0.9,
         s3Key: cached.s3Key,
         cached: true,
+        pdfText: pdfTextLayer,
       })
     }
 
@@ -348,6 +365,7 @@ ${text.trim()}`,
       confidence: 0.9,
       s3Key,
       cached: false,
+      pdfText: pdfTextLayer,
     })
   } catch (error) {
     console.error("Contract extraction error:", error)

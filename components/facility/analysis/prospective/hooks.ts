@@ -14,10 +14,13 @@ import {
   analyzeProposal,
   getVendorCOGPatterns,
   analyzeUploadedPDF,
+  extractAndAnalyzeUploadedPDFCanonical,
   type AnalyzeProposalInput,
   type AnalyzeProposalResult,
   type SpendPatternAnalysis,
   type ClauseAnalysis,
+  type ExtractAndAnalyzeCanonicalInput,
+  type ExtractAndAnalyzeCanonicalResult,
 } from "@/lib/actions/prospective-analysis"
 
 export function useAnalyzeProspectiveProposal() {
@@ -50,6 +53,24 @@ export function useAnalyzePDFClauses() {
     mutationFn: (input) => analyzeUploadedPDF(input),
     onError: (err) => {
       toast.error(err.message || "Failed to analyze PDF clauses")
+    },
+  })
+}
+
+/**
+ * Bundled extract-with-LLM + canonical-analyze. One server round-trip.
+ * Used by the Upload Proposal tab once the user has picked a side +
+ * contract variant and dropped a PDF.
+ */
+export function useExtractAndAnalyzeCanonical() {
+  return useMutation<
+    ExtractAndAnalyzeCanonicalResult,
+    Error,
+    ExtractAndAnalyzeCanonicalInput
+  >({
+    mutationFn: (input) => extractAndAnalyzeUploadedPDFCanonical(input),
+    onError: (err) => {
+      toast.error(err.message || "Failed to analyze contract clauses")
     },
   })
 }

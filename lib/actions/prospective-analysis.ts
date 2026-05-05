@@ -54,6 +54,7 @@ import {
   type UserSide,
   type ContractVariant,
 } from "@/lib/contracts/clause-risk-analyzer"
+import { extractClauses } from "@/lib/contracts/clause-extractor"
 
 // ─── Re-exported types for callers ──────────────────────────────────
 
@@ -286,20 +287,16 @@ export interface AnalyzeUploadedPDFCanonicalInput {
  * with CRITICAL, per-variant REQUIRED_CLAUSES, MISSING_CLAUSE_SUGGESTIONS,
  * cross-clause regulatory checks, side-aware concerns).
  *
- * TODO: wire to UI. The current `analyzeUploadedPDF` UI path
- * (Upload Proposal tab → analysis-clause-risk-card) consumes the
- * legacy 0-10-score `ClauseAnalysis` shape. Wiring this canonical
- * 0-100-score `PDFContractAnalysisResult` through requires:
- *   1. An upstream extractor that converts `pdfText` →
- *      `CanonicalContractClause[]` (regex over Charles's pattern
- *      library, or a Claude pass).
- *   2. UI surfacing for `side` + `contractVariant` selection (not
- *      currently captured in the upload modal).
- *   3. An adapter (or a side-by-side card) so the existing
- *      `analysis-clause-risk-card` doesn't break.
- * The pure module (`lib/contracts/clause-risk-analyzer.ts`) ships
- * standalone and is fully test-covered, so callers can adopt it as
- * the pieces above land.
+ * Wiring overview (added 2026-05-04):
+ *  - UI extractor: `lib/contracts/clause-extractor.ts` converts pdfText
+ *    → `CanonicalContractClause[]` via a single Sonnet pass.
+ *  - UI surfacing: the Upload Proposal tab now exposes side +
+ *    contractVariant selectors (`canonical-clause-analyzer-panel.tsx`)
+ *    and renders the rich result alongside the legacy panel.
+ *  - This action remains the structured "clauses-in, result-out" path
+ *    so callers with their own extractors (or persisted clauses) can
+ *    skip the LLM hop. See `extractAndAnalyzeUploadedPDFCanonical`
+ *    below for the bundled extract + analyze entry point.
  */
 export async function analyzeUploadedPDFCanonical(
   input: AnalyzeUploadedPDFCanonicalInput,
@@ -339,6 +336,88 @@ export async function analyzeUploadedPDFCanonical(
       clauseCount: input.clauses.length,
     })
     throw err
+  }
+}
+
+// ─── extractAndAnalyzeUploadedPDFCanonical ─────────────────────────
+
+export interface ExtractAndAnalyzeCanonicalInput {
+  /** Plain PDF text (post `extractPdfText`). Truncated to 50KB inside
+   *  the extractor — caller can pass the full string. */
+  pdfText: string
+  side: UserSide
+  contractVariant: ContractVariant
+  contractName: string
+}
+
+export interface ExtractAndAnalyzeCanonicalResult {
+  analysis: PDFContractAnalysisResult
+  /** Number of clauses the LLM picked up — surfaced in toasts so users
+   *  can sanity-check that extraction worked. */
+  extractedClauseCount: number
+  /** True when the input exceeded the 50KB extractor cap. */
+  truncated: boolean
+}
+
+/**
+ * One-shot: extract clauses with the Sonnet-backed extractor, then
+ * run the canonical analyzer. The Upload Proposal tab calls this so
+ * the user only sees a single round-trip.
+ *
+ * Per CLAUDE.md AI-action error-path rule: failures log
+ * `[extractAndAnalyzeUploadedPDFCanonical]` with context and re-throw
+ * a user-facing message naming the action + failure kind.
+ */
+export async function extractAndAnalyzeUploadedPDFCanonical(
+  input: ExtractAndAnalyzeCanonicalInput,
+): Promise<ExtractAndAnalyzeCanonicalResult> {
+  const session = await requireFacility()
+  try {
+    const extracted = await extractClauses({
+      pdfText: input.pdfText,
+      contractName: input.contractName,
+    })
+
+    const analysis = analyzePDFContractCanonical(
+      extracted.clauses,
+      input.side,
+      input.contractVariant,
+      input.contractName,
+    )
+
+    await logAudit({
+      userId: session.user.id,
+      action: "prospective.pdf_extracted_and_analyzed_canonical",
+      entityType: "pdf_analysis",
+      metadata: {
+        contractName: input.contractName,
+        side: input.side,
+        contractVariant: input.contractVariant,
+        textLength: input.pdfText.length,
+        extractedClauseCount: extracted.clauses.length,
+        truncated: extracted.truncated,
+        overallRiskScore: analysis.overallRiskScore,
+        overallRiskLevel: analysis.overallRiskLevel,
+        criticalFlagCount: analysis.criticalFlags.length,
+        missingClauseCount: analysis.missingClauses.length,
+      },
+    })
+
+    return serialize({
+      analysis,
+      extractedClauseCount: extracted.clauses.length,
+      truncated: extracted.truncated,
+    })
+  } catch (err) {
+    console.error("[extractAndAnalyzeUploadedPDFCanonical]", err, {
+      facilityId: session.facility.id,
+      contractName: input.contractName,
+      side: input.side,
+      contractVariant: input.contractVariant,
+      textLength: input.pdfText.length,
+    })
+    const reason = err instanceof Error ? err.message : String(err)
+    throw new Error(`Clause extractor failed: ${reason}`)
   }
 }
 
