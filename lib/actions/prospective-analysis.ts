@@ -47,6 +47,13 @@ import {
   analyzePDFContract,
   type ClauseAnalysis,
 } from "@/lib/prospective-analysis/pdf-clause-analyzer"
+import {
+  analyzePDFContract as analyzePDFContractCanonical,
+  type PDFContractAnalysisResult,
+  type ContractClause as CanonicalContractClause,
+  type UserSide,
+  type ContractVariant,
+} from "@/lib/contracts/clause-risk-analyzer"
 
 // ─── Re-exported types for callers ──────────────────────────────────
 
@@ -57,6 +64,10 @@ export type {
   ComparisonResult,
   SpendPatternAnalysis,
   ClauseAnalysis,
+  PDFContractAnalysisResult,
+  CanonicalContractClause,
+  UserSide,
+  ContractVariant,
 }
 
 // ─── analyzeProposal ────────────────────────────────────────────────
@@ -254,6 +265,78 @@ export async function analyzeUploadedPDF(
       facilityId: session.facility.id,
       fileName: input.fileName ?? null,
       textLength: input.pdfText.length,
+    })
+    throw err
+  }
+}
+
+// ─── analyzeUploadedPDFCanonical ────────────────────────────────────
+
+export interface AnalyzeUploadedPDFCanonicalInput {
+  /** Pre-extracted, pre-categorized clauses. Caller owns the upstream
+   *  extraction (regex, Claude, manual). */
+  clauses: CanonicalContractClause[]
+  side: UserSide
+  contractVariant: ContractVariant
+  contractName: string
+}
+
+/**
+ * Run the canonical Charles-spec analyzer (24 categories, RiskLevel
+ * with CRITICAL, per-variant REQUIRED_CLAUSES, MISSING_CLAUSE_SUGGESTIONS,
+ * cross-clause regulatory checks, side-aware concerns).
+ *
+ * TODO: wire to UI. The current `analyzeUploadedPDF` UI path
+ * (Upload Proposal tab → analysis-clause-risk-card) consumes the
+ * legacy 0-10-score `ClauseAnalysis` shape. Wiring this canonical
+ * 0-100-score `PDFContractAnalysisResult` through requires:
+ *   1. An upstream extractor that converts `pdfText` →
+ *      `CanonicalContractClause[]` (regex over Charles's pattern
+ *      library, or a Claude pass).
+ *   2. UI surfacing for `side` + `contractVariant` selection (not
+ *      currently captured in the upload modal).
+ *   3. An adapter (or a side-by-side card) so the existing
+ *      `analysis-clause-risk-card` doesn't break.
+ * The pure module (`lib/contracts/clause-risk-analyzer.ts`) ships
+ * standalone and is fully test-covered, so callers can adopt it as
+ * the pieces above land.
+ */
+export async function analyzeUploadedPDFCanonical(
+  input: AnalyzeUploadedPDFCanonicalInput,
+): Promise<PDFContractAnalysisResult> {
+  const session = await requireFacility()
+  try {
+    const result = analyzePDFContractCanonical(
+      input.clauses,
+      input.side,
+      input.contractVariant,
+      input.contractName,
+    )
+
+    await logAudit({
+      userId: session.user.id,
+      action: "prospective.pdf_analyzed_canonical",
+      entityType: "pdf_analysis",
+      metadata: {
+        contractName: input.contractName,
+        side: input.side,
+        contractVariant: input.contractVariant,
+        clauseCount: input.clauses.length,
+        overallRiskScore: result.overallRiskScore,
+        overallRiskLevel: result.overallRiskLevel,
+        criticalFlagCount: result.criticalFlags.length,
+        missingClauseCount: result.missingClauses.length,
+      },
+    })
+
+    return serialize(result)
+  } catch (err) {
+    console.error("[analyzeUploadedPDFCanonical]", err, {
+      facilityId: session.facility.id,
+      contractName: input.contractName,
+      side: input.side,
+      contractVariant: input.contractVariant,
+      clauseCount: input.clauses.length,
     })
     throw err
   }
