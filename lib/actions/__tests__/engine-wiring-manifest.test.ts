@@ -62,8 +62,8 @@ const MANIFEST: EngineWiring[] = [
   {
     fn: "calculateCapitated",
     source: "lib/rebates/engine/capitated.ts",
-    status: "unwired",
-    note: "No action constructs CAPITATED config today. The calculateRebate dispatcher was removed as part of the 2026-04-19 engine-param-coverage audit resolution; the per-type calculator is still exported but unreachable from the display path until a future action adopts it.",
+    status: "wired",
+    note: "Reachable via getCapitatedRebateForContract in lib/actions/contracts/capitated.ts; routes through calculateRebate dispatcher + buildRebateConfigFromPrisma. Wraps capitated_price_reduction terms with a periodCap. capitated_pricing_rebate terms still flow through recomputeVolumeAccrualForTerm (CPT-occurrence shape) to preserve persisted Rebate-row numbers.",
   },
   {
     fn: "calculateCarveOut",
