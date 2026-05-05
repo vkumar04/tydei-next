@@ -194,6 +194,79 @@ describe("buildRebateConfigFromPrisma — unit scaling", () => {
       expect(cfg!.tiers[0]!.fixedRebateAmount).toBe(30_000)
     }
   })
+
+  it("scales fixed_rebate_per_unit dollar value by 100 (engine's /100 yields count × $X)", () => {
+    // VOLUME_REBATE: tier rebateValue=$50/unit. Engine math is
+    // (occurrences × tier.rebateValue) / 100. For the engine to output
+    // $50 per occurrence, tier.rebateValue must arrive as 5000.
+    const cfg = buildRebateConfigFromPrisma(
+      term({ termType: "volume_rebate", cptCodes: ["66984"] }, [
+        tier({
+          tierNumber: 1,
+          rebateType: "fixed_rebate_per_unit",
+          rebateValue: new Prisma.Decimal(50),
+        }),
+      ]),
+    )
+    expect(cfg!.type).toBe("VOLUME_REBATE")
+    if (cfg!.type === "VOLUME_REBATE") {
+      expect(cfg!.tiers[0]!.rebateValue).toBe(5000)
+      expect(cfg!.tiers[0]!.fixedRebateAmount).toBeNull()
+    }
+  })
+
+  it("scales per_procedure_rebate dollar value by 100", () => {
+    const cfg = buildRebateConfigFromPrisma(
+      term({ termType: "volume_rebate", cptCodes: ["27447"] }, [
+        tier({
+          tierNumber: 1,
+          rebateType: "per_procedure_rebate",
+          rebateValue: new Prisma.Decimal(75),
+        }),
+      ]),
+    )
+    if (cfg!.type === "VOLUME_REBATE") {
+      expect(cfg!.tiers[0]!.rebateValue).toBe(7500)
+    }
+  })
+})
+
+describe("buildRebateConfigFromPrisma — engine math equivalence", () => {
+  it("VOLUME_REBATE per-unit tier × engine == production count × rebateValue", async () => {
+    // Production volume writer (lib/contracts/recompute/volume.ts:244):
+    //   rebate = occurrences × tier.rebateValue (raw dollars-per-unit)
+    // Engine (calculateVolumeRebate via shared cumulative helpers):
+    //   rebate = (occurrences × tier.rebateValue) / 100
+    // The bridge ×100 scaling makes these equal.
+    const { calculateRebate } = await import("@/lib/rebates/engine")
+    const cfg = buildRebateConfigFromPrisma(
+      term({ termType: "volume_rebate", cptCodes: ["66984"] }, [
+        tier({
+          tierNumber: 1,
+          spendMin: new Prisma.Decimal(0),
+          rebateType: "fixed_rebate_per_unit",
+          rebateValue: new Prisma.Decimal(50),
+        }),
+      ]),
+    )
+    expect(cfg!.type).toBe("VOLUME_REBATE")
+
+    // 10 occurrences × $50 = $500 expected
+    const purchases = Array.from({ length: 10 }, (_, i) => ({
+      referenceNumber: `ref-${i}`,
+      quantity: 1,
+      unitPrice: 0,
+      extendedPrice: 0,
+      purchaseDate: new Date(`2025-01-${String(i + 1).padStart(2, "0")}`),
+      cptCode: "66984",
+      caseId: `case-${i}`,
+    }))
+    const result = calculateRebate(cfg!, {
+      purchases,
+      totalSpend: 0,
+    })
+    expect(result.rebateEarned).toBe(500)
+  })
 })
 
 describe("buildRebateConfigFromPrisma — spendBasis routing", () => {

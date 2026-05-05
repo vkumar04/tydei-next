@@ -79,18 +79,44 @@ export type PrismaTermWithTiers = PrismaContractTerm & {
 /**
  * Map a Prisma ContractTier row into the engine's `RebateTier` shape.
  *
- * For `percent_of_spend`, scale the fraction up to integer percent.
- * For `fixed_rebate`, route the dollar amount through `fixedRebateAmount`
- * so cumulative/marginal helpers short-circuit to the flat amount on
- * tier qualification (see `lib/rebates/calculate.ts` for the same
- * convention used by the flat-tier facade).
- *
- * For unit-based types (`fixed_rebate_per_unit`, `per_procedure_rebate`)
- * the rebateValue is already in dollars-per-unit and we pass it through
- * unchanged.
+ * Per the rules table at the top of this file:
+ *   - `percent_of_spend`: scale the fraction up to integer percent
+ *     (`scaleRebateValueForEngine` → `× 100`); the engine's shared
+ *     cumulative/marginal helpers then divide by 100 internally.
+ *   - `fixed_rebate`: route the dollar amount through `fixedRebateAmount`
+ *     so cumulative/marginal short-circuit to the flat dollars on tier
+ *     qualification (cumulative.ts:20). `rebateValue` is forced to 0 so
+ *     any caller that ignores `fixedRebateAmount` cleanly returns 0.
+ *   - `fixed_rebate_per_unit` / `per_procedure_rebate`: scale dollars-per-
+ *     unit by ×100 here. The engine's tier helpers always do `(amount ×
+ *     rebateValue) / 100`; for VOLUME_REBATE the "amount" is the
+ *     occurrence count, so `(count × ($X × 100)) / 100 = count × $X`.
+ *     This matches the production volume / PO / invoice writers' raw
+ *     `count × tier.rebateValue` formula. The ×100 lives here (at the
+ *     bridge boundary) rather than in `scaleRebateValueForEngine` so
+ *     existing display + accrual callers — which call
+ *     `scaleRebateValueForEngine` directly and aren't routed through
+ *     the engine's /100 path — keep their current numbers.
  */
 function mapTier(t: PrismaContractTier): RebateTier {
   const isFixedRebate = t.rebateType === "fixed_rebate"
+  const isUnitBased =
+    t.rebateType === "fixed_rebate_per_unit" ||
+    t.rebateType === "per_procedure_rebate"
+  let rebateValueForEngine: number
+  if (isFixedRebate) {
+    rebateValueForEngine = 0
+  } else if (isUnitBased) {
+    // ×100 to undo the engine's internal /100 — see bridge header rules
+    // table. Yields `count × tier.rebateValue` after the engine divides.
+    rebateValueForEngine = Number(t.rebateValue) * 100
+  } else {
+    // percent_of_spend: scale fraction → integer percent.
+    rebateValueForEngine = scaleRebateValueForEngine(
+      t.rebateValue,
+      t.rebateType,
+    )
+  }
   return {
     tierNumber: t.tierNumber,
     tierName: t.tierName ?? null,
@@ -99,9 +125,7 @@ function mapTier(t: PrismaContractTier): RebateTier {
       t.spendMax === null || t.spendMax === undefined
         ? null
         : Number(t.spendMax),
-    rebateValue: isFixedRebate
-      ? 0
-      : scaleRebateValueForEngine(t.rebateValue, t.rebateType),
+    rebateValue: rebateValueForEngine,
     fixedRebateAmount: isFixedRebate
       ? Number(t.rebateValue)
       : t.fixedRebateAmount === null || t.fixedRebateAmount === undefined
