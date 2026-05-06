@@ -112,6 +112,27 @@ export async function seedContracts(
       tieInCapitalContractId: contracts.strykerMako.id,
     },
   })
+  // 2026-05-06 (bug #10 follow-up): tie-in contracts MUST own at least
+  // one ContractCapitalLineItem so the amortization card has something
+  // to compute against. The legacy `tieInCapitalContractId` pointer
+  // alone leaves capitalLineItems empty and the amortization schedule
+  // renders nothing — exactly the symptom validated against this seed.
+  await prisma.contractCapitalLineItem.createMany({
+    data: [
+      {
+        contractId: contracts.strykerTieIn.id,
+        description: "Tie-in capital coverage (Mako system)",
+        itemNumber: "MAKO-TIE-IN",
+        serialNumber: null,
+        contractTotal: 1_500_000,
+        initialSales: 250_000,
+        interestRate: 0.04,
+        termMonths: 60,
+        paymentType: "fixed",
+        paymentCadence: "quarterly",
+      },
+    ],
+  })
   // Tie-in members surface from contract.terms in
   // lib/actions/analytics/tie-in-compliance.ts. Without these the
   // TieInComplianceCard renders an empty body.
