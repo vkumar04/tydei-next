@@ -68,9 +68,40 @@ export function useCreateContract() {
       toast.success("Contract created successfully")
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to create contract")
+      toast.error(humanizeServerActionError(error, "Failed to create contract"))
     },
   })
+}
+
+// Bug #9: Next.js redacts server-action error messages in production
+// builds to "An error occurred in the Server Components render. The
+// specific message could not be production builds to avoid leaking
+// sensitive details. A digest property is included on this error
+// instance which may provide additional details about the nature of
+// the error." That string is useless in a toast — it tells the user
+// nothing about what failed and how to recover. When we detect the
+// prod-redaction wrapper, replace it with a friendlier fallback that
+// names the action and points the user at server logs (where the
+// `console.error("[createContract]", err, …)` breadcrumb trail lives).
+//
+// In development mode (or when the action returned a humanized message
+// via `throw new Error("Contract validation failed at …")`), the
+// original message is preserved.
+function humanizeServerActionError(
+  error: unknown,
+  fallback: string,
+): string {
+  const msg =
+    error instanceof Error ? error.message : String(error ?? "")
+  if (!msg) return fallback
+  if (
+    msg.startsWith("An error occurred in the Server Components render") ||
+    msg.includes("specific message could not be") ||
+    msg.includes("digest property")
+  ) {
+    return `${fallback}. The server logged the specific reason — ask an engineer to grep the server logs for the digest hash.`
+  }
+  return msg
 }
 
 export function useUpdateContract() {
@@ -87,7 +118,7 @@ export function useUpdateContract() {
       toast.success("Contract updated successfully")
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to update contract")
+      toast.error(humanizeServerActionError(error, "Failed to update contract"))
     },
   })
 }
@@ -102,7 +133,7 @@ export function useDeleteContract() {
       toast.success("Contract deleted successfully")
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to delete contract")
+      toast.error(humanizeServerActionError(error, "Failed to delete contract"))
     },
   })
 }
