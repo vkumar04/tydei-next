@@ -101,11 +101,22 @@ const dollarOnlyRebateTypes = rebateTypes.filter(
 )
 function rebateTypesForTerm(
   termType: string | undefined,
+  currentRebateType?: TierInput["rebateType"],
 ): readonly { value: TierInput["rebateType"]; label: string }[] {
   if (termType === "price_reduction") {
     return [{ value: "percent_of_spend", label: "% off contract price" }]
   }
   if (termType && NON_PERCENT_TERM_TYPES.has(termType)) {
+    // Preserve a legacy `percent_of_spend` option in the picker when the
+    // tier already carries that value, so the user can SEE the
+    // mis-shaped row and re-pick a compatible type. Without this, the
+    // Select would render with no visible value and look broken.
+    if (currentRebateType === "percent_of_spend") {
+      return [
+        ...dollarOnlyRebateTypes,
+        { value: "percent_of_spend", label: "% of Spend (legacy — switch to a dollar type)" },
+      ]
+    }
     return dollarOnlyRebateTypes
   }
   return rebateTypes
@@ -222,7 +233,7 @@ export function ContractTierRow({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {rebateTypesForTerm(termType).map((rt) => (
+            {rebateTypesForTerm(termType, tier.rebateType).map((rt) => (
               <SelectItem key={rt.value} value={rt.value}>
                 {rt.label}
               </SelectItem>

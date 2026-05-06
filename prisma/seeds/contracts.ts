@@ -115,21 +115,28 @@ export async function seedContracts(
   // Tie-in members surface from contract.terms in
   // lib/actions/analytics/tie-in-compliance.ts. Without these the
   // TieInComplianceCard renders an empty body.
+  // Compliance-rebate tiers pay a FLAT dollar amount per evaluation
+  // period when the contract's `complianceRate` (%) crosses the
+  // threshold (`spendMin` is the % threshold, not dollars). Pre-2026-05-05
+  // these used `percent_of_spend` with fractional rebateValues — the
+  // threshold writer's `payoutForTier` legacy fallback then paid $2-$3.50
+  // per period. Switched to `fixed_rebate` with explicit dollar payouts
+  // so the rebate amount matches operator intent.
   await addTerm(prisma, contracts.strykerTieIn.id, {
     termName: "Joint Implant Commitment", termType: "compliance_rebate", baselineType: "spend_based",
     effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow,
     minimumPurchaseCommitment: 1_500_000,
   }, [
-    { tierNumber: 1, spendMin: 0, spendMax: 1_500_000, rebateType: "percent_of_spend", rebateValue: 0.02 },
-    { tierNumber: 2, spendMin: 1_500_000, rebateType: "percent_of_spend", rebateValue: 0.035 },
+    { tierNumber: 1, spendMin: 0, spendMax: 1_500_000, rebateType: "fixed_rebate", rebateValue: 10_000 },
+    { tierNumber: 2, spendMin: 1_500_000, rebateType: "fixed_rebate", rebateValue: 17_500 },
   ])
   await addTerm(prisma, contracts.strykerTieIn.id, {
     termName: "Capital Coverage", termType: "compliance_rebate", baselineType: "spend_based",
     effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow,
     minimumPurchaseCommitment: 500_000,
   }, [
-    { tierNumber: 1, spendMin: 0, spendMax: 500_000, rebateType: "percent_of_spend", rebateValue: 0.015 },
-    { tierNumber: 2, spendMin: 500_000, rebateType: "percent_of_spend", rebateValue: 0.025 },
+    { tierNumber: 1, spendMin: 0, spendMax: 500_000, rebateType: "fixed_rebate", rebateValue: 7_500 },
+    { tierNumber: 2, spendMin: 500_000, rebateType: "fixed_rebate", rebateValue: 12_500 },
   ])
 
   // 4. Stryker Pricing Only (pricing_only, active)
@@ -215,9 +222,13 @@ export async function seedContracts(
     paymentTiming: "semi_annual",
     effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow, desiredMarketShare: 65,
   }, [
-    { tierNumber: 1, marketShareMin: 0, marketShareMax: 50, rebateType: "percent_of_spend", rebateValue: 0.01 },
-    { tierNumber: 2, marketShareMin: 50, marketShareMax: 65, rebateType: "percent_of_spend", rebateValue: 0.03 },
-    { tierNumber: 3, marketShareMin: 65, rebateType: "percent_of_spend", rebateValue: 0.05 },
+    // Market-share tiers pay a flat dollar amount per evaluation period
+    // when `Contract.currentMarketShare` crosses the threshold band.
+    // Same pattern as compliance_rebate above: use `fixed_rebate` with
+    // explicit dollar values, not `percent_of_spend` fractions.
+    { tierNumber: 1, marketShareMin: 0, marketShareMax: 50, rebateType: "fixed_rebate", rebateValue: 5_000 },
+    { tierNumber: 2, marketShareMin: 50, marketShareMax: 65, rebateType: "fixed_rebate", rebateValue: 12_500 },
+    { tierNumber: 3, marketShareMin: 65, rebateType: "fixed_rebate", rebateValue: 25_000 },
   ])
 
   // 9. Smith & Nephew Wound Care (usage, expired)
@@ -299,9 +310,12 @@ export async function seedContracts(
     evaluationPeriod: "quarterly", paymentTiming: "annual",
     effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow, spendBaseline: 300000,
   }, [
-    { tierNumber: 1, spendMin: 0, spendMax: 300000, rebateType: "percent_of_spend", rebateValue: 0.02 },
-    { tierNumber: 2, spendMin: 300000, spendMax: 600000, rebateType: "percent_of_spend", rebateValue: 0.035 },
-    { tierNumber: 3, spendMin: 600000, rebateType: "percent_of_spend", rebateValue: 0.05 },
+    // 2026-05-05: switched compliance_rebate tiers from percent_of_spend
+    // (which the threshold writer paid as $2/$3.50/$5 per period via the
+    // legacy fallback) to fixed_rebate with explicit per-period dollars.
+    { tierNumber: 1, spendMin: 0, spendMax: 300000, rebateType: "fixed_rebate", rebateValue: 3_000 },
+    { tierNumber: 2, spendMin: 300000, spendMax: 600000, rebateType: "fixed_rebate", rebateValue: 5_500 },
+    { tierNumber: 3, spendMin: 600000, rebateType: "fixed_rebate", rebateValue: 8_000 },
   ])
 
   // 13. DePuy Synthes Multi-Facility (grouped, active)
