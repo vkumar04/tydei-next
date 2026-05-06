@@ -4,17 +4,7 @@ import { useState, useCallback, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
-import {
-  ArrowLeft,
-  Loader2,
-  Save,
-  FileText,
-  Upload,
-  CheckCircle2,
-  X,
-  Plus,
-  Paperclip,
-} from "lucide-react"
+import { ArrowLeft, Loader2, Save } from "lucide-react"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractDocument } from "@/lib/actions/contracts"
@@ -34,7 +24,7 @@ import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
-import { ContractPdfDropZone } from "@/components/contracts/contract-pdf-drop-zone"
+import { EntryModeTabs } from "@/components/vendor/contracts/submission"
 import { TieInCapitalPicker } from "@/components/contracts/tie-in-capital-picker"
 import {
   CapitalLineItemsEditor,
@@ -42,23 +32,8 @@ import {
 } from "@/components/contracts/capital-line-items-editor"
 import { createCapitalLineItem } from "@/lib/actions/contracts/capital-line-items"
 import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 
@@ -85,8 +60,11 @@ export function NewContractClient({
     [dynamicCategories, categories],
   )
 
+  const [entryMode, setEntryMode] = useState<"ai" | "pdf" | "manual">("manual")
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
   const [droppedFile, setDroppedFile] = useState<File | null>(null)
+  const [contractFile, setContractFile] = useState<File | null>(null)
+  const [extractionComplete, setExtractionComplete] = useState(false)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
   const [pricingFileName, setPricingFileName] = useState<string | null>(null)
   const [pricingCategories, setPricingCategories] = useState<string[]>([])
@@ -388,6 +366,7 @@ export function NewContractClient({
   async function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string, aiPricingItems?: ContractPricingItem[], aiPricingCategories?: string[]) {
     if (s3Key) setContractS3Key(s3Key)
     if (fileName) setContractFileName(fileName)
+    setExtractionComplete(true)
 
     form.setValue("name", data.contractName)
     if (data.contractNumber) form.setValue("contractNumber", data.contractNumber)
@@ -747,45 +726,52 @@ export function NewContractClient({
           onApply={handleMappingApply}
         />
 
-        {/* Entry-mode tabs — E2E regression spec
-            (facility-contract-with-new-vendor-category-rebate.spec.ts)
-            clicks the Manual Entry tab first. Default tab is "manual" so
-            procurement teams who aren't uploading a PDF land on the form
-            directly. "PDF / AI Extract" tab holds the drop zone. Form
-            state is shared — extracting a PDF pre-fills the same form. */}
-        <Tabs defaultValue="manual" className="w-full">
-          <TabsList>
-            <TabsTrigger value="manual">Manual Entry</TabsTrigger>
-            <TabsTrigger value="pdf">PDF / AI Extract</TabsTrigger>
-          </TabsList>
-          <TabsContent value="pdf" className="mt-4">
-            <ContractPdfDropZone
-              onFileSelected={(file, kind) => {
-                if (kind === "contract") {
-                  setDroppedFile(file)
-                  setAiExtractOpen(true)
-                } else if (kind === "pricing") {
-                  void handlePricingUpload(file)
-                } else {
-                  toast.error(
-                    "Unsupported file type. Use PDF / DOCX / TXT for contract documents, or CSV / XLSX / XLS for pricing files.",
-                  )
-                }
-              }}
-              extractedFileName={contractFileName}
-              onReplace={() => {
-                setContractFileName(null)
-                setContractS3Key(null)
-              }}
-            />
-          </TabsContent>
-          <TabsContent value="manual" className="mt-4 space-y-6">
-            <p className="text-sm text-muted-foreground">
-              Fill in the form below. Switch to PDF / AI Extract to upload a
-              contract PDF and auto-populate these fields.
-            </p>
-          </TabsContent>
-        </Tabs>
+        {/* 3-tab entry mode (AI Assistant / Upload PDF / Manual Entry) —
+            mirrors v0's facility + vendor design and the vendor-side
+            VendorContractSubmission. Form state is shared across tabs;
+            switching to AI or PDF pre-fills the same form. The PDF tab
+            owns Additional Documents + Pricing File uploads. */}
+        <EntryModeTabs
+          entryMode={entryMode}
+          onEntryModeChange={setEntryMode}
+          contractFile={contractFile}
+          extractionComplete={extractionComplete}
+          onPDFUpload={(file) => {
+            setContractFile(file)
+            setExtractionComplete(false)
+            setDroppedFile(file)
+            setAiExtractOpen(true)
+          }}
+          onClearPDF={() => {
+            setContractFile(null)
+            setExtractionComplete(false)
+            setDroppedFile(null)
+            setContractFileName(null)
+            setContractS3Key(null)
+          }}
+          onAIExtracted={(data, s3Key, fileName) =>
+            void handleAIExtract(data, s3Key, fileName)
+          }
+          additionalDocs={additionalDocs}
+          onAddDoc={(file, type) =>
+            setAdditionalDocs((prev) => [...prev, { file, type, name: file.name }])
+          }
+          onRemoveDoc={(i) =>
+            setAdditionalDocs((prev) => prev.filter((_, idx) => idx !== i))
+          }
+          onChangeDocType={(i, type) =>
+            setAdditionalDocs((prev) =>
+              prev.map((d, idx) => (idx === i ? { ...d, type } : d)),
+            )
+          }
+          pricingFileName={pricingFileName}
+          pricingItemCount={pricingItems.length}
+          onPricingUpload={(file) => void handlePricingUpload(file)}
+          onClearPricing={() => {
+            setPricingItems([])
+            setPricingFileName(null)
+          }}
+        />
 
         {/* Contract Details form */}
         <ContractFormBasicInfo
@@ -870,164 +856,6 @@ export function NewContractClient({
           categories={liveCategories}
         />
 
-        {/* Attachments (optional) — collapsed by default */}
-        <Accordion type="single" collapsible>
-          <AccordionItem
-            value="attachments"
-            className="rounded-lg border px-4"
-          >
-            <AccordionTrigger className="hover:no-underline">
-              <div className="flex items-center gap-2">
-                <Paperclip className="h-4 w-4" />
-                <span className="font-medium">Attachments (optional)</span>
-                {(additionalDocs.length > 0 || pricingItems.length > 0) && (
-                  <Badge variant="secondary">
-                    {additionalDocs.length +
-                      (pricingItems.length > 0 ? 1 : 0)}{" "}
-                    attached
-                  </Badge>
-                )}
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="space-y-6 pt-2">
-              {/* Additional Documents */}
-              <div className="space-y-3">
-                <div>
-                  <h4 className="text-sm font-medium">Additional Documents</h4>
-                  <p className="text-xs text-muted-foreground">
-                    Amendments, addendums, or exhibits related to this contract
-                  </p>
-                </div>
-                {additionalDocs.length > 0 && (
-                  <div className="space-y-2">
-                    {additionalDocs.map((doc, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between gap-2 rounded-lg border p-2"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <span className="truncate text-sm">{doc.name}</span>
-                          <Select
-                            value={doc.type}
-                            onValueChange={(value) =>
-                              setAdditionalDocs((prev) =>
-                                prev.map((d, i) =>
-                                  i === idx ? { ...d, type: value } : d,
-                                ),
-                              )
-                            }
-                          >
-                            <SelectTrigger className="h-7 w-[130px] shrink-0 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="amendment">Amendment</SelectItem>
-                              <SelectItem value="addendum">Addendum</SelectItem>
-                              <SelectItem value="exhibit">Exhibit</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() =>
-                            setAdditionalDocs((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            )
-                          }
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const input = document.createElement("input")
-                    input.type = "file"
-                    input.accept = ".pdf,.doc,.docx,.txt"
-                    input.onchange = (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0]
-                      if (file) {
-                        setAdditionalDocs((prev) => [
-                          ...prev,
-                          { file, type: "amendment", name: file.name },
-                        ])
-                      }
-                    }
-                    input.click()
-                  }}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Document
-                </Button>
-              </div>
-
-              {/* Upload Pricing File */}
-              <div className="space-y-3">
-                <div>
-                  <h4 className="text-sm font-medium">Pricing File</h4>
-                  <p className="text-xs text-muted-foreground">
-                    CSV or Excel with vendor item numbers and pricing to link
-                    to this contract
-                  </p>
-                </div>
-                {pricingItems.length > 0 ? (
-                  <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                      <div>
-                        <p className="text-sm font-medium">{pricingFileName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {pricingItems.length} pricing items loaded
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">
-                        {pricingItems.length} items
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => {
-                          setPricingItems([])
-                          setPricingFileName(null)
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const input = document.createElement("input")
-                      input.type = "file"
-                      input.accept = ".csv,.xlsx,.xls"
-                      input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0]
-                        if (file) handlePricingUpload(file)
-                      }
-                      input.click()
-                    }}
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Pricing File
-                  </Button>
-                )}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
       </div>
 
       {/* Sticky action bar */}
