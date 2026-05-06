@@ -296,6 +296,75 @@ export function ContractTermsEntry({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contractType, terms.length])
 
+  // Bug #12 / #13: existing saved terms may have a termType / baselineType
+  // / tier rebateType combination that the form's onValueChange cascade
+  // would have rejected (e.g. a volume_rebate term with baselineType=
+  // spend_based and percent_of_spend tiers). The form-side gates only
+  // catch NEW changes; without this, opening such a term in edit mode
+  // shows the legacy shape and the recompute math runs on the wrong
+  // semantics. Self-heal once on mount: cascade baselineType + flip
+  // percent_of_spend tiers to fixed_rebate (zeroing the value, since a
+  // 0.10 fraction would read as $0.10 per period otherwise).
+  useEffect(() => {
+    if (terms.length === 0) return
+    const PER_OCC = new Set([
+      "volume_rebate",
+      "rebate_per_use",
+      "capitated_pricing_rebate",
+    ])
+    const FLAT = new Set([
+      "market_share",
+      "compliance_rebate",
+      "fixed_fee",
+      "payment_rebate",
+      "po_rebate",
+    ])
+    let changed = false
+    const next = terms.map((t) => {
+      const patch: Partial<TermFormValues> = {}
+      const expectedBaseline: TermFormValues["baselineType"] | null = PER_OCC.has(
+        t.termType,
+      )
+        ? "volume_based"
+        : t.termType === "growth_rebate"
+          ? "growth_based"
+          : null
+      if (expectedBaseline && t.baselineType !== expectedBaseline) {
+        patch.baselineType = expectedBaseline
+      }
+      if (
+        t.termType === "volume_rebate" &&
+        t.volumeType == null
+      ) {
+        patch.volumeType = "procedure_code"
+      }
+      if ((PER_OCC.has(t.termType) || FLAT.has(t.termType)) && t.tiers) {
+        const fixedTiers = t.tiers.map((tier) => {
+          if (tier.rebateType !== "percent_of_spend") return tier
+          // Match the threshold writer's legacy `percent_of_spend → raw
+          // × 100` fallback so the displayed dollar payout equals what
+          // the recompute path was already producing. The user can
+          // adjust upward; we never silently invent a larger number.
+          const preservedDollarValue = Number(tier.rebateValue ?? 0) * 100
+          return {
+            ...tier,
+            rebateType: "fixed_rebate" as const,
+            rebateValue: preservedDollarValue,
+          }
+        })
+        const tiersChanged = fixedTiers.some((tier, idx) => tier !== t.tiers[idx])
+        if (tiersChanged) patch.tiers = fixedTiers
+      }
+      if (Object.keys(patch).length > 0) {
+        changed = true
+        return { ...t, ...patch }
+      }
+      return t
+    })
+    if (changed) onChange(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function addTerm() {
     onChange([...terms, createEmptyTerm()])
   }
