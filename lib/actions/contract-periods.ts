@@ -358,22 +358,45 @@ export async function createContractTransaction(input: {
       // windowed row exists, fall through to the orphan-row creation
       // path below (which is clearly labeled `[out-of-band]`) rather
       // than attaching the collection to an unrelated period.
+      // Bug #2: a $57k collection on May 5, 2026 for a contract whose
+      // newest accrued period is Q4 2025 has no in-window match — the prior
+      // logic then orphan-rowed the collection (rebateEarned=0,
+      // [out-of-band]…) so the ledger never reconciled and the open Q1-Q4
+      // 2025 periods stayed Outstanding forever. The dropdown label
+      // ("Auto-match oldest uncollected earned period") describes a real
+      // two-step rule:
+      //   1. Prefer the period whose window contains the collection date.
+      //   2. Otherwise fall back to the OLDEST uncollected earned period.
+      // Only fully orphan-row the collection when there are no earned
+      // uncollected rows on the contract at all.
+      const matchInWindow = async () =>
+        prisma.rebate.findFirst({
+          where: {
+            contractId: input.contractId,
+            collectionDate: null,
+            rebateEarned: { gt: 0 },
+            payPeriodStart: { lte: txnDate },
+            payPeriodEnd: { gte: txnDate },
+          },
+          orderBy: { payPeriodEnd: "asc" },
+          select: rebateSelect,
+        })
+      const matchOldestUncollected = async () =>
+        prisma.rebate.findFirst({
+          where: {
+            contractId: input.contractId,
+            collectionDate: null,
+            rebateEarned: { gt: 0 },
+          },
+          orderBy: { payPeriodEnd: "asc" },
+          select: rebateSelect,
+        })
       const target = input.rebateId
         ? await prisma.rebate.findFirst({
             where: { id: input.rebateId, contractId: input.contractId },
             select: rebateSelect,
           })
-        : await prisma.rebate.findFirst({
-            where: {
-              contractId: input.contractId,
-              collectionDate: null,
-              rebateEarned: { gt: 0 },
-              payPeriodStart: { lte: txnDate },
-              payPeriodEnd: { gte: txnDate },
-            },
-            orderBy: { payPeriodEnd: "asc" },
-            select: rebateSelect,
-          })
+        : ((await matchInWindow()) ?? (await matchOldestUncollected()))
 
       if (target) {
         const priorCollected = Number(target.rebateCollected ?? 0)
