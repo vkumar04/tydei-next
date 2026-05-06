@@ -484,10 +484,16 @@ function VendorFilterCombobox({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[260px] p-0" align="start">
+      <PopoverContent className="w-[260px] p-0" align="start" sideOffset={4}>
         <Command>
           <CommandInput placeholder="Search vendors…" />
-          <CommandList className="max-h-[320px]">
+          {/* Bug #14: with hundreds of vendors the list previously hit a
+              fixed 320px ceiling and stopped visibly scrolling past "A"
+              entries when the popover anchored low in the viewport. Use
+              Radix's `--radix-popover-content-available-height` (auto-
+              set on the popover element) so the list always claims the
+              available viewport space and falls back to 60vh. */}
+          <CommandList className="max-h-[min(60vh,var(--radix-popover-content-available-height,320px))]">
             <CommandEmpty>No vendor matches.</CommandEmpty>
             <CommandGroup>
               <CommandItem
