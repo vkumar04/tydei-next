@@ -238,6 +238,18 @@ export function EditContractClient({
       return
     }
 
+    // Bug #10: tie-in / capital contracts MUST have at least one Capital
+    // / Leased Item — without it the amortization schedule has nothing to
+    // compute against (Bug #11) and rebate-applied-to-capital silently
+    // pays into the void. Same gate as new-contract-client.handleSubmit.
+    const t = form.getValues("contractType")
+    if ((t === "tie_in" || t === "capital") && capitalItems.length === 0) {
+      toast.error(
+        "Add at least one Capital / Leased Item before saving a tie-in or capital contract.",
+      )
+      return
+    }
+
     // Charles W1.W-E3 — pre-validate terms BEFORE we kick off the
     // contract-level update. Previously an invalid term (blank dates,
     // missing term name) would throw inside the save loop, the outer

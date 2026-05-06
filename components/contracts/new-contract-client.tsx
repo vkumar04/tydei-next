@@ -618,6 +618,23 @@ export function NewContractClient({
       return
     }
 
+    // Bug #10: a tie-in contract by definition pairs financed capital
+    // equipment with usage / rebate terms. Submitting a tie-in with no
+    // capital line items leaves the amortization schedule empty (no
+    // contractTotal, rate, term to compute against) and the rebate-applied
+    // math has nothing to retire. Block the submit and tell the user
+    // exactly what to add. Same gate applies to contractType="capital".
+    if (
+      (form.getValues("contractType") === "tie_in" ||
+        form.getValues("contractType") === "capital") &&
+      capitalItems.length === 0
+    ) {
+      toast.error(
+        "Add at least one Capital / Leased Item before saving a tie-in or capital contract.",
+      )
+      return
+    }
+
     // Bug 7 guardrail: if the AI originally extracted more terms than
     // what's about to be submitted, ask the user to confirm. Common
     // failure mode: user clicked a trash icon mid-review and didn't
