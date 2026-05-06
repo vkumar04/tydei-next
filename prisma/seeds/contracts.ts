@@ -188,6 +188,10 @@ export async function seedContracts(
   })
   await addTerm(prisma, contracts.medtronicSpine.id, {
     termName: "Volume Rebate", termType: "volume_rebate", baselineType: "volume_based",
+    volumeType: "procedure_code",
+    // Bug #13: spine-fusion CPT range. Without these, the volume
+    // recompute path skips the term (countCptOccurrences returns 0).
+    cptCodes: ["22612", "22633", "22634", "22845", "22846", "22847", "22853"],
     effectiveStart: oneYearAgo, effectiveEnd: twoYearsFromNow, volumeBaseline: 200,
   }, [
     { tierNumber: 1, volumeMin: 0, volumeMax: 200, rebateType: "fixed_rebate_per_unit", rebateValue: 50 },
@@ -402,6 +406,10 @@ export async function seedContracts(
   })
   await addTerm(prisma, contracts.integraDural.id, {
     termName: "Volume Rebate", termType: "volume_rebate", baselineType: "volume_based",
+    volumeType: "procedure_code",
+    // Bug #13: dural repair / craniotomy CPT codes so the volume
+    // recompute can count occurrences. Without these the term skips.
+    cptCodes: ["61500", "61512", "61518", "61524", "62141", "62142"],
     effectiveStart: oneYearAgo, effectiveEnd: oneYearFromNow, volumeBaseline: 60,
   }, [
     { tierNumber: 1, volumeMin: 0, volumeMax: 60, rebateType: "fixed_rebate_per_unit", rebateValue: 25 },

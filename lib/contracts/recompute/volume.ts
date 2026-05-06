@@ -62,6 +62,15 @@ interface VolumeRebateTermLike {
     tierName: string | null
     spendMin: unknown
     spendMax: unknown
+    /**
+     * Bug #13: volume tiers store their threshold in volumeMin/volumeMax
+     * (Int columns), not spendMin/spendMax (dollar Decimal). Pass these
+     * through so the bridge can translate the right column into the
+     * engine's thresholdMin/thresholdMax. Optional for legacy callers
+     * that haven't been updated.
+     */
+    volumeMin?: number | null
+    volumeMax?: number | null
     rebateValue: unknown
     /**
      * Charles canonical-engine wiring 2026-05-05: required so the
@@ -235,14 +244,34 @@ export async function recomputeVolumeAccrualForTerm(input: {
         : isUnitBased
           ? rebateValueRaw * 100
           : rebateValueRaw * 100
+      // Bug #13: volume tiers express their threshold in the
+      // `volumeMin/volumeMax` columns (occurrence count, Int). The
+      // bridge previously read `spendMin/spendMax` (dollar Decimal,
+      // default 0), so EVERY volume tier had thresholdMin=0 and the
+      // cumulative engine silently always picked the top tier — that's
+      // why "Volume rebates calculate incorrect" recurred even after
+      // the form-side fixes. Prefer volumeMin when set; fall back to
+      // spendMin only for legacy rows that wrote the threshold to the
+      // wrong column.
+      const tVolMin =
+        (t as unknown as { volumeMin?: number | null }).volumeMin
+      const tVolMax =
+        (t as unknown as { volumeMax?: number | null }).volumeMax
+      const thresholdMin =
+        tVolMin != null && Number.isFinite(Number(tVolMin))
+          ? Number(tVolMin)
+          : Number(t.spendMin ?? 0)
+      const thresholdMax =
+        tVolMax != null && Number.isFinite(Number(tVolMax))
+          ? Number(tVolMax)
+          : t.spendMax === null || t.spendMax === undefined
+            ? null
+            : Number(t.spendMax)
       return {
         tierNumber: t.tierNumber,
         tierName: t.tierName,
-        thresholdMin: Number(t.spendMin ?? 0),
-        thresholdMax:
-          t.spendMax === null || t.spendMax === undefined
-            ? null
-            : Number(t.spendMax),
+        thresholdMin,
+        thresholdMax,
         rebateValue: rebateValueForEngine,
         fixedRebateAmount: isFixedRebate ? rebateValueRaw : null,
       }
