@@ -16,7 +16,10 @@ import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-
 import { useAutoFillWhenPristine } from "@/hooks/use-auto-fill-when-pristine"
 import { queryKeys } from "@/lib/query-keys"
 import { createVendor } from "@/lib/actions/vendors"
-import type { TermFormValues } from "@/lib/validators/contract-terms"
+import type {
+  TermFormValues,
+  TierInput,
+} from "@/lib/validators/contract-terms"
 import { normalizeAIRebateValue, toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { computeContractYears } from "@/lib/contracts/term-years"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
@@ -25,7 +28,6 @@ import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { EntryModeTabs } from "@/components/vendor/contracts/submission"
-import { TieInCapitalPicker } from "@/components/contracts/tie-in-capital-picker"
 import {
   CapitalLineItemsEditor,
   type CapitalLineItemDraft,
@@ -386,6 +388,36 @@ export function NewContractClient({
     }
     if (data.description) form.setValue("description", data.description)
 
+    // Bug #8: AI was extracting capital fields (capitalCost, interestRate,
+    // termMonths, paymentCadence, downPayment) from the PDF but nothing was
+    // populating the Capital / Leased Items editor. For tie_in / capital
+    // contracts with at least a capitalCost, seed a single line item from
+    // the extraction so the user lands on the form with capital prefilled
+    // instead of an empty editor.
+    if (
+      (data.contractType === "tie_in" || data.contractType === "capital") &&
+      (data.capitalCost ?? 0) > 0
+    ) {
+      const seeded: CapitalLineItemDraft = {
+        description:
+          data.description?.slice(0, 80) ||
+          data.contractName ||
+          "Capital equipment",
+        itemNumber: "",
+        serialNumber: "",
+        contractTotal: data.capitalCost ?? 0,
+        initialSales: data.downPayment ?? 0,
+        interestRatePercent: data.interestRatePercent ?? 0,
+        termMonths: data.termMonths ?? 60,
+        paymentType: "fixed",
+        paymentCadence: data.paymentCadence ?? "monthly",
+      }
+      // Replace the editor's contents with the AI-seeded item rather than
+      // appending — extraction runs once at the top of the form, before the
+      // user has touched the editor.
+      setCapitalItems([seeded])
+    }
+
     // Merge product categories from the extraction. Prefer the plural
     // `productCategories` (multi-category contracts — Subsystem 9.12)
     // and fall back to the legacy singular `productCategory` when only
@@ -491,6 +523,35 @@ export function NewContractClient({
           const sortedTiers = [...t.tiers].sort(
             (a, b) => (a.tierNumber ?? 0) - (b.tierNumber ?? 0),
           )
+          // Bug #6 / Bug #8: count- and threshold-based termTypes can't
+          // accept percent_of_spend tiers — the engine reads rebateValue as
+          // dollars per period / per occurrence, so a fractional 0.05 from
+          // a "5%" extraction becomes $0.05 instead of $5,000. Map the AI
+          // output to the right rebateType for the termType:
+          //   - volume_rebate, rebate_per_use, capitated_pricing_rebate
+          //     → per_procedure_rebate (per-occurrence dollar amount)
+          //   - market_share, compliance_rebate, fixed_fee, payment_rebate,
+          //     po_rebate → fixed_rebate (flat per-period dollar amount)
+          //   - everything else (spend_rebate, growth_rebate, …) keeps
+          //     percent_of_spend.
+          const PER_OCCURRENCE_TYPES = new Set([
+            "volume_rebate",
+            "rebate_per_use",
+            "capitated_pricing_rebate",
+          ])
+          const FLAT_PERIOD_TYPES = new Set([
+            "market_share",
+            "compliance_rebate",
+            "fixed_fee",
+            "payment_rebate",
+            "po_rebate",
+          ])
+          const tierRebateType: TierInput["rebateType"] =
+            PER_OCCURRENCE_TYPES.has(termType)
+              ? "per_procedure_rebate"
+              : FLAT_PERIOD_TYPES.has(termType)
+                ? "fixed_rebate"
+                : "percent_of_spend"
           const normalizedTiers = sortedTiers.map((tier, idx) => {
             const next = sortedTiers[idx + 1]
             const derivedSpendMax =
@@ -499,8 +560,11 @@ export function NewContractClient({
               tierNumber: tier.tierNumber,
               spendMin: tier.spendMin ?? 0,
               spendMax: derivedSpendMax,
-              rebateType: "percent_of_spend" as const,
-              rebateValue: normalizeAIRebateValue("percent_of_spend", tier.rebateValue),
+              rebateType: tierRebateType,
+              rebateValue: normalizeAIRebateValue(
+                tierRebateType,
+                tier.rebateValue,
+              ),
             }
           })
           // Generate smart term name from the denormalized display
@@ -787,33 +851,14 @@ export function NewContractClient({
         />
 
         {/* Tie-in capital contract picker */}
-        {form.watch("contractType") === "tie_in" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Tied to Capital Contract</CardTitle>
-              <CardDescription>
-                Pick the capital contract this tie-in pays down with rebates.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TieInCapitalPicker
-                value={form.watch("tieInCapitalContractId") ?? null}
-                onChange={(v) =>
-                  form.setValue(
-                    "tieInCapitalContractId",
-                    v ?? undefined,
-                  )
-                }
-              />
-            </CardContent>
-          </Card>
-        )}
-
         {/* Charles audit suggestion #4 (v0-port): per-asset capital
             line items. v0's tie-in supports multi-equipment financing
             (e.g. MRI + service warranty); each item gets its own
             description / item # / serial / contract total / down /
-            rate / term / payment type / cadence. */}
+            rate / term / payment type / cadence. The legacy "Tied to
+            Capital Contract" picker has been retired — capital is the
+            line-items table below, not a foreign-key to a separate
+            capital contract. */}
         {form.watch("contractType") === "tie_in" && (
           <CapitalLineItemsEditor
             items={capitalItems}

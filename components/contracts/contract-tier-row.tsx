@@ -70,22 +70,43 @@ const rebateTypes = [
 ] as const
 
 /**
- * Charles 2026-04-30: per-termType filter for the rebate-type picker.
- * For price_reduction the "tier" is just "% off contract price" — there
- * is no Fixed/Unit or Per-Procedure variant. Locking the picker to
- * percent_of_spend (which the engine treats as the % discount) cuts
- * off a class of misconfigured price_reduction terms where the user
- * picked Fixed Rebate by mistake.
+ * Per-termType filter for the rebate-type picker.
  *
- * Returning the full menu for other termTypes preserves the existing
- * picker. Volume-family termTypes (volume_rebate / rebate_per_use)
- * naturally use Fixed/Unit or Per-Procedure, so they stay open.
+ * Bug #6: count-based / threshold-based termTypes (volume_rebate,
+ * rebate_per_use, capitated_pricing_rebate, market_share,
+ * compliance_rebate, fixed_fee, payment_rebate, po_rebate) measure
+ * achievement in occurrences or percent points — there is no dollar
+ * "spend" base for the rebate engine to apply a percent against.
+ * Allowing percent_of_spend on those tiers caused the engine to read
+ * a fractional rebateValue (0.05 = 5%) as $0.05 per period or per
+ * occurrence, producing wildly low numbers (the user reported "Volume
+ * and market share rebates calculate incorrect").
+ *
+ * Lock the picker to dollar-shaped rebate types for those termTypes.
+ * price_reduction stays locked to its single "% off contract price"
+ * variant. spend / growth rebates keep the full menu.
  */
+const NON_PERCENT_TERM_TYPES = new Set([
+  "volume_rebate",
+  "rebate_per_use",
+  "capitated_pricing_rebate",
+  "market_share",
+  "compliance_rebate",
+  "fixed_fee",
+  "payment_rebate",
+  "po_rebate",
+])
+const dollarOnlyRebateTypes = rebateTypes.filter(
+  (rt) => rt.value !== "percent_of_spend",
+)
 function rebateTypesForTerm(
   termType: string | undefined,
 ): readonly { value: TierInput["rebateType"]; label: string }[] {
   if (termType === "price_reduction") {
     return [{ value: "percent_of_spend", label: "% off contract price" }]
+  }
+  if (termType && NON_PERCENT_TERM_TYPES.has(termType)) {
+    return dollarOnlyRebateTypes
   }
   return rebateTypes
 }

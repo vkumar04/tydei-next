@@ -418,11 +418,69 @@ export function ContractTermsEntry({
                       </Label>
                       <Select
                         value={term.termType}
-                        onValueChange={(v) =>
+                        onValueChange={(v) => {
+                          const nextType = v as TermFormValues["termType"]
+                          // Cascade baseline + scope when the user changes
+                          // term type, so the form doesn't get stuck in a
+                          // mismatched state (Bug #5: switching to Volume
+                          // Rebate while baseline still shows Spend Based).
+                          // The user can still override after.
+                          const baselineForType: TermFormValues["baselineType"] =
+                            nextType === "volume_rebate" ||
+                            nextType === "rebate_per_use" ||
+                            nextType === "capitated_pricing_rebate" ||
+                            nextType === "capitated_price_reduction"
+                              ? "volume_based"
+                              : nextType === "growth_rebate"
+                                ? "growth_based"
+                                : "spend_based"
+                          // Bug #6: count- and threshold-based termTypes
+                          // pay a flat per-period or per-occurrence dollar
+                          // amount; percent_of_spend tiers are incoherent
+                          // there. When the user switches to one of those
+                          // termTypes, auto-flip any existing
+                          // percent_of_spend tier to fixed_rebate and zero
+                          // out its rebate value (the prior value was a
+                          // percent and would be misread as dollars).
+                          const NON_PCT_TYPES = new Set([
+                            "volume_rebate",
+                            "rebate_per_use",
+                            "capitated_pricing_rebate",
+                            "market_share",
+                            "compliance_rebate",
+                            "fixed_fee",
+                            "payment_rebate",
+                            "po_rebate",
+                          ])
+                          const tiersForNextType =
+                            NON_PCT_TYPES.has(nextType)
+                              ? (term.tiers ?? []).map((t) =>
+                                  t.rebateType === "percent_of_spend"
+                                    ? {
+                                        ...t,
+                                        rebateType: "fixed_rebate" as const,
+                                        rebateValue: 0,
+                                      }
+                                    : t,
+                                )
+                              : (term.tiers ?? [])
                           updateTerm(termIdx, {
-                            termType: v as TermFormValues["termType"],
+                            termType: nextType,
+                            baselineType: baselineForType,
+                            // For procedure-driven types, default volumeType
+                            // to procedure_code so CPT-code field semantics
+                            // line up. For non-procedure volume rebate, leave
+                            // volumeType cleared.
+                            volumeType:
+                              nextType === "rebate_per_use" ||
+                              nextType === "capitated_pricing_rebate"
+                                ? "procedure_code"
+                                : nextType === "volume_rebate"
+                                  ? term.volumeType ?? "procedure_code"
+                                  : undefined,
+                            tiers: tiersForNextType,
                           })
-                        }
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -539,6 +597,34 @@ export function ContractTermsEntry({
                       </Field>
                     )}
                   </div>
+
+                  {term.termType === "volume_rebate" && (
+                    <Field label="Volume Counted By">
+                      <Select
+                        value={term.volumeType ?? "procedure_code"}
+                        onValueChange={(v) =>
+                          updateTerm(termIdx, {
+                            volumeType: v as TermFormValues["volumeType"],
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="procedure_code">
+                            Procedure code (CPT)
+                          </SelectItem>
+                          <SelectItem value="product_category">
+                            Product category (units)
+                          </SelectItem>
+                          <SelectItem value="catalog_cap_based">
+                            Catalog / cap based
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  )}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="Evaluation Period">
@@ -792,19 +878,19 @@ export function ContractTermsEntry({
                     </Field>
                   )}
 
-                  {/* Charles 2026-04-25: CPT codes are required when EITHER
-                      a tier carries per_procedure_rebate OR the term type
-                      itself is one of the CPT-driven engines (volume_rebate,
-                      capitated_pricing_rebate, rebate_per_use). The previous
-                      gate hid the input from the term-type users — they'd
-                      never see the field even though their dropdown
-                      description told them to set it, and the engine would
-                      silently match 0 cases. Show the input whenever ANY
-                      signal demands CPT codes. */}
+                  {/* CPT codes only show when the term is genuinely
+                      procedure-driven. For volume_rebate, that's keyed off
+                      volumeType === "procedure_code" — a volume rebate by
+                      product category or catalog cap doesn't need CPTs and
+                      shouldn't surface them (Bug #4: CPTs were popping up on
+                      every Volume Rebate even when product scope wasn't case-
+                      based). The other CPT-driven types are always procedure-
+                      based or have a per_procedure_rebate tier. */}
                   {((term.tiers ?? []).some(
                     (t) => t.rebateType === "per_procedure_rebate",
                   ) ||
-                    term.termType === "volume_rebate" ||
+                    (term.termType === "volume_rebate" &&
+                      term.volumeType === "procedure_code") ||
                     term.termType === "capitated_pricing_rebate" ||
                     term.termType === "rebate_per_use") && (
                     <Field label="CPT Codes">
