@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest"
-import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
+import {
+  formatTierRebateLabel,
+  formatTierDollarAnnotation,
+} from "@/lib/contracts/tier-rebate-label"
 
 describe("formatTierRebateLabel", () => {
   describe("percent_of_spend", () => {
@@ -34,5 +37,43 @@ describe("formatTierRebateLabel", () => {
     it("renders per_procedure_rebate as precise currency", () => {
       expect(formatTierRebateLabel("per_procedure_rebate", 25)).toBe("$25.00")
     })
+  })
+})
+
+describe("formatTierDollarAnnotation — Bug #3 (sub-threshold projection)", () => {
+  // Regression for the Distal Extremities scoped-category rebate:
+  // tier 1 spendMin = $825,000 @ 2%. Scoped current spend = $302,650
+  // (well below the $825k floor). The display previously read
+  // "top rate — projects $6,053 at current spend" (= 2% × $302,650),
+  // implying a phantom rebate. Below-threshold spend must surface as
+  // "to unlock", never as a top-rate projection.
+  const tier = {
+    tierNumber: 1,
+    spendMin: 825000,
+    spendMax: null,
+    rebateType: "percent_of_spend" as const,
+    rebateValue: 0.02,
+  }
+
+  it("renders 'to unlock' when scoped spend is below tier 1's floor", () => {
+    const out = formatTierDollarAnnotation(
+      tier,
+      302650, // current scoped spend
+      0, // currentTierNumber = 0 (below baseline sentinel)
+      false, // isTopTier — irrelevant when below baseline
+    )
+    expect(out).toBe("$522,350 to unlock")
+    expect(out).not.toMatch(/top rate/i)
+    expect(out).not.toMatch(/\$6,053/)
+  })
+
+  it("renders top-rate projection only when spend has actually reached the tier", () => {
+    const out = formatTierDollarAnnotation(
+      tier,
+      900000, // current scoped spend over the floor
+      1, // currentTierNumber = 1 (matched)
+      true, // isTopTier
+    )
+    expect(out).toBe("top rate — projects $18,000 at current spend")
   })
 })

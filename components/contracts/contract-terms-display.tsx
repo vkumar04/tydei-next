@@ -411,14 +411,26 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                           const sorted = [...term.tiers].sort(
                             (a, b) => Number(a.spendMin) - Number(b.spendMin),
                           )
-                          let currentTierNumber: number | undefined
-                          let idx = 0
+                          // 0 = "below baseline" sentinel — spend hasn't
+                          // reached even the lowest tier's spendMin. The
+                          // annotation logic in `formatTierDollarAnnotation`
+                          // (lib/contracts/tier-rebate-label.ts:91) treats
+                          // this as "to unlock" and correctly suppresses the
+                          // top-rate projection. Pre-fix this defaulted to
+                          // sorted[0].tierNumber, so a scoped term with
+                          // current spend ($302k) below tier 1's floor
+                          // ($825k) was rendered as "top rate — projects 2%
+                          // of $302k = $6,053", a phantom rebate that doesn't
+                          // exist (Bug #3).
+                          let currentTierNumber = 0
                           for (let i = 0; i < sorted.length; i++) {
-                            if (effectiveSpend >= Number(sorted[i].spendMin)) idx = i
+                            if (effectiveSpend >= Number(sorted[i].spendMin)) {
+                              currentTierNumber = sorted[i].tierNumber
+                            }
                           }
-                          currentTierNumber = sorted[idx].tierNumber
                           const topTierNumber = sorted[sorted.length - 1].tierNumber
                           const isTopTierReached =
+                            currentTierNumber > 0 &&
                             currentTierNumber === topTierNumber
                           return (
                             <div className="space-y-2">
