@@ -764,8 +764,49 @@ export async function createContract(
       contractType: input.contractType,
       termCount: Array.isArray(input.terms) ? input.terms.length : 0,
     })
-    throw err
+    // Bug #9 — surface the real reason instead of letting Next.js redact
+    // the server-action error to "An error occurred in the Server
+    // Components render." The client toast pattern in
+    // `useCreateContract.onError` uses `error.message`, so a sanitized
+    // explanatory message has to arrive ON the Error itself.
+    throw new Error(humanizeCreateContractError(err))
   }
+}
+
+function humanizeCreateContractError(err: unknown): string {
+  // Zod validation: include the path + first issue.
+  if (err && typeof err === "object" && "issues" in err) {
+    const issues = (err as { issues?: Array<{ path: unknown[]; message: string }> })
+      .issues
+    if (Array.isArray(issues) && issues.length > 0) {
+      const first = issues[0]
+      const path = Array.isArray(first.path) ? first.path.join(".") : "(root)"
+      return `Contract validation failed at ${path}: ${first.message}`
+    }
+  }
+  // Prisma known errors: keep the code so we can map common ones.
+  if (err && typeof err === "object" && "code" in err) {
+    const code = String((err as { code?: unknown }).code ?? "")
+    const meta = (err as { meta?: { target?: unknown; field_name?: unknown } })
+      .meta
+    if (code === "P2002") {
+      const target = Array.isArray(meta?.target)
+        ? meta!.target.join(", ")
+        : String(meta?.target ?? "")
+      return `Contract creation failed: a row with the same ${target || "unique key"} already exists.`
+    }
+    if (code === "P2003") {
+      const field = String(meta?.field_name ?? "")
+      return `Contract creation failed: foreign-key violation${field ? ` on ${field}` : ""}. The referenced row likely no longer exists or was never created (vendor / category / facility).`
+    }
+    if (code === "P2025") {
+      return "Contract creation failed: a referenced row (vendor / category / facility) does not exist."
+    }
+  }
+  if (err instanceof Error) {
+    return `Contract creation failed: ${err.message}`
+  }
+  return "Contract creation failed (unknown error). Check the server logs for the full stack."
 }
 
 async function _createContractImpl(

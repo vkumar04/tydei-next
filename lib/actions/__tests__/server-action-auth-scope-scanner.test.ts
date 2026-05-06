@@ -275,9 +275,14 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/categories.ts:142",
   // change-proposals.ts: post-mutation re-read
   "lib/actions/change-proposals.ts:175",
-  // contract-periods.ts: post-period-mutation re-reads
-  "lib/actions/contract-periods.ts:394",
-  "lib/actions/contract-periods.ts:623",
+  // contract-periods.ts: post-period-mutation re-reads. Lines drift
+  // (bumped 2026-05-05 after the auto-match-oldest fallback fix —
+  // see Bug #2: the action now does two `findFirst`s in sequence so
+  // the windowed match can fall back to oldest-uncollected. The pre-
+  // authorized rebate.update call still verifies ownership via the
+  // same prior contract-find guard at the top of createContractTransaction).
+  "lib/actions/contract-periods.ts:417",
+  "lib/actions/contract-periods.ts:646",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:94",
@@ -292,9 +297,11 @@ const BASELINE_HITS = new Set<string>([
   // verification before contractDocument.delete (lines drift as the
   // file grows — bumped 2026-04-26 after analytics cache invalidation
   // hooks were added; bumped again same day after the getContracts
-  // perf refactor batched the per-contract category aggregate).
-  "lib/actions/contracts.ts:1359",
-  "lib/actions/contracts.ts:1379",
+  // perf refactor batched the per-contract category aggregate; bumped
+  // again 2026-05-05 after Bug #9 added a `humanizeCreateContractError`
+  // helper above the contractDocument operations).
+  "lib/actions/contracts.ts:1400",
+  "lib/actions/contracts.ts:1420",
   // imports/case-costing-import.ts: facility-scoped via upstream batch
   "lib/actions/imports/case-costing-import.ts:243",
   "lib/actions/imports/case-costing-import.ts:380",
