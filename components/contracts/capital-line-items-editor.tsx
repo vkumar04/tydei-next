@@ -235,14 +235,32 @@ export function CapitalLineItemsEditor({
                           <Input
                             type="number"
                             min="0"
+                            // Bug #11: cap down payment at the contract total
+                            // so a user can't enter a value that zeroes out
+                            // financed principal and silently breaks the
+                            // amortization schedule (every column $0).
+                            max={item.contractTotal || undefined}
                             step="0.01"
                             value={item.initialSales}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const next = Number(e.target.value)
                               update(idx, {
-                                initialSales: Number(e.target.value),
+                                initialSales: Math.min(
+                                  Math.max(0, next),
+                                  item.contractTotal || next,
+                                ),
                               })
-                            }
+                            }}
                           />
+                          {item.initialSales >= item.contractTotal &&
+                            item.contractTotal > 0 && (
+                              <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                                Down payment equals contract total — nothing
+                                will be financed and the amortization schedule
+                                will be empty. Set this lower than the contract
+                                total to amortize.
+                              </p>
+                            )}
                         </Field>
                         <Field label="Interest Rate (%)">
                           <Input

@@ -266,6 +266,17 @@ function aggregatePerItemSchedules(
   items: ReadonlyArray<NormalizedCapitalLineItem>,
 ): { entries: AmortizationEntry[]; period: "monthly" | "quarterly" | "annual" } {
   if (items.length === 0) return { entries: [], period: "monthly" }
+  // Bug #11 defense-in-depth: if every item has zero financed principal
+  // (e.g. user set Initial Sales == Contract Total), there's nothing to
+  // amortize — return empty so the UI surfaces the "no schedule" empty
+  // state instead of N rows full of $0 columns. The parent
+  // `getContractCapitalSchedule` already short-circuits via
+  // `financedPrincipal <= 0` but this guards aggregator-callers too.
+  const totalFinanced = items.reduce(
+    (acc, i) => acc + Math.max(0, i.contractTotal - i.initialSales),
+    0,
+  )
+  if (totalFinanced <= 0) return { entries: [], period: "monthly" }
 
   // Find the finest cadence (smallest months-per-period) so we render
   // on the densest possible grid.
