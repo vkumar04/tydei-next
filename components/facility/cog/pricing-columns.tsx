@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/formatting"
 
 export interface PricingColumnOptions {
-  onDelete?: (id: string) => void
+  onDelete?: (row: UnifiedPricingRow) => void
   pendingDeleteId?: string | null
 }
 
@@ -108,11 +108,23 @@ export function getPricingColumns(
     {
       id: "source",
       header: "Source",
-      cell: () => (
-        <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs">
-          File
-        </div>
-      ),
+      cell: ({ row }) => {
+        if (row.original.source === "contract") {
+          return (
+            <div
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs"
+              title={row.original.contractName ?? undefined}
+            >
+              Contract
+            </div>
+          )
+        }
+        return (
+          <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs">
+            File
+          </div>
+        )
+      },
     },
     ...(onDelete
       ? [
@@ -129,7 +141,7 @@ export function getPricingColumns(
                   className="h-8 w-8 text-destructive hover:text-destructive"
                   onClick={(e) => {
                     e.stopPropagation()
-                    onDelete(row.original.id)
+                    onDelete(row.original)
                   }}
                   disabled={busy}
                 >

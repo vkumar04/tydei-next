@@ -2,10 +2,15 @@
 
 import { useState, useMemo } from "react"
 import { Download, Plus, List } from "lucide-react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   useDeletePricingFile,
   usePricingFiles,
 } from "@/hooks/use-pricing-files"
+import { queryKeys } from "@/lib/query-keys"
+import { deleteContractPricing } from "@/lib/actions/pricing-files"
+import type { UnifiedPricingRow } from "@/lib/actions/pricing-files"
 import { useVendorList } from "@/hooks/use-vendor-crud"
 import { getPricingColumns } from "@/components/facility/cog/pricing-columns"
 import { DataTable } from "@/components/shared/tables/data-table"
@@ -34,25 +39,40 @@ interface PricingFilesTableProps {
 }
 
 export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
-  const [vendorFilter, setVendorFilter] = useState<string>("")
+  const [vendorFilter, setVendorFilter] = useState<string>("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<UnifiedPricingRow | null>(
+    null,
+  )
 
   const { data, isLoading } = usePricingFiles(
     facilityId,
-    vendorFilter || undefined
+    vendorFilter && vendorFilter !== "all" ? vendorFilter : undefined,
   )
   const { data: vendorData } = useVendorList()
-  const deleteMutation = useDeletePricingFile()
+  const deleteFileMutation = useDeletePricingFile()
+  const qc = useQueryClient()
+  const deleteContractPricingMutation = useMutation({
+    mutationFn: (id: string) => deleteContractPricing(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.pricingFiles.all })
+      toast.success("Contract pricing row deleted")
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed to delete"),
+  })
+  const pendingDeleteId = deleteFileMutation.isPending
+    ? deleteFileMutation.variables
+    : deleteContractPricingMutation.isPending
+      ? deleteContractPricingMutation.variables
+      : null
   const columns = useMemo(
     () =>
       getPricingColumns({
-        onDelete: (id) => setPendingDeleteId(id),
-        pendingDeleteId: deleteMutation.isPending
-          ? (deleteMutation.variables ?? null)
-          : null,
+        onDelete: (row) => setPendingDelete(row),
+        pendingDeleteId,
       }),
-    [deleteMutation.isPending, deleteMutation.variables],
+    [pendingDeleteId],
   )
 
   const files = data?.files ?? []
@@ -137,18 +157,18 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
       </CardContent>
 
       <AlertDialog
-        open={!!pendingDeleteId}
+        open={!!pendingDelete}
         onOpenChange={(open) => {
-          if (!open) setPendingDeleteId(null)
+          if (!open) setPendingDelete(null)
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete pricing row?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the pricing row from this facility.
-              Any contract-pricing entries that reference the same vendor
-              item number will also be cleared. This cannot be undone.
+              {pendingDelete?.source === "contract"
+                ? `This permanently removes the pricing row from contract "${pendingDelete?.contractName ?? ""}". This cannot be undone.`
+                : "This permanently removes the pricing row from this facility. Any contract-pricing entries that reference the same vendor item number will also be cleared. This cannot be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -156,9 +176,13 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                if (!pendingDeleteId) return
-                deleteMutation.mutate(pendingDeleteId)
-                setPendingDeleteId(null)
+                if (!pendingDelete) return
+                if (pendingDelete.source === "contract") {
+                  deleteContractPricingMutation.mutate(pendingDelete.id)
+                } else {
+                  deleteFileMutation.mutate(pendingDelete.id)
+                }
+                setPendingDelete(null)
               }}
             >
               Delete

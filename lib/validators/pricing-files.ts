@@ -23,7 +23,7 @@ export const pricingFiltersSchema = z.object({
   facilityId: z.string().optional(),
   vendorId: z.string().optional(),
   page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  pageSize: z.number().int().min(1).max(10000).optional(),
 })
 
 export type PricingFilters = z.infer<typeof pricingFiltersSchema>
