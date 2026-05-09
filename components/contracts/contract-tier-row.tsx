@@ -86,11 +86,22 @@ const rebateTypes = [
  * price_reduction stays locked to its single "% off contract price"
  * variant. spend / growth rebates keep the full menu.
  */
+// Bug #16 (2026-05-08, Vick iMessage): the Market Share tier picker no
+// longer offered "% of Spend", but market_share rebates conventionally
+// pay a percent of the vendor's category spend once a share threshold
+// is reached. The market-share engine already routes
+// `percent_of_spend` correctly (vendorCategorySpend × percent) so
+// re-enable it in the picker.
+//
+// Volume rebate stays locked to dollar-shaped types for now: the volume
+// engine's eligible amount is occurrences (count), not dollars, so a
+// percent rebate has no spend base to apply against. Wiring volume
+// %-of-spend through the engine + recompute writer is tracked
+// separately (Bug #15-volume).
 const NON_PERCENT_TERM_TYPES = new Set([
   "volume_rebate",
   "rebate_per_use",
   "capitated_pricing_rebate",
-  "market_share",
   "compliance_rebate",
   "fixed_fee",
   "payment_rebate",
