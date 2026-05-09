@@ -172,7 +172,7 @@ export function getCOGColumns({
           ? null
           : Number(r.extendedPrice)
         if (ext === null || unit === 0 || qty === 0) {
-          return <span className="text-muted-foreground text-right">—</span>
+          return <span className="text-muted-foreground text-right">{"—"}</span>
         }
         const mult = ext / (unit * qty)
         const isOne = Math.abs(mult - 1) < 0.001
@@ -206,7 +206,7 @@ export function getCOGColumns({
       cell: ({ row }) => {
         const raw = row.original.contractPrice
         if (raw === null || raw === undefined) {
-          return <span className="text-muted-foreground text-right">\u2014</span>
+          return <span className="text-muted-foreground text-right">{"\u2014"}</span>
         }
         return (
           <span className="text-right font-medium tabular-nums">
