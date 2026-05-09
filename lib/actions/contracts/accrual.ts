@@ -137,14 +137,53 @@ async function _buildAccrualTimelineForContract(
   // `lib/rebates/calculate.ts#computeRebateFromPrismaTiers` and
   // `lib/contracts/tier-rebate-label.ts` — scale at the boundary, not in
   // the engine. See CLAUDE.md "Rebate engine units" rule.
+  // Bug #16 (2026-05-08, Vick screenshots): the accrual-timeline rate
+  // column was rendering raw `tier.rebateValue` for `fixed_rebate`
+  // tiers, so a $50,000 / $500,000 flat rebate showed up as "50000%" /
+  // "500000%" in the Rate column and the Accrued column was billions
+  // of dollars. The legacy engine in `lib/rebates/calculate.ts`
+  // already short-circuits to `tier.fixedRebateAmount` when set
+  // (`shared/cumulative.ts:20`), but the mapper here never populated
+  // that field. For `fixed_rebate`, route the dollar value through
+  // `fixedRebateAmount` and force `rebateValue` to 0 so the engine's
+  // percent math returns 0 dollars on its own and the Rate column
+  // shows 0% (a fixed rebate has no percent rate by definition).
+  //
+  // For `fixed_rebate_per_unit` / `per_procedure_rebate` tiers, the
+  // spend-accrual timeline is the wrong surface to render them on
+  // (those rebates are unit-driven, not spend-driven), but until the
+  // timeline gets a per-rebate-type viewer we at least zero out the
+  // rate so it doesn't display absurd percentages — accrual on those
+  // termTypes is computed via the dedicated VOLUME / per-use writers
+  // in `lib/contracts/recompute/`, not this timeline.
+  const isFixedDollarRebateType = (rt: string | null | undefined): boolean =>
+    rt === "fixed_rebate" ||
+    rt === "fixed_rebate_per_unit" ||
+    rt === "per_procedure_rebate"
+
   const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
-    const tiers: TierLike[] = term.tiers.map((t) => ({
-      tierNumber: t.tierNumber,
-      tierName: t.tierName ?? null,
-      spendMin: Number(t.spendMin),
-      spendMax: t.spendMax ? Number(t.spendMax) : null,
-      rebateValue: scaleRebateValueForEngine(t.rebateValue, t.rebateType),
-    }))
+    const tiers: TierLike[] = term.tiers.map((t) => {
+      const isFixed = isFixedDollarRebateType(t.rebateType)
+      const isTrueFixedRebate = t.rebateType === "fixed_rebate"
+      return {
+        tierNumber: t.tierNumber,
+        tierName: t.tierName ?? null,
+        spendMin: Number(t.spendMin),
+        spendMax: t.spendMax ? Number(t.spendMax) : null,
+        // Force 0 for any non-percent rebate type so the Rate column
+        // never renders a dollar amount as a percent. Percent tiers
+        // keep the existing × 100 fraction-to-percent scaling.
+        rebateValue: isFixed
+          ? 0
+          : scaleRebateValueForEngine(t.rebateValue, t.rebateType),
+        // Only `fixed_rebate` is truly a flat-dollar tier; route its
+        // dollars through `fixedRebateAmount` so the engine pays it on
+        // tier qualification. Per-unit / per-procedure types remain
+        // null — those are unit-driven, not flat, and shouldn't be
+        // paid out here.
+        fixedRebateAmount: isTrueFixedRebate ? Number(t.rebateValue) : null,
+      }
+    })
     const evaluationPeriod: EvaluationPeriod =
       term.evaluationPeriod === "monthly" ||
       term.evaluationPeriod === "quarterly" ||

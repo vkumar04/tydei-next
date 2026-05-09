@@ -150,17 +150,28 @@ export function ContractAccrualTimeline({
                     <td className="py-2 text-right tabular-nums">
                       {showBreakdown ? (
                         <div className="flex flex-col gap-0.5 text-xs">
-                          {contributions.map((c) => (
-                            <span key={c.termIndex} className="tabular-nums">
-                              <span className="text-muted-foreground mr-1">
-                                {termLabels[c.termIndex]?.termName ?? `T${c.termIndex + 1}`}:
+                          {contributions.map((c) => {
+                            const pct = Number(c.rebatePercent)
+                            // Bug #16: fixed-rebate tiers ride through the
+                            // engine with rebatePercent=0; show a flat
+                            // dash rather than "0.00%" so the column
+                            // reads cleanly across mixed term types.
+                            return (
+                              <span key={c.termIndex} className="tabular-nums">
+                                <span className="text-muted-foreground mr-1">
+                                  {termLabels[c.termIndex]?.termName ?? `T${c.termIndex + 1}`}:
+                                </span>
+                                {pct > 0 ? `${pct.toFixed(2)}%` : "—"}
                               </span>
-                              {Number(c.rebatePercent).toFixed(2)}%
-                            </span>
-                          ))}
+                            )
+                          })}
                         </div>
                       ) : (
-                        <>{Number(row.rebatePercent).toFixed(2)}%</>
+                        <>
+                          {Number(row.rebatePercent) > 0
+                            ? `${Number(row.rebatePercent).toFixed(2)}%`
+                            : "—"}
+                        </>
                       )}
                     </td>
                     <td className="py-2 text-right font-medium tabular-nums">
