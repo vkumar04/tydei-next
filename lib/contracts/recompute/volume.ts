@@ -53,6 +53,17 @@ const AUTO_VOLUME_PREFIX = "[auto-volume-accrual]"
 interface VolumeRebateTermLike {
   id: string
   cptCodes: string[]
+  /**
+   * Bug #17: when cptCodes is empty, the writer falls back to
+   * summing line-item quantity from COG records — those need to be
+   * filtered by the contract's vendor and the term's category scope.
+   * Optional + nullable to keep the type tolerant of legacy callers
+   * that haven't been upgraded; the COG-fallback path treats
+   * missing values as "no in-scope spend" and returns 0.
+   */
+  vendorId?: string | null
+  categories?: string[]
+  appliesTo?: string | null
   rebateMethod: string | null
   evaluationPeriod: string | null
   effectiveStart: Date | null
@@ -125,11 +136,16 @@ export async function recomputeVolumeAccrualForTerm(input: {
 }): Promise<{ inserted: number; sumEarned: number }> {
   const { contractId, facilityId, contractEffectiveDate, term } = input
 
-  // Defensive: a volume rebate without CPT codes can't compute
-  // anything meaningful. Skip silently — UI surfaces a "no CPT codes
-  // configured" hint when present.
-  if (!term.cptCodes || term.cptCodes.length === 0) {
-    return { inserted: 0, sumEarned: 0 }
+  // Bug #17 (2026-05-08, Vick): two volume-rebate basis modes.
+  // - When `term.cptCodes` is non-empty, qualification = CPT-coded
+  //   procedure occurrences (existing behavior; no change below).
+  // - When empty, qualification = line-item quantity summed across
+  //   in-scope COG records (vendor + category filter). This branch
+  //   delegates to `recomputeVolumeFromCogRecords` and returns early
+  //   so we don't hit the CPT-only path.
+  const isCptMode = term.cptCodes && term.cptCodes.length > 0
+  if (!isCptMode) {
+    return recomputeVolumeFromCogRecords(input)
   }
 
   // Window: bound by contract effective range AND term effective range
@@ -391,6 +407,261 @@ export async function recomputeVolumeAccrualForTerm(input: {
       payPeriodEnd: r.periodEnd,
       collectionDate: null,
       notes: `${termPrefix} · ${r.occurrences} occurrences · $${r.rebateEarned.toFixed(2)}`,
+    })
+  }
+  if (toInsert.length > 0) {
+    await prisma.rebate.createMany({ data: toInsert, skipDuplicates: true })
+  }
+
+  return { inserted: toInsert.length, sumEarned }
+}
+
+/**
+ * Bug #17 (2026-05-08, Vick): COG-records fallback for volume rebates
+ * whose tier ladder gates on QTY of items used (no CPT codes set).
+ *
+ * Pipeline:
+ *   1. Query COG records for the contract's vendor + the term's
+ *      category scope, within the term's effective window.
+ *   2. Bucket into evaluation-period windows (mirrors the CPT-path
+ *      bucketing).
+ *   3. Per bucket: sum `quantity` (the qualification metric) and
+ *      `extendedPrice` (the dollar base for `% of Spend` tiers).
+ *   4. Determine the achieved cumulative tier by quantitySum vs
+ *      `volumeMin / volumeMax`. (Marginal not supported on this path
+ *      yet — falls back to cumulative; opens a follow-up.)
+ *   5. Compute the rebate $ per the achieved tier's `rebateType`:
+ *        - `percent_of_spend` → bucketSpend × rebateValue (stored as
+ *          fraction, 0.02 = 2%; no /100 needed)
+ *        - `fixed_rebate`     → flat `rebateValue` dollars
+ *        - `fixed_rebate_per_unit` / `per_procedure_rebate` / null →
+ *          quantitySum × rebateValue (raw $/unit)
+ *   6. Persist as `[auto-volume-accrual]` rows with the same
+ *      term-prefix idempotency contract as the CPT path.
+ *
+ * No schema migration: `term.cptCodes.length === 0` is the implicit
+ * mode flag. Future work (Bug #18) adds an explicit `volumeBasis`
+ * picker on the form so the user doesn't have to leave cptCodes
+ * blank to opt in.
+ */
+async function recomputeVolumeFromCogRecords(input: {
+  contractId: string
+  facilityId: string
+  contractEffectiveDate: Date
+  contractExpirationDate: Date
+  term: VolumeRebateTermLike
+}): Promise<{ inserted: number; sumEarned: number }> {
+  const { contractId, facilityId, contractEffectiveDate, term } = input
+  if (!term.vendorId) {
+    return { inserted: 0, sumEarned: 0 }
+  }
+
+  const endOfDay = (d: Date) =>
+    new Date(
+      Date.UTC(
+        d.getUTCFullYear(),
+        d.getUTCMonth(),
+        d.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    )
+  const today = new Date()
+  const start = new Date(
+    Math.max(
+      contractEffectiveDate.getTime(),
+      term.effectiveStart?.getTime() ?? -Infinity,
+    ),
+  )
+  const end = new Date(
+    Math.min(
+      today.getTime(),
+      endOfDay(input.contractExpirationDate).getTime(),
+      term.effectiveEnd ? endOfDay(term.effectiveEnd).getTime() : Infinity,
+    ),
+  )
+  if (end.getTime() <= start.getTime()) {
+    return { inserted: 0, sumEarned: 0 }
+  }
+
+  // Build the term's category scope. Mirrors `buildCategoryWhereClause`
+  // semantics inline (the writer's term shape is narrower than the
+  // helper's expected input).
+  const isSpecificCategory =
+    term.appliesTo === "specific_category" &&
+    Array.isArray(term.categories) &&
+    term.categories.length > 0
+  const categoryFilter = isSpecificCategory
+    ? { category: { in: Array.from(new Set(term.categories ?? [])) } }
+    : {}
+
+  const cogRecords = await prisma.cOGRecord.findMany({
+    where: {
+      facilityId,
+      vendorId: term.vendorId,
+      transactionDate: { gte: start, lte: end },
+      ...categoryFilter,
+    },
+    select: {
+      transactionDate: true,
+      quantity: true,
+      extendedPrice: true,
+    },
+  })
+
+  // Bucket by evaluation period.
+  const width = widthMonths(term.evaluationPeriod)
+  const firstWindowStart = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
+  )
+  type Bucket = {
+    periodStart: Date
+    periodEnd: Date
+    quantitySum: number
+    spendSum: number
+  }
+  const buckets: Bucket[] = []
+  let cursor = firstWindowStart
+  for (let iter = 0; iter < 200; iter++) {
+    const next = addMonthsUTC(cursor, width)
+    const periodEnd = new Date(next.getTime() - 1)
+    if (periodEnd.getTime() > end.getTime()) break
+    let qSum = 0
+    let spendSum = 0
+    for (const r of cogRecords) {
+      const t = r.transactionDate.getTime()
+      if (t < cursor.getTime() || t > periodEnd.getTime()) continue
+      qSum += r.quantity ?? 0
+      spendSum += r.extendedPrice == null ? 0 : Number(r.extendedPrice)
+    }
+    buckets.push({
+      periodStart: cursor,
+      periodEnd,
+      quantitySum: qSum,
+      spendSum,
+    })
+    cursor = next
+  }
+
+  // Sort tiers ascending by threshold so the cumulative pick (highest
+  // tier whose volumeMin ≤ qty) is straightforward.
+  type SortedTier = {
+    tierNumber: number
+    tierName: string | null
+    thresholdMin: number
+    thresholdMax: number | null
+    rebateValue: number
+    rebateType: string | null
+  }
+  const sortedTiers: SortedTier[] = term.tiers
+    .map((t) => {
+      const tVolMin = (t as unknown as { volumeMin?: number | null }).volumeMin
+      const tVolMax = (t as unknown as { volumeMax?: number | null }).volumeMax
+      const thresholdMin =
+        tVolMin != null && Number.isFinite(Number(tVolMin))
+          ? Number(tVolMin)
+          : Number(t.spendMin ?? 0)
+      const thresholdMax =
+        tVolMax != null && Number.isFinite(Number(tVolMax))
+          ? Number(tVolMax)
+          : t.spendMax === null || t.spendMax === undefined
+            ? null
+            : Number(t.spendMax)
+      return {
+        tierNumber: t.tierNumber,
+        tierName: t.tierName,
+        thresholdMin,
+        thresholdMax,
+        rebateValue: Number(t.rebateValue ?? 0),
+        rebateType: t.rebateType ?? null,
+      }
+    })
+    .sort((a, b) => a.thresholdMin - b.thresholdMin)
+
+  type BucketResult = {
+    periodStart: Date
+    periodEnd: Date
+    quantity: number
+    rebateEarned: number
+  }
+  const results: BucketResult[] = buckets.map((b) => {
+    // Cumulative method: pick the highest tier whose thresholdMin is
+    // met by this bucket's quantitySum (EXCLUSIVE upper bound — the
+    // canonical engine convention).
+    let achieved: SortedTier | null = null
+    for (const t of sortedTiers) {
+      if (b.quantitySum >= t.thresholdMin) {
+        const ceilingOk =
+          t.thresholdMax == null || b.quantitySum < t.thresholdMax
+        if (ceilingOk) achieved = t
+        else if (achieved == null) achieved = t
+      }
+    }
+    if (!achieved) {
+      return {
+        periodStart: b.periodStart,
+        periodEnd: b.periodEnd,
+        quantity: b.quantitySum,
+        rebateEarned: 0,
+      }
+    }
+    let rebate = 0
+    switch (achieved.rebateType) {
+      case "percent_of_spend":
+        // rebateValue stored as fraction (0.02 = 2%) by the form.
+        rebate = b.spendSum * achieved.rebateValue
+        break
+      case "fixed_rebate":
+        rebate = achieved.rebateValue
+        break
+      case "fixed_rebate_per_unit":
+      case "per_procedure_rebate":
+      default:
+        rebate = b.quantitySum * achieved.rebateValue
+        break
+    }
+    return {
+      periodStart: b.periodStart,
+      periodEnd: b.periodEnd,
+      quantity: b.quantitySum,
+      rebateEarned: rebate,
+    }
+  })
+
+  const termPrefix = `${AUTO_VOLUME_PREFIX} term:${term.id}`
+  await prisma.rebate.deleteMany({
+    where: {
+      contractId,
+      collectionDate: null,
+      notes: { startsWith: termPrefix },
+    },
+  })
+
+  let sumEarned = 0
+  const toInsert: Array<{
+    contractId: string
+    facilityId: string
+    rebateEarned: number
+    rebateCollected: number
+    payPeriodStart: Date
+    payPeriodEnd: Date
+    collectionDate: null
+    notes: string
+  }> = []
+  for (const r of results) {
+    if (r.rebateEarned <= 0 && r.quantity <= 0) continue
+    sumEarned += r.rebateEarned
+    toInsert.push({
+      contractId,
+      facilityId,
+      rebateEarned: r.rebateEarned,
+      rebateCollected: 0,
+      payPeriodStart: r.periodStart,
+      payPeriodEnd: r.periodEnd,
+      collectionDate: null,
+      notes: `${termPrefix} · ${r.quantity} units · $${r.rebateEarned.toFixed(2)}`,
     })
   }
   if (toInsert.length > 0) {

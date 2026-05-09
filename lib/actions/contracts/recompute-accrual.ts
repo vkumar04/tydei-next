@@ -653,13 +653,19 @@ export async function _recomputeAccrualForContractWithFacility(
   //   - capitated_pricing_rebate: per-procedure rebate when the
   //     procedure-spend cap is reached. Same Cases.procedures
   //     data source; the tier ladder defines when the cap is hit.
+  // Bug #17 (2026-05-08, Vick): the dispatcher previously required
+  // `cptCodes.length > 0`, so a volume contract whose tiers gate on
+  // line-item *quantity* (no procedures attached) silently produced
+  // $0 earned with no rebate rows. Volume rebates can also be
+  // expressed as "QTY of items used"; in that case the writer falls
+  // back to summing COG-record `quantity` (filtered by the contract's
+  // vendor + the term's category scope) and we keep the same tier
+  // ladder + per-tier rebateType dispatch.
   const volumeTerms = contract.terms.filter(
     (t) =>
       (t.termType === "volume_rebate" ||
         t.termType === "rebate_per_use" ||
         t.termType === "capitated_pricing_rebate") &&
-      Array.isArray(t.cptCodes) &&
-      t.cptCodes.length > 0 &&
       t.tiers.length > 0,
   )
   if (volumeTerms.length > 0) {
@@ -676,6 +682,12 @@ export async function _recomputeAccrualForContractWithFacility(
           term: {
             id: term.id,
             cptCodes: term.cptCodes,
+            // Bug #17: COG-records fallback path needs to know the
+            // contract's vendor + the term's category scope so it can
+            // sum the right quantities.
+            vendorId: contract.vendorId,
+            categories: term.categories ?? [],
+            appliesTo: term.appliesTo ?? null,
             rebateMethod: term.rebateMethod ?? null,
             evaluationPeriod: term.evaluationPeriod ?? null,
             effectiveStart: term.effectiveStart ?? null,
