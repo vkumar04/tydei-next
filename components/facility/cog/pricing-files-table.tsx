@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { VendorFilterCombobox } from "@/components/shared/vendor-filter-combobox"
 
 interface PricingFilesTableProps {
   facilityId: string
@@ -124,19 +125,13 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
             isLoading={isLoading}
             filterComponent={
               <>
-                <Select value={vendorFilter} onValueChange={setVendorFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="All Vendors" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Vendors</SelectItem>
-                    {vendorData?.vendors.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <VendorFilterCombobox
+                  vendors={vendorData?.vendors ?? []}
+                  value={vendorFilter === "all" ? "" : vendorFilter}
+                  onChange={(next) => setVendorFilter(next || "all")}
+                  placeholder="All Vendors"
+                  width={180}
+                />
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="All Categories" />

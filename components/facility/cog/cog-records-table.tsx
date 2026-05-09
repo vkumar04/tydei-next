@@ -493,7 +493,19 @@ function VendorFilterCombobox({
               Radix's `--radix-popover-content-available-height` (auto-
               set on the popover element) so the list always claims the
               available viewport space and falls back to 60vh. */}
-          <CommandList className="max-h-[min(60vh,var(--radix-popover-content-available-height,320px))]">
+          {/* Bug #15 (2026-05-08, Vick): the prior arbitrary-tailwind
+              `max-h-[min(60vh,…)]` class wasn't always honored because
+              Tailwind's JIT can't always parse `var()` inside
+              `min()` reliably. Move the height to an inline style so
+              cmdk's CommandList always claims the popover's available
+              height and falls back to 60vh. */}
+          <CommandList
+            className="overflow-y-auto"
+            style={{
+              maxHeight:
+                "min(60vh, var(--radix-popover-content-available-height, 320px))",
+            }}
+          >
             <CommandEmpty>No vendor matches.</CommandEmpty>
             <CommandGroup>
               <CommandItem
