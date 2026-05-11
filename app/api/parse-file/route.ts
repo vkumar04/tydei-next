@@ -26,11 +26,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+    // Bug #27 (2026-05-11, Vick): real-facility COG dumps run
+    // 50-200MB on quarterly exports. The old 10MB cap silently
+    // refused the user's standard XLS export ("the main XLS file I
+    // use every time"); they had to fall back to a small CSV slice.
+    // Bumped to 100MB and surface the actual MB number so the user
+    // can tell whether to split the file vs save-as-CSV.
+    const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
     if (file.size > MAX_FILE_SIZE) {
+      const mb = (file.size / (1024 * 1024)).toFixed(1)
       return NextResponse.json(
-        { error: "File too large (max 10MB)" },
-        { status: 400 }
+        {
+          error: `File is ${mb}MB; max is 100MB. Split the workbook into multiple sheets/files, or export each tab as a separate .csv.`,
+        },
+        { status: 400 },
       )
     }
 

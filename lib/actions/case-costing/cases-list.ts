@@ -56,7 +56,7 @@ export async function getCasesForFacility(
           id: true,
           vendorItemNo: true,
           materialName: true,
-          unitCost: true,
+          usedCost: true,
           quantity: true,
           extendedCost: true,
           contractId: true,

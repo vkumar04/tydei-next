@@ -186,6 +186,18 @@ export function COGImportDialog({
     }
   }, [parser.data, importState])
 
+  // Bug #27 (2026-05-11, Vick): the COG import dialog never surfaced
+  // `parser.error`, so a parse failure (e.g. XLS over the size cap,
+  // .xls legacy format, corrupt zip) silently left the dialog stuck
+  // on the upload step with no feedback — exactly the symptom user
+  // reported ("It would not take the main XLS file I use every time").
+  // Surface the error from the hook as a toast.
+  useEffect(() => {
+    if (parser.error) {
+      toast.error(parser.error)
+    }
+  }, [parser.error])
+
   // Run duplicate check when entering the duplicate_check step
   useEffect(() => {
     if (importState.step !== "duplicate_check") return

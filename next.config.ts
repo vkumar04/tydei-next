@@ -21,7 +21,13 @@ const config: NextConfig = {
       // never reached the action. 50mb gives ~4× headroom for the
       // largest realistic import (200K rows ≈ 50MB). On Vercel Fluid
       // Compute the platform tolerates this.
-      bodySizeLimit: "50mb",
+      //
+      // Bug #27 (2026-05-11, Vick): standard quarterly XLS dumps run
+      // 70-100MB raw. Once parsed server-side they fan out to even
+      // larger JSON payloads when bulkImportCOGRecords is called from
+      // the client. Bump to 200mb so the parse-file → confirm-import
+      // flow doesn't silently drop the request body.
+      bodySizeLimit: "200mb",
     },
   },
   async redirects() {
