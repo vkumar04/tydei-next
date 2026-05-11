@@ -59,16 +59,27 @@ export function VendorFilterCombobox({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[260px] p-0" align="start" sideOffset={4}>
-        <Command>
+      {/* Bug #26 (2026-05-11, Vick): the earlier fix (bug #15) used
+          `min(60vh, var(--radix-popover-content-available-height,
+          320px))` on the CommandList, but the user reports the lists
+          still don't scroll past the A's. Suspect: the
+          `var(--radix-popover-content-available-height)` value
+          collapses to a small number when the popover anchors low in
+          the viewport (which it does after a search filter shrinks
+          the list briefly then grows it back), AND the inline-style
+          max-height in some Safari/Edge builds doesn't repaint when
+          the var changes. Replace with a fixed pixel cap on the
+          PopoverContent itself plus a flex layout so the CommandList
+          gets a real bounded height it can scroll within. */}
+      <PopoverContent
+        className="w-[260px] p-0 flex flex-col"
+        align="start"
+        sideOffset={4}
+        style={{ maxHeight: "min(70vh, 480px)" }}
+      >
+        <Command className="flex flex-1 min-h-0 flex-col">
           <CommandInput placeholder="Search vendors…" />
-          <CommandList
-            className="overflow-y-auto"
-            style={{
-              maxHeight:
-                "min(60vh, var(--radix-popover-content-available-height, 320px))",
-            }}
-          >
+          <CommandList className="flex-1 min-h-0 overflow-y-auto">
             <CommandEmpty>No vendor matches.</CommandEmpty>
             <CommandGroup>
               <CommandItem
