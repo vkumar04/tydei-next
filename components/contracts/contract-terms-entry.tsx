@@ -749,14 +749,17 @@ export function ContractTermsEntry({
                           </TooltipTrigger>
                           <TooltipContent className="max-w-[320px] p-3 text-xs">
                             <p>
-                              <span className="font-medium">Retroactive (Dollar 1 / Cumulative):</span>{" "}
+                              <span className="font-medium">Retroactive:</span>{" "}
                               once the highest tier is reached, that tier&apos;s
                               rate applies to the entire spend from dollar one.
+                              (Aka &quot;Dollar 1&quot; or cumulative.)
                             </p>
                             <p className="mt-2">
-                              <span className="font-medium">Tiered (Per-slice / Marginal):</span>{" "}
+                              <span className="font-medium">Bracketed:</span>{" "}
                               each tier&apos;s rate applies only to dollars
-                              within that tier&apos;s band.
+                              within that tier&apos;s band. Tier 1 rate pays
+                              the first slice, tier 2 rate pays the next, etc.
+                              (Aka marginal.)
                             </p>
                           </TooltipContent>
                         </Tooltip>

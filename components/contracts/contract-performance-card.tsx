@@ -155,7 +155,7 @@ export function ContractPerformanceCard({
               Method:{" "}
               <span className="font-medium text-foreground">
                 {util.rebateMethod === "marginal"
-                  ? "Tiered (per-slice)"
+                  ? "Bracketed (per-tier)"
                   : "Retroactive (dollar-one)"}
               </span>{" "}
               · {util.tierCount} tier{util.tierCount === 1 ? "" : "s"}

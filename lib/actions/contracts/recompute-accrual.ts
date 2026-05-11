@@ -599,15 +599,23 @@ export async function _recomputeAccrualForContractWithFacility(
         )
       : new Date(Math.min(now.getTime(), end.getTime()))
 
-    // Charles 2026-04-25: signal growth-baseline math when EITHER
-    // signal is set on the term — `baselineType === "growth_based"`
-    // (the explicit baseline knob) OR `termType === "growth_rebate"`
-    // (the explicit type indicator). Either alone is enough; both
-    // together are common when the form's "Growth Rebate" preset
-    // populates both fields.
-    const isGrowthBased =
-      config.baselineType === "growth_based" ||
-      config.termType === "growth_rebate"
+    // Bug #22 (2026-05-11, Vick): a contract with `spendBaseline > 0`
+    // should pay rebate only on dollars ABOVE the baseline,
+    // regardless of whether the user picked "growth_rebate" as the
+    // termType or kept it as a plain `spend_rebate` with a
+    // `spend_based` baseline. Before this fix, baseline subtraction
+    // was gated on `baselineType === "growth_based"` OR
+    // `termType === "growth_rebate"` — so the typical "Qualified
+    // Annual Spend Rebate" contract with a $500K baseline computed
+    // rebate against full $1.36M spend and over-paid by ~10× on
+    // tier 1.
+    //
+    // New rule: if `spendBaseline > 0`, apply baseline-above math
+    // for tier evaluation. The bucket's reported `totalSpend` still
+    // shows gross spend; the tier engine sees `max(0, periodSpend −
+    // proRatedBaseline)`.
+    const hasBaseline =
+      config.spendBaseline != null && config.spendBaseline > 0
     const periodBuckets = buildEvaluationPeriodAccruals(
       series,
       config.tiers,
@@ -616,8 +624,8 @@ export async function _recomputeAccrualForContractWithFacility(
       windowAnchor,
       {
         boundedUntil: termWindowEnd,
-        spendBaseline: isGrowthBased ? config.spendBaseline ?? null : null,
-        growthBased: isGrowthBased,
+        spendBaseline: hasBaseline ? config.spendBaseline ?? null : null,
+        growthBased: hasBaseline,
       },
     )
 

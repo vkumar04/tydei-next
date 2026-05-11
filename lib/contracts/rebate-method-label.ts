@@ -25,11 +25,16 @@ export function formatRebateMethodLabel(
 ): string {
   const m = (method ?? "cumulative") as RebateMethodName
   if (opts.short) {
-    return m === "marginal" ? "Tiered" : "Retroactive"
+    return m === "marginal" ? "Bracketed" : "Retroactive"
   }
+  // Bug #23 (2026-05-11, Vick): "Tiered (Per-slice / Marginal)" was
+  // confusing — every tiered rebate is, definitionally, tiered, so
+  // the label said nothing useful. Rename to "Bracketed" (the rate
+  // applies bracket-by-bracket) which actually distinguishes it from
+  // Retroactive (one rate applied to all dollars).
   return m === "marginal"
-    ? "Tiered (Per-slice / Marginal)"
-    : "Retroactive (Dollar 1 / Cumulative)"
+    ? "Bracketed (rate per tier band)"
+    : "Retroactive (best tier rate × all dollars)"
 }
 
 /**
@@ -42,6 +47,6 @@ export function describeRebateMethod(
 ): string {
   const m = (method ?? "cumulative") as RebateMethodName
   return m === "marginal"
-    ? "Each tier's rate applies only to dollars within that tier's band (e.g. $200K × 5% + $1.06M × 10% = $116,040 on $1.26M)."
-    : "Once the highest tier is reached, the tier's rate applies to the entire spend retroactively (e.g. $1.26M × 10% = $126,040 on $1.26M)."
+    ? "Each tier's rate applies only to dollars in that bracket. Tier 1 rate pays on the first slice, tier 2 rate pays on the next slice, etc. (e.g. $200K × 5% + $1.06M × 10% = $116,040 on $1.26M)."
+    : "Once the top tier is reached, that tier's rate applies to the whole spend (e.g. $1.26M × 10% = $126,040 on $1.26M). Aka 'Dollar 1' or 'cumulative.'"
 }
