@@ -131,6 +131,20 @@ function rebateTypesForTerm(
     }
     return dollarOnlyRebateTypes
   }
+  // Bug #25 (2026-05-11, Vick): on volume_rebate the generic
+  // "Fixed Rebate" label confused users into entering a per-unit
+  // value as a flat amount. Re-label the options in volume context
+  // so the per-unit nature is obvious and "$ per Unit" reads first.
+  // (The underlying enum values are unchanged — only the user-
+  // visible labels differ.)
+  if (termType === "volume_rebate") {
+    return [
+      { value: "fixed_rebate_per_unit", label: "$ per Unit (qty × rate)" },
+      { value: "percent_of_spend", label: "% of Spend" },
+      { value: "per_procedure_rebate", label: "$ per Procedure (CPT mode)" },
+      { value: "fixed_rebate", label: "Flat $ per Period" },
+    ]
+  }
   return rebateTypes
 }
 

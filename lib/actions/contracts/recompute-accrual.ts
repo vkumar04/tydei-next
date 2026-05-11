@@ -139,6 +139,14 @@ export async function _recomputeAccrualForContractWithFacility(
   // CPT codes so the toast can warn the user. Done here (before the
   // filter strips them) so we have visibility into why the engine
   // produced no rows for that term.
+  // Bug #24 (2026-05-11, Vick): the "missing CPT codes" diagnostic
+  // is no longer accurate. Since bug #17 (2026-05-08), volume terms
+  // with empty `cptCodes` route through `recomputeVolumeFromCogRecords`
+  // and pay rebate on COG line-item quantity × tier rate. Surfacing
+  // those terms as "Skipped — add CPT codes" was misleading and is
+  // why screenshot 3 showed the warning despite the rebate working.
+  // Only flag terms that have NEITHER cptCodes nor a usable COG
+  // basis (vendor missing — fallback writer returns 0 then).
   const volumeTermsMissingCpt = contract.terms
     .filter(
       (t) =>
@@ -146,7 +154,10 @@ export async function _recomputeAccrualForContractWithFacility(
           t.termType === "rebate_per_use" ||
           t.termType === "capitated_pricing_rebate") &&
         t.tiers.length > 0 &&
-        (!Array.isArray(t.cptCodes) || t.cptCodes.length === 0),
+        (!Array.isArray(t.cptCodes) || t.cptCodes.length === 0) &&
+        // COG fallback needs a vendor to scope spend; without that
+        // it returns 0 and the user has no path to a rebate.
+        !contract.vendorId,
     )
     .map((t) => t.termName)
 

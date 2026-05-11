@@ -216,12 +216,21 @@ function createEmptyTier(
     "rebate_per_use",
     "capitated_pricing_rebate",
     "po_rebate",
-    "volume_rebate",
   ])
-  const rebateType: TierInput["rebateType"] =
-    termType && flatPayoutTermTypes.has(termType)
-      ? "fixed_rebate"
-      : "percent_of_spend"
+  // Bug #25 (2026-05-11, Vick): volume_rebate's natural default is
+  // $-per-unit (qty × rate), not flat $-per-period. The user reported
+  // entering "$5" expecting "$5 × units used" but the writer
+  // interpreted it as a flat $5 per period. Default new volume tiers
+  // to `fixed_rebate_per_unit` so the UI label, engine math, and user
+  // mental model all line up.
+  let rebateType: TierInput["rebateType"]
+  if (termType === "volume_rebate") {
+    rebateType = "fixed_rebate_per_unit"
+  } else if (termType && flatPayoutTermTypes.has(termType)) {
+    rebateType = "fixed_rebate"
+  } else {
+    rebateType = "percent_of_spend"
+  }
   return {
     tierNumber,
     spendMin: 0,
