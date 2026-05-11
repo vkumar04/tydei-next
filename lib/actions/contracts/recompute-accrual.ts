@@ -116,6 +116,9 @@ export async function _recomputeAccrualForContractWithFacility(
         select: { paymentCadence: true },
         orderBy: { createdAt: "asc" },
       },
+      // Bug #21: market_share + percent_of_spend writer needs the
+      // primary category name to scope COG spend per period.
+      productCategory: { select: { name: true } },
     },
   })
 
@@ -941,6 +944,15 @@ export async function _recomputeAccrualForContractWithFacility(
             evaluationPeriod: term.evaluationPeriod ?? null,
             effectiveStart: term.effectiveStart ?? null,
             effectiveEnd: term.effectiveEnd ?? null,
+            // Bug #21: market_share + percent_of_spend needs to fall
+            // back to per-period vendor spend × percent. Thread the
+            // contract's termType + vendor + category through so the
+            // writer can fetch in-scope COG spend per bucket.
+            termType: term.termType ?? null,
+            vendorId: contract.vendorId,
+            categoryName: contract.productCategory?.name ?? null,
+            appliesTo: term.appliesTo ?? null,
+            categories: term.categories ?? [],
             tiers: term.tiers,
           },
         })

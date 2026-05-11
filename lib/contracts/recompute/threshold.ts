@@ -35,6 +35,18 @@ interface ThresholdRebateTermLike {
   evaluationPeriod: string | null
   effectiveStart: Date | null
   effectiveEnd: Date | null
+  /**
+   * Bug #21 (2026-05-11, Vick): market_share + percent_of_spend
+   * needs to fall back to per-period vendor spend × percent, not
+   * the flat-payout shape compliance uses. The dispatcher passes
+   * termType + the contract's vendorId + category name through so
+   * the percent-of-spend branch below has everything it needs.
+   */
+  termType?: string | null
+  vendorId?: string | null
+  categoryName?: string | null
+  appliesTo?: string | null
+  categories?: string[]
   tiers: Array<{
     tierNumber: number
     tierName: string | null
@@ -214,7 +226,24 @@ export async function recomputeThresholdAccrualForTerm(input: {
   }
 
   const achieved = determineTier(input.metricValue, tiers, "EXCLUSIVE")
-  const perPeriodPayment = achieved ? achieved.rebateValue : 0
+  const flatPerPeriodPayment = achieved ? achieved.rebateValue : 0
+
+  // Bug #21: market_share + percent_of_spend pays a percent of the
+  // contract's in-scope vendor spend during the period, NOT a flat
+  // dollar amount. Look up the achieved tier's raw rebateType (the
+  // RebateTier shape above loses it via payoutForTier's scaling) so
+  // the percent branch below can apply the right math. Compliance
+  // stays flat-payment regardless of rebateType — its metric (% of
+  // line items on contract) has no per-period dollar base.
+  const achievedRawTier = achieved
+    ? term.tiers.find((t) => t.tierNumber === achieved.tierNumber)
+    : null
+  const isMarketSharePercentOfSpend =
+    term.termType === "market_share" &&
+    achievedRawTier?.rebateType === "percent_of_spend"
+  const percentFraction = isMarketSharePercentOfSpend
+    ? Number(achievedRawTier?.rebateValue ?? 0)
+    : 0
 
   // Bucket by evaluation period — one row per closed period inside
   // the contract window.
@@ -225,6 +254,8 @@ export async function recomputeThresholdAccrualForTerm(input: {
   type BucketResult = {
     periodStart: Date
     periodEnd: Date
+    periodPayment: number
+    spendInScope: number
   }
   const results: BucketResult[] = []
   let cursor = firstWindowStart
@@ -232,8 +263,47 @@ export async function recomputeThresholdAccrualForTerm(input: {
     const next = addMonthsUTC(cursor, width)
     const periodEnd = new Date(next.getTime() - 1)
     if (periodEnd.getTime() > end.getTime()) break
-    results.push({ periodStart: cursor, periodEnd })
+    results.push({
+      periodStart: cursor,
+      periodEnd,
+      periodPayment: flatPerPeriodPayment,
+      spendInScope: 0,
+    })
     cursor = next
+  }
+
+  // Bug #21: when market_share + percent_of_spend, per-period payment
+  // is (in-scope vendor spend during the period) × percent. Query
+  // COG records once for the whole window, then partition in memory
+  // by bucket — cheaper than N queries on contracts with many buckets.
+  if (isMarketSharePercentOfSpend && term.vendorId && results.length > 0) {
+    const categoryFilter =
+      term.appliesTo === "specific_category" &&
+      Array.isArray(term.categories) &&
+      term.categories.length > 0
+        ? { category: { in: Array.from(new Set(term.categories)) } }
+        : term.categoryName
+          ? { category: term.categoryName }
+          : {}
+    const cogRows = await prisma.cOGRecord.findMany({
+      where: {
+        facilityId,
+        vendorId: term.vendorId,
+        transactionDate: { gte: start, lte: end },
+        ...categoryFilter,
+      },
+      select: { transactionDate: true, extendedPrice: true },
+    })
+    for (const r of results) {
+      let spendSum = 0
+      for (const row of cogRows) {
+        const t = row.transactionDate.getTime()
+        if (t < r.periodStart.getTime() || t > r.periodEnd.getTime()) continue
+        spendSum += row.extendedPrice == null ? 0 : Number(row.extendedPrice)
+      }
+      r.spendInScope = spendSum
+      r.periodPayment = spendSum * percentFraction
+    }
   }
 
   // Idempotent persist
@@ -256,17 +326,21 @@ export async function recomputeThresholdAccrualForTerm(input: {
     collectionDate: null
     notes: string
   }> = []
+  let totalEarned = 0
   for (const r of results) {
-    if (perPeriodPayment <= 0) continue
+    if (r.periodPayment <= 0) continue
+    totalEarned += r.periodPayment
     toInsert.push({
       contractId,
       facilityId,
-      rebateEarned: perPeriodPayment,
+      rebateEarned: r.periodPayment,
       rebateCollected: 0,
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
       collectionDate: null,
-      notes: `${termPrefix} · ${input.metric}=${input.metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · $${perPeriodPayment.toFixed(2)}`,
+      notes: isMarketSharePercentOfSpend
+        ? `${termPrefix} · ${input.metric}=${input.metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · spend=$${r.spendInScope.toFixed(2)} × ${(percentFraction * 100).toFixed(2)}% = $${r.periodPayment.toFixed(2)}`
+        : `${termPrefix} · ${input.metric}=${input.metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · $${r.periodPayment.toFixed(2)}`,
     })
   }
   if (toInsert.length > 0) {
@@ -275,6 +349,6 @@ export async function recomputeThresholdAccrualForTerm(input: {
 
   return {
     inserted: toInsert.length,
-    sumEarned: perPeriodPayment * toInsert.length,
+    sumEarned: totalEarned,
   }
 }
