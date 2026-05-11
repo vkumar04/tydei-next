@@ -34,6 +34,18 @@ export async function getContractInsights(contractId: string) {
       purchaseOrders: {
         include: { lineItems: true },
       },
+      // Bug #19 (2026-05-11, Vick): the market-share section below
+      // queried `cOGRecord.aggregate` with `productCategoryId`, which
+      // is NOT a column on COGRecord (COGRecord.category is a plain
+      // string, not an FK). That threw `Unknown argument
+      // productCategoryId` for every contract that has a primary
+      // category set — including post-create redirect on the new
+      // market-share contract surface, which is what produced the
+      // generic "Failed to create contract" toast (the underlying
+      // server-component throw got prod-redacted into a digest).
+      // Load the category's name here so we can filter the COG rows
+      // against `category` (string) instead.
+      productCategory: { select: { name: true } },
     },
   })
 
@@ -104,20 +116,21 @@ export async function getContractInsights(contractId: string) {
   const priceVariance = analyzePriceDiscrepancies(varianceLines, priceLookup)
 
   let marketShare: ReturnType<typeof calculateMarketShare> | null = null
-  if (contract.productCategoryId) {
+  const categoryName = contract.productCategory?.name ?? null
+  if (categoryName) {
     const [vendorAgg, categoryAgg] = await Promise.all([
       prisma.cOGRecord.aggregate({
         where: {
           facilityId: facility.id,
           vendorId: contract.vendorId,
-          productCategoryId: contract.productCategoryId,
+          category: categoryName,
         },
         _sum: { extendedPrice: true },
       }),
       prisma.cOGRecord.aggregate({
         where: {
           facilityId: facility.id,
-          productCategoryId: contract.productCategoryId,
+          category: categoryName,
         },
         _sum: { extendedPrice: true },
       }),
