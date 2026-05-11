@@ -62,7 +62,11 @@ export function NewContractClient({
     [dynamicCategories, categories],
   )
 
-  const [entryMode, setEntryMode] = useState<"ai" | "pdf" | "manual">("manual")
+  // Bug #20 (2026-05-11, Vick): default to Upload PDF because that's
+  // the primary intake path — almost every contract starts as a
+  // vendor PDF the user is digitizing. Manual entry is the escape
+  // hatch, not the default.
+  const [entryMode, setEntryMode] = useState<"ai" | "pdf" | "manual">("pdf")
   const [aiExtractOpen, setAiExtractOpen] = useState(false)
   const [droppedFile, setDroppedFile] = useState<File | null>(null)
   const [contractFile, setContractFile] = useState<File | null>(null)
