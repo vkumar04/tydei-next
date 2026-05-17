@@ -72,20 +72,21 @@ export function VendorFilterCombobox({
           PopoverContent itself plus a flex layout so the CommandList
           gets a real bounded height it can scroll within. */}
       <PopoverContent
-        className="w-[260px] p-0 flex flex-col"
+        className="w-[260px] p-0"
         align="start"
         sideOffset={4}
-        style={{ maxHeight: "min(70vh, 480px)" }}
       >
-        <Command className="flex flex-1 min-h-0 flex-col">
+        <Command>
           <CommandInput placeholder="Search vendors…" />
-          {/* Bug #29 (2026-05-17, Vick): shadcn's CommandList ships with
-              a default `max-h-[300px]` (see components/ui/command.tsx),
-              which caps the list at ~8 rows regardless of the
-              PopoverContent height. Override with `max-h-none` so the
-              flex parent's bounded height (480px / 70vh) actually
-              governs the scroll region. */}
-          <CommandList className="max-h-none flex-1 min-h-0 overflow-y-auto">
+          {/* Bug #30 (2026-05-17, Vick): the flex-chain approach from
+              bug #29 didn't propagate height through cmdk's wrapper
+              divs — list still capped at the A's. Drop the flex layout
+              and put an explicit pixel max-height directly on
+              CommandList (overriding shadcn's default `max-h-[300px]`
+              from components/ui/command.tsx). cmdk's CommandList
+              already includes `overflow-y-auto`, so this is all that's
+              needed to make the full list scrollable. */}
+          <CommandList className="!max-h-[60vh]">
             <CommandEmpty>No vendor matches.</CommandEmpty>
             <CommandGroup>
               <CommandItem
