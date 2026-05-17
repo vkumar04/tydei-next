@@ -80,7 +80,7 @@ export function ContractDatesCard({
                   mode="single"
                   selected={effectiveDate}
                   onSelect={onEffectiveDateChange}
-                  initialFocus
+                  autoFocus
                 />
               </PopoverContent>
             </Popover>
@@ -108,7 +108,7 @@ export function ContractDatesCard({
                   mode="single"
                   selected={expirationDate}
                   onSelect={onExpirationDateChange}
-                  initialFocus
+                  autoFocus
                 />
               </PopoverContent>
             </Popover>
