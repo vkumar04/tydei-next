@@ -79,7 +79,13 @@ export function VendorFilterCombobox({
       >
         <Command className="flex flex-1 min-h-0 flex-col">
           <CommandInput placeholder="Search vendors…" />
-          <CommandList className="flex-1 min-h-0 overflow-y-auto">
+          {/* Bug #29 (2026-05-17, Vick): shadcn's CommandList ships with
+              a default `max-h-[300px]` (see components/ui/command.tsx),
+              which caps the list at ~8 rows regardless of the
+              PopoverContent height. Override with `max-h-none` so the
+              flex parent's bounded height (480px / 70vh) actually
+              governs the scroll region. */}
+          <CommandList className="max-h-none flex-1 min-h-0 overflow-y-auto">
             <CommandEmpty>No vendor matches.</CommandEmpty>
             <CommandGroup>
               <CommandItem
