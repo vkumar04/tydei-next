@@ -98,8 +98,8 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
                     setValue("effectiveDate", toDateString(date))
                   }
                   captionLayout="dropdown"
-                  fromYear={2020}
-                  toYear={2035}
+                  startMonth={new Date(2020, 0)}
+                  endMonth={new Date(2035, 11)}
                 />
               </PopoverContent>
             </Popover>
@@ -133,8 +133,8 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
                     setValue("expirationDate", toDateString(date))
                   }
                   captionLayout="dropdown"
-                  fromYear={2020}
-                  toYear={2035}
+                  startMonth={new Date(2020, 0)}
+                  endMonth={new Date(2035, 11)}
                   disabled={(date) =>
                     effectiveDate ? date < effectiveDate : false
                   }
