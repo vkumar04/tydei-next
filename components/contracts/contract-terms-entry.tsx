@@ -984,23 +984,6 @@ export function ContractTermsEntry({
                     </Field>
                   )}
 
-                  {/* Charles W1.X-A6 — Per-Unit rebate tiers pay per item, so
-                      the term MUST be scoped to specific items with REF
-                      numbers. Nudge the user when that pairing is missing. */}
-                  {(term.tiers ?? []).some(
-                    (t) => t.rebateType === "fixed_rebate_per_unit",
-                  ) &&
-                    (term.appliesTo !== "specific_items" ||
-                      (term.scopedItemNumbers ?? []).length === 0) && (
-                      <p className="inline-flex items-start gap-1 text-[11px] text-amber-700 dark:text-amber-400">
-                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                        <span>
-                          Per-Unit rebate tiers require a Specific Items scope
-                          with at least one REF number selected.
-                        </span>
-                      </p>
-                    )}
-
                   {contractType === "tie_in" && (
                     <div className="space-y-5 rounded-md border p-4">
                       {/* Charles W1.T — tie-in capital is contract-level now.

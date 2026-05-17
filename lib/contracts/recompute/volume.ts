@@ -294,6 +294,41 @@ export async function recomputeVolumeAccrualForTerm(input: {
     })
     .sort((a, b) => a.thresholdMin - b.thresholdMin)
 
+  // Spec 2026-05-17: when ANY tier on the term uses `percent_of_spend`,
+  // the dollar number depends on in-scope COG spend per bucket, not on
+  // occurrence count × rate. Tier selection still uses occurrences;
+  // only the dollar replacement comes from COG spend. Fetch once
+  // upfront and sum per bucket in-memory.
+  const hasPercentOfSpendTier = term.tiers.some(
+    (t) => t.rebateType === "percent_of_spend",
+  )
+  const spendByDate: Array<{ transactionDate: Date; extendedPrice: number }> =
+    []
+  if (hasPercentOfSpendTier && term.vendorId) {
+    const isSpecificCategory =
+      term.appliesTo === "specific_category" &&
+      Array.isArray(term.categories) &&
+      (term.categories?.length ?? 0) > 0
+    const categoryFilter = isSpecificCategory
+      ? { category: { in: Array.from(new Set(term.categories ?? [])) } }
+      : {}
+    const cogForSpend = await prisma.cOGRecord.findMany({
+      where: {
+        facilityId,
+        vendorId: term.vendorId,
+        transactionDate: { gte: start, lte: end },
+        ...categoryFilter,
+      },
+      select: { transactionDate: true, extendedPrice: true },
+    })
+    for (const r of cogForSpend) {
+      spendByDate.push({
+        transactionDate: r.transactionDate,
+        extendedPrice: r.extendedPrice == null ? 0 : Number(r.extendedPrice),
+      })
+    }
+  }
+
   // Bucket purchases by evaluation period. Iterate from start through
   // end in evaluation-period steps, computing rebate per bucket.
   const width = widthMonths(term.evaluationPeriod)
@@ -332,6 +367,8 @@ export async function recomputeVolumeAccrualForTerm(input: {
     periodEnd: Date
     occurrences: number
     rebateEarned: number
+    bucketSpend: number
+    percentOfSpendApplied: boolean
   }
   const volumeConfig: VolumeRebateConfig = {
     type: "VOLUME_REBATE",
@@ -363,11 +400,40 @@ export async function recomputeVolumeAccrualForTerm(input: {
       totalSpend: 0,
     }
     const result = calculateRebate(volumeConfig, periodData)
+    let rebateEarned = result.rebateEarned
+    let bucketSpend = 0
+    let percentOfSpendApplied = false
+    // Spec 2026-05-17: replace engine dollars for percent_of_spend tiers.
+    // The engine has no percent_of_spend branch, so it would pay
+    // `occurrences × fraction × 100` (totally wrong). Tier selection still
+    // comes from the engine (which gates on occurrence count); we only
+    // swap the dollar number when the achieved tier is percent_of_spend.
+    // TODO: marginal+percent_of_spend — falls back to cumulative behavior
+    // (top achieved tier's rate × whole bucket spend).
+    if (hasPercentOfSpendTier && result.tierResult?.tier) {
+      const achievedTierNumber = result.tierResult.tier.tierNumber
+      const achievedTermTier = term.tiers.find(
+        (t) => t.tierNumber === achievedTierNumber,
+      )
+      if (achievedTermTier?.rebateType === "percent_of_spend") {
+        for (const r of spendByDate) {
+          const t = r.transactionDate.getTime()
+          if (t >= b.periodStart.getTime() && t <= b.periodEnd.getTime()) {
+            bucketSpend += r.extendedPrice
+          }
+        }
+        const fraction = Number(achievedTermTier.rebateValue ?? 0)
+        rebateEarned = bucketSpend * fraction
+        percentOfSpendApplied = true
+      }
+    }
     return {
       periodStart: b.periodStart,
       periodEnd: b.periodEnd,
       occurrences,
-      rebateEarned: result.rebateEarned,
+      rebateEarned,
+      bucketSpend,
+      percentOfSpendApplied,
     }
   })
 
@@ -406,7 +472,9 @@ export async function recomputeVolumeAccrualForTerm(input: {
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
       collectionDate: null,
-      notes: `${termPrefix} · ${r.occurrences} occurrences · $${r.rebateEarned.toFixed(2)}`,
+      notes: r.percentOfSpendApplied
+        ? `${termPrefix} · ${r.occurrences} occurrences · spend=$${r.bucketSpend.toFixed(2)} · $${r.rebateEarned.toFixed(2)}`
+        : `${termPrefix} · ${r.occurrences} occurrences · $${r.rebateEarned.toFixed(2)}`,
     })
   }
   if (toInsert.length > 0) {
