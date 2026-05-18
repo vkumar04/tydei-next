@@ -285,6 +285,30 @@ function TierDisplay({
   )
 }
 
+/**
+ * Renders a chip row like `Categories: [Implants, Orthopedic, Spine]
+ * (+3 more)`. Caps the visible chips at 8 so a 40-CPT scope doesn't
+ * blow out the term card; surplus collapses into a `+N more` counter.
+ */
+function ScopeChipRow({ label, values }: { label: string; values: string[] }) {
+  const MAX_VISIBLE = 8
+  const visible = values.slice(0, MAX_VISIBLE)
+  const remaining = values.length - visible.length
+  return (
+    <div className="flex flex-wrap items-baseline gap-1.5">
+      <span className="text-muted-foreground">{label}:</span>
+      {visible.map((v) => (
+        <Badge key={v} variant="outline" className="text-[10px] font-normal">
+          {v}
+        </Badge>
+      ))}
+      {remaining > 0 && (
+        <span className="text-muted-foreground">+{remaining} more</span>
+      )}
+    </div>
+  )
+}
+
 export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: ContractTermsDisplayProps) {
   if (terms.length === 0) {
     return (
@@ -384,7 +408,15 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                       </p>
                     </div>
                   )}
-                  <div className="grid gap-2 text-sm sm:grid-cols-3">
+                  {/* Bug 2026-05-18 (Vick "categories not here"): the
+                      Rebates & Tiers tab previously only surfaced
+                      Baseline / Spend Baseline / Evaluation. The user
+                      reads this section to audit *what the rebate
+                      applies to* — so include Product Scope, Categories,
+                      REF#s, CPTs, Volume Counted By, baselines, and
+                      Payment Timing here too. Empty fields collapse so
+                      a simple `all_products` term still reads clean. */}
+                  <div className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
                     <div>
                       <DefinitionTooltip term="baseline_type">
                         <span className="text-muted-foreground">Baseline</span>
@@ -392,6 +424,27 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                       <span className="text-muted-foreground">: </span>
                       <span className="capitalize">
                         {term.baselineType.replace("_", " ")}
+                      </span>
+                    </div>
+                    <div>
+                      <DefinitionTooltip term="evaluation_period">
+                        <span className="text-muted-foreground">Evaluation</span>
+                      </DefinitionTooltip>
+                      <span className="text-muted-foreground">: </span>
+                      <span className="capitalize">
+                        {term.evaluationPeriod}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Payment: </span>
+                      <span className="capitalize">
+                        {term.paymentTiming.replace("_", " ")}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Scope: </span>
+                      <span className="capitalize">
+                        {term.appliesTo.replace("_", " ")}
                       </span>
                     </div>
                     {term.spendBaseline && (
@@ -402,16 +455,49 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                         {formatCurrency(Number(term.spendBaseline))}
                       </div>
                     )}
-                    <div>
-                      <DefinitionTooltip term="evaluation_period">
-                        <span className="text-muted-foreground">Evaluation</span>
-                      </DefinitionTooltip>
-                      <span className="text-muted-foreground">: </span>
-                      <span className="capitalize">
-                        {term.evaluationPeriod}
-                      </span>
-                    </div>
+                    {term.volumeBaseline != null && (
+                      <div>
+                        <span className="text-muted-foreground">
+                          Volume Baseline:{" "}
+                        </span>
+                        {formatNumber(term.volumeBaseline)} units
+                      </div>
+                    )}
+                    {term.termType === "volume_rebate" && term.volumeType && (
+                      <div>
+                        <span className="text-muted-foreground">
+                          Volume Counted By:{" "}
+                        </span>
+                        <span className="capitalize">
+                          {term.volumeType.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                    )}
                   </div>
+                  {((term.categories?.length ?? 0) > 0 ||
+                    (term.referenceNumbers?.length ?? 0) > 0 ||
+                    (term.cptCodes?.length ?? 0) > 0) && (
+                    <div className="space-y-1.5 rounded-md border bg-muted/30 p-2.5 text-xs">
+                      {term.categories.length > 0 && (
+                        <ScopeChipRow
+                          label="Categories"
+                          values={term.categories}
+                        />
+                      )}
+                      {term.referenceNumbers.length > 0 && (
+                        <ScopeChipRow
+                          label="REF Numbers"
+                          values={term.referenceNumbers}
+                        />
+                      )}
+                      {term.cptCodes.length > 0 && (
+                        <ScopeChipRow
+                          label="CPT Codes"
+                          values={term.cptCodes}
+                        />
+                      )}
+                    </div>
+                  )}
                   {(() => {
                     // Pick the spend that actually applies to THIS term:
                     // scoped spend when the term is category-scoped and
