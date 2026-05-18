@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getVendorConcentration } from "@/lib/actions/cog/concentration"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * Surfaces `calculateSpendConcentration` (Herfindahl-Hirschman Index)
@@ -24,11 +25,14 @@ export function CogVendorConcentrationCard({
   facilityId: string
 }) {
   const { data, isLoading } = useQuery({
-    // Nested under "cog-records" so existing CRUD invalidations
-    // (hooks/use-cog.ts: deleteMany, importCOG, etc.) bust this cache
-    // too. Previously the card kept serving pre-delete numbers while
-    // the top stats panel correctly showed 0 rows.
-    queryKey: ["cog-records", "vendor-concentration", facilityId],
+    // Bug 2026-05-18 (Vick "still hardcoded"): nested under the
+    // canonical `queryKeys.cogRecords.all` root so existing COG-CRUD
+    // invalidations in hooks/use-cog.ts (importCOG, deleteMany, etc.)
+    // actually bust this cache. Prior key was the hyphenated literal
+    // `["cog-records", ...]` which never matched the camelCase
+    // `["cogRecords"]` root the mutations invalidate — so the card
+    // froze on its first-mount fetch and looked hardcoded forever.
+    queryKey: [...queryKeys.cogRecords.all, "vendor-concentration", facilityId],
     queryFn: () => getVendorConcentration(facilityId),
   })
 

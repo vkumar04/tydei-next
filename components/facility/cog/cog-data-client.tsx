@@ -22,6 +22,7 @@ import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
 import { matchCOGToContracts } from "@/lib/actions/cog-match"
 import { backfillCOGEnrichment } from "@/lib/actions/cog-import/backfill"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/query-keys"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,7 +69,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
           `${result.vendorsUnmatched} vendor(s) unmatched.`,
       )
       refetchStats()
-      qc.invalidateQueries({ queryKey: ["cog-records"] })
+      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
       // Rematch flips matchStatus on COGRecord rows, which changes the
       // contract-detail "On vs Off Contract Spend" aggregates. Without
       // this invalidation the contract page keeps serving cached $0
@@ -101,8 +102,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         { duration: 8000 },
       )
       refetchStats()
-      qc.invalidateQueries({ queryKey: ["cog"] })
-      qc.invalidateQueries({ queryKey: ["cog-records"] })
+      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
       // Backfill enrichment also flips matchStatus and contractId on
       // COG rows, which the contract-detail aggregates depend on.
       qc.invalidateQueries({ queryKey: ["contracts"] })

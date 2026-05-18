@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getCogSpendTrend } from "@/lib/actions/cog/spend-trend"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * Surfaces `classifySpendTrend` (v0 cogs-functionality.md §30) on the
@@ -21,9 +22,11 @@ import { getCogSpendTrend } from "@/lib/actions/cog/spend-trend"
  */
 export function CogSpendTrendCard({ facilityId }: { facilityId: string }) {
   const { data, isLoading } = useQuery({
-    // Nested under "cog-records" so existing CRUD invalidations bust
-    // this cache too (same rationale as the concentration card).
-    queryKey: ["cog-records", "spend-trend", facilityId],
+    // Bug 2026-05-18 (Vick "still hardcoded"): same key-mismatch fix
+    // as the vendor-concentration card — invalidations target
+    // `queryKeys.cogRecords.all` (camelCase) so this key must nest
+    // under that root, not the hyphenated literal it used before.
+    queryKey: [...queryKeys.cogRecords.all, "spend-trend", facilityId],
     queryFn: () => getCogSpendTrend(facilityId),
   })
 
