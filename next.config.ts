@@ -14,6 +14,20 @@ const config: NextConfig = {
   // flag and the cleaner module shape is worth keeping.
   // cacheComponents: true,
   experimental: {
+    // Bug 2026-05-18 (Vick "XLS not working for loading COGS"):
+    // proxy.ts intercepts every /dashboard/* request for auth-gating.
+    // Next.js buffers the request body so middleware can access it,
+    // capped at 10MB by default — independent of the
+    // `serverActions.bodySizeLimit` below. The 46k-record COG import
+    // serializes to ~11MB JSON and tripped this cap, surfacing as a
+    // generic "Server Components render" overlay. Server log:
+    //   "Request body exceeded 10MB for /dashboard/cog-data.
+    //    Only the first 10MB will be available unless configured.
+    //    See …/middlewareClientMaxBodySize"
+    // followed by `SyntaxError: ... in JSON at position 10476543`.
+    // Bump to 200mb so the proxy doesn't truncate the body it never
+    // even reads.
+    proxyClientMaxBodySize: "200mb",
     serverActions: {
       // Charles 2026-04-29: 46,512-record COG import was hitting the
       // 10mb cap (~250B/row × 46K ≈ 11-15MB JSON) and surfacing as the
