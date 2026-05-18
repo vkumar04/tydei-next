@@ -33,12 +33,14 @@ const fixture = [
     category: "Spine",
     extendedPrice: 100,
     contractId: null,
+    matchStatus: "off_contract",
   },
   {
     vendorId: OTHER_VENDOR,
     category: "Spine",
     extendedPrice: 100,
     contractId: null,
+    matchStatus: "off_contract",
   },
   // Fallback path — both rows lack category but matched contracts say "Spine"
   // Pre-fix this $300 ($240 + $60) was invisible to currentMarketShare.
@@ -49,12 +51,14 @@ const fixture = [
     category: null,
     extendedPrice: 240,
     contractId: "c_v_spine",
+    matchStatus: "on_contract",
   },
   {
     vendorId: OTHER_VENDOR,
     category: null,
     extendedPrice: 60,
     contractId: "c_o_spine",
+    matchStatus: "on_contract",
   },
 ]
 
@@ -126,6 +130,22 @@ describe("computeContractMetrics market share fallback", () => {
     expect(result.currentMarketShare).toBeNull()
     expect(result.vendorSpendInCategories).toBe(0)
     expect(result.totalSpendInCategories).toBe(0)
+  })
+
+  it("counts on_contract rows via category fallback when computing complianceRate", async () => {
+    const { computeContractMetrics } = await import(
+      "@/lib/actions/contracts/derived-metrics"
+    )
+
+    const result = await computeContractMetrics({ contractId: "c_target" })
+
+    // Vendor rows in scope:
+    //   - explicit Spine, off_contract (1 row)
+    //   - null + c_v_spine → fallback Spine, on_contract (1 row)
+    // Compliance = 1 on-contract / 2 total = 50%
+    expect(result.cogRowsTotal).toBe(2)
+    expect(result.cogRowsOnContract).toBe(1)
+    expect(result.complianceRate).toBe(50.0)
   })
 
   it("ignores spend in categories outside the contract's scope", async () => {

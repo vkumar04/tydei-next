@@ -124,55 +124,30 @@ export async function computeContractMetrics(
     }
   }
 
-  // Compliance still runs as a direct row-count ratio (matchStatus is
-  // not a market-share concept). Market share goes through the
-  // canonical `computeCategoryMarketShare` helper so the
-  // `effectiveCategoryOf` fallback (COG.category=null + matched
-  // contract's productCategory) feeds both numerator AND denominator.
-  // Bug 2026-05-18 (Vick): the prior direct aggregate skipped that
-  // fallback entirely, undercounting spend for any contract whose COG
-  // rows arrived without explicit categories — even though the
-  // per-category card on the contract detail (`CategoryMarketShareCard`)
-  // already counts that spend via the same helper.
-  const [
-    cogRowsTotal,
-    cogRowsOnContract,
-    cogRowsForMarketShare,
-  ] = await Promise.all([
-    prisma.cOGRecord.count({
-      where: { ...baseWhere, ...categoryClause, vendorId },
-    }),
-    prisma.cOGRecord.count({
-      where: {
-        ...baseWhere,
-        ...categoryClause,
-        vendorId,
-        matchStatus: "on_contract",
-      },
-    }),
-    // Wider net for market share: pull every COG row in the window
-    // (vendor's + competitors'), pass through the canonical filter, and
-    // then sum across our category scope. We can't pre-filter by
-    // `category: { in: categories }` here because the fallback path
-    // depends on having `contractId` available so the helper can
-    // resolve null categories.
-    prisma.cOGRecord.findMany({
-      where: baseWhere,
-      select: {
-        vendorId: true,
-        category: true,
-        extendedPrice: true,
-        contractId: true,
-      },
-    }),
-  ])
+  // Bug 2026-05-18 (Vick "market share calculations"): both market
+  // share AND compliance previously ran raw aggregates with a
+  // `category: { in: scope }` filter — silently excluding COG rows
+  // whose `category=null` but matched contract had a `productCategory`
+  // in scope. The canonical `computeCategoryMarketShare` helper (used
+  // by the per-category contract-detail card) applies that
+  // `effectiveCategoryOf` fallback; this action drifted because it
+  // bypassed the helper. Both metrics now consume the same wider COG
+  // pull + contract-category map so the fallback feeds both
+  // numerator AND denominator on each.
+  const cogRowsForMetrics = await prisma.cOGRecord.findMany({
+    where: baseWhere,
+    select: {
+      vendorId: true,
+      category: true,
+      extendedPrice: true,
+      contractId: true,
+      matchStatus: true,
+    },
+  })
 
-  // Build the contract-category fallback map ONCE for all matched
-  // contracts in the window (not just the one being evaluated). This
-  // mirrors the per-category card's query shape.
   const contractIdsInWindow = Array.from(
     new Set(
-      cogRowsForMarketShare
+      cogRowsForMetrics
         .map((r) => r.contractId)
         .filter((v): v is string => !!v),
     ),
@@ -191,17 +166,16 @@ export async function computeContractMetrics(
     contractCategoryRows.map((c) => [c.id, c.productCategory?.name ?? null]),
   )
 
+  // Market share — sum vendor + total spend across this contract's
+  // category scope. Rows the helper couldn't categorize (no
+  // COG.category + no matched-contract fallback) live in
+  // `msComputed.uncategorizedSpend` and don't count toward share — a
+  // real data-quality gap, not market share.
   const msComputed = computeCategoryMarketShare({
-    rows: cogRowsForMarketShare,
+    rows: cogRowsForMetrics,
     contractCategoryMap,
     vendorId,
   })
-
-  // Sum vendor + total spend across only this contract's category
-  // scope. Rows for categories outside scope are ignored. Rows the
-  // helper couldn't categorize (no COG.category + no contract
-  // fallback) live in `msComputed.uncategorizedSpend` and don't count
-  // toward share — they're a real data-quality gap, not market share.
   const scopeSet = new Set(categories)
   let vendorSpendInCategories = 0
   let totalSpendInCategories = 0
@@ -209,6 +183,23 @@ export async function computeContractMetrics(
     if (!scopeSet.has(row.category)) continue
     vendorSpendInCategories += row.vendorSpend
     totalSpendInCategories += row.categoryTotal
+  }
+
+  // Compliance — same fallback-aware filter. Apply effectiveCategoryOf
+  // row-by-row, count vendor-rows in scope (denominator) vs
+  // vendor-rows in scope with matchStatus=on_contract (numerator).
+  let cogRowsTotal = 0
+  let cogRowsOnContract = 0
+  for (const row of cogRowsForMetrics) {
+    if (row.vendorId !== vendorId) continue
+    const cat = row.category
+      ? row.category
+      : row.contractId
+        ? contractCategoryMap.get(row.contractId) ?? null
+        : null
+    if (!cat || !scopeSet.has(cat)) continue
+    cogRowsTotal++
+    if (row.matchStatus === "on_contract") cogRowsOnContract++
   }
 
   const complianceRate =
