@@ -5,7 +5,9 @@ import { Plus, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react
 import { toast } from "sonner"
 import { useForm } from "react-hook-form"
 import { useCOGRecords, useDeleteCOGRecord, useUpdateCOGRecord } from "@/hooks/use-cog"
-import { useVendorList } from "@/hooks/use-vendor-crud"
+import { useQuery } from "@tanstack/react-query"
+import { getVendors } from "@/lib/actions/vendors"
+import { queryKeys } from "@/lib/query-keys"
 import { VendorFilterCombobox as SharedVendorFilterCombobox } from "@/components/shared/vendor-filter-combobox"
 import {
   getCOGColumns,
@@ -106,7 +108,15 @@ export function COGRecordsTable({
   const { data, isLoading, refetch } = useCOGRecords(facilityId, filters)
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const { data: vendorData } = useVendorList()
+  // Bug 2026-05-18 (Vick "only see the A's"): useVendorList() returns
+  // the paginated 20-per-page shape (correct for the Vendors page
+  // table, wrong for filter dropdowns). Switch to the dropdown-shaped
+  // `getVendors()` action which returns every non-inactive vendor so
+  // A–Z all appear in the combobox.
+  const { data: vendorData } = useQuery({
+    queryKey: queryKeys.vendors.all,
+    queryFn: () => getVendors(),
+  })
   const deleteMutation = useDeleteCOGRecord()
   const updateMutation = useUpdateCOGRecord()
 
@@ -225,7 +235,7 @@ export function COGRecordsTable({
                 className="w-[320px]"
               />
               <VendorFilterCombobox
-                vendors={vendorData?.vendors ?? []}
+                vendors={vendorData ?? []}
                 value={vendorFilter}
                 onChange={(v) => {
                   // Filter changes reset to page 1 so the user sees

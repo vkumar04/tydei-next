@@ -23,7 +23,9 @@ import { COGColumnMapper } from "@/components/facility/cog/cog-column-mapper"
 import { useFileParser } from "@/hooks/use-file-parser"
 import { usePricingImport } from "@/hooks/use-pricing-import"
 import { useImportPricingFiles } from "@/hooks/use-pricing-files"
-import { useVendorList } from "@/hooks/use-vendor-crud"
+import { useQuery } from "@tanstack/react-query"
+import { getVendors } from "@/lib/actions/vendors"
+import { queryKeys } from "@/lib/query-keys"
 
 interface PricingImportDialogProps {
   facilityId: string
@@ -46,7 +48,11 @@ export function PricingImportDialog({
   const parser = useFileParser()
   const importState = usePricingImport()
   const importMutation = useImportPricingFiles()
-  const { data: vendorData } = useVendorList()
+  // Bug 2026-05-18 (Vick): full vendor list for dropdown, not paginated.
+  const { data: vendorData } = useQuery({
+    queryKey: queryKeys.vendors.all,
+    queryFn: () => getVendors(),
+  })
   const forwarded = useRef(false)
 
   const handleFile = async (file: File) => {
@@ -105,7 +111,7 @@ export function PricingImportDialog({
                   <SelectValue placeholder="Select vendor..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {vendorData?.vendors.map((v) => (
+                  {(vendorData ?? []).map((v) => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.name}
                     </SelectItem>

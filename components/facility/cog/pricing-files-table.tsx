@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from "react"
 import { Download, Plus, List } from "lucide-react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { getVendors } from "@/lib/actions/vendors"
 import { toast } from "sonner"
 import {
   useDeletePricingFile,
@@ -11,7 +12,6 @@ import {
 import { queryKeys } from "@/lib/query-keys"
 import { deleteContractPricing } from "@/lib/actions/pricing-files"
 import type { UnifiedPricingRow } from "@/lib/actions/pricing-files"
-import { useVendorList } from "@/hooks/use-vendor-crud"
 import { getPricingColumns } from "@/components/facility/cog/pricing-columns"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { Button } from "@/components/ui/button"
@@ -50,7 +50,12 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
     facilityId,
     vendorFilter && vendorFilter !== "all" ? vendorFilter : undefined,
   )
-  const { data: vendorData } = useVendorList()
+  // Bug 2026-05-18 (Vick "only see the A's"): use the full vendor list
+  // for the filter dropdown, not the paginated 20-per-page table shape.
+  const { data: vendorData } = useQuery({
+    queryKey: queryKeys.vendors.all,
+    queryFn: () => getVendors(),
+  })
   const deleteFileMutation = useDeletePricingFile()
   const qc = useQueryClient()
   const deleteContractPricingMutation = useMutation({
@@ -126,7 +131,7 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
             filterComponent={
               <>
                 <VendorFilterCombobox
-                  vendors={vendorData?.vendors ?? []}
+                  vendors={vendorData ?? []}
                   value={vendorFilter === "all" ? "" : vendorFilter}
                   onChange={(next) => setVendorFilter(next || "all")}
                   placeholder="All Vendors"
