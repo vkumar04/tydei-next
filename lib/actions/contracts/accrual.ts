@@ -82,6 +82,14 @@ async function _buildAccrualTimelineForContract(
   contract: _AccrualContract,
   facilityId: string | null,
 ) {
+  // Bug 3 (2026-05-17): flag the timeline as volume-driven if ANY term
+  // is a volume_rebate. The UI uses this to surface a "Volume (units)"
+  // column alongside Spend so users can see the qty that drove tier
+  // achievement.
+  const isVolumeRebate = contract.terms.some(
+    (t) => t.termType === "volume_rebate",
+  )
+
   if (!facilityId) {
     // No primary facility — fall through with empty result. Matches
     // the early-return shape below.
@@ -93,6 +101,7 @@ async function _buildAccrualTimelineForContract(
         termName: string
         evaluationPeriod: string
       }>,
+      isVolumeRebate,
     })
   }
 
@@ -107,6 +116,7 @@ async function _buildAccrualTimelineForContract(
         termName: string
         evaluationPeriod: string
       }>,
+      isVolumeRebate,
     })
   }
 
@@ -124,6 +134,7 @@ async function _buildAccrualTimelineForContract(
         termName: string
         evaluationPeriod: string
       }>,
+      isVolumeRebate,
     })
   }
 
@@ -325,6 +336,111 @@ async function _buildAccrualTimelineForContract(
   const monthsTimeline =
     perTermResults[0]?.series.map((s) => s.month) ?? []
 
+  // Bug 3 (2026-05-17): build a per-month volume series for the UI.
+  // Mirrors the volume-rebate writer (`lib/contracts/recompute/volume.ts`):
+  //   - CPT mode (term has cptCodes): count distinct case+CPT
+  //     occurrences from Case.procedures within the month.
+  //   - COG-fallback (no cptCodes): sum COGRecord.quantity within the
+  //     month, scoped to the term's category filter.
+  // We sum across every volume_rebate term so a month's "Volume" reads
+  // as the total qty that drove ANY volume tier this month.
+  const volumeByMonth = new Map<string, number>()
+  if (isVolumeRebate) {
+    const volumeTerms = termsWithTiers.filter(
+      (t) => t.termType === "volume_rebate",
+    )
+    const cptVolumeTerms = volumeTerms.filter(
+      (t) => Array.isArray(t.cptCodes) && t.cptCodes.length > 0,
+    )
+    const cogVolumeTerms = volumeTerms.filter(
+      (t) => !t.cptCodes || t.cptCodes.length === 0,
+    )
+
+    // CPT-mode buckets: load cases once, fan out per term + dedupe by
+    // (caseId, cptCode) within each (term, month) bucket so the count
+    // matches what the writer persists.
+    if (cptVolumeTerms.length > 0) {
+      const cases = await prisma.case.findMany({
+        where: {
+          facilityId,
+          dateOfSurgery: { gte: contract.effectiveDate, lte: end },
+        },
+        select: {
+          id: true,
+          dateOfSurgery: true,
+          procedures: { select: { cptCode: true } },
+        },
+      })
+      for (const term of cptVolumeTerms) {
+        const allowed = new Set(term.cptCodes)
+        const seenPerMonth = new Map<string, Set<string>>()
+        for (const c of cases) {
+          const d = c.dateOfSurgery
+          if (!d) continue
+          if (term.effectiveStart && d < term.effectiveStart) continue
+          if (term.effectiveEnd && d > term.effectiveEnd) continue
+          const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+          let seen = seenPerMonth.get(key)
+          if (!seen) {
+            seen = new Set<string>()
+            seenPerMonth.set(key, seen)
+          }
+          for (const p of c.procedures) {
+            if (!allowed.has(p.cptCode)) continue
+            seen.add(`case:${c.id}|cpt:${p.cptCode}`)
+          }
+        }
+        for (const [m, set] of seenPerMonth) {
+          volumeByMonth.set(m, (volumeByMonth.get(m) ?? 0) + set.size)
+        }
+      }
+    }
+
+    // COG-fallback: sum COGRecord.quantity per month across in-scope
+    // categories. Reload COG with `quantity` (the upper-block select
+    // intentionally omits it) — one extra query is fine, only volume
+    // contracts hit this path.
+    if (cogVolumeTerms.length > 0) {
+      const unionWhereForVolume = buildUnionCategoryWhereClause(
+        cogVolumeTerms.map((t) => ({
+          appliesTo: t.appliesTo,
+          categories: t.categories,
+        })),
+      )
+      const cogVolRows = await prisma.cOGRecord.findMany({
+        where: {
+          facilityId,
+          vendorId: contract.vendorId,
+          transactionDate: { gte: contract.effectiveDate, lte: end },
+          ...unionWhereForVolume,
+        },
+        select: {
+          transactionDate: true,
+          quantity: true,
+          category: true,
+        },
+      })
+      for (const term of cogVolumeTerms) {
+        const termScope = {
+          appliesTo: term.appliesTo,
+          categories: term.categories,
+        }
+        const where = buildCategoryWhereClause(termScope)
+        const categoryIn = where.category?.in ?? null
+        const categorySet = categoryIn ? new Set(categoryIn) : null
+        for (const r of cogVolRows) {
+          const d = r.transactionDate
+          if (!d) continue
+          if (term.effectiveStart && d < term.effectiveStart) continue
+          if (term.effectiveEnd && d > term.effectiveEnd) continue
+          if (categorySet && !categorySet.has(r.category ?? "")) continue
+          const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+          volumeByMonth.set(key, (volumeByMonth.get(key) ?? 0) + (r.quantity ?? 0))
+        }
+      }
+    }
+  }
+
   // Charles 2026-04-23 — the Cumulative column previously ran a
   // lifetime running sum across all months, which made a quarterly-
   // eval contract look like tier qualification was using lifetime
@@ -361,18 +477,34 @@ async function _buildAccrualTimelineForContract(
   }
   let runningCumulative = 0
   let currentPeriodKey: string | null = null
-  const rows: MultiTermTimelineRow[] = monthsTimeline.map((month, i) => {
+  type TimelineRowWithVolume = MultiTermTimelineRow & {
+    volume: number
+    /** Bug 3: the achieved tier's rebate type for the headline term, so
+     * the UI's Rate column can render `$X / period` for `fixed_rebate`,
+     * `$X / unit` for `fixed_rebate_per_unit`, etc. instead of "—" for
+     * any non-percent tier. */
+    achievedRebateType: string | null
+    /** Raw fractional/dollar `rebateValue` from the achieved tier (NOT
+     * scaled by 100 — that scaling is only for percent_of_spend tiers
+     * passed to the engine). Used by the UI to render unit/flat dollar
+     * labels for non-percent tiers. */
+    achievedRebateValue: number
+  }
+  const rows: TimelineRowWithVolume[] = monthsTimeline.map((month, i) => {
     let totalSpend = 0
     let totalAccrued = 0
     let bestTier = 0
     let bestPercent = 0
     let bestContribution = -1
+    let bestRebateType: string | null = null
+    let bestRebateValue = 0
     const contributions: MultiTermTimelineRow["termContributions"] = []
 
     const monthStart = monthKeyToDate(month)
     const monthEnd = monthKeyEndOfMonth(month)
 
     for (const { termIndex, rows: tRows, config, series } of perTermResults) {
+      const sourceTerm = termsWithTiers[termIndex]
       const startOk =
         config.effectiveStart == null || config.effectiveStart <= monthEnd
       const endOk =
@@ -417,6 +549,11 @@ async function _buildAccrualTimelineForContract(
         bestContribution = row.accruedAmount
         bestTier = row.tierAchieved
         bestPercent = row.rebatePercent
+        const sourceTier = sourceTerm.tiers.find(
+          (t) => t.tierNumber === row.tierAchieved,
+        )
+        bestRebateType = sourceTier?.rebateType ?? null
+        bestRebateValue = sourceTier ? Number(sourceTier.rebateValue) : 0
       }
     }
 
@@ -434,6 +571,9 @@ async function _buildAccrualTimelineForContract(
       tierAchieved: bestTier,
       rebatePercent: bestPercent,
       termContributions: contributions,
+      volume: volumeByMonth.get(month) ?? 0,
+      achievedRebateType: bestRebateType,
+      achievedRebateValue: bestRebateValue,
     }
   })
 
@@ -457,7 +597,7 @@ async function _buildAccrualTimelineForContract(
     evaluationPeriod: t.evaluationPeriod ?? "annual",
   }))
 
-  return serialize({ rows, method, termLabels, cumulativeReset })
+  return serialize({ rows, method, termLabels, cumulativeReset, isVolumeRebate })
 }
 
 // Local month-key helpers duplicated from `lib/contracts/accrual.ts` —

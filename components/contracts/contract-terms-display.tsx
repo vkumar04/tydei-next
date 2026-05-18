@@ -1,7 +1,12 @@
 "use client"
 
 import type { ContractTerm, ContractTier } from "@prisma/client"
-import { formatCurrency, formatCalendarDate, formatPercent } from "@/lib/formatting"
+import {
+  formatCurrency,
+  formatCalendarDate,
+  formatPercent,
+  formatNumber,
+} from "@/lib/formatting"
 import { formatRebateMethodLabel } from "@/lib/contracts/rebate-method-label"
 import {
   formatTierRebateLabel,
@@ -144,12 +149,16 @@ function TierDisplay({
   isTopTier,
   rebateMethod = "cumulative",
   termIsScoped = false,
+  isVolumeTerm = false,
 }: {
   tier: ContractTier
   currentSpend?: number
   currentTierNumber?: number
   isTopTier?: boolean
   rebateMethod?: "cumulative" | "marginal"
+  /** Bug 3 (2026-05-17): when true, render the tier threshold in
+   *  UNITS (sourced from `volumeMin/volumeMax`) instead of dollars. */
+  isVolumeTerm?: boolean
   /** True when the parent term is scoped to specific categories or SKUs.
    *  We suppress the dollar-projection annotation in that case because
    *  the only `currentSpend` we have is the contract-wide aggregate —
@@ -240,8 +249,28 @@ function TierDisplay({
       <div className="flex-1 space-y-1">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">
-            {formatCurrency(Number(tier.spendMin))}
-            {tier.spendMax ? ` - ${formatCurrency(Number(tier.spendMax))}` : "+"}
+            {isVolumeTerm
+              ? (() => {
+                  const vMin =
+                    tier.volumeMin != null
+                      ? Number(tier.volumeMin)
+                      : Number(tier.spendMin)
+                  const vMax =
+                    tier.volumeMax != null
+                      ? Number(tier.volumeMax)
+                      : tier.spendMax
+                        ? Number(tier.spendMax)
+                        : null
+                  return vMax === null
+                    ? `${formatNumber(vMin)}+ units`
+                    : `${formatNumber(vMin)} – ${formatNumber(vMax)} units`
+                })()
+              : (
+                <>
+                  {formatCurrency(Number(tier.spendMin))}
+                  {tier.spendMax ? ` - ${formatCurrency(Number(tier.spendMax))}` : "+"}
+                </>
+              )}
           </span>
           <span className="font-medium">{rebateLabel}</span>
         </div>
@@ -445,6 +474,7 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                                   // Now that the scoped spend is correct,
                                   // the annotation can render honest numbers.
                                   termIsScoped={false}
+                                  isVolumeTerm={term.termType === "volume_rebate"}
                                 />
                               ))}
                             </div>

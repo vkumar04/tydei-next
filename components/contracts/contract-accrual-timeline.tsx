@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatNumber } from "@/lib/formatting"
 import { formatRebateMethodLabel } from "@/lib/contracts/rebate-method-label"
 import { getAccrualTimeline } from "@/lib/actions/contracts/accrual"
 
@@ -73,6 +73,36 @@ export function ContractAccrualTimeline({
       ? `Cumulative (${resetLabel[data.cumulativeReset] ?? "lifetime"})`
       : "Cumulative"
 
+  // Bug 3 (2026-05-17): when ANY term on the contract is a
+  // volume_rebate, surface a "Volume (units)" column alongside Spend so
+  // users can see the qty that drove tier achievement. Tier ladder
+  // thresholds for volume contracts are units, not dollars; the
+  // accompanying Volume column makes the math legible.
+  const isVolumeRebate =
+    "isVolumeRebate" in data ? Boolean(data.isVolumeRebate) : false
+
+  // Bug 3 / leftover from bug #16: the Rate column previously rendered
+  // "—" for any non-percent tier. Surface a clean label for each
+  // rebate type so users can read what they're earning at a glance.
+  const formatRate = (
+    rebateType: string | null | undefined,
+    rebatePercent: number,
+    rebateValue: number,
+  ): string => {
+    switch (rebateType) {
+      case "percent_of_spend":
+        return rebatePercent > 0 ? `${rebatePercent.toFixed(2)}%` : "—"
+      case "fixed_rebate":
+        return rebateValue > 0 ? `${formatCurrency(rebateValue, true)} / period` : "—"
+      case "fixed_rebate_per_unit":
+        return rebateValue > 0 ? `${formatCurrency(rebateValue, true)} / unit` : "—"
+      case "per_procedure_rebate":
+        return rebateValue > 0 ? `${formatCurrency(rebateValue, true)} / procedure` : "—"
+      default:
+        return rebatePercent > 0 ? `${rebatePercent.toFixed(2)}%` : "—"
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="flex-row items-start justify-between space-y-0">
@@ -101,6 +131,9 @@ export function ContractAccrualTimeline({
                 <th className="py-2 text-left font-medium">Month</th>
                 <th className="py-2 text-right font-medium">Spend</th>
                 <th className="py-2 text-right font-medium">{cumulativeHeader}</th>
+                {isVolumeRebate && (
+                  <th className="py-2 text-right font-medium">Volume (units)</th>
+                )}
                 <th className="py-2 text-center font-medium">Tier</th>
                 <th className="py-2 text-right font-medium">Rate</th>
                 <th className="py-2 text-right font-medium">Accrued</th>
@@ -126,6 +159,15 @@ export function ContractAccrualTimeline({
                     <td className="py-2 text-right tabular-nums">
                       {formatCurrency(Number(row.cumulativeSpend))}
                     </td>
+                    {isVolumeRebate && (
+                      <td className="py-2 text-right tabular-nums">
+                        {formatNumber(
+                          Number(
+                            (row as unknown as { volume?: number }).volume ?? 0,
+                          ),
+                        )}
+                      </td>
+                    )}
                     <td className="py-2 text-center">
                       {showBreakdown ? (
                         <div className="flex flex-col items-center gap-0.5">
@@ -168,9 +210,15 @@ export function ContractAccrualTimeline({
                         </div>
                       ) : (
                         <>
-                          {Number(row.rebatePercent) > 0
-                            ? `${Number(row.rebatePercent).toFixed(2)}%`
-                            : "—"}
+                          {formatRate(
+                            (row as unknown as { achievedRebateType?: string | null })
+                              .achievedRebateType ?? null,
+                            Number(row.rebatePercent),
+                            Number(
+                              (row as unknown as { achievedRebateValue?: number })
+                                .achievedRebateValue ?? 0,
+                            ),
+                          )}
                         </>
                       )}
                     </td>
@@ -196,7 +244,7 @@ export function ContractAccrualTimeline({
             </tbody>
             <tfoot>
               <tr className="border-t font-medium">
-                <td colSpan={5} className="py-2 text-right text-xs text-muted-foreground">
+                <td colSpan={isVolumeRebate ? 6 : 5} className="py-2 text-right text-xs text-muted-foreground">
                   Latest cumulative spend: {formatCurrency(Number(latest.cumulativeSpend))}
                 </td>
                 <td className="py-2 text-right tabular-nums">
