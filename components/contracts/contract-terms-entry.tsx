@@ -683,16 +683,26 @@ export function ContractTermsEntry({
                     <Field label="Volume Counted By">
                       <Select
                         value={term.volumeType ?? "procedure_code"}
-                        onValueChange={(v) =>
-                          updateTerm(termIdx, {
-                            volumeType: v as TermFormValues["volumeType"],
-                          })
-                        }
+                        onValueChange={(v) => {
+                          const next = v as TermFormValues["volumeType"]
+                          if (next === "all_products") {
+                            updateTerm(termIdx, {
+                              volumeType: next,
+                              appliesTo: "all_products",
+                              cptCodes: [],
+                            })
+                          } else {
+                            updateTerm(termIdx, { volumeType: next })
+                          }
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="all_products">
+                            All products on contract (count units)
+                          </SelectItem>
                           <SelectItem value="procedure_code">
                             Procedure code (CPT)
                           </SelectItem>

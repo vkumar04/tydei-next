@@ -235,6 +235,44 @@ describe("recomputeVolumeAccrualForTerm — CPT path + percent_of_spend", () => 
 })
 
 describe("recomputeVolumeAccrualForTerm — COG fallback + all-products", () => {
+  it("counts qty across all in-scope COG records when volumeType=all_products + cptCodes empty", async () => {
+    // Bug 2: form's `All products on contract` picker sets
+    // volumeType=all_products, appliesTo=all_products, cptCodes=[]. The
+    // recompute gate is empty cptCodes -> COG fallback; this test locks
+    // in that path summing quantity = 20 at $5/unit = $100.
+    const day = new Date(Date.UTC(2024, 5, 15))
+    cogRows = [
+      { transactionDate: day, quantity: 12, extendedPrice: 0 },
+      { transactionDate: day, quantity: 8, extendedPrice: 0 },
+    ]
+    const term = baseTerm({
+      cptCodes: [],
+      appliesTo: "all_products",
+      tiers: [
+        {
+          tierNumber: 1,
+          tierName: null,
+          spendMin: 0,
+          spendMax: null,
+          volumeMin: 0,
+          volumeMax: null,
+          rebateValue: 5,
+          rebateType: "fixed_rebate_per_unit",
+        },
+      ],
+    })
+    await recomputeVolumeAccrualForTerm({
+      contractId: CONTRACT,
+      facilityId: FACILITY,
+      contractEffectiveDate: START,
+      contractExpirationDate: END,
+      term,
+    })
+    expect(createManyCalls.length).toBe(1)
+    const rows = createManyCalls[0].data
+    expect(rows[0].rebateEarned).toBeCloseTo(100, 6)
+  })
+
   it("per-unit tier: rebateEarned = sum(quantity) × $/unit", async () => {
     const day = new Date(Date.UTC(2024, 5, 15))
     cogRows = [

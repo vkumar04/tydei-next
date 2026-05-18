@@ -65,6 +65,7 @@ enum TermType {
 }
 
 enum VolumeType {
+  all_products
   product_category
   catalog_cap_based
   procedure_code
