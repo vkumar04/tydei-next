@@ -208,17 +208,35 @@ export function COGImportDialog({
     setDuplicates([])
     setExcludedIndices(new Set())
 
-    // Bug 2026-05-18 (Vick "can't load XLS anymore"): skip the dupe
-    // check entirely when the strategy is `keep_both` — dupe rows are
-    // inserted regardless, so the server-side scan is pure overhead.
-    // For a 49k-row import that scan was building 99 batches of 500-way
-    // OR queries against COGRecord, exceeding the Railway 300s function
-    // timeout and surfacing as the generic "Server Components render"
-    // overlay. Other strategies still need the check so the user can
-    // review what will be skipped/overwritten.
-    if (importState.duplicateStrategy === "keep_both") {
+    // Bug 2026-05-18 (Vick "XLS still not working"): the pre-import
+    // dupe check is purely informational — bulkImportCOGRecords itself
+    // already implements skip/keep_both/overwrite semantics inside its
+    // batch loop. The pre-check exists only to let the user review +
+    // unselect specific rows BEFORE confirming. That review only
+    // matters for `overwrite` (the destructive strategy); skip and
+    // keep_both don't need it.
+    //
+    // Skipping here keeps the dialog snappy and removes a class of
+    // failure modes (the dupe-check action was the most likely source
+    // of the "Server Components render" overlay on 46k-row imports —
+    // it ran an O(n) cOGRecord.findMany even after the IN-chunk fix).
+    if (
+      importState.duplicateStrategy === "keep_both" ||
+      importState.duplicateStrategy === "skip"
+    ) {
       setDuplicates([])
       setDuplicateChecking(false)
+      return
+    }
+    // Same skip on any very large import regardless of strategy —
+    // even overwrite users can't realistically click through 50k+
+    // dupes one-by-one; trust the server-side strategy.
+    if (importState.mappedRecords.length > 10_000) {
+      setDuplicates([])
+      setDuplicateChecking(false)
+      toast.info(
+        `${importState.mappedRecords.length.toLocaleString()} rows — duplicate preview skipped for performance. Duplicates will be handled at import time per the selected strategy.`,
+      )
       return
     }
 
