@@ -321,8 +321,13 @@ export function ContractTermsEntry({
       "rebate_per_use",
       "capitated_pricing_rebate",
     ])
-    const FLAT = new Set([
-      "market_share",
+    // Mirrors NON_PERCENT_TERM_TYPES in contract-tier-row.tsx — the
+    // termTypes whose engines have no defined per-period $ base to
+    // apply a percent against. volume_rebate and market_share ARE
+    // legal % targets (bugs #16, #17) so they stay off this list.
+    const TYPES_WITHOUT_PERCENT_TIERS = new Set([
+      "rebate_per_use",
+      "capitated_pricing_rebate",
       "compliance_rebate",
       "fixed_fee",
       "payment_rebate",
@@ -347,13 +352,9 @@ export function ContractTermsEntry({
       ) {
         patch.volumeType = "procedure_code"
       }
-      if ((PER_OCC.has(t.termType) || FLAT.has(t.termType)) && t.tiers) {
+      if (TYPES_WITHOUT_PERCENT_TIERS.has(t.termType) && t.tiers) {
         const fixedTiers = t.tiers.map((tier) => {
           if (tier.rebateType !== "percent_of_spend") return tier
-          // Match the threshold writer's legacy `percent_of_spend → raw
-          // × 100` fallback so the displayed dollar payout equals what
-          // the recompute path was already producing. The user can
-          // adjust upward; we never silently invent a larger number.
           const preservedDollarValue = Number(tier.rebateValue ?? 0) * 100
           return {
             ...tier,
@@ -520,11 +521,13 @@ export function ContractTermsEntry({
                           // percent_of_spend tier to fixed_rebate and zero
                           // out its rebate value (the prior value was a
                           // percent and would be misread as dollars).
+                          // Mirrors NON_PERCENT_TERM_TYPES in
+                          // contract-tier-row.tsx. volume_rebate and
+                          // market_share legitimately accept percent
+                          // tiers (bugs #16, #17) so they're absent.
                           const NON_PCT_TYPES = new Set([
-                            "volume_rebate",
                             "rebate_per_use",
                             "capitated_pricing_rebate",
-                            "market_share",
                             "compliance_rebate",
                             "fixed_fee",
                             "payment_rebate",

@@ -123,3 +123,16 @@ Manual smoke (after merge):
 - `lib/contracts/recompute/volume.ts` (Change A)
 - `components/contracts/contract-terms-entry.tsx` (Change B — delete lines ~987-1002)
 - `lib/contracts/recompute/__tests__/volume.test.ts` (new file, Changes A + C tests)
+
+## CHANGELOG
+
+- 2026-05-17 — Bug #1 follow-up: the form's load-time self-heal and
+  termType-change cascade were still force-converting any
+  `percent_of_spend` tier on a `volume_rebate` term into a
+  `fixed_rebate` worth `original × 100`. After bug #17 re-enabled the
+  combination in the tier picker, this silent corruption was the only
+  remaining path to broken data. Both sites now match
+  `NON_PERCENT_TERM_TYPES` from `contract-tier-row.tsx`. Already-saved
+  `volume_rebate` terms whose `%` tiers were destroyed by the old
+  effect will need to be re-opened and re-saved by the user — no DB
+  migration ships with this fix.
