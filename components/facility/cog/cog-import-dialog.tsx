@@ -208,6 +208,20 @@ export function COGImportDialog({
     setDuplicates([])
     setExcludedIndices(new Set())
 
+    // Bug 2026-05-18 (Vick "can't load XLS anymore"): skip the dupe
+    // check entirely when the strategy is `keep_both` — dupe rows are
+    // inserted regardless, so the server-side scan is pure overhead.
+    // For a 49k-row import that scan was building 99 batches of 500-way
+    // OR queries against COGRecord, exceeding the Railway 300s function
+    // timeout and surfacing as the generic "Server Components render"
+    // overlay. Other strategies still need the check so the user can
+    // review what will be skipped/overwritten.
+    if (importState.duplicateStrategy === "keep_both") {
+      setDuplicates([])
+      setDuplicateChecking(false)
+      return
+    }
+
     // Full-key duplicate check (Charles W1.W-A2): pass every
     // business-relevant column so an existing row only flags when it's
     // byte-for-byte identical. Quantity / unitCost / extendedPrice were

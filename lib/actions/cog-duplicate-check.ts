@@ -36,7 +36,9 @@ export interface DuplicateMatch {
   existingUnitCost: number
 }
 
-const DUPLICATE_BATCH_SIZE = 500
+// Postgres caps `IN (...)` parameters at 32,767; staying under 5k keeps
+// the planner happy and leaves headroom for other WHERE params.
+const INVENTORY_IN_CHUNK = 5_000
 // Charles 2026-04-25: a hard 500-row cap on the result set was making
 // the duplicate-check step claim "Found 500 duplicates" on imports that
 // actually had 21k+ overlaps. Server still skipped them all on import,
@@ -57,24 +59,39 @@ export async function checkCOGDuplicates(input: {
 
   if (input.keys.length === 0) return []
 
+  // Bug 2026-05-18 (Vick "can't load XLS anymore"): prior impl ran one
+  // 500-way OR query per batch of 500 keys (~99 queries for a 49k
+  // import), each enumerating `facilityId + inventoryNumber + vendorItemNo`
+  // per clause. Postgres handles the SQL but planner pathology + serial
+  // round-trips blew past the Railway 300s function ceiling and surfaced
+  // as the generic "Server Components render" overlay.
+  //
+  // Switch to one indexed `IN (...)` lookup per chunk of unique
+  // inventoryNumbers (chunked at 5k to stay well under Postgres' 32,767
+  // param ceiling), then do the full-key match in memory.
+  const uniqueInventoryNumbers = Array.from(
+    new Set(input.keys.map((k) => k.inventoryNumber).filter(Boolean)),
+  )
+  if (uniqueInventoryNumbers.length === 0) return []
+
+  // Group keys by inventoryNumber for O(1) candidate match in the loop.
+  const keysByInventory = new Map<string, DuplicateCheckKey[]>()
+  for (const k of input.keys) {
+    const list = keysByInventory.get(k.inventoryNumber) ?? []
+    list.push(k)
+    keysByInventory.set(k.inventoryNumber, list)
+  }
+
   const allMatches: DuplicateMatch[] = []
 
-  for (let i = 0; i < input.keys.length; i += DUPLICATE_BATCH_SIZE) {
-    const batch = input.keys.slice(i, i + DUPLICATE_BATCH_SIZE)
-
-    // First-pass SQL filter narrows candidates by the cheap/indexed
-    // columns (facilityId + inventoryNumber + vendorItemNo). Full-key
-    // comparison (date, quantity, unitCost, extendedPrice) happens in
-    // memory after the fetch so we don't explode Postgres param count
-    // with 6-column OR conditions.
-    const orConditions = batch.map((key) => ({
-      facilityId: facility.id,
-      inventoryNumber: key.inventoryNumber,
-      ...(key.vendorItemNo ? { vendorItemNo: key.vendorItemNo } : {}),
-    }))
+  for (let i = 0; i < uniqueInventoryNumbers.length; i += INVENTORY_IN_CHUNK) {
+    const chunk = uniqueInventoryNumbers.slice(i, i + INVENTORY_IN_CHUNK)
 
     const existing = await prisma.cOGRecord.findMany({
-      where: { OR: orConditions },
+      where: {
+        facilityId: facility.id,
+        inventoryNumber: { in: chunk },
+      },
       select: {
         id: true,
         inventoryNumber: true,
@@ -86,15 +103,14 @@ export async function checkCOGDuplicates(input: {
         inventoryDescription: true,
         vendorName: true,
       },
-      take: 2000,
     })
 
-    // In-memory strict filter: every compared field must match.
-    for (const key of batch) {
-      const keyDate = new Date(key.transactionDate)
-      for (const r of existing) {
-        if (r.inventoryNumber !== key.inventoryNumber) continue
+    for (const r of existing) {
+      const candidates = keysByInventory.get(r.inventoryNumber)
+      if (!candidates) continue
+      for (const key of candidates) {
         if ((r.vendorItemNo ?? null) !== (key.vendorItemNo ?? null)) continue
+        const keyDate = new Date(key.transactionDate)
         if (!sameDay(r.transactionDate, keyDate)) continue
         if (key.quantity !== undefined && r.quantity !== key.quantity) continue
         if (
@@ -120,7 +136,10 @@ export async function checkCOGDuplicates(input: {
           existingVendor: r.vendorName,
           existingUnitCost: Number(r.unitCost),
         })
+
+        if (allMatches.length >= MAX_REPORTED_DUPLICATES) break
       }
+      if (allMatches.length >= MAX_REPORTED_DUPLICATES) break
     }
 
     if (allMatches.length >= MAX_REPORTED_DUPLICATES) break
