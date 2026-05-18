@@ -408,22 +408,89 @@ export async function recomputeVolumeAccrualForTerm(input: {
     // `occurrences × fraction × 100` (totally wrong). Tier selection still
     // comes from the engine (which gates on occurrence count); we only
     // swap the dollar number when the achieved tier is percent_of_spend.
-    // TODO: marginal+percent_of_spend — falls back to cumulative behavior
-    // (top achieved tier's rate × whole bucket spend).
+    //
+    // Method semantics:
+    //  - cumulative: top achieved tier's rate × whole bucket spend.
+    //  - marginal:   sum over EVERY tier the occurrence count crossed
+    //    of `(slice_occurrences / total_occurrences × bucketSpend) × tierRate`.
+    //    Prorates bucket spend by per-tier occurrence share — same shape
+    //    as `calculateMarginalRebate` but in $-space.
     if (hasPercentOfSpendTier && result.tierResult?.tier) {
       const achievedTierNumber = result.tierResult.tier.tierNumber
       const achievedTermTier = term.tiers.find(
         (t) => t.tierNumber === achievedTierNumber,
       )
-      if (achievedTermTier?.rebateType === "percent_of_spend") {
+      const isMarginal = term.rebateMethod === "marginal"
+      const cumulativePercentTier =
+        !isMarginal && achievedTermTier?.rebateType === "percent_of_spend"
+      const anyPercentTierInLadder = term.tiers.some(
+        (t) => t.rebateType === "percent_of_spend",
+      )
+      const shouldReplace =
+        cumulativePercentTier || (isMarginal && anyPercentTierInLadder)
+      if (shouldReplace) {
         for (const r of spendByDate) {
           const t = r.transactionDate.getTime()
           if (t >= b.periodStart.getTime() && t <= b.periodEnd.getTime()) {
             bucketSpend += r.extendedPrice
           }
         }
-        const fraction = Number(achievedTermTier.rebateValue ?? 0)
-        rebateEarned = bucketSpend * fraction
+        if (isMarginal) {
+          // Marginal: prorate bucket spend by each tier's occurrence
+          // slice and sum. Per-tier rate respects rebateType — only
+          // `percent_of_spend` tiers earn against spend; flat /
+          // per-unit tiers retain their existing engine contribution
+          // and we leave the engine's $ for those slices alone by
+          // computing the percent-share contribution as a *delta*
+          // against the engine's cumulative-occurrences math.
+          //
+          // Implementation: walk the sorted-asc ladder, compute each
+          // tier's [sliceMin, sliceMax) crossed by `occurrences`, then
+          // for percent_of_spend tiers add `(slice/total) × bucketSpend
+          // × fraction` to rebateEarned; engine already paid the
+          // non-percent slices via its marginal helper.
+          const sortedTermTiers = [...term.tiers]
+            .map((t) => ({
+              tierNumber: t.tierNumber,
+              rebateType: t.rebateType ?? null,
+              rebateValue: Number(t.rebateValue ?? 0),
+              volumeMin:
+                (t as unknown as { volumeMin?: number | null }).volumeMin ??
+                Number(t.spendMin ?? 0),
+              volumeMax: (() => {
+                const v = (t as unknown as { volumeMax?: number | null })
+                  .volumeMax
+                if (v != null && Number.isFinite(Number(v))) return Number(v)
+                if (t.spendMax === null || t.spendMax === undefined) return null
+                return Number(t.spendMax)
+              })(),
+            }))
+            .sort((a, b) => a.volumeMin - b.volumeMin)
+          let percentContribution = 0
+          let engineDoubleCount = 0
+          for (const t of sortedTermTiers) {
+            if (occurrences <= t.volumeMin) continue
+            const sliceTop =
+              t.volumeMax == null ? occurrences : Math.min(occurrences, t.volumeMax)
+            const slice = Math.max(0, sliceTop - t.volumeMin)
+            if (slice <= 0) continue
+            if (t.rebateType === "percent_of_spend") {
+              const prorated = occurrences > 0 ? (slice / occurrences) * bucketSpend : 0
+              percentContribution += prorated * t.rebateValue
+              // Engine paid `slice × rebateValueForEngine / 100` for
+              // this slice. rebateValueForEngine = rebateValue × 100
+              // (the percent_of_spend boundary scaling), so the net
+              // engine $ per slice = slice × rebateValue. Subtract
+              // that out so we don't double-count.
+              engineDoubleCount += slice * t.rebateValue
+            }
+          }
+          rebateEarned = result.rebateEarned - engineDoubleCount + percentContribution
+        } else {
+          // Cumulative: top tier's rate × whole bucket spend.
+          const fraction = Number(achievedTermTier?.rebateValue ?? 0)
+          rebateEarned = bucketSpend * fraction
+        }
         percentOfSpendApplied = true
       }
     }

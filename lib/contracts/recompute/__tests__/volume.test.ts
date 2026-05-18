@@ -180,6 +180,70 @@ describe("recomputeVolumeAccrualForTerm — CPT path + percent_of_spend", () => 
     expect(rows[0].rebateEarned).toBeCloseTo(50, 6)
   })
 
+  it("marginal + percent_of_spend prorates bucket spend by per-tier occurrence slice", async () => {
+    // 15 occurrences cross both tiers.
+    // Tier 1: 0–10 occurrences, 1% of spend on that slice.
+    // Tier 2: 10+,            2% of spend on that slice.
+    // Bucket spend = $50,000 evenly across 15 occurrences (per-occ
+    // share = $3,333.33).
+    //
+    // Expected payout:
+    //   Tier 1 slice = 10 occ × $3,333.33 = $33,333.33 × 1% = $333.33
+    //   Tier 2 slice =  5 occ × $3,333.33 = $16,666.67 × 2% = $333.33
+    //   Total = $666.67
+    //
+    // Cumulative would be: top tier rate × whole spend = 2% × $50k = $1,000.
+    // Make sure marginal does NOT collapse to that.
+    const cptDay = new Date(Date.UTC(2024, 5, 15))
+    caseRows = Array.from({ length: 15 }, (_, i) => ({
+      id: `case_${i}`,
+      dateOfSurgery: cptDay,
+      procedures: [{ cptCode: "12345" }],
+    }))
+    cogRows = [
+      { transactionDate: cptDay, quantity: 0, extendedPrice: 50_000 },
+    ]
+    const term = baseTerm({
+      cptCodes: ["12345"],
+      rebateMethod: "marginal",
+      tiers: [
+        {
+          tierNumber: 1,
+          tierName: null,
+          spendMin: 0,
+          spendMax: null,
+          volumeMin: 0,
+          volumeMax: 10,
+          rebateValue: 0.01,
+          rebateType: "percent_of_spend",
+        },
+        {
+          tierNumber: 2,
+          tierName: null,
+          spendMin: 0,
+          spendMax: null,
+          volumeMin: 10,
+          volumeMax: null,
+          rebateValue: 0.02,
+          rebateType: "percent_of_spend",
+        },
+      ],
+    })
+    await recomputeVolumeAccrualForTerm({
+      contractId: CONTRACT,
+      facilityId: FACILITY,
+      contractEffectiveDate: START,
+      contractExpirationDate: END,
+      term,
+    })
+    const rows = createManyCalls[0].data
+    expect(rows.length).toBe(1)
+    // $333.33 + $333.33 = $666.67 (small float drift OK)
+    expect(rows[0].rebateEarned).toBeCloseTo(666.67, 1)
+    // Not the cumulative shortcut.
+    expect(rows[0].rebateEarned).not.toBeCloseTo(1000, 1)
+  })
+
   it("mixed tiers: hits the percent_of_spend tier and pays on spend, not occurrences", async () => {
     const cptDay = new Date(Date.UTC(2024, 5, 15))
     caseRows = Array.from({ length: 15 }, (_, i) => ({
