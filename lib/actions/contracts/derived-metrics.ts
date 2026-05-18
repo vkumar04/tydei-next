@@ -24,6 +24,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
 
 export interface ContractMetricsInput {
   /** Either an existing contractId OR the prospective shape below. */
@@ -123,13 +124,20 @@ export async function computeContractMetrics(
     }
   }
 
-  // Compliance: vendor + category rows where matchStatus = on_contract
-  // ÷ vendor + category rows total.
+  // Compliance still runs as a direct row-count ratio (matchStatus is
+  // not a market-share concept). Market share goes through the
+  // canonical `computeCategoryMarketShare` helper so the
+  // `effectiveCategoryOf` fallback (COG.category=null + matched
+  // contract's productCategory) feeds both numerator AND denominator.
+  // Bug 2026-05-18 (Vick): the prior direct aggregate skipped that
+  // fallback entirely, undercounting spend for any contract whose COG
+  // rows arrived without explicit categories — even though the
+  // per-category card on the contract detail (`CategoryMarketShareCard`)
+  // already counts that spend via the same helper.
   const [
     cogRowsTotal,
     cogRowsOnContract,
-    vendorSpendAgg,
-    totalSpendAgg,
+    cogRowsForMarketShare,
   ] = await Promise.all([
     prisma.cOGRecord.count({
       where: { ...baseWhere, ...categoryClause, vendorId },
@@ -142,18 +150,66 @@ export async function computeContractMetrics(
         matchStatus: "on_contract",
       },
     }),
-    prisma.cOGRecord.aggregate({
-      where: { ...baseWhere, ...categoryClause, vendorId },
-      _sum: { extendedPrice: true },
-    }),
-    prisma.cOGRecord.aggregate({
-      where: { ...baseWhere, ...categoryClause },
-      _sum: { extendedPrice: true },
+    // Wider net for market share: pull every COG row in the window
+    // (vendor's + competitors'), pass through the canonical filter, and
+    // then sum across our category scope. We can't pre-filter by
+    // `category: { in: categories }` here because the fallback path
+    // depends on having `contractId` available so the helper can
+    // resolve null categories.
+    prisma.cOGRecord.findMany({
+      where: baseWhere,
+      select: {
+        vendorId: true,
+        category: true,
+        extendedPrice: true,
+        contractId: true,
+      },
     }),
   ])
 
-  const vendorSpendInCategories = Number(vendorSpendAgg._sum.extendedPrice ?? 0)
-  const totalSpendInCategories = Number(totalSpendAgg._sum.extendedPrice ?? 0)
+  // Build the contract-category fallback map ONCE for all matched
+  // contracts in the window (not just the one being evaluated). This
+  // mirrors the per-category card's query shape.
+  const contractIdsInWindow = Array.from(
+    new Set(
+      cogRowsForMarketShare
+        .map((r) => r.contractId)
+        .filter((v): v is string => !!v),
+    ),
+  )
+  const contractCategoryRows =
+    contractIdsInWindow.length > 0
+      ? await prisma.contract.findMany({
+          where: { id: { in: contractIdsInWindow } },
+          select: {
+            id: true,
+            productCategory: { select: { name: true } },
+          },
+        })
+      : []
+  const contractCategoryMap = new Map<string, string | null>(
+    contractCategoryRows.map((c) => [c.id, c.productCategory?.name ?? null]),
+  )
+
+  const msComputed = computeCategoryMarketShare({
+    rows: cogRowsForMarketShare,
+    contractCategoryMap,
+    vendorId,
+  })
+
+  // Sum vendor + total spend across only this contract's category
+  // scope. Rows for categories outside scope are ignored. Rows the
+  // helper couldn't categorize (no COG.category + no contract
+  // fallback) live in `msComputed.uncategorizedSpend` and don't count
+  // toward share — they're a real data-quality gap, not market share.
+  const scopeSet = new Set(categories)
+  let vendorSpendInCategories = 0
+  let totalSpendInCategories = 0
+  for (const row of msComputed.rows) {
+    if (!scopeSet.has(row.category)) continue
+    vendorSpendInCategories += row.vendorSpend
+    totalSpendInCategories += row.categoryTotal
+  }
 
   const complianceRate =
     cogRowsTotal > 0
