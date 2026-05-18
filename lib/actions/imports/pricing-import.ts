@@ -19,13 +19,30 @@ import {
 } from "./shared"
 
 export async function ingestPricingFile(input: {
-  rows: Record<string, string>[]
+  /**
+   * Either an array of row objects OR a JSON-encoded string of the
+   * same array. Bug 2026-05-18 (Vick "Primary full COG.xlsx" import
+   * failing with "Maximum array nesting exceeded"): the RSC
+   * deserializer caps cumulative array leaves at 1M. A 46k-row
+   * pricing file with ~25 columns each = 1.15M leaves and trips the
+   * limit before the action ever runs. Callers with large datasets
+   * should send `rowsJson` (a single string arg bypasses the array
+   * counter); small callers can keep using `rows` as-is.
+   */
+  rows?: Record<string, string>[]
+  rowsJson?: string
   fileName?: string
   vendorHint?: string | null
 }): Promise<{ imported: number; failed: number; vendorUsed: string | null }> {
   const session = await requireFacility()
   const facilityId = session.facility.id
   const userId = session.user.id
+
+  const rows: Record<string, string>[] =
+    input.rows ??
+    (input.rowsJson
+      ? (JSON.parse(input.rowsJson) as Record<string, string>[])
+      : [])
 
   // Vendor resolution: filename hint first (match vendor.code + full name),
   // then Manufacturer column, then Unknown fallback.
@@ -66,8 +83,8 @@ export async function ingestPricingFile(input: {
     }
   }
 
-  if (!vendorId && input.rows.length > 0) {
-    const firstRow = input.rows[0]
+  if (!vendorId && rows.length > 0) {
+    const firstRow = rows[0]
     const maybeVendor =
       firstRow["Manufacturer"] ??
       firstRow["Vendor"] ??
@@ -85,7 +102,7 @@ export async function ingestPricingFile(input: {
   let imported = 0
   let failed = 0
 
-  const headers = input.rows.length > 0 ? Object.keys(input.rows[0]) : []
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : []
   const mapping = await mapColumnsWithAI(
     headers,
     [
@@ -113,11 +130,11 @@ export async function ingestPricingFile(input: {
       { key: "uom", label: "Unit of Measure / UOM", required: false },
       { key: "category", label: "Category / Product Category", required: false },
     ],
-    input.rows,
+    rows,
   )
 
   const today = new Date()
-  for (const row of input.rows) {
+  for (const row of rows) {
     try {
       const vendorItemNo = get(row, mapping, "vendorItemNo")
       if (!vendorItemNo) {
@@ -169,7 +186,7 @@ export async function ingestPricingFile(input: {
       vendorId,
       vendorName: vendor?.name,
       fileName: input.fileName ?? null,
-      rowCount: input.rows.length,
+      rowCount: rows.length,
     },
   })
 

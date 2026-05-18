@@ -814,10 +814,22 @@ export function MassUpload({
             })
           }
         }
-        const r = await ingestPricingFile({
-          rows,
-          fileName: d.file.name,
-        })
+        // Bug 2026-05-18 (Vick "Primary full COG.xlsx" — Maximum
+        // array nesting exceeded): RSC caps cumulative array leaves
+        // at 1M for action args. ~46k rows × ~25 cols = 1.15M leaves,
+        // over the limit. Send as a JSON string for any non-trivial
+        // payload — server parses on receipt. The string variant
+        // counts as 1 leaf instead of rows×cols.
+        const r =
+          rows.length > 1000
+            ? await ingestPricingFile({
+                rowsJson: JSON.stringify(rows),
+                fileName: d.file.name,
+              })
+            : await ingestPricingFile({
+                rows,
+                fileName: d.file.name,
+              })
         totalCreated += r.imported
         totalFailed += r.failed
       } catch (err) {
