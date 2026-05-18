@@ -11,7 +11,6 @@ import {
   ingestCaseSuppliesCSV,
 } from "@/lib/actions/imports/case-costing-import"
 import { ingestCOGRecordsCSV } from "@/lib/actions/imports/cog-csv-import"
-import { ingestPricingFile } from "@/lib/actions/imports/pricing-import"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import { generateId, calculateSimilarity } from "./_mass-upload-helpers"
 import { renderStatusBadge } from "./_mass-upload-status-badge"
@@ -760,85 +759,41 @@ export function MassUpload({
     // ── Pricing Files — CSV goes direct, xlsx via /api/parse-file ──
     for (const d of pricingDocs) {
       try {
-        let rows: Record<string, string>[] = []
-        const ext = d.file.name.split(".").pop()?.toLowerCase()
-        if (ext === "xlsx" || ext === "xls") {
-          const form = new FormData()
-          form.append("file", d.file)
-          const res = await fetch("/api/parse-file", { method: "POST", body: form })
-          if (!res.ok) throw new Error(`parse-file ${res.status}`)
-          const parsed = (await res.json()) as {
-            headers: string[]
-            rows: Record<string, string>[]
-          }
-          rows = parsed.rows
-        } else {
-          const csvText = await d.file.text()
-          // Reuse parseCSV shape by passing through ingestPricingFile's
-          // row-based signature — we need headers+rows in the action so
-          // parse client-side here.
-          const stripped = csvText.replace(/^\uFEFF/, "")
-          const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0)
-          if (lines.length > 1) {
-            const splitRow = (line: string): string[] => {
-              const out: string[] = []
-              let cur = ""
-              let inQ = false
-              for (let i = 0; i < line.length; i++) {
-                const ch = line[i]
-                if (ch === '"') {
-                  if (inQ && line[i + 1] === '"') {
-                    cur += '"'
-                    i++
-                  } else {
-                    inQ = !inQ
-                  }
-                } else if (ch === "," && !inQ) {
-                  out.push(cur)
-                  cur = ""
-                } else {
-                  cur += ch
-                }
-              }
-              out.push(cur)
-              return out.map((s) => s.trim())
-            }
-            const headers = splitRow(lines[0])
-            rows = lines.slice(1).map((line) => {
-              const cells = splitRow(line)
-              const row: Record<string, string> = {}
-              for (let j = 0; j < headers.length; j++) {
-                row[headers[j]] = cells[j] ?? ""
-              }
-              return row
-            })
-          }
-        }
         // Bug 2026-05-18 (Vick "Primary full COG.xlsx" — Maximum
-        // array nesting exceeded): RSC caps cumulative array leaves
-        // at 1M for action args. ~46k rows × ~25 cols = 1.15M leaves,
-        // over the limit. Send as a JSON string for any non-trivial
-        // payload — server parses on receipt. The string variant
-        // counts as 1 leaf instead of rows×cols.
-        const r =
-          rows.length > 1000
-            ? await ingestPricingFile({
-                rowsJson: JSON.stringify(rows),
-                fileName: d.file.name,
-              })
-            : await ingestPricingFile({
-                rows,
-                fileName: d.file.name,
-              })
+        // array nesting exceeded): parse-on-client → send-rows-to-
+        // Server-Action tripped RSC's 1M-array-leaf cap on a
+        // 46k-row × 25-col file. Server Actions are the wrong
+        // transport for arbitrary tabular uploads — Next.js docs
+        // recommend Route Handlers with multipart formData.
+        // /api/import-pricing handles parse + ingest in one request;
+        // the rows array never crosses the wire as RSC.
+        const form = new FormData()
+        form.append("file", d.file)
+        const res = await fetch("/api/import-pricing", {
+          method: "POST",
+          body: form,
+        })
+        if (!res.ok) {
+          const errBody = (await res
+            .json()
+            .catch(() => null)) as { error?: string } | null
+          throw new Error(errBody?.error ?? `import-pricing ${res.status}`)
+        }
+        const r = (await res.json()) as {
+          imported: number
+          failed: number
+          vendorUsed: string | null
+        }
         totalCreated += r.imported
         totalFailed += r.failed
       } catch (err) {
         totalFailed++
         errorMessages.push(
-          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
+          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`,
         )
       }
     }
+
 
     // Optional callback for callers that want to react to completion.
     if (onComplete) {
