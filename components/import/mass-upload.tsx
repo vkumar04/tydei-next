@@ -10,7 +10,6 @@ import {
   ingestCaseProceduresCSV,
   ingestCaseSuppliesCSV,
 } from "@/lib/actions/imports/case-costing-import"
-import { ingestCOGRecordsCSV } from "@/lib/actions/imports/cog-csv-import"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import { generateId, calculateSimilarity } from "./_mass-upload-helpers"
 import { renderStatusBadge } from "./_mass-upload-status-badge"
@@ -741,17 +740,38 @@ export function MassUpload({
       }
     }
 
-    // ── COG Records CSVs — generic Vendor/PO/Date/Cost shape ───
+    // ── COG Records — .xlsx + .csv via /api/import-cog ─────────
+    // Bug 2026-05-18 (Vick "Primary full COG.xlsx" — Maximum array
+    // nesting exceeded): previously `await d.file.text()` on an .xlsx
+    // produced binary garbage AND the resulting Server Action payload
+    // tripped RSC's array-leaf cap. Route Handler + multipart formData
+    // is the Next.js-recommended path for arbitrary tabular uploads;
+    // mirrors the /api/import-pricing fix.
     for (const d of cogDocs) {
       try {
-        const csvText = await d.file.text()
-        const r = await ingestCOGRecordsCSV(csvText, d.file.name)
+        const form = new FormData()
+        form.append("file", d.file)
+        const res = await fetch("/api/import-cog", {
+          method: "POST",
+          body: form,
+        })
+        if (!res.ok) {
+          const errBody = (await res
+            .json()
+            .catch(() => null)) as { error?: string } | null
+          throw new Error(errBody?.error ?? `import-cog ${res.status}`)
+        }
+        const r = (await res.json()) as {
+          imported: number
+          skipped: number
+          errors: number
+        }
         totalCreated += r.imported
         totalFailed += r.errors
       } catch (err) {
         totalFailed++
         errorMessages.push(
-          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
+          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`,
         )
       }
     }

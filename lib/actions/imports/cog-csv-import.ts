@@ -13,18 +13,35 @@ import { logAudit } from "@/lib/audit"
 import { bulkImportCOGRecords } from "@/lib/actions/cog-import"
 import { parseCSV, parseMoney, parseDate, mapColumnsWithAI, get } from "./shared"
 
-export async function ingestCOGRecordsCSV(
-  csvText: string,
-  fileName?: string,
-): Promise<{
+type COGImportResult = {
   imported: number
   skipped: number
   errors: number
   matched?: number
   unmatched?: number
   onContractRate?: number
-}> {
+}
+
+export async function ingestCOGRecordsCSV(
+  csvText: string,
+  fileName?: string,
+): Promise<COGImportResult> {
   const rows = parseCSV(csvText)
+  return ingestCOGRecordsRows(rows, fileName)
+}
+
+/**
+ * Rows-in variant. Same pipeline as ingestCOGRecordsCSV but skips the
+ * CSV parse — used by the /api/import-cog Route Handler, which parses
+ * .xlsx server-side with ExcelJS so binary workbooks never get coerced
+ * to text on the client (Bug 2026-05-18: MassUpload's `await file.text()`
+ * on an .xlsx tripped RSC's array-nesting cap and produced garbage
+ * "rows" anyway).
+ */
+export async function ingestCOGRecordsRows(
+  rows: Record<string, string>[],
+  fileName?: string,
+): Promise<COGImportResult> {
   if (rows.length === 0)
     return {
       imported: 0,
