@@ -38,6 +38,7 @@ export type TierInput = z.infer<typeof tierInputSchema>
 export function refineTierOrdering(
   tiers: TierInput[],
   ctx: z.RefinementCtx,
+  termType?: string,
 ): void {
   // Boundary policy (Charles 2026-04-28 Bug #3 — "had to get rid of a
   // couple tiers it did not like them"). Adjacent tiers like
@@ -52,11 +53,26 @@ export function refineTierOrdering(
   //     belongs to the upper bracket
   // Therefore strict overlap (`cur.spendMin < prev.spendMax`) is the
   // real error condition; equality is fine.
+  //
+  // Bug 2026-05-18 (Vick "Can't make market share contract"): for term
+  // types where the UI doesn't render a spendMax field (market_share,
+  // compliance_rebate use Threshold % only — see contract-tier-row.tsx
+  // `thresholdLabels`), the spendMax field can carry stale state from
+  // a previous termType the user switched away from. The user has no
+  // way to clear it from the form. Skip the spend-side overlap check
+  // for those term types — they're validated by the
+  // marketShareMin/Max + volumeMin/Max branches below if applicable.
+  const skipSpendOverlap =
+    termType === "market_share" || termType === "compliance_rebate"
   const sorted = [...tiers].sort((a, b) => a.tierNumber - b.tierNumber)
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1]
     const cur = sorted[i]
-    if (prev.spendMax != null && cur.spendMin < prev.spendMax) {
+    if (
+      !skipSpendOverlap &&
+      prev.spendMax != null &&
+      cur.spendMin < prev.spendMax
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["tiers", i, "spendMin"],
@@ -162,7 +178,7 @@ export const createTermSchema = z.object({
 const _createTermSchemaBase = createTermSchema
 export const createTermSchemaWithTierCheck = _createTermSchemaBase.superRefine(
   (value, ctx) => {
-    refineTierOrdering(value.tiers ?? [], ctx)
+    refineTierOrdering(value.tiers ?? [], ctx, value.termType)
   },
 )
 
@@ -234,7 +250,7 @@ export const termFormSchema = z.object({
 // tier-overlap rule to fire there too.
 export const termFormSchemaWithTierCheck = termFormSchema.superRefine(
   (value, ctx) => {
-    refineTierOrdering(value.tiers ?? [], ctx)
+    refineTierOrdering(value.tiers ?? [], ctx, value.termType)
   },
 )
 
