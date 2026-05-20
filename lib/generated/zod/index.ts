@@ -243,7 +243,7 @@ export const TermTypeSchema = z.enum(['spend_rebate','volume_rebate','price_redu
 
 export type TermTypeType = `${z.infer<typeof TermTypeSchema>}`
 
-export const VolumeTypeSchema = z.enum(['all_products','product_category','catalog_cap_based','procedure_code']);
+export const VolumeTypeSchema = z.enum(['all_products','product_category','catalog_cap_based','procedure_code','purchase_order']);
 
 export type VolumeTypeType = `${z.infer<typeof VolumeTypeSchema>}`
 

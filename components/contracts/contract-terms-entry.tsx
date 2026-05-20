@@ -712,6 +712,9 @@ export function ContractTermsEntry({
                           <SelectItem value="catalog_cap_based">
                             Catalog / cap based
                           </SelectItem>
+                          <SelectItem value="purchase_order">
+                            Purchase order (count POs)
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </Field>

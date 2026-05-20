@@ -69,6 +69,7 @@ enum VolumeType {
   product_category
   catalog_cap_based
   procedure_code
+  purchase_order
 }
 
 enum RebateType {

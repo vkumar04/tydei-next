@@ -17,6 +17,8 @@
  * Bucket A1.
  */
 
+import { canonicalizeCategoryName } from "./category-canonical"
+
 export interface MarketShareCogRow {
   vendorId: string | null
   category: string | null
@@ -87,7 +89,11 @@ export function computeCategoryMarketShare(
   let totalVendorSpend = 0
   let uncategorizedSpend = 0
 
-  type Bucket = { total: number; byVendor: Map<string, number> }
+  type Bucket = { total: number; byVendor: Map<string, number>; displayName: string }
+  // Bug 2026-05-20 (Vick): bucket by CANONICAL category key so variants
+  // like "Ortho Joint" / "Joint Ortho" / "Ortho-Joint" collapse into
+  // one market-share row. The first display name we see for a given
+  // canonical wins the rendered label.
   const byCategory = new Map<string, Bucket>()
 
   for (const row of rows) {
@@ -103,10 +109,13 @@ export function computeCategoryMarketShare(
     }
 
     if (!cat) continue
+    const key = canonicalizeCategoryName(cat)
+    if (!key) continue
 
-    const bucket = byCategory.get(cat) ?? {
+    const bucket = byCategory.get(key) ?? {
       total: 0,
       byVendor: new Map<string, number>(),
+      displayName: cat,
     }
     bucket.total += amount
     if (row.vendorId) {
@@ -115,20 +124,23 @@ export function computeCategoryMarketShare(
         (bucket.byVendor.get(row.vendorId) ?? 0) + amount,
       )
     }
-    byCategory.set(cat, bucket)
+    byCategory.set(key, bucket)
   }
 
   const result: MarketShareRow[] = []
-  for (const [category, bucket] of byCategory.entries()) {
+  for (const [, bucket] of byCategory.entries()) {
     const vendorSpend = bucket.byVendor.get(vendorId) ?? 0
     if (vendorSpend <= 0) continue
     result.push({
-      category,
+      category: bucket.displayName,
       vendorSpend,
       categoryTotal: bucket.total,
       sharePct: bucket.total > 0 ? (vendorSpend / bucket.total) * 100 : 0,
       competingVendors: bucket.byVendor.size,
-      commitmentPct: commitmentByCategory?.get(category) ?? null,
+      commitmentPct:
+        commitmentByCategory?.get(bucket.displayName) ??
+        commitmentByCategory?.get(canonicalizeCategoryName(bucket.displayName)) ??
+        null,
     })
   }
 

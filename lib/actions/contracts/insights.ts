@@ -22,6 +22,7 @@ import {
   type InvoiceLineForVariance,
 } from "@/lib/contracts/price-variance"
 import { serialize } from "@/lib/serialize"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 
 export async function getContractInsights(contractId: string) {
   const { facility } = await requireFacility()
@@ -127,13 +128,39 @@ export async function getContractInsights(contractId: string) {
   // Pull every category the contract scopes — primary + join table —
   // and de-duplicate. The Performance tab card aggregates vendor /
   // facility spend across the union.
-  const categoryNames = Array.from(
+  const contractCategoryNames = Array.from(
     new Set(
       [
         contract.productCategory?.name ?? null,
         ...contract.contractCategories.map((cc) => cc.productCategory.name),
       ].filter((n): n is string => !!n),
     ),
+  )
+  // Bug 2026-05-20 (Vick "Ortho Joint ↔ Joint Ortho"): the COG.category
+  // string is free-form and drifts across imports. Expand the contract's
+  // category list to include every stored COG category whose canonical
+  // form matches one of ours, so token-shuffled aliases still aggregate.
+  const wantedCanonical = new Set(
+    contractCategoryNames.map(canonicalizeCategoryName).filter(Boolean),
+  )
+  const distinctCogCategories = wantedCanonical.size > 0
+    ? await prisma.cOGRecord.findMany({
+        where: {
+          facilityId: facility.id,
+          category: { not: null },
+        },
+        distinct: ["category"],
+        select: { category: true },
+      })
+    : []
+  const categoryNames = Array.from(
+    new Set([
+      ...contractCategoryNames,
+      ...distinctCogCategories
+        .map((r) => r.category)
+        .filter((c): c is string => !!c)
+        .filter((c) => wantedCanonical.has(canonicalizeCategoryName(c))),
+    ]),
   )
   if (categoryNames.length > 0) {
     const [vendorAgg, categoryAgg] = await Promise.all([

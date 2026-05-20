@@ -710,6 +710,9 @@ export async function _recomputeAccrualForContractWithFacility(
             vendorId: contract.vendorId,
             categories: term.categories ?? [],
             appliesTo: term.appliesTo ?? null,
+            // Bug 2026-05-20 (Vick): pass volumeType so the
+            // purchase_order baseline path can dispatch on it.
+            volumeType: term.volumeType ?? null,
             rebateMethod: term.rebateMethod ?? null,
             evaluationPeriod: term.evaluationPeriod ?? null,
             effectiveStart: term.effectiveStart ?? null,

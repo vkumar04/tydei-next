@@ -6,6 +6,7 @@ import {
   RebateTypeSchema,
   RebateMethodSchema,
 } from "@/lib/validators"
+import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 
 // ─── Tier Input ──────────────────────────────────────────────────
 
@@ -34,10 +35,11 @@ export const tierInputSchema = z.object({
   // Enforce 0 ≤ fraction ≤ 1 at the validator boundary so a save can
   // never persist a >100% rate.
   if (tier.rebateType === "percent_of_spend" && tier.rebateValue > 1) {
+    const display = toDisplayRebateValue(tier.rebateType, tier.rebateValue)
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["rebateValue"],
-      message: `Rebate % must be ≤ 100%. Got ${(tier.rebateValue * 100).toFixed(2)}% (stored as ${tier.rebateValue}). If you meant a flat dollar amount, switch Rebate Type to "Fixed $" or "Per Unit".`,
+      message: `Rebate % must be ≤ 100%. Got ${display.toFixed(2)}% (stored fraction ${tier.rebateValue}). If you meant a flat dollar amount, switch Rebate Type to "Fixed $" or "Per Unit".`,
     })
   }
 })

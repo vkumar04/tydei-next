@@ -64,6 +64,12 @@ interface VolumeRebateTermLike {
   vendorId?: string | null
   categories?: string[]
   appliesTo?: string | null
+  /**
+   * Bug 2026-05-20 (Vick): adds the `purchase_order` basis mode. When
+   * set the writer counts distinct PurchaseOrders for the contract's
+   * vendor instead of CPT procedures or COG units.
+   */
+  volumeType?: string | null
   rebateMethod: string | null
   evaluationPeriod: string | null
   effectiveStart: Date | null
@@ -143,6 +149,12 @@ export async function recomputeVolumeAccrualForTerm(input: {
   //   in-scope COG records (vendor + category filter). This branch
   //   delegates to `recomputeVolumeFromCogRecords` and returns early
   //   so we don't hit the CPT-only path.
+  // Bug 2026-05-20 (Vick): purchase_order baseline path. Counts
+  // distinct POs for the contract's vendor in the window and feeds
+  // the count through the same tier ladder.
+  if (term.volumeType === "purchase_order") {
+    return recomputeVolumeFromPurchaseOrders(input)
+  }
   const isCptMode = term.cptCodes && term.cptCodes.length > 0
   if (!isCptMode) {
     return recomputeVolumeFromCogRecords(input)
@@ -805,3 +817,227 @@ async function recomputeVolumeFromCogRecords(input: {
 
   return { inserted: toInsert.length, sumEarned }
 }
+
+/**
+ * Bug 2026-05-20 (Vick): purchase_order baseline writer.
+ *
+ * Counts distinct PurchaseOrder rows for the contract's vendor at this
+ * facility, bucketed by `orderDate` into the term's evaluation period,
+ * then runs each bucket's PO count through the tier ladder. Mirrors
+ * the COG-records writer's bucket → tier-pick → reward shape so the
+ * three volume paths (CPT procedures, COG units, POs) share semantics.
+ *
+ * Reward types behave the same as the CPT/COG paths:
+ *   - percent_of_spend → bucket spend × rebateValue (fraction)
+ *   - fixed_rebate     → flat rebateValue dollars per qualifying period
+ *   - fixed_rebate_per_unit / per_procedure_rebate → poCount × rebateValue
+ */
+async function recomputeVolumeFromPurchaseOrders(input: {
+  contractId: string
+  facilityId: string
+  contractEffectiveDate: Date
+  contractExpirationDate: Date
+  term: VolumeRebateTermLike
+}): Promise<{ inserted: number; sumEarned: number }> {
+  const { contractId, facilityId, contractEffectiveDate, term } = input
+  if (!term.vendorId) {
+    return { inserted: 0, sumEarned: 0 }
+  }
+
+  const endOfDay = (d: Date) =>
+    new Date(
+      Date.UTC(
+        d.getUTCFullYear(),
+        d.getUTCMonth(),
+        d.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    )
+  const today = new Date()
+  const start = new Date(
+    Math.max(
+      contractEffectiveDate.getTime(),
+      term.effectiveStart?.getTime() ?? -Infinity,
+    ),
+  )
+  const end = new Date(
+    Math.min(
+      today.getTime(),
+      endOfDay(input.contractExpirationDate).getTime(),
+      term.effectiveEnd ? endOfDay(term.effectiveEnd).getTime() : Infinity,
+    ),
+  )
+  if (end.getTime() <= start.getTime()) {
+    return { inserted: 0, sumEarned: 0 }
+  }
+
+  const pos = await prisma.purchaseOrder.findMany({
+    where: {
+      facilityId,
+      vendorId: term.vendorId,
+      orderDate: { gte: start, lte: end },
+    },
+    select: {
+      id: true,
+      orderDate: true,
+      totalAmount: true,
+    },
+  })
+
+  const width = widthMonths(term.evaluationPeriod)
+  const firstWindowStart = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
+  )
+  type Bucket = {
+    periodStart: Date
+    periodEnd: Date
+    poCount: number
+    spendSum: number
+  }
+  const bucketMap = new Map<string, Bucket>()
+  for (const po of pos) {
+    if (!po.orderDate) continue
+    const monthsFromStart =
+      (po.orderDate.getUTCFullYear() - firstWindowStart.getUTCFullYear()) * 12 +
+      (po.orderDate.getUTCMonth() - firstWindowStart.getUTCMonth())
+    const periodIndex = Math.floor(monthsFromStart / width)
+    const periodStart = addMonthsUTC(firstWindowStart, periodIndex * width)
+    const periodEnd = new Date(addMonthsUTC(periodStart, width).getTime() - 1)
+    const key = periodStart.toISOString()
+    const bucket = bucketMap.get(key) ?? {
+      periodStart,
+      periodEnd,
+      poCount: 0,
+      spendSum: 0,
+    }
+    bucket.poCount += 1
+    bucket.spendSum += Number(po.totalAmount ?? 0)
+    bucketMap.set(key, bucket)
+  }
+  const buckets = Array.from(bucketMap.values()).sort(
+    (a, b) => a.periodStart.getTime() - b.periodStart.getTime(),
+  )
+
+  type SortedTier = {
+    tierNumber: number
+    tierName: string | null
+    thresholdMin: number
+    thresholdMax: number | null
+    rebateValue: number
+    rebateType: string | null
+  }
+  const sortedTiers: SortedTier[] = term.tiers
+    .map((t) => {
+      const tVolMin = (t as unknown as { volumeMin?: number | null }).volumeMin
+      const tVolMax = (t as unknown as { volumeMax?: number | null }).volumeMax
+      const thresholdMin =
+        tVolMin != null && Number.isFinite(Number(tVolMin))
+          ? Number(tVolMin)
+          : Number(t.spendMin ?? 0)
+      const thresholdMax =
+        tVolMax != null && Number.isFinite(Number(tVolMax))
+          ? Number(tVolMax)
+          : t.spendMax === null || t.spendMax === undefined
+            ? null
+            : Number(t.spendMax)
+      return {
+        tierNumber: t.tierNumber,
+        tierName: t.tierName,
+        thresholdMin,
+        thresholdMax,
+        rebateValue: Number(t.rebateValue ?? 0),
+        rebateType: t.rebateType ?? null,
+      }
+    })
+    .sort((a, b) => a.thresholdMin - b.thresholdMin)
+
+  type BucketResult = {
+    periodStart: Date
+    periodEnd: Date
+    poCount: number
+    rebateEarned: number
+  }
+  const results: BucketResult[] = buckets.map((b) => {
+    let achieved: SortedTier | null = null
+    for (const t of sortedTiers) {
+      if (b.poCount >= t.thresholdMin) {
+        const ceilingOk =
+          t.thresholdMax == null || b.poCount < t.thresholdMax
+        if (ceilingOk) achieved = t
+        else if (achieved == null) achieved = t
+      }
+    }
+    if (!achieved) {
+      return {
+        periodStart: b.periodStart,
+        periodEnd: b.periodEnd,
+        poCount: b.poCount,
+        rebateEarned: 0,
+      }
+    }
+    let rebate = 0
+    switch (achieved.rebateType) {
+      case "percent_of_spend":
+        rebate = b.spendSum * achieved.rebateValue
+        break
+      case "fixed_rebate":
+        rebate = achieved.rebateValue
+        break
+      case "fixed_rebate_per_unit":
+      case "per_procedure_rebate":
+      default:
+        rebate = b.poCount * achieved.rebateValue
+        break
+    }
+    return {
+      periodStart: b.periodStart,
+      periodEnd: b.periodEnd,
+      poCount: b.poCount,
+      rebateEarned: rebate,
+    }
+  })
+
+  const termPrefix = `${AUTO_VOLUME_PREFIX} term:${term.id}`
+  await prisma.rebate.deleteMany({
+    where: {
+      contractId,
+      collectionDate: null,
+      notes: { startsWith: termPrefix },
+    },
+  })
+
+  let sumEarned = 0
+  const toInsert: Array<{
+    contractId: string
+    facilityId: string
+    rebateEarned: number
+    rebateCollected: number
+    payPeriodStart: Date
+    payPeriodEnd: Date
+    collectionDate: null
+    notes: string
+  }> = []
+  for (const r of results) {
+    if (r.rebateEarned <= 0 && r.poCount <= 0) continue
+    sumEarned += r.rebateEarned
+    toInsert.push({
+      contractId,
+      facilityId,
+      rebateEarned: r.rebateEarned,
+      rebateCollected: 0,
+      payPeriodStart: r.periodStart,
+      payPeriodEnd: r.periodEnd,
+      collectionDate: null,
+      notes: `${termPrefix} · ${r.poCount} POs · $${r.rebateEarned.toFixed(2)}`,
+    })
+  }
+  if (toInsert.length > 0) {
+    await prisma.rebate.createMany({ data: toInsert, skipDuplicates: true })
+  }
+
+  return { inserted: toInsert.length, sumEarned }
+}
+

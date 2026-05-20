@@ -128,11 +128,12 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
                       <p className="text-xs">
-                        Same-vendor SKUs the matcher hasn&apos;t classified
-                        yet. Not leakage — these are purchases from this
-                        contract&apos;s vendor that need enrichment. Run
-                        &quot;Re-run match&quot; on COG Data to resolve them
-                        into On Contract or Off Contract.
+                        Same-vendor SKUs that aren&apos;t in any active
+                        contract&apos;s pricing file (or fall outside its
+                        date range). Re-running match resolves vendor
+                        identity but won&apos;t clear these — to drop the
+                        number, add the SKUs to this contract&apos;s
+                        pricing file, or accept them as off-contract.
                       </p>
                     </TooltipContent>
                   </Tooltip>
