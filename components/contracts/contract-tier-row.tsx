@@ -311,6 +311,17 @@ export function ContractTierRow({
             </span>
           )}
         </div>
+        {/* Bug 2026-05-20 (Vick): if a legacy/AI-extracted row stored a
+            value outside 0-1 for %-of-spend, the display shows nonsense
+            like "80029%". Flag inline so the user knows the row needs
+            a fix (the validator now blocks new saves above 100%). */}
+        {isPercent && displayValue > 100 && (
+          <p className="text-xs text-destructive">
+            Stored value is {displayValue.toFixed(0)}% — likely a legacy/AI
+            entry meant as flat dollars. Switch Rebate Type or re-enter as
+            a true percent (≤ 100%).
+          </p>
+        )}
       </div>
 
       <Button

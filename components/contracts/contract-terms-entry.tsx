@@ -776,13 +776,6 @@ export function ContractTermsEntry({
                               rate applies to the entire spend from dollar one.
                               (Aka &quot;Dollar 1&quot; or cumulative.)
                             </p>
-                            <p className="mt-2">
-                              <span className="font-medium">Bracketed:</span>{" "}
-                              each tier&apos;s rate applies only to dollars
-                              within that tier&apos;s band. Tier 1 rate pays
-                              the first slice, tier 2 rate pays the next, etc.
-                              (Aka marginal.)
-                            </p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -809,22 +802,10 @@ export function ContractTermsEntry({
                             </span>
                           </div>
                         </SelectItem>
-                        <SelectItem value="marginal">
-                          <div className="flex flex-col">
-                            <span className="font-medium">
-                              {formatRebateMethodLabel("marginal")}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {describeRebateMethod("marginal")}
-                            </span>
-                          </div>
-                        </SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      {term.rebateMethod === "marginal"
-                        ? "Tiered: each tier's rate applies only to dollars within that tier's band."
-                        : "Retroactive: the highest-achieved tier's rate applies to the entire spend from dollar one."}
+                      Retroactive: the highest-achieved tier&apos;s rate applies to the entire spend from dollar one.
                     </p>
                   </div>
 

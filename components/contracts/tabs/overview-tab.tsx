@@ -88,6 +88,7 @@ export function OverviewTab({
         contractId={contractId}
         vendorId={contract.vendorId}
         productCategory={contract.productCategory?.name ?? null}
+        productCategories={productCategories.map((pc) => pc.name)}
       />
       {/* Wave A: tie-in amortization + capital summary.
           Shows only for tie-in contracts that either link to a capital
@@ -508,7 +509,12 @@ export function OverviewTab({
             </div>
             <Progress value={Number(contract.complianceRate)} />
             <p className="text-xs text-muted-foreground">
-              % of vendor purchases routed through this contract.
+              Of every dollar spent with this vendor (in the contract&apos;s
+              product categories), {Number(contract.complianceRate).toFixed(0)}%
+              ran through this contract&apos;s pricing.{" "}
+              <span className="text-foreground/80">
+                On Track ≥ 90% · Needs Attention 75-89% · At Risk &lt; 75%.
+              </span>
             </p>
           </CardContent>
         </Card>

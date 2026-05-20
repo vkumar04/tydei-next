@@ -89,6 +89,33 @@ export async function ingestExtractedContracts(
           contractFacilities: {
             create: [{ facilityId }],
           },
+          // Bug 2026-05-20 (Vick): AI extracted tieInDetails but only
+          // capitalEquipmentValue was being persisted (as Contract.totalValue).
+          // The form's Capital / Leased Items section then rendered empty
+          // because ContractCapitalLineItem rows weren't created. Map the
+          // full tieInDetails into a single line item row; downstream
+          // amortization picks it up from there.
+          ...(extracted.tieInDetails?.capitalEquipmentValue &&
+          extracted.tieInDetails.capitalEquipmentValue > 0
+            ? {
+                capitalLineItems: {
+                  create: [
+                    {
+                      description: "Capital equipment (AI-extracted)",
+                      contractTotal: extracted.tieInDetails.capitalEquipmentValue,
+                      initialSales: extracted.tieInDetails.downPayment ?? 0,
+                      interestRate:
+                        extracted.tieInDetails.interestRatePercent != null
+                          ? extracted.tieInDetails.interestRatePercent / 100
+                          : null,
+                      termMonths: extracted.tieInDetails.payoffPeriodMonths ?? null,
+                      paymentCadence:
+                        extracted.tieInDetails.paymentCadence ?? "monthly",
+                    },
+                  ],
+                },
+              }
+            : {}),
           ...(extracted.terms && extracted.terms.length > 0
             ? {
                 terms: {

@@ -29,16 +29,22 @@ export function ContractPerformanceCard({
   contractId,
   vendorId,
   productCategory,
+  productCategories,
 }: {
   contractId: string
   /** Optional — when present, the card adds a Market Share row scoped
    *  to this vendor at the active facility. Pulled from COG live so
    *  the metric reflects actual purchase mix. */
   vendorId?: string
-  /** Optional — when present, narrows the Market Share row to the
-   *  contract's product category (instead of summing across all
-   *  categories the vendor sells in). */
+  /** Deprecated — kept for callers that still pass a single category.
+   *  Prefer `productCategories` so all of the contract's categories
+   *  get their own market-share row. */
   productCategory?: string | null
+  /** Bug 2026-05-20 (Vick): the card used to pick the first/alphabetical
+   *  category and show "No categorized COG for X" while other in-scope
+   *  categories had real data. Pass the full list and we render one
+   *  market-share sub-row per category that has presence. */
+  productCategories?: string[]
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ["contract-performance", contractId],
@@ -79,12 +85,28 @@ export function ContractPerformanceCard({
   // the data drift is just whitespace/case.
   const normalizeCategory = (s: string | null | undefined) =>
     (s ?? "").trim().toLowerCase()
-  const targetCategory = normalizeCategory(productCategory)
-  const shareRow = shareData
-    ? productCategory
-      ? shareData.rows.find((r) => normalizeCategory(r.category) === targetCategory) ?? null
-      : shareData.rows[0] ?? null
-    : null
+  // Bug 2026-05-20 (Vick): build the list of rows to render. Prefer
+  // the multi-category list; fall back to the legacy single-category
+  // narrowing; final fallback is "all categories the vendor sells in".
+  const targets =
+    productCategories && productCategories.length > 0
+      ? productCategories.map(normalizeCategory)
+      : productCategory
+        ? [normalizeCategory(productCategory)]
+        : []
+  const shareRows = shareData
+    ? targets.length > 0
+      ? targets
+          .map((t) => ({
+            target: t,
+            row: shareData.rows.find(
+              (r) => normalizeCategory(r.category) === t,
+            ) ?? null,
+          }))
+      : shareData.rows.slice(0, 1).map((r) => ({ target: normalizeCategory(r.category), row: r }))
+    : []
+  // Used by the empty-state copy below.
+  const anyShareRow = shareRows.find((s) => s.row != null)?.row ?? null
 
   const riskBadgeVariant =
     risk?.riskLevel === "high"
@@ -176,60 +198,93 @@ export function ContractPerformanceCard({
           </div>
         )}
         {vendorId && (
-          <div className="space-y-2 rounded-md border bg-card p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <PieChart className="h-3.5 w-3.5" />
-                Market share
-                {productCategory && (
-                  <span className="text-xs font-normal text-muted-foreground">
-                    · {productCategory}
-                  </span>
-                )}
-              </div>
-              {shareRow ? (
-                <span className="text-lg font-semibold tabular-nums">
-                  {shareRow.sharePct.toFixed(1)}%
-                </span>
-              ) : (
-                <span className="text-sm text-muted-foreground">—</span>
-              )}
-            </div>
-            {shareRow ? (
-              <>
-                <Progress value={Math.min(100, shareRow.sharePct)} />
+          <div className="space-y-2">
+            {shareRows.length === 0 || !anyShareRow ? (
+              <div className="space-y-2 rounded-md border bg-card p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <PieChart className="h-3.5 w-3.5" />
+                    Market share
+                  </div>
+                  <span className="text-sm text-muted-foreground">—</span>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(shareRow.vendorSpend)} of{" "}
-                  {formatCurrency(shareRow.categoryTotal)} ·{" "}
-                  {shareRow.competingVendors === 1
-                    ? "Sole supplier"
-                    : `${shareRow.competingVendors} vendors competing`}
-                  {shareRow.commitmentPct != null && (
-                    <>
-                      {" "}
-                      · target {shareRow.commitmentPct.toFixed(1)}%
-                      {shareRow.sharePct >= shareRow.commitmentPct ? (
-                        <span className="text-emerald-600"> (met)</span>
-                      ) : (
-                        <span className="text-amber-600">
-                          {" "}
-                          ({(shareRow.commitmentPct - shareRow.sharePct).toFixed(1)}% short)
-                        </span>
-                      )}
-                    </>
-                  )}
+                  {!shareData
+                    ? "Loading…"
+                    : shareData.totalVendorSpend === 0
+                      ? "No spend recorded for this vendor at this facility in the last 12 months."
+                      : `No categorized COG for ${
+                          productCategories && productCategories.length > 0
+                            ? productCategories.join(", ")
+                            : productCategory ?? "this vendor"
+                        }. Total un-categorized vendor spend: ${formatCurrency(shareData.uncategorizedSpend)}.`}
                 </p>
-              </>
+              </div>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                {!shareData
-                  ? "Loading…"
-                  : shareData.totalVendorSpend === 0
-                    ? "No spend recorded for this vendor at this facility in the last 12 months."
-                    : productCategory
-                      ? `No categorized COG for ${productCategory}. Total un-categorized vendor spend: ${formatCurrency(shareData.uncategorizedSpend)}.`
-                      : "Vendor spend exists but isn't categorized — categorize the COG import to see share by category."}
-              </p>
+              shareRows.map(({ target, row }, idx) => {
+                const label =
+                  row?.category ??
+                  productCategories?.find(
+                    (c) => normalizeCategory(c) === target,
+                  ) ??
+                  productCategory ??
+                  ""
+                return (
+                  <div
+                    key={`${target}-${idx}`}
+                    className="space-y-2 rounded-md border bg-card p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <PieChart className="h-3.5 w-3.5" />
+                        Market share
+                        {label && (
+                          <span className="text-xs font-normal text-muted-foreground">
+                            · {label}
+                          </span>
+                        )}
+                      </div>
+                      {row ? (
+                        <span className="text-lg font-semibold tabular-nums">
+                          {row.sharePct.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </div>
+                    {row ? (
+                      <>
+                        <Progress value={Math.min(100, row.sharePct)} />
+                        <p className="text-xs text-muted-foreground">
+                          {formatCurrency(row.vendorSpend)} of{" "}
+                          {formatCurrency(row.categoryTotal)} ·{" "}
+                          {row.competingVendors === 1
+                            ? "Sole supplier"
+                            : `${row.competingVendors} vendors competing`}
+                          {row.commitmentPct != null && (
+                            <>
+                              {" "}
+                              · target {row.commitmentPct.toFixed(1)}%
+                              {row.sharePct >= row.commitmentPct ? (
+                                <span className="text-emerald-600"> (met)</span>
+                              ) : (
+                                <span className="text-amber-600">
+                                  {" "}
+                                  ({(row.commitmentPct - row.sharePct).toFixed(1)}% short)
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No categorized COG for {label}.
+                      </p>
+                    )}
+                  </div>
+                )
+              })
             )}
           </div>
         )}

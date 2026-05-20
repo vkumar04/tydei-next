@@ -150,6 +150,7 @@ function TierDisplay({
   rebateMethod = "cumulative",
   termIsScoped = false,
   isVolumeTerm = false,
+  isMarketShareTerm = false,
 }: {
   tier: ContractTier
   currentSpend?: number
@@ -159,6 +160,11 @@ function TierDisplay({
   /** Bug 3 (2026-05-17): when true, render the tier threshold in
    *  UNITS (sourced from `volumeMin/volumeMax`) instead of dollars. */
   isVolumeTerm?: boolean
+  /** Bug 2026-05-20 (Vick): when true, render the tier threshold as a
+   *  market-share % (sourced from `marketShareMin/marketShareMax`)
+   *  instead of dollar ranges. Falls back to spendMin/spendMax if the
+   *  market-share fields aren't set on legacy rows. */
+  isMarketShareTerm?: boolean
   /** True when the parent term is scoped to specific categories or SKUs.
    *  We suppress the dollar-projection annotation in that case because
    *  the only `currentSpend` we have is the contract-wide aggregate —
@@ -264,6 +270,22 @@ function TierDisplay({
                   return vMax === null
                     ? `${formatNumber(vMin)}+ units`
                     : `${formatNumber(vMin)} – ${formatNumber(vMax)} units`
+                })()
+              : isMarketShareTerm
+              ? (() => {
+                  const msMin =
+                    tier.marketShareMin != null
+                      ? Number(tier.marketShareMin)
+                      : Number(tier.spendMin)
+                  const msMax =
+                    tier.marketShareMax != null
+                      ? Number(tier.marketShareMax)
+                      : tier.spendMax
+                        ? Number(tier.spendMax)
+                        : null
+                  return msMax === null
+                    ? `${msMin.toFixed(1)}%+ market share`
+                    : `${msMin.toFixed(1)}% – ${msMax.toFixed(1)}% market share`
                 })()
               : (
                 <>
@@ -561,6 +583,7 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                                   // the annotation can render honest numbers.
                                   termIsScoped={false}
                                   isVolumeTerm={term.termType === "volume_rebate"}
+                                  isMarketShareTerm={term.termType === "market_share"}
                                 />
                               ))}
                             </div>

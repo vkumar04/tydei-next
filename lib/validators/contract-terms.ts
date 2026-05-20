@@ -24,6 +24,22 @@ export const tierInputSchema = z.object({
   marketShareMax: z.number().min(0).max(100).optional(),
   rebateType: RebateTypeSchema.default("percent_of_spend"),
   rebateValue: z.number().min(0).default(0),
+}).superRefine((tier, ctx) => {
+  // Bug 2026-05-20 (Vick "Volume Growth Rebate %-of-Spend tiers
+  // showing 80029, 120165, …"): when rebateType is percent_of_spend,
+  // rebateValue is stored as a FRACTION (0.02 = 2%). The form converts
+  // display % → fraction via fromDisplayRebateValue, but if an upstream
+  // path (AI extract, legacy form, manual SQL) writes a raw dollar
+  // value the tier renderer multiplies by 100 and displays nonsense.
+  // Enforce 0 ≤ fraction ≤ 1 at the validator boundary so a save can
+  // never persist a >100% rate.
+  if (tier.rebateType === "percent_of_spend" && tier.rebateValue > 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["rebateValue"],
+      message: `Rebate % must be ≤ 100%. Got ${(tier.rebateValue * 100).toFixed(2)}% (stored as ${tier.rebateValue}). If you meant a flat dollar amount, switch Rebate Type to "Fixed $" or "Per Unit".`,
+    })
+  }
 })
 
 export type TierInput = z.infer<typeof tierInputSchema>

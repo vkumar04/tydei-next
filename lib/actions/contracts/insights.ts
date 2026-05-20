@@ -46,6 +46,14 @@ export async function getContractInsights(contractId: string) {
       // Load the category's name here so we can filter the COG rows
       // against `category` (string) instead.
       productCategory: { select: { name: true } },
+      // Bug 2026-05-20 (Vick): the Performance tab Market Share card
+      // showed 0.0% because the query below only narrowed to the single
+      // primary `productCategory`. Contracts now carry the full multi-
+      // category list via `contractCategories`; include it so we can
+      // aggregate across every category the contract actually covers.
+      contractCategories: {
+        include: { productCategory: { select: { name: true } } },
+      },
     },
   })
 
@@ -116,21 +124,31 @@ export async function getContractInsights(contractId: string) {
   const priceVariance = analyzePriceDiscrepancies(varianceLines, priceLookup)
 
   let marketShare: ReturnType<typeof calculateMarketShare> | null = null
-  const categoryName = contract.productCategory?.name ?? null
-  if (categoryName) {
+  // Pull every category the contract scopes — primary + join table —
+  // and de-duplicate. The Performance tab card aggregates vendor /
+  // facility spend across the union.
+  const categoryNames = Array.from(
+    new Set(
+      [
+        contract.productCategory?.name ?? null,
+        ...contract.contractCategories.map((cc) => cc.productCategory.name),
+      ].filter((n): n is string => !!n),
+    ),
+  )
+  if (categoryNames.length > 0) {
     const [vendorAgg, categoryAgg] = await Promise.all([
       prisma.cOGRecord.aggregate({
         where: {
           facilityId: facility.id,
           vendorId: contract.vendorId,
-          category: categoryName,
+          category: { in: categoryNames },
         },
         _sum: { extendedPrice: true },
       }),
       prisma.cOGRecord.aggregate({
         where: {
           facilityId: facility.id,
-          category: categoryName,
+          category: { in: categoryNames },
         },
         _sum: { extendedPrice: true },
       }),
