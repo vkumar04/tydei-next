@@ -443,7 +443,8 @@ export function toTermType(v: string | null | undefined): TermType {
     "capitated_price_reduction",
     "capitated_pricing_rebate",
     "payment_rebate",
-    "growth_rebate",
+    // `growth_rebate` removed 2026-05-25 — express as spend_rebate +
+    // growthOnly=true at the term-row level instead.
     "compliance_rebate",
     "fixed_fee",
     "locked_pricing",

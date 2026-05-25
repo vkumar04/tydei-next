@@ -386,11 +386,15 @@ export interface TermAccrualConfig {
   effectiveEnd?: Date | null
   /**
    * Charles 2026-04-25: growth-baseline support. When `baselineType`
-   * is "growth_based" (or `termType` is "growth_rebate") AND
-   * `spendBaseline` is set, tier evaluation runs against
-   * `max(0, periodSpend − proRatedBaseline)`. The baseline is
+   * is "growth_based" AND `spendBaseline` is set, tier evaluation runs
+   * against `max(0, periodSpend − proRatedBaseline)`. The baseline is
    * understood as ANNUAL dollars and pro-rated to the evaluation
    * period (annual=full, quarterly=÷4, semi_annual=÷2, monthly=÷12).
+   *
+   * Charles 2026-05-25: the legacy `growth_rebate` termType was
+   * retired in favor of `growthOnly: true` on a spend_rebate. The
+   * `termType` field here remains accepted for legacy callers but
+   * is no longer load-bearing for the math.
    *
    * Both fields are optional so existing callers that don't supply
    * them keep the prior "evaluate on full spend" behavior.

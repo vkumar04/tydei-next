@@ -7,7 +7,7 @@
  * term type, `tier.spendMin` is the threshold the engine compares
  * against — but the UNIT of that threshold depends on the term type:
  *
- *   - spend_rebate / growth_rebate / carve_out → DOLLARS  (currentSpend)
+ *   - spend_rebate / carve_out                 → DOLLARS  (currentSpend)
  *   - market_share                              → PERCENT  (currentMarketShare)
  *   - compliance_rebate                         → PERCENT  (complianceRate)
  *   - volume_rebate / rebate_per_use /
@@ -50,7 +50,6 @@ export function pickThresholdMetric(
     case "payment_rebate":
       return metrics.currentVolume ?? 0
     case "spend_rebate":
-    case "growth_rebate":
     case "carve_out":
     case "tie_in":
     default:

@@ -20,6 +20,9 @@
 import { describe, it, expect } from "vitest"
 import { updateTermSchema } from "@/lib/validators/contract-terms"
 
+// `growth_rebate` retired 2026-05-25 — growth is now expressed via
+// growthOnly on a spend_rebate. See prisma/migrations/
+// 20260525120000_drop_growth_rebate_term_type/.
 const ALL_TERM_TYPES = [
   "spend_rebate",
   "volume_rebate",
@@ -31,7 +34,6 @@ const ALL_TERM_TYPES = [
   "po_rebate",
   "carve_out",
   "payment_rebate",
-  "growth_rebate",
   "compliance_rebate",
   "fixed_fee",
   "locked_pricing",

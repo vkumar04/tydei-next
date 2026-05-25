@@ -70,9 +70,7 @@ export interface RebateOptimizerActionResult {
  * ThresholdOpportunitiesCard.
  */
 function mapTermKind(termType: string): RebateTermKind | null {
-  if (termType === "spend_rebate" || termType === "growth_rebate") {
-    return "SPEND_REBATE"
-  }
+  if (termType === "spend_rebate") return "SPEND_REBATE"
   if (termType === "po_rebate") return "PO_REBATE"
   if (termType === "carve_out") return "CARVE_OUT"
   return null

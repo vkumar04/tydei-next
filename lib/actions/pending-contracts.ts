@@ -262,15 +262,16 @@ function extractPendingTerms(termsJson: unknown, contractEffectiveDate?: Date | 
   // vendor-contract-submission.tsx (defaultRebateMethodForTermType).
   // Pre-fix the server defaulted to "cumulative" for everything when
   // the JSON omitted rebateMethod (older drafts, ingest paths, AI
-  // extracts that didn't set it). For volume_rebate / growth_rebate
-  // the natural shape is a marginal $/unit (or $/% growth) ladder, so
-  // cumulative would compound the top tier's rate over the entire
-  // qualifying base and over-pay the rebate. Bias to "marginal" for
-  // those two, leaving every other type at "cumulative".
+  // extracts that didn't set it). For volume_rebate the natural shape
+  // is a marginal $/unit ladder, so cumulative would compound the top
+  // tier's rate over the entire qualifying base and over-pay the
+  // rebate. Bias to "marginal" for volume_rebate, leaving every other
+  // type at "cumulative". (Growth is now a property — growthOnly —
+  // rather than its own term type; growth-on-spend contracts default
+  // to cumulative like other spend_rebate rows.)
   const defaultRebateMethodForTermType = (tt: string): string => {
     switch (tt) {
       case "volume_rebate":
-      case "growth_rebate":
         return "marginal"
       default:
         return "cumulative"

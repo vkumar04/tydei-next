@@ -486,7 +486,10 @@ export function NewContractClient({
         market_share_price_reduction: "market_share_price_reduction",
         capitated_price_reduction: "capitated_price_reduction",
         capitated_pricing_rebate: "capitated_pricing_rebate",
-        growth_rebate: "growth_rebate",
+        // Legacy growth_rebate folds into spend_rebate (growth is now
+        // expressed via growthOnly on the term, set elsewhere in this
+        // mapper or by the Baseline Calculation Method picker).
+        growth_rebate: "spend_rebate",
         compliance_rebate: "compliance_rebate",
         fixed_fee: "fixed_fee",
         locked_pricing: "locked_pricing",

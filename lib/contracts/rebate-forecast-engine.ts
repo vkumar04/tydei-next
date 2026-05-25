@@ -43,7 +43,6 @@ export interface ForecastTermLike {
 
 const SPEND_BASED_TERM_TYPES = new Set([
   "spend_rebate",
-  "growth_rebate",
   "tie_in",
   "carve_out",
 ])

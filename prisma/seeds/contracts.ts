@@ -222,7 +222,11 @@ export async function seedContracts(
     },
   })
   await addTerm(prisma, contracts.medtronicBio.id, {
-    termName: "Growth Rebate", termType: "growth_rebate", baselineType: "growth_based",
+    // 2026-05-25: growth_rebate term type retired; growth is now a
+    // property of spend_rebate via growthOnly=true. baselineType stays
+    // growth_based so the engine still subtracts the prior-year actual.
+    termName: "Growth Rebate", termType: "spend_rebate", baselineType: "growth_based",
+    growthOnly: true,
     effectiveStart: twoYearsAgo, effectiveEnd: sixMonthsFromNow, growthBaselinePercent: 10,
   }, [
     { tierNumber: 1, spendMin: 0, spendMax: 300000, rebateType: "percent_of_spend", rebateValue: 0.02 },

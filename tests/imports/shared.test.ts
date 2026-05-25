@@ -268,6 +268,8 @@ describe("toPerfPeriod", () => {
 
 describe("toTermType", () => {
   it("accepts every whitelisted term type", () => {
+    // `growth_rebate` retired 2026-05-25 — growth is now expressed via
+    // growthOnly on a spend_rebate.
     const allowed = [
       "spend_rebate",
       "volume_rebate",
@@ -279,7 +281,6 @@ describe("toTermType", () => {
       "capitated_price_reduction",
       "capitated_pricing_rebate",
       "payment_rebate",
-      "growth_rebate",
       "compliance_rebate",
       "fixed_fee",
       "locked_pricing",
