@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useTransition } from "react"
 import {
   Dialog,
   DialogContent,
@@ -27,16 +27,13 @@ export function RenewalInitiateDialog({
   onOpenChange,
   onInitiate,
 }: RenewalInitiateDialogProps) {
-  const [loading, setLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
-  async function handleInitiate() {
-    setLoading(true)
-    try {
+  function handleInitiate() {
+    startTransition(async () => {
       await onInitiate()
       onOpenChange(false)
-    } finally {
-      setLoading(false)
-    }
+    })
   }
 
   return (
@@ -51,12 +48,12 @@ export function RenewalInitiateDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
-          <Button onClick={handleInitiate} disabled={loading}>
+          <Button onClick={handleInitiate} disabled={isPending}>
             <RefreshCw className="mr-1.5 size-4" />
-            {loading ? "Creating..." : "Create Renewal Draft"}
+            {isPending ? "Creating..." : "Create Renewal Draft"}
           </Button>
         </DialogFooter>
       </DialogContent>

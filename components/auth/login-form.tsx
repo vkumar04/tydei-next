@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useTransition } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
@@ -18,7 +18,7 @@ import { staggerContainer, fadeInUp } from "@/lib/animations"
 
 export function LoginForm() {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   const {
     register,
@@ -29,25 +29,24 @@ export function LoginForm() {
     resolver: zodResolver(loginSchema),
   })
 
-  async function onSubmit(data: LoginInput) {
-    setIsLoading(true)
-    try {
-      const result = await signIn.email({
-        email: data.email,
-        password: data.password,
-      })
-      if (result.error) {
-        const { message, status } = result.error
-        toast.error(message || `Sign-in failed (status ${status ?? "?"})`)
-      } else {
-        router.push("/dashboard")
-        router.refresh()
+  function onSubmit(data: LoginInput) {
+    startTransition(async () => {
+      try {
+        const result = await signIn.email({
+          email: data.email,
+          password: data.password,
+        })
+        if (result.error) {
+          const { message, status } = result.error
+          toast.error(message || `Sign-in failed (status ${status ?? "?"})`)
+        } else {
+          router.push("/dashboard")
+          router.refresh()
+        }
+      } catch {
+        toast.error("Something went wrong")
       }
-    } catch {
-      toast.error("Something went wrong")
-    } finally {
-      setIsLoading(false)
-    }
+    })
   }
 
   function handleDemoFill(email: string, password: string) {
@@ -89,14 +88,14 @@ export function LoginForm() {
       </motion.div>
 
       <motion.div variants={fadeInUp}>
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
+        <Button type="submit" className="w-full" disabled={isPending}>
+          {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
           Sign in
         </Button>
       </motion.div>
 
       <motion.div variants={fadeInUp}>
-        <DemoLoginButtons onFill={handleDemoFill} isLoading={isLoading} />
+        <DemoLoginButtons onFill={handleDemoFill} isLoading={isPending} />
       </motion.div>
 
       <motion.p variants={fadeInUp} className="text-center text-sm text-muted-foreground">

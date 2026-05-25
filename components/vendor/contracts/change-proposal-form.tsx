@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -63,7 +63,7 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
   const [proposalType, setProposalType] = useState<"term_change" | "new_term" | "remove_term" | "contract_edit">("term_change")
   const [changes, setChanges] = useState<Change[]>([{ field: "", currentValue: "", proposedValue: "" }])
   const [message, setMessage] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   const addChange = () => setChanges([...changes, { field: "", currentValue: "", proposedValue: "" }])
 
@@ -73,9 +73,8 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
 
   const removeChange = (index: number) => setChanges(changes.filter((_, i) => i !== index))
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true)
-    try {
+  const handleSubmit = () => {
+    startTransition(async () => {
       await onSubmit({
         contractId: contract.id,
         vendorId: contract.vendorId,
@@ -86,9 +85,7 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
         changes,
         vendorMessage: message || undefined,
       })
-    } finally {
-      setIsSubmitting(false)
-    }
+    })
   }
 
   return (
@@ -158,8 +155,8 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
           <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} />
         </Field>
 
-        <Button onClick={handleSubmit} disabled={isSubmitting}>
-          {isSubmitting ? "Submitting..." : "Submit Proposal"}
+        <Button onClick={handleSubmit} disabled={isPending}>
+          {isPending ? "Submitting..." : "Submit Proposal"}
         </Button>
       </CardContent>
     </Card>

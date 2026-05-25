@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useTransition } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
@@ -22,7 +22,7 @@ import { signUpSchema, type SignUpInput } from "@/lib/validators"
 
 export function SignUpForm() {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   const {
     register,
@@ -34,24 +34,24 @@ export function SignUpForm() {
     defaultValues: { role: "facility" },
   })
 
-  async function onSubmit(data: SignUpInput) {
-    setIsLoading(true)
-    try {
-      const result = await authSignUp.email({
-        name: data.name,
-        email: data.email,
-        password: data.password,
-      })
-      if (result.error) {
-        toast.error(result.error.message ?? "Sign up failed")
-      } else {
-        router.push("/sign-up-success")
+  function onSubmit(data: SignUpInput) {
+    startTransition(async () => {
+      try {
+        const result = await authSignUp.email({
+          name: data.name,
+          email: data.email,
+          password: data.password,
+        })
+        if (result.error) {
+          const { message, status } = result.error
+          toast.error(message || `Sign-up failed (status ${status ?? "?"})`)
+        } else {
+          router.push("/sign-up-success")
+        }
+      } catch {
+        toast.error("Something went wrong")
       }
-    } catch {
-      toast.error("Something went wrong")
-    } finally {
-      setIsLoading(false)
-    }
+    })
   }
 
   return (
@@ -122,8 +122,8 @@ export function SignUpForm() {
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
         Create account
       </Button>
 

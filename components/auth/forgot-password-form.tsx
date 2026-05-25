@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import Link from "next/link"
@@ -13,7 +13,7 @@ import { requestPasswordReset } from "@/lib/actions/auth"
 import { forgotPasswordSchema, type ForgotPasswordInput } from "@/lib/validators"
 
 export function ForgotPasswordForm() {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
   const [sent, setSent] = useState(false)
 
   const {
@@ -24,16 +24,15 @@ export function ForgotPasswordForm() {
     resolver: zodResolver(forgotPasswordSchema),
   })
 
-  async function onSubmit(data: ForgotPasswordInput) {
-    setIsLoading(true)
-    try {
-      await requestPasswordReset(data.email)
-      setSent(true)
-    } catch {
-      toast.error("Something went wrong")
-    } finally {
-      setIsLoading(false)
-    }
+  function onSubmit(data: ForgotPasswordInput) {
+    startTransition(async () => {
+      try {
+        await requestPasswordReset(data.email)
+        setSent(true)
+      } catch {
+        toast.error("Something went wrong")
+      }
+    })
   }
 
   if (sent) {
@@ -66,8 +65,8 @@ export function ForgotPasswordForm() {
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
         Send Reset Link
       </Button>
 

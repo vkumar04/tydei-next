@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useTransition } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
@@ -18,7 +18,7 @@ interface ResetPasswordFormProps {
 
 export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   const {
     register,
@@ -28,17 +28,16 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     resolver: zodResolver(resetPasswordSchema),
   })
 
-  async function onSubmit(data: ResetPasswordInput) {
-    setIsLoading(true)
-    try {
-      await resetPasswordAction(token, data.password)
-      toast.success("Password reset successfully")
-      router.push("/login")
-    } catch {
-      toast.error("Failed to reset password")
-    } finally {
-      setIsLoading(false)
-    }
+  function onSubmit(data: ResetPasswordInput) {
+    startTransition(async () => {
+      try {
+        await resetPasswordAction(token, data.password)
+        toast.success("Password reset successfully")
+        router.push("/login")
+      } catch {
+        toast.error("Failed to reset password")
+      }
+    })
   }
 
   return (
@@ -69,8 +68,8 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
         Reset Password
       </Button>
     </form>

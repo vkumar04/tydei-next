@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import {
   Dialog,
   DialogContent,
@@ -35,19 +35,16 @@ export function InviteMemberDialog({
 }: InviteMemberDialogProps) {
   const [email, setEmail] = useState("")
   const [role, setRole] = useState(roles[0]?.value ?? "member")
-  const [loading, setLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
-  async function handleInvite() {
+  function handleInvite() {
     if (!email) return
-    setLoading(true)
-    try {
+    startTransition(async () => {
       await onInvite(email, role)
       onOpenChange(false)
       setEmail("")
       setRole(roles[0]?.value ?? "member")
-    } finally {
-      setLoading(false)
-    }
+    })
   }
 
   return (
@@ -87,11 +84,11 @@ export function InviteMemberDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
-          <Button onClick={handleInvite} disabled={loading || !email}>
-            {loading ? "Sending..." : "Send Invite"}
+          <Button onClick={handleInvite} disabled={isPending || !email}>
+            {isPending ? "Sending..." : "Send Invite"}
           </Button>
         </DialogFooter>
       </DialogContent>
