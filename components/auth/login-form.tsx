@@ -37,7 +37,8 @@ export function LoginForm() {
         password: data.password,
       })
       if (result.error) {
-        toast.error(result.error.message ?? "Invalid credentials")
+        const { message, status } = result.error
+        toast.error(message || `Sign-in failed (status ${status ?? "?"})`)
       } else {
         router.push("/dashboard")
         router.refresh()
@@ -100,7 +101,7 @@ export function LoginForm() {
 
       <motion.p variants={fadeInUp} className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <Link href="/auth/sign-up" className="font-medium text-primary hover:underline">
+        <Link href="/sign-up" className="font-medium text-primary hover:underline">
           Contact your administrator
         </Link>
       </motion.p>
