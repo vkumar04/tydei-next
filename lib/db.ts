@@ -17,15 +17,16 @@ dns.setDefaultResultOrder("ipv6first")
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
 
+// `family` is accepted by pg's underlying net.connect call but isn't
+// in the published PoolConfig type, so cast the whole literal once.
+// 0 = dual-stack (try IPv6 then IPv4) — pairs with setDefaultResultOrder
+// above so legacy IPv6-only Railway hosts still connect while local dev
+// (which serves both) keeps working.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // pg passes `family` straight to net.connect: 0 = dual-stack (try
-  // IPv6 then IPv4). Pairs with the setDefaultResultOrder above so
-  // legacy Railway hosts that only serve IPv6 still connect, while
-  // local dev (which serves both) keeps working.
+  family: 0,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  family: 0 as any,
-})
+} as any)
 const adapter = new PrismaPg(pool)
 
 export const prisma =

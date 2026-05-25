@@ -30,11 +30,13 @@ import { seedInvoices } from "./seeds/invoices"
 import { seedCases } from "./seeds/cases"
 import { seedCrossVendorTieIns } from "./seeds/cross-vendor-tie-ins"
 
+// Same IPv6 workaround as lib/db.ts. Cast covers `family` not being
+// in pg's published PoolConfig type.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  family: 0,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  family: 0 as any,
-})
+} as any)
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
