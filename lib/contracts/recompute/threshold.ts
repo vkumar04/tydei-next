@@ -131,9 +131,17 @@ export async function recomputeThresholdAccrualForTerm(input: {
   contractExpirationDate: Date
   metric: ThresholdMetric
   metricValue: number | null
+  /**
+   * Bug #16 (2026-05-24): when the parent contract is tie-in, every
+   * auto-accrual row is system-stamped with collectionDate = periodEnd
+   * (no user-collect workflow exists for tie-in). Set this true so the
+   * delete filter wipes ALL auto-accrual rows for this term — not just
+   * uncollected ones. Without this, Recompute is non-idempotent.
+   */
+  isTieIn?: boolean
   term: ThresholdRebateTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
-  const { contractId, facilityId, term } = input
+  const { contractId, facilityId, term, isTieIn } = input
 
   // No metric value = no qualification. (e.g. complianceRate is null
   // on contracts where we haven't tracked compliance yet.)
@@ -311,8 +319,11 @@ export async function recomputeThresholdAccrualForTerm(input: {
   await prisma.rebate.deleteMany({
     where: {
       contractId,
-      collectionDate: null,
       notes: { startsWith: termPrefix },
+      // Bug #16: tie-in contracts auto-stamp collectionDate, so the
+      // collectionDate=null gate would never match. Drop the gate when
+      // the parent contract is tie-in.
+      ...(isTieIn ? {} : { collectionDate: null }),
     },
   })
 

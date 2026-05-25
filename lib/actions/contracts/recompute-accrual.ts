@@ -135,6 +135,16 @@ export async function _recomputeAccrualForContractWithFacility(
     }
   }
 
+  // Charles 2026-05-24 (Bug #16): tie-in contracts auto-stamp
+  // collectionDate on every auto-accrual row (see line 586). The
+  // delete filters below normally preserve rows with a non-null
+  // collectionDate (user-logged collections), but tie-in has no
+  // user-collection workflow — every "collected" row is system-
+  // stamped. So drop the collectionDate gate when tie-in; otherwise
+  // every Recompute click adds duplicate rows that survive forever.
+  const isTieIn = contract.contractType === "tie_in"
+  const preserveUserCollections = !isTieIn
+
   // Charles 2026-04-26 #75/#76: collect volume-family terms with no
   // CPT codes so the toast can warn the user. Done here (before the
   // filter strips them) so we have visibility into why the engine
@@ -191,7 +201,9 @@ export async function _recomputeAccrualForContractWithFacility(
       payPeriodEnd: { gt: now },
       // Charles W1.W-C1: never wipe a row the user has already marked
       // collected — that stamp is the only record of money received.
-      collectionDate: null,
+      // Bug #16: drop the collectionDate gate on tie-in so auto-
+      // stamped future rows actually get purged.
+      ...(preserveUserCollections ? { collectionDate: null } : {}),
     },
   })
 
@@ -208,7 +220,7 @@ export async function _recomputeAccrualForContractWithFacility(
     where: {
       contractId,
       notes: { startsWith: AUTO_ACCRUAL_PREFIX },
-      collectionDate: null,
+      ...(preserveUserCollections ? { collectionDate: null } : {}),
     },
   })
 
@@ -557,7 +569,6 @@ export async function _recomputeAccrualForContractWithFacility(
   // semantic flip while giving the user the "no manual collect needed"
   // experience they asked for. Non-tie-in contracts keep the prior
   // "earned, awaiting collection" shape.
-  const autoStampCollectionForTieIn = contract.contractType === "tie_in"
   const toInsert: {
     contractId: string
     facilityId: string
@@ -580,10 +591,10 @@ export async function _recomputeAccrualForContractWithFacility(
         contractId,
         facilityId: facilityId,
         rebateEarned: b.rebateEarned,
-        rebateCollected: autoStampCollectionForTieIn ? b.rebateEarned : 0,
+        rebateCollected: isTieIn ? b.rebateEarned : 0,
         payPeriodStart: b.periodStart,
         payPeriodEnd: b.periodEnd,
-        collectionDate: autoStampCollectionForTieIn ? b.periodEnd : null,
+        collectionDate: isTieIn ? b.periodEnd : null,
         notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
         engineVersion: ENGINE_VERSION,
         engineWarnings: null,
@@ -649,10 +660,10 @@ export async function _recomputeAccrualForContractWithFacility(
         contractId,
         facilityId: facilityId,
         rebateEarned: b.rebateEarned,
-        rebateCollected: autoStampCollectionForTieIn ? b.rebateEarned : 0,
+        rebateCollected: isTieIn ? b.rebateEarned : 0,
         payPeriodStart: b.periodStart,
         payPeriodEnd: b.periodEnd,
-        collectionDate: autoStampCollectionForTieIn ? b.periodEnd : null,
+        collectionDate: isTieIn ? b.periodEnd : null,
         notes: `${AUTO_ACCRUAL_PREFIX} ${noteBody}`,
         engineVersion: ENGINE_VERSION,
         engineWarnings: null,
@@ -701,6 +712,7 @@ export async function _recomputeAccrualForContractWithFacility(
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
+          isTieIn,
           term: {
             id: term.id,
             cptCodes: term.cptCodes,
@@ -750,6 +762,7 @@ export async function _recomputeAccrualForContractWithFacility(
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
+          isTieIn,
           term: {
             id: term.id,
             rebateMethod: term.rebateMethod ?? null,
@@ -792,6 +805,7 @@ export async function _recomputeAccrualForContractWithFacility(
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
+          isTieIn,
           term: {
             id: term.id,
             evaluationPeriod: term.evaluationPeriod ?? null,
@@ -832,6 +846,7 @@ export async function _recomputeAccrualForContractWithFacility(
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
+          isTieIn,
           term: {
             id: term.id,
             rebateMethod: term.rebateMethod ?? null,
@@ -961,6 +976,7 @@ export async function _recomputeAccrualForContractWithFacility(
           contractExpirationDate: contract.expirationDate,
           metric,
           metricValue,
+          isTieIn,
           term: {
             id: term.id,
             evaluationPeriod: term.evaluationPeriod ?? null,

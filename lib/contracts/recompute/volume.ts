@@ -138,9 +138,17 @@ export async function recomputeVolumeAccrualForTerm(input: {
   facilityId: string
   contractEffectiveDate: Date
   contractExpirationDate: Date
+  /**
+   * Bug #16 (2026-05-24): when the parent contract is tie-in, every
+   * auto-accrual row is system-stamped with collectionDate = periodEnd
+   * (no user-collect workflow exists for tie-in). Set this true so the
+   * delete filter wipes ALL auto-accrual rows for this term — not just
+   * uncollected ones. Without this, Recompute is non-idempotent.
+   */
+  isTieIn?: boolean
   term: VolumeRebateTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
-  const { contractId, facilityId, contractEffectiveDate, term } = input
+  const { contractId, facilityId, contractEffectiveDate, term, isTieIn } = input
 
   // Bug #17 (2026-05-08, Vick): two volume-rebate basis modes.
   // - When `term.cptCodes` is non-empty, qualification = CPT-coded
@@ -524,8 +532,11 @@ export async function recomputeVolumeAccrualForTerm(input: {
   await prisma.rebate.deleteMany({
     where: {
       contractId,
-      collectionDate: null,
       notes: { startsWith: termPrefix },
+      // Bug #16: tie-in contracts auto-stamp collectionDate, so the
+      // collectionDate=null gate would never match. Drop the gate when
+      // the parent contract is tie-in.
+      ...(isTieIn ? {} : { collectionDate: null }),
     },
   })
 
@@ -596,9 +607,10 @@ async function recomputeVolumeFromCogRecords(input: {
   facilityId: string
   contractEffectiveDate: Date
   contractExpirationDate: Date
+  isTieIn?: boolean
   term: VolumeRebateTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
-  const { contractId, facilityId, contractEffectiveDate, term } = input
+  const { contractId, facilityId, contractEffectiveDate, term, isTieIn } = input
   if (!term.vendorId) {
     return { inserted: 0, sumEarned: 0 }
   }
@@ -781,8 +793,11 @@ async function recomputeVolumeFromCogRecords(input: {
   await prisma.rebate.deleteMany({
     where: {
       contractId,
-      collectionDate: null,
       notes: { startsWith: termPrefix },
+      // Bug #16: tie-in contracts auto-stamp collectionDate, so the
+      // collectionDate=null gate would never match. Drop the gate when
+      // the parent contract is tie-in.
+      ...(isTieIn ? {} : { collectionDate: null }),
     },
   })
 
@@ -837,9 +852,10 @@ async function recomputeVolumeFromPurchaseOrders(input: {
   facilityId: string
   contractEffectiveDate: Date
   contractExpirationDate: Date
+  isTieIn?: boolean
   term: VolumeRebateTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
-  const { contractId, facilityId, contractEffectiveDate, term } = input
+  const { contractId, facilityId, contractEffectiveDate, term, isTieIn } = input
   if (!term.vendorId) {
     return { inserted: 0, sumEarned: 0 }
   }
@@ -1004,8 +1020,11 @@ async function recomputeVolumeFromPurchaseOrders(input: {
   await prisma.rebate.deleteMany({
     where: {
       contractId,
-      collectionDate: null,
       notes: { startsWith: termPrefix },
+      // Bug #16: tie-in contracts auto-stamp collectionDate, so the
+      // collectionDate=null gate would never match. Drop the gate when
+      // the parent contract is tie-in.
+      ...(isTieIn ? {} : { collectionDate: null }),
     },
   })
 
