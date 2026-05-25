@@ -1,7 +1,8 @@
 // Vendor AI Agent — system prompt + suggested questions.
 //
-// Ported from v0's vendor ai-agent page.tsx, adapted for Gemini via
-// @ai-sdk/anthropic. The shared chat route (`app/api/ai/chat/route.ts`) selects
+// Ported from v0's vendor ai-agent page.tsx; runs against the
+// Claude model resolved by `lib/ai/config.ts` (via the Vercel AI
+// Gateway). The shared chat route (`app/api/ai/chat/route.ts`) selects
 // this prompt when `portalType === "vendor"`.
 //
 // Vendor-specific framing: analyze deals, track market share, identify growth

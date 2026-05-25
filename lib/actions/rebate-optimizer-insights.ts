@@ -21,11 +21,13 @@
  * Spec: docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.1
  * Plan: docs/superpowers/plans/2026-04-19-rebate-optimizer-ai-implementation.md §1.3
  *
- * Note on SDK choice: this file uses `@ai-sdk/anthropic` (Vercel AI SDK's
- * Anthropic adapter — the provider already wired up project-wide in
- * `lib/ai/config.ts`). The plan references `@anthropic-ai/sdk`'s
- * `messages.stream` + `messages.parse`; the equivalent in the Vercel AI SDK
- * is `generateText` + `Output.object({ schema })`, which this file uses.
+ * Note on SDK choice: this file uses the Vercel AI SDK's
+ * `generateText` + `Output.object({ schema })` pattern against the
+ * project-wide Claude model resolved in `lib/ai/config.ts` (string
+ * model ID routed through the Vercel AI Gateway). The plan references
+ * `@anthropic-ai/sdk`'s `messages.stream` + `messages.parse`; the
+ * gateway-routed equivalent gives us provider fallback + observability
+ * for free.
  */
 
 import { createHash } from "node:crypto"
