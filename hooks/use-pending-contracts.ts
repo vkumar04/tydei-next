@@ -59,14 +59,34 @@ export function useFacilityPendingContracts(facilityId: string) {
   })
 }
 
+/**
+ * Charles 2026-05-25 (latest-patterns audit): approving a pending contract
+ * creates a new `Contract` row that touches multiple aggregating surfaces
+ * on the facility's UI: dashboard KPIs, alerts (renewal / off-contract
+ * watchers), purchase-order compliance counts, COG match-status stats,
+ * and the contract-list itself. Per TanStack Query v5 docs, the canonical
+ * pattern is to invalidate every key whose data the mutation could have
+ * changed. Returning the Promise from `onSuccess` keeps the mutation in
+ * `pending` state until all refetches settle so the UI stays consistent.
+ */
+function invalidateAllContractDownstream(qc: ReturnType<typeof useQueryClient>) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ["pendingContracts"] }),
+    qc.invalidateQueries({ queryKey: queryKeys.contracts.all }),
+    qc.invalidateQueries({ queryKey: queryKeys.alerts.all }),
+    qc.invalidateQueries({ queryKey: queryKeys.purchaseOrders.all }),
+    qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all }),
+    qc.invalidateQueries({ queryKey: queryKeys.categories.all }),
+  ])
+}
+
 export function useApprovePendingContract() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, reviewedBy }: { id: string; reviewedBy: string }) =>
       approvePendingContract(id, reviewedBy),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pendingContracts"] })
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.all })
+    onSuccess: async () => {
+      await invalidateAllContractDownstream(qc)
       toast.success("Contract approved")
     },
     onError: (e) => toast.error(e.message || "Failed to approve"),
@@ -78,8 +98,8 @@ export function useRejectPendingContract() {
   return useMutation({
     mutationFn: ({ id, reviewedBy, notes }: { id: string; reviewedBy: string; notes: string }) =>
       rejectPendingContract(id, reviewedBy, notes),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pendingContracts"] })
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["pendingContracts"] })
       toast.success("Contract rejected")
     },
     onError: (e) => toast.error(e.message || "Failed to reject"),
@@ -91,8 +111,8 @@ export function useRequestRevision() {
   return useMutation({
     mutationFn: ({ id, reviewedBy, notes }: { id: string; reviewedBy: string; notes: string }) =>
       requestRevision(id, reviewedBy, notes),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pendingContracts"] })
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["pendingContracts"] })
       toast.success("Revision requested")
     },
     onError: (e) => toast.error(e.message || "Failed to request revision"),
