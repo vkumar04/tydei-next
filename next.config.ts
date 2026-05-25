@@ -12,18 +12,29 @@ const config: NextConfig = {
   // The analytics-layer refactor (_cache.ts / _cached.ts /
   // contract-score-impl.ts split) stays — it's independent of the
   // flag and the cleaner module shape is worth keeping.
-  // 2026-05-25 audit: confirmed this is still the right call. The
-  // infrastructure is intact (tag builders in _cached.ts, write-side
-  // invalidators in _cache.ts using updateTag). Re-enabling requires:
-  //   1. Push every `await requireFacility()` / `await getX()` out of
-  //      page.tsx into a child component
-  //   2. Wrap that child in `<Suspense fallback={<Skeleton />}>` in
-  //      the page
-  //   3. Restore `'use cache'` + cacheLife + cacheTag in _cached.ts
-  //      read helpers
+  // 2026-05-25 audit: confirmed and concretely scoped. Re-running
+  // `bun run build` with this flag on fails with "Uncached data was
+  // accessed outside of <Suspense>" on every dashboard route. The
+  // work is bigger than the 21 page.tsx files that do top-level
+  // `await requireX()` — each portal layout also does it:
+  //   - app/dashboard/layout.tsx → requireFacility + getUnreadAlertCount
+  //   - app/admin/layout.tsx     → requireAdmin + (similar)
+  //   - app/vendor/layout.tsx    → requireVendor + (similar)
+  // Layouts run on every route under them, so a single un-Suspended
+  // layout breaks every page under it (which is what the prerender
+  // error stack traces showed — pointing at providers.tsx through
+  // the shared shell, not the page-specific data fetch).
+  // Re-enabling requires:
+  //   1. Refactor 3 portal layouts so requireX() + per-user reads
+  //      stream via Suspense (PortalShell needs to render its chrome
+  //      synchronously, with user/alert-count slots streamed in)
+  //   2. Refactor 21 page.tsx files to wrap top-level data access
+  //      in <Suspense> via a child PageContent() pattern
+  //   3. Restore `'use cache'` + cacheLife + cacheTag in
+  //      lib/actions/analytics/_cached.ts read helpers
   //   4. Flip this flag
-  // ~62 page files to migrate. Worth a focused spec rather than a
-  // bundled audit-PR. See docs/superpowers/specs/ when scheduled.
+  // Estimated 4–6 hours focused, not appropriate for a bundled audit
+  // PR. Worth a docs/superpowers/specs/ entry when prioritised.
   // cacheComponents: true,
   experimental: {
     // Bug 2026-05-18 (Vick "XLS not working for loading COGS"):
