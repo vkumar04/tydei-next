@@ -32,6 +32,26 @@ bunx prisma migrate resolve --applied 0_init $CONFIG_FLAG || {
   echo "[prisma-deploy] resolve --applied returned non-zero (likely already applied) — continuing."
 }
 
+# Self-heal the 2026-05-25 growth_rebate-drop migration. Its first
+# version was committed with snake_case column names (`term_type`,
+# `growth_only`) when Prisma's schema uses camelCase fields without
+# `@map`, so the actual DB columns are quoted camelCase
+# (`"termType"`, `"growthOnly"`). The UPDATE failed instantly and
+# Postgres rolled the whole transaction back — no data changed, but
+# Prisma's `_prisma_migrations` table now carries a permanent "failed"
+# row that blocks every subsequent migrate-deploy. The fixed migration
+# uses the correct identifiers; this step marks the prior failure as
+# rolled-back so the new version actually runs.
+#
+# Idempotent: once the migration is successfully applied, `resolve
+# --rolled-back` errors with "migration not found in a failed state"
+# which we tolerate.
+FAILED_MIGRATION="20260525120000_drop_growth_rebate_term_type"
+echo "[prisma-deploy] Clearing any failed record for ${FAILED_MIGRATION} (idempotent)…"
+bunx prisma migrate resolve --rolled-back "$FAILED_MIGRATION" $CONFIG_FLAG 2>/dev/null || {
+  echo "[prisma-deploy] No failed ${FAILED_MIGRATION} record found — continuing."
+}
+
 echo "[prisma-deploy] Applying any pending migrations…"
 bunx prisma migrate deploy $CONFIG_FLAG
 
