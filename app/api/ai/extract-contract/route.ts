@@ -18,7 +18,14 @@ import { createHash } from "node:crypto"
 
 import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
 
-const MAX_BYTES = 10 * 1024 * 1024
+// Bug A 2026-05-25 (Charles Bugs.rtfd): "Mako Tie in carve out file
+// not working PDF." Larger contract PDFs (capital tie-ins with
+// attached schedules, signed Acrobat Sign envelopes with embedded
+// images) routinely run 15-25MB, well under Anthropic's 32MB PDF
+// limit but over the prior 10MB cap. Bumped to 25MB — gives headroom
+// under the upstream API limit while still rejecting truly oversize
+// uploads.
+const MAX_BYTES = 25 * 1024 * 1024
 
 export async function POST(request: Request) {
   try {
@@ -40,8 +47,9 @@ export async function POST(request: Request) {
     if (contentLength && parseInt(contentLength) > MAX_BYTES) {
       return Response.json(
         {
-          error: "File too large. Maximum size is 10MB.",
-          details: "Please upload a smaller file or compress the PDF.",
+          error: "File too large. Maximum size is 25MB.",
+          details:
+            "Please compress the PDF (most contracts compress 5-10x by re-saving without form/signing metadata) or split it into a main contract + Additional Documents.",
         },
         { status: 413 }
       )
@@ -140,7 +148,7 @@ ${text.trim()}`,
       return Response.json(
         {
           error: "File too large",
-          details: `File is ${(file.size / (1024 * 1024)).toFixed(1)}MB. Maximum size is 10MB.`,
+          details: `File is ${(file.size / (1024 * 1024)).toFixed(1)}MB. Maximum size is 25MB.`,
         },
         { status: 413 }
       )

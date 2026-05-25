@@ -32,7 +32,9 @@ import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extrac
 
 export const maxDuration = 60
 
-const MAX_BYTES = 10 * 1024 * 1024
+// Bug A 2026-05-25: bumped from 10MB → 25MB to match the non-streaming
+// /api/ai/extract-contract route. See that file for the rationale.
+const MAX_BYTES = 25 * 1024 * 1024
 
 export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
   const contentLength = req.headers.get("content-length")
   if (contentLength && parseInt(contentLength) > MAX_BYTES) {
     return Response.json(
-      { error: "File too large", details: "Maximum size is 10MB." },
+      { error: "File too large", details: "Maximum size is 25MB." },
       { status: 413 },
     )
   }
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
     return Response.json(
       {
         error: "File too large",
-        details: `${(file.size / (1024 * 1024)).toFixed(1)}MB; max 10MB.`,
+        details: `${(file.size / (1024 * 1024)).toFixed(1)}MB; max 25MB.`,
       },
       { status: 413 },
     )
