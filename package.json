@@ -90,5 +90,8 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.7",
     "zod-prisma-types": "^3.3.11"
+  },
+  "overrides": {
+    "pg": "^8.21.0"
   }
 }
