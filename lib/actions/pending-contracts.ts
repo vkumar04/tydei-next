@@ -971,6 +971,41 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
   revalidatePath("/dashboard/alerts")
   revalidatePath("/dashboard")
 
+  // Bug #14 (2026-05-24): after approval, the vendor's My Contracts
+  // page must reflect the newly-created Contract row. revalidatePath
+  // invalidates the Next.js cache so the vendor's next visit reads
+  // fresh data. React Query state stays per-browser; this only
+  // helps if the vendor reloads (which is the usual flow).
+  revalidatePath("/vendor/contracts")
+  revalidatePath(`/vendor/contracts/${contract.id}`)
+  revalidatePath("/dashboard/contracts")
+  revalidatePath(`/dashboard/contracts/${contract.id}`)
+
+  // Bug #14 (2026-05-24): post-approval sanity check. If the Contract
+  // row isn't readable AFTER all writes, something's wrong with the
+  // transaction boundary — throw so the user sees a real error
+  // instead of a green-toast-but-no-contract.
+  // auth-scope-scanner-skip: post-authorized re-read after facility-scoped create;
+  // intentionally unscoped so a facilityId mismatch on the new row still surfaces.
+  const verifyContract = await prisma.contract.findUnique({
+    where: { id: contract.id },
+    select: { id: true, vendorId: true, facilityId: true },
+  })
+  if (!verifyContract) {
+    throw new Error(
+      `Approval verification failed: Contract ${contract.id} not found after create. Vendor: ${pending.vendorId}, Facility: ${facility.id}. Re-run approval.`,
+    )
+  }
+
+  console.info("[approvePendingContract] approved", {
+    pendingId: pending.id,
+    contractId: contract.id,
+    vendorId: pending.vendorId,
+    facilityId: facility.id,
+    termCount: pendingTerms.length,
+    pricingItemCount: pricingItems.length,
+  })
+
   return serialize(contract)
 }
 

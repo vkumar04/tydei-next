@@ -48,6 +48,17 @@ export async function getVendorContracts(input: {
     prisma.contract.count({ where }),
   ])
 
+  // Bug #14 (2026-05-24): log when vendor's query returns 0 — helps
+  // diagnose the "approved contract didn't appear" class of bug.
+  if (contracts.length === 0) {
+    console.info("[getVendorContracts] empty result", {
+      vendorId: vendor.id,
+      status,
+      search,
+      total,
+    })
+  }
+
   return serialize({ contracts, total })
 }
 

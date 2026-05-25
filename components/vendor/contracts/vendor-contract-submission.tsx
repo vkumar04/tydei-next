@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { getUploadUrl } from "@/lib/actions/uploads"
 import { useCreatePendingContract } from "@/hooks/use-pending-contracts"
@@ -295,6 +295,25 @@ export function VendorContractSubmission({
     setPricingFileData(null)
     setPricingItems([])
   }, [])
+
+  // Bug #13 (2026-05-24): auto-populate contractTotal from capital line
+  // items sum when contractTotal is still empty. The pricing-file path
+  // already auto-fills inside processPricingFile (line ~284) using
+  // pricingFileData.total; this sibling effect covers capital-only
+  // submissions (no pricing file) where the vendor has added one or
+  // more items with explicit contractTotal costs. The two sources are
+  // independent — pricing file fires synchronously inside the
+  // processPricingFile callback; this effect fires whenever capitalItems
+  // changes (add, edit, remove). Only fills if contractTotal is empty
+  // so a vendor who manually typed a number doesn't get overwritten.
+  useEffect(() => {
+    if (capitalItems.length === 0) return
+    if (contractTotal) return
+    const sum = capitalItems.reduce((acc, item) => acc + Math.max(0, item.contractTotal), 0)
+    if (sum > 0) {
+      setContractTotal(sum.toFixed(2))
+    }
+  }, [capitalItems, contractTotal])
 
   function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string) {
     if (s3Key) {
