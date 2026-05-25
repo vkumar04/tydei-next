@@ -57,7 +57,11 @@ enum TermType {
   po_rebate
   carve_out
   payment_rebate
-  growth_rebate
+  // `growth_rebate` removed 2026-05-25 (Charles Bugs.rtfd). Growth is now
+  // expressed as `growthOnly: true` on any spend-basis term — the engine
+  // already routes both shapes through SPEND_REBATE in
+  // lib/rebates/prisma-engine-bridge.ts. See migration
+  // 20260525120000_drop_growth_rebate_term_type for the data conversion.
   compliance_rebate
   fixed_fee
   locked_pricing

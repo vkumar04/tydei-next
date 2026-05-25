@@ -187,7 +187,7 @@ export const extractedContractSchema = z.object({
           "Volume measurement type for volume_rebate / rebate_per_use terms.",
         ),
       spendBaseline: coerceOptionalNumber().describe(
-        "Prior-year baseline spend for growth_rebate terms (dollars).",
+        "Prior-year baseline spend for spend-basis terms configured with growthOnly=true (dollars).",
       ),
       volumeBaseline: coerceOptionalNumber().describe(
         "Prior-year baseline procedure / unit count for volume-based growth.",
@@ -328,7 +328,9 @@ export const richContractExtractSchema = z.object({
             "capitated_pricing_rebate",
             "periodic_maintenance",
             "payment_rebate",
-            "growth_rebate",
+            // `growth_rebate` removed 2026-05-25 — express growth as
+            // spend_rebate + growthOnly=true on the term. See
+            // prisma/migrations/20260525120000_drop_growth_rebate_term_type/.
             "compliance_rebate",
             "fixed_fee",
             "locked_pricing",

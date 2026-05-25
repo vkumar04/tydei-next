@@ -324,9 +324,12 @@ function buildCapitatedConfig(
  *   - `carve_out` → returns null (the carve-out engine takes a different
  *     config built from per-line ContractPricing rows; see
  *     `lib/contracts/recompute/carve-out.ts`).
- *   - Everything else (spend_rebate, growth_rebate, po_rebate,
- *     payment_rebate, compliance_rebate, fixed_fee, locked_pricing) →
- *     SPEND_REBATE as a sensible default.
+ *   - Everything else (spend_rebate, po_rebate, payment_rebate,
+ *     compliance_rebate, fixed_fee, locked_pricing) → SPEND_REBATE as a
+ *     sensible default. Growth-on-spend contracts come through as
+ *     spend_rebate with `growthOnly: true` (the legacy `growth_rebate`
+ *     enum value was retired 2026-05-25 — see migration
+ *     20260525120000_drop_growth_rebate_term_type/).
  *
  * A term with zero tiers AND no `periodCap` returns null — there's
  * nothing for the engine to compute.
@@ -366,7 +369,6 @@ export function buildRebateConfigFromPrisma(
       return null
 
     case "spend_rebate":
-    case "growth_rebate":
     case "po_rebate":
     case "payment_rebate":
     case "compliance_rebate":

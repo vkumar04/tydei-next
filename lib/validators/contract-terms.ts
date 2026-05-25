@@ -143,6 +143,14 @@ export const createTermSchema = z.object({
   spendBaseline: z.number().min(0).optional(),
   volumeBaseline: z.number().int().min(0).optional(),
   growthBaselinePercent: z.number().min(0).max(100).optional(),
+  // Baseline Calculation Method (Charles Bugs.rtfd 2026-05-25).
+  // false = "From dollar one" (cumulative — rebate every dollar after
+  //         the tier threshold is crossed).
+  // true  = "Growth" (rebate only on spend ABOVE the baseline).
+  // Backed by Prisma's `growthOnly` boolean. Optional in the schema
+  // so existing callers that don't supply the field keep working —
+  // when undefined, Prisma uses the column default of false.
+  growthOnly: z.boolean().optional(),
   desiredMarketShare: z.number().min(0).max(100).optional(),
   scopedCategoryId: z.string().optional(),
   scopedCategoryIds: z.array(z.string()).optional(),
@@ -229,6 +237,14 @@ export const termFormSchema = z.object({
   spendBaseline: z.number().min(0).optional(),
   volumeBaseline: z.number().int().min(0).optional(),
   growthBaselinePercent: z.number().min(0).max(100).optional(),
+  // Baseline Calculation Method (Charles Bugs.rtfd 2026-05-25).
+  // false = "From dollar one" (cumulative — rebate every dollar after
+  //         the tier threshold is crossed).
+  // true  = "Growth" (rebate only on spend ABOVE the baseline).
+  // Backed by Prisma's `growthOnly` boolean. Optional in the schema
+  // so existing callers that don't supply the field keep working —
+  // when undefined, Prisma uses the column default of false.
+  growthOnly: z.boolean().optional(),
   desiredMarketShare: z.number().min(0).max(100).optional(),
   scopedCategoryId: z.string().optional(),
   scopedCategoryIds: z.array(z.string()).optional(),

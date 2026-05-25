@@ -622,19 +622,15 @@ export async function _recomputeAccrualForContractWithFacility(
       : new Date(Math.min(now.getTime(), end.getTime()))
 
     // Bug #22 (2026-05-11, Vick): a contract with `spendBaseline > 0`
-    // should pay rebate only on dollars ABOVE the baseline,
-    // regardless of whether the user picked "growth_rebate" as the
-    // termType or kept it as a plain `spend_rebate` with a
-    // `spend_based` baseline. Before this fix, baseline subtraction
-    // was gated on `baselineType === "growth_based"` OR
-    // `termType === "growth_rebate"` — so the typical "Qualified
-    // Annual Spend Rebate" contract with a $500K baseline computed
-    // rebate against full $1.36M spend and over-paid by ~10× on
-    // tier 1.
+    // should pay rebate only on dollars ABOVE the baseline. Charles
+    // 2026-05-25: the legacy `growth_rebate` termType was retired —
+    // growth is now expressed as `growthOnly: true` on a plain
+    // `spend_rebate`, which the engine routes through the same
+    // baseline-above math.
     //
-    // New rule: if `spendBaseline > 0`, apply baseline-above math
-    // for tier evaluation. The bucket's reported `totalSpend` still
-    // shows gross spend; the tier engine sees `max(0, periodSpend −
+    // Rule: if `spendBaseline > 0`, apply baseline-above math for
+    // tier evaluation. The bucket's reported `totalSpend` still shows
+    // gross spend; the tier engine sees `max(0, periodSpend −
     // proRatedBaseline)`.
     const hasBaseline =
       config.spendBaseline != null && config.spendBaseline > 0

@@ -290,10 +290,9 @@ export const TERM_TYPE_DEFINITIONS: Record<PrismaTermType, Definition> = {
     label: "Payment Rebate",
     description: "Rebate triggered by payment timing or method.",
   },
-  growth_rebate: {
-    label: "Growth Rebate",
-    description: "Rebate based on spend growth over baseline.",
-  },
+  // `growth_rebate` retired 2026-05-25 — growth is now a property of
+  // spend_rebate via growthOnly=true. See prisma/migrations/
+  // 20260525120000_drop_growth_rebate_term_type/.
   compliance_rebate: {
     label: "Compliance Rebate",
     description: "Rebate for meeting compliance requirements.",

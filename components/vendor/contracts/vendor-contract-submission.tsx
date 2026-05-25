@@ -381,7 +381,6 @@ export function VendorContractSubmission({
             [
               "spend_rebate",
               "volume_rebate",
-              "growth_rebate",
               "rebate_per_use",
               "po_rebate",
               "payment_rebate",
@@ -397,21 +396,24 @@ export function VendorContractSubmission({
             ] as const
           ).includes(aiTermType as TermFormValues["termType"])
             ? (aiTermType as TermFormValues["termType"])
-            : "spend_rebate"
+            : // Legacy `growth_rebate` extractions get folded into
+              // spend_rebate (the term form will set growthOnly via the
+              // Baseline Calculation Method picker downstream).
+              aiTermType === "growth_rebate"
+              ? "spend_rebate"
+              : "spend_rebate"
 
           // Charles 2026-04-25 (audit C2): honor what the AI returned
           // for the term shape; only fall back when the field is
-          // missing. Fallbacks are termType-aware — e.g. a market_share
-          // or compliance_rebate has no spend baseline, growth_rebate
-          // is growth_based, volume_rebate is volume_based — so even
-          // when the AI omits the field we don't actively mistype the
-          // term as a spend_based / cumulative rebate.
+          // missing. Fallbacks are termType-aware so even when the AI
+          // omits the field we don't actively mistype the term as a
+          // spend_based / cumulative rebate. (Charles 2026-05-25:
+          // growth_rebate retired — growth is now a property of
+          // spend_rebate via growthOnly, so no special baseline branch.)
           const defaultBaselineForTermType = (
             tt: TermFormValues["termType"],
           ): TermFormValues["baselineType"] => {
             switch (tt) {
-              case "growth_rebate":
-                return "growth_based"
               case "volume_rebate":
               case "rebate_per_use":
               case "po_rebate":
@@ -431,16 +433,13 @@ export function VendorContractSubmission({
             tt: TermFormValues["termType"],
           ): TermFormValues["rebateMethod"] => {
             // Tier-engine `marginal` makes sense for ordered $/unit
-            // ladders (spend, growth, volume); flat-trigger types are
-            // always cumulative-equivalent. Charles audit re-pass C6:
-            // volume_rebate / growth_rebate previously fell through to
-            // cumulative even when the AI's contract is clearly a
-            // marginal ladder. Bias to `marginal` for those two so
-            // AI-extracted volume/growth contracts compute correctly
-            // when the AI omits the field.
+            // ladders (spend, volume); flat-trigger types are always
+            // cumulative-equivalent. Bias to `marginal` for volume_rebate
+            // so AI-extracted volume contracts compute correctly when
+            // the AI omits the field. (growth_rebate retired 2026-05-25;
+            // spend_rebate stays cumulative even when growthOnly=true.)
             switch (tt) {
               case "volume_rebate":
-              case "growth_rebate":
                 return "marginal"
               case "market_share":
               case "compliance_rebate":
