@@ -15,6 +15,7 @@ import {
 import { useFacilityVendors } from "@/hooks/use-purchase-orders"
 import type { RebateOpportunity } from "@/lib/actions/rebate-optimizer"
 import type { RebateOpportunity as EngineRebateOpportunity } from "@/lib/actions/rebate-optimizer-engine"
+import { rankOpportunities } from "@/lib/rebate-optimizer/rank-opportunities"
 import { AiInsightsPanel } from "./ai-insights-panel"
 import { CompareScenariosTable } from "./compare-scenarios-table"
 import { ContractsTierProgress } from "./contracts-tier-progress"
@@ -126,11 +127,15 @@ export function RebateOptimizerClient({ facilityId }: OptimizerClientProps) {
     }
   }, [opportunities])
 
-  const sortedOpportunities = useMemo(() => {
-    return [...filtered].sort(
-      (a, b) => b.projectedAdditionalRebate - a.projectedAdditionalRebate,
-    )
-  }, [filtered])
+  // Bug 2026-05-25 (Charles Bugs.rtfd): the ranked list was leaking
+  // opportunities with `projectedAdditionalRebate === 0` ("Increase
+  // spend by $0 to reach Tier 1 and earn an additional $0 in rebates").
+  // rankOpportunities filters those out + sorts by projected reward
+  // descending. Stats above (totalEarned / totalPotential / contractCount)
+  // intentionally keep the raw `opportunities` list — a contract with
+  // tier-climb potential but zero reward is still meaningful for
+  // aggregates, just not for "Top ranked opportunities."
+  const sortedOpportunities = useMemo(() => rankOpportunities(filtered), [filtered])
 
   const bestOpp = sortedOpportunities[0] ?? null
   const aiHeadline = ai.data?.insights?.[0]?.title ?? null
