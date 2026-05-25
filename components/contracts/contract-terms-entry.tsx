@@ -1114,38 +1114,56 @@ export function ContractTermsEntry({
                     </Field>
                   </div>
 
-                  {/* Tiers */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium">Tiers</h4>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        onClick={() => addTier(termIdx)}
-                      >
-                        <Plus className="size-3" /> Add Tier
-                      </Button>
-                    </div>
-                    {term.tiers.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        No tiers added
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {term.tiers.map((tier, tierIdx) => (
-                          <ContractTierRow
-                            key={tierIdx}
-                            tier={tier}
-                            index={tierIdx}
-                            termType={term.termType}
-                            onChange={(t) => updateTier(termIdx, tierIdx, t)}
-                            onRemove={() => removeTier(termIdx, tierIdx)}
-                          />
-                        ))}
+                  {/*
+                    Tiers section.
+
+                    Bug C 2026-05-25 (Charles Bugs.rtfd): "On carve out
+                    here, having a tier does not work because each item
+                    has different rebate it should all just come from
+                    the price file only. And tiers is not needed."
+                    Hidden for carve_out — per-item carve-out percent
+                    lives on ContractPricing rows, not on a tier ladder.
+                  */}
+                  {term.termType !== "carve_out" && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium">Tiers</h4>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          onClick={() => addTier(termIdx)}
+                        >
+                          <Plus className="size-3" /> Add Tier
+                        </Button>
                       </div>
-                    )}
-                  </div>
+                      {term.tiers.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No tiers added
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {term.tiers.map((tier, tierIdx) => (
+                            <ContractTierRow
+                              key={tierIdx}
+                              tier={tier}
+                              index={tierIdx}
+                              termType={term.termType}
+                              onChange={(t) => updateTier(termIdx, tierIdx, t)}
+                              onRemove={() => removeTier(termIdx, tierIdx)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {term.termType === "carve_out" && (
+                    <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                      Carve-out rebates are per item — set the rebate
+                      percent on each pricing row in the Pricing tab.
+                      Tiers are not used.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </AccordionContent>
