@@ -169,11 +169,19 @@ export function AiInsightsPanel({
               !insightsError &&
               insightsData &&
               insightsData.insights.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No actionable recommendations right now. Claude may surface
-                  more once you have additional tier-gap contracts or recent
-                  spend activity.
-                </p>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>No actionable recommendations right now.</p>
+                  <p>
+                    Smart Recommendations currently analyzes spend-based
+                    contracts only (spend_rebate, growth_rebate, po_rebate,
+                    carve_out). Contracts with market_share, volume_rebate, or
+                    compliance_rebate terms are not yet included.
+                  </p>
+                  <p>
+                    Claude may surface more once you have additional tier-gap
+                    spend-based contracts or recent spend activity.
+                  </p>
+                </div>
               )}
 
             {!insightsLoading &&

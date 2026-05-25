@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Copy, RefreshCw, Sparkles } from "lucide-react"
 
@@ -55,15 +55,25 @@ export function RenewalBriefDialog({
   const isPending = query.isFetching || regenerate.isPending
   const brief = query.data
 
-  // Kick a refetch when the user re-opens the modal if we already have
-  // cached client data — TanStack's staleTime keeps it warm, but we want
-  // the loading UX to feel responsive on first-open regardless.
+  // Guard: only fire the auto-regen once per dialog open to prevent a
+  // re-render loop. The `query` object is not referentially stable, so
+  // listing it as a dep would re-trigger the effect on every render.
+  const autoRegenFiredRef = useRef(false)
   useEffect(() => {
-    if (!open) return
-    if (!query.data && !query.isFetching && !query.error) {
+    if (!open) {
+      autoRegenFiredRef.current = false
+      return
+    }
+    if (
+      !autoRegenFiredRef.current &&
+      !query.data &&
+      !query.isFetching &&
+      !query.error
+    ) {
+      autoRegenFiredRef.current = true
       void query.refetch()
     }
-  }, [open, query])
+  }, [open, query.data, query.isFetching, query.error, query.refetch])
 
   async function copyMarkdown() {
     if (!brief) return

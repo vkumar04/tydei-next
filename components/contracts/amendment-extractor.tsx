@@ -185,6 +185,7 @@ export function AmendmentExtractor({
   const [fileName, setFileName] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   // Validation toggles (informational only)
   const [supersedesOriginal, setSupersedesOriginal] = useState(false)
@@ -234,10 +235,21 @@ export function AmendmentExtractor({
       // Step 2: Reading
       setStepIndex(1)
 
-      const res = await fetch("/api/ai/extract-amendment", {
-        method: "POST",
-        body: formData,
-      })
+      const controller = new AbortController()
+      abortRef.current = controller
+      let res: Response
+      try {
+        res = await fetch("/api/ai/extract-amendment", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        })
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return // user-initiated cancel; resetState already ran
+        }
+        throw err
+      }
 
       // Step 3: Comparing
       setStepIndex(2)
@@ -272,6 +284,8 @@ export function AmendmentExtractor({
     setStage("applying")
     try {
       const updatePayload: Record<string, unknown> = {}
+      const skippedChanges: { label: string; reason: string }[] = []
+      let appliedCount = 0
 
       for (const change of changes) {
         if (change.type === "removed") continue
@@ -280,38 +294,36 @@ export function AmendmentExtractor({
           case "effectiveDate":
           case "expirationDate":
             updatePayload[change.field] = change.newValue
+            appliedCount++
             break
           case "totalValue":
           case "annualValue":
             try {
               updatePayload[change.field] = sanitizeNumeric(change.newValue)
+              appliedCount++
             } catch (err) {
-              const message =
-                err instanceof Error ? err.message : String(err)
-              toast.error(
-                `Could not parse ${change.label} value "${change.newValue}". ${message}`,
-              )
-              setStage("review")
-              return
+              skippedChanges.push({
+                label: change.label,
+                reason: err instanceof Error ? err.message : String(err),
+              })
             }
             break
           case "terminationNoticeDays":
             try {
               updatePayload[change.field] = sanitizeInteger(change.newValue)
+              appliedCount++
             } catch (err) {
-              const message =
-                err instanceof Error ? err.message : String(err)
-              toast.error(
-                `Could not parse ${change.label} value "${change.newValue}". ${message}`,
-              )
-              setStage("review")
-              return
+              skippedChanges.push({
+                label: change.label,
+                reason: err instanceof Error ? err.message : String(err),
+              })
             }
             break
           case "autoRenewal":
             updatePayload[change.field] =
               change.newValue.toLowerCase() === "true" ||
               change.newValue.toLowerCase() === "yes"
+            appliedCount++
             break
           case "description":
           case "notes":
@@ -319,6 +331,7 @@ export function AmendmentExtractor({
           case "name":
           case "contractNumber":
             updatePayload[change.field] = change.newValue
+            appliedCount++
             break
           default:
             break
@@ -329,10 +342,24 @@ export function AmendmentExtractor({
         await updateContract(contractId, updatePayload)
       }
 
-      toast.success("Amendment changes applied successfully")
-      onApplied()
-      onOpenChange(false)
-      resetState()
+      if (appliedCount > 0) {
+        const msg =
+          skippedChanges.length > 0
+            ? `Applied ${appliedCount} change${appliedCount === 1 ? "" : "s"}. Skipped ${skippedChanges.length}: ${skippedChanges.map((s) => s.label).join(", ")} (non-numeric).`
+            : `Amendment applied (${appliedCount} change${appliedCount === 1 ? "" : "s"}).`
+        toast.success(msg)
+        onApplied()
+        onOpenChange(false)
+        resetState()
+      } else if (skippedChanges.length > 0) {
+        toast.error(
+          `No changes applied — all ${skippedChanges.length} required-numeric fields were non-numeric (${skippedChanges.map((s) => s.label).join(", ")}). Manually edit these fields instead.`,
+        )
+        setStage("review")
+      } else {
+        toast.info("No applicable changes to apply.")
+        setStage("review")
+      }
     } catch {
       toast.error("Failed to apply changes")
       setStage("review")
@@ -473,6 +500,18 @@ export function AmendmentExtractor({
             <p className="text-xs text-muted-foreground">
               This may take 1-3 minutes for large documents
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                abortRef.current?.abort()
+                resetState()
+              }}
+              className="mt-3"
+            >
+              Cancel
+            </Button>
           </div>
         )}
 
