@@ -101,6 +101,7 @@ function scoreHeaderAgainstField(
   normalizedHeader: string,
   normalizedKey: string,
   normalizedLabel: string,
+  labelTokens: string[],
 ): number {
   if (normalizedHeader === normalizedKey) return 3
   if (normalizedHeader === normalizedLabel) return 3
@@ -117,6 +118,17 @@ function scoreHeaderAgainstField(
       normalizedKey.includes(normalizedHeader))
   ) {
     return 1
+  }
+  // 2026-05-25 (Charles Bugs.rtfd verification round): the previous
+  // scorer required the FULL header to appear as a contiguous substring
+  // of the concatenated normalized label, so real-world headers like
+  // "Reference numer" (typo) or "Catalog Item" (two words from
+  // different label tokens) silently dropped to score 0 even though
+  // "reference" / "catalog" were valid label tokens. Add a token-level
+  // pass: if any label TOKEN ≥ 4 chars is a substring of the
+  // normalized header, score 1.
+  for (const token of labelTokens) {
+    if (token.length >= 4 && normalizedHeader.includes(token)) return 1
   }
   return 0
 }
@@ -151,9 +163,17 @@ export function localFallbackMap(
     const field = targetFields[i]
     const k = NORM(field.key)
     const l = NORM(field.label)
+    // Split the label into normalized tokens (alphanumeric runs) so
+    // scoreHeaderAgainstField can match real-world headers that
+    // concatenate two label tokens (e.g. "Catalog Item" → "catalogitem"
+    // hits the "catalog" token on the Vendor Item Number label).
+    const labelTokens = field.label
+      .split(/[^A-Za-z0-9]+/)
+      .map((t) => t.toLowerCase())
+      .filter((t) => t.length >= 4)
     for (const header of headers) {
       const n = NORM(header)
-      const score = scoreHeaderAgainstField(n, k, l)
+      const score = scoreHeaderAgainstField(n, k, l, labelTokens)
       if (score > 0) {
         candidates.push({ fieldKey: field.key, header, score, fieldOrder: i })
       }

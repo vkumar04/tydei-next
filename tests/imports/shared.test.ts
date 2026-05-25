@@ -205,6 +205,49 @@ describe("localFallbackMap", () => {
     const mapping = localFallbackMap(["Foo", "Bar"], targets)
     expect(Object.keys(mapping)).toEqual([])
   })
+
+  // Charles Bugs.rtfd 2026-05-25 (verification round): the SYK Carve out
+  // workbook ships a header typo "Reference numer" (missing 'b'). The
+  // pre-fix mapper scored that 0 against the vendorItemNo target because
+  // the full header didn't appear as a contiguous substring of the
+  // concatenated label, AND landed it on the "Vendor" column instead
+  // (where "vendor" IS substring of the label). Result on /api/import-
+  // pricing: 3/15548 rows imported, the rest dropped silently.
+  it("matches the typo'd 'Reference numer' header against vendorItemNo", () => {
+    const target: TargetField[] = [
+      {
+        key: "vendorItemNo",
+        label:
+          "Vendor Item Number / Catalog Number / Reference / Reference Number / Reference Numer / Ref No / SKU / Item No / Part No",
+        required: true,
+      },
+      // The decoy that previously stole the column.
+      { key: "vendorName", label: "Vendor / Supplier Name", required: true },
+    ]
+    const mapping = localFallbackMap(
+      ["Reference numer", "Description", "Price", "Vendor"],
+      target,
+    )
+    expect(mapping.vendorItemNo).toBe("Reference numer")
+    expect(mapping.vendorName).toBe("Vendor")
+  })
+
+  it("matches 'Catalog Item' via the token-level fallback", () => {
+    // joint pricing COG.xlsx ships with "Catalog Item" — pre-fix that
+    // wasn't a substring of any label (the label had "catalog number"
+    // and "item number" as separate fragments). New token-level
+    // matching: any label token >= 4 chars that appears as substring
+    // of the header scores 1.
+    const target: TargetField[] = [
+      {
+        key: "vendorItemNo",
+        label: "Vendor Item Number / Catalog Number / Reference",
+        required: true,
+      },
+    ]
+    const mapping = localFallbackMap(["Catalog Item", "Price"], target)
+    expect(mapping.vendorItemNo).toBe("Catalog Item")
+  })
 })
 
 // ─── get ────────────────────────────────────────────────────────

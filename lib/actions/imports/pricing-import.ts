@@ -107,8 +107,16 @@ export async function ingestPricingFile(input: {
     headers,
     [
       {
+        // 2026-05-25 (Charles Bugs.rtfd: "Carve out xls price file not
+        // working"): the SYK Carve out workbook ships a header
+        // "Reference numer" (typo, missing 'b'). The fuzzy fallback
+        // matcher in localFallbackMap does substring matching against
+        // the *concatenated normalized label*, so adding the typo'd
+        // alias here lets the typo'd header match without changing
+        // the matcher itself.
         key: "vendorItemNo",
-        label: "Vendor Item Number / Catalog Number / Reference",
+        label:
+          "Vendor Item Number / Catalog Number / Reference / Reference Number / Reference Numer / Ref No / SKU / Item No / Part No",
         required: true,
       },
       {
