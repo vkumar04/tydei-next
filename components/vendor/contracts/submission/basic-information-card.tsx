@@ -21,13 +21,16 @@ import {
 import { Label } from "@/components/ui/label"
 import { Users, Building2, X } from "lucide-react"
 
+// Order per Charles (Bugs.rtfd 2026-05-25). Match the facility
+// manual-entry order in components/contracts/_form/_basic-
+// information-card.tsx so the picker is consistent across surfaces.
 const CONTRACT_TYPE_OPTIONS = [
-  { value: "usage", label: "Usage-Based", hint: "Rebates on spend" },
   { value: "pricing_only", label: "Pricing Only", hint: "Discounted prices" },
-  { value: "capital", label: "Capital Equipment", hint: "Equipment + service" },
-  { value: "grouped", label: "GPO/Group", hint: "Collective buying" },
+  { value: "usage", label: "Usage-Based", hint: "Rebates on spend" },
   { value: "tie_in", label: "Tie-In", hint: "Bundled products" },
+  { value: "capital", label: "Capital Equipment", hint: "Equipment + service" },
   { value: "service", label: "Service", hint: "Service agreements" },
+  { value: "grouped", label: "GPO/Group", hint: "Collective buying" },
 ] as const
 
 /**

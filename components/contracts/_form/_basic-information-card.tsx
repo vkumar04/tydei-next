@@ -68,16 +68,27 @@ import { cn } from "@/lib/utils"
 // models tie-in — but removing it today would orphan seeded `capital`
 // rows and break existing reports. Descriptions first, taxonomy change
 // later if it's still confusing.
+// Display order per Charles (Bugs.rtfd 2026-05-25): Pricing Only,
+// Usage, Tie-In, Capital, Service, GPO/Group. Pricing-only leads
+// because it's the lowest-commitment classification; tie-in sits
+// next to usage and above capital because it's the canonical
+// capital-with-rebates pattern. GPO last because it covers
+// multi-vendor edge cases.
 const contractTypes = [
+  {
+    value: "pricing_only",
+    label: "Pricing Only",
+    description: "Discounted prices, no rebate terms",
+  },
   {
     value: "usage",
     label: "Usage-Based",
     description: "Rebates on spend (no capital equipment)",
   },
   {
-    value: "pricing_only",
-    label: "Pricing Only",
-    description: "Discounted prices, no rebate terms",
+    value: "tie_in",
+    label: "Tie-In",
+    description: "Capital equipment + rebate terms on one contract",
   },
   {
     value: "capital",
@@ -86,19 +97,14 @@ const contractTypes = [
       "Stand-alone equipment purchase, no rebate terms. If this contract mixes capital + consumables, pick Tie-In instead.",
   },
   {
-    value: "grouped",
-    label: "GPO/Group",
-    description: "Collective buying",
-  },
-  {
-    value: "tie_in",
-    label: "Tie-In",
-    description: "Capital equipment + rebate terms on one contract",
-  },
-  {
     value: "service",
     label: "Service",
     description: "Service agreements",
+  },
+  {
+    value: "grouped",
+    label: "GPO/Group",
+    description: "Collective buying",
   },
 ] as const
 
