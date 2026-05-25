@@ -196,9 +196,16 @@ function AddTransactionButtons({
         )
       }
       if (result.carveOutTermsMissingPricing.length > 0) {
+        // Bug D 2026-05-25 (Charles Bugs.rtfd): the warning fires when
+        // ContractPricing rows exist but none has a non-null
+        // carveOutPercent. The most common reason is a pre-PR-#26 upload
+        // of a file that DID have a "Carve out %" column — the loader
+        // was silently dropping that column. PR #26 fixed the loader;
+        // existing contracts heal by re-uploading the same pricing file.
+        // Make the action explicit so the user knows what to do.
         toast.warning(
-          `Carve-out terms missing pricing rates: ${result.carveOutTermsMissingPricing.join(", ")}. Set carveOutPercent on the contract's pricing rows so the engine can apply per-line carve-out rates.`,
-          { duration: 10_000 },
+          `Carve-out terms missing per-item rates: ${result.carveOutTermsMissingPricing.join(", ")}. Re-upload the contract's pricing file from Edit Contract → Upload Pricing File — the "Carve out %" column is now auto-detected.`,
+          { duration: 12_000 },
         )
       }
       queryClient.invalidateQueries({
