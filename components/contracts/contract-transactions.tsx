@@ -475,15 +475,45 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
     onError: () => toast.error("Failed to remove collection"),
   })
 
+  // Optimistic delete: snapshot the rebates cache, remove the row
+  // immediately so the table updates with zero perceived latency,
+  // and rollback if the server rejects. onSettled reconciles with
+  // the server regardless. Pattern: https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates
   const del = useMutation({
     mutationFn: async (row: PeriodRow) => {
       await deleteContractTransaction({ id: row.id, contractId })
     },
+    onMutate: async (row: PeriodRow) => {
+      const queryKey = ["contractRebates", contractId] as const
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<{ id: string }[]>(queryKey)
+      if (previous) {
+        queryClient.setQueryData(
+          queryKey,
+          previous.filter((r) => r.id !== row.id),
+        )
+      }
+      return { previous }
+    },
+    onError: (
+      err: Error,
+      _row,
+      context: { previous?: { id: string }[] } | undefined,
+    ) => {
+      if (context?.previous) {
+        queryClient.setQueryData(
+          ["contractRebates", contractId],
+          context.previous,
+        )
+      }
+      toast.error(err.message || "Failed to delete")
+    },
     onSuccess: () => {
       toast.success("Row deleted")
+    },
+    onSettled: () => {
       invalidateLedger()
     },
-    onError: (err: Error) => toast.error(err.message || "Failed to delete"),
   })
 
   function handleAction(
