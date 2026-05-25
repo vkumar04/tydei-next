@@ -17,6 +17,8 @@ import {
   toPerfPeriod,
   toTermType,
   toRebateType,
+  excelCellToString,
+  parseXlsxBufferToRows,
   type TargetField,
 } from "@/lib/actions/imports/shared"
 
@@ -310,5 +312,191 @@ describe("toRebateType", () => {
   it("falls back to 'percent_of_spend' for null/unknown", () => {
     expect(toRebateType(null)).toBe("percent_of_spend")
     expect(toRebateType("per_use")).toBe("percent_of_spend")
+  })
+})
+
+// ─── excelCellToString ──────────────────────────────────────────
+// Bug 2026-05-25: rich-text headers in "SYK Carve out.xlsx" came
+// through as the literal string "[object Object]" because the route
+// handler used String(cellValue) on ExcelJS's non-primitive shapes.
+
+describe("excelCellToString", () => {
+  it("returns empty string for null/undefined", () => {
+    expect(excelCellToString(null)).toBe("")
+    expect(excelCellToString(undefined)).toBe("")
+  })
+
+  it("passes primitives through", () => {
+    expect(excelCellToString("CAT01386")).toBe("CAT01386")
+    expect(excelCellToString(330.65)).toBe("330.65")
+    expect(excelCellToString(0)).toBe("0")
+    expect(excelCellToString(true)).toBe("true")
+  })
+
+  it("unwraps rich-text into concatenated plain text", () => {
+    // This is the literal shape ExcelJS returned for the SYK Carve out
+    // workbook's "Description" header and catalog-ID cells.
+    expect(
+      excelCellToString({
+        richText: [
+          { font: { bold: true, name: "Cambria" }, text: "Carve out " },
+          { font: { bold: true, name: "Cambria" }, text: "%" },
+        ],
+      }),
+    ).toBe("Carve out %")
+    expect(
+      excelCellToString({
+        richText: [{ font: { size: 8 }, text: "Nanotack Suture Anchor" }],
+      }),
+    ).toBe("Nanotack Suture Anchor")
+  })
+
+  it("uses .result for formula cells (recursing through richText)", () => {
+    expect(excelCellToString({ formula: "A1*2", result: 42 })).toBe("42")
+    expect(
+      excelCellToString({
+        formula: "CONCAT(A1,B1)",
+        result: { richText: [{ text: "Hello" }, { text: " world" }] },
+      }),
+    ).toBe("Hello world")
+    expect(excelCellToString({ sharedFormula: "A1", result: 7 })).toBe("7")
+  })
+
+  it("uses .text for hyperlink cells", () => {
+    expect(
+      excelCellToString({ text: "PO-123", hyperlink: "https://x.test/po/123" }),
+    ).toBe("PO-123")
+  })
+
+  it("returns empty string for error cells", () => {
+    expect(excelCellToString({ error: "#REF!" })).toBe("")
+  })
+
+  it("converts Date to ISO 8601 (parseDate can read it)", () => {
+    const d = new Date("2026-05-25T00:00:00.000Z")
+    const s = excelCellToString(d)
+    expect(s).toBe("2026-05-25T00:00:00.000Z")
+    expect(parseDate(s)).toBeInstanceOf(Date)
+  })
+})
+
+// ─── parseXlsxBufferToRows ─────────────────────────────────────
+// Regression coverage for the SYK Carve out / joint pricing import
+// bug 2026-05-25:
+//   • Rich-text cells must come through as plain text.
+//   • Phantom trailing rows (fill-down to row 1,048,576 with only one
+//     column populated) must not flood the importer.
+
+import ExcelJS from "exceljs"
+
+async function buildXlsxBuffer(
+  fill: (sheet: ExcelJS.Worksheet) => void,
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  const sheet = wb.addWorksheet("Sheet1")
+  fill(sheet)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return Buffer.from((await wb.xlsx.writeBuffer()) as any)
+}
+
+describe("parseXlsxBufferToRows", () => {
+  it("unwraps rich-text headers AND data cells (SYK Carve out case)", async () => {
+    const buf = await buildXlsxBuffer((sheet) => {
+      // Mimic the SYK Carve out shape: "Description" + "Carve out %"
+      // headers are rich text; catalog ID cells in column 1 are rich text.
+      // ExcelJS `row.values = [...]` is 1-indexed in the WRITE direction,
+      // so the array elements are column 1, 2, 3, ... in order.
+      sheet.getRow(1).values = [
+        "Reference numer",
+        { richText: [{ text: "Description" }] },
+        "Price",
+        {
+          richText: [
+            { font: { bold: true }, text: "Carve out " },
+            { font: { bold: true }, text: "%" },
+          ],
+        },
+      ]
+      sheet.getRow(2).values = [
+        { richText: [{ text: "CAT01386" }] },
+        { richText: [{ text: "Nanotack Suture Anchor" }] },
+        330.65,
+        0.12,
+      ]
+      sheet.getRow(3).values = [
+        { richText: [{ text: "CAT01373" }] },
+        { richText: [{ text: "Nanotack Drill Bit" }] },
+        160.65,
+        0.12,
+      ]
+    })
+    const { headers, rows } = await parseXlsxBufferToRows(buf)
+    expect(headers).toEqual([
+      "Reference numer",
+      "Description",
+      "Price",
+      "Carve out %",
+    ])
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toEqual({
+      "Reference numer": "CAT01386",
+      Description: "Nanotack Suture Anchor",
+      Price: "330.65",
+      "Carve out %": "0.12",
+    })
+    // The hallmark of the pre-fix bug — must never appear.
+    for (const r of rows) {
+      for (const v of Object.values(r)) {
+        expect(v).not.toContain("[object Object]")
+      }
+    }
+  })
+
+  it("trims trailing phantom rows from accidental fill-down (joint-pricing case)", async () => {
+    const buf = await buildXlsxBuffer((sheet) => {
+      sheet.getRow(1).values = [
+        "Catalog Item",
+        "Description",
+        "Price",
+        "Contract ID",
+      ]
+      sheet.getRow(2).values = ["H1", "Femoral Stem", 7000, "C1"]
+      sheet.getRow(3).values = ["H2", "HA Cup", 3900, "C1"]
+      // Simulate 500 phantom rows where only Contract ID is filled —
+      // user accidentally fill-dragged the column.
+      for (let i = 4; i < 504; i++) {
+        sheet.getRow(i).values = [null, null, null, "C1"]
+      }
+    })
+    const { rows } = await parseXlsxBufferToRows(buf)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]["Catalog Item"]).toBe("H1")
+    expect(rows[1]["Catalog Item"]).toBe("H2")
+  })
+
+  it("preserves a single sparse row interleaved in real data (no early stop)", async () => {
+    const buf = await buildXlsxBuffer((sheet) => {
+      sheet.getRow(1).values = ["A", "B", "C"]
+      sheet.getRow(2).values = ["1", "2", "3"]
+      // A sparse row in the middle — must NOT trigger phantom-row trim.
+      sheet.getRow(3).values = [null, "only-b", null]
+      sheet.getRow(4).values = ["4", "5", "6"]
+    })
+    const { rows } = await parseXlsxBufferToRows(buf)
+    // The middle sparse row gets recorded (it has content); only fully-
+    // empty rows are dropped. Phantom-row trim only kicks in for the
+    // trailing edge.
+    expect(rows.length).toBeGreaterThanOrEqual(3)
+    expect(rows[0]).toEqual({ A: "1", B: "2", C: "3" })
+    expect(rows[rows.length - 1]).toEqual({ A: "4", B: "5", C: "6" })
+  })
+
+  it("returns empty headers/rows for a workbook with no sheets", async () => {
+    const wb = new ExcelJS.Workbook()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buf = Buffer.from((await wb.xlsx.writeBuffer()) as any)
+    const out = await parseXlsxBufferToRows(buf)
+    expect(out.headers).toEqual([])
+    expect(out.rows).toEqual([])
   })
 })

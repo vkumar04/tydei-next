@@ -13,6 +13,7 @@
  *   - get (row-by-mapping field getter)
  *   - toContractType / toPerfPeriod / toTermType / toRebateType (AI→enum)
  */
+import ExcelJS from "exceljs"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { prisma } from "@/lib/db"
@@ -233,6 +234,114 @@ export function parseCSV(text: string): Record<string, string>[] {
 }
 
 /** Trim + strip "$ 205.00" / "$205.00" / "205.00" / "" → number. */
+/**
+ * Parse an .xlsx workbook buffer into a list of row records keyed by
+ * header. Handles the two real-world quirks that broke the SYK
+ * carve-out + joint-pricing files:
+ *
+ *   1. Rich-text cells (formatted text runs) — see `excelCellToString`.
+ *   2. Phantom trailing rows from accidental fill-down (Excel will
+ *      report `rowCount = 1,048,576` if even one column is dragged to
+ *      the bottom). We stop iterating after a long consecutive run of
+ *      sparse rows (< 2 populated cells), then trim trailing sparse
+ *      rows out of the result.
+ */
+export async function parseXlsxBufferToRows(
+  buffer: Buffer,
+): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const workbook = new ExcelJS.Workbook()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await workbook.xlsx.load(buffer as any)
+  const sheet = workbook.worksheets[0]
+  if (!sheet) return { headers: [], rows: [] }
+
+  const headerRow = sheet.getRow(1)
+  const rawValues = headerRow.values as (ExcelJS.CellValue | undefined)[]
+  // Use a dense loop — exceljs returns a 1-indexed (sparse) array, and
+  // Array.prototype.map preserves empty slots without invoking the
+  // callback, which would leak `undefined` into the headers.
+  const headers: string[] = []
+  for (let i = 1; i < rawValues.length; i++) {
+    headers.push(excelCellToString(rawValues[i]).trim())
+  }
+
+  const STOP_AFTER_SPARSE_RUN = 200
+  let sparseRun = 0
+  let stop = false
+  const rows: Record<string, string>[] = []
+  sheet.eachRow((row, rowNumber) => {
+    if (stop) return
+    if (rowNumber === 1) return
+    const record: Record<string, string> = {}
+    const values = row.values as (ExcelJS.CellValue | undefined)[]
+    let nonEmpty = 0
+    headers.forEach((header, index) => {
+      if (!header) return
+      const v = excelCellToString(values[index + 1])
+      if (v.trim() !== "") nonEmpty++
+      record[header] = v
+    })
+    if (nonEmpty < 2) {
+      sparseRun++
+      if (sparseRun >= STOP_AFTER_SPARSE_RUN) stop = true
+      if (nonEmpty === 0) return
+      rows.push(record)
+      return
+    }
+    sparseRun = 0
+    rows.push(record)
+  })
+  while (rows.length > 0) {
+    const last = rows[rows.length - 1]
+    const nonEmpty = Object.values(last).filter(
+      (v) => v.trim() !== "",
+    ).length
+    if (nonEmpty < 2) rows.pop()
+    else break
+  }
+  return { headers, rows }
+}
+
+/**
+ * Coerce an ExcelJS cell value to a plain string.
+ *
+ * Bug 2026-05-25 (Vick "SYK Carve out.xlsx" import producing
+ * `[object Object]`): `String(cellValue)` doesn't handle the non-primitive
+ * shapes ExcelJS returns for formatted/computed cells. A workbook with
+ * rich-text headers (bold/font runs) had its `Description` and
+ * `Carve out %` headers collapse to `"[object Object]"`, the column
+ * mapper dropped those columns, and every catalog-id cell came through
+ * as `"[object Object]"` too.
+ *
+ * Handles the cell shapes documented in exceljs's Worksheet#getRow.values:
+ *   - rich text: `{ richText: [{ text }, ...] }` → concatenated text
+ *   - formula/sharedFormula: `{ formula, result }` → recurse on `result`
+ *   - hyperlink: `{ text, hyperlink }` → display text (fallback to URL)
+ *   - error: `{ error }` → empty string (treat as blank cell)
+ *   - Date → ISO 8601 (parseDate / parseMoney can read it)
+ *   - primitives → String(v)
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function excelCellToString(value: any): string {
+  if (value == null) return ""
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value)
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === "object") {
+    if (Array.isArray(value.richText)) {
+      return value.richText
+        .map((r: { text?: unknown }) => (r?.text != null ? String(r.text) : ""))
+        .join("")
+    }
+    if ("result" in value) return excelCellToString(value.result)
+    if ("text" in value) return excelCellToString(value.text)
+    if ("hyperlink" in value) return String(value.hyperlink)
+    if ("error" in value) return ""
+  }
+  return String(value)
+}
+
 export function parseMoney(raw: string | undefined): number {
   if (!raw) return 0
   const cleaned = raw.replace(/[$,\s]/g, "").replace(/[()]/g, "")

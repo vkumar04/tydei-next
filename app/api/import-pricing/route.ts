@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import ExcelJS from "exceljs"
 import { rateLimit } from "@/lib/rate-limit"
 import { ingestPricingFile } from "@/lib/actions/imports/pricing-import"
+import { parseXlsxBufferToRows } from "@/lib/actions/imports/shared"
 
 /**
  * Bug 2026-05-18 (Vick "Primary full COG.xlsx" import failing):
@@ -64,32 +64,14 @@ export async function POST(request: Request) {
 
     if (lowerName.endsWith(".xlsx")) {
       const arrayBuffer = await file.arrayBuffer()
-      const workbook = new ExcelJS.Workbook()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await workbook.xlsx.load(Buffer.from(arrayBuffer) as any)
-      const sheet = workbook.worksheets[0]
-      if (!sheet) {
+      const parsed = await parseXlsxBufferToRows(Buffer.from(arrayBuffer))
+      if (parsed.headers.length === 0) {
         return NextResponse.json(
           { error: "No sheets found in file" },
           { status: 400 },
         )
       }
-      const headerRow = sheet.getRow(1)
-      const rawValues = headerRow.values as (ExcelJS.CellValue | undefined)[]
-      const headers: string[] = rawValues
-        .slice(1)
-        .map((v) => (v != null ? String(v).trim() : ""))
-      sheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return
-        const record: Record<string, string> = {}
-        const values = row.values as (ExcelJS.CellValue | undefined)[]
-        headers.forEach((header, index) => {
-          if (!header) return
-          const cellValue = values[index + 1]
-          record[header] = cellValue != null ? String(cellValue) : ""
-        })
-        rows.push(record)
-      })
+      rows = parsed.rows
     } else if (lowerName.endsWith(".csv")) {
       const text = await file.text()
       const stripped = text.replace(/^﻿/, "")
