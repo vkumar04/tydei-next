@@ -129,6 +129,11 @@ export async function ingestPricingFile(input: {
       },
       { key: "uom", label: "Unit of Measure / UOM", required: false },
       { key: "category", label: "Category / Product Category", required: false },
+      {
+        key: "carveOutPercent",
+        label: "Carve-Out % / Carveout Percent / Carve Out Rate",
+        required: false,
+      },
     ],
     rows,
   )
@@ -151,6 +156,23 @@ export async function ingestPricingFile(input: {
       const uom = get(row, mapping, "uom") || undefined
       const category = get(row, mapping, "category") || undefined
 
+      // Normalize carve-out percent: user-supplied values may arrive as
+      // "30", "30%", or "0.30". We store as a fraction (0.30 = 30%) per
+      // the PricingFile.carveOutPercent column convention documented in
+      // components/contracts/pricing-column-mapper.tsx:42 and consumed
+      // by lib/contracts/recompute/carve-out.ts.
+      const rawCarveOutPercent = get(row, mapping, "carveOutPercent")
+      const carveOutPercent = (() => {
+        if (!rawCarveOutPercent) return null
+        const cleaned = String(rawCarveOutPercent).replace(/[^\d.-]/g, "")
+        if (!cleaned) return null
+        const n = parseFloat(cleaned)
+        if (!Number.isFinite(n)) return null
+        // Values > 1 are assumed percent-points (30 → 0.30); values ≤ 1
+        // are already fractions.
+        return n > 1 ? n / 100 : n
+      })()
+
       await prisma.pricingFile.create({
         data: {
           vendorId,
@@ -163,6 +185,7 @@ export async function ingestPricingFile(input: {
           effectiveDate: today,
           category,
           uom,
+          carveOutPercent: carveOutPercent ?? undefined,
         },
       })
       imported++

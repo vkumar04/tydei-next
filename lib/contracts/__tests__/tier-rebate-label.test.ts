@@ -74,6 +74,8 @@ describe("formatTierDollarAnnotation — Bug #3 (sub-threshold projection)", () 
       1, // currentTierNumber = 1 (matched)
       true, // isTopTier
     )
-    expect(out).toBe("top rate — projects $18,000 at current spend")
+    // Bug #17/#18: annotation now leads with the rate so all rebate
+    // language is visible inline on the tier row.
+    expect(out).toBe("2.0% top rate — projects $18,000 at current spend")
   })
 })

@@ -105,10 +105,11 @@ export function formatTierDollarAnnotation(
   // explicit so it cannot be mistaken for the ledger total.
   if (tier.tierNumber === currentTierNumber) {
     const projected = Math.max(0, currentSpend) * tier.rebateValue
+    const rateLabel = formatPercent(tier.rebateValue * 100)
     if (isTopTier) {
-      return `top rate — projects ${formatCurrency(projected)} at current spend`
+      return `${rateLabel} top rate — projects ${formatCurrency(projected)} at current spend`
     }
-    return `projects ${formatCurrency(projected)} at ${formatCurrency(currentSpend)} spend`
+    return `projects ${formatCurrency(projected)} (${rateLabel} of ${formatCurrency(currentSpend)})`
   }
 
   if (tier.tierNumber < currentTierNumber) {
