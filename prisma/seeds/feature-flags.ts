@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client"
+import type { PrismaClient } from "@/lib/generated/prisma/client"
 import type { Facilities } from "./health-systems"
 
 export async function seedFeatureFlags(

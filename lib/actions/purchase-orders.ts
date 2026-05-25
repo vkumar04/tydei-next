@@ -9,7 +9,7 @@ import {
   type CreatePOInput,
   type POFilters,
 } from "@/lib/validators/purchase-orders"
-import type { POStatus, Prisma } from "@prisma/client"
+import type { POStatus, Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 

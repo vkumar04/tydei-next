@@ -2,7 +2,7 @@ import type {
   ContractType as PrismaContractType,
   RebateType as PrismaRebateType,
   TermType as PrismaTermType,
-} from "@prisma/client"
+} from "@/lib/generated/prisma/client"
 
 // ─── Structured definitions for tooltips ────────────────────────
 

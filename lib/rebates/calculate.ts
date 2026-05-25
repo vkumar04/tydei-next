@@ -21,7 +21,7 @@
  * disagreed depending on which page you were on. Keep this the single
  * choke point.
  */
-import type { ContractTier, RebateType } from "@prisma/client"
+import type { ContractTier, RebateType } from "@/lib/generated/prisma/client"
 import { calculateCumulativeRebate } from "@/lib/rebates/engine/shared/cumulative"
 import { calculateMarginalRebate } from "@/lib/rebates/engine/shared/marginal"
 import type { RebateTier } from "@/lib/rebates/engine/types"

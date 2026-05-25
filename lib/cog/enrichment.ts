@@ -19,7 +19,7 @@
  * exactly one place where the sign lives.
  */
 
-import type { COGMatchStatus, Prisma } from "@prisma/client"
+import type { COGMatchStatus, Prisma } from "@/lib/generated/prisma/client"
 import type { MatchResult } from "@/lib/contracts/match"
 
 export type EnrichmentColumns = {

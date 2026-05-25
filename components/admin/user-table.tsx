@@ -41,7 +41,7 @@ import {
 } from "@/lib/actions/admin/users"
 import { adminGetFacilities } from "@/lib/actions/admin/facilities"
 import { adminGetVendors } from "@/lib/actions/admin/vendors"
-import type { UserRole } from "@prisma/client"
+import type { UserRole } from "@/lib/generated/prisma/client"
 import { queryKeys } from "@/lib/query-keys"
 
 // ─── Notification preference keys ───────────────────────────────

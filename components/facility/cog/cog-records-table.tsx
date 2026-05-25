@@ -37,7 +37,7 @@ import {
   EmptyMedia,
 } from "@/components/ui/empty"
 import { FileText, AlertTriangle } from "lucide-react"
-import type { COGRecord, COGMatchStatus } from "@prisma/client"
+import type { COGRecord, COGMatchStatus } from "@/lib/generated/prisma/client"
 
 type COGRecordWithVendor = COGRecord & {
   vendor: { id: string; name: string } | null

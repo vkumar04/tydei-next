@@ -1,7 +1,7 @@
 "use client"
 
 import type { ColumnDef } from "@tanstack/react-table"
-import type { Vendor } from "@prisma/client"
+import type { Vendor } from "@/lib/generated/prisma/client"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Pencil, Ban } from "lucide-react"

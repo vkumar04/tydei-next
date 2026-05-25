@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { getVendorContracts, getVendorContractDetail } from "@/lib/actions/vendor-contracts"
-import type { ContractStatus } from "@prisma/client"
+import type { ContractStatus } from "@/lib/generated/prisma/client"
 
 export function useVendorContracts(
   vendorId: string,

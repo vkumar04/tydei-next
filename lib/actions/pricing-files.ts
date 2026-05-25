@@ -10,7 +10,7 @@ import {
   type PricingFilters,
   type BulkImportPricingInput,
 } from "@/lib/validators/pricing-files"
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 

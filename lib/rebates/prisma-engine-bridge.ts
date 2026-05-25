@@ -49,7 +49,7 @@
 import type {
   ContractTerm as PrismaContractTerm,
   ContractTier as PrismaContractTier,
-} from "@prisma/client"
+} from "@/lib/generated/prisma/client"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import type {
   BaselineType,

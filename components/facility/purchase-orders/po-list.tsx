@@ -16,7 +16,7 @@ import { POHero } from "./po-hero"
 import { POControlBar } from "./po-control-bar"
 import { POTable, type POTableRow } from "./po-table"
 import { toast } from "sonner"
-import type { POStatus } from "@prisma/client"
+import type { POStatus } from "@/lib/generated/prisma/client"
 import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
 import {
   formatExportDate,

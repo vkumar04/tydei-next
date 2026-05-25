@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from "vitest"
 import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@/lib/generated/prisma/client"
 
 type Tier = Parameters<typeof computeRebateFromPrismaTiers>[1][number]
 

@@ -9,7 +9,7 @@ import {
   Inbox,
   Plus,
 } from "lucide-react"
-import type { ContractStatus, ContractType } from "@prisma/client"
+import type { ContractStatus, ContractType } from "@/lib/generated/prisma/client"
 import {
   useContracts,
   useContractStats,

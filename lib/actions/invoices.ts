@@ -8,7 +8,7 @@ import {
   type ImportInvoiceInput,
   type InvoiceFilters,
 } from "@/lib/validators/invoices"
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 

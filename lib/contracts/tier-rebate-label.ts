@@ -1,4 +1,4 @@
-import type { RebateType } from "@prisma/client"
+import type { RebateType } from "@/lib/generated/prisma/client"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
 
 /**

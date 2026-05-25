@@ -17,7 +17,7 @@
  */
 
 import { prisma } from "@/lib/db"
-import { ContractStatus } from "@prisma/client"
+import { ContractStatus } from "@/lib/generated/prisma/client"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"

@@ -14,7 +14,7 @@ import {
 } from "@/hooks/use-pending-contracts"
 import { formatDate, formatCurrency } from "@/lib/formatting"
 import { Eye } from "lucide-react"
-import type { PendingContract, Vendor } from "@prisma/client"
+import type { PendingContract, Vendor } from "@/lib/generated/prisma/client"
 
 type PendingContractWithVendor = PendingContract & {
   vendor: Pick<Vendor, "id" | "name" | "logoUrl">

@@ -16,7 +16,7 @@
  * stays "use server"-free and can be imported by tests / the oracle.
  */
 
-import type { Prisma, PrismaClient } from "@prisma/client"
+import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client"
 import {
   computeTieInAllOrNothing,
   computeTieInProportional,

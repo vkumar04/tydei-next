@@ -4,7 +4,7 @@
  * dollar values. Mirrors the seed update so existing dev DBs reflect
  * the same shape as a fresh `bun run db:seed`.
  */
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 
 const NON_PERCENT_TERM_TYPES = [

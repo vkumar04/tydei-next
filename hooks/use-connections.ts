@@ -9,7 +9,7 @@ import {
   rejectConnection,
   removeConnection,
 } from "@/lib/actions/connections"
-import type { ConnectionStatus } from "@prisma/client"
+import type { ConnectionStatus } from "@/lib/generated/prisma/client"
 
 export function useConnections(
   entityId: string,

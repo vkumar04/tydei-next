@@ -1,6 +1,6 @@
 "use client"
 
-import type { PendingContract, Facility } from "@prisma/client"
+import type { PendingContract, Facility } from "@/lib/generated/prisma/client"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

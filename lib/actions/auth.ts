@@ -4,7 +4,7 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth-server"
 import { prisma } from "@/lib/db"
-import type { UserRole } from "@prisma/client"
+import type { UserRole } from "@/lib/generated/prisma/client"
 import { roleConfig } from "@/lib/constants"
 
 // ─── Session Guards ──────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
-import type { Contract, Vendor, ProductCategory, Facility } from "@prisma/client"
+import type { Contract, Vendor, ProductCategory, Facility } from "@/lib/generated/prisma/client"
 import {
   ArrowUpDown,
   HelpCircle,

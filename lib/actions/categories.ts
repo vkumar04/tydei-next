@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAdmin, requireAuth, requireFacility } from "@/lib/actions/auth"
-import type { ProductCategory } from "@prisma/client"
+import type { ProductCategory } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 
 // ─── Types ──────────────────────────────────────────────────────

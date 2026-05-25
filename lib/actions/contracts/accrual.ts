@@ -13,7 +13,7 @@
  * contract's primary facility is the same data point in either
  * scope, so the inner helper is reusable.
  */
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"

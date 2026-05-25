@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireVendor, requireFacility } from "@/lib/actions/auth"
 import {
   createPendingContractSchema,

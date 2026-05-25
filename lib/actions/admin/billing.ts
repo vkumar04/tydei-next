@@ -3,7 +3,7 @@
 import { requireAdmin } from "@/lib/actions/auth"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
-import type { CreditTierId } from "@prisma/client"
+import type { CreditTierId } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────

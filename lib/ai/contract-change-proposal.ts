@@ -24,7 +24,7 @@
  *   - Call the Anthropic API. Prompt-building lives in `./prompts/`.
  */
 
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import type { AiAdvisoryProposal } from "./types"
 
 // ─── Input / output types ────────────────────────────────────────

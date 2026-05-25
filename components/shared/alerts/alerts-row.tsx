@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import { CheckCircle, ChevronRight } from "lucide-react"
-import type { Alert } from "@prisma/client"
+import type { Alert } from "@/lib/generated/prisma/client"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

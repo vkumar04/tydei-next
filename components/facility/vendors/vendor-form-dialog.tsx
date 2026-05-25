@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import type { Vendor } from "@prisma/client"
+import type { Vendor } from "@/lib/generated/prisma/client"
 import { createVendorSchema, type CreateVendorInput } from "@/lib/validators/vendors"
 import { useCreateVendor, useUpdateVendor } from "@/hooks/use-vendor-crud"
 import { FormDialog } from "@/components/shared/forms/form-dialog"

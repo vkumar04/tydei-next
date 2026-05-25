@@ -14,7 +14,7 @@ import {
   Send,
   XCircle,
 } from "lucide-react"
-import type { POStatus } from "@prisma/client"
+import type { POStatus } from "@/lib/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import {
   Table,

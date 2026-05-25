@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { ContractType, RebateType, TermType } from "@prisma/client"
+import { ContractType, RebateType, TermType } from "@/lib/generated/prisma/client"
 import {
   CONTRACT_TYPE_DEFINITIONS,
   REBATE_TYPE_DEFINITIONS,

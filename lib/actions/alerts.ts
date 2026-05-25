@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { alertFiltersSchema, type AlertFilters } from "@/lib/validators/alerts"
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import {
   generateExpiringContractAlerts,
   generateTierThresholdAlerts,

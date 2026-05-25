@@ -1,7 +1,7 @@
 "use client"
 
 import type { ColumnDef } from "@tanstack/react-table"
-import type { Contract, Facility, ProductCategory } from "@prisma/client"
+import type { Contract, Facility, ProductCategory } from "@/lib/generated/prisma/client"
 import { Eye, MoreHorizontal, FileText, Building2 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"

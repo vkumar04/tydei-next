@@ -10,7 +10,7 @@
  * only does DB I/O and orchestration.
  */
 
-import type { Prisma, PrismaClient } from "@prisma/client"
+import type { Prisma, PrismaClient } from "@/lib/generated/prisma/client"
 import {
   matchCOGRecordToContract,
   PRICE_VARIANCE_THRESHOLD,

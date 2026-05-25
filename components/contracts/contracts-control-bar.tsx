@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { Download, Plus, Search } from "lucide-react"
-import type { ContractStatus, ContractType } from "@prisma/client"
+import type { ContractStatus, ContractType } from "@/lib/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"

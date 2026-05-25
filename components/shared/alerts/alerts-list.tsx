@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { BellOff, Search, CheckCircle2, Archive } from "lucide-react"
-import type { Alert } from "@prisma/client"
+import type { Alert } from "@/lib/generated/prisma/client"
 
 // ─── Types ──────────────────────────────────────────────────────
 

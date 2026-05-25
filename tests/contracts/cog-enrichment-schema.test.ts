@@ -5,7 +5,7 @@ import type {
   FileImportStatus,
   COGRecord,
   FileImport,
-} from "@prisma/client"
+} from "@/lib/generated/prisma/client"
 
 describe("COGMatchStatus enum", () => {
   it("exposes the 6 canonical status values", () => {

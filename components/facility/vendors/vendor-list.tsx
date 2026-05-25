@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { Plus } from "lucide-react"
-import type { Vendor } from "@prisma/client"
+import type { Vendor } from "@/lib/generated/prisma/client"
 import { useVendorList, useDeactivateVendor } from "@/hooks/use-vendor-crud"
 import { getVendorColumns } from "@/components/facility/vendors/vendor-columns"
 import { VendorFormDialog } from "@/components/facility/vendors/vendor-form-dialog"

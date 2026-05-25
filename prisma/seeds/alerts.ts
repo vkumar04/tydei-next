@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client"
+import type { PrismaClient } from "@/lib/generated/prisma/client"
 import type { Facilities } from "./health-systems"
 import type { Vendors } from "./vendors"
 import type { Contracts } from "./contracts"

@@ -7,7 +7,7 @@
  * This module centralizes that predicate so we have exactly one
  * definition of "owned by this facility" across the codebase.
  */
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 
 /**
  * Returns a Prisma where-unique-input that scopes `id` to contracts

@@ -12,7 +12,7 @@ import {
 } from "./vendor-contracts-control-bar"
 import { useVendorContracts } from "@/hooks/use-vendor-contracts"
 import { useVendorPendingContracts } from "@/hooks/use-pending-contracts"
-import type { ContractStatus } from "@prisma/client"
+import type { ContractStatus } from "@/lib/generated/prisma/client"
 
 interface VendorContractListProps {
   vendorId: string

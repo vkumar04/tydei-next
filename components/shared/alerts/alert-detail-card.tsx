@@ -16,7 +16,7 @@ import {
   XCircle,
 } from "lucide-react"
 import Link from "next/link"
-import type { Alert, Contract, Vendor, Facility } from "@prisma/client"
+import type { Alert, Contract, Vendor, Facility } from "@/lib/generated/prisma/client"
 
 type AlertDetail = Alert & {
   contract?: Pick<

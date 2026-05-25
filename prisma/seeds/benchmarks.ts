@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client"
+import type { PrismaClient } from "@/lib/generated/prisma/client"
 
 const dataDate = new Date(2025, 11, 1) // Dec 2025
 

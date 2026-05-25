@@ -12,7 +12,7 @@ import {
   getFacilityVendors,
 } from "@/lib/actions/purchase-orders"
 import type { POFilters } from "@/lib/validators/purchase-orders"
-import type { POStatus } from "@prisma/client"
+import type { POStatus } from "@/lib/generated/prisma/client"
 import { toast } from "sonner"
 
 export function usePurchaseOrders(facilityId: string, filters?: Partial<POFilters>) {

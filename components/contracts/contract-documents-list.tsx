@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import type { ContractDocument } from "@prisma/client"
+import type { ContractDocument } from "@/lib/generated/prisma/client"
 import { FileText, Loader2, Sparkles, Trash2, Upload } from "lucide-react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"

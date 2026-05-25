@@ -6,7 +6,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
-import type { Prisma, DocumentType } from "@prisma/client"
+import type { Prisma, DocumentType } from "@/lib/generated/prisma/client"
 
 export interface CreateContractDocumentInput {
   contractId: string

@@ -13,7 +13,7 @@
  * into the persisted `COGMatchStatus` enum (see lib/cog/recompute.ts).
  */
 
-import type { COGRecord } from "@prisma/client"
+import type { COGRecord } from "@/lib/generated/prisma/client"
 
 export type MatchMode =
   | "vendorItemNo"

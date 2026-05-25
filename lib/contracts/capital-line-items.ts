@@ -12,7 +12,7 @@
  * downstream sums per-item PMT to produce the combined view.
  */
 
-import type { Contract, ContractCapitalLineItem } from "@prisma/client"
+import type { Contract, ContractCapitalLineItem } from "@/lib/generated/prisma/client"
 
 export interface NormalizedCapitalLineItem {
   id: string

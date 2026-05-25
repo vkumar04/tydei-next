@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
+import { JsonValue, InputJsonValue, objectEnumValues, Decimal as PrismaDecimal, DecimalJsLike } from '@prisma/client/runtime/library';
+import type { Prisma } from '../prisma/client';
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -8,11 +9,11 @@ import { Prisma } from '@prisma/client';
 // JSON
 //------------------------------------------------------
 
-export type NullableJsonInput = Prisma.JsonValue | null | 'JsonNull' | 'DbNull' | Prisma.NullTypes.DbNull | Prisma.NullTypes.JsonNull;
+export type NullableJsonInput = JsonValue | null | 'JsonNull' | 'DbNull' | typeof objectEnumValues.instances.DbNull | typeof objectEnumValues.instances.JsonNull;
 
 export const transformJsonNull = (v?: NullableJsonInput) => {
-  if (!v || v === 'DbNull') return Prisma.NullTypes.DbNull;
-  if (v === 'JsonNull') return Prisma.NullTypes.JsonNull;
+  if (!v || v === 'DbNull') return typeof objectEnumValues.instances.DbNull;
+  if (v === 'JsonNull') return typeof objectEnumValues.instances.JsonNull;
   return v;
 };
 
@@ -1688,7 +1689,7 @@ export const CrossVendorTieInSchema = z.object({
   /**
    * * Integer percent (1.0 = 1%). Applied to total spend when bonus criterion is met.
    */
-  facilityBonusRate: z.instanceof(Prisma.Decimal, { message: "Field 'facilityBonusRate' must be a Decimal. Location: ['Models', 'CrossVendorTieIn']"}),
+  facilityBonusRate: z.instanceof(PrismaDecimal, { message: "Field 'facilityBonusRate' must be a Decimal. Location: ['Models', 'CrossVendorTieIn']"}),
   /**
    * * "all_compliant" or "none". v0 supports more bands; tydei carries the two it actually uses.
    */
@@ -1718,7 +1719,7 @@ export const CrossVendorTieInOptionalDefaultsSchema = CrossVendorTieInSchema.mer
   /**
    * * Integer percent (1.0 = 1%). Applied to total spend when bonus criterion is met.
    */
-  facilityBonusRate: z.instanceof(Prisma.Decimal, { message: "Field 'facilityBonusRate' must be a Decimal. Location: ['Models', 'CrossVendorTieIn']"}).optional(),
+  facilityBonusRate: z.instanceof(PrismaDecimal, { message: "Field 'facilityBonusRate' must be a Decimal. Location: ['Models', 'CrossVendorTieIn']"}).optional(),
   /**
    * * "all_compliant" or "none". v0 supports more bands; tydei carries the two it actually uses.
    */
@@ -1800,11 +1801,11 @@ export const CrossVendorTieInMemberSchema = z.object({
   /**
    * * Annual minimum spend commitment for this vendor in the bundle.
    */
-  minimumSpend: z.instanceof(Prisma.Decimal, { message: "Field 'minimumSpend' must be a Decimal. Location: ['Models', 'CrossVendorTieInMember']"}),
+  minimumSpend: z.instanceof(PrismaDecimal, { message: "Field 'minimumSpend' must be a Decimal. Location: ['Models', 'CrossVendorTieInMember']"}),
   /**
    * * Integer percent (2.5 = 2.5%) — vendor's contribution rate when compliant.
    */
-  rebateContribution: z.instanceof(Prisma.Decimal, { message: "Field 'rebateContribution' must be a Decimal. Location: ['Models', 'CrossVendorTieInMember']"}),
+  rebateContribution: z.instanceof(PrismaDecimal, { message: "Field 'rebateContribution' must be a Decimal. Location: ['Models', 'CrossVendorTieInMember']"}),
   createdAt: z.coerce.date(),
 })
 
@@ -1983,7 +1984,7 @@ export const ProductCategorySchema = z.object({
   parentId: z.string().nullable(),
   source: z.string().nullable(),
   sourceId: z.string().nullable(),
-  spendTotal: z.instanceof(Prisma.Decimal, { message: "Field 'spendTotal' must be a Decimal. Location: ['Models', 'ProductCategory']"}),
+  spendTotal: z.instanceof(PrismaDecimal, { message: "Field 'spendTotal' must be a Decimal. Location: ['Models', 'ProductCategory']"}),
   itemCount: z.number().int(),
   createdAt: z.coerce.date(),
 })
@@ -2003,7 +2004,7 @@ export type ProductCategoryPartial = z.infer<typeof ProductCategoryPartialSchema
 
 export const ProductCategoryOptionalDefaultsSchema = ProductCategorySchema.merge(z.object({
   id: z.cuid().optional(),
-  spendTotal: z.instanceof(Prisma.Decimal, { message: "Field 'spendTotal' must be a Decimal. Location: ['Models', 'ProductCategory']"}).optional(),
+  spendTotal: z.instanceof(PrismaDecimal, { message: "Field 'spendTotal' must be a Decimal. Location: ['Models', 'ProductCategory']"}).optional(),
   itemCount: z.number().int().optional(),
   createdAt: z.coerce.date().optional(),
 }))
@@ -2105,8 +2106,8 @@ export const ContractSchema = z.object({
   expirationDate: z.coerce.date(),
   autoRenewal: z.boolean(),
   terminationNoticeDays: z.number().int(),
-  totalValue: z.instanceof(Prisma.Decimal, { message: "Field 'totalValue' must be a Decimal. Location: ['Models', 'Contract']"}),
-  annualValue: z.instanceof(Prisma.Decimal, { message: "Field 'annualValue' must be a Decimal. Location: ['Models', 'Contract']"}),
+  totalValue: z.instanceof(PrismaDecimal, { message: "Field 'totalValue' must be a Decimal. Location: ['Models', 'Contract']"}),
+  annualValue: z.instanceof(PrismaDecimal, { message: "Field 'annualValue' must be a Decimal. Location: ['Models', 'Contract']"}),
   description: z.string().nullable(),
   notes: z.string().nullable(),
   gpoAffiliation: z.string().nullable(),
@@ -2114,9 +2115,9 @@ export const ContractSchema = z.object({
   isMultiFacility: z.boolean(),
   tieInCapitalContractId: z.string().nullable(),
   division: z.string().nullable(),
-  complianceRate: z.instanceof(Prisma.Decimal, { message: "Field 'complianceRate' must be a Decimal. Location: ['Models', 'Contract']"}).nullable(),
-  currentMarketShare: z.instanceof(Prisma.Decimal, { message: "Field 'currentMarketShare' must be a Decimal. Location: ['Models', 'Contract']"}).nullable(),
-  marketShareCommitment: z.instanceof(Prisma.Decimal, { message: "Field 'marketShareCommitment' must be a Decimal. Location: ['Models', 'Contract']"}).nullable(),
+  complianceRate: z.instanceof(PrismaDecimal, { message: "Field 'complianceRate' must be a Decimal. Location: ['Models', 'Contract']"}).nullable(),
+  currentMarketShare: z.instanceof(PrismaDecimal, { message: "Field 'currentMarketShare' must be a Decimal. Location: ['Models', 'Contract']"}).nullable(),
+  marketShareCommitment: z.instanceof(PrismaDecimal, { message: "Field 'marketShareCommitment' must be a Decimal. Location: ['Models', 'Contract']"}).nullable(),
   /**
    * *
    * * Charles 2026-04-25 (audit follow-up): per-category market share
@@ -2158,8 +2159,8 @@ export const ContractOptionalDefaultsSchema = ContractSchema.merge(z.object({
   id: z.cuid().optional(),
   autoRenewal: z.boolean().optional(),
   terminationNoticeDays: z.number().int().optional(),
-  totalValue: z.instanceof(Prisma.Decimal, { message: "Field 'totalValue' must be a Decimal. Location: ['Models', 'Contract']"}).optional(),
-  annualValue: z.instanceof(Prisma.Decimal, { message: "Field 'annualValue' must be a Decimal. Location: ['Models', 'Contract']"}).optional(),
+  totalValue: z.instanceof(PrismaDecimal, { message: "Field 'totalValue' must be a Decimal. Location: ['Models', 'Contract']"}).optional(),
+  annualValue: z.instanceof(PrismaDecimal, { message: "Field 'annualValue' must be a Decimal. Location: ['Models', 'Contract']"}).optional(),
   isGrouped: z.boolean().optional(),
   isMultiFacility: z.boolean().optional(),
   createdAt: z.coerce.date().optional(),
@@ -2625,16 +2626,16 @@ export const ContractTermSchema = z.object({
   appliesTo: z.string(),
   effectiveStart: z.coerce.date(),
   effectiveEnd: z.coerce.date(),
-  spendBaseline: z.instanceof(Prisma.Decimal, { message: "Field 'spendBaseline' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
+  spendBaseline: z.instanceof(PrismaDecimal, { message: "Field 'spendBaseline' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
   volumeBaseline: z.number().int().nullable(),
-  growthBaselinePercent: z.instanceof(Prisma.Decimal, { message: "Field 'growthBaselinePercent' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
-  desiredMarketShare: z.instanceof(Prisma.Decimal, { message: "Field 'desiredMarketShare' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
-  negotiatedBaseline: z.instanceof(Prisma.Decimal, { message: "Field 'negotiatedBaseline' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
+  growthBaselinePercent: z.instanceof(PrismaDecimal, { message: "Field 'growthBaselinePercent' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
+  desiredMarketShare: z.instanceof(PrismaDecimal, { message: "Field 'desiredMarketShare' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
+  negotiatedBaseline: z.instanceof(PrismaDecimal, { message: "Field 'negotiatedBaseline' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
   growthOnly: z.boolean(),
-  periodCap: z.instanceof(Prisma.Decimal, { message: "Field 'periodCap' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
-  fixedRebatePerOccurrence: z.instanceof(Prisma.Decimal, { message: "Field 'fixedRebatePerOccurrence' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
-  minimumPurchaseCommitment: z.instanceof(Prisma.Decimal, { message: "Field 'minimumPurchaseCommitment' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
-  adminFeePercent: z.instanceof(Prisma.Decimal, { message: "Field 'adminFeePercent' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
+  periodCap: z.instanceof(PrismaDecimal, { message: "Field 'periodCap' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
+  fixedRebatePerOccurrence: z.instanceof(PrismaDecimal, { message: "Field 'fixedRebatePerOccurrence' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
+  minimumPurchaseCommitment: z.instanceof(PrismaDecimal, { message: "Field 'minimumPurchaseCommitment' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
+  adminFeePercent: z.instanceof(PrismaDecimal, { message: "Field 'adminFeePercent' must be a Decimal. Location: ['Models', 'ContractTerm']"}).nullable(),
   cptCodes: z.string().array(),
   groupedReferenceNumbers: z.string().array(),
   referenceNumbers: z.string().array(),
@@ -2763,16 +2764,16 @@ export const ContractTierSchema = z.object({
   termId: z.string(),
   tierNumber: z.number().int(),
   tierName: z.string().nullable(),
-  spendMin: z.instanceof(Prisma.Decimal, { message: "Field 'spendMin' must be a Decimal. Location: ['Models', 'ContractTier']"}),
-  spendMax: z.instanceof(Prisma.Decimal, { message: "Field 'spendMax' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
+  spendMin: z.instanceof(PrismaDecimal, { message: "Field 'spendMin' must be a Decimal. Location: ['Models', 'ContractTier']"}),
+  spendMax: z.instanceof(PrismaDecimal, { message: "Field 'spendMax' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
   volumeMin: z.number().int().nullable(),
   volumeMax: z.number().int().nullable(),
-  marketShareMin: z.instanceof(Prisma.Decimal, { message: "Field 'marketShareMin' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
-  marketShareMax: z.instanceof(Prisma.Decimal, { message: "Field 'marketShareMax' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
-  rebateValue: z.instanceof(Prisma.Decimal, { message: "Field 'rebateValue' must be a Decimal. Location: ['Models', 'ContractTier']"}),
-  fixedRebateAmount: z.instanceof(Prisma.Decimal, { message: "Field 'fixedRebateAmount' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
-  reducedPrice: z.instanceof(Prisma.Decimal, { message: "Field 'reducedPrice' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
-  priceReductionPercent: z.instanceof(Prisma.Decimal, { message: "Field 'priceReductionPercent' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
+  marketShareMin: z.instanceof(PrismaDecimal, { message: "Field 'marketShareMin' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
+  marketShareMax: z.instanceof(PrismaDecimal, { message: "Field 'marketShareMax' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
+  rebateValue: z.instanceof(PrismaDecimal, { message: "Field 'rebateValue' must be a Decimal. Location: ['Models', 'ContractTier']"}),
+  fixedRebateAmount: z.instanceof(PrismaDecimal, { message: "Field 'fixedRebateAmount' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
+  reducedPrice: z.instanceof(PrismaDecimal, { message: "Field 'reducedPrice' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
+  priceReductionPercent: z.instanceof(PrismaDecimal, { message: "Field 'priceReductionPercent' must be a Decimal. Location: ['Models', 'ContractTier']"}).nullable(),
   createdAt: z.coerce.date(),
 })
 
@@ -2793,8 +2794,8 @@ export const ContractTierOptionalDefaultsSchema = ContractTierSchema.merge(z.obj
   rebateType: RebateTypeSchema.optional(),
   id: z.cuid().optional(),
   tierNumber: z.number().int().optional(),
-  spendMin: z.instanceof(Prisma.Decimal, { message: "Field 'spendMin' must be a Decimal. Location: ['Models', 'ContractTier']"}).optional(),
-  rebateValue: z.instanceof(Prisma.Decimal, { message: "Field 'rebateValue' must be a Decimal. Location: ['Models', 'ContractTier']"}).optional(),
+  spendMin: z.instanceof(PrismaDecimal, { message: "Field 'spendMin' must be a Decimal. Location: ['Models', 'ContractTier']"}).optional(),
+  rebateValue: z.instanceof(PrismaDecimal, { message: "Field 'rebateValue' must be a Decimal. Location: ['Models', 'ContractTier']"}).optional(),
   createdAt: z.coerce.date().optional(),
 }))
 
@@ -2859,11 +2860,11 @@ export const ContractAmortizationScheduleSchema = z.object({
   id: z.cuid(),
   contractId: z.string(),
   periodNumber: z.number().int(),
-  openingBalance: z.instanceof(Prisma.Decimal, { message: "Field 'openingBalance' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
-  interestCharge: z.instanceof(Prisma.Decimal, { message: "Field 'interestCharge' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
-  principalDue: z.instanceof(Prisma.Decimal, { message: "Field 'principalDue' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
-  amortizationDue: z.instanceof(Prisma.Decimal, { message: "Field 'amortizationDue' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
-  closingBalance: z.instanceof(Prisma.Decimal, { message: "Field 'closingBalance' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
+  openingBalance: z.instanceof(PrismaDecimal, { message: "Field 'openingBalance' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
+  interestCharge: z.instanceof(PrismaDecimal, { message: "Field 'interestCharge' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
+  principalDue: z.instanceof(PrismaDecimal, { message: "Field 'principalDue' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
+  amortizationDue: z.instanceof(PrismaDecimal, { message: "Field 'amortizationDue' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
+  closingBalance: z.instanceof(PrismaDecimal, { message: "Field 'closingBalance' must be a Decimal. Location: ['Models', 'ContractAmortizationSchedule']"}),
   createdAt: z.coerce.date(),
 })
 
@@ -2947,7 +2948,7 @@ export const ContractTermProductSchema = z.object({
   termId: z.string(),
   vendorItemNo: z.string(),
   productDescription: z.string().nullable(),
-  contractPrice: z.instanceof(Prisma.Decimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'ContractTermProduct']"}).nullable(),
+  contractPrice: z.instanceof(PrismaDecimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'ContractTermProduct']"}).nullable(),
   createdAt: z.coerce.date(),
 })
 
@@ -3031,7 +3032,7 @@ export const ContractTermProcedureSchema = z.object({
   termId: z.string(),
   cptCode: z.string(),
   procedureDescription: z.string().nullable(),
-  rebateAmount: z.instanceof(Prisma.Decimal, { message: "Field 'rebateAmount' must be a Decimal. Location: ['Models', 'ContractTermProcedure']"}).nullable(),
+  rebateAmount: z.instanceof(PrismaDecimal, { message: "Field 'rebateAmount' must be a Decimal. Location: ['Models', 'ContractTermProcedure']"}).nullable(),
   createdAt: z.coerce.date(),
 })
 
@@ -3116,12 +3117,12 @@ export const ContractPricingSchema = z.object({
   vendorItemNo: z.string(),
   description: z.string().nullable(),
   category: z.string().nullable(),
-  unitPrice: z.instanceof(Prisma.Decimal, { message: "Field 'unitPrice' must be a Decimal. Location: ['Models', 'ContractPricing']"}),
+  unitPrice: z.instanceof(PrismaDecimal, { message: "Field 'unitPrice' must be a Decimal. Location: ['Models', 'ContractPricing']"}),
   uom: z.string(),
-  listPrice: z.instanceof(Prisma.Decimal, { message: "Field 'listPrice' must be a Decimal. Location: ['Models', 'ContractPricing']"}).nullable(),
-  discountPercentage: z.instanceof(Prisma.Decimal, { message: "Field 'discountPercentage' must be a Decimal. Location: ['Models', 'ContractPricing']"}).nullable(),
-  carveOutPercent: z.instanceof(Prisma.Decimal, { message: "Field 'carveOutPercent' must be a Decimal. Location: ['Models', 'ContractPricing']"}).nullable(),
-  escalatorPercent: z.instanceof(Prisma.Decimal, { message: "Field 'escalatorPercent' must be a Decimal. Location: ['Models', 'ContractPricing']"}).nullable(),
+  listPrice: z.instanceof(PrismaDecimal, { message: "Field 'listPrice' must be a Decimal. Location: ['Models', 'ContractPricing']"}).nullable(),
+  discountPercentage: z.instanceof(PrismaDecimal, { message: "Field 'discountPercentage' must be a Decimal. Location: ['Models', 'ContractPricing']"}).nullable(),
+  carveOutPercent: z.instanceof(PrismaDecimal, { message: "Field 'carveOutPercent' must be a Decimal. Location: ['Models', 'ContractPricing']"}).nullable(),
+  escalatorPercent: z.instanceof(PrismaDecimal, { message: "Field 'escalatorPercent' must be a Decimal. Location: ['Models', 'ContractPricing']"}).nullable(),
   effectiveDate: z.coerce.date().nullable(),
   expirationDate: z.coerce.date().nullable(),
   createdAt: z.coerce.date(),
@@ -3217,9 +3218,9 @@ export const ContractCapitalLineItemSchema = z.object({
   description: z.string(),
   itemNumber: z.string().nullable(),
   serialNumber: z.string().nullable(),
-  contractTotal: z.instanceof(Prisma.Decimal, { message: "Field 'contractTotal' must be a Decimal. Location: ['Models', 'ContractCapitalLineItem']"}),
-  initialSales: z.instanceof(Prisma.Decimal, { message: "Field 'initialSales' must be a Decimal. Location: ['Models', 'ContractCapitalLineItem']"}),
-  interestRate: z.instanceof(Prisma.Decimal, { message: "Field 'interestRate' must be a Decimal. Location: ['Models', 'ContractCapitalLineItem']"}).nullable(),
+  contractTotal: z.instanceof(PrismaDecimal, { message: "Field 'contractTotal' must be a Decimal. Location: ['Models', 'ContractCapitalLineItem']"}),
+  initialSales: z.instanceof(PrismaDecimal, { message: "Field 'initialSales' must be a Decimal. Location: ['Models', 'ContractCapitalLineItem']"}),
+  interestRate: z.instanceof(PrismaDecimal, { message: "Field 'interestRate' must be a Decimal. Location: ['Models', 'ContractCapitalLineItem']"}).nullable(),
   termMonths: z.number().int().nullable(),
   paymentType: z.string(),
   paymentCadence: z.string(),
@@ -3242,7 +3243,7 @@ export type ContractCapitalLineItemPartial = z.infer<typeof ContractCapitalLineI
 
 export const ContractCapitalLineItemOptionalDefaultsSchema = ContractCapitalLineItemSchema.merge(z.object({
   id: z.cuid().optional(),
-  initialSales: z.instanceof(Prisma.Decimal, { message: "Field 'initialSales' must be a Decimal. Location: ['Models', 'ContractCapitalLineItem']"}).optional(),
+  initialSales: z.instanceof(PrismaDecimal, { message: "Field 'initialSales' must be a Decimal. Location: ['Models', 'ContractCapitalLineItem']"}).optional(),
   paymentType: z.string().optional(),
   paymentCadence: z.string().optional(),
   createdAt: z.coerce.date().optional(),
@@ -3791,14 +3792,14 @@ export const ContractPeriodSchema = z.object({
   facilityId: z.string().nullable(),
   periodStart: z.coerce.date(),
   periodEnd: z.coerce.date(),
-  totalSpend: z.instanceof(Prisma.Decimal, { message: "Field 'totalSpend' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
+  totalSpend: z.instanceof(PrismaDecimal, { message: "Field 'totalSpend' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
   totalVolume: z.number().int(),
-  rebateEarned: z.instanceof(Prisma.Decimal, { message: "Field 'rebateEarned' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
-  rebateCollected: z.instanceof(Prisma.Decimal, { message: "Field 'rebateCollected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
-  paymentExpected: z.instanceof(Prisma.Decimal, { message: "Field 'paymentExpected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
-  paymentActual: z.instanceof(Prisma.Decimal, { message: "Field 'paymentActual' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
-  balanceExpected: z.instanceof(Prisma.Decimal, { message: "Field 'balanceExpected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
-  balanceActual: z.instanceof(Prisma.Decimal, { message: "Field 'balanceActual' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
+  rebateEarned: z.instanceof(PrismaDecimal, { message: "Field 'rebateEarned' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
+  rebateCollected: z.instanceof(PrismaDecimal, { message: "Field 'rebateCollected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
+  paymentExpected: z.instanceof(PrismaDecimal, { message: "Field 'paymentExpected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
+  paymentActual: z.instanceof(PrismaDecimal, { message: "Field 'paymentActual' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
+  balanceExpected: z.instanceof(PrismaDecimal, { message: "Field 'balanceExpected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
+  balanceActual: z.instanceof(PrismaDecimal, { message: "Field 'balanceActual' must be a Decimal. Location: ['Models', 'ContractPeriod']"}),
   tierAchieved: z.number().int().nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -3819,14 +3820,14 @@ export type ContractPeriodPartial = z.infer<typeof ContractPeriodPartialSchema>
 
 export const ContractPeriodOptionalDefaultsSchema = ContractPeriodSchema.merge(z.object({
   id: z.cuid().optional(),
-  totalSpend: z.instanceof(Prisma.Decimal, { message: "Field 'totalSpend' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
+  totalSpend: z.instanceof(PrismaDecimal, { message: "Field 'totalSpend' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
   totalVolume: z.number().int().optional(),
-  rebateEarned: z.instanceof(Prisma.Decimal, { message: "Field 'rebateEarned' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
-  rebateCollected: z.instanceof(Prisma.Decimal, { message: "Field 'rebateCollected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
-  paymentExpected: z.instanceof(Prisma.Decimal, { message: "Field 'paymentExpected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
-  paymentActual: z.instanceof(Prisma.Decimal, { message: "Field 'paymentActual' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
-  balanceExpected: z.instanceof(Prisma.Decimal, { message: "Field 'balanceExpected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
-  balanceActual: z.instanceof(Prisma.Decimal, { message: "Field 'balanceActual' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
+  rebateEarned: z.instanceof(PrismaDecimal, { message: "Field 'rebateEarned' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
+  rebateCollected: z.instanceof(PrismaDecimal, { message: "Field 'rebateCollected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
+  paymentExpected: z.instanceof(PrismaDecimal, { message: "Field 'paymentExpected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
+  paymentActual: z.instanceof(PrismaDecimal, { message: "Field 'paymentActual' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
+  balanceExpected: z.instanceof(PrismaDecimal, { message: "Field 'balanceExpected' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
+  balanceActual: z.instanceof(PrismaDecimal, { message: "Field 'balanceActual' must be a Decimal. Location: ['Models', 'ContractPeriod']"}).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 }))
@@ -3908,13 +3909,13 @@ export const TieInBundleSchema = z.object({
   complianceMode: TieInModeSchema,
   id: z.cuid(),
   primaryContractId: z.string(),
-  baseRate: z.instanceof(Prisma.Decimal, { message: "Field 'baseRate' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
-  bonusRate: z.instanceof(Prisma.Decimal, { message: "Field 'bonusRate' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
-  acceleratorMultiplier: z.instanceof(Prisma.Decimal, { message: "Field 'acceleratorMultiplier' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
-  bonusMultiplier: z.instanceof(Prisma.Decimal, { message: "Field 'bonusMultiplier' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
+  baseRate: z.instanceof(PrismaDecimal, { message: "Field 'baseRate' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
+  bonusRate: z.instanceof(PrismaDecimal, { message: "Field 'bonusRate' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
+  acceleratorMultiplier: z.instanceof(PrismaDecimal, { message: "Field 'acceleratorMultiplier' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
+  bonusMultiplier: z.instanceof(PrismaDecimal, { message: "Field 'bonusMultiplier' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
   effectiveStart: z.coerce.date().nullable(),
   effectiveEnd: z.coerce.date().nullable(),
-  facilityBonusRate: z.instanceof(Prisma.Decimal, { message: "Field 'facilityBonusRate' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
+  facilityBonusRate: z.instanceof(PrismaDecimal, { message: "Field 'facilityBonusRate' must be a Decimal. Location: ['Models', 'TieInBundle']"}).nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 })
@@ -4009,9 +4010,9 @@ export const TieInBundleMemberSchema = z.object({
   bundleId: z.string(),
   contractId: z.string().nullable(),
   vendorId: z.string().nullable(),
-  weightPercent: z.instanceof(Prisma.Decimal, { message: "Field 'weightPercent' must be a Decimal. Location: ['Models', 'TieInBundleMember']"}),
-  minimumSpend: z.instanceof(Prisma.Decimal, { message: "Field 'minimumSpend' must be a Decimal. Location: ['Models', 'TieInBundleMember']"}).nullable(),
-  rebateContribution: z.instanceof(Prisma.Decimal, { message: "Field 'rebateContribution' must be a Decimal. Location: ['Models', 'TieInBundleMember']"}).nullable(),
+  weightPercent: z.instanceof(PrismaDecimal, { message: "Field 'weightPercent' must be a Decimal. Location: ['Models', 'TieInBundleMember']"}),
+  minimumSpend: z.instanceof(PrismaDecimal, { message: "Field 'minimumSpend' must be a Decimal. Location: ['Models', 'TieInBundleMember']"}).nullable(),
+  rebateContribution: z.instanceof(PrismaDecimal, { message: "Field 'rebateContribution' must be a Decimal. Location: ['Models', 'TieInBundleMember']"}).nullable(),
   createdAt: z.coerce.date(),
 })
 
@@ -4226,18 +4227,18 @@ export const PendingContractSchema = z.object({
   contractName: z.string(),
   effectiveDate: z.coerce.date().nullable(),
   expirationDate: z.coerce.date().nullable(),
-  totalValue: z.instanceof(Prisma.Decimal, { message: "Field 'totalValue' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
+  totalValue: z.instanceof(PrismaDecimal, { message: "Field 'totalValue' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
   contractNumber: z.string().nullable(),
-  annualValue: z.instanceof(Prisma.Decimal, { message: "Field 'annualValue' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
+  annualValue: z.instanceof(PrismaDecimal, { message: "Field 'annualValue' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
   gpoAffiliation: z.string().nullable(),
   performancePeriod: z.string().nullable(),
   rebatePayPeriod: z.string().nullable(),
   autoRenewal: z.boolean(),
   terminationNoticeDays: z.number().int().nullable(),
-  capitalCost: z.instanceof(Prisma.Decimal, { message: "Field 'capitalCost' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
-  interestRate: z.instanceof(Prisma.Decimal, { message: "Field 'interestRate' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
+  capitalCost: z.instanceof(PrismaDecimal, { message: "Field 'capitalCost' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
+  interestRate: z.instanceof(PrismaDecimal, { message: "Field 'interestRate' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
   termMonths: z.number().int().nullable(),
-  downPayment: z.instanceof(Prisma.Decimal, { message: "Field 'downPayment' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
+  downPayment: z.instanceof(PrismaDecimal, { message: "Field 'downPayment' must be a Decimal. Location: ['Models', 'PendingContract']"}).nullable(),
   paymentCadence: z.string().nullable(),
   amortizationShape: z.string().nullable(),
   capitalLineItems: JsonValueSchema.nullable(),
@@ -4473,18 +4474,18 @@ export const COGRecordSchema = z.object({
   vendorItemNo: z.string().nullable(),
   manufacturerNo: z.string().nullable(),
   poNumber: z.string().nullable(),
-  unitCost: z.instanceof(Prisma.Decimal, { message: "Field 'unitCost' must be a Decimal. Location: ['Models', 'COGRecord']"}),
-  extendedPrice: z.instanceof(Prisma.Decimal, { message: "Field 'extendedPrice' must be a Decimal. Location: ['Models', 'COGRecord']"}).nullable(),
+  unitCost: z.instanceof(PrismaDecimal, { message: "Field 'unitCost' must be a Decimal. Location: ['Models', 'COGRecord']"}),
+  extendedPrice: z.instanceof(PrismaDecimal, { message: "Field 'extendedPrice' must be a Decimal. Location: ['Models', 'COGRecord']"}).nullable(),
   quantity: z.number().int(),
   transactionDate: z.coerce.date(),
   category: z.string().nullable(),
   notes: z.string().nullable(),
   createdBy: z.string().nullable(),
   contractId: z.string().nullable(),
-  contractPrice: z.instanceof(Prisma.Decimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'COGRecord']"}).nullable(),
+  contractPrice: z.instanceof(PrismaDecimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'COGRecord']"}).nullable(),
   isOnContract: z.boolean(),
-  savingsAmount: z.instanceof(Prisma.Decimal, { message: "Field 'savingsAmount' must be a Decimal. Location: ['Models', 'COGRecord']"}).nullable(),
-  variancePercent: z.instanceof(Prisma.Decimal, { message: "Field 'variancePercent' must be a Decimal. Location: ['Models', 'COGRecord']"}).nullable(),
+  savingsAmount: z.instanceof(PrismaDecimal, { message: "Field 'savingsAmount' must be a Decimal. Location: ['Models', 'COGRecord']"}).nullable(),
+  variancePercent: z.instanceof(PrismaDecimal, { message: "Field 'variancePercent' must be a Decimal. Location: ['Models', 'COGRecord']"}).nullable(),
   fileImportId: z.string().nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -4592,9 +4593,9 @@ export const PricingFileSchema = z.object({
   vendorItemNo: z.string(),
   manufacturerNo: z.string().nullable(),
   productDescription: z.string(),
-  listPrice: z.instanceof(Prisma.Decimal, { message: "Field 'listPrice' must be a Decimal. Location: ['Models', 'PricingFile']"}).nullable(),
-  contractPrice: z.instanceof(Prisma.Decimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'PricingFile']"}).nullable(),
-  carveOutPercent: z.instanceof(Prisma.Decimal, { message: "Field 'carveOutPercent' must be a Decimal. Location: ['Models', 'PricingFile']"}).nullable(),
+  listPrice: z.instanceof(PrismaDecimal, { message: "Field 'listPrice' must be a Decimal. Location: ['Models', 'PricingFile']"}).nullable(),
+  contractPrice: z.instanceof(PrismaDecimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'PricingFile']"}).nullable(),
+  carveOutPercent: z.instanceof(PrismaDecimal, { message: "Field 'carveOutPercent' must be a Decimal. Location: ['Models', 'PricingFile']"}).nullable(),
   effectiveDate: z.coerce.date(),
   expirationDate: z.coerce.date().nullable(),
   category: z.string().nullable(),
@@ -4696,9 +4697,9 @@ export const FileImportSchema = z.object({
   vendorId: z.string().nullable(),
   fileName: z.string(),
   recordCount: z.number().int().nullable(),
-  onContractSpend: z.instanceof(Prisma.Decimal, { message: "Field 'onContractSpend' must be a Decimal. Location: ['Models', 'FileImport']"}).nullable(),
-  offContractSpend: z.instanceof(Prisma.Decimal, { message: "Field 'offContractSpend' must be a Decimal. Location: ['Models', 'FileImport']"}).nullable(),
-  totalSavings: z.instanceof(Prisma.Decimal, { message: "Field 'totalSavings' must be a Decimal. Location: ['Models', 'FileImport']"}).nullable(),
+  onContractSpend: z.instanceof(PrismaDecimal, { message: "Field 'onContractSpend' must be a Decimal. Location: ['Models', 'FileImport']"}).nullable(),
+  offContractSpend: z.instanceof(PrismaDecimal, { message: "Field 'offContractSpend' must be a Decimal. Location: ['Models', 'FileImport']"}).nullable(),
+  totalSavings: z.instanceof(PrismaDecimal, { message: "Field 'totalSavings' must be a Decimal. Location: ['Models', 'FileImport']"}).nullable(),
   matchedRecords: z.number().int().nullable(),
   unmatchedRecords: z.number().int().nullable(),
   uniqueVendors: z.number().int().nullable(),
@@ -4929,7 +4930,7 @@ export const PurchaseOrderSchema = z.object({
   vendorId: z.string(),
   contractId: z.string().nullable(),
   orderDate: z.coerce.date(),
-  totalCost: z.instanceof(Prisma.Decimal, { message: "Field 'totalCost' must be a Decimal. Location: ['Models', 'PurchaseOrder']"}).nullable(),
+  totalCost: z.instanceof(PrismaDecimal, { message: "Field 'totalCost' must be a Decimal. Location: ['Models', 'PurchaseOrder']"}).nullable(),
   isOffContract: z.boolean(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -5053,8 +5054,8 @@ export const POLineItemSchema = z.object({
   vendorItemNo: z.string().nullable(),
   manufacturerNo: z.string().nullable(),
   quantity: z.number().int(),
-  unitPrice: z.instanceof(Prisma.Decimal, { message: "Field 'unitPrice' must be a Decimal. Location: ['Models', 'POLineItem']"}),
-  extendedPrice: z.instanceof(Prisma.Decimal, { message: "Field 'extendedPrice' must be a Decimal. Location: ['Models', 'POLineItem']"}),
+  unitPrice: z.instanceof(PrismaDecimal, { message: "Field 'unitPrice' must be a Decimal. Location: ['Models', 'POLineItem']"}),
+  extendedPrice: z.instanceof(PrismaDecimal, { message: "Field 'extendedPrice' must be a Decimal. Location: ['Models', 'POLineItem']"}),
   uom: z.string(),
   isOffContract: z.boolean(),
   contractId: z.string().nullable(),
@@ -5146,7 +5147,7 @@ export const InvoiceSchema = z.object({
   vendorId: z.string(),
   purchaseOrderId: z.string().nullable(),
   invoiceDate: z.coerce.date(),
-  totalInvoiceCost: z.instanceof(Prisma.Decimal, { message: "Field 'totalInvoiceCost' must be a Decimal. Location: ['Models', 'Invoice']"}).nullable(),
+  totalInvoiceCost: z.instanceof(PrismaDecimal, { message: "Field 'totalInvoiceCost' must be a Decimal. Location: ['Models', 'Invoice']"}).nullable(),
   status: z.string(),
   disputeNote: z.string().nullable(),
   disputeAt: z.coerce.date().nullable(),
@@ -5259,11 +5260,11 @@ export const InvoiceLineItemSchema = z.object({
   invoiceId: z.string(),
   inventoryDescription: z.string(),
   vendorItemNo: z.string().nullable(),
-  invoicePrice: z.instanceof(Prisma.Decimal, { message: "Field 'invoicePrice' must be a Decimal. Location: ['Models', 'InvoiceLineItem']"}),
+  invoicePrice: z.instanceof(PrismaDecimal, { message: "Field 'invoicePrice' must be a Decimal. Location: ['Models', 'InvoiceLineItem']"}),
   invoiceQuantity: z.number().int(),
-  totalLineCost: z.instanceof(Prisma.Decimal, { message: "Field 'totalLineCost' must be a Decimal. Location: ['Models', 'InvoiceLineItem']"}),
-  contractPrice: z.instanceof(Prisma.Decimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'InvoiceLineItem']"}).nullable(),
-  variancePercent: z.instanceof(Prisma.Decimal, { message: "Field 'variancePercent' must be a Decimal. Location: ['Models', 'InvoiceLineItem']"}).nullable(),
+  totalLineCost: z.instanceof(PrismaDecimal, { message: "Field 'totalLineCost' must be a Decimal. Location: ['Models', 'InvoiceLineItem']"}),
+  contractPrice: z.instanceof(PrismaDecimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'InvoiceLineItem']"}).nullable(),
+  variancePercent: z.instanceof(PrismaDecimal, { message: "Field 'variancePercent' must be a Decimal. Location: ['Models', 'InvoiceLineItem']"}).nullable(),
   isFlagged: z.boolean(),
   createdAt: z.coerce.date(),
 })
@@ -5358,10 +5359,10 @@ export const InvoicePriceVarianceSchema = z.object({
   id: z.cuid(),
   invoiceLineItemId: z.string(),
   contractId: z.string(),
-  contractPrice: z.instanceof(Prisma.Decimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'InvoicePriceVariance']"}),
-  actualPrice: z.instanceof(Prisma.Decimal, { message: "Field 'actualPrice' must be a Decimal. Location: ['Models', 'InvoicePriceVariance']"}),
-  variancePercent: z.instanceof(Prisma.Decimal, { message: "Field 'variancePercent' must be a Decimal. Location: ['Models', 'InvoicePriceVariance']"}),
-  dollarImpact: z.instanceof(Prisma.Decimal, { message: "Field 'dollarImpact' must be a Decimal. Location: ['Models', 'InvoicePriceVariance']"}),
+  contractPrice: z.instanceof(PrismaDecimal, { message: "Field 'contractPrice' must be a Decimal. Location: ['Models', 'InvoicePriceVariance']"}),
+  actualPrice: z.instanceof(PrismaDecimal, { message: "Field 'actualPrice' must be a Decimal. Location: ['Models', 'InvoicePriceVariance']"}),
+  variancePercent: z.instanceof(PrismaDecimal, { message: "Field 'variancePercent' must be a Decimal. Location: ['Models', 'InvoicePriceVariance']"}),
+  dollarImpact: z.instanceof(PrismaDecimal, { message: "Field 'dollarImpact' must be a Decimal. Location: ['Models', 'InvoicePriceVariance']"}),
   detectedAt: z.coerce.date(),
 })
 
@@ -5453,9 +5454,9 @@ export const RebateSchema = z.object({
   contractId: z.string(),
   facilityId: z.string(),
   periodId: z.string().nullable(),
-  rebateEarned: z.instanceof(Prisma.Decimal, { message: "Field 'rebateEarned' must be a Decimal. Location: ['Models', 'Rebate']"}),
-  rebateCollected: z.instanceof(Prisma.Decimal, { message: "Field 'rebateCollected' must be a Decimal. Location: ['Models', 'Rebate']"}),
-  rebateUnearned: z.instanceof(Prisma.Decimal, { message: "Field 'rebateUnearned' must be a Decimal. Location: ['Models', 'Rebate']"}),
+  rebateEarned: z.instanceof(PrismaDecimal, { message: "Field 'rebateEarned' must be a Decimal. Location: ['Models', 'Rebate']"}),
+  rebateCollected: z.instanceof(PrismaDecimal, { message: "Field 'rebateCollected' must be a Decimal. Location: ['Models', 'Rebate']"}),
+  rebateUnearned: z.instanceof(PrismaDecimal, { message: "Field 'rebateUnearned' must be a Decimal. Location: ['Models', 'Rebate']"}),
   payPeriodStart: z.coerce.date(),
   payPeriodEnd: z.coerce.date(),
   collectionDate: z.coerce.date().nullable(),
@@ -5481,8 +5482,8 @@ export type RebatePartial = z.infer<typeof RebatePartialSchema>
 
 export const RebateOptionalDefaultsSchema = RebateSchema.merge(z.object({
   id: z.cuid().optional(),
-  rebateCollected: z.instanceof(Prisma.Decimal, { message: "Field 'rebateCollected' must be a Decimal. Location: ['Models', 'Rebate']"}).optional(),
-  rebateUnearned: z.instanceof(Prisma.Decimal, { message: "Field 'rebateUnearned' must be a Decimal. Location: ['Models', 'Rebate']"}).optional(),
+  rebateCollected: z.instanceof(PrismaDecimal, { message: "Field 'rebateCollected' must be a Decimal. Location: ['Models', 'Rebate']"}).optional(),
+  rebateUnearned: z.instanceof(PrismaDecimal, { message: "Field 'rebateUnearned' must be a Decimal. Location: ['Models', 'Rebate']"}).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 }))
@@ -5567,8 +5568,8 @@ export const RebateAccrualSchema = z.object({
   contractId: z.string(),
   periodStart: z.coerce.date(),
   periodEnd: z.coerce.date(),
-  accruedAmount: z.instanceof(Prisma.Decimal, { message: "Field 'accruedAmount' must be a Decimal. Location: ['Models', 'RebateAccrual']"}),
-  trueUpAmount: z.instanceof(Prisma.Decimal, { message: "Field 'trueUpAmount' must be a Decimal. Location: ['Models', 'RebateAccrual']"}),
+  accruedAmount: z.instanceof(PrismaDecimal, { message: "Field 'accruedAmount' must be a Decimal. Location: ['Models', 'RebateAccrual']"}),
+  trueUpAmount: z.instanceof(PrismaDecimal, { message: "Field 'trueUpAmount' must be a Decimal. Location: ['Models', 'RebateAccrual']"}),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 })
@@ -5589,8 +5590,8 @@ export type RebateAccrualPartial = z.infer<typeof RebateAccrualPartialSchema>
 export const RebateAccrualOptionalDefaultsSchema = RebateAccrualSchema.merge(z.object({
   status: AccrualStatusSchema.optional(),
   id: z.cuid().optional(),
-  accruedAmount: z.instanceof(Prisma.Decimal, { message: "Field 'accruedAmount' must be a Decimal. Location: ['Models', 'RebateAccrual']"}).optional(),
-  trueUpAmount: z.instanceof(Prisma.Decimal, { message: "Field 'trueUpAmount' must be a Decimal. Location: ['Models', 'RebateAccrual']"}).optional(),
+  accruedAmount: z.instanceof(PrismaDecimal, { message: "Field 'accruedAmount' must be a Decimal. Location: ['Models', 'RebateAccrual']"}).optional(),
+  trueUpAmount: z.instanceof(PrismaDecimal, { message: "Field 'trueUpAmount' must be a Decimal. Location: ['Models', 'RebateAccrual']"}).optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
 }))
@@ -5657,7 +5658,7 @@ export const PaymentSchema = z.object({
   contractId: z.string(),
   facilityId: z.string(),
   paymentDate: z.coerce.date(),
-  paymentAmount: z.instanceof(Prisma.Decimal, { message: "Field 'paymentAmount' must be a Decimal. Location: ['Models', 'Payment']"}),
+  paymentAmount: z.instanceof(PrismaDecimal, { message: "Field 'paymentAmount' must be a Decimal. Location: ['Models', 'Payment']"}),
   paymentType: z.string().nullable(),
   notes: z.string().nullable(),
   createdById: z.string().nullable(),
@@ -5760,7 +5761,7 @@ export const CreditSchema = z.object({
   contractId: z.string(),
   facilityId: z.string(),
   creditDate: z.coerce.date(),
-  creditAmount: z.instanceof(Prisma.Decimal, { message: "Field 'creditAmount' must be a Decimal. Location: ['Models', 'Credit']"}),
+  creditAmount: z.instanceof(PrismaDecimal, { message: "Field 'creditAmount' must be a Decimal. Location: ['Models', 'Credit']"}),
   creditReason: z.string().nullable(),
   notes: z.string().nullable(),
   createdById: z.string().nullable(),
@@ -5863,7 +5864,7 @@ export const VendorNameMappingSchema = z.object({
   cogVendorName: z.string(),
   mappedVendorId: z.string().nullable(),
   mappedVendorName: z.string().nullable(),
-  confidenceScore: z.instanceof(Prisma.Decimal, { message: "Field 'confidenceScore' must be a Decimal. Location: ['Models', 'VendorNameMapping']"}).nullable(),
+  confidenceScore: z.instanceof(PrismaDecimal, { message: "Field 'confidenceScore' must be a Decimal. Location: ['Models', 'VendorNameMapping']"}).nullable(),
   isConfirmed: z.boolean(),
   createdAt: z.coerce.date(),
 })
@@ -5948,7 +5949,7 @@ export const CategoryMappingSchema = z.object({
   id: z.cuid(),
   cogCategory: z.string(),
   contractCategory: z.string().nullable(),
-  similarityScore: z.instanceof(Prisma.Decimal, { message: "Field 'similarityScore' must be a Decimal. Location: ['Models', 'CategoryMapping']"}).nullable(),
+  similarityScore: z.instanceof(PrismaDecimal, { message: "Field 'similarityScore' must be a Decimal. Location: ['Models', 'CategoryMapping']"}).nullable(),
   isConfirmed: z.boolean(),
   createdAt: z.coerce.date(),
 })
@@ -5984,12 +5985,12 @@ export const ProductBenchmarkSchema = z.object({
   vendorItemNo: z.string(),
   description: z.string().nullable(),
   category: z.string().nullable(),
-  nationalAvgPrice: z.instanceof(Prisma.Decimal, { message: "Field 'nationalAvgPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
-  percentile25: z.instanceof(Prisma.Decimal, { message: "Field 'percentile25' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
-  percentile50: z.instanceof(Prisma.Decimal, { message: "Field 'percentile50' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
-  percentile75: z.instanceof(Prisma.Decimal, { message: "Field 'percentile75' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
-  minPrice: z.instanceof(Prisma.Decimal, { message: "Field 'minPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
-  maxPrice: z.instanceof(Prisma.Decimal, { message: "Field 'maxPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
+  nationalAvgPrice: z.instanceof(PrismaDecimal, { message: "Field 'nationalAvgPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
+  percentile25: z.instanceof(PrismaDecimal, { message: "Field 'percentile25' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
+  percentile50: z.instanceof(PrismaDecimal, { message: "Field 'percentile50' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
+  percentile75: z.instanceof(PrismaDecimal, { message: "Field 'percentile75' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
+  minPrice: z.instanceof(PrismaDecimal, { message: "Field 'minPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
+  maxPrice: z.instanceof(PrismaDecimal, { message: "Field 'maxPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
   sampleSize: z.number().int().nullable(),
   dataDate: z.coerce.date().nullable(),
   source: z.string(),
@@ -6082,7 +6083,7 @@ export const CaseSchema = z.object({
   /**
    * * Patient BMI at time of surgery (v0 §8 surgeon scorecard input).
    */
-  patientBmi: z.instanceof(Prisma.Decimal, { message: "Field 'patientBmi' must be a Decimal. Location: ['Models', 'Case']"}).nullable(),
+  patientBmi: z.instanceof(PrismaDecimal, { message: "Field 'patientBmi' must be a Decimal. Location: ['Models', 'Case']"}).nullable(),
   /**
    * *
    * * Insurance class for payor-mix scoring per v0 doc §8. One of:
@@ -6093,9 +6094,9 @@ export const CaseSchema = z.object({
   timeInOr: z.string().nullable(),
   timeOutOr: z.string().nullable(),
   primaryCptCode: z.string().nullable(),
-  totalSpend: z.instanceof(Prisma.Decimal, { message: "Field 'totalSpend' must be a Decimal. Location: ['Models', 'Case']"}),
-  totalReimbursement: z.instanceof(Prisma.Decimal, { message: "Field 'totalReimbursement' must be a Decimal. Location: ['Models', 'Case']"}),
-  margin: z.instanceof(Prisma.Decimal, { message: "Field 'margin' must be a Decimal. Location: ['Models', 'Case']"}),
+  totalSpend: z.instanceof(PrismaDecimal, { message: "Field 'totalSpend' must be a Decimal. Location: ['Models', 'Case']"}),
+  totalReimbursement: z.instanceof(PrismaDecimal, { message: "Field 'totalReimbursement' must be a Decimal. Location: ['Models', 'Case']"}),
+  margin: z.instanceof(PrismaDecimal, { message: "Field 'margin' must be a Decimal. Location: ['Models', 'Case']"}),
   complianceStatus: z.string(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -6116,9 +6117,9 @@ export type CasePartial = z.infer<typeof CasePartialSchema>
 
 export const CaseOptionalDefaultsSchema = CaseSchema.merge(z.object({
   id: z.cuid().optional(),
-  totalSpend: z.instanceof(Prisma.Decimal, { message: "Field 'totalSpend' must be a Decimal. Location: ['Models', 'Case']"}).optional(),
-  totalReimbursement: z.instanceof(Prisma.Decimal, { message: "Field 'totalReimbursement' must be a Decimal. Location: ['Models', 'Case']"}).optional(),
-  margin: z.instanceof(Prisma.Decimal, { message: "Field 'margin' must be a Decimal. Location: ['Models', 'Case']"}).optional(),
+  totalSpend: z.instanceof(PrismaDecimal, { message: "Field 'totalSpend' must be a Decimal. Location: ['Models', 'Case']"}).optional(),
+  totalReimbursement: z.instanceof(PrismaDecimal, { message: "Field 'totalReimbursement' must be a Decimal. Location: ['Models', 'Case']"}).optional(),
+  margin: z.instanceof(PrismaDecimal, { message: "Field 'margin' must be a Decimal. Location: ['Models', 'Case']"}).optional(),
   complianceStatus: z.string().optional(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
@@ -6285,9 +6286,9 @@ export const CaseSupplySchema = z.object({
   caseId: z.string(),
   materialName: z.string(),
   vendorItemNo: z.string().nullable(),
-  usedCost: z.instanceof(Prisma.Decimal, { message: "Field 'usedCost' must be a Decimal. Location: ['Models', 'CaseSupply']"}),
+  usedCost: z.instanceof(PrismaDecimal, { message: "Field 'usedCost' must be a Decimal. Location: ['Models', 'CaseSupply']"}),
   quantity: z.number().int(),
-  extendedCost: z.instanceof(Prisma.Decimal, { message: "Field 'extendedCost' must be a Decimal. Location: ['Models', 'CaseSupply']"}),
+  extendedCost: z.instanceof(PrismaDecimal, { message: "Field 'extendedCost' must be a Decimal. Location: ['Models', 'CaseSupply']"}),
   isOnContract: z.boolean(),
   contractId: z.string().nullable(),
   createdAt: z.coerce.date(),
@@ -6309,7 +6310,7 @@ export type CaseSupplyPartial = z.infer<typeof CaseSupplyPartialSchema>
 export const CaseSupplyOptionalDefaultsSchema = CaseSupplySchema.merge(z.object({
   id: z.cuid().optional(),
   quantity: z.number().int().optional(),
-  extendedCost: z.instanceof(Prisma.Decimal, { message: "Field 'extendedCost' must be a Decimal. Location: ['Models', 'CaseSupply']"}).optional(),
+  extendedCost: z.instanceof(PrismaDecimal, { message: "Field 'extendedCost' must be a Decimal. Location: ['Models', 'CaseSupply']"}).optional(),
   isOnContract: z.boolean().optional(),
   createdAt: z.coerce.date().optional(),
 }))
@@ -6414,9 +6415,9 @@ export const SurgeonUsageSchema = z.object({
   facilityId: z.string(),
   periodStart: z.coerce.date(),
   periodEnd: z.coerce.date(),
-  usageAmount: z.instanceof(Prisma.Decimal, { message: "Field 'usageAmount' must be a Decimal. Location: ['Models', 'SurgeonUsage']"}),
+  usageAmount: z.instanceof(PrismaDecimal, { message: "Field 'usageAmount' must be a Decimal. Location: ['Models', 'SurgeonUsage']"}),
   caseCount: z.number().int(),
-  complianceRate: z.instanceof(Prisma.Decimal, { message: "Field 'complianceRate' must be a Decimal. Location: ['Models', 'SurgeonUsage']"}),
+  complianceRate: z.instanceof(PrismaDecimal, { message: "Field 'complianceRate' must be a Decimal. Location: ['Models', 'SurgeonUsage']"}),
   createdAt: z.coerce.date(),
 })
 
@@ -6435,9 +6436,9 @@ export type SurgeonUsagePartial = z.infer<typeof SurgeonUsagePartialSchema>
 
 export const SurgeonUsageOptionalDefaultsSchema = SurgeonUsageSchema.merge(z.object({
   id: z.cuid().optional(),
-  usageAmount: z.instanceof(Prisma.Decimal, { message: "Field 'usageAmount' must be a Decimal. Location: ['Models', 'SurgeonUsage']"}).optional(),
+  usageAmount: z.instanceof(PrismaDecimal, { message: "Field 'usageAmount' must be a Decimal. Location: ['Models', 'SurgeonUsage']"}).optional(),
   caseCount: z.number().int().optional(),
-  complianceRate: z.instanceof(Prisma.Decimal, { message: "Field 'complianceRate' must be a Decimal. Location: ['Models', 'SurgeonUsage']"}).optional(),
+  complianceRate: z.instanceof(PrismaDecimal, { message: "Field 'complianceRate' must be a Decimal. Location: ['Models', 'SurgeonUsage']"}).optional(),
   createdAt: z.coerce.date().optional(),
 }))
 
@@ -6519,7 +6520,7 @@ export const PayorContractSchema = z.object({
   grouperRates: JsonValueSchema,
   multiProcedureRule: JsonValueSchema,
   implantPassthrough: z.boolean(),
-  implantMarkup: z.instanceof(Prisma.Decimal, { message: "Field 'implantMarkup' must be a Decimal. Location: ['Models', 'PayorContract']"}),
+  implantMarkup: z.instanceof(PrismaDecimal, { message: "Field 'implantMarkup' must be a Decimal. Location: ['Models', 'PayorContract']"}),
   uploadedAt: z.coerce.date(),
   uploadedBy: z.string().nullable(),
   fileName: z.string().nullable(),
@@ -6547,7 +6548,7 @@ export const PayorContractOptionalDefaultsSchema = PayorContractSchema.merge(z.o
   grouperRates: JsonValueSchema,
   multiProcedureRule: JsonValueSchema,
   implantPassthrough: z.boolean().optional(),
-  implantMarkup: z.instanceof(Prisma.Decimal, { message: "Field 'implantMarkup' must be a Decimal. Location: ['Models', 'PayorContract']"}).optional(),
+  implantMarkup: z.instanceof(PrismaDecimal, { message: "Field 'implantMarkup' must be a Decimal. Location: ['Models', 'PayorContract']"}).optional(),
   uploadedAt: z.coerce.date().optional(),
 }))
 

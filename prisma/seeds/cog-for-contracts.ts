@@ -1,4 +1,4 @@
-import type { PrismaClient, Prisma } from "@prisma/client"
+import type { PrismaClient, Prisma } from "@/lib/generated/prisma/client"
 import { applyTiers, computeRebate } from "@/lib/rebates/calculate"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"

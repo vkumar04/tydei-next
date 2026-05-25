@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client"
+import type { PrismaClient } from "@/lib/generated/prisma/client"
 
 /**
  * Recompute `CaseSupply.isOnContract` + `CaseSupply.contractId` for a

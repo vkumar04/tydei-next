@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import type { UserRole } from "@prisma/client"
+import type { UserRole } from "@/lib/generated/prisma/client"
 
 export type PortalRole = "facility" | "vendor" | "admin"
 

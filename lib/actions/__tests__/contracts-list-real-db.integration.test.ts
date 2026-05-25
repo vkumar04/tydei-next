@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from "@/lib/generated/prisma/client"
 import { Pool } from "pg"
 import { PrismaPg } from "@prisma/adapter-pg"
 import {

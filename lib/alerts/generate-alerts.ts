@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db"
-import type { AlertType, AlertSeverity } from "@prisma/client"
+import type { AlertType, AlertSeverity } from "@/lib/generated/prisma/client"
 
 interface NewAlert {
   portalType: string

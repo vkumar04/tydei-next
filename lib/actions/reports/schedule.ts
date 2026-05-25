@@ -16,7 +16,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import type { ReportType, ReportFrequency } from "@prisma/client"
+import type { ReportType, ReportFrequency } from "@/lib/generated/prisma/client"
 
 // ─── Input surface ──────────────────────────────────────────────
 

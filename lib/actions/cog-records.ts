@@ -8,7 +8,7 @@ import {
   type COGFilters,
   type CreateCOGRecordInput,
 } from "@/lib/validators/cog-records"
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 
 // ─── List COG Records ───────────────────────────────────────────

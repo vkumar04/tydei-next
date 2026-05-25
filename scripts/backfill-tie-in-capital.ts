@@ -4,7 +4,7 @@
  * applied-to-capital pays into the void. This is a one-shot — once run,
  * subsequent runs are no-ops.
  */
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 
 async function main() {

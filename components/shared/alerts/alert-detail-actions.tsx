@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { CheckCircle, ExternalLink, XCircle } from "lucide-react"
-import type { AlertType } from "@prisma/client"
+import type { AlertType } from "@/lib/generated/prisma/client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"

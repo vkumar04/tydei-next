@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAdmin } from "@/lib/actions/auth"
-import type { UserRole } from "@prisma/client"
+import type { UserRole } from "@/lib/generated/prisma/client"
 import type { AdminCreateUserInput, AdminUpdateUserInput } from "@/lib/validators/admin"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"

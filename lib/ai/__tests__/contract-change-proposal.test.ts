@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import {
   buildContractChangeProposal,
   serializeProposalForUi,

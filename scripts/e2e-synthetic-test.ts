@@ -23,7 +23,7 @@
 
 import { prisma } from "@/lib/db"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
-import type { COGMatchStatus } from "@prisma/client"
+import type { COGMatchStatus } from "@/lib/generated/prisma/client"
 
 /**
  * PRICE_VARIANCE_THRESHOLD mirrors lib/contracts/match.ts — kept as a local

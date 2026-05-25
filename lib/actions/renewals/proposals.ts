@@ -21,7 +21,7 @@
  * `lib/ai/contract-change-proposal.ts`.
  */
 
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"

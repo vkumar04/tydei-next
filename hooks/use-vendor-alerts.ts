@@ -9,7 +9,7 @@ import {
   bulkResolveVendorAlerts,
   bulkDismissVendorAlerts,
 } from "@/lib/actions/vendor-alerts"
-import type { AlertType, AlertSeverity, AlertStatus } from "@prisma/client"
+import type { AlertType, AlertSeverity, AlertStatus } from "@/lib/generated/prisma/client"
 import { toast } from "sonner"
 
 export function useVendorAlerts(

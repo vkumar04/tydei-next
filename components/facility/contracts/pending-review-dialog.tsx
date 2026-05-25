@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import type { PendingContract, Vendor } from "@prisma/client"
+import type { PendingContract, Vendor } from "@/lib/generated/prisma/client"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"

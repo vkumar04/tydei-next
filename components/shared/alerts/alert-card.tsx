@@ -7,7 +7,7 @@ import { alertTypeIconConfig, alertSeverityBadgeConfig, alertColorBg } from "./a
 import { formatDistanceToNow } from "date-fns"
 import { CheckCircle, ChevronRight } from "lucide-react"
 import Link from "next/link"
-import type { Alert } from "@prisma/client"
+import type { Alert } from "@/lib/generated/prisma/client"
 
 interface AlertCardProps {
   alert: Alert & {

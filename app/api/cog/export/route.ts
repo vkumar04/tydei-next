@@ -14,7 +14,7 @@ import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { prisma } from "@/lib/db"
-import type { Prisma, COGMatchStatus } from "@prisma/client"
+import type { Prisma, COGMatchStatus } from "@/lib/generated/prisma/client"
 
 const ALLOWED_MATCH_STATUSES: readonly COGMatchStatus[] = [
   "pending",

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { ChevronRight, ChevronDown, Plus, Pencil, Trash2, FolderTree } from "lucide-react"
-import type { ProductCategory } from "@prisma/client"
+import type { ProductCategory } from "@/lib/generated/prisma/client"
 import type { CategoryNode } from "@/lib/actions/categories"
 import { useCategoryTree, useDeleteCategory } from "@/hooks/use-categories"
 import { CategoryFormDialog } from "@/components/facility/categories/category-form-dialog"

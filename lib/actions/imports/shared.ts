@@ -26,7 +26,7 @@ import type {
   PerformancePeriod,
   RebateType,
   TermType,
-} from "@prisma/client"
+} from "@/lib/generated/prisma/client"
 
 export type TargetField = { key: string; label: string; required: boolean }
 

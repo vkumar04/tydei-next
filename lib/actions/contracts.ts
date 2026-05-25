@@ -10,7 +10,7 @@ import {
   type CreateContractInput,
   type UpdateContractInput,
 } from "@/lib/validators/contracts"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"

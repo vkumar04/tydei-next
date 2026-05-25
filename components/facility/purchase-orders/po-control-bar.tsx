@@ -1,7 +1,7 @@
 "use client"
 
 import { Download, Plus, Search } from "lucide-react"
-import type { POStatus } from "@prisma/client"
+import type { POStatus } from "@/lib/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"

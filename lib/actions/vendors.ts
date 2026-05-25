@@ -10,7 +10,7 @@ import {
   type CreateVendorInput,
   type UpdateVendorInput,
 } from "@/lib/validators/vendors"
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 
 // ─── List Vendors (simple - for dropdowns) ──────────────────────

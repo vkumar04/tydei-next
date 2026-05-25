@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client"
+import type { PrismaClient } from "@/lib/generated/prisma/client"
 
 /**
  * Seed `ContractPricing` rows for every active/expiring contract using

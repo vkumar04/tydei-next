@@ -1,6 +1,6 @@
 "use client"
 
-import type { ContractType } from "@prisma/client"
+import type { ContractType } from "@/lib/generated/prisma/client"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {

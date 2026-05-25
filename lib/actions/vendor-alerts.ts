@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import type { AlertFilters } from "@/lib/validators/alerts"
-import type { Prisma } from "@prisma/client"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 
 // ─── Vendor Alerts ──────────────────────────────────────────────

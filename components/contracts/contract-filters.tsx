@@ -1,6 +1,6 @@
 "use client"
 
-import type { ContractStatus, ContractType } from "@prisma/client"
+import type { ContractStatus, ContractType } from "@/lib/generated/prisma/client"
 import {
   Select,
   SelectContent,

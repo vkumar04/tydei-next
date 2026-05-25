@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
-import type { ConnectionStatus } from "@prisma/client"
+import type { ConnectionStatus } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 
 /**

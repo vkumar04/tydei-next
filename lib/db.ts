@@ -1,5 +1,5 @@
 import dns from "node:dns"
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from "@/lib/generated/prisma/client"
 import type { PoolConfig } from "pg"
 import { PrismaPg } from "@prisma/adapter-pg"
 

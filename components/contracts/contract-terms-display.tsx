@@ -1,6 +1,6 @@
 "use client"
 
-import type { ContractTerm, ContractTier } from "@prisma/client"
+import type { ContractTerm, ContractTier } from "@/lib/generated/prisma/client"
 import {
   formatCurrency,
   formatCalendarDate,

@@ -8,11 +8,11 @@
  * Reference: lib/rebates/prisma-engine-bridge.ts
  */
 import { describe, it, expect } from "vitest"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@/lib/generated/prisma/client"
 import type {
   ContractTerm as PrismaContractTerm,
   ContractTier as PrismaContractTier,
-} from "@prisma/client"
+} from "@/lib/generated/prisma/client"
 import { buildRebateConfigFromPrisma } from "@/lib/rebates/prisma-engine-bridge"
 
 function tier(

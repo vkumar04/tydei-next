@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
-import type { ContractStatus, Prisma } from "@prisma/client"
+import type { ContractStatus, Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
