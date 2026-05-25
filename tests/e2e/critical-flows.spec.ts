@@ -45,8 +45,10 @@ test.describe("facility critical flows", () => {
     const trigger = page.getByRole("combobox").first()
     await expect(trigger).toBeVisible({ timeout: 15_000 })
     await trigger.click()
-    // "All vendors" + at least one specific vendor option
-    await expect(page.getByText(/all vendors/i)).toBeVisible()
+    // "All vendors" + at least one specific vendor option.
+    // Use .first() since "All vendors" appears in both the select-value
+    // span and the option label after the dropdown opens.
+    await expect(page.getByText(/all vendors/i).first()).toBeVisible()
     // Count vendor options — should be > 1 (was 1 before fix)
     const items = page.getByRole("option")
     const count = await items.count()
@@ -128,9 +130,13 @@ test.describe("vendor critical flows", () => {
     ).toBeVisible({ timeout: 15_000 })
     // Click the tab — should show the drop zone, not a fake progress bar
     await page.getByRole("tab", { name: /upload pdf/i }).click()
-    // The dropzone copy from contract-pdf-drop-zone.tsx
+    // The Upload PDF tab's dropzone copy. The vendor "Submit New
+    // Contract" surface uses a contract-only dropzone ("Drop your
+    // contract PDF here"); the general-purpose dropzone elsewhere
+    // says "Drop a contract or pricing file here". Match either.
     await expect(
-      page.getByText(/drop a contract.*here.*click to upload/i).first(),
+      page.getByText(/drop (your|a) contract( pdf|.*pricing file)? here/i)
+        .first(),
     ).toBeVisible({ timeout: 10_000 })
   })
 

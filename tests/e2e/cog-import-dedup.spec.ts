@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test"
 test.use({ storageState: "tests/e2e/.auth/facility.json" })
 
 test("COG Data page renders stats + table controls", async ({ page }) => {
-  await page.goto("/dashboard/cog")
+  await page.goto("/dashboard/cog-data")
   // Stats panel labels
   await expect(page.getByText(/total rows|enrichment overview/i).first()).toBeVisible({
     timeout: 15_000,
@@ -21,7 +21,7 @@ test("COG Data page renders stats + table controls", async ({ page }) => {
 })
 
 test("COG search input is server-side (hits all records, not current page)", async ({ page }) => {
-  await page.goto("/dashboard/cog")
+  await page.goto("/dashboard/cog-data")
   // The server-side search input has the updated placeholder
   const search = page.getByPlaceholder(
     /search description, vendor item, or inventory #/i,
@@ -30,7 +30,7 @@ test("COG search input is server-side (hits all records, not current page)", asy
 })
 
 test("import dialog exposes bulk dedup controls", async ({ page }) => {
-  await page.goto("/dashboard/cog")
+  await page.goto("/dashboard/cog-data")
   // Open import dialog if there's an Import button
   const importBtn = page
     .getByRole("button", { name: /^import$|^upload cog|^mass upload$/i })
