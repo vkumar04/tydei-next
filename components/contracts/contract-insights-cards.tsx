@@ -28,7 +28,7 @@ export function ContractInsightsCards({ contractId }: ContractInsightsCardsProps
     )
   }
 
-  const { compliance, priceVariance, marketShare } = data
+  const { compliance, priceVariance, marketShare, contractType } = data
 
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -39,7 +39,11 @@ export function ContractInsightsCards({ contractId }: ContractInsightsCardsProps
         </CardHeader>
         <CardContent className="space-y-2">
           {compliance.compliancePercent === null ? (
-            <p className="text-sm text-muted-foreground">No purchases to evaluate</p>
+            <p className="text-sm text-muted-foreground">
+              {contractType === "tie_in"
+                ? "Capital contracts don't track per-SKU compliance. See the Amortization tab for the payment schedule."
+                : "No purchases to evaluate"}
+            </p>
           ) : (
             <>
               <div className="flex items-baseline gap-2">
@@ -117,6 +121,12 @@ export function ContractInsightsCards({ contractId }: ContractInsightsCardsProps
                     : `${Math.abs(marketShare.gap).toFixed(1)}pp short of commitment`}
                 </p>
               )}
+              {marketShare.scope === "vendorTotal" && (
+                <p className="text-[11px] italic text-muted-foreground">
+                  Vendor-wide share — no in-category COG attributed to this contract.
+                  Verify the contract&apos;s category assignment if you expected a category-scoped number.
+                </p>
+              )}
             </>
           )}
         </CardContent>
@@ -130,7 +140,9 @@ export function ContractInsightsCards({ contractId }: ContractInsightsCardsProps
         <CardContent className="space-y-2">
           {priceVariance.totalLines === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No matching invoice lines to compare.
+              {contractType === "tie_in"
+                ? "Per-SKU price variance not tracked for capital contracts."
+                : "No matching invoice lines to compare."}
             </p>
           ) : (
             <>

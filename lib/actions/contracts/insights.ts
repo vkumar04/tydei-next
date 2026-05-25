@@ -15,6 +15,7 @@ import {
   calculateMarketShare,
   type CompliancePurchase,
   type ComplianceContract,
+  type MarketShareResult,
 } from "@/lib/contracts/compliance"
 import {
   analyzePriceDiscrepancies,
@@ -124,7 +125,7 @@ export async function getContractInsights(contractId: string) {
     }))
   const priceVariance = analyzePriceDiscrepancies(varianceLines, priceLookup)
 
-  let marketShare: ReturnType<typeof calculateMarketShare> | null = null
+  let marketShare: (MarketShareResult & { scope?: "categoryScoped" | "vendorTotal" }) | null = null
   // Pull every category the contract scopes — primary + join table —
   // and de-duplicate. The Performance tab card aggregates vendor /
   // facility spend across the union.
@@ -180,13 +181,52 @@ export async function getContractInsights(contractId: string) {
         _sum: { extendedPrice: true },
       }),
     ])
-    marketShare = calculateMarketShare(
-      Number(vendorAgg._sum.extendedPrice ?? 0),
-      Number(categoryAgg._sum.extendedPrice ?? 0),
-      contract.marketShareCommitment != null
-        ? Number(contract.marketShareCommitment)
-        : null,
-    )
+    marketShare = {
+      ...calculateMarketShare(
+        Number(vendorAgg._sum.extendedPrice ?? 0),
+        Number(categoryAgg._sum.extendedPrice ?? 0),
+        contract.marketShareCommitment != null
+          ? Number(contract.marketShareCommitment)
+          : null,
+      ),
+      scope: "categoryScoped" as const,
+    }
+  }
+
+  // Bug #15 (2026-05-24): tie-in and other contracts whose stored
+  // category name doesn't match any COG.category often show "0.0%
+  // Market Share" despite real vendor spend. Fall back to a vendor-
+  // vs-facility-total scope so the metric is meaningful instead of
+  // misleadingly zero. UI surfaces a "vendor-wide" qualifier.
+  const vendorTotalFallbackNeeded =
+    marketShare !== null && marketShare.currentMarketShare === 0
+  const vendorTotalFallbackEligible =
+    categoryNames.length === 0 && contract.vendorId !== null
+  if ((vendorTotalFallbackNeeded || vendorTotalFallbackEligible) && contract.vendorId !== null) {
+    const [vendorAllAgg, facilityAllAgg] = await Promise.all([
+      prisma.cOGRecord.aggregate({
+        where: { facilityId: facility.id, vendorId: contract.vendorId },
+        _sum: { extendedPrice: true },
+      }),
+      prisma.cOGRecord.aggregate({
+        where: { facilityId: facility.id },
+        _sum: { extendedPrice: true },
+      }),
+    ])
+    const vendorTotal = Number(vendorAllAgg._sum.extendedPrice ?? 0)
+    const facilityTotal = Number(facilityAllAgg._sum.extendedPrice ?? 0)
+    if (vendorTotal > 0 && facilityTotal > 0) {
+      marketShare = {
+        ...calculateMarketShare(
+          vendorTotal,
+          facilityTotal,
+          contract.marketShareCommitment != null
+            ? Number(contract.marketShareCommitment)
+            : null,
+        ),
+        scope: "vendorTotal" as const,
+      }
+    }
   }
 
   return serialize({
@@ -198,5 +238,9 @@ export async function getContractInsights(contractId: string) {
       bySeverity: priceVariance.bySeverity,
     },
     marketShare,
+    // Bug #15: surface contractType so the UI can show tie-in-specific
+    // empty-state messages on cards that legitimately have no PO/
+    // invoice data for capital contracts.
+    contractType: contract.contractType,
   })
 }
