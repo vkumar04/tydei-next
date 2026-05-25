@@ -104,7 +104,7 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
             </p>
           </div>
           <div>
-            <p className="text-muted-foreground">Off Contract</p>
+            <p className="text-muted-foreground">Off Catalog</p>
             <p className="text-2xl font-bold text-sky-600">
               {formatCurrency(data.notPriced)}
             </p>
@@ -164,7 +164,7 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
                     <p className="text-xs">
                       Leakage counts only truly off-contract spend: purchases
                       from vendors outside any active contract (or unknown
-                      vendors). &quot;Off Contract&quot; items are a pricing-file
+                      vendors). &quot;Off Catalog&quot; items are a pricing-file
                       gap; &quot;Pre-Match&quot; items are same-vendor rows
                       awaiting enrichment — neither is leakage.
                     </p>
@@ -189,9 +189,9 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
             keyPrefix="on"
           />
           <BucketDrilldown
-            title="Off-contract items"
+            title="Off-catalog items"
             items={data.topNotPriced}
-            emptyMessage="No not-priced spend."
+            emptyMessage="No off-catalog spend."
             keyPrefix="np"
           />
           {data.preMatch > 0 ? (
@@ -203,9 +203,9 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
             />
           ) : null}
           <BucketDrilldown
-            title="Off-contract items"
+            title="Leakage items"
             items={data.topOffContract}
-            emptyMessage='No off-contract spend recorded. Run "Re-run match" on COG Data if this looks wrong.'
+            emptyMessage='No leakage detected. Run "Re-run match" on COG Data if this looks wrong.'
             keyPrefix="off"
           />
         </div>
