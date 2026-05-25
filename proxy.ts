@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getSessionCookie } from "better-auth/cookies"
 
 const securityHeaders = {
   "X-Content-Type-Options": "nosniff",
@@ -17,9 +18,11 @@ export function proxy(request: NextRequest) {
   const isApi = path.startsWith("/api/")
   const isPublicApi = PUBLIC_API.some((prefix) => path.startsWith(prefix))
 
-  const sessionToken =
-    request.cookies.get("__Secure-better-auth.session_token")?.value ||
-    request.cookies.get("better-auth.session_token")?.value
+  // Cookie presence is the optimistic check. Actual session validation
+  // happens in each protected page/action via requireFacility/Vendor/Admin.
+  // getSessionCookie handles the better-auth cookie-prefix + __Secure-
+  // variants for us, so we don't drift if naming conventions change.
+  const sessionToken = getSessionCookie(request)
 
   if (!sessionToken && !isPublicApi) {
     // API routes: return 401 instead of redirect

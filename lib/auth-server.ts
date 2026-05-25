@@ -108,22 +108,13 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_SITE_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   trustedOrigins: Array.from(new Set(trustedOrigins)),
-  rateLimit: {
-    window: 60,
-    max: 100,
-  },
-  // ─── Cookie hardening ─────────────────────────────────────────
-  //
-  // better-auth 1.6 puts cookie config under `advanced`. The legacy
-  // `session.cookie` block was silently ignored at runtime.
-  // - `useSecureCookies: true` in production auto-prefixes session
-  //   cookies with `__Secure-` (preserved by `cookiePrefix:
-  //   "better-auth"` default), keeping proxy.ts's literal cookie
-  //   names valid.
-  // - `defaultCookieAttributes` apply to ALL better-auth cookies.
+  // 2–3× perf on /get-session and 50+ other endpoints via DB joins
+  // instead of N round-trips. GA-experimental since 1.4.
+  experimental: { joins: true },
+  // defaultCookieAttributes pins sameSite=lax explicitly; httpOnly +
+  // secure are already the production defaults, kept here so the
+  // policy is self-documenting in one place.
   advanced: {
-    useSecureCookies: process.env.NODE_ENV === "production",
-    cookiePrefix: "better-auth",
     defaultCookieAttributes: {
       httpOnly: true,
       sameSite: "lax",
@@ -140,6 +131,7 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
+    revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       if (!resend) {
         throw new Error("Resend not configured: RESEND_API_KEY missing")
