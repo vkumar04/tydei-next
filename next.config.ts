@@ -12,6 +12,18 @@ const config: NextConfig = {
   // The analytics-layer refactor (_cache.ts / _cached.ts /
   // contract-score-impl.ts split) stays — it's independent of the
   // flag and the cleaner module shape is worth keeping.
+  // 2026-05-25 audit: confirmed this is still the right call. The
+  // infrastructure is intact (tag builders in _cached.ts, write-side
+  // invalidators in _cache.ts using updateTag). Re-enabling requires:
+  //   1. Push every `await requireFacility()` / `await getX()` out of
+  //      page.tsx into a child component
+  //   2. Wrap that child in `<Suspense fallback={<Skeleton />}>` in
+  //      the page
+  //   3. Restore `'use cache'` + cacheLife + cacheTag in _cached.ts
+  //      read helpers
+  //   4. Flip this flag
+  // ~62 page files to migrate. Worth a focused spec rather than a
+  // bundled audit-PR. See docs/superpowers/specs/ when scheduled.
   // cacheComponents: true,
   experimental: {
     // Bug 2026-05-18 (Vick "XLS not working for loading COGS"):
