@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { getUploadUrl } from "@/lib/actions/uploads"
 import { useCreatePendingContract } from "@/hooks/use-pending-contracts"
@@ -106,7 +106,7 @@ export function VendorContractSubmission({
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
 
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([])
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   const handleDocUpload = useCallback(async (file: File) => {
     const { uploadUrl, key } = await getUploadUrl({
@@ -531,9 +531,8 @@ export function VendorContractSubmission({
     setEntryMode("manual")
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setIsSubmitting(true)
 
     // Charles audit round-1 vendor C1: multi-facility submission used
     // to silently take only selectedFacilities[0]. The remaining
@@ -555,9 +554,10 @@ export function VendorContractSubmission({
       !expirationDate
     ) {
       toast.error("Please fill in all required fields")
-      setIsSubmitting(false)
       return
     }
+
+    startTransition(async () => {
 
     const buildPayloadFor = (
       facId: string,
@@ -650,51 +650,51 @@ export function VendorContractSubmission({
         : undefined,
     })
 
-    try {
-      // Charles audit round-2 vendor CONCERN 2: fan out with
-      // Promise.allSettled so a mid-flight failure on one facility
-      // doesn't skip the rest, and surface a single rolled-up toast
-      // (instead of one per success) telling the user exactly what
-      // succeeded and what failed.
-      const results = await Promise.allSettled(
-        facilityIdsToSubmit.map((facId) =>
-          create.mutateAsync(buildPayloadFor(facId)),
-        ),
-      )
-      const failures = results
-        .map((r, i) =>
-          r.status === "rejected"
-            ? {
-                facilityName:
-                  facilities.find((f) => f.id === facilityIdsToSubmit[i])
-                    ?.name ?? facilityIdsToSubmit[i],
-                error: r.reason instanceof Error ? r.reason.message : String(r.reason),
-              }
-            : null,
+      try {
+        // Charles audit round-2 vendor CONCERN 2: fan out with
+        // Promise.allSettled so a mid-flight failure on one facility
+        // doesn't skip the rest, and surface a single rolled-up toast
+        // (instead of one per success) telling the user exactly what
+        // succeeded and what failed.
+        const results = await Promise.allSettled(
+          facilityIdsToSubmit.map((facId) =>
+            create.mutateAsync(buildPayloadFor(facId)),
+          ),
         )
-        .filter((x): x is { facilityName: string; error: string } => x !== null)
-      const successes = results.length - failures.length
-      if (failures.length === 0) {
-        toast.success(
-          successes === 1
-            ? "Contract submitted for review"
-            : `Contract submitted to ${successes} facilities`,
+        const failures = results
+          .map((r, i) =>
+            r.status === "rejected"
+              ? {
+                  facilityName:
+                    facilities.find((f) => f.id === facilityIdsToSubmit[i])
+                      ?.name ?? facilityIdsToSubmit[i],
+                  error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+                }
+              : null,
+          )
+          .filter((x): x is { facilityName: string; error: string } => x !== null)
+        const successes = results.length - failures.length
+        if (failures.length === 0) {
+          toast.success(
+            successes === 1
+              ? "Contract submitted for review"
+              : `Contract submitted to ${successes} facilities`,
+          )
+          router.push("/vendor/contracts")
+          return
+        }
+        toast.error(
+          `Submitted to ${successes} of ${results.length} facilities. Failed: ${failures
+            .map((f) => f.facilityName)
+            .join(", ")}`,
         )
-        router.push("/vendor/contracts")
-        return
+      } catch {
+        // toast already shown by mutationCache global error handler; nothing else to do
       }
-      toast.error(
-        `Submitted to ${successes} of ${results.length} facilities. Failed: ${failures
-          .map((f) => f.facilityName)
-          .join(", ")}`,
-      )
-      setIsSubmitting(false)
-    } catch {
-      setIsSubmitting(false)
-    }
+    })
   }
 
-  const submitting = isSubmitting || create.isPending
+  const submitting = isPending || create.isPending
 
   return (
     <div className="space-y-6">

@@ -343,6 +343,11 @@ model User {
   image         String?
   role          UserRole @default(facility)
   lastLoginAt   DateTime?
+  // Surfaced via the @better-auth/stripe plugin. Lets the plugin
+  // join the Stripe customer when reading user state (e.g. inside
+  // findUserByEmail) so the experimental.joins fast path doesn't
+  // throw "Unknown field stripeCustomerId" on every sign-in.
+  stripeCustomerId String? @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

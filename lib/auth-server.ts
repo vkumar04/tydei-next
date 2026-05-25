@@ -108,12 +108,12 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_SITE_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   trustedOrigins: Array.from(new Set(trustedOrigins)),
-  // experimental.joins (1.4+) would give 2–3× perf on /get-session,
-  // but the @better-auth/stripe plugin's join eagerly selects a
-  // `stripeCustomerId` column on User that our schema doesn't have.
-  // Re-enable after adding the column + migrating, OR drop the
-  // stripe plugin if it isn't pulling its weight.
-  // experimental: { joins: true },
+  // 2–3× perf on /get-session and 50+ other endpoints via DB joins
+  // instead of N round-trips. GA-experimental since better-auth 1.4.
+  // Re-enabled 2026-05-25 after migration 20260525184927 added the
+  // `stripeCustomerId` column the @better-auth/stripe plugin needs
+  // for its eager-join select.
+  experimental: { joins: true },
   // defaultCookieAttributes pins sameSite=lax explicitly; httpOnly +
   // secure are already the production defaults, kept here so the
   // policy is self-documenting in one place.
