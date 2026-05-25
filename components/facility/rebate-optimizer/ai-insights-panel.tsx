@@ -94,7 +94,7 @@ export function AiInsightsPanel({
                     )}
                   </CardTitle>
                   <CardDescription className="mt-0.5">
-                    Claude analyzes your portfolio for cross-contract
+                    Automated portfolio analysis surfaces cross-contract
                     opportunities — roughly 10 seconds to generate.
                   </CardDescription>
                 </div>
@@ -178,8 +178,8 @@ export function AiInsightsPanel({
                     compliance_rebate terms are not yet included.
                   </p>
                   <p>
-                    Claude may surface more once you have additional tier-gap
-                    spend-based contracts or recent spend activity.
+                    More recommendations will surface once you have additional
+                    tier-gap spend-based contracts or recent spend activity.
                   </p>
                 </div>
               )}

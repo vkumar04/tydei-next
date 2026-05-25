@@ -8,15 +8,15 @@ import { anthropic } from "@ai-sdk/anthropic"
 // is Anthropic's official provider for that ecosystem — it calls the
 // real Anthropic API, not an OpenAI-compat shim.
 //
-// Model selection defaults to Claude Opus 4.6. Each endpoint can opt
-// into a faster/cheaper model via `claudeHaiku`/`claudeSonnet` if the
-// task is mechanical (classification, column mapping, etc.).
-export const claudeModel = anthropic("claude-opus-4-6")
+// Model selection defaults to Claude Opus 4.7 (latest). Each endpoint
+// can opt into a faster/cheaper model via `claudeHaiku`/`claudeSonnet`
+// if the task is mechanical (classification, column mapping, etc.).
+export const claudeModel = anthropic("claude-opus-4-7")
 
 // Faster / cheaper models for mechanical tasks. Not currently wired in
 // — any caller that wants to downgrade can import directly.
 export const claudeSonnet = anthropic("claude-sonnet-4-6")
-export const claudeHaiku = anthropic("claude-haiku-4-5")
+export const claudeHaiku = anthropic("claude-haiku-4-5-20251001")
 
 export const AI_CREDIT_COSTS = {
   document_extraction_per_page: 2,
