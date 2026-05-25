@@ -90,9 +90,6 @@ export function EditTransactionDialog({
       })
       toast.success("Row updated")
       queryClient.invalidateQueries({
-        queryKey: ["contract-periods", contractId],
-      })
-      queryClient.invalidateQueries({
         queryKey: ["contractPeriods", contractId],
       })
       queryClient.invalidateQueries({

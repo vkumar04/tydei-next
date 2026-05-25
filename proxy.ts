@@ -10,13 +10,9 @@ const securityHeaders = {
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
 }
 
-// Public API routes that don't require a session cookie
-const PUBLIC_API = ["/api/auth/", "/api/webhooks/"]
-
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isApi = path.startsWith("/api/")
-  const isPublicApi = PUBLIC_API.some((prefix) => path.startsWith(prefix))
 
   // Cookie presence is the optimistic check. Actual session validation
   // happens in each protected page/action via requireFacility/Vendor/Admin.
@@ -24,7 +20,7 @@ export function proxy(request: NextRequest) {
   // variants for us, so we don't drift if naming conventions change.
   const sessionToken = getSessionCookie(request)
 
-  if (!sessionToken && !isPublicApi) {
+  if (!sessionToken) {
     // API routes: return 401 instead of redirect
     if (isApi) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -44,11 +40,14 @@ export function proxy(request: NextRequest) {
   return response
 }
 
+// The matcher excludes /api/auth/ and /api/webhooks/ via negative lookahead
+// so the proxy isn't invoked for unauthenticated routes — saves a function
+// call per better-auth round-trip and per webhook delivery.
 export const config = {
   matcher: [
     "/dashboard/:path*",
     "/vendor/:path*",
     "/admin/:path*",
-    "/api/:path*",
+    "/api/((?!auth/|webhooks/).*)",
   ],
 }

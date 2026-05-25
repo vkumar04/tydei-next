@@ -52,7 +52,7 @@ const chatBodySchema = z.object({
       .passthrough()
       .refine(
         (m) => typeof m.content === "string" || Array.isArray(m.parts),
-        { message: "message must have content or parts" },
+        { error: "message must have content or parts" },
       ),
   ),
   portalType: z.enum(["facility", "vendor"]),

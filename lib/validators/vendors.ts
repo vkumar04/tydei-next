@@ -9,9 +9,9 @@ export const createVendorSchema = z.object({
   displayName: z.string().optional(),
   division: z.string().optional(),
   contactName: z.string().optional(),
-  contactEmail: z.string().email("Invalid email").optional().or(z.literal("")),
+  contactEmail: z.email("Invalid email").optional().or(z.literal("")),
   contactPhone: z.string().optional(),
-  website: z.string().url("Invalid URL").optional().or(z.literal("")),
+  website: z.url("Invalid URL").optional().or(z.literal("")),
   address: z.string().optional(),
   tier: VendorTierSchema,
 })

@@ -12,7 +12,7 @@ export const createReportScheduleSchema = z.object({
   frequency: z.enum(["daily", "weekly", "monthly"]),
   dayOfWeek: z.number().int().min(0).max(6).optional(),
   dayOfMonth: z.number().int().min(1).max(28).optional(),
-  emailRecipients: z.array(z.string().email()).min(1, "At least one recipient is required"),
+  emailRecipients: z.array(z.email()).min(1, "At least one recipient is required"),
   isActive: z.boolean().default(true),
 })
 

@@ -28,7 +28,7 @@ export const adminCreateVendorSchema = z.object({
   displayName: z.string().optional(),
   division: z.string().optional(),
   contactName: z.string().optional(),
-  contactEmail: z.string().email().optional().or(z.literal("")),
+  contactEmail: z.email().optional().or(z.literal("")),
   contactPhone: z.string().optional(),
   website: z.string().optional(),
   address: z.string().optional(),
@@ -45,7 +45,7 @@ export type AdminUpdateVendorInput = z.infer<typeof adminUpdateVendorSchema>
 
 export const adminCreateUserSchema = z.object({
   name: z.string().min(2, "Name is required"),
-  email: z.string().email("Invalid email"),
+  email: z.email("Invalid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: UserRoleSchema,
   organizationId: z.string().optional(),
@@ -53,7 +53,7 @@ export const adminCreateUserSchema = z.object({
 
 export const adminUpdateUserSchema = z.object({
   name: z.string().min(2).optional(),
-  email: z.string().email().optional(),
+  email: z.email().optional(),
   role: UserRoleSchema.optional(),
   organizationId: z.string().optional(),
 })

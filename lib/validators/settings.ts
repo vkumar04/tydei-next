@@ -11,7 +11,7 @@ export const updateFacilityProfileSchema = z.object({
   state: z.string().optional(),
   zip: z.string().optional(),
   beds: z.number().int().min(0).optional(),
-  contactEmail: z.string().email().optional(),
+  contactEmail: z.email().optional(),
   contactPhone: z.string().optional(),
 })
 
@@ -22,11 +22,11 @@ export type UpdateFacilityProfileInput = z.infer<typeof updateFacilityProfileSch
 export const updateVendorProfileSchema = z.object({
   name: z.string().min(1, "Company name is required"),
   displayName: z.string().optional(),
-  logoUrl: z.string().url().optional().or(z.literal("")),
+  logoUrl: z.url().optional().or(z.literal("")),
   contactName: z.string().optional(),
-  contactEmail: z.string().email().optional().or(z.literal("")),
+  contactEmail: z.email().optional().or(z.literal("")),
   contactPhone: z.string().optional(),
-  website: z.string().url().optional().or(z.literal("")),
+  website: z.url().optional().or(z.literal("")),
   address: z.string().optional(),
   division: z.string().optional(),
 })
@@ -52,7 +52,7 @@ export type NotificationPreferences = z.infer<typeof notificationPreferencesSche
 // ─── Invite Team Member ──────────────────────────────────────────
 
 export const inviteTeamMemberSchema = z.object({
-  email: z.string().email("Valid email is required"),
+  email: z.email("Valid email is required"),
   role: z.string().min(1, "Role is required"),
 })
 

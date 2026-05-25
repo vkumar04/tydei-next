@@ -32,7 +32,7 @@ const updateRoleSchema = z.enum(["admin", "member"])
 
 const inviteTeamMemberInputSchema = z.object({
   organizationId: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   role: inviteRoleSchema,
 })
 
@@ -47,7 +47,7 @@ const safeRoleSegment = z
 
 const inviteVendorTeamMemberInputSchema = z.object({
   organizationId: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   role: inviteRoleSchema,
   subRole: safeRoleSegment,
 })

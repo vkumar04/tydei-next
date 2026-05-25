@@ -83,7 +83,7 @@ const createSchema = z.object({
   reportType: z.enum(SPEC_REPORT_TYPES),
   frequency: z.enum(SPEC_FREQUENCIES),
   recipients: z
-    .array(z.string().email("Invalid email"))
+    .array(z.email("Invalid email"))
     .min(1, "At least one recipient is required"),
   includeCharts: z.boolean().optional(),
   includeLineItems: z.boolean().optional(),

@@ -36,7 +36,7 @@ import {
   type RenewalBriefInput,
 } from "@/lib/ai/renewal-brief-schemas"
 
-const MODEL_ID = "claude-opus-4-6"
+const MODEL_ID = claudeModel
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
 const MAX_OUTPUT_TOKENS = 12000
 

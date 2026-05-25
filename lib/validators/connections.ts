@@ -9,7 +9,7 @@ import { z } from "zod"
  * is now dead input — the server ignores them.
  */
 export const sendConnectionInviteSchema = z.object({
-  toEmail: z.string().email("Valid email is required"),
+  toEmail: z.email("Valid email is required"),
   toName: z.string().min(1, "Name is required"),
   message: z.string().optional(),
 })

@@ -371,9 +371,6 @@ export function EditContractClient({
           queryKey: ["contractRebates", contractId],
         }),
         queryClient.invalidateQueries({
-          queryKey: ["contract-periods", contractId],
-        }),
-        queryClient.invalidateQueries({
           queryKey: ["contractPeriods", contractId],
         }),
         queryClient.invalidateQueries({

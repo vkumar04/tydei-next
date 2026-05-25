@@ -209,9 +209,6 @@ function AddTransactionButtons({
         )
       }
       queryClient.invalidateQueries({
-        queryKey: ["contract-periods", contractId],
-      })
-      queryClient.invalidateQueries({
         queryKey: ["contractPeriods", contractId],
       })
       queryClient.invalidateQueries({
@@ -451,9 +448,6 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
   // every edit. Without the explicit invalidate the user would see
   // stale numbers until the next tab flip.
   function invalidateLedger() {
-    queryClient.invalidateQueries({
-      queryKey: ["contract-periods", contractId],
-    })
     queryClient.invalidateQueries({
       queryKey: ["contractPeriods", contractId],
     })
