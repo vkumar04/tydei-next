@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
 
 export interface RebateOpportunity {
   contractId: string
@@ -60,23 +61,10 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
           tiers: { orderBy: { tierNumber: "asc" } },
         },
       },
-      periods: {
-        select: { totalSpend: true, tierAchieved: true },
-        orderBy: { periodEnd: "desc" },
-        take: 4,
-      },
     },
   })
 
-  const opportunities: RebateOpportunity[] = []
-
-  // Charles 2026-04-25 (Bug 25): the prior implementation summed
-  // `ContractPeriod.totalSpend` over the last 4 periods, which is empty
-  // on contracts that haven't generated periods yet (and stale on ones
-  // that have). Replace with a trailing-12-month sum from the canonical
-  // COG source so this matches the contracts list / detail. Pre-fetch
-  // all spend in one grouped query to avoid an N+1 round-trip per
-  // contract.
+  // Trailing-12-month spend from canonical COG source (single batched groupBy).
   const trailingStart = new Date()
   trailingStart.setMonth(trailingStart.getMonth() - 12)
   const vendorIds = Array.from(
@@ -102,55 +90,79 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
     }
   }
 
+  const opportunities: RebateOpportunity[] = []
+
   for (const contract of contracts) {
     const currentSpend = contract.vendorId
       ? spendByVendor.get(contract.vendorId) ?? 0
       : 0
-    const currentTierAchieved = contract.periods[0]?.tierAchieved ?? 0
+    // Charles 2026-05-24 (Bug Cluster B): per-term metric routing. The
+    // engine compares against tier.spendMin regardless of term type
+    // (column-reuse pattern), but the UNIT of that threshold differs:
+    // market_share → percent, volume_rebate → count, etc. Routing each
+    // term through pickThresholdMetric eliminates the silent
+    // wrong-metric drift that produced Tier 1 in the optimizer while
+    // Contract Detail (qualifying by spend) showed Tier 3.
+    const metricInputs = {
+      currentSpend,
+      currentMarketShare:
+        contract.currentMarketShare === null ? null : Number(contract.currentMarketShare),
+      complianceRate:
+        contract.complianceRate === null ? null : Number(contract.complianceRate),
+      // currentVolume not on Contract yet — volume terms still fall through
+      // to currentSpend until that column exists (separate task).
+      currentVolume: null,
+    }
 
     for (const term of contract.terms) {
       if (term.tiers.length < 2) continue
 
-      const currentTierIdx = term.tiers.findIndex(
-        (t) => t.tierNumber === currentTierAchieved
+      const metric = pickThresholdMetric(term.termType, metricInputs)
+
+      // Sort tiers by spendMin and pick the highest-qualifying tier.
+      const sortedTiers = [...term.tiers].sort(
+        (a, b) => Number(a.spendMin) - Number(b.spendMin),
       )
-      const nextTierIdx = currentTierIdx + 1
 
-      if (nextTierIdx >= term.tiers.length) continue
+      let currentIdx = -1
+      for (let i = 0; i < sortedTiers.length; i++) {
+        if (metric >= Number(sortedTiers[i].spendMin)) currentIdx = i
+      }
 
-      const currentTier = term.tiers[currentTierIdx] ?? term.tiers[0]
-      const nextTier = term.tiers[nextTierIdx]
-      if (!currentTier || !nextTier) continue
+      const nextIdx = currentIdx + 1
+      if (nextIdx >= sortedTiers.length) continue // already at top
+
+      const currentTier = currentIdx >= 0 ? sortedTiers[currentIdx] : null
+      const nextTier = sortedTiers[nextIdx]
 
       const nextThreshold = Number(nextTier.spendMin)
-      const spendGap = Math.max(0, nextThreshold - currentSpend)
-      // Charles 2026-04-25 (Bug 25): `ContractTier.rebateValue` is stored
-      // as a fraction (0.02 = 2%) but the optimizer math below expects
-      // integer percent (the `/100` divisor). Without `toDisplayRebateValue`
-      // every projected-rebate number was 100x too small. CLAUDE.md
-      // canonical-helpers table marks this as the boundary scaler.
-      const currentRebatePercent = toDisplayRebateValue(
-        currentTier.rebateType,
-        Number(currentTier.rebateValue),
-      )
+      const metricGap = Math.max(0, nextThreshold - metric)
+      // For spend terms this is a dollar gap; for market-share terms it's
+      // a percent-points gap. The output field name stays `spendGap` for
+      // back-compat with the UI — its UNIT now matches the term's metric.
+      const spendGap = metricGap
+
+      const currentRebatePercent = currentTier
+        ? toDisplayRebateValue(currentTier.rebateType, Number(currentTier.rebateValue))
+        : 0
       const nextRebatePercent = toDisplayRebateValue(
         nextTier.rebateType,
         Number(nextTier.rebateValue),
       )
 
       const projectedAdditionalRebate =
-        (nextRebatePercent - currentRebatePercent) * currentSpend / 100
+        ((nextRebatePercent - currentRebatePercent) * currentSpend) / 100
 
       const percentToNextTier =
         nextThreshold > 0
-          ? Math.min(100, (currentSpend / nextThreshold) * 100)
+          ? Math.min(100, (metric / nextThreshold) * 100)
           : 100
 
       opportunities.push({
         contractId: contract.id,
         contractName: contract.name,
         vendorName: contract.vendor.name,
-        currentTier: currentTier.tierNumber,
+        currentTier: currentTier?.tierNumber ?? 0,
         nextTier: nextTier.tierNumber,
         currentSpend,
         nextTierThreshold: nextThreshold,
@@ -160,21 +172,23 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
         currentRebatePercent,
         nextRebatePercent,
         topTierRebatePercent: (() => {
-          const top = term.tiers[term.tiers.length - 1]
+          const top = sortedTiers[sortedTiers.length - 1]
           return top
             ? toDisplayRebateValue(top.rebateType, Number(top.rebateValue))
             : nextRebatePercent
         })(),
         topTierThreshold: Number(
-          term.tiers[term.tiers.length - 1]?.spendMin ?? nextThreshold,
+          sortedTiers[sortedTiers.length - 1]?.spendMin ?? nextThreshold,
         ),
       })
     }
   }
 
-  return serialize(opportunities.sort(
-    (a, b) => b.projectedAdditionalRebate - a.projectedAdditionalRebate
-  ))
+  return serialize(
+    opportunities.sort(
+      (a, b) => b.projectedAdditionalRebate - a.projectedAdditionalRebate,
+    ),
+  )
 }
 
 // ─── Set Spend Target ────────────────────────────────────────────
