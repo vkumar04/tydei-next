@@ -25,6 +25,7 @@ import { Progress } from "@/components/ui/progress"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
 import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
+import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
 
 type ContractTermWithTiers = ContractTerm & { tiers: ContractTier[] }
 
@@ -37,14 +38,26 @@ interface ContractTermsDisplayProps {
    *  it, both types of terms render identical tier projections (user bug
    *  2026-04-23). */
   termScopedSpend?: Record<string, number>
+  /**
+   * Contract-level qualification metrics, threaded through to the per-term
+   * tier qualifier so market_share / compliance_rebate terms compare
+   * against the right metric (not dollar spend). Bug Cluster B fix —
+   * spec: docs/superpowers/specs/2026-05-24-rebate-optimizer-tier-drift-design.md
+   */
+  currentMarketShare?: number | null
+  complianceRate?: number | null
 }
 
 function TierProgressCard({
   term,
   currentSpend,
+  currentMarketShare,
+  complianceRate,
 }: {
   term: ContractTermWithTiers
   currentSpend: number
+  currentMarketShare?: number | null
+  complianceRate?: number | null
 }) {
   if (term.tiers.length === 0) return null
 
@@ -57,7 +70,20 @@ function TierProgressCard({
   }))
   const method = (term.rebateMethod ?? "cumulative") as RebateMethodName
 
-  const progress = calculateTierProgress(currentSpend, tiersForEngine, method)
+  // Bug Cluster B fix: route market-share / compliance terms through the
+  // contract-level metric instead of dollar spend. Without this, a
+  // market-share term with tier.spendMin in market-share-percent units
+  // (column-reuse pattern) gets qualified against dollar spend that is
+  // orders of magnitude larger → engine picks the top tier on every
+  // contract. Spec: docs/superpowers/specs/2026-05-24-rebate-optimizer-tier-drift-design.md
+  const metric = pickThresholdMetric(term.termType, {
+    currentSpend,
+    currentMarketShare: currentMarketShare ?? null,
+    complianceRate: complianceRate ?? null,
+    currentVolume: null,
+  })
+
+  const progress = calculateTierProgress(metric, tiersForEngine, method)
 
   if (!progress.currentTier) return null
 
@@ -95,10 +121,10 @@ function TierProgressCard({
     (a, b) => Number(a.spendMin) - Number(b.spendMin),
   )
   const baselineSpend = Number(sortedTiers[0].spendMin)
-  const pastBaseline = currentSpend >= baselineSpend
+  const pastBaseline = metric >= baselineSpend
   const baselinePercent =
     baselineSpend > 0
-      ? Math.min(100, Math.max(0, (currentSpend / baselineSpend) * 100))
+      ? Math.min(100, Math.max(0, (metric / baselineSpend) * 100))
       : 100
 
   return (
@@ -109,7 +135,7 @@ function TierProgressCard({
         </span>
         {!pastBaseline ? (
           <span className="text-xs text-muted-foreground">
-            {formatCurrency(Math.max(0, baselineSpend - currentSpend))} to baseline
+            {formatCurrency(Math.max(0, baselineSpend - metric))} to baseline
           </span>
         ) : nextLabel ? (
           <span className="text-xs text-muted-foreground">
@@ -331,7 +357,7 @@ function ScopeChipRow({ label, values }: { label: string; values: string[] }) {
   )
 }
 
-export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: ContractTermsDisplayProps) {
+export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend, currentMarketShare, complianceRate }: ContractTermsDisplayProps) {
   if (terms.length === 0) {
     return (
       <Card>
@@ -537,7 +563,12 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                     }
                     return (
                       <>
-                        <TierProgressCard term={term} currentSpend={effectiveSpend} />
+                        <TierProgressCard
+                          term={term}
+                          currentSpend={effectiveSpend}
+                          currentMarketShare={currentMarketShare}
+                          complianceRate={complianceRate}
+                        />
                         {usingScopedSpend && (
                           <p className="text-[11px] italic text-muted-foreground">
                             Scoped to this term's product categories — not the
@@ -559,9 +590,15 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend }: C
                           // ($825k) was rendered as "top rate — projects 2%
                           // of $302k = $6,053", a phantom rebate that doesn't
                           // exist (Bug #3).
+                          const tierMetric = pickThresholdMetric(term.termType, {
+                            currentSpend: effectiveSpend,
+                            currentMarketShare: currentMarketShare ?? null,
+                            complianceRate: complianceRate ?? null,
+                            currentVolume: null,
+                          })
                           let currentTierNumber = 0
                           for (let i = 0; i < sorted.length; i++) {
-                            if (effectiveSpend >= Number(sorted[i].spendMin)) {
+                            if (tierMetric >= Number(sorted[i].spendMin)) {
                               currentTierNumber = sorted[i].tierNumber
                             }
                           }

@@ -260,6 +260,8 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
         <ContractTermsDisplay
           terms={terms ?? []}
           currentSpend={contract?.currentSpend ?? undefined}
+          currentMarketShare={contract?.currentMarketShare != null ? Number(contract.currentMarketShare) : null}
+          complianceRate={contract?.complianceRate != null ? Number(contract.complianceRate) : null}
         />
       )}
     </div>

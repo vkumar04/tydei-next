@@ -721,6 +721,8 @@ export function ContractDetailClient({
               (contract as { termScopedSpend?: Record<string, number> })
                 .termScopedSpend
             }
+            currentMarketShare={contract.currentMarketShare != null ? Number(contract.currentMarketShare) : null}
+            complianceRate={contract.complianceRate != null ? Number(contract.complianceRate) : null}
           />
         </TabsContent>
 
