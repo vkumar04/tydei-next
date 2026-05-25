@@ -1,7 +1,14 @@
+import dns from "node:dns"
 import { PrismaClient } from "@prisma/client"
 import { Pool } from "pg"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { clean } from "./seeds/clean"
+
+// Mirror lib/db.ts — Railway legacy IPv6-only networking workaround.
+// When this seed runs inside Railway (`railway run bun run db:seed`),
+// the default IPv4-first resolution can't reach
+// `postgres.railway.internal`. Setting ipv6first + family:0 fixes it.
+dns.setDefaultResultOrder("ipv6first")
 import { seedHealthSystems } from "./seeds/health-systems"
 import { seedVendors } from "./seeds/vendors"
 import { seedCategories } from "./seeds/categories"
@@ -23,7 +30,11 @@ import { seedInvoices } from "./seeds/invoices"
 import { seedCases } from "./seeds/cases"
 import { seedCrossVendorTieIns } from "./seeds/cross-vendor-tie-ins"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  family: 0 as any,
+})
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
