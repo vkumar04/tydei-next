@@ -27,13 +27,16 @@ const statusOptions: { value: ContractStatus | "all"; label: string }[] = [
   { value: "draft", label: "Draft" },
 ]
 
+// Display order per Charles (Bugs.rtfd 2026-05-25). Match the
+// manual-entry picker in components/contracts/_form/_basic-
+// information-card.tsx so creation and filtering stay consistent.
 const typeOptions: { value: ContractType | "all"; label: string }[] = [
   { value: "all", label: "All Types" },
-  { value: "usage", label: "Usage" },
   { value: "pricing_only", label: "Pricing Only" },
+  { value: "usage", label: "Usage" },
+  { value: "tie_in", label: "Tie-In" },
   { value: "capital", label: "Capital" },
   { value: "service", label: "Service" },
-  { value: "tie_in", label: "Tie-In" },
   { value: "grouped", label: "Grouped" },
 ]
 

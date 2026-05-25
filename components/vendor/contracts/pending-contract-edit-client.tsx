@@ -169,13 +169,16 @@ function hydrateTermsForForm(termsJson: unknown): TermFormValues[] {
 // `ContractType` enum. Saving with any of those values would throw
 // a Zod validation error at the server boundary. Match the actual
 // schema enum so the dropdown is round-trippable.
+// Order per Charles (Bugs.rtfd 2026-05-25). Match the facility
+// manual-entry order in components/contracts/_form/_basic-
+// information-card.tsx so the picker is consistent across surfaces.
 const CONTRACT_TYPES = [
+  { value: "pricing_only", label: "Pricing Only" },
   { value: "usage", label: "Usage" },
+  { value: "tie_in", label: "Tie-In" },
   { value: "capital", label: "Capital" },
   { value: "service", label: "Service" },
-  { value: "tie_in", label: "Tie-In" },
   { value: "grouped", label: "Grouped" },
-  { value: "pricing_only", label: "Pricing Only" },
 ]
 
 export function PendingContractEditClient({ pendingContractId }: PendingContractEditClientProps) {
