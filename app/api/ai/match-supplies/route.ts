@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     const result = await generateStructured({
       schema: supplyMatchSchema,
       actionName: "match-supplies",
+      abortSignal: request.signal,
       messages: [
         {
           role: "user",
@@ -90,6 +91,9 @@ Explain your reasoning for the match or lack thereof.`,
 
     return Response.json(result.output)
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response(null, { status: 499 })
+    }
     console.error("Supply matching error:", error)
     return Response.json({ error: "Matching failed" }, { status: 500 })
   }

@@ -48,6 +48,13 @@ export interface GenerateStructuredInput<T> {
   actionName: string
   primary?: LanguageModel
   fallback?: LanguageModel
+  /**
+   * Client-cancellation signal. When the user navigates away or hits
+   * Cancel in the UI, the fetch is aborted and `request.signal` fires;
+   * threading it here causes the AI SDK to abort the provider HTTP
+   * call so we don't burn credits on work the user will never see.
+   */
+  abortSignal?: AbortSignal
 }
 
 export interface GenerateStructuredResult<T> {
@@ -59,6 +66,10 @@ export interface GenerateStructuredResult<T> {
 }
 
 function isTransientError(err: unknown): boolean {
+  // Never treat a client cancellation as transient — re-throwing lets
+  // the route's outer catch return HTTP 499 instead of burning credits
+  // on a fallback model call the user will never see.
+  if (err instanceof Error && err.name === "AbortError") return false
   const msg = err instanceof Error ? err.message : String(err)
   return (
     /grammar compilation/i.test(msg) ||
@@ -94,6 +105,7 @@ export async function generateStructured<T>(
     output: Output.object({ schema: input.schema }),
     messages: input.messages,
     providerOptions: ANTHROPIC_TOOL_MODE_OPTIONS,
+    abortSignal: input.abortSignal,
   }
 
   try {

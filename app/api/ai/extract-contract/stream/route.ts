@@ -122,89 +122,101 @@ export async function POST(req: Request) {
     ? `\n\nAdditional user instructions:\n${userInstructions}`
     : ""
 
-  const result = streamObject({
-    model: claudeModel,
-    schema: extractedContractSchema,
-    providerOptions: {
-      anthropic: { structuredOutputMode: "jsonTool" as const },
-    },
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text:
-              getActiveContractExtractPrompt().prompt +
-              textHint +
-              userInstructionsHint,
-          },
-          {
-            type: "file",
-            data: fileData,
-            mediaType: "application/pdf",
-            filename: file.name,
-            providerOptions: {
-              anthropic: { cacheControl: { type: "ephemeral" as const } },
-            },
-          },
-        ],
+  try {
+    const result = streamObject({
+      model: claudeModel,
+      schema: extractedContractSchema,
+      abortSignal: req.signal,
+      providerOptions: {
+        anthropic: { structuredOutputMode: "jsonTool" as const },
       },
-    ],
-    onError: ({ error }) => {
-      // CLAUDE.md AI-action error path: log full context server-side
-      // before the SDK surfaces the failure to the client.
-      console.error("[extract-contract/stream]", error, {
-        userId,
-        file: file.name,
-        size: file.size,
-      })
-    },
-    onFinish: async ({ object }) => {
-      if (!object) return
-      try {
-        const expiresAt = new Date()
-        expiresAt.setDate(expiresAt.getDate() + 30)
-        await prisma.contractExtractionCache.upsert({
-          where: { userId_fileHash: { userId, fileHash } },
-          create: {
-            userId,
-            fileHash,
-            filename: file.name,
-            extracted: object as object,
-            confidence: 0.9,
-            s3Key,
-            expiresAt,
-          },
-          update: {
-            extracted: object as object,
-            confidence: 0.9,
-            s3Key,
-            expiresAt,
-          },
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                getActiveContractExtractPrompt().prompt +
+                textHint +
+                userInstructionsHint,
+            },
+            {
+              type: "file",
+              data: fileData,
+              mediaType: "application/pdf",
+              filename: file.name,
+              providerOptions: {
+                anthropic: { cacheControl: { type: "ephemeral" as const } },
+              },
+            },
+          ],
+        },
+      ],
+      onError: ({ error }) => {
+        // CLAUDE.md AI-action error path: log full context server-side
+        // before the SDK surfaces the failure to the client.
+        console.error("[extract-contract/stream]", error, {
+          userId,
+          file: file.name,
+          size: file.size,
         })
-      } catch (err) {
-        console.warn("[extract-contract/stream] cache write skipped:", err)
-      }
-    },
-  })
+      },
+      onFinish: async ({ object }) => {
+        if (!object) return
+        try {
+          const expiresAt = new Date()
+          expiresAt.setDate(expiresAt.getDate() + 30)
+          await prisma.contractExtractionCache.upsert({
+            where: { userId_fileHash: { userId, fileHash } },
+            create: {
+              userId,
+              fileHash,
+              filename: file.name,
+              extracted: object as object,
+              confidence: 0.9,
+              s3Key,
+              expiresAt,
+            },
+            update: {
+              extracted: object as object,
+              confidence: 0.9,
+              s3Key,
+              expiresAt,
+            },
+          })
+        } catch (err) {
+          console.warn("[extract-contract/stream] cache write skipped:", err)
+        }
+      },
+    })
 
-  // Charles 2026-04-30 bug doc — "No documents here for a faculty
-  // to review". Root cause: this stream route uploaded the PDF to
-  // S3 (above) AND wrote the s3Key into the cache row, but the
-  // response stream itself never told the client what the key was.
-  // The client (ai-extract-dialog.tsx:205) expected `lastValid.s3Key`
-  // from the streamed JSON and got undefined every time, so vendor
-  // submissions landed with documents:[] on the PendingContract
-  // row — the facility-side review then correctly showed the "No
-  // documents…" empty state.
-  //
-  // Fix: use the `X-S3-Key` response header to surface the archived
-  // PDF location alongside the streaming JSON body. Header-based
-  // metadata avoids changing the existing JSON-parse loop on the
-  // client (which assembles a single progressive JSON object across
-  // chunks); the client reads the header before consuming the body.
-  const response = result.toTextStreamResponse()
-  if (s3Key) response.headers.set("X-S3-Key", s3Key)
-  return response
+    // Charles 2026-04-30 bug doc — "No documents here for a faculty
+    // to review". Root cause: this stream route uploaded the PDF to
+    // S3 (above) AND wrote the s3Key into the cache row, but the
+    // response stream itself never told the client what the key was.
+    // The client (ai-extract-dialog.tsx:205) expected `lastValid.s3Key`
+    // from the streamed JSON and got undefined every time, so vendor
+    // submissions landed with documents:[] on the PendingContract
+    // row — the facility-side review then correctly showed the "No
+    // documents…" empty state.
+    //
+    // Fix: use the `X-S3-Key` response header to surface the archived
+    // PDF location alongside the streaming JSON body. Header-based
+    // metadata avoids changing the existing JSON-parse loop on the
+    // client (which assembles a single progressive JSON object across
+    // chunks); the client reads the header before consuming the body.
+    const response = result.toTextStreamResponse()
+    if (s3Key) response.headers.set("X-S3-Key", s3Key)
+    return response
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response(null, { status: 499 })
+    }
+    console.error("[extract-contract/stream] streamObject error:", error, {
+      userId,
+      file: file.name,
+    })
+    return Response.json({ error: "Extraction failed" }, { status: 500 })
+  }
 }

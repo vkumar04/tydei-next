@@ -50,6 +50,7 @@ export async function POST(request: Request) {
     // Step 1: Extract text content from the payor contract
     const extraction = await generateText({
       model: claudeModel,
+      abortSignal: request.signal,
       messages: [
         {
           role: "user",
@@ -89,6 +90,7 @@ Be thorough - extract EVERY CPT code and rate you can find. Return all informati
     const result = await generateStructured({
       schema: extractedPayorContractSchema,
       actionName: "extract-payor-contract",
+      abortSignal: request.signal,
       messages: [
         {
           role: "user",
@@ -152,6 +154,9 @@ ${extractedText}`,
 
     return Response.json({ extracted, confidence, s3Key })
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response(null, { status: 499 })
+    }
     console.error("Payor contract extraction error:", error)
     return Response.json({ error: "Extraction failed" }, { status: 500 })
   }

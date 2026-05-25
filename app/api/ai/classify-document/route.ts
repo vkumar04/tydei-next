@@ -297,6 +297,7 @@ export async function POST(request: Request) {
         const result = await generateStructured({
           schema: richClassificationSchema,
           actionName: "classify-document",
+          abortSignal: request.signal,
           messages: [
             {
               role: "user",
@@ -401,6 +402,7 @@ Return all fields, using null for any you cannot determine.`,
           confidence: merged.confidence,
         })
       } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") throw err
         console.error("[classify-document] AI classification failed:", err)
         const fallback = emptyRich("unknown", 0, { year, quarter, month, dataPeriod })
         return Response.json({
@@ -419,6 +421,9 @@ Return all fields, using null for any you cannot determine.`,
       confidence: 0,
     })
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response(null, { status: 499 })
+    }
     console.error("Document classification error:", error)
     return Response.json({ error: "Classification failed" }, { status: 500 })
   }

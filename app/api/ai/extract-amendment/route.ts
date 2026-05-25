@@ -97,6 +97,7 @@ export async function POST(request: Request) {
     // ── Step 1: Read the amendment document ────────────────────
     const extraction = await generateText({
       model: claudeModel,
+      abortSignal: request.signal,
       messages: [
         {
           role: "user",
@@ -137,6 +138,7 @@ Return all details as structured text.`,
     const result = await generateStructured({
       schema: extractedAmendmentSchema,
       actionName: "extract-amendment",
+      abortSignal: request.signal,
       messages: [
         {
           role: "user",
@@ -214,6 +216,9 @@ Return valid JSON only — no markdown fences.`,
       s3Key,
     })
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response(null, { status: 499 })
+    }
     console.error("Amendment extraction error:", error)
     return Response.json({ error: "Extraction failed" }, { status: 500 })
   }

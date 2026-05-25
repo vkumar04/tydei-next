@@ -74,6 +74,7 @@ export async function POST(request: Request) {
       schema: mappingSchema,
       actionName: "map-columns",
       primary: claudeSonnet,
+      abortSignal: request.signal,
       messages: [
         {
           role: "user",
@@ -109,6 +110,9 @@ Rules:
 
     return Response.json({ mapping })
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response(null, { status: 499 })
+    }
     console.error("Column mapping error:", error)
     return Response.json({ error: "Mapping failed" }, { status: 500 })
   }

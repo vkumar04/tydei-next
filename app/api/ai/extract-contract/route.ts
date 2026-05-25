@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       // Use the legacy (simpler) schema for raw-text parsing.
       const result = await generateText({
         model: claudeModel,
+        abortSignal: request.signal,
         output: Output.object({ schema: extractedContractSchema }),
         prompt: `Parse this contract information into structured data. Be precise with numbers and dates.
 
@@ -281,6 +282,7 @@ ${text.trim()}`,
         schema: extractedContractSchema,
         messages: [{ role: "user", content: userContent }],
         actionName: "extract-contract",
+        abortSignal: request.signal,
       })
 
       try {
@@ -368,6 +370,9 @@ ${text.trim()}`,
       pdfText: pdfTextLayer,
     })
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response(null, { status: 499 })
+    }
     console.error("Contract extraction error:", error)
     const message = error instanceof Error ? error.message : "Unknown error"
 
