@@ -6,8 +6,6 @@ import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { serialize } from "@/lib/serialize"
 import type { CategoryUsageRow } from "./types"
 
-export type { CategoryUsageRow }
-
 export async function getCategoryUsage(): Promise<CategoryUsageRow[]> {
   const { facility } = await requireFacility()
   const [cogAgg, pricingAgg] = await Promise.all([
