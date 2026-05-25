@@ -1,0 +1,43 @@
+# Files NOT needed for `next build` on Railway.
+# Trims the build context Railway uploads + scans, and reduces cache
+# invalidation noise (changes to docs/tests/scripts don't bust the
+# Nixpacks layer cache).
+
+# Agent / tooling state
+.claude/
+.worktrees/
+graphify-out/
+
+# Internal docs (not shipped, not referenced by the app)
+docs/
+
+# Tests + fixtures
+tests/
+test-fixtures/
+**/__tests__/
+**/*.test.ts
+**/*.test.tsx
+**/*.integration.test.ts
+playwright.config.ts
+playwright-report/
+test-results/
+
+# Dev / QA scripts that never run on Railway
+scripts/oracles/
+scripts/qa-*.ts
+scripts/qa-sanity.ts
+scripts/pre-ship-smoke.ts
+scripts/diagnose-*.ts
+scripts/dual-app-dom-diff.ts
+scripts/e2e-synthetic-test.ts
+scripts/verify-app-against-oracle.ts
+scripts/repro-*.ts
+scripts/build-v0-feature-ledger.ts
+
+# Seed data (production migrate-deploy doesn't seed)
+prisma/seeds/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
