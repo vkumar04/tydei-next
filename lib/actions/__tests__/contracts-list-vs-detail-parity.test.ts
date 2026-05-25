@@ -30,6 +30,23 @@ type RebateRow = {
   collectionDate: Date | null
 }
 
+type TierShape = {
+  id: string
+  tierNumber: number
+  spendMin: number
+  spendMax: number | null
+  rebateValue: number
+  rebateType: string
+  tierName: string | null
+}
+
+type TermShape = {
+  appliesTo: string
+  categories: string[]
+  termType: string
+  tiers: TierShape[]
+}
+
 type ContractShape = {
   id: string
   name: string
@@ -46,12 +63,14 @@ type ContractShape = {
   facility: null
   vendor: { id: string; name: string; logoUrl: string | null }
   rebates: RebateRow[]
-  terms: Array<{ appliesTo: string; categories: string[]; tiers: Array<{ id: string }> }>
+  terms: TermShape[]
   periods: Array<{ id: string }>
   documents: unknown[]
   contractFacilities: unknown[]
   contractCategories: unknown[]
   createdBy: null
+  currentMarketShare: number | null
+  complianceRate: number | null
 }
 
 type GroupByPeriod = Array<{
@@ -133,6 +152,8 @@ vi.mock("@/lib/serialize", () => ({
 }))
 
 import { getContracts, getContract } from "@/lib/actions/contracts"
+import { getRebateOpportunities } from "@/lib/actions/rebate-optimizer"
+import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
 import { mapRebateRowsToLedger } from "@/components/contracts/contract-transactions-display"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
@@ -161,6 +182,8 @@ function makeContract(overrides: Partial<ContractShape> = {}): ContractShape {
     contractFacilities: [],
     contractCategories: [],
     createdBy: null,
+    currentMarketShare: null,
+    complianceRate: null,
     ...overrides,
   }
 }
@@ -320,6 +343,111 @@ describe("contracts list vs detail parity", () => {
     expect(Number(detail.rebateEarnedYTD)).toBe(58_660)
     expect(Number(detail.rebateCollected)).toBe(58_660)
     expect(Number(detail.currentSpend)).toBe(1_536_659)
+  })
+
+  /**
+   * Bug Cluster B regression guard — market-share tier parity.
+   *
+   * Before the `pickThresholdMetric` fix (Task 2), `getRebateOpportunities`
+   * compared `currentSpend` (dollars) against tier thresholds that are
+   * expressed in percent-points for market_share terms. That produced
+   * Tier 1 in the optimizer while Contract Detail (which compared
+   * `currentMarketShare` against the same thresholds) showed Tier 3 —
+   * a silent three-tier drift visible in Charles's 2026-05-24 screenshot.
+   *
+   * This test pins the invariant: for a market_share contract at 92.6%
+   * with tiers at 10/50/100%, both the "list source"
+   * (`getRebateOpportunities`) and the "detail source" (the inline
+   * qualifier in `contract-terms-display.tsx`, reproduced here without
+   * JSX) must agree that the current tier is 2 (the ≥50% tier).
+   */
+  it("list (getRebateOpportunities) and detail qualifier agree on current tier for market-share contract", async () => {
+    // Fixture: market_share contract at 92.6% with a 3-tier ladder:
+    //   tier 1 → spendMin=10  (≥10%  qualifies)
+    //   tier 2 → spendMin=50  (≥50%  qualifies)  ← expected current
+    //   tier 3 → spendMin=100 (≥100% does NOT qualify at 92.6%)
+    // rebateValue stored as fraction; rebateType=percent_of_spend.
+    const msTiers: TierShape[] = [
+      {
+        id: "t-ms-1",
+        tierNumber: 1,
+        spendMin: 10,
+        spendMax: 50,
+        rebateValue: 0.10,
+        rebateType: "percent_of_spend",
+        tierName: null,
+      },
+      {
+        id: "t-ms-2",
+        tierNumber: 2,
+        spendMin: 50,
+        spendMax: 100,
+        rebateValue: 0.15,
+        rebateType: "percent_of_spend",
+        tierName: null,
+      },
+      {
+        id: "t-ms-3",
+        tierNumber: 3,
+        spendMin: 100,
+        spendMax: null,
+        rebateValue: 0.20,
+        rebateType: "percent_of_spend",
+        tierName: null,
+      },
+    ]
+
+    const msContract = makeContract({
+      id: "c-ms",
+      name: "Market Share Parity Contract",
+      vendorId: "v-ms",
+      vendor: { id: "v-ms", name: "MSVendor", logoUrl: null },
+      status: "active",
+      currentMarketShare: 92.6,
+      complianceRate: null,
+      terms: [
+        {
+          appliesTo: "all",
+          categories: [],
+          termType: "market_share",
+          tiers: msTiers,
+        },
+      ],
+    })
+
+    contractRows = [msContract]
+    // getRebateOpportunities queries cOGRecord.groupBy by vendorId for spend.
+    // The spend value is irrelevant to the tier qualifier for market_share —
+    // it affects projectedAdditionalRebate only — so zero is fine.
+    cogByVendor = [{ vendorId: "v-ms", _sum: { extendedPrice: 200_000 } }]
+
+    // ── List side ────────────────────────────────────────────────────
+    const opportunities = await getRebateOpportunities("fac-test")
+    const opp = opportunities.find((o) => o.contractId === "c-ms")
+    expect(opp).toBeDefined()
+    const listCurrentTier = opp!.currentTier
+
+    // ── Detail side ──────────────────────────────────────────────────
+    // Reproduce the inline qualifier from `contract-terms-display.tsx`
+    // exactly: sort by spendMin, walk up while metric >= spendMin.
+    // Use pickThresholdMetric so both sides share the same routing.
+    const term = msContract.terms[0]
+    const metric = pickThresholdMetric(term.termType, {
+      currentSpend: 200_000,
+      currentMarketShare: msContract.currentMarketShare,
+      complianceRate: msContract.complianceRate,
+      currentVolume: null,
+    })
+    const sorted = [...term.tiers].sort((a, b) => a.spendMin - b.spendMin)
+    let detailCurrentTier = 0
+    for (let i = 0; i < sorted.length; i++) {
+      if (metric >= sorted[i].spendMin) detailCurrentTier = sorted[i].tierNumber
+    }
+
+    // Both surfaces must agree: tier 2 (the ≥50% threshold is met; ≥100% is not).
+    expect(listCurrentTier).toBe(2)
+    expect(detailCurrentTier).toBe(2)
+    expect(listCurrentTier).toBe(detailCurrentTier)
   })
 })
 
