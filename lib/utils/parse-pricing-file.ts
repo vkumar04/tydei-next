@@ -32,6 +32,12 @@ export function detectPricingColumnMapping(rawHeaders: string[]): Record<string,
     "productid", "productcode", "vendorpart", "vendorcatalog",
     "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
     "referencenumber", "reference",
+    // Bug B 2026-05-25 (Charles Bugs.rtfd "Carve out xls price file
+    // not working"): the SYK Carve out workbook ships with the header
+    // typo "Reference numer" (missing 'b'). Add the typo variant so
+    // the auto-detector matches it instead of falling through to the
+    // "Could not auto-detect columns" error.
+    "referencenumer", "reference_numer",
     "vendor_item_number", "vendoritemnumber", "item_number",
     "productno", "productnumber", "productref", "productrefnumber",
   )
@@ -61,6 +67,16 @@ export function detectPricingColumnMapping(rawHeaders: string[]): Record<string,
     "uom", "unit_of_measure", "unit",
     "unitofmeasure", "packsize", "packaging", "pkg", "measure",
   )
+  // Bug B 2026-05-25: previously buildPricingItems read a
+  // `carveOutPercent` column via the mapping, but detectPricingColumnMapping
+  // never populated it — so every row came out with carveOutPercent
+  // undefined. The SYK Carve out workbook ships a "Carve out %" column
+  // that the loader silently dropped.
+  const idxCarve = findHeader(normHeaders, rawHeaders,
+    "carve_out_percent", "carveoutpercent", "carve_out_pct", "carveoutpct",
+    "carveout", "carve_out", "carveoutpercentage",
+    "carveoutrate", "carve_out_rate",
+  )
 
   const autoMap: Record<string, string> = {}
   if (idxItem >= 0) autoMap.vendorItemNo = rawHeaders[idxItem]
@@ -69,6 +85,7 @@ export function detectPricingColumnMapping(rawHeaders: string[]): Record<string,
   if (idxList >= 0) autoMap.listPrice = rawHeaders[idxList]
   if (idxCat >= 0) autoMap.category = rawHeaders[idxCat]
   if (idxUom >= 0) autoMap.uom = rawHeaders[idxUom]
+  if (idxCarve >= 0) autoMap.carveOutPercent = rawHeaders[idxCarve]
 
   return autoMap
 }

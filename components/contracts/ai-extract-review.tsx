@@ -73,7 +73,11 @@ export function AIExtractReview({
     try {
       const result = await parsePricingFile(file)
       if (result.needsManualMapping) {
-        setPricingError("Could not auto-detect columns. Please upload a file with vendor_item_no and contract_price columns.")
+        // Surface what we DID find so the user can spot the gap fast.
+        const found = Object.keys(result.autoMapping).join(", ") || "no recognized columns"
+        setPricingError(
+          `Could not auto-detect required columns (need a vendor item / catalog ref column and a price column). Found: ${found}. Headers: ${result.rawHeaders.join(", ")}.`,
+        )
         return
       }
       if (result.items.length === 0) {
