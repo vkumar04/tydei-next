@@ -114,6 +114,23 @@ export async function getExpiringContracts(input: {
       totalRebate,
       tierAchieved: latestTier,
       autoRenewal: c.autoRenewal,
+      // Bug 2026-05-26 (Vick "Commitment column not coming in"):
+      // renewals-list reads `commitmentMet = currentMarketShare /
+      // marketShareCommitment` via deriveCommitmentMet. The mapper
+      // already expected these fields on ExpiringContract; the query
+      // simply wasn't returning them, so every row collapsed to the
+      // spend-based fallback (which also returns null when contracts
+      // have no ContractPeriod rows yet — i.e. newly imported ones).
+      // Surface the canonical market-share fields directly so set
+      // contracts render a real %.
+      marketShareCommitment:
+        c.marketShareCommitment != null
+          ? Number(c.marketShareCommitment)
+          : null,
+      currentMarketShare:
+        c.currentMarketShare != null
+          ? Number(c.currentMarketShare)
+          : null,
     }
   }))
 }
