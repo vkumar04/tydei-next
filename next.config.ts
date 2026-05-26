@@ -2,7 +2,22 @@ import type { NextConfig } from "next"
 import bundleAnalyzer from "@next/bundle-analyzer"
 
 const config: NextConfig = {
-  serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg", "pg"],
+  serverExternalPackages: [
+    "@prisma/client",
+    "@prisma/adapter-pg",
+    "pg",
+    // pdf-parse v2 ships a pdfjs-dist worker file (pdf.worker.mjs) and
+    // dynamic-imports it at runtime. When Turbopack bundles either
+    // package, the worker file isn't copied alongside the chunk and
+    // every PDF upload 500s with "Cannot find module
+    // '/app/.next/server/chunks/pdf.worker.mjs'" — then pdf.js falls
+    // back to vision-only which blew past Claude's 1M-token cap on a
+    // large scanned Mako PDF (Vick prod report 2026-05-25). Marking
+    // these external keeps both packages resolved from node_modules at
+    // runtime, where pdfjs-dist's worker sits next to its entry file.
+    "pdf-parse",
+    "pdfjs-dist",
+  ],
   // 2026-04-26: cacheComponents was enabled but caused build failures
   // during static-page generation — `cacheComponents: true` requires
   // every uncached data access (e.g. `await requireFacility()`) to be
