@@ -186,7 +186,7 @@ describe("getRebateOpportunities — market_share metric routing", () => {
     expect(result[0].nextTier).toBe(1)
   })
 
-  it("emits no opportunity when contract is already at the top market-share tier", async () => {
+  it("emits a zero-projection opportunity when contract is already at the top market-share tier", async () => {
     contractRows = [
       {
         id: "ms-at-top",
@@ -215,7 +215,18 @@ describe("getRebateOpportunities — market_share metric routing", () => {
 
     const { getRebateOpportunities } = await import("@/lib/actions/rebate-optimizer")
     const result = await getRebateOpportunities()
-    // Already at top tier (3) → no "next tier" to chase → no opportunity emitted.
-    expect(result).toHaveLength(0)
+    // Bug 2026-05-26 (Vick): facilities want to SEE contracts even
+    // when they're maxed out — the prior "drop at top tier" behavior
+    // emptied the optimizer headline for a facility whose only tiered
+    // contract had cleared all thresholds. We now emit a zero-
+    // projection sentinel so stats.contractCount picks it up;
+    // rankOpportunities still filters projectedAdditionalRebate === 0
+    // out of the "Top ranked" list downstream.
+    expect(result).toHaveLength(1)
+    const opp = result[0]!
+    expect(opp.currentTier).toBe(3)
+    expect(opp.nextTier).toBe(3) // sentinel: equals currentTier when at top
+    expect(opp.projectedAdditionalRebate).toBe(0)
+    expect(opp.spendGap).toBe(0)
   })
 })

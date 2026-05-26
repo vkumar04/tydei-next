@@ -130,7 +130,45 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
       }
 
       const nextIdx = currentIdx + 1
-      if (nextIdx >= sortedTiers.length) continue // already at top
+
+      // Bug 2026-05-26 (Vick "No contracts being picked up on the
+      // rebate optimizer now"): when every tiered contract a facility
+      // has is already at top tier (e.g. S&N at $7.3M trailing spend
+      // vs a $2M top threshold), the prior `continue` here dropped
+      // them entirely — opportunities ended up empty and the hero
+      // rendered "No tiered rebate contracts to optimize yet."
+      // contradicting the visible contracts on the page.
+      //
+      // Push a zero-projection opportunity instead so the contract
+      // counts toward stats.contractCount (drives the more honest
+      // "Tracking N tiered rebate contracts." copy) and shows up in
+      // any "all tracked contracts" surfaces. rankOpportunities
+      // downstream already filters projectedAdditionalRebate === 0
+      // from the "Top ranked" list, so no false ranking creeps in.
+      if (nextIdx >= sortedTiers.length) {
+        const topTier = sortedTiers[currentIdx]!
+        const topRebatePercent = toDisplayRebateValue(
+          topTier.rebateType,
+          Number(topTier.rebateValue),
+        )
+        opportunities.push({
+          contractId: contract.id,
+          contractName: contract.name,
+          vendorName: contract.vendor.name,
+          currentTier: topTier.tierNumber,
+          nextTier: topTier.tierNumber, // at top — no next
+          currentSpend,
+          nextTierThreshold: Number(topTier.spendMin),
+          spendGap: 0,
+          projectedAdditionalRebate: 0,
+          percentToNextTier: 100,
+          currentRebatePercent: topRebatePercent,
+          nextRebatePercent: topRebatePercent,
+          topTierRebatePercent: topRebatePercent,
+          topTierThreshold: Number(topTier.spendMin),
+        })
+        continue
+      }
 
       const currentTier = currentIdx >= 0 ? sortedTiers[currentIdx] : null
       const nextTier = sortedTiers[nextIdx]
