@@ -1,26 +1,28 @@
-// AI Gateway model identifiers (provider/model string IDs). Vercel
-// AI SDK v6 accepts strings directly via `model: 'anthropic/...'`
-// and routes through the Vercel AI Gateway — giving us provider
-// fallback, unified billing, observability, and zero data retention
-// without coupling the code to one provider's SDK.
+// AI SDK v6 model handles.
 //
-// Per Vercel platform guidance (Feb 2026): "prefer plain
-// 'provider/model' strings through the gateway by default; do not
-// default to provider-specific packages like @ai-sdk/anthropic
-// unless the user explicitly asks for direct provider wiring."
+// Vercel guidance is to use "provider/model" gateway strings by
+// default — but that REQUIRES AI_GATEWAY_API_KEY to be provisioned
+// (auto-provisioned on Vercel; not on Railway, where we host).
+// Without the gateway key, every AI call 500s with
+// "GatewayError: Unauthenticated. Configure AI_GATEWAY_API_KEY or
+//  use a provider module."
 //
-// `providerOptions.anthropic.*` (cache control, etc.) is still
-// honored on gateway-routed calls — the option block keys off the
-// provider name, not the SDK shape.
+// We use the @ai-sdk/anthropic provider module directly with
+// ANTHROPIC_API_KEY (already set in Railway). This is the
+// "explicit provider wiring" path Vercel's note allows. If we ever
+// migrate to Vercel or provision AI_GATEWAY_API_KEY on Railway,
+// flip these back to the "anthropic/<model>" gateway strings to
+// pick up multi-provider fallback + unified billing.
 //
-// Model selection defaults to Claude Opus 4.7 (latest). Each
-// endpoint can opt into Sonnet/Haiku for mechanical tasks
-// (classification, column mapping, etc.).
-export const claudeModel = "anthropic/claude-opus-4-7" as const
+// `providerOptions.anthropic.*` (cache control, etc.) works the
+// same way regardless of which path we use here.
+import { anthropic } from "@ai-sdk/anthropic"
+
+export const claudeModel = anthropic("claude-opus-4-7")
 
 // Faster / cheaper models for mechanical tasks.
-export const claudeSonnet = "anthropic/claude-sonnet-4-6" as const
-export const claudeHaiku = "anthropic/claude-haiku-4-5-20251001" as const
+export const claudeSonnet = anthropic("claude-sonnet-4-6")
+export const claudeHaiku = anthropic("claude-haiku-4-5-20251001")
 
 export const AI_CREDIT_COSTS = {
   document_extraction_per_page: 2,

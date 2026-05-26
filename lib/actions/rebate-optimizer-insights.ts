@@ -46,7 +46,7 @@ import {
   type RebateInsightsResponse,
 } from "@/lib/ai/rebate-optimizer-schemas"
 
-const MODEL_ID = claudeModel
+const MODEL_ID = claudeModel.modelId
 const CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes
 const MAX_OUTPUT_TOKENS = 8000
 const LAST_N_DAYS = 90
