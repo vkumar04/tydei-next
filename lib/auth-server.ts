@@ -108,12 +108,16 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_SITE_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   trustedOrigins: Array.from(new Set(trustedOrigins)),
-  // 2–3× perf on /get-session and 50+ other endpoints via DB joins
-  // instead of N round-trips. GA-experimental since better-auth 1.4.
-  // Re-enabled 2026-05-25 after migration 20260525184927 added the
-  // `stripeCustomerId` column the @better-auth/stripe plugin needs
-  // for its eager-join select.
-  experimental: { joins: true },
+  // experimental.joins (1.4+) — 2–3× perf on /get-session, but
+  // disabled 2026-05-26 because the better-auth organization plugin
+  // contributes an `activeOrganizationId` column to Session that our
+  // schema doesn't have. Sign-in worked (we added stripeCustomerId
+  // for the stripe plugin) but session reads (every authenticated
+  // page request) 500'd with "Unknown field activeOrganizationId
+  // for select statement on model Session". Re-enable AFTER adding
+  // Session.activeOrganizationId (and any other plugin-contributed
+  // columns surfaced by joins) in a follow-up migration.
+  // experimental: { joins: true },
   // defaultCookieAttributes pins sameSite=lax explicitly; httpOnly +
   // secure are already the production defaults, kept here so the
   // policy is self-documenting in one place.
