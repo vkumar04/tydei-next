@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  Users,
 } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { Button } from "@/components/ui/button"
@@ -48,6 +49,7 @@ export interface CogControlBarProps {
   onImport: () => void
   onManualEntry: () => void
   onClearAll: () => void
+  onVendorMapping: () => void
 }
 
 export function CogControlBar({
@@ -63,6 +65,7 @@ export function CogControlBar({
   onImport,
   onManualEntry,
   onClearAll,
+  onVendorMapping,
 }: CogControlBarProps) {
   const hasDateFilter = Boolean(dateFrom || dateTo)
   return (
@@ -141,6 +144,21 @@ export function CogControlBar({
           <FileStack className="mr-2 h-4 w-4" />
           Mass Upload
         </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="sm" onClick={onVendorMapping}>
+                <Users className="mr-2 h-4 w-4" />
+                Vendor Mapping
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[300px] text-xs">
+              Edit which canonical vendor each COG vendor name points to.
+              Use to combine duplicates or fix mis-matched names without
+              re-importing.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         {/*
          * Charles 2026-04-24 (Bug 8): "Match" and "Re-run" do different
          * things and were confusing users. Match Pricing resolves vendor

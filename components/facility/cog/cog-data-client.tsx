@@ -16,6 +16,7 @@ import { CogSpendTrendCard } from "@/components/facility/cog/cog-spend-trend-car
 import { PricingImportHistoryCard } from "@/components/facility/cog/pricing-import-history-card"
 import { CogHero } from "@/components/facility/cog/cog-hero"
 import { CogControlBar } from "@/components/facility/cog/cog-control-bar"
+import { CogVendorMappingDialog } from "@/components/facility/cog/cog-vendor-mapping-dialog"
 import { MassUpload } from "@/components/import/mass-upload"
 import { toast } from "sonner"
 import { useCOGStats, useClearAllCOGRecords } from "@/hooks/use-cog"
@@ -54,6 +55,7 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [clearAllOpen, setClearAllOpen] = useState(false)
+  const [vendorMappingOpen, setVendorMappingOpen] = useState(false)
 
   // Fetch aggregated stats from server (not from paginated records)
   const { data: stats, isPending: statsLoading, refetch: refetchStats } =
@@ -147,6 +149,12 @@ export function COGDataClient({ facilityId }: COGDataClientProps) {
         onImport={() => setCogImportOpen(true)}
         onManualEntry={() => setManualEntryOpen(true)}
         onClearAll={() => setClearAllOpen(true)}
+        onVendorMapping={() => setVendorMappingOpen(true)}
+      />
+
+      <CogVendorMappingDialog
+        open={vendorMappingOpen}
+        onOpenChange={setVendorMappingOpen}
       />
 
       {/* Enrichment stats panel — rows total / matched / unmatched /
