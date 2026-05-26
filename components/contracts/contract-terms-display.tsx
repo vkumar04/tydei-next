@@ -561,6 +561,19 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend, cur
                     if (effectiveSpend === undefined || term.tiers.length === 0) {
                       return null
                     }
+                    // Bug 2026-05-25 (Vick): carve_out terms render "Tier 1 /
+                    // Tier 2 / Tier 3 · 18.9% top rate" even when the user
+                    // entered no tiers. The engine doesn't use the tier
+                    // ladder for carve_out (per the amber warning banner
+                    // above — "engine reads per-line rates from pricing"),
+                    // so showing the tier ladder is just visual noise that
+                    // contradicts the warning. Carve-out terms may still
+                    // carry phantom tier rows from AI extraction or default
+                    // form scaffolds; suppress the ladder UI for them and
+                    // let the Pricing tab show the per-line percents.
+                    if (term.termType === "carve_out") {
+                      return null
+                    }
                     return (
                       <>
                         <TierProgressCard
