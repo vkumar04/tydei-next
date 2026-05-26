@@ -18,7 +18,7 @@
  * the client dialog reads either response identically.
  */
 
-import { streamObject } from "ai"
+import { generateObject, streamObject } from "ai"
 import { headers } from "next/headers"
 import { createHash } from "node:crypto"
 import { auth } from "@/lib/auth-server"
@@ -26,15 +26,32 @@ import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
 import { claudeModel } from "@/lib/ai/config"
-import { extractedContractSchema } from "@/lib/ai/schemas"
+import { extractedContractSchema, type ExtractedContractData } from "@/lib/ai/schemas"
 import { extractPdfText } from "@/lib/ai/pdf-text-helper"
+import { splitPdfByPages } from "@/lib/ai/pdf-chunker"
+import {
+  chunkExtractSchema,
+  mergeExtractedContracts,
+  type ChunkExtractData,
+} from "@/lib/ai/contract-extract-merger"
 import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
 
-export const maxDuration = 60
+// 261-page Mako PDF chunks into ~33 parallel Anthropic calls; even
+// rate-limit-safe with parallel queuing, the whole pipeline can
+// take 60-180s depending on Anthropic queue depth. Bump to 5 min.
+export const maxDuration = 300
 
 // Bug A 2026-05-25: bumped from 10MB → 25MB to match the non-streaming
 // /api/ai/extract-contract route. See that file for the rationale.
 const MAX_BYTES = 25 * 1024 * 1024
+
+// Bug 2026-05-25 (Vick): vision-only on a 30-page scanned Mako PDF
+// produced a 1.1M-token prompt and Anthropic 400'd with "prompt is too
+// long". Anything longer than this gets split into N-page sub-PDFs,
+// extracted per-chunk via generateObject, then merged via
+// mergeExtractedContracts. 8 pages × ~80K vision tokens ≈ 640K — well
+// under the 1M cap with headroom for the system prompt + text hint.
+const MAX_PAGES_PER_CHUNK = 8
 
 export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -123,6 +140,163 @@ export async function POST(req: Request) {
   const userInstructionsHint = userInstructions
     ? `\n\nAdditional user instructions:\n${userInstructions}`
     : ""
+
+  // ─── Chunked path: large PDFs ──────────────────────────────────
+  //
+  // Splits into N-page sub-PDFs, extracts each via generateObject in
+  // parallel, merges into one final ExtractedContractData, and emits
+  // it as a single-chunk response (same envelope as the cache-hit
+  // path so the client dialog doesn't need a separate code path).
+  if (pdfText.pageCount > MAX_PAGES_PER_CHUNK) {
+    try {
+      const chunks = await splitPdfByPages(fileData, {
+        maxPagesPerChunk: MAX_PAGES_PER_CHUNK,
+      })
+      console.info(
+        `[extract-contract/stream] chunking ${file.name} (${pdfText.pageCount} pages) into ${chunks.length} sub-PDFs of ≤${MAX_PAGES_PER_CHUNK} pages`,
+      )
+
+      const promptText =
+        getActiveContractExtractPrompt().prompt +
+        textHint +
+        userInstructionsHint
+
+      // allSettled so one schema-violating chunk doesn't tank the
+      // whole extraction; merger tolerates the partial set. Each
+      // chunk uses the permissive chunkExtractSchema (header fields
+      // nullable) because mid-document pages legitimately have no
+      // contract name / vendor / type to report.
+      const settled = await Promise.allSettled(
+        chunks.map((chunk) =>
+          generateObject({
+            model: claudeModel,
+            schema: chunkExtractSchema,
+            abortSignal: req.signal,
+            providerOptions: {
+              anthropic: { structuredOutputMode: "jsonTool" as const },
+            },
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      promptText +
+                      `\n\nThis is chunk ${chunk.pageStart}-${chunk.pageEnd} of a ${pdfText.pageCount}-page PDF. Extract only what's visible in these pages — if header fields (contract name, vendor, type) are not on these pages, return null for them. Per-chunk results are merged downstream.`,
+                  },
+                  {
+                    type: "file",
+                    data: chunk.pdf,
+                    mediaType: "application/pdf",
+                    filename: `${file.name} (pages ${chunk.pageStart}-${chunk.pageEnd})`,
+                    providerOptions: {
+                      anthropic: {
+                        cacheControl: { type: "ephemeral" as const },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          }).then((r) => r.object as ChunkExtractData),
+        ),
+      )
+
+      const successful: ChunkExtractData[] = []
+      const failed: { chunk: string; error: string }[] = []
+      settled.forEach((res, i) => {
+        const c = chunks[i]!
+        const label = `pages ${c.pageStart}-${c.pageEnd}`
+        if (res.status === "fulfilled") {
+          successful.push(res.value)
+        } else {
+          failed.push({
+            chunk: label,
+            error:
+              res.reason instanceof Error
+                ? res.reason.message
+                : String(res.reason),
+          })
+        }
+      })
+
+      if (failed.length > 0) {
+        console.warn(
+          `[extract-contract/stream] ${failed.length}/${chunks.length} chunks failed — merging the rest`,
+          { failed },
+        )
+      }
+      if (successful.length === 0) {
+        throw new Error(
+          `All ${chunks.length} chunks failed; first failure: ${failed[0]?.error ?? "unknown"}`,
+        )
+      }
+
+      const merged = mergeExtractedContracts(successful)
+
+      try {
+        const expiresAt = new Date()
+        expiresAt.setDate(expiresAt.getDate() + 30)
+        await prisma.contractExtractionCache.upsert({
+          where: { userId_fileHash: { userId, fileHash } },
+          create: {
+            userId,
+            fileHash,
+            filename: file.name,
+            extracted: merged as object,
+            confidence: 0.9,
+            s3Key,
+            expiresAt,
+          },
+          update: {
+            extracted: merged as object,
+            confidence: 0.9,
+            s3Key,
+            expiresAt,
+          },
+        })
+      } catch (err) {
+        console.warn(
+          "[extract-contract/stream] chunked cache write skipped:",
+          err,
+        )
+      }
+
+      const encoder = new TextEncoder()
+      const body = new ReadableStream({
+        start(controller) {
+          const payload = {
+            extracted: merged,
+            confidence: 0.9,
+            s3Key,
+            chunked: { chunks: chunks.length, pages: pdfText.pageCount },
+            done: true,
+          }
+          controller.enqueue(encoder.encode(JSON.stringify(payload)))
+          controller.close()
+        },
+      })
+      const response = new Response(body, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      })
+      if (s3Key) response.headers.set("X-S3-Key", s3Key)
+      return response
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return new Response(null, { status: 499 })
+      }
+      console.error(
+        "[extract-contract/stream] chunked extract error:",
+        error,
+        { userId, file: file.name, pageCount: pdfText.pageCount },
+      )
+      return Response.json(
+        { error: "Chunked extraction failed" },
+        { status: 500 },
+      )
+    }
+  }
 
   try {
     const result = streamObject({
