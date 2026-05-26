@@ -334,7 +334,7 @@ export async function recomputeThresholdAccrualForTerm(input: {
     rebateCollected: number
     payPeriodStart: Date
     payPeriodEnd: Date
-    collectionDate: null
+    collectionDate: Date | null
     notes: string
   }> = []
   let totalEarned = 0
@@ -345,10 +345,12 @@ export async function recomputeThresholdAccrualForTerm(input: {
       contractId,
       facilityId,
       rebateEarned: r.periodPayment,
-      rebateCollected: 0,
+      // See carve-out.ts:248 — tie-in auto-stamps collectionDate at
+      // accrual so the rebate flows into "applied to capital".
+      rebateCollected: isTieIn ? r.periodPayment : 0,
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
-      collectionDate: null,
+      collectionDate: isTieIn ? r.periodEnd : null,
       notes: isMarketSharePercentOfSpend
         ? `${termPrefix} · ${input.metric}=${input.metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · spend=$${r.spendInScope.toFixed(2)} × ${(percentFraction * 100).toFixed(2)}% = $${r.periodPayment.toFixed(2)}`
         : `${termPrefix} · ${input.metric}=${input.metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · $${r.periodPayment.toFixed(2)}`,

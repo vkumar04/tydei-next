@@ -548,7 +548,7 @@ export async function recomputeVolumeAccrualForTerm(input: {
     rebateCollected: number
     payPeriodStart: Date
     payPeriodEnd: Date
-    collectionDate: null
+    collectionDate: Date | null
     notes: string
   }> = []
   for (const r of results) {
@@ -558,10 +558,12 @@ export async function recomputeVolumeAccrualForTerm(input: {
       contractId,
       facilityId,
       rebateEarned: r.rebateEarned,
-      rebateCollected: 0,
+      // See carve-out.ts:248 — tie-in auto-stamps collectionDate at
+      // accrual so the rebate flows into "applied to capital".
+      rebateCollected: isTieIn ? r.rebateEarned : 0,
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
-      collectionDate: null,
+      collectionDate: isTieIn ? r.periodEnd : null,
       notes: r.percentOfSpendApplied
         ? `${termPrefix} · ${r.occurrences} occurrences · spend=$${r.bucketSpend.toFixed(2)} · $${r.rebateEarned.toFixed(2)}`
         : `${termPrefix} · ${r.occurrences} occurrences · $${r.rebateEarned.toFixed(2)}`,
@@ -809,7 +811,7 @@ async function recomputeVolumeFromCogRecords(input: {
     rebateCollected: number
     payPeriodStart: Date
     payPeriodEnd: Date
-    collectionDate: null
+    collectionDate: Date | null
     notes: string
   }> = []
   for (const r of results) {
@@ -819,10 +821,12 @@ async function recomputeVolumeFromCogRecords(input: {
       contractId,
       facilityId,
       rebateEarned: r.rebateEarned,
-      rebateCollected: 0,
+      // See carve-out.ts:248 — tie-in auto-stamps collectionDate at
+      // accrual so the rebate flows into "applied to capital".
+      rebateCollected: isTieIn ? r.rebateEarned : 0,
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
-      collectionDate: null,
+      collectionDate: isTieIn ? r.periodEnd : null,
       notes: `${termPrefix} · ${r.quantity} units · $${r.rebateEarned.toFixed(2)}`,
     })
   }
@@ -1036,7 +1040,7 @@ async function recomputeVolumeFromPurchaseOrders(input: {
     rebateCollected: number
     payPeriodStart: Date
     payPeriodEnd: Date
-    collectionDate: null
+    collectionDate: Date | null
     notes: string
   }> = []
   for (const r of results) {
@@ -1046,10 +1050,12 @@ async function recomputeVolumeFromPurchaseOrders(input: {
       contractId,
       facilityId,
       rebateEarned: r.rebateEarned,
-      rebateCollected: 0,
+      // See carve-out.ts:248 — tie-in auto-stamps collectionDate at
+      // accrual so the rebate flows into "applied to capital".
+      rebateCollected: isTieIn ? r.rebateEarned : 0,
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
-      collectionDate: null,
+      collectionDate: isTieIn ? r.periodEnd : null,
       notes: `${termPrefix} · ${r.poCount} POs · $${r.rebateEarned.toFixed(2)}`,
     })
   }

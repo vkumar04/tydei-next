@@ -239,7 +239,7 @@ export async function recomputeCarveOutAccrualForTerm(input: {
     rebateCollected: number
     payPeriodStart: Date
     payPeriodEnd: Date
-    collectionDate: null
+    collectionDate: Date | null
     notes: string
   }> = []
   for (const r of results) {
@@ -249,10 +249,20 @@ export async function recomputeCarveOutAccrualForTerm(input: {
       contractId,
       facilityId,
       rebateEarned: r.rebateEarned,
-      rebateCollected: 0,
+      // Bug 2026-05-25 (Vick screenshot — "$47k earned / $0 applied to
+      // capital" on a Mako tie-in carve-out): the file-level comment at
+      // line 82-87 always promised tie-in rows would auto-stamp
+      // collectionDate, but the insert path here always hardcoded
+      // collectionDate: null — so sumRebateAppliedToCapital saw $0
+      // collected and rendered $0 applied. Same gap in po/invoice/
+      // threshold/volume; this commit fixes all five. For tie-in
+      // there is no separate user-collect step (the rebate is the
+      // capital paydown), so stamping collectionDate=payPeriodEnd at
+      // accrual time IS the collection event.
+      rebateCollected: isTieIn ? r.rebateEarned : 0,
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
-      collectionDate: null,
+      collectionDate: isTieIn ? r.periodEnd : null,
       notes: `${termPrefix} · ${r.lineCount} carve lines · $${r.rebateEarned.toFixed(2)}`,
     })
   }

@@ -231,7 +231,7 @@ export async function recomputePoAccrualForTerm(input: {
     rebateCollected: number
     payPeriodStart: Date
     payPeriodEnd: Date
-    collectionDate: null
+    collectionDate: Date | null
     notes: string
   }> = []
   for (const r of results) {
@@ -241,10 +241,13 @@ export async function recomputePoAccrualForTerm(input: {
       contractId,
       facilityId,
       rebateEarned: r.rebateEarned,
-      rebateCollected: 0,
+      // See carve-out.ts:248 — tie-in has no separate user-collect
+      // step; stamping collectionDate=payPeriodEnd at accrual IS the
+      // collection event so the rebate flows into "applied to capital".
+      rebateCollected: isTieIn ? r.rebateEarned : 0,
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
-      collectionDate: null,
+      collectionDate: isTieIn ? r.periodEnd : null,
       notes: `${termPrefix} · ${r.count} POs · $${r.rebateEarned.toFixed(2)}`,
     })
   }

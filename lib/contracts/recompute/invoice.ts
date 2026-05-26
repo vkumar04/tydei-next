@@ -230,7 +230,7 @@ export async function recomputeInvoiceAccrualForTerm(input: {
     rebateCollected: number
     payPeriodStart: Date
     payPeriodEnd: Date
-    collectionDate: null
+    collectionDate: Date | null
     notes: string
   }> = []
   for (const r of results) {
@@ -240,10 +240,12 @@ export async function recomputeInvoiceAccrualForTerm(input: {
       contractId,
       facilityId,
       rebateEarned: r.rebateEarned,
-      rebateCollected: 0,
+      // See carve-out.ts:248 — tie-in auto-stamps collectionDate at
+      // accrual so the rebate flows into "applied to capital".
+      rebateCollected: isTieIn ? r.rebateEarned : 0,
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
-      collectionDate: null,
+      collectionDate: isTieIn ? r.periodEnd : null,
       notes: `${termPrefix} · ${r.count} invoices · $${r.rebateEarned.toFixed(2)}`,
     })
   }
