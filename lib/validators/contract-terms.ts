@@ -10,6 +10,21 @@ import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 
 // ─── Tier Input ──────────────────────────────────────────────────
 
+// Bug 2026-05-25 (Vick Bugs.rtfd): AI-extracted tiers from a PDF
+// can carry negative *Max values (the AI emits any number the
+// model thinks fits; the AI schema in lib/ai/schemas.ts has no
+// .min on tier maxes). The rebate engine treats a missing/null
+// *Max as "no upper bound", and the form's "Tiers are not used"
+// types (carve_out etc.) leave stale state from a prior termType
+// — both paths converge on negative values reaching the
+// validator and 500'ing the contract create with
+// "Too small: expected number to be >=0". Coerce any negative
+// *Max to undefined so the engine reads it as uncapped, matching
+// what every downstream consumer (recompute/*, accrual.ts,
+// engine-invariants.test.ts) already does.
+const uncappedIfNegative = (v: unknown): unknown =>
+  typeof v === "number" && v < 0 ? undefined : v
+
 export const tierInputSchema = z.object({
   id: z.string().optional(),
   tierNumber: z.number().int().min(1).default(1),
@@ -18,11 +33,11 @@ export const tierInputSchema = z.object({
   // include it here so the form schema doesn't strip it on save.
   tierName: z.string().nullable().optional(),
   spendMin: z.number().min(0).default(0),
-  spendMax: z.number().min(0).optional(),
+  spendMax: z.preprocess(uncappedIfNegative, z.number().min(0).optional()),
   volumeMin: z.number().int().min(0).optional(),
-  volumeMax: z.number().int().min(0).optional(),
+  volumeMax: z.preprocess(uncappedIfNegative, z.number().int().min(0).optional()),
   marketShareMin: z.number().min(0).max(100).optional(),
-  marketShareMax: z.number().min(0).max(100).optional(),
+  marketShareMax: z.preprocess(uncappedIfNegative, z.number().min(0).max(100).optional()),
   rebateType: RebateTypeSchema.default("percent_of_spend"),
   rebateValue: z.number().min(0).default(0),
 }).superRefine((tier, ctx) => {
