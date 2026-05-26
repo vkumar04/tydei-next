@@ -61,6 +61,13 @@ export interface ContractTermScopeForMatch {
 export type ContractForMatch = {
   id: string
   vendorId: string
+  /**
+   * Grouped (multi-vendor) contracts list participating vendors here in
+   * addition to the primary `vendorId`. Matcher consumers register the
+   * contract under each id so a COG row for any participating vendor
+   * resolves to this contract via the vendorId+date cascade.
+   */
+  additionalVendorIds?: string[]
   status: "active" | "expiring" | "expired" | "draft" | "pending"
   effectiveDate: Date
   expirationDate: Date | null

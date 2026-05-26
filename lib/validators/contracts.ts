@@ -51,6 +51,10 @@ const createContractBase = z.object({
   rebatePayPeriod: PerformancePeriodSchema,
   isMultiFacility: z.boolean(),
   isGrouped: z.boolean().optional(),
+  // Vendor IDs in the group besides the primary `vendorId`. Empty when
+  // not grouped. Persisted to contract.additionalVendorIds so the COG
+  // matcher registers the contract under every participating vendor.
+  additionalVendorIds: z.array(z.string()).optional(),
   facilityIds: z.array(z.string()),
   additionalFacilityIds: z.array(z.string()).optional(),
   // 2026-04-28: tieInCapitalValue + tieInPayoffMonths removed —

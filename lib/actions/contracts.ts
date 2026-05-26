@@ -911,6 +911,7 @@ async function _createContractImpl(
       rebatePayPeriod: data.rebatePayPeriod,
       isMultiFacility: data.isMultiFacility,
       isGrouped: data.isGrouped ?? false,
+      additionalVendorIds: data.additionalVendorIds ?? [],
       tieInCapitalContractId: data.tieInCapitalContractId,
       // Charles audit suggestion #4 (v0-port): legacy capital fields
       // removed — capital lives in ContractCapitalLineItem rows now.
@@ -1195,6 +1196,8 @@ async function _updateContractImpl(
   if (data.rebatePayPeriod !== undefined) updateData.rebatePayPeriod = data.rebatePayPeriod
   if (data.isMultiFacility !== undefined) updateData.isMultiFacility = data.isMultiFacility
   if (data.isGrouped !== undefined) updateData.isGrouped = data.isGrouped
+  if (data.additionalVendorIds !== undefined)
+    updateData.additionalVendorIds = data.additionalVendorIds
 
   // Charles audit suggestion #4 (v0-port): legacy contract-level
   // capital fields removed — capital lives in ContractCapitalLineItem

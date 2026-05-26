@@ -674,6 +674,13 @@ model Contract {
   performancePeriod      PerformancePeriod @default(monthly)
   rebatePayPeriod        PerformancePeriod @default(quarterly)
   isGrouped              Boolean           @default(false)
+  // Vendor IDs participating in a grouped (multi-vendor) contract
+  // *in addition to* the primary `vendorId`. The matcher in
+  // lib/cog/recompute.ts registers the contract under each of these
+  // vendor IDs so COG rows for additional vendors resolve to the
+  // grouped contract via the cascade's vendorId+date path, and
+  // pricing-file REFs from any included vendor count as on-contract.
+  additionalVendorIds    String[]          @default([])
   isMultiFacility        Boolean           @default(false)
   tieInCapitalContractId String?
   // Charles audit deferred-fix: vendor's organizational division

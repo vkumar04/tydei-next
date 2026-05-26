@@ -103,7 +103,13 @@ export function ContractFormBasicInfo({
   }
   const [cogAutoFilled, setCogAutoFilled] = useState(false)
   const [linkedContractId, setLinkedContractId] = useState<string>("")
-  const [additionalVendorIds, setAdditionalVendorIds] = useState<string[]>([])
+  // Mirror form state so the grouped vendor list actually rides along to
+  // the create/update action. Previously this was local-only state and
+  // the selections were silently dropped on save (Vick screenshot
+  // 2026-05-26: "grouped contract vendors aren't being picked up").
+  const additionalVendorIds = watch("additionalVendorIds") ?? []
+  const setAdditionalVendorIds = (next: string[]) =>
+    setValue("additionalVendorIds", next, { shouldDirty: true })
 
   // Live vendor list for the grouped contract vendor picker
   const { data: liveVendorsData } = useQuery({

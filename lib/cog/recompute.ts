@@ -41,16 +41,25 @@ export async function loadContractsForVendor(
 ): Promise<ContractForMatch[]> {
   const contracts = await db.contract.findMany({
     where: {
-      vendorId,
+      // Grouped contracts list participating vendors in additionalVendorIds.
+      // Loading by that array as well as the primary vendorId means a COG
+      // row for vendor B resolves to the grouped contract owned by vendor
+      // A — and pricing SKUs from any included vendor count as on-contract.
+      OR: [{ vendorId }, { additionalVendorIds: { has: vendorId } }],
       status: { in: ["active", "expiring"] },
-      OR: [
-        { facilityId },
-        { contractFacilities: { some: { facilityId } } },
+      AND: [
+        {
+          OR: [
+            { facilityId },
+            { contractFacilities: { some: { facilityId } } },
+          ],
+        },
       ],
     },
     select: {
       id: true,
       vendorId: true,
+      additionalVendorIds: true,
       status: true,
       effectiveDate: true,
       expirationDate: true,
@@ -94,6 +103,7 @@ export async function loadContractsForVendor(
     return {
       id: c.id,
       vendorId: c.vendorId,
+      additionalVendorIds: c.additionalVendorIds ?? [],
       status: c.status,
       effectiveDate: c.effectiveDate,
       expirationDate: c.expirationDate,
@@ -216,9 +226,16 @@ export async function recomputeMatchStatusesForVendor(
       effectiveDate: c.effectiveDate,
       expirationDate: c.expirationDate,
     }
-    const byVendor = activeContractsByVendor.get(c.vendorId) ?? []
-    byVendor.push(contractCandidate)
-    activeContractsByVendor.set(c.vendorId, byVendor)
+    // Register the contract under its primary vendorId AND every
+    // additionalVendorId so grouped contracts match COG rows for any
+    // participating vendor. Without this leg a grouped contract owned
+    // by vendor A would never match COG rows tagged with vendor B.
+    const participatingVendorIds = [c.vendorId, ...(c.additionalVendorIds ?? [])]
+    for (const vid of participatingVendorIds) {
+      const byVendor = activeContractsByVendor.get(vid) ?? []
+      byVendor.push(contractCandidate)
+      activeContractsByVendor.set(vid, byVendor)
+    }
 
     for (const p of c.pricingItems) {
       const pricingCandidate: PricingCandidate = {
