@@ -41,6 +41,38 @@ import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extrac
 // take 60-180s depending on Anthropic queue depth. Bump to 5 min.
 export const maxDuration = 300
 
+// Anthropic rate-limit at our current tier accepts a small burst
+// but rejects the rest with 429s. The first all-parallel run on a
+// 33-chunk PDF saw 26/33 chunks fail to that burst. 5 concurrent
+// keeps Anthropic's queue happy while only adding ~5s per batch
+// vs full parallel — net latency on the 261-page Mako file stays
+// ~30-90s with success rate close to 100%.
+const CHUNK_CONCURRENCY = 5
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length)
+  let cursor = 0
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const i = cursor++
+      if (i >= items.length) return
+      try {
+        const value = await fn(items[i]!, i)
+        results[i] = { status: "fulfilled", value }
+      } catch (reason) {
+        results[i] = { status: "rejected", reason }
+      }
+    }
+  }
+  const workerCount = Math.min(limit, items.length)
+  await Promise.all(Array.from({ length: workerCount }, worker))
+  return results
+}
+
 // Bug A 2026-05-25: bumped from 10MB → 25MB to match the non-streaming
 // /api/ai/extract-contract route. See that file for the rationale.
 const MAX_BYTES = 25 * 1024 * 1024
@@ -161,13 +193,18 @@ export async function POST(req: Request) {
         textHint +
         userInstructionsHint
 
-      // allSettled so one schema-violating chunk doesn't tank the
-      // whole extraction; merger tolerates the partial set. Each
-      // chunk uses the permissive chunkExtractSchema (header fields
-      // nullable) because mid-document pages legitimately have no
-      // contract name / vendor / type to report.
-      const settled = await Promise.allSettled(
-        chunks.map((chunk) =>
+      // Bounded concurrency keeps Anthropic from 429'ing on the
+      // burst (33 simultaneous calls reliably failed 26 of them
+      // before this limiter landed). allSettled within the worker
+      // pool so one chunk's schema violation doesn't sink the rest;
+      // merger tolerates the partial set. Each chunk uses the
+      // permissive chunkExtractSchema (header fields nullable)
+      // because mid-document pages legitimately have no contract
+      // name / vendor / type to report.
+      const settled = await mapWithConcurrency(
+        chunks,
+        CHUNK_CONCURRENCY,
+        (chunk) =>
           generateObject({
             model: claudeModel,
             schema: chunkExtractSchema,
@@ -200,7 +237,6 @@ export async function POST(req: Request) {
               },
             ],
           }).then((r) => r.object as ChunkExtractData),
-        ),
       )
 
       const successful: ChunkExtractData[] = []
