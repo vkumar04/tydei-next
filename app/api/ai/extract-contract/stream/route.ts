@@ -18,7 +18,7 @@
  * the client dialog reads either response identically.
  */
 
-import { generateObject, streamObject } from "ai"
+import { generateObject, streamObject, NoObjectGeneratedError } from "ai"
 import { headers } from "next/headers"
 import { createHash } from "node:crypto"
 import { auth } from "@/lib/auth-server"
@@ -204,10 +204,15 @@ export async function POST(req: Request) {
       // permissive chunkExtractSchema (header fields nullable)
       // because mid-document pages legitimately have no contract
       // name / vendor / type to report.
-      const settled = await mapWithConcurrency(
-        chunks,
-        CHUNK_CONCURRENCY,
-        (chunk) =>
+      // One-shot retry on AI_NoObjectGeneratedError specifically.
+      // That error fires when the model returns content that doesn't
+      // match the schema — usually a transient parse hiccup that
+      // succeeds on a fresh call. We don't retry credit / rate-limit /
+      // network errors here; those won't fix themselves.
+      const callChunk = async (
+        chunk: (typeof chunks)[number],
+      ): Promise<ChunkExtractData> => {
+        const request = () =>
           generateObject({
             // Haiku 4.5 for the chunked per-page extraction — ~90%
             // cheaper than Opus per token. Mechanical structured
@@ -254,7 +259,24 @@ export async function POST(req: Request) {
                 ],
               },
             ],
-          }).then((r) => r.object as ChunkExtractData),
+          }).then((r) => r.object as ChunkExtractData)
+        try {
+          return await request()
+        } catch (err) {
+          if (NoObjectGeneratedError.isInstance(err)) {
+            console.info(
+              `[extract-contract/stream] retry chunk pages ${chunk.pageStart}-${chunk.pageEnd} after NoObjectGeneratedError`,
+            )
+            return await request()
+          }
+          throw err
+        }
+      }
+
+      const settled = await mapWithConcurrency(
+        chunks,
+        CHUNK_CONCURRENCY,
+        callChunk,
       )
 
       const successful: ChunkExtractData[] = []
