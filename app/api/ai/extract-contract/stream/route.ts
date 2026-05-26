@@ -25,7 +25,7 @@ import { auth } from "@/lib/auth-server"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
-import { claudeModel } from "@/lib/ai/config"
+import { claudeModel, claudeHaiku } from "@/lib/ai/config"
 import { extractedContractSchema, type ExtractedContractData } from "@/lib/ai/schemas"
 import { extractPdfText } from "@/lib/ai/pdf-text-helper"
 import { splitPdfByPages } from "@/lib/ai/pdf-chunker"
@@ -81,9 +81,12 @@ const MAX_BYTES = 25 * 1024 * 1024
 // produced a 1.1M-token prompt and Anthropic 400'd with "prompt is too
 // long". Anything longer than this gets split into N-page sub-PDFs,
 // extracted per-chunk via generateObject, then merged via
-// mergeExtractedContracts. 8 pages × ~80K vision tokens ≈ 640K — well
-// under the 1M cap with headroom for the system prompt + text hint.
-const MAX_PAGES_PER_CHUNK = 8
+// mergeExtractedContracts. 10 pages × ~80K vision tokens ≈ 800K — under
+// the 1M cap with ~200K headroom for the system prompt + text hint.
+// Bumped from 8 → 10 after the Haiku switch made cost-per-call cheap
+// enough that fewer/bigger chunks beats more/smaller ones for wall
+// time without breaking the budget.
+const MAX_PAGES_PER_CHUNK = 10
 
 export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -206,7 +209,13 @@ export async function POST(req: Request) {
         CHUNK_CONCURRENCY,
         (chunk) =>
           generateObject({
-            model: claudeModel,
+            // Haiku 4.5 for the chunked per-page extraction — ~90%
+            // cheaper than Opus per token. Mechanical structured
+            // extraction (terms, tiers, categories) doesn't need
+            // Opus reasoning. The single-call path below still
+            // uses claudeModel (Opus) for small PDFs where one
+            // cover-page-aware pass beats N narrower ones.
+            model: claudeHaiku,
             schema: chunkExtractSchema,
             abortSignal: req.signal,
             providerOptions: {
@@ -216,22 +225,31 @@ export async function POST(req: Request) {
               {
                 role: "user",
                 content: [
+                  // Shared prefix — identical across all chunks of
+                  // this upload. cacheControl breakpoint here means
+                  // chunks 2..N hit Anthropic's prompt cache for
+                  // ~90% off the prompt tokens. Splitting the
+                  // chunk-specific suffix into its own block keeps
+                  // it OUTSIDE the cached prefix — required for the
+                  // cache key to match across calls.
                   {
                     type: "text",
-                    text:
-                      promptText +
-                      `\n\nThis is chunk ${chunk.pageStart}-${chunk.pageEnd} of a ${pdfText.pageCount}-page PDF. Extract only what's visible in these pages — if header fields (contract name, vendor, type) are not on these pages, return null for them. Per-chunk results are merged downstream.`,
+                    text: promptText,
+                    providerOptions: {
+                      anthropic: {
+                        cacheControl: { type: "ephemeral" as const },
+                      },
+                    },
+                  },
+                  {
+                    type: "text",
+                    text: `This is chunk ${chunk.pageStart}-${chunk.pageEnd} of a ${pdfText.pageCount}-page PDF. Extract only what's visible in these pages — if header fields (contract name, vendor, type) are not on these pages, return null for them. Per-chunk results are merged downstream.`,
                   },
                   {
                     type: "file",
                     data: chunk.pdf,
                     mediaType: "application/pdf",
                     filename: `${file.name} (pages ${chunk.pageStart}-${chunk.pageEnd})`,
-                    providerOptions: {
-                      anthropic: {
-                        cacheControl: { type: "ephemeral" as const },
-                      },
-                    },
                   },
                 ],
               },
