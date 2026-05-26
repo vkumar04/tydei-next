@@ -191,27 +191,39 @@ export async function POST(req: Request) {
         `[extract-contract/stream] chunking ${file.name} (${pdfText.pageCount} pages) into ${chunks.length} sub-PDFs of ≤${MAX_PAGES_PER_CHUNK} pages`,
       )
 
-      const promptText =
-        getActiveContractExtractPrompt().prompt +
-        textHint +
-        userInstructionsHint
+      // Chunked-path prompt deliberately OMITS the whole-PDF text
+      // hint that the single-call path includes — chunks send their
+      // own per-chunk text (cheaper, more focused) so duplicating
+      // the entire PDF text into every chunk's prompt just burned
+      // cache-write tokens without helping accuracy.
+      const chunkPromptText =
+        getActiveContractExtractPrompt().prompt + userInstructionsHint
 
       // Bounded concurrency keeps Anthropic from 429'ing on the
-      // burst (33 simultaneous calls reliably failed 26 of them
-      // before this limiter landed). allSettled within the worker
-      // pool so one chunk's schema violation doesn't sink the rest;
-      // merger tolerates the partial set. Each chunk uses the
-      // permissive chunkExtractSchema (header fields nullable)
-      // because mid-document pages legitimately have no contract
-      // name / vendor / type to report.
-      // One-shot retry on AI_NoObjectGeneratedError specifically.
-      // That error fires when the model returns content that doesn't
-      // match the schema — usually a transient parse hiccup that
-      // succeeds on a fresh call. We don't retry credit / rate-limit /
-      // network errors here; those won't fix themselves.
+      // burst. One-shot retry on AI_NoObjectGeneratedError handles
+      // transient schema-parse hiccups. Text-first per chunk: if
+      // the chunk has an extractable text layer we send the text
+      // and skip the vision-heavy `file` block (~70-90% cheaper
+      // on born-digital contracts). Vision-only fallback when the
+      // chunk is scanned. maxOutputTokens caps the response.
       const callChunk = async (
         chunk: (typeof chunks)[number],
       ): Promise<ChunkExtractData> => {
+        const chunkText = await extractPdfText(chunk.pdf)
+        const useVision = !chunkText.hasTextLayer
+
+        const sourceBlock = useVision
+          ? ({
+              type: "file" as const,
+              data: chunk.pdf,
+              mediaType: "application/pdf",
+              filename: `${file.name} (pages ${chunk.pageStart}-${chunk.pageEnd})`,
+            })
+          : ({
+              type: "text" as const,
+              text: `Extracted text layer (pages ${chunk.pageStart}-${chunk.pageEnd}):\n\n${chunkText.text}`,
+            })
+
         const request = () =>
           generateObject({
             // Haiku 4.5 for the chunked per-page extraction — ~90%
@@ -223,6 +235,10 @@ export async function POST(req: Request) {
             model: claudeHaiku,
             schema: chunkExtractSchema,
             abortSignal: req.signal,
+            // Cap response so a runaway model can't spend more than
+            // ~$0.02 on output per chunk. Real chunk outputs are
+            // small JSON (a few hundred tokens), 4k gives 10× safety.
+            maxOutputTokens: 4000,
             providerOptions: {
               anthropic: { structuredOutputMode: "jsonTool" as const },
             },
@@ -239,7 +255,7 @@ export async function POST(req: Request) {
                   // cache key to match across calls.
                   {
                     type: "text",
-                    text: promptText,
+                    text: chunkPromptText,
                     providerOptions: {
                       anthropic: {
                         cacheControl: { type: "ephemeral" as const },
@@ -248,14 +264,9 @@ export async function POST(req: Request) {
                   },
                   {
                     type: "text",
-                    text: `This is chunk ${chunk.pageStart}-${chunk.pageEnd} of a ${pdfText.pageCount}-page PDF. Extract only what's visible in these pages — if header fields (contract name, vendor, type) are not on these pages, return null for them. Per-chunk results are merged downstream.`,
+                    text: `This is chunk ${chunk.pageStart}-${chunk.pageEnd} of a ${pdfText.pageCount}-page PDF (${useVision ? "scanned, sent as image" : "text layer included"}). Extract only what's visible in these pages — if header fields (contract name, vendor, type) are not on these pages, return null for them. Per-chunk results are merged downstream.`,
                   },
-                  {
-                    type: "file",
-                    data: chunk.pdf,
-                    mediaType: "application/pdf",
-                    filename: `${file.name} (pages ${chunk.pageStart}-${chunk.pageEnd})`,
-                  },
+                  sourceBlock,
                 ],
               },
             ],
