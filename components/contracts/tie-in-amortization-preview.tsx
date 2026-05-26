@@ -48,7 +48,7 @@ interface TieInAmortizationPreviewProps {
   downPayment: number | null | undefined
   interestRate: number | null | undefined
   termMonths: number | null | undefined
-  paymentCadence: "monthly" | "quarterly" | "annual" | undefined
+  paymentCadence: "monthly" | "quarterly" | "semi_annual" | "annual" | undefined
   /** ISO yyyy-mm-dd from the term's effectiveStart — used to date rows. */
   effectiveStart: string
   amortizationShape: "symmetrical" | "custom"
@@ -58,13 +58,15 @@ interface TieInAmortizationPreviewProps {
 }
 
 function monthsPerPeriod(
-  p: "monthly" | "quarterly" | "annual",
+  p: "monthly" | "quarterly" | "semi_annual" | "annual",
 ): number {
   switch (p) {
     case "monthly":
       return 1
     case "quarterly":
       return 3
+    case "semi_annual":
+      return 6
     case "annual":
       return 12
   }

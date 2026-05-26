@@ -185,7 +185,7 @@ export interface ContractCapitalScheduleResult {
   financedPrincipal: number
   interestRate: number
   termMonths: number
-  period: "monthly" | "quarterly" | "annual"
+  period: "monthly" | "quarterly" | "semi_annual" | "annual"
   schedule: ContractCapitalScheduleRow[]
   /** periodNumber of the last row whose periodDate ≤ today; 0 when none. */
   elapsedPeriods: number
@@ -264,7 +264,7 @@ function addMonths(date: Date, months: number): Date {
  */
 function aggregatePerItemSchedules(
   items: ReadonlyArray<NormalizedCapitalLineItem>,
-): { entries: AmortizationEntry[]; period: "monthly" | "quarterly" | "annual" } {
+): { entries: AmortizationEntry[]; period: "monthly" | "quarterly" | "semi_annual" | "annual" } {
   if (items.length === 0) return { entries: [], period: "monthly" }
   // Bug #11 defense-in-depth: if every item has zero financed principal
   // (e.g. user set Initial Sales == Contract Total), there's nothing to
@@ -281,7 +281,7 @@ function aggregatePerItemSchedules(
   // Find the finest cadence (smallest months-per-period) so we render
   // on the densest possible grid.
   const cadences = new Set(items.map((i) => i.paymentCadence))
-  const period: "monthly" | "quarterly" | "annual" = cadences.has("monthly")
+  const period: "monthly" | "quarterly" | "semi_annual" | "annual" = cadences.has("monthly")
     ? "monthly"
     : cadences.has("quarterly")
       ? "quarterly"
@@ -345,12 +345,14 @@ function aggregatePerItemSchedules(
   return { entries: combined, period }
 }
 
-function monthsPerPeriod(p: "monthly" | "quarterly" | "annual"): number {
+function monthsPerPeriod(p: "monthly" | "quarterly" | "semi_annual" | "annual"): number {
   switch (p) {
     case "monthly":
       return 1
     case "quarterly":
       return 3
+    case "semi_annual":
+      return 6
     case "annual":
       return 12
   }
@@ -459,7 +461,7 @@ export async function getContractCapitalSchedule(
   // table; symmetrical contracts always compute live so capital /
   // interest / term edits flow through without a write.
   let entries: AmortizationEntry[]
-  let period: "monthly" | "quarterly" | "annual"
+  let period: "monthly" | "quarterly" | "semi_annual" | "annual"
   if (
     contract.amortizationShape === "custom" &&
     contract.amortizationRows.length > 0
@@ -819,7 +821,7 @@ export async function getVendorContractCapitalSchedule(
   if (financedPrincipal <= 0 || termMonths <= 0) return empty
 
   let entries
-  let period: "monthly" | "quarterly" | "annual"
+  let period: "monthly" | "quarterly" | "semi_annual" | "annual"
   if (
     contract.amortizationShape === "custom" &&
     contract.amortizationRows.length > 0
@@ -964,13 +966,15 @@ function addMonthsLocal(date: Date, months: number): Date {
 }
 
 function monthsPerPeriodLocal(
-  p: "monthly" | "quarterly" | "annual",
+  p: "monthly" | "quarterly" | "semi_annual" | "annual",
 ): number {
   switch (p) {
     case "monthly":
       return 1
     case "quarterly":
       return 3
+    case "semi_annual":
+      return 6
     case "annual":
       return 12
   }

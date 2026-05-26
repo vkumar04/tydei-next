@@ -181,7 +181,7 @@ export const createTermSchema = z.object({
   termMonths: z.number().int().nullable().optional(),
   // Wave B (tie-in parity) — down payment, cadence, min purchase commitment.
   downPayment: z.number().min(0).nullish(),
-  paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  paymentCadence: z.enum(["monthly", "quarterly", "semi_annual", "annual"]).optional(),
   minimumPurchaseCommitment: z.number().min(0).nullish(),
   // Wave C — shortfall handling policy for tie-in capital.
   shortfallHandling: z
@@ -273,7 +273,7 @@ export const termFormSchema = z.object({
   termMonths: z.number().int().nullable().optional(),
   // Wave B (tie-in parity) — down payment, cadence, min purchase commitment.
   downPayment: z.number().min(0).nullish(),
-  paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  paymentCadence: z.enum(["monthly", "quarterly", "semi_annual", "annual"]).optional(),
   minimumPurchaseCommitment: z.number().min(0).nullish(),
   // Wave C — shortfall handling policy for tie-in capital.
   shortfallHandling: z

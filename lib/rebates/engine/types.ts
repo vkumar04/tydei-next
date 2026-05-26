@@ -218,8 +218,8 @@ export interface TieInCapitalConfig {
   interestRate: number
   /** Total repayment term in months. */
   termMonths: number
-  /** Cadence of evaluation ("monthly" | "quarterly" | "annual"). */
-  period: "monthly" | "quarterly" | "annual"
+  /** Cadence of evaluation ("monthly" | "quarterly" | "semi_annual" | "annual"). */
+  period: "monthly" | "quarterly" | "semi_annual" | "annual"
   shortfallHandling: TrueUpShortfallHandling
   /** Nested rebate config used to compute the earning stream. */
   rebateEngine:

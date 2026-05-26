@@ -212,7 +212,7 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
   const [termMonths, setTermMonths] = useState("")
   const [downPayment, setDownPayment] = useState("")
   const [paymentCadence, setPaymentCadence] = useState<
-    "monthly" | "quarterly" | "annual"
+    "monthly" | "quarterly" | "semi_annual" | "annual"
   >("monthly")
   const [amortizationShape, setAmortizationShape] = useState<
     "symmetrical" | "custom"
@@ -273,7 +273,7 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
         contract.downPayment != null ? String(contract.downPayment) : "",
       )
       setPaymentCadence(
-        (contract.paymentCadence as "monthly" | "quarterly" | "annual") ??
+        (contract.paymentCadence as "monthly" | "quarterly" | "semi_annual" | "annual") ??
           "monthly",
       )
       setAmortizationShape(
@@ -634,7 +634,7 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
                   <Select
                     value={paymentCadence}
                     onValueChange={(v) =>
-                      setPaymentCadence(v as "monthly" | "quarterly" | "annual")
+                      setPaymentCadence(v as "monthly" | "quarterly" | "semi_annual" | "annual")
                     }
                     disabled={!isEditable}
                   >
@@ -644,6 +644,7 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
                     <SelectContent>
                       <SelectItem value="monthly">Monthly</SelectItem>
                       <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="semi_annual">Semi-Annual</SelectItem>
                       <SelectItem value="annual">Annual</SelectItem>
                     </SelectContent>
                   </Select>

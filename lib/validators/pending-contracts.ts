@@ -34,7 +34,7 @@ export const createPendingContractSchema = z.object({
   interestRate: z.number().min(0).max(1).optional(),
   termMonths: z.number().int().min(0).optional(),
   downPayment: z.number().min(0).optional(),
-  paymentCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  paymentCadence: z.enum(["monthly", "quarterly", "semi_annual", "annual"]).optional(),
   amortizationShape: z.enum(["symmetrical", "custom"]).optional(),
   // Charles audit suggestion #4 (v0-port): multi-item capital on
   // vendor submission. Each item mirrors v0's LeasedServiceItem +
@@ -51,7 +51,7 @@ export const createPendingContractSchema = z.object({
         termMonths: z.number().int().min(0).nullable().optional(),
         paymentType: z.enum(["fixed", "variable"]).default("fixed"),
         paymentCadence: z
-          .enum(["monthly", "quarterly", "annual"])
+          .enum(["monthly", "quarterly", "semi_annual", "annual"])
           .default("monthly"),
       }),
     )

@@ -25,7 +25,7 @@ export interface NormalizedCapitalLineItem {
   interestRate: number
   termMonths: number
   paymentType: "fixed" | "variable"
-  paymentCadence: "monthly" | "quarterly" | "annual"
+  paymentCadence: "monthly" | "quarterly" | "semi_annual" | "annual"
 }
 
 type ContractWithLineItems = Pick<Contract, "id" | "name"> & {
@@ -79,7 +79,7 @@ export function sumInitialSales(
 
 function normalizeCadence(
   raw: string | null | undefined,
-): "monthly" | "quarterly" | "annual" {
+): "monthly" | "quarterly" | "semi_annual" | "annual" {
   if (raw === "quarterly" || raw === "annual") return raw
   return "monthly"
 }

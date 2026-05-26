@@ -49,8 +49,8 @@ export function VendorPhase2FieldsCard(props: {
   onTermMonthsChange: (v: string) => void
   downPayment: string
   onDownPaymentChange: (v: string) => void
-  paymentCadence: "monthly" | "quarterly" | "annual"
-  onPaymentCadenceChange: (v: "monthly" | "quarterly" | "annual") => void
+  paymentCadence: "monthly" | "quarterly" | "semi_annual" | "annual"
+  onPaymentCadenceChange: (v: "monthly" | "quarterly" | "semi_annual" | "annual") => void
   amortizationShape: "symmetrical" | "custom"
   onAmortizationShapeChange: (v: "symmetrical" | "custom") => void
 }) {
@@ -189,7 +189,7 @@ export function VendorPhase2FieldsCard(props: {
                 <Select
                   value={props.paymentCadence}
                   onValueChange={(v) =>
-                    props.onPaymentCadenceChange(v as "monthly" | "quarterly" | "annual")
+                    props.onPaymentCadenceChange(v as "monthly" | "quarterly" | "semi_annual" | "annual")
                   }
                 >
                   <SelectTrigger id="vc-payment-cadence">
@@ -198,6 +198,7 @@ export function VendorPhase2FieldsCard(props: {
                   <SelectContent>
                     <SelectItem value="monthly">Monthly</SelectItem>
                     <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="semi_annual">Semi-Annual</SelectItem>
                     <SelectItem value="annual">Annual</SelectItem>
                   </SelectContent>
                 </Select>

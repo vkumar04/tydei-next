@@ -338,8 +338,8 @@ export function OverviewTab({
                               // is term-period-scoped, not cadence-scoped, so
                               // monthly is a safe display default until the
                               // term-level cadence accessor is wired.
-                              const cadence: "monthly" | "quarterly" | "annual" =
-                                "monthly" as "monthly" | "quarterly" | "annual"
+                              const cadence: "monthly" | "quarterly" | "semi_annual" | "annual" =
+                                "monthly" as "monthly" | "quarterly" | "semi_annual" | "annual"
                               const cadenceLabel =
                                 cadence === "quarterly"
                                   ? "Quarterly"

@@ -29,7 +29,7 @@ export interface AmortizationScheduleConfig {
   /** Annual interest rate (decimal: 0.05 = 5%). */
   interestRate: number
   termMonths: number
-  period: "monthly" | "quarterly" | "annual"
+  period: "monthly" | "quarterly" | "semi_annual" | "annual"
 }
 
 function periodsPerYear(period: AmortizationScheduleConfig["period"]): number {
@@ -38,6 +38,8 @@ function periodsPerYear(period: AmortizationScheduleConfig["period"]): number {
       return 12
     case "quarterly":
       return 4
+    case "semi_annual":
+      return 2
     case "annual":
       return 1
     default: {
@@ -58,6 +60,8 @@ function totalPeriods(
       return termMonths
     case "quarterly":
       return Math.ceil(termMonths / 3)
+    case "semi_annual":
+      return Math.ceil(termMonths / 6)
     case "annual":
       return Math.ceil(termMonths / 12)
     default: {

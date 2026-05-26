@@ -77,7 +77,7 @@ export function VendorContractSubmission({
   const [termMonths, setTermMonths] = useState("")
   const [downPayment, setDownPayment] = useState("")
   const [paymentCadence, setPaymentCadence] = useState<
-    "monthly" | "quarterly" | "annual"
+    "monthly" | "quarterly" | "semi_annual" | "annual"
   >("monthly")
   const [amortizationShape, setAmortizationShape] = useState<
     "symmetrical" | "custom"

@@ -56,7 +56,7 @@ tieInDetails with EVERY available value:
   (5 years → 60).
 - interestRatePercent: financing rate as percent (5 = 5%). null only
   if explicitly zero-interest or not financed.
-- paymentCadence: "monthly" | "quarterly" | "annual" — driven by
+- paymentCadence: "monthly" | "quarterly" | "semi_annual" | "annual" — driven by
   phrases like "monthly installments", "quarterly draws".
 - downPayment: upfront payment in dollars before financing.
 - linkedProductCategories: for tie_in only — consumable categories

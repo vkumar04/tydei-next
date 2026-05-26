@@ -49,7 +49,7 @@ export interface CapitalLineItemDraft {
   interestRatePercent: number
   termMonths: number
   paymentType: "fixed" | "variable"
-  paymentCadence: "monthly" | "quarterly" | "annual"
+  paymentCadence: "monthly" | "quarterly" | "semi_annual" | "annual"
 }
 
 export function makeEmptyCapitalLineItem(): CapitalLineItemDraft {
@@ -327,6 +327,7 @@ export function CapitalLineItemsEditor({
                             <SelectContent>
                               <SelectItem value="monthly">Monthly</SelectItem>
                               <SelectItem value="quarterly">Quarterly</SelectItem>
+                              <SelectItem value="semi_annual">Semi-Annual</SelectItem>
                               <SelectItem value="annual">Annual</SelectItem>
                             </SelectContent>
                           </Select>

@@ -102,7 +102,7 @@ export const extractedContractSchema = z.object({
     "Capital payoff/financing term in months. Look for 'term', 'payoff period', 'amortization period', '60-month financing'. Convert years→months (5 years = 60).",
   ),
   paymentCadence: z
-    .enum(["monthly", "quarterly", "annual"])
+    .enum(["monthly", "quarterly", "semi_annual", "annual"])
     .nullable()
     .optional()
     .describe(
@@ -387,7 +387,7 @@ export const richContractExtractSchema = z.object({
       capitalEquipmentValue: z.number().nullable().describe("Value of capital equipment to pay off"),
       payoffPeriodMonths: z.number().nullable().describe("Expected payoff period in months"),
       interestRatePercent: z.number().nullable().describe("Financing interest rate as percent (5 = 5%); null if zero-interest or not financed"),
-      paymentCadence: z.enum(["monthly", "quarterly", "annual"]).nullable().describe("Cadence of capital payments"),
+      paymentCadence: z.enum(["monthly", "quarterly", "semi_annual", "annual"]).nullable().describe("Cadence of capital payments"),
       downPayment: z.number().nullable().describe("Up-front payment in dollars before financing"),
       linkedProductCategories: z.array(z.string()).nullable(),
     })

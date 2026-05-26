@@ -194,7 +194,7 @@ export function EditContractClient({
           paymentCadence: ((r.paymentCadence === "quarterly" ||
           r.paymentCadence === "annual"
             ? r.paymentCadence
-            : "monthly") as "monthly" | "quarterly" | "annual"),
+            : "monthly") as "monthly" | "quarterly" | "semi_annual" | "annual"),
         }))
         setCapitalItems(drafts)
         initialCapitalItemsRef.current = drafts

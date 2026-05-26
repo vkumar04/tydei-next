@@ -452,7 +452,7 @@ function monthKeyEndOfMonth(key: string): Date {
  * buckets before writing Rebate rows. `getAccrualTimeline` still returns
  * monthly rows; only the persisted Rebate ledger honors this bucket.
  */
-export type PaymentCadence = "monthly" | "quarterly" | "annual"
+export type PaymentCadence = "monthly" | "quarterly" | "semi_annual" | "annual"
 
 export interface CadenceBucket {
   /** Period start at UTC midnight. */

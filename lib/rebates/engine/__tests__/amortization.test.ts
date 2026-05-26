@@ -70,6 +70,25 @@ describe("buildTieInAmortizationSchedule — quarterly cadence", () => {
   })
 })
 
+describe("buildTieInAmortizationSchedule — semi-annual cadence", () => {
+  it("$300K, 5% interest, 60 months, semi_annual → 10 semi-annual entries", () => {
+    const schedule = buildTieInAmortizationSchedule({
+      capitalCost: 300_000,
+      interestRate: 0.05,
+      termMonths: 60,
+      period: "semi_annual",
+    })
+
+    expect(schedule).toHaveLength(10)
+    expect(schedule[0]!.openingBalance).toBe(300_000)
+    // First-period interest = P × (r / 2) = 300000 × 0.025 = 7500.
+    expect(schedule[0]!.interestCharge).toBeCloseTo(7500, 6)
+    const totalPrincipal = schedule.reduce((acc, e) => acc + e.principalDue, 0)
+    expect(totalPrincipal).toBeCloseTo(300_000, 4)
+    expect(schedule[schedule.length - 1]!.closingBalance).toBeCloseTo(0, 4)
+  })
+})
+
 describe("buildTieInAmortizationSchedule — annual cadence", () => {
   it("$500K, 6% interest, 60 months, annual → 5 annual entries", () => {
     const schedule = buildTieInAmortizationSchedule({
