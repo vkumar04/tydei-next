@@ -162,6 +162,18 @@ export async function POST(request: Request) {
     messages: await convertToModelMessages(messages as UIMessage[]),
     tools: chatTools,
     stopWhen: stepCountIs(5),
+    // Cap output so a runaway model can't burn unlimited tokens.
+    // Chat answers are typically <1k tokens; 4k is 4× headroom.
+    maxOutputTokens: 4000,
+    providerOptions: {
+      anthropic: {
+        // Cache the system prompt — every chat call ships the same
+        // multi-thousand-token system prefix (role policies, tool
+        // descriptions, etc.). 5-min TTL means consecutive turns
+        // from the same user are basically free on the prompt side.
+        cacheControl: { type: "ephemeral" as const },
+      },
+    },
     onFinish: () => {
       // Fire-and-forget; never await on the user-visible stream path.
       recordClaudeUsage({

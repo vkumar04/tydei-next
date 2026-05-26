@@ -74,6 +74,16 @@ export async function generateReportFromPrompt(input: {
       output: Output.object({ schema: reportSchema }),
       system: systemPrompt,
       prompt: input.prompt,
+      // Schema caps rows at 200; 8k output tokens covers that.
+      maxOutputTokens: 8000,
+      providerOptions: {
+        anthropic: {
+          // Cache the static system prompt — it varies only by
+          // reportType (one of N enums), so calls of the same type
+          // hit the cache.
+          cacheControl: { type: "ephemeral" as const },
+        },
+      },
     })
 
     const output = result.output as z.infer<typeof reportSchema>

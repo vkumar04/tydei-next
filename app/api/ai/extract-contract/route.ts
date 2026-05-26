@@ -69,6 +69,16 @@ export async function POST(request: Request) {
       const result = await generateText({
         model: claudeModel,
         abortSignal: request.signal,
+        // Cap output — schema is bounded; 8k covers the longest
+        // realistic extract while preventing runaway costs.
+        maxOutputTokens: 8000,
+        providerOptions: {
+          anthropic: {
+            // Cache the static instruction prefix — same prompt
+            // template across every raw-text extract call.
+            cacheControl: { type: "ephemeral" as const },
+          },
+        },
         output: Output.object({ schema: extractedContractSchema }),
         prompt: `Parse this contract information into structured data. Be precise with numbers and dates.
 

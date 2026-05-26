@@ -98,6 +98,9 @@ export async function POST(request: Request) {
     const extraction = await generateText({
       model: claudeModel,
       abortSignal: request.signal,
+      // Cap output — amendment summaries are short (a few hundred
+      // tokens); 4k is generous headroom.
+      maxOutputTokens: 4000,
       messages: [
         {
           role: "user",
@@ -112,6 +115,15 @@ export async function POST(request: Request) {
 - Any other contractual modifications
 
 Return all details as structured text.`,
+              // Cache the instruction prefix — every amendment upload
+              // ships the same multi-line bullet list, so chunks 2..N
+              // and step-2 of THIS request hit Anthropic's prompt
+              // cache at ~90% off.
+              providerOptions: {
+                anthropic: {
+                  cacheControl: { type: "ephemeral" as const },
+                },
+              },
             },
             {
               type: "file",

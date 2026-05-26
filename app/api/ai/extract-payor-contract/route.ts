@@ -51,6 +51,10 @@ export async function POST(request: Request) {
     const extraction = await generateText({
       model: claudeModel,
       abortSignal: request.signal,
+      // Cap so a runaway model can't pump unbounded tokens on a
+      // payor contract with hundreds of CPT codes. 8k is generous
+      // for the longest realistic transcription.
+      maxOutputTokens: 8000,
       messages: [
         {
           role: "user",
@@ -69,6 +73,14 @@ export async function POST(request: Request) {
 - Any other notable contract terms
 
 Be thorough - extract EVERY CPT code and rate you can find. Return all information as detailed text.`,
+              // Cache the static instruction so step-2 (compose
+              // structured) and future uploads within 5 min hit the
+              // prompt cache at ~90% off this block.
+              providerOptions: {
+                anthropic: {
+                  cacheControl: { type: "ephemeral" as const },
+                },
+              },
             },
             {
               type: "file",

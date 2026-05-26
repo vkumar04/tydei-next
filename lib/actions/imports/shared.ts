@@ -18,7 +18,7 @@ import { generateText, Output } from "ai"
 import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { resolveVendorId } from "@/lib/vendors/resolve"
-import { claudeModel } from "@/lib/ai/config"
+import { claudeSonnet } from "@/lib/ai/config"
 import { columnMappingPrompt } from "@/lib/ai/prompts"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import type {
@@ -69,10 +69,25 @@ export async function mapColumnsWithAI(
     )
 
     const result = await generateText({
-      model: claudeModel,
+      // Sonnet (not Opus) — column mapping is mechanical. Matches the
+      // /api/ai/map-columns API route, which has been on Sonnet since
+      // it was extracted from this helper. The fuzzy-match fallback
+      // below picks up any case Sonnet misses, so the downgrade is
+      // safe with a guard rail.
+      model: claudeSonnet,
       output: Output.object({ schema }),
       system,
       prompt: user,
+      // Mapping output is tiny — one entry per target field.
+      maxOutputTokens: 2000,
+      providerOptions: {
+        anthropic: {
+          // System prompt is the static `columnMappingPrompt` template;
+          // cache it so back-to-back imports (CSV → XLSX → second CSV)
+          // share the prefix.
+          cacheControl: { type: "ephemeral" as const },
+        },
+      },
     })
 
     const mapping = result.output as Record<string, string>
