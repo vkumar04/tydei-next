@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import ExcelJS from "exceljs"
+import * as XLSX from "xlsx"
 import { rateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: Request) {
@@ -43,65 +44,105 @@ export async function POST(request: Request) {
       )
     }
 
-    // ExcelJS only supports .xlsx (zip-based). Legacy .xls (BIFF binary)
-    // throws an opaque "end of central directory" error from the zip
-    // loader — give the user actionable guidance instead.
-    // Charles 2026-04-28: "will not allow XLS files to be loaded".
-    const lowerName = file.name.toLowerCase()
-    if (lowerName.endsWith(".xls") && !lowerName.endsWith(".xlsx")) {
-      return NextResponse.json(
-        {
-          error:
-            "Legacy .xls workbooks are not supported. Open the file and save as .xlsx (or export as .csv), then re-upload.",
-        },
-        { status: 400 },
-      )
-    }
-
     const arrayBuffer = await file.arrayBuffer()
-    const workbook = new ExcelJS.Workbook()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await workbook.xlsx.load(Buffer.from(arrayBuffer) as any)
+    const lowerName = file.name.toLowerCase()
+    // ExcelJS handles modern .xlsx (zip-based OOXML); legacy .xls is
+    // BIFF binary and ExcelJS rejects it with "end of central
+    // directory". Vick 2026-05-26 sent a real-world Zimmer Biomet .xls
+    // pricing export — route those through SheetJS, which reads both
+    // BIFF and OOXML. Keep ExcelJS as the primary path for .xlsx
+    // (smaller hot-path, no SheetJS in the streaming response).
+    let headers: string[]
+    let rows: Record<string, string>[]
+    const isLegacyXls =
+      lowerName.endsWith(".xls") && !lowerName.endsWith(".xlsx")
 
-    const sheet = workbook.worksheets[0]
-    if (!sheet) {
-      return NextResponse.json(
-        { error: "No sheets found in file" },
-        { status: 400 }
-      )
-    }
-
-    // ExcelJS row.values is 1-indexed: index 0 is undefined
-    const headerRow = sheet.getRow(1)
-    const rawValues = headerRow.values as (ExcelJS.CellValue | undefined)[]
-    const headers: string[] = rawValues
-      .slice(1)
-      .map((v) => (v != null ? String(v).trim() : ""))
-
-    if (headers.length === 0 || headers.every((h) => h === "")) {
-      return NextResponse.json(
-        { error: "No headers found in first row" },
-        { status: 400 }
-      )
-    }
-
-    const rows: Record<string, string>[] = []
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return // skip header row
-      const record: Record<string, string> = {}
-      const values = row.values as (ExcelJS.CellValue | undefined)[]
-      headers.forEach((header, index) => {
-        if (!header) return
-        const cellValue = values[index + 1] // 1-indexed
-        record[header] = cellValue != null ? String(cellValue) : ""
+    if (isLegacyXls) {
+      const workbook = XLSX.read(Buffer.from(arrayBuffer), { type: "buffer" })
+      const firstSheetName = workbook.SheetNames[0]
+      if (!firstSheetName) {
+        return NextResponse.json(
+          { error: "No sheets found in file" },
+          { status: 400 },
+        )
+      }
+      const sheet = workbook.Sheets[firstSheetName]
+      if (!sheet) {
+        return NextResponse.json(
+          { error: "First sheet is empty" },
+          { status: 400 },
+        )
+      }
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        defval: "",
+        raw: false,
       })
-      rows.push(record)
-    })
+      if (matrix.length === 0) {
+        return NextResponse.json(
+          { error: "No headers found in first row" },
+          { status: 400 },
+        )
+      }
+      headers = (matrix[0] ?? []).map((v) =>
+        v != null ? String(v).trim() : "",
+      )
+      rows = []
+      for (let r = 1; r < matrix.length; r += 1) {
+        const arr = matrix[r] ?? []
+        const record: Record<string, string> = {}
+        headers.forEach((h, idx) => {
+          if (!h) return
+          const cell = arr[idx]
+          record[h] = cell != null ? String(cell) : ""
+        })
+        rows.push(record)
+      }
+    } else {
+      const workbook = new ExcelJS.Workbook()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await workbook.xlsx.load(Buffer.from(arrayBuffer) as any)
+
+      const sheet = workbook.worksheets[0]
+      if (!sheet) {
+        return NextResponse.json(
+          { error: "No sheets found in file" },
+          { status: 400 },
+        )
+      }
+
+      // ExcelJS row.values is 1-indexed: index 0 is undefined
+      const headerRow = sheet.getRow(1)
+      const rawValues = headerRow.values as (ExcelJS.CellValue | undefined)[]
+      headers = rawValues
+        .slice(1)
+        .map((v) => (v != null ? String(v).trim() : ""))
+
+      if (headers.length === 0 || headers.every((h) => h === "")) {
+        return NextResponse.json(
+          { error: "No headers found in first row" },
+          { status: 400 },
+        )
+      }
+
+      rows = []
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return
+        const record: Record<string, string> = {}
+        const values = row.values as (ExcelJS.CellValue | undefined)[]
+        headers.forEach((header, index) => {
+          if (!header) return
+          const cellValue = values[index + 1]
+          record[header] = cellValue != null ? String(cellValue) : ""
+        })
+        rows.push(record)
+      })
+    }
 
     if (rows.length === 0) {
       return NextResponse.json(
         { error: "File contains no data rows" },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
