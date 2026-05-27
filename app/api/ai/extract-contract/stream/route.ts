@@ -128,7 +128,16 @@ export async function POST(req: Request) {
 
   const fileData = new Uint8Array(await file.arrayBuffer())
   const userId = session.user.id
-  const fileHash = createHash("sha256").update(fileData).digest("hex")
+  // Bumped 2026-05-27: forces all cached extracts to re-run after
+  // the chunked-path text-first regression that left
+  // contractName/vendorName empty on every cover page. Without this,
+  // users who tried the broken version keep getting the broken
+  // result back from cache instead of the fixed Opus+vision retry.
+  const EXTRACT_SCHEMA_VERSION = "v2"
+  const fileHash = createHash("sha256")
+    .update(fileData)
+    .update(EXTRACT_SCHEMA_VERSION)
+    .digest("hex")
 
   const cached = await prisma.contractExtractionCache.findUnique({
     where: { userId_fileHash: { userId, fileHash } },
@@ -208,9 +217,29 @@ export async function POST(req: Request) {
       // chunk is scanned. maxOutputTokens caps the response.
       const callChunk = async (
         chunk: (typeof chunks)[number],
+        chunkIndex: number,
       ): Promise<ChunkExtractData> => {
         const chunkText = await extractPdfText(chunk.pdf)
-        const useVision = !chunkText.hasTextLayer
+        // Vick 2026-05-27 bug-doc: every PDF was coming back with
+        // contractName / vendorName / effectiveDate / totalValue
+        // empty ("Not detected") even though contractType + terms
+        // extracted fine. Root cause: the text-first optimization
+        // (commit 24d24ca) sent ONLY the chunk's extracted text
+        // layer to Haiku and skipped the vision file. Cover pages
+        // typically render the contract title + vendor as styled
+        // text inside a layout that the text-layer extractor
+        // garbles (or alongside logos that aren't text at all), so
+        // the model literally couldn't see those fields and
+        // returned null — which the merger then propagated as "".
+        //
+        // Fix: force vision on the FIRST chunk (page 1 always has
+        // the cover page). The cost delta on a single chunk is
+        // small (~1 extra image), and identity recovery is what
+        // makes the whole extract usable downstream. Body chunks
+        // stay text-first — the savings on long PDFs (Mako 261p)
+        // come from those, not from chunk 1.
+        const isFirstChunk = chunkIndex === 0
+        const useVision = !chunkText.hasTextLayer || isFirstChunk
 
         const sourceBlock = useVision
           ? ({
