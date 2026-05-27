@@ -188,6 +188,12 @@ export function AIExtractDialog({
         try {
           const parsed = JSON.parse(buffer)
           if (parsed && typeof parsed === "object") {
+            // Server sentinel: streamObject errored and no real output
+            // came through. Surface the real cause instead of falling
+            // through to a generic "Empty response from extractor".
+            if ("streamError" in parsed && typeof parsed.streamError === "string") {
+              throw new Error(`AI extractor error: ${parsed.streamError}`)
+            }
             // Cache-hit envelope shape: { extracted, confidence, s3Key, cached, done }
             if ("extracted" in parsed) {
               lastValid = parsed
@@ -202,7 +208,16 @@ export function AIExtractDialog({
             const pct = Math.min(95, 40 + (buffer.length / 8000) * 50)
             setProgress(Math.round(pct))
           }
-        } catch {
+        } catch (parseOrSentinelErr) {
+          // Rethrow our own sentinel-derived error so the catch at the
+          // function level surfaces the real cause; swallow only the
+          // JSON.parse failures that are normal mid-stream.
+          if (
+            parseOrSentinelErr instanceof Error &&
+            parseOrSentinelErr.message.startsWith("AI extractor error:")
+          ) {
+            throw parseOrSentinelErr
+          }
           // Not yet a valid JSON document — keep reading.
         }
       }

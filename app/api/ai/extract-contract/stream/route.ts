@@ -386,6 +386,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    let capturedStreamError: string | null = null
     const result = streamObject({
       model: claudeModel,
       schema: extractedContractSchema,
@@ -424,6 +425,13 @@ export async function POST(req: Request) {
           file: file.name,
           size: file.size,
         })
+        // Capture for the client envelope (see custom ReadableStream
+        // below). Without this the AI SDK swallows streaming errors and
+        // the client falls through to a generic "Empty response from
+        // extractor" message that hides the real cause (missing
+        // ANTHROPIC_API_KEY, schema mismatch, 429, etc.).
+        capturedStreamError =
+          error instanceof Error ? error.message : String(error)
       },
       onFinish: async ({ object }) => {
         if (!object) return
@@ -469,7 +477,40 @@ export async function POST(req: Request) {
     // metadata avoids changing the existing JSON-parse loop on the
     // client (which assembles a single progressive JSON object across
     // chunks); the client reads the header before consuming the body.
-    const response = result.toTextStreamResponse()
+    // Wrap the AI SDK text stream so onError surfaces to the client.
+    // Default toTextStreamResponse() closes silently on error → client
+    // shows useless "Empty response from extractor". Here we forward
+    // every chunk untouched and, if the stream closed with an error
+    // and produced no extractable JSON, append a sentinel JSON envelope
+    // {"streamError": "..."} the client recognizes.
+    const encoder = new TextEncoder()
+    const wrapped = new ReadableStream({
+      async start(controller) {
+        let emittedAnyChunk = false
+        try {
+          for await (const chunk of result.textStream) {
+            emittedAnyChunk = true
+            controller.enqueue(encoder.encode(chunk))
+          }
+        } catch (err) {
+          if (!capturedStreamError) {
+            capturedStreamError =
+              err instanceof Error ? err.message : String(err)
+          }
+        }
+        if (capturedStreamError && !emittedAnyChunk) {
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({ streamError: capturedStreamError }),
+            ),
+          )
+        }
+        controller.close()
+      },
+    })
+    const response = new Response(wrapped, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    })
     if (s3Key) response.headers.set("X-S3-Key", s3Key)
     return response
   } catch (error) {
