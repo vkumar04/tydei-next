@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { PieChart } from "lucide-react"
 import { getFacilityCategorySpend } from "@/lib/actions/cog/facility-category-spend"
+import { getContractStats } from "@/lib/actions/contracts"
 
 const UNCATEGORIZED_FOOTNOTE_THRESHOLD = 0.05
 
@@ -35,6 +36,15 @@ export function DashboardCategorySpendCard() {
     queryKey: ["facility-category-spend"],
     queryFn: () => getFacilityCategorySpend(),
   })
+  // Vick screenshot 2026-05-27: the card was showing per-category
+  // breakdowns even when the facility had zero contracts, which made
+  // the % numbers meaningless ("of what?") and gave no actionable
+  // next step. When no contracts exist we show a single empty-state
+  // pointing the user at /dashboard/contracts/new instead.
+  const { data: contractStats } = useQuery({
+    queryKey: ["dashboard-contract-count"],
+    queryFn: () => getContractStats(),
+  })
 
   if (isLoading) {
     return (
@@ -53,6 +63,27 @@ export function DashboardCategorySpendCard() {
   if (!data) return null
 
   const { rows, uncategorizedSpend, facilityTotalSpend } = data
+
+  // Empty-state 0: no contracts at all. The category-spend view is
+  // meant to surface where contracts cover (vs don't cover) spend,
+  // so without any contracts it just lists raw COG categories with
+  // misleading % labels. Tell the user to start with a contract.
+  if (contractStats && contractStats.totalContracts === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <PieChart className="h-4 w-4" /> Category spend
+          </CardTitle>
+          <CardDescription>
+            No contracts yet. Once you add a contract this card will
+            show category-by-category spend versus the contracted
+            vendors so you can see where you're covered.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
 
   // Empty-state 1: no spend at all.
   if (facilityTotalSpend === 0) {

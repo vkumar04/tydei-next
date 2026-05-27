@@ -46,16 +46,16 @@ export async function POST(request: Request) {
 
     const arrayBuffer = await file.arrayBuffer()
     const lowerName = file.name.toLowerCase()
-    // ExcelJS handles modern .xlsx (zip-based OOXML); legacy .xls is
-    // BIFF binary and ExcelJS rejects it with "end of central
-    // directory". Vick 2026-05-26 sent a real-world Zimmer Biomet .xls
-    // pricing export — route those through SheetJS, which reads both
-    // BIFF and OOXML. Keep ExcelJS as the primary path for .xlsx
-    // (smaller hot-path, no SheetJS in the streaming response).
-    let headers: string[]
-    let rows: Record<string, string>[]
     const isLegacyXls =
       lowerName.endsWith(".xls") && !lowerName.endsWith(".xlsx")
+
+    // Step 1: parse into a uniform string[][] matrix regardless of format.
+    // ExcelJS handles modern .xlsx (zip-based OOXML); legacy .xls is BIFF
+    // binary and ExcelJS rejects it with "end of central directory" —
+    // route those through SheetJS (xlsx@0.18.5). Keep ExcelJS as the
+    // primary path for .xlsx (smaller hot-path, no SheetJS in the
+    // streaming response).
+    let matrix: string[][]
 
     if (isLegacyXls) {
       const workbook = XLSX.read(Buffer.from(arrayBuffer), { type: "buffer" })
@@ -73,31 +73,14 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
         header: 1,
         defval: "",
         raw: false,
       })
-      if (matrix.length === 0) {
-        return NextResponse.json(
-          { error: "No headers found in first row" },
-          { status: 400 },
-        )
-      }
-      headers = (matrix[0] ?? []).map((v) =>
-        v != null ? String(v).trim() : "",
+      matrix = raw.map((row) =>
+        (row ?? []).map((v) => (v != null ? String(v).trim() : "")),
       )
-      rows = []
-      for (let r = 1; r < matrix.length; r += 1) {
-        const arr = matrix[r] ?? []
-        const record: Record<string, string> = {}
-        headers.forEach((h, idx) => {
-          if (!h) return
-          const cell = arr[idx]
-          record[h] = cell != null ? String(cell) : ""
-        })
-        rows.push(record)
-      }
     } else {
       const workbook = new ExcelJS.Workbook()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,33 +93,103 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-
-      // ExcelJS row.values is 1-indexed: index 0 is undefined
-      const headerRow = sheet.getRow(1)
-      const rawValues = headerRow.values as (ExcelJS.CellValue | undefined)[]
-      headers = rawValues
-        .slice(1)
-        .map((v) => (v != null ? String(v).trim() : ""))
-
-      if (headers.length === 0 || headers.every((h) => h === "")) {
-        return NextResponse.json(
-          { error: "No headers found in first row" },
-          { status: 400 },
-        )
-      }
-
-      rows = []
-      sheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return
-        const record: Record<string, string> = {}
+      matrix = []
+      sheet.eachRow((row) => {
         const values = row.values as (ExcelJS.CellValue | undefined)[]
-        headers.forEach((header, index) => {
-          if (!header) return
-          const cellValue = values[index + 1]
-          record[header] = cellValue != null ? String(cellValue) : ""
-        })
-        rows.push(record)
+        // ExcelJS row.values is 1-indexed; index 0 is undefined.
+        matrix.push(
+          values.slice(1).map((v) => (v != null ? String(v).trim() : "")),
+        )
       })
+    }
+
+    if (matrix.length === 0) {
+      return NextResponse.json(
+        { error: "No data found in first sheet" },
+        { status: 400 },
+      )
+    }
+
+    // Step 2: header-row detection. Vendor pricing exports (DePuy,
+    // Stryker, J&J, etc.) frequently put a title row / branding row /
+    // blank row above the real header row, so a strict "row 1 is the
+    // header" rule rejects them with "No headers found in first row".
+    // Scan the first 15 rows for the most plausible header — the row
+    // with the most non-empty cells that also contains at least one
+    // known pricing-token (item, sku, price, description, ref, …).
+    // Fall back to the first row with ≥2 non-empty cells, then row 0.
+    const HEADER_TOKENS = [
+      "item",
+      "sku",
+      "part",
+      "ref",
+      "reference",
+      "catalog",
+      "product",
+      "description",
+      "desc",
+      "price",
+      "cost",
+      "uom",
+      "unit",
+      "category",
+      "vendor",
+      "manufacturer",
+      "list",
+      "contract",
+      "discount",
+      "msrp",
+    ]
+    const looksLikeHeader = (row: string[]): boolean => {
+      const joined = row.join(" ").toLowerCase()
+      return HEADER_TOKENS.some((t) => joined.includes(t))
+    }
+    const nonEmptyCount = (row: string[]) => row.filter((c) => c).length
+
+    const SCAN_LIMIT = Math.min(matrix.length, 15)
+    let headerRowIdx = -1
+    let bestScore = 0
+    for (let r = 0; r < SCAN_LIMIT; r += 1) {
+      const row = matrix[r] ?? []
+      if (!looksLikeHeader(row)) continue
+      const score = nonEmptyCount(row)
+      if (score > bestScore) {
+        bestScore = score
+        headerRowIdx = r
+      }
+    }
+    if (headerRowIdx === -1) {
+      // No token match — accept the first row with ≥2 non-empty cells.
+      for (let r = 0; r < SCAN_LIMIT; r += 1) {
+        if (nonEmptyCount(matrix[r] ?? []) >= 2) {
+          headerRowIdx = r
+          break
+        }
+      }
+    }
+    if (headerRowIdx === -1) headerRowIdx = 0
+
+    const headers = matrix[headerRowIdx] ?? []
+    if (headers.length === 0 || headers.every((h) => h === "")) {
+      return NextResponse.json(
+        {
+          error:
+            "No headers found in the first 15 rows. Make sure your file has a row with column labels like 'Item No', 'Description', 'Price'.",
+        },
+        { status: 400 },
+      )
+    }
+
+    const rows: Record<string, string>[] = []
+    for (let r = headerRowIdx + 1; r < matrix.length; r += 1) {
+      const arr = matrix[r] ?? []
+      if (arr.every((c) => !c)) continue // skip blank separator rows
+      const record: Record<string, string> = {}
+      headers.forEach((h, idx) => {
+        if (!h) return
+        record[h] = arr[idx] ?? ""
+      })
+      rows.push(record)
     }
 
     if (rows.length === 0) {
@@ -149,6 +202,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       headers: headers.filter((h) => h !== ""),
       rows,
+      headerRowIndex: headerRowIdx,
     })
   } catch (error) {
     console.error("Parse file error:", error)
