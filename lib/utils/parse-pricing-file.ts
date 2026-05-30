@@ -40,17 +40,42 @@ export function detectPricingColumnMapping(rawHeaders: string[]): Record<string,
     "referencenumer", "reference_numer",
     "vendor_item_number", "vendoritemnumber", "item_number",
     "productno", "productnumber", "productref", "productrefnumber",
+    // Vick 2026-05-30: DePuy real-world export uses "PROD CD"
+    // (short for product code). Without "prodcd" the auto-detector
+    // misses the SKU column and the whole file fails.
+    "prodcd", "prod_cd", "prodno", "prod_no", "prodid", "prod_id",
+    "itemcd", "item_cd",
   )
   const idxDesc = findHeader(normHeaders, rawHeaders,
     "description", "desc", "product_description", "productdescription", "item_description",
     "productdesc", "itemname", "materialname", "materialdesc",
     "fulldescription",
+    // Vick 2026-05-30: DePuy "PROD DESCRIPTION" normalizes to
+    // "proddescription" (no space-strip can save it). ZB "ITEM
+    // DESCRIPTION" normalizes to "itemdescription" — already
+    // matches via item_description. Add the prod_description
+    // family explicitly.
+    "prod_description", "proddescription", "prod_desc",
+    "itemdescription",
   )
   const idxPrice = findHeader(normHeaders, rawHeaders,
     "contract_price", "contractprice", "unit_price", "unitprice", "price", "cost",
     "netprice", "yourprice", "discountprice", "discountedprice",
     "negotiatedprice", "agreementprice", "contractcost", "netcost",
     "sellprice", "sellingprice", "customerprice",
+    // Vick 2026-05-30: DePuy export ships four price columns
+    // (DIRECT BX PRICE, INDIRECT BX PRICE, DIRECT DZ PRICE,
+    // INDIRECT DZ PRICE). Most rows only populate one of them.
+    // Match the BX price first (per-unit) since the import treats
+    // each row as a single unit; DZ is dozen-priced and would
+    // need a per-row divide. List in priority order so the first
+    // present column wins.
+    "directbxprice", "direct_bx_price",
+    "indirectbxprice", "indirect_bx_price",
+    "bxprice", "bx_price",
+    "directdzprice", "direct_dz_price",
+    "indirectdzprice", "indirect_dz_price",
+    "dzprice", "dz_price",
   )
   const idxList = findHeader(normHeaders, rawHeaders,
     "list_price", "listprice", "msrp", "retail_price",
@@ -66,6 +91,8 @@ export function detectPricingColumnMapping(rawHeaders: string[]): Record<string,
   const idxUom = findHeader(normHeaders, rawHeaders,
     "uom", "unit_of_measure", "unit",
     "unitofmeasure", "packsize", "packaging", "pkg", "measure",
+    // Vick 2026-05-30: ZB pricing uses "UM" (not "UOM").
+    "um",
   )
   // Bug B 2026-05-25: previously buildPricingItems read a
   // `carveOutPercent` column via the mapping, but detectPricingColumnMapping

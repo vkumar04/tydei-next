@@ -202,8 +202,8 @@ export async function POST(request: Request) {
     }
     if (headerRowIdx === -1) headerRowIdx = 0
 
-    const headers = matrix[headerRowIdx] ?? []
-    if (headers.length === 0 || headers.every((h) => h === "")) {
+    const rawHeaderRow = matrix[headerRowIdx] ?? []
+    if (rawHeaderRow.length === 0 || rawHeaderRow.every((h) => h === "")) {
       return NextResponse.json(
         {
           error:
@@ -212,6 +212,22 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
+    // Vick 2026-05-30: DePuy export ships duplicate header names
+    // ("Category"/"CATEGORY", "PRICE BOOK" twice, "PRICING END
+    // DATE" twice). When headers collide the row→object map silently
+    // overwrites earlier values with the same key. Disambiguate by
+    // appending " (2)", " (3)" so each column survives the round
+    // trip — the downstream column-mapper UI shows them as distinct
+    // pickable options.
+    const seen = new Map<string, number>()
+    const headers = rawHeaderRow.map((h) => {
+      const trimmed = h.trim()
+      if (!trimmed) return trimmed
+      const lower = trimmed.toLowerCase()
+      const count = (seen.get(lower) ?? 0) + 1
+      seen.set(lower, count)
+      return count === 1 ? trimmed : `${trimmed} (${count})`
+    })
 
     const rows: Record<string, string>[] = []
     for (let r = headerRowIdx + 1; r < matrix.length; r += 1) {
