@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
 import { revalidatePath } from "next/cache"
 
 export interface CogVendorMapping {
@@ -153,8 +154,17 @@ export async function remapCOGVendorName(input: {
   if (input.newVendorId) toRecompute.add(input.newVendorId)
   for (const vendorId of toRecompute) {
     await recomputeMatchStatusesForVendor(vendorId, facility.id)
+    // Vick 2026-05-30 bug doc ("Howmedica has 10M in spend when I
+    // mapped it in a contract it is not picking that up"):
+    // recomputeMatchStatusesForVendor only updates per-row
+    // matchStatus; the contract's persisted currentSpend / annualValue
+    // / complianceRate stay stale until something else triggers a
+    // metrics refresh. Cascade the refresh here so a remap is
+    // immediately visible in the contracts list and detail.
+    await refreshContractMetricsForVendor({ vendorId, facilityId: facility.id })
   }
 
   revalidatePath("/dashboard/cog-data")
+  revalidatePath("/dashboard/contracts")
   return { recordsUpdated: updated.count }
 }

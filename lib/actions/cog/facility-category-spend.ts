@@ -21,6 +21,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 
 export interface FacilityCategorySpendVendor {
   vendorId: string
@@ -83,7 +84,18 @@ export async function getFacilityCategorySpend(input: {
     type CatBucket = {
       total: number
       byVendor: Map<string, VendorAgg>
+      /**
+       * All variant spellings that fell into this bucket. The display
+       * label is picked from this set (longest wins, alphabetical
+       * tiebreak) so the dashboard shows the most-fully-spelled name
+       * rather than whichever variant happened to arrive first.
+       */
+      variants: Set<string>
     }
+    // Bucket by canonical key (order-insensitive token sort) so
+    // "Joints-Ortho" and "Ortho-Joints" collapse into one row.
+    // Vick screenshot 2026-05-30: both showed up side-by-side on the
+    // dashboard because the bucket key was the raw string.
     const byCategory = new Map<string, CatBucket>()
 
     for (const r of rows) {
@@ -94,17 +106,24 @@ export async function getFacilityCategorySpend(input: {
         uncategorizedSpend += amt
         continue
       }
-      const bucket = byCategory.get(r.category) ?? {
+      const key = canonicalizeCategoryName(r.category)
+      if (!key) {
+        uncategorizedSpend += amt
+        continue
+      }
+      const bucket = byCategory.get(key) ?? {
         total: 0,
         byVendor: new Map<string, VendorAgg>(),
+        variants: new Set<string>(),
       }
       bucket.total += amt
+      bucket.variants.add(r.category)
       if (r.vendorId) {
         const v = bucket.byVendor.get(r.vendorId) ?? { spend: 0 }
         v.spend += amt
         bucket.byVendor.set(r.vendorId, v)
       }
-      byCategory.set(r.category, bucket)
+      byCategory.set(key, bucket)
     }
 
     // Resolve vendor names in one shot for the top-N vendors across
@@ -127,7 +146,7 @@ export async function getFacilityCategorySpend(input: {
     )
 
     const result: FacilityCategorySpendRow[] = []
-    for (const [category, bucket] of byCategory.entries()) {
+    for (const bucket of byCategory.values()) {
       const sortedVendors = Array.from(bucket.byVendor.entries())
         .sort((a, b) => b[1].spend - a[1].spend)
         .slice(0, topN)
@@ -138,8 +157,20 @@ export async function getFacilityCategorySpend(input: {
           sharePct:
             bucket.total > 0 ? (agg.spend / bucket.total) * 100 : 0,
         }))
+      // Pick the most-fully-spelled variant as the display label so
+      // the user sees a recognizable name, not the canonical hash.
+      let displayCategory = ""
+      for (const v of bucket.variants) {
+        if (
+          !displayCategory ||
+          v.length > displayCategory.length ||
+          (v.length === displayCategory.length && v < displayCategory)
+        ) {
+          displayCategory = v
+        }
+      }
       result.push({
-        category,
+        category: displayCategory,
         totalSpend: bucket.total,
         pctOfFacility:
           facilityTotalSpend > 0

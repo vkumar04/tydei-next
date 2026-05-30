@@ -3,13 +3,10 @@
 /**
  * Picks a list of additional vendors to include in a grouped (GPO-style)
  * contract. The *primary* vendor is set on the main form via `vendorId`;
- * this picker only captures the extra participating vendors.
- *
- * NOTE: Persistence for the additional vendors is deferred — the schema
- * does not yet have a join table for grouped contracts. For now the
- * contract is created against the primary vendor only; the additional
- * vendor ids are held in UI state and surfaced to the user with an
- * explicit "coming soon" hint so expectations are clear.
+ * this picker only captures the extra participating vendors. As of
+ * commit b59235d (2026-05-26) the selected ids are persisted to
+ * Contract.additionalVendorIds and the COG matcher registers the
+ * contract under every participating vendor.
  */
 
 import { useMemo, useState } from "react"
@@ -79,8 +76,8 @@ export function GroupedVendorPicker({
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        Persistence for additional vendors is coming — for now this contract
-        will be created against the primary vendor only.
+        Spend, pricing REFs, and on-contract status will be matched against
+        each selected vendor in addition to the primary.
       </p>
 
       {availableVendors.length === 0 ? (
