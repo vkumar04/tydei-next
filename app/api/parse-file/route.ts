@@ -49,6 +49,41 @@ export async function POST(request: Request) {
     const isLegacyXls =
       lowerName.endsWith(".xls") && !lowerName.endsWith(".xlsx")
 
+    // Vick 2026-05-30 bug: ExcelJS returns object-shaped values for
+    // rich-text / hyperlink / formula cells. Stringifying those with
+    // `String(v)` produced "[object Object]" in the Description
+    // column of every pricing import that came from a styled
+    // workbook. Coerce to a plain string up front per known shape.
+    function coerceCellToString(v: unknown): string {
+      if (v == null) return ""
+      if (typeof v === "string") return v
+      if (typeof v === "number" || typeof v === "boolean") return String(v)
+      if (v instanceof Date) return v.toISOString()
+      if (typeof v === "object") {
+        const o = v as Record<string, unknown>
+        // ExcelJS hyperlink cell
+        if (typeof o.text === "string") return o.text
+        // ExcelJS rich-text cell: { richText: [{ text, font }, ...] }
+        if (Array.isArray(o.richText)) {
+          return o.richText
+            .map((r) => {
+              if (r && typeof r === "object" && typeof (r as Record<string, unknown>).text === "string") {
+                return (r as { text: string }).text
+              }
+              return ""
+            })
+            .join("")
+        }
+        // ExcelJS formula cell: { formula, result }
+        if (o.formula != null && "result" in o) {
+          return coerceCellToString((o as { result: unknown }).result)
+        }
+        // ExcelJS error cell: { error: "#REF!" } etc.
+        if (typeof o.error === "string") return ""
+      }
+      return ""
+    }
+
     // Step 1: parse into a uniform string[][] matrix regardless of format.
     // ExcelJS handles modern .xlsx (zip-based OOXML); legacy .xls is BIFF
     // binary and ExcelJS rejects it with "end of central directory" —
@@ -79,7 +114,7 @@ export async function POST(request: Request) {
         raw: false,
       })
       matrix = raw.map((row) =>
-        (row ?? []).map((v) => (v != null ? String(v).trim() : "")),
+        (row ?? []).map((v) => coerceCellToString(v).trim()),
       )
     } else {
       const workbook = new ExcelJS.Workbook()
@@ -97,9 +132,7 @@ export async function POST(request: Request) {
       sheet.eachRow((row) => {
         const values = row.values as (ExcelJS.CellValue | undefined)[]
         // ExcelJS row.values is 1-indexed; index 0 is undefined.
-        matrix.push(
-          values.slice(1).map((v) => (v != null ? String(v).trim() : "")),
-        )
+        matrix.push(values.slice(1).map((v) => coerceCellToString(v).trim()))
       })
     }
 
