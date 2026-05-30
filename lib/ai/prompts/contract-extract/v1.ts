@@ -10,6 +10,23 @@ CONTRACT TYPES TO IDENTIFY:
 - grouped: Contracts spanning multiple vendor divisions with combined rebate structures
 - pricing_only: Price-only agreements that lock in specific pricing without rebate structures
 
+── IDENTITY FIELDS ARE NEVER OPTIONAL ──
+Vick 2026-05-30: every PDF was returning blank contractName/vendorName
+("Not detected" in the review dialog) because the model defaulted to
+empty strings whenever the cover page was ambiguous. These are
+required string fields in the output schema — you CANNOT return
+empty strings. Pull a best-effort value from anywhere in the doc:
+- contractName: prefer the cover-page title. If no clear title is
+  on the cover page, derive one from "<Vendor> <Contract type>
+  Agreement" (e.g. "Stryker Carve-Out Agreement"). Fall back to
+  the document subject line, recital paragraph header, or signature-
+  page agreement label. NEVER return "".
+- vendorName: prefer the supplier party named in the recital
+  ("between FACILITY and VENDOR"). If recitals aren't present, use
+  the most prominent corporate entity on the cover page or in the
+  signature block. Apply the parent-brand ranking rules below.
+  NEVER return "".
+
 KEY THINGS TO EXTRACT:
 - Contract name, vendor, vendor division, product categories
   · vendorName ranking (Charles 2026-04-30): when multiple entity

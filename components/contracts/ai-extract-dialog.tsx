@@ -224,6 +224,35 @@ export function AIExtractDialog({
 
       if (!lastValid) throw new Error("Empty response from extractor")
 
+      // Vick 2026-05-30 bug doc: the model sometimes returned ""
+      // for contractName/vendorName even on well-formed PDFs,
+      // leaving the dialog showing "Not detected" on required
+      // fields and forcing the user to type them back in by hand.
+      // Backstop both with the file name (stem) so the form always
+      // has SOMETHING the user can keep or edit instead of nothing.
+      // The user can still override; we just refuse to leave them
+      // blank when we have a perfectly good filename available.
+      if (lastValid.extracted && typeof lastValid.extracted === "object") {
+        const e = lastValid.extracted as ExtractedContractData
+        const stem = (fileName ?? "")
+          .replace(/\.[^./]+$/, "")
+          .replace(/[_-]+/g, " ")
+          .trim()
+        if (stem) {
+          if (!e.contractName || !e.contractName.trim()) {
+            e.contractName = stem
+          }
+          if (!e.vendorName || !e.vendorName.trim()) {
+            // Best-effort vendor guess from the stem's leading word
+            // (e.g. "SYK Carve-Out Agreement" → "SYK"). The user
+            // resolves the actual vendor in the next step anyway.
+            const leading = stem.split(/\s+/)[0]
+            if (leading) e.vendorName = leading
+          }
+          setExtracted(e)
+        }
+      }
+
       setProgress(100)
       // Cache-hit envelope already carries s3Key in the body; for the
       // streaming-MISS path we read it from the X-S3-Key header. Prefer

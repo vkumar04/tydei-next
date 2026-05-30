@@ -133,7 +133,7 @@ export async function POST(req: Request) {
   // contractName/vendorName empty on every cover page. Without this,
   // users who tried the broken version keep getting the broken
   // result back from cache instead of the fixed Opus+vision retry.
-  const EXTRACT_SCHEMA_VERSION = "v2"
+  const EXTRACT_SCHEMA_VERSION = "v3"
   const fileHash = createHash("sha256")
     .update(fileData)
     .update(EXTRACT_SCHEMA_VERSION)
