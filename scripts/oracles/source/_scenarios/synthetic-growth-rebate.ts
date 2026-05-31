@@ -2,11 +2,13 @@
 /**
  * Synthetic growth-rebate scenario.
  *
- * growth_rebate term type. Tier thresholds are growth-pct values
- * vs prior-period baseline. Growth-specific math depends on prior-
- * period data the recompute engine pulls from earlier ContractPeriods,
- * which we don't synthesize here, so expectations are limited to
- * structural aggregates.
+ * Growth is now expressed as `growthOnly: true` on a spend-basis term —
+ * the standalone `growth_rebate` term type was dropped 2026-05-25
+ * (migration 20260525120000). Tier thresholds are growth-pct values vs
+ * prior-period baseline. Growth-specific math depends on prior-period
+ * data the recompute engine pulls from earlier ContractPeriods, which we
+ * don't synthesize here, so expectations are limited to structural
+ * aggregates.
  *
  * Hand-computed: 5 COG rows × $4K = $20K spend.
  */
@@ -22,7 +24,7 @@ const dateOnly = (d: Date) => d.toISOString().slice(0, 10)
 
 export default defineScenario({
   name: "synthetic-growth-rebate",
-  description: "growth_rebate term + 5 matched COG rows ($20K).",
+  description: "growth-only spend_rebate term + 5 matched COG rows ($20K).",
 
   facilityName: "Lighthouse Surgical Center",
 
@@ -39,7 +41,8 @@ export default defineScenario({
     terms: [
       {
         termName: "YoY Growth",
-        termType: "growth_rebate",
+        termType: "spend_rebate",
+        growthOnly: true,
         appliesTo: "all_products",
         evaluationPeriod: "annual",
         paymentTiming: "annual",
