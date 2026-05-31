@@ -137,11 +137,23 @@ export function matchCOGRecordToContract(
   if (!record.vendorId) {
     return { status: "unknown_vendor" }
   }
+  // Narrow to a local so the .filter() closure below keeps `string`
+  // (control-flow narrowing of record.vendorId doesn't cross the closure).
+  const recordVendorId: string = record.vendorId
 
-  // 2. Active/expiring contracts for this vendor
+  // 2. Active/expiring contracts for this vendor.
+  //
+  // #2 (Vick 2026-05-31): a grouped contract participates under its
+  // primary `vendorId` AND every `additionalVendorIds` entry. Without
+  // the additionalVendorIds leg, COG purchased by a group's secondary
+  // vendor was never attributed to the contract — so group spend and
+  // carve-out (which read matched COG) came back near-empty. The
+  // contract's price-file ref number is then matched in step 5, so a
+  // SKU bought by any group vendor resolves to the contract.
   const activeContracts = contracts.filter(
     (c) =>
-      c.vendorId === record.vendorId &&
+      (c.vendorId === recordVendorId ||
+        (c.additionalVendorIds ?? []).includes(recordVendorId)) &&
       (c.status === "active" || c.status === "expiring"),
   )
   if (activeContracts.length === 0) {
