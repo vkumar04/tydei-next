@@ -137,6 +137,27 @@ export function normalizeAIRebateValue(
 ): number {
   const v = rebateValue ?? 0
   if (!isPercentRebateType(rebateType)) return v
-  if (v > 1) return v / 100
-  return v
+  // First, the standard percent→fraction normalize (AI tends to emit
+  // "3" for 3% even though the DB stores fractions).
+  let fraction = v > 1 ? v / 100 : v
+  // Vick 2026-05-30: Mako tie-in PDFs were producing tier values like
+  // 164366.05 (the AI mis-took a $164,366 spend threshold for a
+  // rebate %). Even after /100 we end up at 1643.66 — way over the
+  // 100% ceiling. The server-side validator throws ZodError; in
+  // production that's redacted to a useless "Failed to create
+  // contract" toast and the user is stuck.
+  //
+  // Defensive fallback: if the AI's value is still over 100% after
+  // the first scale, return 0. Zero leaves the field obviously blank
+  // in the review form so the user types the right number, beats
+  // silently storing a wrong value AND beats the create-blocking
+  // ZodError. The original raw value is dropped (we can't tell if
+  // 164366 meant $164k, 16% with a typo, or genuine garbage —
+  // safest to require human input).
+  if (fraction > 1) {
+    // value still > 100% after one scale-down; treat as
+    // un-extractable and let the user fill it in.
+    fraction = 0
+  }
+  return fraction
 }
