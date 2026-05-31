@@ -5,7 +5,7 @@
  * items for you for carve out." After every pricing import the carve_out
  * terms on a contract should have their ContractTermProduct rows
  * rebuilt from pricing rows whose carveOutPercent > 0, and the term's
- * appliesTo should flip to "specific_products".
+ * appliesTo should flip to "specific_items".
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -116,15 +116,17 @@ describe("populateCarveOutTermsForContract", () => {
         },
       ],
     })
-    // appliesTo flipped to specific_products on EVERY carve-out term
+    // appliesTo flipped to specific_items on EVERY carve-out term
+    // (Vick 2026-05-31 #3 — was the orphan "specific_products"; now the
+    // value the term-editor dropdown + SpecificItemsPicker recognize).
     expect(termUpdate).toHaveBeenCalledTimes(2)
     expect(termUpdate).toHaveBeenCalledWith({
       where: { id: "t1" },
-      data: { appliesTo: "specific_products" },
+      data: { appliesTo: "specific_items" },
     })
     expect(termUpdate).toHaveBeenCalledWith({
       where: { id: "t2" },
-      data: { appliesTo: "specific_products" },
+      data: { appliesTo: "specific_items" },
     })
   })
 

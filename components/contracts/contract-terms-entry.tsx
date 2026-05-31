@@ -49,6 +49,7 @@ import { getCategories } from "@/lib/actions/categories"
 import { queryKeys } from "@/lib/query-keys"
 import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
 import { SpecificItemsPicker, type VendorItem } from "./specific-items-picker"
+import { isCarveOutScopeLocked } from "@/lib/contracts/carve-out-scope"
 import { CptCodeList } from "./_form/_cpt-code-list"
 import { CategoryMappingSuggestions } from "./_form/_category-mapping-suggestions"
 
@@ -796,35 +797,71 @@ export function ContractTermsEntry({
                     </p>
                   </div>
 
-                  <Field label="Product Scope">
-                    <Select
-                      value={term.appliesTo}
-                      onValueChange={(v) =>
-                        updateTerm(termIdx, {
-                          appliesTo: v,
-                          // Drop the scoped category when moving back to
-                          // all_products / specific_items.
-                          scopedCategoryId:
-                            v === "specific_category"
-                              ? term.scopedCategoryId
-                              : undefined,
-                          scopedCategoryIds:
-                            v === "specific_category"
-                              ? term.scopedCategoryIds
-                              : undefined,
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all_products">All Products</SelectItem>
-                        <SelectItem value="specific_category">Specific Category</SelectItem>
-                        <SelectItem value="specific_items">Specific Items</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
+                  {/* Carve-out terms derive their product scope + per-SKU
+                      rebate from the Pricing tab's carve-out % column
+                      (lib/contracts/recompute/carve-out.ts reads
+                      ContractPricing.carveOutPercent per SKU). The engine
+                      ignores appliesTo / the manual SKU picker for carve-out,
+                      so we show the controls locked rather than letting the
+                      user configure something that has no effect.
+                      Vick 2026-05-31 #3. */}
+                  {isCarveOutScopeLocked(term.termType) ? (
+                    <Field label="Product Scope">
+                      <Select value="auto" disabled>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">
+                            Auto (from pricing file)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Scope and per-SKU rebate % come from the Pricing tab.
+                        Upload a pricing file with a carve-out % column to
+                        populate items.
+                      </p>
+                      <div className="mt-2">
+                        <SpecificItemsPicker
+                          availableItems={availableItems}
+                          selected={term.scopedItemNumbers ?? []}
+                          onChange={() => {}}
+                          readOnly
+                        />
+                      </div>
+                    </Field>
+                  ) : (
+                    <Field label="Product Scope">
+                      <Select
+                        value={term.appliesTo}
+                        onValueChange={(v) =>
+                          updateTerm(termIdx, {
+                            appliesTo: v,
+                            // Drop the scoped category when moving back to
+                            // all_products / specific_items.
+                            scopedCategoryId:
+                              v === "specific_category"
+                                ? term.scopedCategoryId
+                                : undefined,
+                            scopedCategoryIds:
+                              v === "specific_category"
+                                ? term.scopedCategoryIds
+                                : undefined,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all_products">All Products</SelectItem>
+                          <SelectItem value="specific_category">Specific Category</SelectItem>
+                          <SelectItem value="specific_items">Specific Items</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  )}
 
                   {/* When a tier is scoped to a specific category, render a
                       combobox picker ("Pick a category") + chip list of
@@ -928,17 +965,18 @@ export function ContractTermsEntry({
                     </Field>
                   )}
 
-                  {term.appliesTo === "specific_items" && (
-                    <Field label="Items">
-                      <SpecificItemsPicker
-                        availableItems={availableItems}
-                        selected={term.scopedItemNumbers ?? []}
-                        onChange={(next) =>
-                          updateTerm(termIdx, { scopedItemNumbers: next })
-                        }
-                      />
-                    </Field>
-                  )}
+                  {!isCarveOutScopeLocked(term.termType) &&
+                    term.appliesTo === "specific_items" && (
+                      <Field label="Items">
+                        <SpecificItemsPicker
+                          availableItems={availableItems}
+                          selected={term.scopedItemNumbers ?? []}
+                          onChange={(next) =>
+                            updateTerm(termIdx, { scopedItemNumbers: next })
+                          }
+                        />
+                      </Field>
+                    )}
 
                   {/* CPT codes only show when the term is genuinely
                       procedure-driven. For volume_rebate, that's keyed off

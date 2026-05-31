@@ -7,8 +7,8 @@ import Link from "next/link"
 import { ArrowLeft, Loader2, Save } from "lucide-react"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { useCreateContract } from "@/hooks/use-contracts"
-import { createContractDocument } from "@/lib/actions/contracts"
-import { importContractPricing, type ContractPricingItem } from "@/lib/actions/pricing-files"
+import { createContractDocumentSafe } from "@/lib/actions/contracts"
+import { importContractPricingSafe, type ContractPricingItem } from "@/lib/actions/pricing-files"
 import { parsePricingFile, detectPricingColumnMapping } from "@/lib/utils/parse-pricing-file"
 import { createCategory, getCategories } from "@/lib/actions/categories"
 import { computePricingVsCOG } from "@/lib/actions/cog-records"
@@ -32,7 +32,7 @@ import {
   CapitalLineItemsEditor,
   type CapitalLineItemDraft,
 } from "@/components/contracts/capital-line-items-editor"
-import { createCapitalLineItem } from "@/lib/actions/contracts/capital-line-items"
+import { createCapitalLineItemSafe } from "@/lib/actions/contracts/capital-line-items"
 import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -695,59 +695,54 @@ export function NewContractClient({
   async function runPostCreateSideEffects(contractId: string) {
     // Charles audit suggestion #4 (v0-port): persist capital line items
     // on the freshly-created contract.
+    //
+    // Vick 2026-05-31: these post-create side effects use the *Safe
+    // (error-as-value) action variants. Next.js 16 redacts any error
+    // THROWN from a Server Action in production builds to the generic
+    // "An error occurred in the Server Components render" digest, so the
+    // old try/catch + err.message toast could only ever show that
+    // boilerplate. The Safe variants return the real reason as a value.
     for (const it of capitalItems) {
-      try {
-        await createCapitalLineItem(contractId, {
-          description: it.description,
-          itemNumber: it.itemNumber || null,
-          serialNumber: it.serialNumber || null,
-          contractTotal: it.contractTotal,
-          initialSales: it.initialSales,
-          interestRate: Math.min(1, Math.max(0, it.interestRatePercent / 100)),
-          termMonths: it.termMonths,
-          paymentType: it.paymentType,
-          paymentCadence: it.paymentCadence,
-        })
-      } catch (err) {
-        console.error("[new-contract] createCapitalLineItem failed", err, { contractId })
-        const msg = err instanceof Error ? err.message : String(err)
-        toast.error(`Contract saved, but a capital line item failed to persist: ${msg}`)
+      const res = await createCapitalLineItemSafe(contractId, {
+        description: it.description,
+        itemNumber: it.itemNumber || null,
+        serialNumber: it.serialNumber || null,
+        contractTotal: it.contractTotal,
+        initialSales: it.initialSales,
+        interestRate: Math.min(1, Math.max(0, it.interestRatePercent / 100)),
+        termMonths: it.termMonths,
+        paymentType: it.paymentType,
+        paymentCadence: it.paymentCadence,
+      })
+      if (!res.ok) {
+        toast.error(`Contract saved, but a capital line item failed to persist: ${res.error}`)
       }
     }
     if (pricingItems.length > 0) {
-      try {
-        await importContractPricing({ contractId, items: pricingItems })
-      } catch (err) {
-        console.error("[new-contract] importContractPricing failed", err, { contractId })
-        const msg = err instanceof Error ? err.message : String(err)
-        toast.error(`Contract saved, but pricing import failed: ${msg}`)
+      const res = await importContractPricingSafe({ contractId, items: pricingItems })
+      if (!res.ok) {
+        toast.error(`Contract saved, but pricing import failed: ${res.error}`)
       }
     }
     if (contractS3Key) {
-      try {
-        await createContractDocument({
-          contractId,
-          name: contractFileName ?? "Contract PDF",
-          type: "main",
-          url: contractS3Key,
-        })
-      } catch (err) {
-        console.error("[new-contract] createContractDocument (main) failed", err, { contractId })
-        const msg = err instanceof Error ? err.message : String(err)
-        toast.error(`Contract saved, but PDF attachment failed: ${msg}`)
+      const res = await createContractDocumentSafe({
+        contractId,
+        name: contractFileName ?? "Contract PDF",
+        type: "main",
+        url: contractS3Key,
+      })
+      if (!res.ok) {
+        toast.error(`Contract saved, but PDF attachment failed: ${res.error}`)
       }
     }
     for (const doc of additionalDocs) {
-      try {
-        await createContractDocument({
-          contractId,
-          name: doc.name,
-          type: doc.type,
-        })
-      } catch (err) {
-        console.error("[new-contract] createContractDocument (additional) failed", err, { contractId, docName: doc.name })
-        const msg = err instanceof Error ? err.message : String(err)
-        toast.error(`Contract saved, but attachment "${doc.name}" failed: ${msg}`)
+      const res = await createContractDocumentSafe({
+        contractId,
+        name: doc.name,
+        type: doc.type,
+      })
+      if (!res.ok) {
+        toast.error(`Contract saved, but attachment "${doc.name}" failed: ${res.error}`)
       }
     }
   }
