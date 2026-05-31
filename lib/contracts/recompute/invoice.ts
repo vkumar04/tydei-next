@@ -118,6 +118,8 @@ function computeInvoiceRebate(
 export async function recomputeInvoiceAccrualForTerm(input: {
   contractId: string
   vendorId: string
+  /** #2: full vendor set for grouped contracts; falls back to [vendorId]. */
+  vendorIds?: string[]
   facilityId: string
   contractEffectiveDate: Date
   contractExpirationDate: Date
@@ -132,6 +134,7 @@ export async function recomputeInvoiceAccrualForTerm(input: {
   term: InvoiceRebateTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
   const { contractId, vendorId, facilityId, term, isTieIn } = input
+  const vendorIds = input.vendorIds ?? (vendorId ? [vendorId] : [])
 
   const today = new Date()
   const start = new Date(
@@ -156,7 +159,7 @@ export async function recomputeInvoiceAccrualForTerm(input: {
   // eligible (Invoice.status is a free-form String).
   const invoices = await prisma.invoice.findMany({
     where: {
-      vendorId,
+      vendorId: { in: vendorIds },
       facilityId,
       invoiceDate: { gte: start, lte: end },
       NOT: { status: "cancelled" },

@@ -30,6 +30,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import {
   bucketAccrualsByCadence,
   buildEvaluationPeriodAccruals,
@@ -134,6 +135,13 @@ export async function _recomputeAccrualForContractWithFacility(
       carveOutTermsMissingPricing: [],
     }
   }
+
+  // #2 (Vick 2026-05-31): a grouped contract's rebate accrual must run
+  // over spend from EVERY participating vendor, not just the primary.
+  // Every COG query below scopes to this set so a grouped contract owned
+  // by vendor A also accrues on vendor B's spend. For a non-grouped
+  // contract this is just [vendorId] — identical to the prior behavior.
+  const vendorIds = contractVendorIds(contract)
 
   // Charles 2026-05-24 (Bug #16): tie-in contracts auto-stamp
   // collectionDate on every auto-accrual row (see line 586). The
@@ -382,7 +390,12 @@ export async function _recomputeAccrualForContractWithFacility(
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facilityId,
-      vendorId: contract.vendorId,
+      // #2 (Vick 2026-05-31): group-aware spend basis — the main
+      // spend_rebate / threshold accrual sums COG across the contract's
+      // full vendor set. (Per-term sub-writers — volume, po, carve-out,
+      // invoice — still scope to the primary vendor; threading the set
+      // through those writers is a tracked follow-up.)
+      vendorId: { in: vendorIds },
       transactionDate: { gte: contract.effectiveDate, lte: end },
       ...unionCategoryWhere,
     },
@@ -716,6 +729,7 @@ export async function _recomputeAccrualForContractWithFacility(
             // contract's vendor + the term's category scope so it can
             // sum the right quantities.
             vendorId: contract.vendorId,
+          vendorIds,
             categories: term.categories ?? [],
             appliesTo: term.appliesTo ?? null,
             // Bug 2026-05-20 (Vick): pass volumeType so the
@@ -755,6 +769,7 @@ export async function _recomputeAccrualForContractWithFacility(
         const r = await recomputePoAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
+          vendorIds,
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
@@ -798,6 +813,7 @@ export async function _recomputeAccrualForContractWithFacility(
         const r = await recomputeCarveOutAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
+          vendorIds,
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
@@ -839,6 +855,7 @@ export async function _recomputeAccrualForContractWithFacility(
         const r = await recomputeInvoiceAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
+          vendorIds,
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
@@ -952,7 +969,8 @@ export async function _recomputeAccrualForContractWithFacility(
             const result = computeCategoryMarketShare({
               rows: cogRows,
               contractCategoryMap,
-              vendorId: contract.vendorId,
+              // #2: group-aware market-share numerator (helper accepts a set).
+              vendorId: vendorIds,
             })
             const top = result.rows[0]
             if (top) metricValue = top.sharePct
@@ -984,6 +1002,7 @@ export async function _recomputeAccrualForContractWithFacility(
             // writer can fetch in-scope COG spend per bucket.
             termType: term.termType ?? null,
             vendorId: contract.vendorId,
+          vendorIds,
             categoryName: contract.productCategory?.name ?? null,
             appliesTo: term.appliesTo ?? null,
             categories: term.categories ?? [],
