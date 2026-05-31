@@ -100,6 +100,12 @@ function computePoRebate(
 export async function recomputePoAccrualForTerm(input: {
   contractId: string
   vendorId: string
+  /**
+   * #2 (Vick 2026-05-31): full participating vendor set for grouped
+   * contracts. When present, PO matching spans all of them; falls back to
+   * [vendorId] so existing callers are unchanged.
+   */
+  vendorIds?: string[]
   facilityId: string
   contractEffectiveDate: Date
   contractExpirationDate: Date
@@ -114,6 +120,7 @@ export async function recomputePoAccrualForTerm(input: {
   term: PoRebateTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
   const { contractId, vendorId, facilityId, term, isTieIn } = input
+  const vendorIds = input.vendorIds ?? (vendorId ? [vendorId] : [])
 
   const today = new Date()
   const start = new Date(
@@ -154,7 +161,7 @@ export async function recomputePoAccrualForTerm(input: {
   // done in memory below.
   const purchaseOrders = await prisma.purchaseOrder.findMany({
     where: {
-      vendorId,
+      vendorId: { in: vendorIds },
       facilityId,
       orderDate: { gte: start, lte: end },
       // POStatus enum: draft | pending | approved | sent | completed | cancelled.

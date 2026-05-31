@@ -44,6 +44,8 @@ interface ThresholdRebateTermLike {
    */
   termType?: string | null
   vendorId?: string | null
+  /** #2: full vendor set for grouped contracts; falls back to [vendorId]. */
+  vendorIds?: string[] | null
   categoryName?: string | null
   appliesTo?: string | null
   categories?: string[]
@@ -296,7 +298,8 @@ export async function recomputeThresholdAccrualForTerm(input: {
     const cogRows = await prisma.cOGRecord.findMany({
       where: {
         facilityId,
-        vendorId: term.vendorId,
+        // #2: group-aware — spans the contract's full vendor set.
+        vendorId: { in: term.vendorIds ?? (term.vendorId ? [term.vendorId] : []) },
         transactionDate: { gte: start, lte: end },
         ...categoryFilter,
       },

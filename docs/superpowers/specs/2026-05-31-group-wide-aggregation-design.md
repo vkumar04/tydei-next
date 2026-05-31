@@ -68,18 +68,17 @@ Idempotent; per-contract before/after log.
 
 ## Implementation note (2026-05-31)
 
-Discovered during build: `recompute-accrual.ts` has multiple per-term-type
-sub-writers (volume, po, carve-out, invoice, percent_of_spend) that each take a
-single `vendorId: string` and run their own internal COG query. Threading the
-vendor set through all of them is a deep, separately-oracle-tested change. This
-PR makes group-aware: the **main spend_rebate/threshold COG basis**, the
-**market-share engine** (helper now accepts a set), and **every display/metric
-surface** (derived-metrics, getContracts list, getContract detail, refresh
-trigger). The per-term sub-writers remain primary-vendor-scoped — a tracked
-follow-up. No regression: for non-grouped contracts every path is identical to
-before (one-element set).
+`recompute-accrual.ts` has per-term-type sub-writers (volume, po, carve-out,
+invoice, threshold/percent_of_spend) that each took a single `vendorId: string`
+and ran their own internal COG/PO/Invoice query. These are **now threaded** with
+the vendor set: each gained an optional `vendorIds?: string[]` and falls back to
+`[vendorId]` when absent, so legacy callers are byte-identical and the recompute
+call sites pass the group set. Together with the main spend basis, the
+market-share engine (helper now accepts a set), and every display/metric surface
+(derived-metrics, getContracts list, getContract detail, refresh trigger),
+**every accrual path is group-aware**. No regression: for non-grouped contracts
+every path is a one-element set (oracle-verified unchanged), and the change was
+live-validated on a real contract ($6,616 primary → $22,344 grouped).
 
 ## Out of scope
-- Threading the vendor set through the per-term accrual sub-writers
-  (volume/po/carve-out/invoice/percent_of_spend) — follow-up.
 - #1 (vendor-mapping engine wiring).

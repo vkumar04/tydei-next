@@ -729,6 +729,7 @@ export async function _recomputeAccrualForContractWithFacility(
             // contract's vendor + the term's category scope so it can
             // sum the right quantities.
             vendorId: contract.vendorId,
+          vendorIds,
             categories: term.categories ?? [],
             appliesTo: term.appliesTo ?? null,
             // Bug 2026-05-20 (Vick): pass volumeType so the
@@ -768,6 +769,7 @@ export async function _recomputeAccrualForContractWithFacility(
         const r = await recomputePoAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
+          vendorIds,
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
@@ -811,6 +813,7 @@ export async function _recomputeAccrualForContractWithFacility(
         const r = await recomputeCarveOutAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
+          vendorIds,
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
@@ -852,6 +855,7 @@ export async function _recomputeAccrualForContractWithFacility(
         const r = await recomputeInvoiceAccrualForTerm({
           contractId,
           vendorId: contract.vendorId,
+          vendorIds,
           facilityId: facilityId,
           contractEffectiveDate: contract.effectiveDate,
           contractExpirationDate: contract.expirationDate,
@@ -998,6 +1002,7 @@ export async function _recomputeAccrualForContractWithFacility(
             // writer can fetch in-scope COG spend per bucket.
             termType: term.termType ?? null,
             vendorId: contract.vendorId,
+          vendorIds,
             categoryName: contract.productCategory?.name ?? null,
             appliesTo: term.appliesTo ?? null,
             categories: term.categories ?? [],

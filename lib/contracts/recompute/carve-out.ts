@@ -75,6 +75,8 @@ function endOfDay(d: Date): Date {
 export async function recomputeCarveOutAccrualForTerm(input: {
   contractId: string
   vendorId: string | null
+  /** #2: full vendor set for grouped contracts; falls back to [vendorId]. */
+  vendorIds?: string[]
   facilityId: string
   contractEffectiveDate: Date
   contractExpirationDate: Date
@@ -89,6 +91,7 @@ export async function recomputeCarveOutAccrualForTerm(input: {
   term: CarveOutTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
   const { contractId, vendorId, facilityId, term, isTieIn } = input
+  const vendorIds = input.vendorIds ?? (vendorId ? [vendorId] : [])
 
   const today = new Date()
   const start = new Date(
@@ -151,7 +154,9 @@ export async function recomputeCarveOutAccrualForTerm(input: {
       transactionDate: { gte: start, lte: end },
       OR: [
         { contractId },
-        ...(vendorId ? [{ contractId: null, vendorId }] : []),
+        ...(vendorIds.length
+          ? [{ contractId: null, vendorId: { in: vendorIds } }]
+          : []),
       ],
       matchStatus: { in: ["on_contract", "price_variance"] },
     },

@@ -62,6 +62,12 @@ interface VolumeRebateTermLike {
    * missing values as "no in-scope spend" and returns 0.
    */
   vendorId?: string | null
+  /**
+   * #2 (Vick 2026-05-31): full participating vendor set for grouped
+   * contracts. The COG/PO basis spans all of them; the writer falls back
+   * to [vendorId] when absent, so legacy callers are unchanged.
+   */
+  vendorIds?: string[] | null
   categories?: string[]
   appliesTo?: string | null
   /**
@@ -133,6 +139,12 @@ function addMonthsUTC(d: Date, n: number): Date {
  * and supplying the term shape (load via Prisma with the fields
  * declared on `VolumeRebateTermLike`).
  */
+
+/** #2: effective vendor set for a term — group set when present, else [vendorId]. */
+function termVendorIds(t: VolumeRebateTermLike): string[] {
+  return t.vendorIds ?? (t.vendorId ? [t.vendorId] : [])
+}
+
 export async function recomputeVolumeAccrualForTerm(input: {
   contractId: string
   facilityId: string
@@ -335,7 +347,7 @@ export async function recomputeVolumeAccrualForTerm(input: {
     const cogForSpend = await prisma.cOGRecord.findMany({
       where: {
         facilityId,
-        vendorId: term.vendorId,
+        vendorId: { in: termVendorIds(term) },
         transactionDate: { gte: start, lte: end },
         ...categoryFilter,
       },
@@ -661,7 +673,7 @@ async function recomputeVolumeFromCogRecords(input: {
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
       facilityId,
-      vendorId: term.vendorId,
+      vendorId: { in: termVendorIds(term) },
       transactionDate: { gte: start, lte: end },
       ...categoryFilter,
     },
@@ -897,7 +909,7 @@ async function recomputeVolumeFromPurchaseOrders(input: {
   const pos = await prisma.purchaseOrder.findMany({
     where: {
       facilityId,
-      vendorId: term.vendorId,
+      vendorId: { in: termVendorIds(term) },
       orderDate: { gte: start, lte: end },
     },
     select: {

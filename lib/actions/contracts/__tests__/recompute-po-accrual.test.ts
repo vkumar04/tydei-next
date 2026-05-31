@@ -83,7 +83,9 @@ describe("recomputePoAccrualForTerm", () => {
       term: TERM_BASE,
     })
     const args = findManyMock.mock.calls[0][0]
-    expect(args.where.vendorId).toBe("v-1")
+    // #2: PO matching now spans the contract's vendor set; a non-grouped
+    // term (vendorId only, no vendorIds) is a one-element `in`.
+    expect(args.where.vendorId).toEqual({ in: ["v-1"] })
     expect(args.where.facilityId).toBe("f-1")
     expect(args.where.status.in).toEqual([
       "pending",
@@ -91,6 +93,21 @@ describe("recomputePoAccrualForTerm", () => {
       "sent",
       "completed",
     ])
+  })
+
+  it("#2: spans the full vendor set for grouped contracts", async () => {
+    findManyMock.mockResolvedValue([])
+    await recomputePoAccrualForTerm({
+      contractId: "c-1",
+      vendorId: "v-1",
+      vendorIds: ["v-1", "v-2"],
+      facilityId: "f-1",
+      contractEffectiveDate: new Date(Date.UTC(2025, 0, 1)),
+      contractExpirationDate: new Date(Date.UTC(2026, 11, 31)),
+      term: TERM_BASE,
+    })
+    const args = findManyMock.mock.calls[0][0]
+    expect(args.where.vendorId).toEqual({ in: ["v-1", "v-2"] })
   })
 
   it("idempotent: deletes prior auto-po rows for the term before insert", async () => {
