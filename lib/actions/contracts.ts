@@ -1158,11 +1158,17 @@ async function _createContractImpl(
     if (contract.facilityId) facilityIds.add(contract.facilityId)
     for (const fId of data.facilityIds) facilityIds.add(fId)
     for (const fId of data.additionalFacilityIds ?? []) facilityIds.add(fId)
+    // #2 (Vick 2026-05-31): recompute match statuses for EVERY participating
+    // vendor of a grouped contract — not just the primary. Otherwise the
+    // group's secondary-vendor COG never gets re-matched (the matcher now
+    // attributes it, but only if its vendor is in the recompute scope), so
+    // group spend + carve-out stay empty after a save.
+    const vendorIds = new Set<string>([data.vendorId])
+    for (const v of data.additionalVendorIds ?? []) vendorIds.add(v)
     for (const facilityId of facilityIds) {
-      await recomputeMatchStatusesForVendor(prisma, {
-        vendorId: data.vendorId,
-        facilityId,
-      })
+      for (const vendorId of vendorIds) {
+        await recomputeMatchStatusesForVendor(prisma, { vendorId, facilityId })
+      }
       // Charles 2026-04-25 (Bug 27 part 2): keep CaseSupply.isOnContract
       // in sync with the contract catalog so Case Costing's "Avg
       // On-Contract %" reflects newly-added/removed contracts.
@@ -1371,6 +1377,12 @@ async function _updateContractImpl(
   if (data.vendorId !== undefined && data.vendorId !== contract.vendorId) {
     vendorsToRecompute.add(data.vendorId)
   }
+  // #2 (Vick 2026-05-31): grouped contracts — recompute every participating
+  // vendor (old set so removed members get cleared, new set so added members
+  // get matched). Without this, editing a group contract leaves the
+  // additional vendors' COG at its stale match status → no group spend.
+  for (const v of contract.additionalVendorIds ?? []) vendorsToRecompute.add(v)
+  for (const v of data.additionalVendorIds ?? []) vendorsToRecompute.add(v)
 
   // Re-read the contract with its facility join so the recompute set
   // reflects the post-update multi-facility membership (data.facilityIds

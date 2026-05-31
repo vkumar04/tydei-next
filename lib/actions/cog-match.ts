@@ -49,18 +49,21 @@ export async function matchCOGToContracts(): Promise<{
 
   // 3. Load vendors that have active contracts at this facility so we
   //    can tell the user which matches are "on contract" vs just "matched".
-  const contractedVendorIds = new Set(
-    (
-      await prisma.contract.findMany({
-        where: {
-          status: { in: ["active", "expiring"] },
-          ...contractsOwnedByFacility(facility.id),
-        },
-        select: { vendorId: true },
-        distinct: ["vendorId"],
-      })
-    ).map((c) => c.vendorId),
-  )
+  // #2 (Vick 2026-05-31): include grouped contracts' additionalVendorIds
+  // so the recompute below re-matches COG for EVERY participating vendor —
+  // not just the primary. Without this the group's secondary-vendor COG
+  // stays off_contract and group spend/carve-out read empty.
+  const contractedVendorIds = new Set<string>()
+  for (const c of await prisma.contract.findMany({
+    where: {
+      status: { in: ["active", "expiring"] },
+      ...contractsOwnedByFacility(facility.id),
+    },
+    select: { vendorId: true, additionalVendorIds: true },
+  })) {
+    contractedVendorIds.add(c.vendorId)
+    for (const v of c.additionalVendorIds ?? []) contractedVendorIds.add(v)
+  }
 
   let vendorsMatched = 0
   let vendorsUnmatched = 0
