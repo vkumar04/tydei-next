@@ -6,7 +6,7 @@ import { Upload, Loader2, Download } from "lucide-react"
 import { toast } from "sonner"
 import {
   getContractPricing,
-  importContractPricing,
+  importContractPricingSafe,
   type ContractPricingItem,
 } from "@/lib/actions/pricing-files"
 import {
@@ -58,11 +58,17 @@ export function ContractPricingTab({
   })
 
   async function importItems(items: ContractPricingItem[]) {
-    const result = await importContractPricing({
+    // Safe (error-as-value) variant — surfaces the real failure reason
+    // instead of Next.js 16's redacted production digest.
+    const result = await importContractPricingSafe({
       contractId,
       items,
     })
-    toast.success(`Imported ${result.imported} pricing records`)
+    if (!result.ok) {
+      toast.error(`Pricing import failed: ${result.error}`)
+      return
+    }
+    toast.success(`Imported ${result.data.imported} pricing records`)
     await queryClient.invalidateQueries({ queryKey: pricingQueryKey })
   }
 

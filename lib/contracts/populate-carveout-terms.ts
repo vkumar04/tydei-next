@@ -77,12 +77,18 @@ export async function populateCarveOutTermsForContract(
           })
           totalLinked += result.count
         }
-        // Flip the term's scope so the engine reads
-        // ContractTermProduct.vendorItemNo (specific_products) instead
-        // of broadcasting the carve-out math across the whole catalog.
+        // Flip the term's scope to "specific_items" — the value the term
+        // editor UI (Product Scope dropdown + SpecificItemsPicker) and
+        // scopedItemNumbers round-trip recognize. Vick 2026-05-31 (#3):
+        // previously wrote the orphan value "specific_products", which no
+        // dropdown option matched, so the Select rendered stale/empty.
+        // Engine-neutral: carve-out rebate math reads
+        // ContractPricing.carveOutPercent per-SKU
+        // (lib/contracts/recompute/carve-out.ts), not appliesTo — this
+        // value only drives the (now read-only) UI display.
         await tx.contractTerm.update({
           where: { id: term.id },
-          data: { appliesTo: "specific_products" },
+          data: { appliesTo: "specific_items" },
         })
       },
       { maxWait: 30_000, timeout: 120_000 },

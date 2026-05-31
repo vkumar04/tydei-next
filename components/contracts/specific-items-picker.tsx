@@ -39,15 +39,62 @@ interface Props {
   availableItems: VendorItem[]
   selected: string[]
   onChange: (next: string[]) => void
+  /**
+   * Read-only mode (Vick 2026-05-31 #3): carve-out terms derive their SKU
+   * scope from the pricing file's carve-out % column, so the picker is
+   * shown but not editable. Renders `selected` as a flat list with no
+   * search box, checkboxes, or toggle handlers.
+   */
+  readOnly?: boolean
 }
 
-export function SpecificItemsPicker({ availableItems, selected, onChange }: Props) {
+export function SpecificItemsPicker({
+  availableItems,
+  selected,
+  onChange,
+  readOnly = false,
+}: Props) {
   const [filter, setFilter] = useState("")
 
   const filtered = useMemo(
     () => filterVendorItems(availableItems, filter),
     [filter, availableItems],
   )
+
+  if (readOnly) {
+    if (selected.length === 0) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          No items yet — upload a pricing file with a carve-out % column.
+        </p>
+      )
+    }
+    const descByNo = new Map(
+      availableItems.map((i) => [i.vendorItemNo, i.description]),
+    )
+    return (
+      <div className="space-y-2">
+        <ScrollArea className="h-48 rounded-md border p-2">
+          <ul className="space-y-1">
+            {selected.map((no) => (
+              <li key={no} className="flex items-center gap-2 px-2 py-1">
+                <span className="font-mono text-xs">{no}</span>
+                {descByNo.get(no) && (
+                  <span className="truncate text-xs text-muted-foreground">
+                    {descByNo.get(no)}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
+        <p className="text-xs text-muted-foreground">
+          {selected.length} item{selected.length === 1 ? "" : "s"} · read-only
+          (auto-derived from pricing file)
+        </p>
+      </div>
+    )
+  }
 
   if (availableItems.length === 0) {
     return (

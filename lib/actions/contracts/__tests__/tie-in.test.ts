@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 /**
  * Wave A coverage: `getContractCapitalSchedule` returns the three
@@ -42,6 +42,12 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+afterEach(() => {
+  // Defensive: tests that install fake timers must not leak a frozen
+  // clock into the rest of the suite.
+  vi.useRealTimers()
+})
+
 describe("getContractCapitalSchedule (Wave A)", () => {
   it("returns an empty, well-formed shape when the contract has no capital term", async () => {
     findFirstMock.mockResolvedValueOnce({
@@ -71,8 +77,12 @@ describe("getContractCapitalSchedule (Wave A)", () => {
 
   it("returns remaining balance, paid to date, and projected end-of-term balance for a 12-month monthly schedule", async () => {
     // Contract that started 3 months ago → 3 periods elapsed, 9 remaining.
-    const effectiveDate = new Date()
-    effectiveDate.setMonth(effectiveDate.getMonth() - 3)
+    // Pin the clock + start date so elapsedPeriods is deterministic. The
+    // old `setMonth(getMonth() - 3)` drifted: on a short-month run (e.g.
+    // May 31 → Feb 31 → Mar 3) the rollover shifted the elapsed count.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"))
+    const effectiveDate = new Date("2026-03-15T12:00:00Z")
 
     findFirstMock.mockResolvedValueOnce({
       id: "c-1",
