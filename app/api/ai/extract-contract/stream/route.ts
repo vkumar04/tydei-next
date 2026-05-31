@@ -527,6 +527,28 @@ export async function POST(req: Request) {
               err instanceof Error ? err.message : String(err)
           }
         }
+        // AI SDK 6 + Anthropic tool-mode (structuredOutputMode: "jsonTool"):
+        // the structured object resolves via a tool call, so `textStream`
+        // can emit nothing even though onFinish receives a complete object.
+        // Forwarding only textStream then closes the body empty and the
+        // client shows "Empty response from extractor" (while onFinish has
+        // already cached the object — hence re-uploading the same file
+        // "works" via the cache-hit path). Fall back to the resolved object
+        // as a single JSON document so the client always gets the extraction.
+        if (!emittedAnyChunk && !capturedStreamError) {
+          try {
+            const finalObject = await result.object
+            if (finalObject) {
+              controller.enqueue(encoder.encode(JSON.stringify(finalObject)))
+              emittedAnyChunk = true
+            }
+          } catch (err) {
+            if (!capturedStreamError) {
+              capturedStreamError =
+                err instanceof Error ? err.message : String(err)
+            }
+          }
+        }
         if (capturedStreamError && !emittedAnyChunk) {
           controller.enqueue(
             encoder.encode(
