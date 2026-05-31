@@ -34,17 +34,40 @@ const NOISE_TOKENS = new Set([
   "an",
 ])
 
+/**
+ * Strip a trailing "s" for plural tokens (length > 3 chars) so
+ * "implant" and "implants" collapse. Skips short tokens to avoid
+ * mangling "abs" / "hrs" style abbreviations.
+ */
+function lemmatize(token: string): string {
+  if (token.length > 3 && token.endsWith("s") && !token.endsWith("ss")) {
+    return token.slice(0, -1)
+  }
+  return token
+}
+
 export function canonicalizeCategoryName(input: string | null | undefined): string {
   if (!input) return ""
-  return input
+  // Vick 2026-05-31 bug doc (Market Share by Category showing 10
+  // near-identical rows like "Supplies & Materials;Implants;Total
+  // Joint" alongside "Supplies & Materials;Implant;Total Joint"):
+  // the prior canonicalizer kept duplicate tokens AND was
+  // singular/plural-blind, so any vendor-export with semicolon-
+  // joined category strings (Stryker, J&J) blew up into a long
+  // list of bucket variants. New rules:
+  //   - split on separator chars then ALL non-alphanumeric
+  //   - lemmatize each token (drop trailing -s for len>3 non-ss)
+  //   - de-dupe tokens (Set) — `implants implants` → `implants`
+  //   - sort and join
+  const tokens = input
     .toLowerCase()
-    .replace(/[\-_/&]+/g, " ")
+    .replace(/[\-_/&;,]+/g, " ")
     .replace(/[^a-z0-9\s]+/g, " ")
     .split(/\s+/)
     .map((t) => t.trim())
     .filter((t) => t.length > 0 && !NOISE_TOKENS.has(t))
-    .sort()
-    .join(" ")
+    .map(lemmatize)
+  return Array.from(new Set(tokens)).sort().join(" ")
 }
 
 /**

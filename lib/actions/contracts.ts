@@ -676,6 +676,18 @@ export async function getContract(
     termScopedSpend[t.id] = Number(termAgg._sum.extendedPrice ?? 0)
   }
 
+  // Vick 2026-05-31 bug doc ("there is not where to see in the
+  // overview who the grouped vendors are"): contract.additionalVendorIds
+  // is just an array of IDs; resolve to {id, name} so the detail
+  // header can render the participating vendors as readable badges.
+  const additionalVendors =
+    contract.additionalVendorIds && contract.additionalVendorIds.length > 0
+      ? await prisma.vendor.findMany({
+          where: { id: { in: contract.additionalVendorIds } },
+          select: { id: true, name: true, displayName: true },
+        })
+      : []
+
   return serialize({
     ...contract,
     rebateEarned,
@@ -683,6 +695,7 @@ export async function getContract(
     rebateCollected,
     currentSpend,
     termScopedSpend,
+    additionalVendors,
   })
 }
 

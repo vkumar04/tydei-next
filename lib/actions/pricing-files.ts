@@ -452,36 +452,53 @@ export async function importContractPricing(input: {
   // Replace-semantics: delete this contract's existing pricing rows
   // first, then bulk-insert. Wrapped in a transaction so a mid-flight
   // failure doesn't leave the contract with empty pricing.
-  const BATCH = 500
+  //
+  // Vick 2026-05-31 bug doc: SYK Carve out pricing import (15,548
+  // rows) was leaving contract_pricing empty. Prisma's default
+  // transaction timeout is 5 s, the bulk insert was rolling back
+  // every time, and the user's only signal was a vague toast.
+  // Bumped maxWait + timeout so realistic vendor pricing exports
+  // (10k-50k rows on Stryker / DePuy / Zimmer files) complete.
+  // Larger batch size halves the round-trip count too.
+  const BATCH = 1000
   let imported = 0
 
-  await prisma.$transaction(async (tx) => {
-    await tx.contractPricing.deleteMany({
-      where: { contractId: input.contractId },
-    })
-    for (let i = 0; i < dedupedItems.length; i += BATCH) {
-      const batch = dedupedItems.slice(i, i + BATCH)
-      const result = await tx.contractPricing.createMany({
-        data: batch.map((item) => ({
-          contractId: input.contractId,
-          vendorItemNo: item.vendorItemNo,
-          description: item.description,
-          category: item.category,
-          unitPrice: item.unitPrice,
-          listPrice: item.listPrice,
-          uom: item.uom ?? "EA",
-          carveOutPercent: item.carveOutPercent ?? null,
-          effectiveDate: item.effectiveDate
-            ? new Date(item.effectiveDate)
-            : null,
-          expirationDate: item.expirationDate
-            ? new Date(item.expirationDate)
-            : null,
-        })),
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.contractPricing.deleteMany({
+        where: { contractId: input.contractId },
       })
-      imported += result.count
-    }
-  })
+      for (let i = 0; i < dedupedItems.length; i += BATCH) {
+        const batch = dedupedItems.slice(i, i + BATCH)
+        const result = await tx.contractPricing.createMany({
+          data: batch.map((item) => ({
+            contractId: input.contractId,
+            vendorItemNo: item.vendorItemNo,
+            description: item.description,
+            category: item.category,
+            unitPrice: item.unitPrice,
+            listPrice: item.listPrice,
+            uom: item.uom ?? "EA",
+            carveOutPercent: item.carveOutPercent ?? null,
+            effectiveDate: item.effectiveDate
+              ? new Date(item.effectiveDate)
+              : null,
+            expirationDate: item.expirationDate
+              ? new Date(item.expirationDate)
+              : null,
+          })),
+        })
+        imported += result.count
+      }
+    },
+    {
+      // 50k rows × ~1 ms / row on Postgres ≈ 50 s. Give 2 min so
+      // realistic catalogs complete. maxWait covers the case where
+      // multiple imports queue up under the connection-pool ceiling.
+      maxWait: 30_000,
+      timeout: 120_000,
+    },
+  )
 
   return { imported }
 }

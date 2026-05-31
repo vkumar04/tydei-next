@@ -359,6 +359,24 @@ export function ContractDetailClient({
               {contract.vendor.name}
               {contract.contractNumber && ` \u00b7 ${contract.contractNumber}`}
             </p>
+            {/* Vick 2026-05-31 bug doc ("not where to see in the
+                overview who the grouped vendors are"): when this is
+                a grouped contract, surface the participating vendors
+                right under the title so the user can verify their
+                selection persisted. */}
+            {contract.additionalVendors && contract.additionalVendors.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-muted-foreground">Group:</span>
+                {contract.additionalVendors.map((v: { id: string; name: string; displayName: string | null }) => (
+                  <span
+                    key={v.id}
+                    className="rounded-md border border-border bg-muted/40 px-2 py-0.5 font-medium"
+                  >
+                    {v.displayName ?? v.name}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

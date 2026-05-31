@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AIExtractReview } from "@/components/contracts/ai-extract-review"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
+import { toast } from "sonner"
 
 interface AIExtractDialogProps {
   open: boolean
@@ -222,7 +223,36 @@ export function AIExtractDialog({
         }
       }
 
-      if (!lastValid) throw new Error("Empty response from extractor")
+      // Vick 2026-05-31 bug doc: even with the streamError sentinel
+      // (commit 7ee3b03) some PDFs still produce a fully-empty
+      // stream — no chunks, no captured error. Pre-fix the user
+      // saw the dead-end "Empty response from extractor" toast and
+      // had to fall back to Manual Entry. Synthesize a minimal
+      // extraction from the filename so the form populates and
+      // the user can keep moving. A warning toast tells them the
+      // model produced nothing usable so they review every field.
+      if (!lastValid) {
+        const stem = (fileName ?? "")
+          .replace(/\.[^./]+$/, "")
+          .replace(/[_-]+/g, " ")
+          .trim()
+        if (!stem) throw new Error("Empty response from extractor")
+        const leading = stem.split(/\s+/)[0] ?? ""
+        lastValid = {
+          extracted: {
+            contractName: stem,
+            vendorName: leading,
+            contractType: "usage",
+            effectiveDate: null,
+            expirationDate: null,
+            terms: [],
+          } as unknown as ExtractedContractData,
+          confidence: 0,
+        }
+        toast.warning(
+          "AI extractor returned no usable data. Filled in from the filename — review every field before saving.",
+        )
+      }
 
       // Vick 2026-05-30 bug doc: the model sometimes returned ""
       // for contractName/vendorName even on well-formed PDFs,
