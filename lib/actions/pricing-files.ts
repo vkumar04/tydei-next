@@ -13,6 +13,7 @@ import {
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
+import { populateCarveOutTermsForContract } from "@/lib/contracts/populate-carveout-terms"
 
 // ─── List Pricing Files ─────────────────────────────────────────
 
@@ -500,7 +501,28 @@ export async function importContractPricing(input: {
     },
   )
 
-  return { imported }
+  // Vick 2026-05-31 bug doc: "It should use the pricing file to pick
+  // all of the items for you for carve out." Any carve_out terms on
+  // this contract get their ContractTermProduct rows rebuilt from
+  // the pricing rows whose carveOutPercent > 0, so the engine
+  // applies the carve-out math only to SKUs the pricing file
+  // flagged. Skipped silently when no carve_out terms exist.
+  let carveOutLinked = 0
+  try {
+    const r = await populateCarveOutTermsForContract(input.contractId)
+    carveOutLinked = r.productsLinked
+  } catch (err) {
+    // Don't let a downstream carve-out failure roll back the pricing
+    // import the user is waiting on. Log and move on — the user can
+    // re-trigger via the contract-detail re-sync button later.
+    console.warn(
+      "[importContractPricing] carve-out auto-populate failed:",
+      err,
+      { contractId: input.contractId },
+    )
+  }
+
+  return { imported, carveOutLinked }
 }
 
 // ─── Update a single ContractPricing record ────────────────────
