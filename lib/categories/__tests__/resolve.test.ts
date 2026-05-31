@@ -20,6 +20,9 @@ vi.mock("@/lib/db", () => ({
       findFirst: (a: unknown) => findFirstMock(a as never),
       create: (a: unknown) => createMock(a as never),
     },
+    // #4: resolver consults confirmed CategoryMapping (Pass 0); default to
+    // no mappings so these tests exercise the ProductCategory path.
+    categoryMapping: { findMany: async () => [] },
   },
 }))
 
