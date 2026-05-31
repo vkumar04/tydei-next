@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Check, ChevronDown, Loader2 } from "lucide-react"
+import { Check, ChevronDown, Loader2, X } from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -167,6 +167,17 @@ function MappingRow({
   const [pendingLabel, setPendingLabel] = useState<string | null>(
     row.currentVendorName,
   )
+  // Vick 2026-05-30 bug doc ("only lets you UNMAP it does not let
+  // you map it"): the previous popover lumped Unmap and the vendor
+  // list into one CommandGroup, where the cmdk search filter could
+  // hide vendor items based on residual input state. Pulling Unmap
+  // out as a dedicated icon button (and resetting pending state
+  // when the row prop refreshes after Apply) makes the mapping
+  // verb-explicit + bug-resistant.
+  useEffect(() => {
+    setPendingVendorId(row.currentVendorId)
+    setPendingLabel(row.currentVendorName)
+  }, [row.currentVendorId, row.currentVendorName])
 
   const dirty = pendingVendorId !== row.currentVendorId
 
@@ -195,83 +206,87 @@ function MappingRow({
         {currency.format(row.totalSpend)}
       </TableCell>
       <TableCell>
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              role="combobox"
-              className="w-[260px] justify-between"
+        <div className="flex items-center gap-1">
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                role="combobox"
+                className="w-[240px] justify-between"
+              >
+                <span className="truncate">
+                  {pendingLabel ?? (
+                    <span className="text-muted-foreground italic">
+                      Unmapped
+                    </span>
+                  )}
+                </span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-[300px] p-0"
+              align="start"
+              style={{
+                maxHeight:
+                  "var(--radix-popover-content-available-height, 60vh)",
+              }}
             >
-              <span className="truncate">
-                {pendingLabel ?? (
-                  <span className="text-muted-foreground italic">
-                    Unmapped
-                  </span>
-                )}
-              </span>
-              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-[280px] p-0"
-            align="start"
-            style={{
-              maxHeight:
-                "var(--radix-popover-content-available-height, 60vh)",
-            }}
-          >
-            <Command>
-              <CommandInput placeholder="Search vendors…" />
-              <CommandList style={{ maxHeight: 320 }}>
-                <CommandEmpty>No vendors found.</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    onSelect={() => {
-                      setPendingVendorId(null)
-                      setPendingLabel(null)
-                      setOpen(false)
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        pendingVendorId === null ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    <span className="italic">Unmap</span>
-                  </CommandItem>
-                  {vendors.map((v) => (
-                    <CommandItem
-                      key={v.id}
-                      value={v.name}
-                      onSelect={() => {
-                        setPendingVendorId(v.id)
-                        setPendingLabel(v.name)
-                        setOpen(false)
-                      }}
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          pendingVendorId === v.id
-                            ? "opacity-100"
-                            : "opacity-0",
+              <Command>
+                <CommandInput placeholder="Search vendors…" autoFocus />
+                <CommandList style={{ maxHeight: 320 }}>
+                  <CommandEmpty>No vendors found.</CommandEmpty>
+                  <CommandGroup heading={`${vendors.length} vendors`}>
+                    {vendors.map((v) => (
+                      <CommandItem
+                        key={v.id}
+                        // cmdk filters by `value` substring. Include the id
+                        // so duplicate display names (rare but possible)
+                        // stay distinct in the keyboard nav order.
+                        value={`${v.name} ${v.id}`}
+                        onSelect={() => {
+                          setPendingVendorId(v.id)
+                          setPendingLabel(v.name)
+                          setOpen(false)
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            pendingVendorId === v.id
+                              ? "opacity-100"
+                              : "opacity-0",
+                          )}
+                        />
+                        <span className="flex-1 truncate">{v.name}</span>
+                        {v.hasActiveContract && (
+                          <Badge variant="secondary" className="ml-2 text-xs">
+                            contract
+                          </Badge>
                         )}
-                      />
-                      <span className="flex-1 truncate">{v.name}</span>
-                      {v.hasActiveContract && (
-                        <Badge variant="secondary" className="ml-2 text-xs">
-                          contract
-                        </Badge>
-                      )}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          {pendingVendorId !== null && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+              title="Unmap"
+              onClick={() => {
+                setPendingVendorId(null)
+                setPendingLabel(null)
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </TableCell>
       <TableCell>
         <Button
