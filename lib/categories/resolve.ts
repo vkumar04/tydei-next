@@ -26,6 +26,28 @@ type CategoryRow = { id: string; name: string }
 const normalize = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, " ")
 
 /**
+ * #4 (Vick 2026-05-31): load confirmed CategoryMapping rules as a lookup
+ * map — normalized `cogCategory` → `contractCategory`. This is the
+ * category twin of the vendor resolver's confirmed-mapping Pass 0 (#1):
+ * a confirmed mapping makes "JOINT" / "CONSTRUCTS-JOINT-Hip" resolve to
+ * the same canonical category as the price file's "Ortho-Joints", so the
+ * COG and pricing sources stop drifting. Categories are tenant-shared
+ * taxonomy (like ProductCategory), so the rules are global — no facility
+ * scoping, unlike VendorNameMapping.
+ */
+async function loadConfirmedCategoryMap(): Promise<Map<string, string>> {
+  const rows = await prisma.categoryMapping.findMany({
+    where: { isConfirmed: true, contractCategory: { not: null } },
+    select: { cogCategory: true, contractCategory: true },
+  })
+  const map = new Map<string, string>()
+  for (const r of rows) {
+    if (r.contractCategory) map.set(normalize(r.cogCategory), r.contractCategory)
+  }
+  return map
+}
+
+/**
  * Resolve a single category name to a canonical name (the one in the
  * ProductCategory table). Returns the canonical name string, NOT the
  * id, because COGRecord.category and ContractTermProduct.category are
@@ -49,6 +71,11 @@ export async function resolveCategoryName(
   const createMissing = opts.createMissing ?? false
   const trimmed = (rawName ?? "").trim()
   if (!trimmed) return null
+
+  // Pass 0 (#4): a confirmed category mapping wins over the
+  // ProductCategory match, so mapped variants unify on every import.
+  const mapped = (await loadConfirmedCategoryMap()).get(normalize(trimmed))
+  if (mapped) return mapped
 
   const all = await prisma.productCategory.findMany({
     select: { id: true, name: true },
@@ -96,12 +123,20 @@ export async function resolveCategoryNamesBulk(
   )
   if (unique.length === 0) return result
 
+  // Pass 0 (#4): confirmed category mappings, loaded once.
+  const mappingByName = await loadConfirmedCategoryMap()
+
   const all = await prisma.productCategory.findMany({
     select: { id: true, name: true },
   })
 
   const unmatched: string[] = []
   for (const name of unique) {
+    const mapped = mappingByName.get(normalize(name))
+    if (mapped) {
+      result.set(normalize(name), mapped)
+      continue
+    }
     const matched = matchFromList(name, all)
     if (matched) {
       result.set(normalize(name), matched.name)

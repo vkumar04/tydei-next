@@ -5,6 +5,7 @@ import {
   FileStack,
   Plus,
   RefreshCw,
+  Tags,
   Trash2,
   Upload,
   Users,
@@ -50,6 +51,7 @@ export interface CogControlBarProps {
   onManualEntry: () => void
   onClearAll: () => void
   onVendorMapping: () => void
+  onCategoryMapping: () => void
 }
 
 export function CogControlBar({
@@ -66,6 +68,7 @@ export function CogControlBar({
   onManualEntry,
   onClearAll,
   onVendorMapping,
+  onCategoryMapping,
 }: CogControlBarProps) {
   const hasDateFilter = Boolean(dateFrom || dateTo)
   return (
@@ -156,6 +159,21 @@ export function CogControlBar({
               Edit which canonical vendor each COG vendor name points to.
               Use to combine duplicates or fix mis-matched names without
               re-importing.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="sm" onClick={onCategoryMapping}>
+                <Tags className="mr-2 h-4 w-4" />
+                Category Mapping
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[300px] text-xs">
+              Map COG category variants to one canonical category — the
+              same way vendor names are mapped — so COG and price-file
+              categories line up. Applies to future imports too.
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

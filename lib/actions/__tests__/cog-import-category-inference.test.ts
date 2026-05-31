@@ -49,6 +49,8 @@ vi.mock("@/lib/db", () => ({
       findFirst: vi.fn(async () => null),
       create: vi.fn(async ({ data }: { data: { name: string } }) => ({ name: data.name })),
     },
+    // #4: resolver's confirmed-mapping Pass 0 — no mappings in this test.
+    categoryMapping: { findMany: vi.fn(async () => []) },
     $transaction: vi.fn().mockResolvedValue([0, 0, 0]),
     fileImport: { create: vi.fn().mockResolvedValue({ id: "fi-1" }) },
   },
