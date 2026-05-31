@@ -1,8 +1,9 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireAdmin, requireFacility } from "@/lib/actions/auth"
+import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import { remapCOGVendorName } from "@/lib/actions/cog-vendor-mapping"
 
 // ─── Get Vendor Name Mappings ───────────────────────────────────
 
@@ -11,13 +12,16 @@ export async function getVendorNameMappings(input: {
   page?: number
   pageSize?: number
 }) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
   const page = input.page ?? 1
   const pageSize = input.pageSize ?? 20
-  const where = input.isConfirmed !== undefined
-    ? { isConfirmed: input.isConfirmed }
-    : {}
+  // #1 (Vick 2026-05-31): mappings are per-facility — only ever list this
+  // facility's rules.
+  const where = {
+    facilityId: facility.id,
+    ...(input.isConfirmed !== undefined ? { isConfirmed: input.isConfirmed } : {}),
+  }
 
   const [mappings, total] = await Promise.all([
     prisma.vendorNameMapping.findMany({
@@ -35,29 +39,27 @@ export async function getVendorNameMappings(input: {
 
 // ─── Confirm Vendor Name Mapping ────────────────────────────────
 
+/**
+ * Confirm a mapping AND apply it. #1 (Vick 2026-05-31): confirming now
+ * routes through `remapCOGVendorName`, which re-maps existing COG rows,
+ * recomputes match/metrics, and persists the confirmed per-facility rule
+ * (so future imports auto-apply it). Per-facility → `requireFacility`
+ * (was `requireAdmin` back when the table was global taxonomy).
+ */
 export async function confirmVendorNameMapping(
   id: string,
-  mappedVendorId: string
+  mappedVendorId: string,
 ) {
-  // Charles audit deferred-fix: VendorNameMapping is global taxonomy.
-  // Confirming a mapping changes how every facility's COG imports
-  // resolve that vendor name. Admin-only. createVendorNameMapping
-  // stays facility-accessible (the COG import flow needs to add new
-  // mappings on the fly).
-  await requireAdmin()
+  const { facility } = await requireFacility()
 
-  const vendor = await prisma.vendor.findUniqueOrThrow({
-    where: { id: mappedVendorId },
-    select: { name: true },
+  const mapping = await prisma.vendorNameMapping.findFirstOrThrow({
+    where: { id, facilityId: facility.id },
+    select: { cogVendorName: true },
   })
 
-  await prisma.vendorNameMapping.update({
-    where: { id },
-    data: {
-      mappedVendorId,
-      mappedVendorName: vendor.name,
-      isConfirmed: true,
-    },
+  await remapCOGVendorName({
+    vendorName: mapping.cogVendorName,
+    newVendorId: mappedVendorId,
   })
 }
 
@@ -69,11 +71,25 @@ export async function createVendorNameMapping(input: {
   mappedVendorName?: string
   confidenceScore?: number
 }) {
-  await requireFacility()
+  const { facility } = await requireFacility()
 
-  const mapping = await prisma.vendorNameMapping.create({
-    data: {
+  // Upsert on the (facilityId, cogVendorName) unique — a plain create would
+  // throw if a rule (e.g. an unconfirmed suggestion) already exists.
+  const mapping = await prisma.vendorNameMapping.upsert({
+    where: {
+      facilityId_cogVendorName: {
+        facilityId: facility.id,
+        cogVendorName: input.cogVendorName,
+      },
+    },
+    create: {
+      facilityId: facility.id,
       cogVendorName: input.cogVendorName,
+      mappedVendorId: input.mappedVendorId,
+      mappedVendorName: input.mappedVendorName,
+      confidenceScore: input.confidenceScore,
+    },
+    update: {
       mappedVendorId: input.mappedVendorId,
       mappedVendorName: input.mappedVendorName,
       confidenceScore: input.confidenceScore,
@@ -85,9 +101,10 @@ export async function createVendorNameMapping(input: {
 // ─── Delete Mapping ─────────────────────────────────────────────
 
 export async function deleteVendorNameMapping(id: string) {
-  // Charles audit deferred-fix: deleting a mapping reverts all
-  // future COG imports across every facility. Admin-only.
-  await requireAdmin()
-
-  await prisma.vendorNameMapping.delete({ where: { id } })
+  const { facility } = await requireFacility()
+  // Facility-scoped delete — deleteMany so a cross-facility id is a no-op
+  // rather than an error.
+  await prisma.vendorNameMapping.deleteMany({
+    where: { id, facilityId: facility.id },
+  })
 }

@@ -132,14 +132,16 @@ export async function remapCOGVendorName(input: {
     .map((r) => r.vendorId)
     .filter((v): v is string => !!v)
 
+  let targetVendorName: string | null = null
   if (input.newVendorId) {
     // auth-scope-scanner-skip: Vendor is a global (non-tenant) table; this
     // is an existence check before writing facility-scoped COG rows below.
     const vendor = await prisma.vendor.findUnique({
       where: { id: input.newVendorId },
-      select: { id: true },
+      select: { id: true, name: true, displayName: true },
     })
     if (!vendor) throw new Error("Target vendor not found")
+    targetVendorName = vendor.displayName ?? vendor.name
   }
 
   const updated = await prisma.cOGRecord.updateMany({
@@ -149,6 +151,35 @@ export async function remapCOGVendorName(input: {
     },
     data: { vendorId: input.newVendorId },
   })
+
+  // #1 (Vick 2026-05-31): persist this remap as a confirmed per-facility
+  // rule so FUTURE COG / pricing imports auto-resolve the old name to the
+  // chosen vendor (resolveVendorId Pass 0) — "map once, sticks forever".
+  // newVendorId === null is an unmap: drop the rule so the name resolves
+  // normally again. deleteMany is a no-op when no rule exists.
+  if (input.newVendorId) {
+    await prisma.vendorNameMapping.upsert({
+      where: {
+        facilityId_cogVendorName: { facilityId: facility.id, cogVendorName: name },
+      },
+      create: {
+        facilityId: facility.id,
+        cogVendorName: name,
+        mappedVendorId: input.newVendorId,
+        mappedVendorName: targetVendorName,
+        isConfirmed: true,
+      },
+      update: {
+        mappedVendorId: input.newVendorId,
+        mappedVendorName: targetVendorName,
+        isConfirmed: true,
+      },
+    })
+  } else {
+    await prisma.vendorNameMapping.deleteMany({
+      where: { facilityId: facility.id, cogVendorName: name },
+    })
+  }
 
   const toRecompute = new Set<string>(previousVendorIds)
   if (input.newVendorId) toRecompute.add(input.newVendorId)

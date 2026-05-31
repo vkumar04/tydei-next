@@ -521,6 +521,7 @@ model Facility {
   rebateInsightCaches RebateInsightCache[]
   rebateInsightFlags  RebateInsightFlag[]
   crossVendorTieIns  CrossVendorTieIn[]
+  vendorNameMappings VendorNameMapping[]
 
   @@index([status])
   @@map("facility")
@@ -1619,6 +1620,11 @@ model Credit {
 
 model VendorNameMapping {
   id               String   @id @default(cuid())
+  // #1 (Vick 2026-05-31): mappings are per-facility — a confirmed
+  // "Howmedica → Stryker" rule for one facility must not change another
+  // facility's vendor resolution. The import resolver consults
+  // confirmed rows WHERE facilityId = current facility.
+  facilityId       String
   cogVendorName    String
   mappedVendorId   String?
   mappedVendorName String?
@@ -1626,8 +1632,12 @@ model VendorNameMapping {
   isConfirmed      Boolean  @default(false)
   createdAt        DateTime @default(now())
 
-  vendor Vendor? @relation(fields: [mappedVendorId], references: [id])
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  vendor   Vendor?  @relation(fields: [mappedVendorId], references: [id])
 
+  // One rule per (facility, cogVendorName) so the resolver lookup is
+  // deterministic and remap upserts are idempotent.
+  @@unique([facilityId, cogVendorName])
   @@index([cogVendorName])
   @@map("vendor_name_mapping")
 }

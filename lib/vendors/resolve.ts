@@ -7,10 +7,19 @@
  * the single canonical resolution pipeline.
  *
  * Strategy (cheapest → most expensive):
+ *   0. confirmed per-facility VendorNameMapping (admin-set rule) — #1
  *   1. exact case-insensitive match against vendor.name / displayName
  *   2. alias table resolution (Stryker Corp → Stryker)
  *   3. fuzzy Levenshtein match (threshold 0.7)
  *   4. optional: create new vendor row
+ *
+ * Pass 0 (Vick 2026-05-31 #1): when a `facilityId` is supplied, a
+ * confirmed `VendorNameMapping` for that facility wins over every other
+ * pass. This is what makes "map a vendor name once" stick — every future
+ * COG / pricing import resolves the old name to the mapped vendor, so
+ * REFs under the old and new names equate (the matcher keys on vendorId).
+ * Callers without a facility (non-import lookups) omit `facilityId` and
+ * Pass 0 is skipped — fully back-compat.
  */
 import { prisma } from "@/lib/db"
 import { matchVendorByAlias } from "@/lib/vendor-aliases"
@@ -19,6 +28,25 @@ import { matchVendorByAlias } from "@/lib/vendor-aliases"
 const UNKNOWN_VENDOR_ID = "unknown-vendor-placeholder"
 
 type VendorRow = { id: string; name: string; displayName: string | null }
+
+/**
+ * Load a facility's confirmed vendor-name rules as a lookup map:
+ * lowercased `cogVendorName` → `mappedVendorId`. Only confirmed rows
+ * with a target vendor participate.
+ */
+async function loadConfirmedMappings(
+  facilityId: string,
+): Promise<Map<string, string>> {
+  const rows = await prisma.vendorNameMapping.findMany({
+    where: { facilityId, isConfirmed: true, mappedVendorId: { not: null } },
+    select: { cogVendorName: true, mappedVendorId: true },
+  })
+  const map = new Map<string, string>()
+  for (const r of rows) {
+    if (r.mappedVendorId) map.set(r.cogVendorName.trim().toLowerCase(), r.mappedVendorId)
+  }
+  return map
+}
 
 // ─── Single lookup ──────────────────────────────────────────────
 
@@ -29,7 +57,7 @@ type VendorRow = { id: string; name: string; displayName: string | null }
  */
 export async function resolveVendorId(
   name: string | null | undefined,
-  opts: { createMissing?: boolean } = {},
+  opts: { createMissing?: boolean; facilityId?: string } = {},
 ): Promise<string | null> {
   const createMissing = opts.createMissing ?? true
   const trimmed = (name ?? "").trim()
@@ -39,11 +67,15 @@ export async function resolveVendorId(
     return ensureUnknownVendor()
   }
 
+  const mappingByName = opts.facilityId
+    ? await loadConfirmedMappings(opts.facilityId)
+    : undefined
+
   const allVendors = await prisma.vendor.findMany({
     select: { id: true, name: true, displayName: true },
   })
 
-  const matched = matchFromList(trimmed, allVendors)
+  const matched = matchFromList(trimmed, allVendors, mappingByName)
   if (matched) return matched
 
   if (!createMissing) return null
@@ -59,7 +91,7 @@ export async function resolveVendorId(
  */
 export async function resolveVendorIdsBulk(
   names: string[],
-  opts: { createMissing?: boolean } = {},
+  opts: { createMissing?: boolean; facilityId?: string } = {},
 ): Promise<Map<string, string>> {
   const createMissing = opts.createMissing ?? true
   const unique = Array.from(new Set(names.map((n) => n.trim()).filter(Boolean)))
@@ -67,13 +99,17 @@ export async function resolveVendorIdsBulk(
 
   if (unique.length === 0) return result
 
+  const mappingByName = opts.facilityId
+    ? await loadConfirmedMappings(opts.facilityId)
+    : undefined
+
   const allVendors = await prisma.vendor.findMany({
     select: { id: true, name: true, displayName: true },
   })
 
   const unmatched: string[] = []
   for (const name of unique) {
-    const id = matchFromList(name, allVendors)
+    const id = matchFromList(name, allVendors, mappingByName)
     if (id) {
       result.set(name.toLowerCase(), id)
     } else {
@@ -109,8 +145,20 @@ export async function resolveVendorIdsBulk(
  * Three-pass matching against a pre-loaded vendor list. Shared
  * between single and bulk paths so both use the same algorithm.
  */
-function matchFromList(name: string, vendors: VendorRow[]): string | null {
+function matchFromList(
+  name: string,
+  vendors: VendorRow[],
+  mappingByName?: Map<string, string>,
+): string | null {
   const lower = name.toLowerCase()
+
+  // Pass 0: confirmed per-facility mapping wins over everything. Guard on
+  // the target still existing in the vendor list so a deleted vendor
+  // can't strand resolution on a dangling id.
+  if (mappingByName) {
+    const mapped = mappingByName.get(name.trim().toLowerCase())
+    if (mapped && vendors.some((v) => v.id === mapped)) return mapped
+  }
 
   // Pass 1: exact case-insensitive name/displayName
   const exact = vendors.find(

@@ -91,12 +91,15 @@ export async function ingestPricingFile(input: {
       firstRow["manufacturer"] ??
       ""
     if (maybeVendor.trim()) {
-      vendorId = await findOrCreateVendorByName(maybeVendor.trim())
+      // #1: apply this facility's confirmed vendor-name mappings.
+      vendorId = await findOrCreateVendorByName(maybeVendor.trim(), undefined, {
+        facilityId,
+      })
     }
   }
 
   if (!vendorId) {
-    vendorId = await findOrCreateVendorByName(null)
+    vendorId = await findOrCreateVendorByName(null, undefined, { facilityId })
   }
 
   let imported = 0
