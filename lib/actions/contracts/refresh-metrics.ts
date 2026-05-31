@@ -160,7 +160,14 @@ export async function refreshContractMetricsForVendor(input: {
   const contracts = await prisma.contract.findMany({
     where: {
       facilityId: input.facilityId,
-      vendorId: input.vendorId,
+      // #2 (Vick 2026-05-31): also refresh GROUPED contracts where this
+      // vendor is an additional participant — otherwise importing COG for
+      // vendor B leaves vendor A's grouped contract metrics stale (mirrors
+      // loadContractsForVendor in lib/cog/recompute.ts).
+      OR: [
+        { vendorId: input.vendorId },
+        { additionalVendorIds: { has: input.vendorId } },
+      ],
       status: { in: ["active", "expiring"] },
     },
     select: { id: true },

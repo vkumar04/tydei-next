@@ -53,8 +53,14 @@ export interface ComputeMarketShareInput {
   /** contractId → productCategory.name lookup. Pass an empty Map to
    *  disable the fallback. */
   contractCategoryMap: Map<string, string | null>
-  /** Vendor whose share is being computed. */
-  vendorId: string
+  /**
+   * Vendor(s) whose share is being computed. A single id is the common
+   * case (one vendor's share); an array is a GROUPED contract (#2, Vick
+   * 2026-05-31) — the numerator sums spend across every participating
+   * vendor while the denominator stays the full category market. A
+   * single-element array is identical to passing the string.
+   */
+  vendorId: string | string[]
   /** Optional category → commitment% overlay. */
   commitmentByCategory?: Map<string, number>
 }
@@ -85,6 +91,9 @@ export function computeCategoryMarketShare(
   input: ComputeMarketShareInput,
 ): MarketShareResult {
   const { rows, contractCategoryMap, vendorId, commitmentByCategory } = input
+  // Normalize to a set so grouped contracts (array) and the common
+  // single-vendor case share one code path.
+  const vendorIdSet = new Set(Array.isArray(vendorId) ? vendorId : [vendorId])
 
   let totalVendorSpend = 0
   let uncategorizedSpend = 0
@@ -100,7 +109,7 @@ export function computeCategoryMarketShare(
     const amount = toAmount(row.extendedPrice)
     if (amount <= 0) continue
 
-    const isVendor = row.vendorId === vendorId
+    const isVendor = row.vendorId != null && vendorIdSet.has(row.vendorId)
     const cat = effectiveCategoryOf(row, contractCategoryMap)
 
     if (isVendor) {
@@ -129,7 +138,11 @@ export function computeCategoryMarketShare(
 
   const result: MarketShareRow[] = []
   for (const [, bucket] of byCategory.entries()) {
-    const vendorSpend = bucket.byVendor.get(vendorId) ?? 0
+    // Numerator = combined spend of every vendor in the set (the group).
+    let vendorSpend = 0
+    for (const [vid, amt] of bucket.byVendor) {
+      if (vendorIdSet.has(vid)) vendorSpend += amt
+    }
     if (vendorSpend <= 0) continue
     result.push({
       category: bucket.displayName,

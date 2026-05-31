@@ -243,11 +243,13 @@ describe("getContract — currentSpend is trailing 12 months (Charles R5.28)", (
     // Second call is the vendor-wide fallback.
     const call = prisma.cOGRecord.aggregate.mock.calls[1][0] as {
       where: {
-        vendorId?: string
+        vendorId?: { in?: string[] }
         transactionDate?: { gte?: Date; lte?: Date }
       }
     }
-    expect(call.where.vendorId).toBe("v-1")
+    // #2: the vendor-COG fallback now scopes to the contract's full vendor
+    // set; for a non-grouped contract that's a one-element `in`.
+    expect(call.where.vendorId).toEqual({ in: ["v-1"] })
     expect(call.where.transactionDate?.gte).toBeInstanceOf(Date)
     expect(call.where.transactionDate?.lte).toBeInstanceOf(Date)
   })

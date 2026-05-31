@@ -26,6 +26,7 @@ import {
   type ResolveContext,
 } from "@/lib/cog/match"
 import { prisma as defaultPrisma } from "@/lib/db"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 type Db = PrismaClient | Prisma.TransactionClient
 
@@ -230,7 +231,7 @@ export async function recomputeMatchStatusesForVendor(
     // additionalVendorId so grouped contracts match COG rows for any
     // participating vendor. Without this leg a grouped contract owned
     // by vendor A would never match COG rows tagged with vendor B.
-    const participatingVendorIds = [c.vendorId, ...(c.additionalVendorIds ?? [])]
+    const participatingVendorIds = contractVendorIds(c)
     for (const vid of participatingVendorIds) {
       const byVendor = activeContractsByVendor.get(vid) ?? []
       byVendor.push(contractCandidate)

@@ -40,6 +40,7 @@ import {
 import { buildUnionCategoryWhereClause, buildCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -147,12 +148,10 @@ export async function getContracts(input: ContractFilters) {
   const windowStart = new Date(today)
   windowStart.setFullYear(windowStart.getFullYear() - 1)
   const contractIds = contracts.map((c) => c.id)
+  // #2 (Vick 2026-05-31): include every participating vendor of grouped
+  // contracts so the tier-3 vendor-window aggregate covers the whole group.
   const vendorIds = Array.from(
-    new Set(
-      contracts
-        .map((c) => c.vendorId)
-        .filter((v): v is string => Boolean(v)),
-    ),
+    new Set(contracts.flatMap((c) => contractVendorIds(c))),
   )
 
   const [periodSpendAgg, cogByContractAgg, cogByVendorAgg] =
@@ -243,11 +242,14 @@ export async function getContracts(input: ContractFilters) {
   const perContractCategorySpend = new Map<string, number>()
   const categoryScopedContracts: Array<{
     id: string
-    vendorId: string
+    vendorIds: string[]
     categories: Set<string>
   }> = []
   for (const c of contracts) {
-    if (!c.vendorId) continue
+    // #2: a grouped contract's category-scoped spend spans every
+    // participating vendor.
+    const vids = contractVendorIds(c)
+    if (vids.length === 0) continue
     const termScopes = (c.terms ?? []).map((t) => ({
       appliesTo: t.appliesTo,
       categories: t.categories,
@@ -257,13 +259,13 @@ export async function getContracts(input: ContractFilters) {
     if (!cats || cats.length === 0) continue
     categoryScopedContracts.push({
       id: c.id,
-      vendorId: c.vendorId,
+      vendorIds: vids,
       categories: new Set(cats),
     })
   }
   if (categoryScopedContracts.length > 0) {
     const scopedVendorIds = Array.from(
-      new Set(categoryScopedContracts.map((c) => c.vendorId)),
+      new Set(categoryScopedContracts.flatMap((c) => c.vendorIds)),
     )
     const scopedCategorySet = new Set<string>()
     for (const c of categoryScopedContracts) {
@@ -291,8 +293,10 @@ export async function getContracts(input: ContractFilters) {
     }
     for (const c of categoryScopedContracts) {
       let sum = 0
-      for (const cat of c.categories) {
-        sum += bucket.get(`${c.vendorId}::${cat}`) ?? 0
+      for (const vid of c.vendorIds) {
+        for (const cat of c.categories) {
+          sum += bucket.get(`${vid}::${cat}`) ?? 0
+        }
       }
       perContractCategorySpend.set(c.id, sum)
     }
@@ -318,8 +322,12 @@ export async function getContracts(input: ContractFilters) {
     // to specific categories.
     const cogVendorSpend = c.vendorId
       ? (perContractCategorySpend.get(c.id) ??
-          cogSpendByVendor.get(c.vendorId) ??
-          0)
+          // #2: sum the vendor-window aggregate across the contract's full
+          // vendor set so grouped contracts don't under-report spend.
+          contractVendorIds(c).reduce(
+            (s, vid) => s + (cogSpendByVendor.get(vid) ?? 0),
+            0,
+          ))
       : 0
     const currentSpend =
       periodSpend > 0
@@ -602,6 +610,11 @@ export async function getContract(
   const windowEnd = new Date()
   const windowStart = new Date(windowEnd)
   windowStart.setFullYear(windowStart.getFullYear() - 1)
+  // #2 (Vick 2026-05-31): the tier-3 vendor-window aggregate (and the
+  // per-term fallback below) span the contract's full vendor set so the
+  // detail "Current Spend (12mo)" card stays in lockstep with the list and
+  // grouped contracts don't under-report.
+  const detailVendorIds = contractVendorIds(contract)
   const [cogAgg, cogVendorAgg, periodAgg] = await Promise.all([
     prisma.cOGRecord.aggregate({
       where: {
@@ -614,7 +627,7 @@ export async function getContract(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
-        vendorId: contract.vendorId,
+        vendorId: { in: detailVendorIds },
         transactionDate: { gte: windowStart, lte: windowEnd },
       },
       _sum: { extendedPrice: true },
@@ -665,7 +678,7 @@ export async function getContract(
         facilityId: facility.id,
         OR: [
           { contractId: contract.id },
-          { contractId: null, vendorId: contract.vendorId },
+          { contractId: null, vendorId: { in: detailVendorIds } },
         ],
         matchStatus: { in: ["on_contract", "price_variance"] },
         transactionDate: { gte: windowStart, lte: windowEnd },

@@ -25,6 +25,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 export interface ContractMetricsInput {
   /** Either an existing contractId OR the prospective shape below. */
@@ -52,7 +53,10 @@ export async function computeContractMetrics(
 ): Promise<ContractMetricsResult> {
   const { facility } = await requireFacility()
 
-  let vendorId = input.vendorId
+  // #2 (Vick 2026-05-31): metrics aggregate over the contract's full
+  // vendor set. Single-vendor mode (prospective, by vendorId) is just a
+  // one-element set; a grouped contract spans every participating vendor.
+  let vendorIds: string[] = input.vendorId ? [input.vendorId] : []
   let categories = input.productCategories ?? []
   let windowStart: Date
   let windowEnd: Date
@@ -62,13 +66,14 @@ export async function computeContractMetrics(
       where: { id: input.contractId, facilityId: facility.id },
       select: {
         vendorId: true,
+        additionalVendorIds: true,
         effectiveDate: true,
         expirationDate: true,
         productCategory: { select: { name: true } },
         terms: { select: { categories: true, appliesTo: true } },
       },
     })
-    vendorId = contract.vendorId
+    vendorIds = contractVendorIds(contract)
     // Union: explicit productCategory + every term.categories array.
     const cats = new Set<string>()
     if (contract.productCategory?.name) cats.add(contract.productCategory.name)
@@ -79,7 +84,7 @@ export async function computeContractMetrics(
     windowStart = contract.effectiveDate
     windowEnd = contract.expirationDate
   } else {
-    if (!vendorId) {
+    if (vendorIds.length === 0) {
       throw new Error("vendorId is required when contractId is not provided")
     }
     windowStart = input.effectiveDate
@@ -111,7 +116,7 @@ export async function computeContractMetrics(
       ? { category: { in: categories } }
       : null
 
-  if (!vendorId || !categoryClause) {
+  if (vendorIds.length === 0 || !categoryClause) {
     return {
       complianceRate: null,
       currentMarketShare: null,
@@ -174,8 +179,9 @@ export async function computeContractMetrics(
   const msComputed = computeCategoryMarketShare({
     rows: cogRowsForMetrics,
     contractCategoryMap,
-    vendorId,
+    vendorId: vendorIds,
   })
+  const vendorIdSet = new Set(vendorIds)
   const scopeSet = new Set(categories)
   let vendorSpendInCategories = 0
   let totalSpendInCategories = 0
@@ -191,7 +197,7 @@ export async function computeContractMetrics(
   let cogRowsTotal = 0
   let cogRowsOnContract = 0
   for (const row of cogRowsForMetrics) {
-    if (row.vendorId !== vendorId) continue
+    if (!row.vendorId || !vendorIdSet.has(row.vendorId)) continue
     const cat = row.category
       ? row.category
       : row.contractId
