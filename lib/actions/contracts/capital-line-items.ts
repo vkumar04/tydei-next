@@ -16,6 +16,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 
 const lineItemInputSchema = z.object({
   description: z.string().min(1, "Description required"),
@@ -76,6 +77,22 @@ export async function createCapitalLineItem(
     },
   })
   return serialize(row)
+}
+
+/**
+ * Error-as-value variant of createCapitalLineItem — returns the failure
+ * reason as a serializable value so it survives Next.js 16's production
+ * Server Action error redaction. See lib/actions/safe-result.ts.
+ */
+export async function createCapitalLineItemSafe(
+  contractId: string,
+  input: CapitalLineItemInput,
+): Promise<SafeResult<Awaited<ReturnType<typeof createCapitalLineItem>>>> {
+  return toSafeResult(
+    "createCapitalLineItem",
+    { contractId, description: input.description },
+    () => createCapitalLineItem(contractId, input),
+  )
 }
 
 /** Update an existing line item. */

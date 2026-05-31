@@ -299,9 +299,10 @@ const BASELINE_HITS = new Set<string>([
   // hooks were added; bumped again same day after the getContracts
   // perf refactor batched the per-contract category aggregate; bumped
   // again 2026-05-05 after Bug #9 added a `humanizeCreateContractError`
-  // helper above the contractDocument operations).
-  "lib/actions/contracts.ts:1454",
-  "lib/actions/contracts.ts:1474",
+  // helper above the contractDocument operations; bumped again
+  // 2026-05-31 after createContractDocumentSafe was added above them).
+  "lib/actions/contracts.ts:1473",
+  "lib/actions/contracts.ts:1493",
   // imports/case-costing-import.ts: facility-scoped via upstream batch
   "lib/actions/imports/case-costing-import.ts:243",
   "lib/actions/imports/case-costing-import.ts:380",

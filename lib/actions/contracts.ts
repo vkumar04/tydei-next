@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import {
   contractFiltersSchema,
   createContractSchema,
@@ -1442,6 +1443,24 @@ export async function createContractDocument(input: {
       url: input.url,
     },
   })
+}
+
+/**
+ * Error-as-value variant of createContractDocument — returns the failure
+ * reason as a serializable value so it survives Next.js 16's production
+ * Server Action error redaction. See lib/actions/safe-result.ts.
+ */
+export async function createContractDocumentSafe(input: {
+  contractId: string
+  name: string
+  type?: string
+  url?: string
+}): Promise<SafeResult<Awaited<ReturnType<typeof createContractDocument>>>> {
+  return toSafeResult(
+    "createContractDocument",
+    { contractId: input.contractId, name: input.name },
+    () => createContractDocument(input),
+  )
 }
 
 // ─── Delete Contract Document ───────────────────────────────────

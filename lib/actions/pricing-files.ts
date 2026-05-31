@@ -14,6 +14,9 @@ import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { populateCarveOutTermsForContract } from "@/lib/contracts/populate-carveout-terms"
+import { sanitizePricingRow } from "@/lib/contracts/pricing-row-sanitize"
+import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
+import type { ContractPricingItem } from "./pricing-files-types"
 
 // ─── List Pricing Files ─────────────────────────────────────────
 
@@ -393,18 +396,7 @@ export async function deletePricingFile(id: string): Promise<{ id: string }> {
 
 // ─── Import Contract Pricing (linked to a specific contract) ───
 
-export interface ContractPricingItem {
-  vendorItemNo: string
-  description?: string
-  category?: string
-  unitPrice: number
-  listPrice?: number
-  uom?: string
-  effectiveDate?: string
-  expirationDate?: string
-  /** Charles iMessage 2026-04-20 N17 — per-SKU carve-out rate (fraction, 0.03 = 3%). */
-  carveOutPercent?: number
-}
+export type { ContractPricingItem } from "./pricing-files-types"
 
 export async function importContractPricing(input: {
   contractId: string
@@ -461,6 +453,25 @@ export async function importContractPricing(input: {
   // Bumped maxWait + timeout so realistic vendor pricing exports
   // (10k-50k rows on Stryker / DePuy / Zimmer files) complete.
   // Larger batch size halves the round-trip count too.
+  // Vick 2026-05-31 (#4b): canonicalize category VALUES the same way COG
+  // import does (lib/actions/cog-import.ts:138-146). Pre-fix, the
+  // contract-linked pricing path stored `category` raw, so a file saying
+  // "Ortho Extremity" while COG canonicalized to "Ortho-Extremity" made
+  // cogCategoryCoveredByContract (match.ts) silently drop COG rows from
+  // this contract's coverage / market-share. createMissing mirrors COG so
+  // a new pricing category is registered (source="pricing_file") for
+  // admin audit. The closure key matches resolveCategoryNamesBulk's
+  // normalize(): trim → lowercase → collapse whitespace.
+  const categoryMap = await resolveCategoryNamesBulk(
+    dedupedItems.map((it) => it.category),
+    { createMissing: true, source: "pricing_file" },
+  )
+  const canonicalizeCategory = (raw: string | undefined): string | undefined => {
+    if (!raw) return undefined
+    const key = raw.trim().toLowerCase().replace(/\s+/g, " ")
+    return categoryMap.get(key) ?? (raw.trim() || undefined)
+  }
+
   const BATCH = 1000
   let imported = 0
 
@@ -472,22 +483,27 @@ export async function importContractPricing(input: {
       for (let i = 0; i < dedupedItems.length; i += BATCH) {
         const batch = dedupedItems.slice(i, i + BATCH)
         const result = await tx.contractPricing.createMany({
-          data: batch.map((item) => ({
-            contractId: input.contractId,
-            vendorItemNo: item.vendorItemNo,
-            description: item.description,
-            category: item.category,
-            unitPrice: item.unitPrice,
-            listPrice: item.listPrice,
-            uom: item.uom ?? "EA",
-            carveOutPercent: item.carveOutPercent ?? null,
-            effectiveDate: item.effectiveDate
-              ? new Date(item.effectiveDate)
-              : null,
-            expirationDate: item.expirationDate
-              ? new Date(item.expirationDate)
-              : null,
-          })),
+          // Vick 2026-05-31 ("carve out file is a problem"): coerce each
+          // row through sanitizePricingRow so a single bad value
+          // (carveOutPercent overflowing Decimal(5,4), NaN price, an
+          // unparseable date) degrades to a safe default instead of
+          // rolling back the whole transaction. Category is then
+          // canonicalized (#4b) so coverage matching lines up with COG.
+          data: batch.map((item) => {
+            const row = sanitizePricingRow(item)
+            return {
+              contractId: input.contractId,
+              vendorItemNo: row.vendorItemNo,
+              description: row.description,
+              category: canonicalizeCategory(row.category),
+              unitPrice: row.unitPrice,
+              listPrice: row.listPrice,
+              uom: row.uom,
+              carveOutPercent: row.carveOutPercent,
+              effectiveDate: row.effectiveDate,
+              expirationDate: row.expirationDate,
+            }
+          }),
         })
         imported += result.count
       }
@@ -523,6 +539,29 @@ export async function importContractPricing(input: {
   }
 
   return { imported, carveOutLinked }
+}
+
+/**
+ * Error-as-value variant of importContractPricing.
+ *
+ * Vick screenshot 2026-05-31: a thrown pricing-import error reached the
+ * user as the redacted "An error occurred in the Server Components
+ * render" digest, because Next.js 16 strips Server Action error
+ * messages in production builds (see df12793's createContractSafe).
+ * Returning the error as a serializable value crosses the action
+ * boundary intact, so the real failure reason reaches the toast.
+ * Call this from React/client code; keep importContractPricing for
+ * tests + non-React callers.
+ */
+export async function importContractPricingSafe(input: {
+  contractId: string
+  items: ContractPricingItem[]
+}): Promise<SafeResult<Awaited<ReturnType<typeof importContractPricing>>>> {
+  return toSafeResult(
+    "importContractPricing",
+    { contractId: input.contractId, itemCount: input.items.length },
+    () => importContractPricing(input),
+  )
 }
 
 // ─── Update a single ContractPricing record ────────────────────
