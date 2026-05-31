@@ -75,7 +75,12 @@ async function runBulkImport(
   const unmatchedNames = data.records
     .filter((r) => !r.vendorId && r.vendorName && r.vendorName.trim())
     .map((r) => r.vendorName!.trim())
-  const nameToId = await resolveVendorIdsBulk(unmatchedNames)
+  // #1 (Vick 2026-05-31): pass facilityId so the resolver applies this
+  // facility's confirmed vendor-name mappings (Pass 0) — a previously
+  // mapped name resolves straight to its vendor instead of being re-created.
+  const nameToId = await resolveVendorIdsBulk(unmatchedNames, {
+    facilityId: session.facility.id,
+  })
 
   const resolveVendorId = (record: (typeof data.records)[number]) => {
     if (record.vendorId) return record.vendorId

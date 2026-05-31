@@ -421,8 +421,11 @@ export function toSafeDate(
 export async function findOrCreateVendorByName(
   name: string | null | undefined,
   division?: string | null,
+  // #1 (Vick 2026-05-31): when the caller knows the facility, the resolver
+  // applies that facility's confirmed vendor-name mappings (Pass 0).
+  opts?: { facilityId?: string },
 ): Promise<string> {
-  const id = await resolveVendorId(name)
+  const id = await resolveVendorId(name, { facilityId: opts?.facilityId })
   if (id && division?.trim()) {
     await prisma.vendor
       .update({

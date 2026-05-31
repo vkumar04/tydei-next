@@ -174,7 +174,7 @@ export const PaymentScalarFieldEnumSchema = z.enum(['id','contractId','facilityI
 
 export const CreditScalarFieldEnumSchema = z.enum(['id','contractId','facilityId','creditDate','creditAmount','creditReason','notes','createdById','createdAt']);
 
-export const VendorNameMappingScalarFieldEnumSchema = z.enum(['id','cogVendorName','mappedVendorId','mappedVendorName','confidenceScore','isConfirmed','createdAt']);
+export const VendorNameMappingScalarFieldEnumSchema = z.enum(['id','facilityId','cogVendorName','mappedVendorId','mappedVendorName','confidenceScore','isConfirmed','createdAt']);
 
 export const CategoryMappingScalarFieldEnumSchema = z.enum(['id','cogCategory','contractCategory','similarityScore','isConfirmed','createdAt']);
 
@@ -1236,6 +1236,7 @@ export type FacilityRelations = {
   rebateInsightCaches: RebateInsightCacheWithRelations[];
   rebateInsightFlags: RebateInsightFlagWithRelations[];
   crossVendorTieIns: CrossVendorTieInWithRelations[];
+  vendorNameMappings: VendorNameMappingWithRelations[];
 };
 
 export type FacilityWithRelations = z.infer<typeof FacilitySchema> & FacilityRelations
@@ -1266,6 +1267,7 @@ export const FacilityWithRelationsSchema: z.ZodType<FacilityWithRelations> = Fac
   rebateInsightCaches: z.lazy(() => RebateInsightCacheWithRelationsSchema).array(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagWithRelationsSchema).array(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInWithRelationsSchema).array(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingWithRelationsSchema).array(),
 }))
 
 // FACILITY OPTIONAL DEFAULTS RELATION SCHEMA
@@ -1297,6 +1299,7 @@ export type FacilityOptionalDefaultsRelations = {
   rebateInsightCaches: RebateInsightCacheOptionalDefaultsWithRelations[];
   rebateInsightFlags: RebateInsightFlagOptionalDefaultsWithRelations[];
   crossVendorTieIns: CrossVendorTieInOptionalDefaultsWithRelations[];
+  vendorNameMappings: VendorNameMappingOptionalDefaultsWithRelations[];
 };
 
 export type FacilityOptionalDefaultsWithRelations = z.infer<typeof FacilityOptionalDefaultsSchema> & FacilityOptionalDefaultsRelations
@@ -1327,6 +1330,7 @@ export const FacilityOptionalDefaultsWithRelationsSchema: z.ZodType<FacilityOpti
   rebateInsightCaches: z.lazy(() => RebateInsightCacheOptionalDefaultsWithRelationsSchema).array(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagOptionalDefaultsWithRelationsSchema).array(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInOptionalDefaultsWithRelationsSchema).array(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingOptionalDefaultsWithRelationsSchema).array(),
 }))
 
 // FACILITY PARTIAL RELATION SCHEMA
@@ -1358,6 +1362,7 @@ export type FacilityPartialRelations = {
   rebateInsightCaches?: RebateInsightCachePartialWithRelations[];
   rebateInsightFlags?: RebateInsightFlagPartialWithRelations[];
   crossVendorTieIns?: CrossVendorTieInPartialWithRelations[];
+  vendorNameMappings?: VendorNameMappingPartialWithRelations[];
 };
 
 export type FacilityPartialWithRelations = z.infer<typeof FacilityPartialSchema> & FacilityPartialRelations
@@ -1388,6 +1393,7 @@ export const FacilityPartialWithRelationsSchema: z.ZodType<FacilityPartialWithRe
   rebateInsightCaches: z.lazy(() => RebateInsightCachePartialWithRelationsSchema).array(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagPartialWithRelationsSchema).array(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInPartialWithRelationsSchema).array(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingPartialWithRelationsSchema).array(),
 })).partial()
 
 export type FacilityOptionalDefaultsWithPartialRelations = z.infer<typeof FacilityOptionalDefaultsSchema> & FacilityPartialRelations
@@ -1418,6 +1424,7 @@ export const FacilityOptionalDefaultsWithPartialRelationsSchema: z.ZodType<Facil
   rebateInsightCaches: z.lazy(() => RebateInsightCachePartialWithRelationsSchema).array(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagPartialWithRelationsSchema).array(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInPartialWithRelationsSchema).array(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingPartialWithRelationsSchema).array(),
 }).partial())
 
 export type FacilityWithPartialRelations = z.infer<typeof FacilitySchema> & FacilityPartialRelations
@@ -1448,6 +1455,7 @@ export const FacilityWithPartialRelationsSchema: z.ZodType<FacilityWithPartialRe
   rebateInsightCaches: z.lazy(() => RebateInsightCachePartialWithRelationsSchema).array(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagPartialWithRelationsSchema).array(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInPartialWithRelationsSchema).array(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingPartialWithRelationsSchema).array(),
 }).partial())
 
 /////////////////////////////////////////
@@ -5864,6 +5872,7 @@ export const CreditWithPartialRelationsSchema: z.ZodType<CreditWithPartialRelati
 
 export const VendorNameMappingSchema = z.object({
   id: z.cuid(),
+  facilityId: z.string(),
   cogVendorName: z.string(),
   mappedVendorId: z.string().nullable(),
   mappedVendorName: z.string().nullable(),
@@ -5897,12 +5906,14 @@ export type VendorNameMappingOptionalDefaults = z.infer<typeof VendorNameMapping
 //------------------------------------------------------
 
 export type VendorNameMappingRelations = {
+  facility: FacilityWithRelations;
   vendor?: VendorWithRelations | null;
 };
 
 export type VendorNameMappingWithRelations = z.infer<typeof VendorNameMappingSchema> & VendorNameMappingRelations
 
 export const VendorNameMappingWithRelationsSchema: z.ZodType<VendorNameMappingWithRelations> = VendorNameMappingSchema.merge(z.object({
+  facility: z.lazy(() => FacilityWithRelationsSchema),
   vendor: z.lazy(() => VendorWithRelationsSchema).nullable(),
 }))
 
@@ -5910,12 +5921,14 @@ export const VendorNameMappingWithRelationsSchema: z.ZodType<VendorNameMappingWi
 //------------------------------------------------------
 
 export type VendorNameMappingOptionalDefaultsRelations = {
+  facility: FacilityOptionalDefaultsWithRelations;
   vendor?: VendorOptionalDefaultsWithRelations | null;
 };
 
 export type VendorNameMappingOptionalDefaultsWithRelations = z.infer<typeof VendorNameMappingOptionalDefaultsSchema> & VendorNameMappingOptionalDefaultsRelations
 
 export const VendorNameMappingOptionalDefaultsWithRelationsSchema: z.ZodType<VendorNameMappingOptionalDefaultsWithRelations> = VendorNameMappingOptionalDefaultsSchema.merge(z.object({
+  facility: z.lazy(() => FacilityOptionalDefaultsWithRelationsSchema),
   vendor: z.lazy(() => VendorOptionalDefaultsWithRelationsSchema).nullable(),
 }))
 
@@ -5923,24 +5936,28 @@ export const VendorNameMappingOptionalDefaultsWithRelationsSchema: z.ZodType<Ven
 //------------------------------------------------------
 
 export type VendorNameMappingPartialRelations = {
+  facility?: FacilityPartialWithRelations;
   vendor?: VendorPartialWithRelations | null;
 };
 
 export type VendorNameMappingPartialWithRelations = z.infer<typeof VendorNameMappingPartialSchema> & VendorNameMappingPartialRelations
 
 export const VendorNameMappingPartialWithRelationsSchema: z.ZodType<VendorNameMappingPartialWithRelations> = VendorNameMappingPartialSchema.merge(z.object({
+  facility: z.lazy(() => FacilityPartialWithRelationsSchema),
   vendor: z.lazy(() => VendorPartialWithRelationsSchema).nullable(),
 })).partial()
 
 export type VendorNameMappingOptionalDefaultsWithPartialRelations = z.infer<typeof VendorNameMappingOptionalDefaultsSchema> & VendorNameMappingPartialRelations
 
 export const VendorNameMappingOptionalDefaultsWithPartialRelationsSchema: z.ZodType<VendorNameMappingOptionalDefaultsWithPartialRelations> = VendorNameMappingOptionalDefaultsSchema.merge(z.object({
+  facility: z.lazy(() => FacilityPartialWithRelationsSchema),
   vendor: z.lazy(() => VendorPartialWithRelationsSchema).nullable(),
 }).partial())
 
 export type VendorNameMappingWithPartialRelations = z.infer<typeof VendorNameMappingSchema> & VendorNameMappingPartialRelations
 
 export const VendorNameMappingWithPartialRelationsSchema: z.ZodType<VendorNameMappingWithPartialRelations> = VendorNameMappingSchema.merge(z.object({
+  facility: z.lazy(() => FacilityPartialWithRelationsSchema),
   vendor: z.lazy(() => VendorPartialWithRelationsSchema).nullable(),
 }).partial())
 
@@ -7854,6 +7871,7 @@ export const FacilityIncludeSchema: z.ZodType<Prisma.FacilityInclude> = z.object
   rebateInsightCaches: z.union([z.boolean(),z.lazy(() => RebateInsightCacheFindManyArgsSchema)]).optional(),
   rebateInsightFlags: z.union([z.boolean(),z.lazy(() => RebateInsightFlagFindManyArgsSchema)]).optional(),
   crossVendorTieIns: z.union([z.boolean(),z.lazy(() => CrossVendorTieInFindManyArgsSchema)]).optional(),
+  vendorNameMappings: z.union([z.boolean(),z.lazy(() => VendorNameMappingFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => FacilityCountOutputTypeArgsSchema)]).optional(),
 }).strict();
 
@@ -7890,6 +7908,7 @@ export const FacilityCountOutputTypeSelectSchema: z.ZodType<Prisma.FacilityCount
   rebateInsightCaches: z.boolean().optional(),
   rebateInsightFlags: z.boolean().optional(),
   crossVendorTieIns: z.boolean().optional(),
+  vendorNameMappings: z.boolean().optional(),
 }).strict();
 
 export const FacilitySelectSchema: z.ZodType<Prisma.FacilitySelect> = z.object({
@@ -7931,6 +7950,7 @@ export const FacilitySelectSchema: z.ZodType<Prisma.FacilitySelect> = z.object({
   rebateInsightCaches: z.union([z.boolean(),z.lazy(() => RebateInsightCacheFindManyArgsSchema)]).optional(),
   rebateInsightFlags: z.union([z.boolean(),z.lazy(() => RebateInsightFlagFindManyArgsSchema)]).optional(),
   crossVendorTieIns: z.union([z.boolean(),z.lazy(() => CrossVendorTieInFindManyArgsSchema)]).optional(),
+  vendorNameMappings: z.union([z.boolean(),z.lazy(() => VendorNameMappingFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => FacilityCountOutputTypeArgsSchema)]).optional(),
 }).strict()
 
@@ -9371,6 +9391,7 @@ export const CreditSelectSchema: z.ZodType<Prisma.CreditSelect> = z.object({
 //------------------------------------------------------
 
 export const VendorNameMappingIncludeSchema: z.ZodType<Prisma.VendorNameMappingInclude> = z.object({
+  facility: z.union([z.boolean(),z.lazy(() => FacilityArgsSchema)]).optional(),
   vendor: z.union([z.boolean(),z.lazy(() => VendorArgsSchema)]).optional(),
 }).strict();
 
@@ -9381,12 +9402,14 @@ export const VendorNameMappingArgsSchema: z.ZodType<Prisma.VendorNameMappingDefa
 
 export const VendorNameMappingSelectSchema: z.ZodType<Prisma.VendorNameMappingSelect> = z.object({
   id: z.boolean().optional(),
+  facilityId: z.boolean().optional(),
   cogVendorName: z.boolean().optional(),
   mappedVendorId: z.boolean().optional(),
   mappedVendorName: z.boolean().optional(),
   confidenceScore: z.boolean().optional(),
   isConfirmed: z.boolean().optional(),
   createdAt: z.boolean().optional(),
+  facility: z.union([z.boolean(),z.lazy(() => FacilityArgsSchema)]).optional(),
   vendor: z.union([z.boolean(),z.lazy(() => VendorArgsSchema)]).optional(),
 }).strict()
 
@@ -10602,6 +10625,7 @@ export const FacilityWhereInputSchema: z.ZodType<Prisma.FacilityWhereInput> = z.
   rebateInsightCaches: z.lazy(() => RebateInsightCacheListRelationFilterSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagListRelationFilterSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInListRelationFilterSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingListRelationFilterSchema).optional(),
 });
 
 export const FacilityOrderByWithRelationInputSchema: z.ZodType<Prisma.FacilityOrderByWithRelationInput> = z.strictObject({
@@ -10643,6 +10667,7 @@ export const FacilityOrderByWithRelationInputSchema: z.ZodType<Prisma.FacilityOr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheOrderByRelationAggregateInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagOrderByRelationAggregateInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInOrderByRelationAggregateInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingOrderByRelationAggregateInputSchema).optional(),
 });
 
 export const FacilityWhereUniqueInputSchema: z.ZodType<Prisma.FacilityWhereUniqueInput> = z.union([
@@ -10699,6 +10724,7 @@ export const FacilityWhereUniqueInputSchema: z.ZodType<Prisma.FacilityWhereUniqu
   rebateInsightCaches: z.lazy(() => RebateInsightCacheListRelationFilterSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagListRelationFilterSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInListRelationFilterSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingListRelationFilterSchema).optional(),
 }));
 
 export const FacilityOrderByWithAggregationInputSchema: z.ZodType<Prisma.FacilityOrderByWithAggregationInput> = z.strictObject({
@@ -14922,45 +14948,62 @@ export const VendorNameMappingWhereInputSchema: z.ZodType<Prisma.VendorNameMappi
   OR: z.lazy(() => VendorNameMappingWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => VendorNameMappingWhereInputSchema), z.lazy(() => VendorNameMappingWhereInputSchema).array() ]).optional(),
   id: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  facilityId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
   cogVendorName: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
   mappedVendorId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   mappedVendorName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   confidenceScore: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   isConfirmed: z.union([ z.lazy(() => BoolFilterSchema), z.boolean() ]).optional(),
   createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
+  facility: z.union([ z.lazy(() => FacilityScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional(),
   vendor: z.union([ z.lazy(() => VendorNullableScalarRelationFilterSchema), z.lazy(() => VendorWhereInputSchema) ]).optional().nullable(),
 });
 
 export const VendorNameMappingOrderByWithRelationInputSchema: z.ZodType<Prisma.VendorNameMappingOrderByWithRelationInput> = z.strictObject({
   id: z.lazy(() => SortOrderSchema).optional(),
+  facilityId: z.lazy(() => SortOrderSchema).optional(),
   cogVendorName: z.lazy(() => SortOrderSchema).optional(),
   mappedVendorId: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   mappedVendorName: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   confidenceScore: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   isConfirmed: z.lazy(() => SortOrderSchema).optional(),
   createdAt: z.lazy(() => SortOrderSchema).optional(),
+  facility: z.lazy(() => FacilityOrderByWithRelationInputSchema).optional(),
   vendor: z.lazy(() => VendorOrderByWithRelationInputSchema).optional(),
 });
 
-export const VendorNameMappingWhereUniqueInputSchema: z.ZodType<Prisma.VendorNameMappingWhereUniqueInput> = z.object({
-  id: z.cuid(),
-})
+export const VendorNameMappingWhereUniqueInputSchema: z.ZodType<Prisma.VendorNameMappingWhereUniqueInput> = z.union([
+  z.object({
+    id: z.cuid(),
+    facilityId_cogVendorName: z.lazy(() => VendorNameMappingFacilityIdCogVendorNameCompoundUniqueInputSchema),
+  }),
+  z.object({
+    id: z.cuid(),
+  }),
+  z.object({
+    facilityId_cogVendorName: z.lazy(() => VendorNameMappingFacilityIdCogVendorNameCompoundUniqueInputSchema),
+  }),
+])
 .and(z.strictObject({
   id: z.cuid().optional(),
+  facilityId_cogVendorName: z.lazy(() => VendorNameMappingFacilityIdCogVendorNameCompoundUniqueInputSchema).optional(),
   AND: z.union([ z.lazy(() => VendorNameMappingWhereInputSchema), z.lazy(() => VendorNameMappingWhereInputSchema).array() ]).optional(),
   OR: z.lazy(() => VendorNameMappingWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => VendorNameMappingWhereInputSchema), z.lazy(() => VendorNameMappingWhereInputSchema).array() ]).optional(),
+  facilityId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
   cogVendorName: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
   mappedVendorId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   mappedVendorName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   confidenceScore: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   isConfirmed: z.union([ z.lazy(() => BoolFilterSchema), z.boolean() ]).optional(),
   createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
+  facility: z.union([ z.lazy(() => FacilityScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional(),
   vendor: z.union([ z.lazy(() => VendorNullableScalarRelationFilterSchema), z.lazy(() => VendorWhereInputSchema) ]).optional().nullable(),
 }));
 
 export const VendorNameMappingOrderByWithAggregationInputSchema: z.ZodType<Prisma.VendorNameMappingOrderByWithAggregationInput> = z.strictObject({
   id: z.lazy(() => SortOrderSchema).optional(),
+  facilityId: z.lazy(() => SortOrderSchema).optional(),
   cogVendorName: z.lazy(() => SortOrderSchema).optional(),
   mappedVendorId: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   mappedVendorName: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -14979,6 +15022,7 @@ export const VendorNameMappingScalarWhereWithAggregatesInputSchema: z.ZodType<Pr
   OR: z.lazy(() => VendorNameMappingScalarWhereWithAggregatesInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => VendorNameMappingScalarWhereWithAggregatesInputSchema), z.lazy(() => VendorNameMappingScalarWhereWithAggregatesInputSchema).array() ]).optional(),
   id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  facilityId: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
   cogVendorName: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
   mappedVendorId: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
   mappedVendorName: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
@@ -17285,6 +17329,7 @@ export const FacilityCreateInputSchema: z.ZodType<Prisma.FacilityCreateInput> = 
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateInput> = z.strictObject({
@@ -17324,6 +17369,7 @@ export const FacilityUncheckedCreateInputSchema: z.ZodType<Prisma.FacilityUnchec
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUpdateInputSchema: z.ZodType<Prisma.FacilityUpdateInput> = z.strictObject({
@@ -17363,6 +17409,7 @@ export const FacilityUpdateInputSchema: z.ZodType<Prisma.FacilityUpdateInput> = 
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateInput> = z.strictObject({
@@ -17402,6 +17449,7 @@ export const FacilityUncheckedUpdateInputSchema: z.ZodType<Prisma.FacilityUnchec
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityCreateManyInputSchema: z.ZodType<Prisma.FacilityCreateManyInput> = z.strictObject({
@@ -21902,11 +21950,13 @@ export const VendorNameMappingCreateInputSchema: z.ZodType<Prisma.VendorNameMapp
   confidenceScore: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   isConfirmed: z.boolean().optional(),
   createdAt: z.coerce.date().optional(),
+  facility: z.lazy(() => FacilityCreateNestedOneWithoutVendorNameMappingsInputSchema),
   vendor: z.lazy(() => VendorCreateNestedOneWithoutVendorNameMappingsInputSchema).optional(),
 });
 
 export const VendorNameMappingUncheckedCreateInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedCreateInput> = z.strictObject({
   id: z.cuid().optional(),
+  facilityId: z.string(),
   cogVendorName: z.string(),
   mappedVendorId: z.string().optional().nullable(),
   mappedVendorName: z.string().optional().nullable(),
@@ -21922,11 +21972,13 @@ export const VendorNameMappingUpdateInputSchema: z.ZodType<Prisma.VendorNameMapp
   confidenceScore: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   isConfirmed: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  facility: z.lazy(() => FacilityUpdateOneRequiredWithoutVendorNameMappingsNestedInputSchema).optional(),
   vendor: z.lazy(() => VendorUpdateOneWithoutVendorNameMappingsNestedInputSchema).optional(),
 });
 
 export const VendorNameMappingUncheckedUpdateInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedUpdateInput> = z.strictObject({
   id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  facilityId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   cogVendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   mappedVendorId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mappedVendorName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -21937,6 +21989,7 @@ export const VendorNameMappingUncheckedUpdateInputSchema: z.ZodType<Prisma.Vendo
 
 export const VendorNameMappingCreateManyInputSchema: z.ZodType<Prisma.VendorNameMappingCreateManyInput> = z.strictObject({
   id: z.cuid().optional(),
+  facilityId: z.string(),
   cogVendorName: z.string(),
   mappedVendorId: z.string().optional().nullable(),
   mappedVendorName: z.string().optional().nullable(),
@@ -21956,6 +22009,7 @@ export const VendorNameMappingUpdateManyMutationInputSchema: z.ZodType<Prisma.Ve
 
 export const VendorNameMappingUncheckedUpdateManyInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedUpdateManyInput> = z.strictObject({
   id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  facilityId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   cogVendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   mappedVendorId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mappedVendorName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -24323,6 +24377,12 @@ export const CrossVendorTieInListRelationFilterSchema: z.ZodType<Prisma.CrossVen
   none: z.lazy(() => CrossVendorTieInWhereInputSchema).optional(),
 });
 
+export const VendorNameMappingListRelationFilterSchema: z.ZodType<Prisma.VendorNameMappingListRelationFilter> = z.strictObject({
+  every: z.lazy(() => VendorNameMappingWhereInputSchema).optional(),
+  some: z.lazy(() => VendorNameMappingWhereInputSchema).optional(),
+  none: z.lazy(() => VendorNameMappingWhereInputSchema).optional(),
+});
+
 export const PendingContractOrderByRelationAggregateInputSchema: z.ZodType<Prisma.PendingContractOrderByRelationAggregateInput> = z.strictObject({
   _count: z.lazy(() => SortOrderSchema).optional(),
 });
@@ -24396,6 +24456,10 @@ export const RebateInsightCacheOrderByRelationAggregateInputSchema: z.ZodType<Pr
 });
 
 export const CrossVendorTieInOrderByRelationAggregateInputSchema: z.ZodType<Prisma.CrossVendorTieInOrderByRelationAggregateInput> = z.strictObject({
+  _count: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const VendorNameMappingOrderByRelationAggregateInputSchema: z.ZodType<Prisma.VendorNameMappingOrderByRelationAggregateInput> = z.strictObject({
   _count: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -24494,12 +24558,6 @@ export const VendorListRelationFilterSchema: z.ZodType<Prisma.VendorListRelation
   none: z.lazy(() => VendorWhereInputSchema).optional(),
 });
 
-export const VendorNameMappingListRelationFilterSchema: z.ZodType<Prisma.VendorNameMappingListRelationFilter> = z.strictObject({
-  every: z.lazy(() => VendorNameMappingWhereInputSchema).optional(),
-  some: z.lazy(() => VendorNameMappingWhereInputSchema).optional(),
-  none: z.lazy(() => VendorNameMappingWhereInputSchema).optional(),
-});
-
 export const VendorDivisionListRelationFilterSchema: z.ZodType<Prisma.VendorDivisionListRelationFilter> = z.strictObject({
   every: z.lazy(() => VendorDivisionWhereInputSchema).optional(),
   some: z.lazy(() => VendorDivisionWhereInputSchema).optional(),
@@ -24519,10 +24577,6 @@ export const CrossVendorTieInMemberListRelationFilterSchema: z.ZodType<Prisma.Cr
 });
 
 export const VendorOrderByRelationAggregateInputSchema: z.ZodType<Prisma.VendorOrderByRelationAggregateInput> = z.strictObject({
-  _count: z.lazy(() => SortOrderSchema).optional(),
-});
-
-export const VendorNameMappingOrderByRelationAggregateInputSchema: z.ZodType<Prisma.VendorNameMappingOrderByRelationAggregateInput> = z.strictObject({
   _count: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -27740,8 +27794,14 @@ export const CreditSumOrderByAggregateInputSchema: z.ZodType<Prisma.CreditSumOrd
   creditAmount: z.lazy(() => SortOrderSchema).optional(),
 });
 
+export const VendorNameMappingFacilityIdCogVendorNameCompoundUniqueInputSchema: z.ZodType<Prisma.VendorNameMappingFacilityIdCogVendorNameCompoundUniqueInput> = z.strictObject({
+  facilityId: z.string(),
+  cogVendorName: z.string(),
+});
+
 export const VendorNameMappingCountOrderByAggregateInputSchema: z.ZodType<Prisma.VendorNameMappingCountOrderByAggregateInput> = z.strictObject({
   id: z.lazy(() => SortOrderSchema).optional(),
+  facilityId: z.lazy(() => SortOrderSchema).optional(),
   cogVendorName: z.lazy(() => SortOrderSchema).optional(),
   mappedVendorId: z.lazy(() => SortOrderSchema).optional(),
   mappedVendorName: z.lazy(() => SortOrderSchema).optional(),
@@ -27756,6 +27816,7 @@ export const VendorNameMappingAvgOrderByAggregateInputSchema: z.ZodType<Prisma.V
 
 export const VendorNameMappingMaxOrderByAggregateInputSchema: z.ZodType<Prisma.VendorNameMappingMaxOrderByAggregateInput> = z.strictObject({
   id: z.lazy(() => SortOrderSchema).optional(),
+  facilityId: z.lazy(() => SortOrderSchema).optional(),
   cogVendorName: z.lazy(() => SortOrderSchema).optional(),
   mappedVendorId: z.lazy(() => SortOrderSchema).optional(),
   mappedVendorName: z.lazy(() => SortOrderSchema).optional(),
@@ -27766,6 +27827,7 @@ export const VendorNameMappingMaxOrderByAggregateInputSchema: z.ZodType<Prisma.V
 
 export const VendorNameMappingMinOrderByAggregateInputSchema: z.ZodType<Prisma.VendorNameMappingMinOrderByAggregateInput> = z.strictObject({
   id: z.lazy(() => SortOrderSchema).optional(),
+  facilityId: z.lazy(() => SortOrderSchema).optional(),
   cogVendorName: z.lazy(() => SortOrderSchema).optional(),
   mappedVendorId: z.lazy(() => SortOrderSchema).optional(),
   mappedVendorName: z.lazy(() => SortOrderSchema).optional(),
@@ -29787,6 +29849,13 @@ export const CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema: z.ZodTy
   connect: z.union([ z.lazy(() => CrossVendorTieInWhereUniqueInputSchema), z.lazy(() => CrossVendorTieInWhereUniqueInputSchema).array() ]).optional(),
 });
 
+export const VendorNameMappingCreateNestedManyWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingCreateNestedManyWithoutFacilityInput> = z.strictObject({
+  create: z.union([ z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema).array(), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => VendorNameMappingCreateOrConnectWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingCreateOrConnectWithoutFacilityInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => VendorNameMappingCreateManyFacilityInputEnvelopeSchema).optional(),
+  connect: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+});
+
 export const ContractUncheckedCreateNestedManyWithoutFacilityInputSchema: z.ZodType<Prisma.ContractUncheckedCreateNestedManyWithoutFacilityInput> = z.strictObject({
   create: z.union([ z.lazy(() => ContractCreateWithoutFacilityInputSchema), z.lazy(() => ContractCreateWithoutFacilityInputSchema).array(), z.lazy(() => ContractUncheckedCreateWithoutFacilityInputSchema), z.lazy(() => ContractUncheckedCreateWithoutFacilityInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => ContractCreateOrConnectWithoutFacilityInputSchema), z.lazy(() => ContractCreateOrConnectWithoutFacilityInputSchema).array() ]).optional(),
@@ -29946,6 +30015,13 @@ export const CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema
   connectOrCreate: z.union([ z.lazy(() => CrossVendorTieInCreateOrConnectWithoutFacilityInputSchema), z.lazy(() => CrossVendorTieInCreateOrConnectWithoutFacilityInputSchema).array() ]).optional(),
   createMany: z.lazy(() => CrossVendorTieInCreateManyFacilityInputEnvelopeSchema).optional(),
   connect: z.union([ z.lazy(() => CrossVendorTieInWhereUniqueInputSchema), z.lazy(() => CrossVendorTieInWhereUniqueInputSchema).array() ]).optional(),
+});
+
+export const VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInput> = z.strictObject({
+  create: z.union([ z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema).array(), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => VendorNameMappingCreateOrConnectWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingCreateOrConnectWithoutFacilityInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => VendorNameMappingCreateManyFacilityInputEnvelopeSchema).optional(),
+  connect: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
 });
 
 export const EnumFacilityTypeFieldUpdateOperationsInputSchema: z.ZodType<Prisma.EnumFacilityTypeFieldUpdateOperationsInput> = z.strictObject({
@@ -30302,6 +30378,20 @@ export const CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema: z.ZodTy
   deleteMany: z.union([ z.lazy(() => CrossVendorTieInScalarWhereInputSchema), z.lazy(() => CrossVendorTieInScalarWhereInputSchema).array() ]).optional(),
 });
 
+export const VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema: z.ZodType<Prisma.VendorNameMappingUpdateManyWithoutFacilityNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema).array(), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => VendorNameMappingCreateOrConnectWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingCreateOrConnectWithoutFacilityInputSchema).array() ]).optional(),
+  upsert: z.union([ z.lazy(() => VendorNameMappingUpsertWithWhereUniqueWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUpsertWithWhereUniqueWithoutFacilityInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => VendorNameMappingCreateManyFacilityInputEnvelopeSchema).optional(),
+  set: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+  disconnect: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+  delete: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+  connect: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+  update: z.union([ z.lazy(() => VendorNameMappingUpdateWithWhereUniqueWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUpdateWithWhereUniqueWithoutFacilityInputSchema).array() ]).optional(),
+  updateMany: z.union([ z.lazy(() => VendorNameMappingUpdateManyWithWhereWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUpdateManyWithWhereWithoutFacilityInputSchema).array() ]).optional(),
+  deleteMany: z.union([ z.lazy(() => VendorNameMappingScalarWhereInputSchema), z.lazy(() => VendorNameMappingScalarWhereInputSchema).array() ]).optional(),
+});
+
 export const ContractUncheckedUpdateManyWithoutFacilityNestedInputSchema: z.ZodType<Prisma.ContractUncheckedUpdateManyWithoutFacilityNestedInput> = z.strictObject({
   create: z.union([ z.lazy(() => ContractCreateWithoutFacilityInputSchema), z.lazy(() => ContractCreateWithoutFacilityInputSchema).array(), z.lazy(() => ContractUncheckedCreateWithoutFacilityInputSchema), z.lazy(() => ContractUncheckedCreateWithoutFacilityInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => ContractCreateOrConnectWithoutFacilityInputSchema), z.lazy(() => ContractCreateOrConnectWithoutFacilityInputSchema).array() ]).optional(),
@@ -30622,6 +30712,20 @@ export const CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema
   update: z.union([ z.lazy(() => CrossVendorTieInUpdateWithWhereUniqueWithoutFacilityInputSchema), z.lazy(() => CrossVendorTieInUpdateWithWhereUniqueWithoutFacilityInputSchema).array() ]).optional(),
   updateMany: z.union([ z.lazy(() => CrossVendorTieInUpdateManyWithWhereWithoutFacilityInputSchema), z.lazy(() => CrossVendorTieInUpdateManyWithWhereWithoutFacilityInputSchema).array() ]).optional(),
   deleteMany: z.union([ z.lazy(() => CrossVendorTieInScalarWhereInputSchema), z.lazy(() => CrossVendorTieInScalarWhereInputSchema).array() ]).optional(),
+});
+
+export const VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema).array(), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => VendorNameMappingCreateOrConnectWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingCreateOrConnectWithoutFacilityInputSchema).array() ]).optional(),
+  upsert: z.union([ z.lazy(() => VendorNameMappingUpsertWithWhereUniqueWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUpsertWithWhereUniqueWithoutFacilityInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => VendorNameMappingCreateManyFacilityInputEnvelopeSchema).optional(),
+  set: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+  disconnect: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+  delete: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+  connect: z.union([ z.lazy(() => VendorNameMappingWhereUniqueInputSchema), z.lazy(() => VendorNameMappingWhereUniqueInputSchema).array() ]).optional(),
+  update: z.union([ z.lazy(() => VendorNameMappingUpdateWithWhereUniqueWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUpdateWithWhereUniqueWithoutFacilityInputSchema).array() ]).optional(),
+  updateMany: z.union([ z.lazy(() => VendorNameMappingUpdateManyWithWhereWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUpdateManyWithWhereWithoutFacilityInputSchema).array() ]).optional(),
+  deleteMany: z.union([ z.lazy(() => VendorNameMappingScalarWhereInputSchema), z.lazy(() => VendorNameMappingScalarWhereInputSchema).array() ]).optional(),
 });
 
 export const VendorCreateNestedOneWithoutChildVendorsInputSchema: z.ZodType<Prisma.VendorCreateNestedOneWithoutChildVendorsInput> = z.strictObject({
@@ -33998,10 +34102,24 @@ export const UserUpdateOneWithoutCreditsNestedInputSchema: z.ZodType<Prisma.User
   update: z.union([ z.lazy(() => UserUpdateToOneWithWhereWithoutCreditsInputSchema), z.lazy(() => UserUpdateWithoutCreditsInputSchema), z.lazy(() => UserUncheckedUpdateWithoutCreditsInputSchema) ]).optional(),
 });
 
+export const FacilityCreateNestedOneWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.FacilityCreateNestedOneWithoutVendorNameMappingsInput> = z.strictObject({
+  create: z.union([ z.lazy(() => FacilityCreateWithoutVendorNameMappingsInputSchema), z.lazy(() => FacilityUncheckedCreateWithoutVendorNameMappingsInputSchema) ]).optional(),
+  connectOrCreate: z.lazy(() => FacilityCreateOrConnectWithoutVendorNameMappingsInputSchema).optional(),
+  connect: z.lazy(() => FacilityWhereUniqueInputSchema).optional(),
+});
+
 export const VendorCreateNestedOneWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.VendorCreateNestedOneWithoutVendorNameMappingsInput> = z.strictObject({
   create: z.union([ z.lazy(() => VendorCreateWithoutVendorNameMappingsInputSchema), z.lazy(() => VendorUncheckedCreateWithoutVendorNameMappingsInputSchema) ]).optional(),
   connectOrCreate: z.lazy(() => VendorCreateOrConnectWithoutVendorNameMappingsInputSchema).optional(),
   connect: z.lazy(() => VendorWhereUniqueInputSchema).optional(),
+});
+
+export const FacilityUpdateOneRequiredWithoutVendorNameMappingsNestedInputSchema: z.ZodType<Prisma.FacilityUpdateOneRequiredWithoutVendorNameMappingsNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => FacilityCreateWithoutVendorNameMappingsInputSchema), z.lazy(() => FacilityUncheckedCreateWithoutVendorNameMappingsInputSchema) ]).optional(),
+  connectOrCreate: z.lazy(() => FacilityCreateOrConnectWithoutVendorNameMappingsInputSchema).optional(),
+  upsert: z.lazy(() => FacilityUpsertWithoutVendorNameMappingsInputSchema).optional(),
+  connect: z.lazy(() => FacilityWhereUniqueInputSchema).optional(),
+  update: z.union([ z.lazy(() => FacilityUpdateToOneWithWhereWithoutVendorNameMappingsInputSchema), z.lazy(() => FacilityUpdateWithoutVendorNameMappingsInputSchema), z.lazy(() => FacilityUncheckedUpdateWithoutVendorNameMappingsInputSchema) ]).optional(),
 });
 
 export const VendorUpdateOneWithoutVendorNameMappingsNestedInputSchema: z.ZodType<Prisma.VendorUpdateOneWithoutVendorNameMappingsNestedInput> = z.strictObject({
@@ -36675,6 +36793,7 @@ export const FacilityCreateWithoutOrganizationInputSchema: z.ZodType<Prisma.Faci
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutOrganizationInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutOrganizationInput> = z.strictObject({
@@ -36713,6 +36832,7 @@ export const FacilityUncheckedCreateWithoutOrganizationInputSchema: z.ZodType<Pr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutOrganizationInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutOrganizationInput> = z.strictObject({
@@ -36891,6 +37011,7 @@ export const FacilityUpdateWithoutOrganizationInputSchema: z.ZodType<Prisma.Faci
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutOrganizationInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutOrganizationInput> = z.strictObject({
@@ -36929,6 +37050,7 @@ export const FacilityUncheckedUpdateWithoutOrganizationInputSchema: z.ZodType<Pr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutOrganizationInputSchema: z.ZodType<Prisma.VendorUpsertWithoutOrganizationInput> = z.strictObject({
@@ -37296,6 +37418,7 @@ export const FacilityCreateWithoutHealthSystemInputSchema: z.ZodType<Prisma.Faci
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutHealthSystemInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutHealthSystemInput> = z.strictObject({
@@ -37334,6 +37457,7 @@ export const FacilityUncheckedCreateWithoutHealthSystemInputSchema: z.ZodType<Pr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutHealthSystemInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutHealthSystemInput> = z.strictObject({
@@ -38493,6 +38617,36 @@ export const CrossVendorTieInCreateManyFacilityInputEnvelopeSchema: z.ZodType<Pr
   skipDuplicates: z.boolean().optional(),
 });
 
+export const VendorNameMappingCreateWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingCreateWithoutFacilityInput> = z.strictObject({
+  id: z.cuid().optional(),
+  cogVendorName: z.string(),
+  mappedVendorName: z.string().optional().nullable(),
+  confidenceScore: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  isConfirmed: z.boolean().optional(),
+  createdAt: z.coerce.date().optional(),
+  vendor: z.lazy(() => VendorCreateNestedOneWithoutVendorNameMappingsInputSchema).optional(),
+});
+
+export const VendorNameMappingUncheckedCreateWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedCreateWithoutFacilityInput> = z.strictObject({
+  id: z.cuid().optional(),
+  cogVendorName: z.string(),
+  mappedVendorId: z.string().optional().nullable(),
+  mappedVendorName: z.string().optional().nullable(),
+  confidenceScore: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  isConfirmed: z.boolean().optional(),
+  createdAt: z.coerce.date().optional(),
+});
+
+export const VendorNameMappingCreateOrConnectWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingCreateOrConnectWithoutFacilityInput> = z.strictObject({
+  where: z.lazy(() => VendorNameMappingWhereUniqueInputSchema),
+  create: z.union([ z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema) ]),
+});
+
+export const VendorNameMappingCreateManyFacilityInputEnvelopeSchema: z.ZodType<Prisma.VendorNameMappingCreateManyFacilityInputEnvelope> = z.strictObject({
+  data: z.union([ z.lazy(() => VendorNameMappingCreateManyFacilityInputSchema), z.lazy(() => VendorNameMappingCreateManyFacilityInputSchema).array() ]),
+  skipDuplicates: z.boolean().optional(),
+});
+
 export const HealthSystemUpsertWithoutFacilitiesInputSchema: z.ZodType<Prisma.HealthSystemUpsertWithoutFacilitiesInput> = z.strictObject({
   update: z.union([ z.lazy(() => HealthSystemUpdateWithoutFacilitiesInputSchema), z.lazy(() => HealthSystemUncheckedUpdateWithoutFacilitiesInputSchema) ]),
   create: z.union([ z.lazy(() => HealthSystemCreateWithoutFacilitiesInputSchema), z.lazy(() => HealthSystemUncheckedCreateWithoutFacilitiesInputSchema) ]),
@@ -39322,6 +39476,36 @@ export const CrossVendorTieInScalarWhereInputSchema: z.ZodType<Prisma.CrossVendo
   updatedAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
 });
 
+export const VendorNameMappingUpsertWithWhereUniqueWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingUpsertWithWhereUniqueWithoutFacilityInput> = z.strictObject({
+  where: z.lazy(() => VendorNameMappingWhereUniqueInputSchema),
+  update: z.union([ z.lazy(() => VendorNameMappingUpdateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUncheckedUpdateWithoutFacilityInputSchema) ]),
+  create: z.union([ z.lazy(() => VendorNameMappingCreateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUncheckedCreateWithoutFacilityInputSchema) ]),
+});
+
+export const VendorNameMappingUpdateWithWhereUniqueWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingUpdateWithWhereUniqueWithoutFacilityInput> = z.strictObject({
+  where: z.lazy(() => VendorNameMappingWhereUniqueInputSchema),
+  data: z.union([ z.lazy(() => VendorNameMappingUpdateWithoutFacilityInputSchema), z.lazy(() => VendorNameMappingUncheckedUpdateWithoutFacilityInputSchema) ]),
+});
+
+export const VendorNameMappingUpdateManyWithWhereWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingUpdateManyWithWhereWithoutFacilityInput> = z.strictObject({
+  where: z.lazy(() => VendorNameMappingScalarWhereInputSchema),
+  data: z.union([ z.lazy(() => VendorNameMappingUpdateManyMutationInputSchema), z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityInputSchema) ]),
+});
+
+export const VendorNameMappingScalarWhereInputSchema: z.ZodType<Prisma.VendorNameMappingScalarWhereInput> = z.strictObject({
+  AND: z.union([ z.lazy(() => VendorNameMappingScalarWhereInputSchema), z.lazy(() => VendorNameMappingScalarWhereInputSchema).array() ]).optional(),
+  OR: z.lazy(() => VendorNameMappingScalarWhereInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => VendorNameMappingScalarWhereInputSchema), z.lazy(() => VendorNameMappingScalarWhereInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  facilityId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  cogVendorName: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  mappedVendorId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  mappedVendorName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  confidenceScore: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  isConfirmed: z.union([ z.lazy(() => BoolFilterSchema), z.boolean() ]).optional(),
+  createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
+});
+
 export const VendorCreateWithoutChildVendorsInputSchema: z.ZodType<Prisma.VendorCreateWithoutChildVendorsInput> = z.strictObject({
   id: z.cuid().optional(),
   name: z.string(),
@@ -40021,10 +40205,12 @@ export const VendorNameMappingCreateWithoutVendorInputSchema: z.ZodType<Prisma.V
   confidenceScore: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   isConfirmed: z.boolean().optional(),
   createdAt: z.coerce.date().optional(),
+  facility: z.lazy(() => FacilityCreateNestedOneWithoutVendorNameMappingsInputSchema),
 });
 
 export const VendorNameMappingUncheckedCreateWithoutVendorInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedCreateWithoutVendorInput> = z.strictObject({
   id: z.cuid().optional(),
+  facilityId: z.string(),
   cogVendorName: z.string(),
   mappedVendorName: z.string().optional().nullable(),
   confidenceScore: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
@@ -40524,19 +40710,6 @@ export const VendorNameMappingUpdateManyWithWhereWithoutVendorInputSchema: z.Zod
   data: z.union([ z.lazy(() => VendorNameMappingUpdateManyMutationInputSchema), z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutVendorInputSchema) ]),
 });
 
-export const VendorNameMappingScalarWhereInputSchema: z.ZodType<Prisma.VendorNameMappingScalarWhereInput> = z.strictObject({
-  AND: z.union([ z.lazy(() => VendorNameMappingScalarWhereInputSchema), z.lazy(() => VendorNameMappingScalarWhereInputSchema).array() ]).optional(),
-  OR: z.lazy(() => VendorNameMappingScalarWhereInputSchema).array().optional(),
-  NOT: z.union([ z.lazy(() => VendorNameMappingScalarWhereInputSchema), z.lazy(() => VendorNameMappingScalarWhereInputSchema).array() ]).optional(),
-  id: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
-  cogVendorName: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
-  mappedVendorId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
-  mappedVendorName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
-  confidenceScore: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
-  isConfirmed: z.union([ z.lazy(() => BoolFilterSchema), z.boolean() ]).optional(),
-  createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
-});
-
 export const ConnectionUpsertWithWhereUniqueWithoutVendorInputSchema: z.ZodType<Prisma.ConnectionUpsertWithWhereUniqueWithoutVendorInput> = z.strictObject({
   where: z.lazy(() => ConnectionWhereUniqueInputSchema),
   update: z.union([ z.lazy(() => ConnectionUpdateWithoutVendorInputSchema), z.lazy(() => ConnectionUncheckedUpdateWithoutVendorInputSchema) ]),
@@ -40698,6 +40871,7 @@ export const FacilityCreateWithoutCrossVendorTieInsInputSchema: z.ZodType<Prisma
   payorContracts: z.lazy(() => PayorContractCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutCrossVendorTieInsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutCrossVendorTieInsInput> = z.strictObject({
@@ -40736,6 +40910,7 @@ export const FacilityUncheckedCreateWithoutCrossVendorTieInsInputSchema: z.ZodTy
   payorContracts: z.lazy(() => PayorContractUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutCrossVendorTieInsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutCrossVendorTieInsInput> = z.strictObject({
@@ -40816,6 +40991,7 @@ export const FacilityUpdateWithoutCrossVendorTieInsInputSchema: z.ZodType<Prisma
   payorContracts: z.lazy(() => PayorContractUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutCrossVendorTieInsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutCrossVendorTieInsInput> = z.strictObject({
@@ -40854,6 +41030,7 @@ export const FacilityUncheckedUpdateWithoutCrossVendorTieInsInputSchema: z.ZodTy
   payorContracts: z.lazy(() => PayorContractUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const CrossVendorTieInMemberUpsertWithWhereUniqueWithoutCrossVendorTieInInputSchema: z.ZodType<Prisma.CrossVendorTieInMemberUpsertWithWhereUniqueWithoutCrossVendorTieInInput> = z.strictObject({
@@ -41707,6 +41884,7 @@ export const FacilityCreateWithoutContractsInputSchema: z.ZodType<Prisma.Facilit
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutContractsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutContractsInput> = z.strictObject({
@@ -41745,6 +41923,7 @@ export const FacilityUncheckedCreateWithoutContractsInputSchema: z.ZodType<Prism
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutContractsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutContractsInput> = z.strictObject({
@@ -42789,6 +42968,7 @@ export const FacilityUpdateWithoutContractsInputSchema: z.ZodType<Prisma.Facilit
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutContractsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutContractsInput> = z.strictObject({
@@ -42827,6 +43007,7 @@ export const FacilityUncheckedUpdateWithoutContractsInputSchema: z.ZodType<Prism
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const ProductCategoryUpsertWithoutContractsInputSchema: z.ZodType<Prisma.ProductCategoryUpsertWithoutContractsInput> = z.strictObject({
@@ -43962,6 +44143,7 @@ export const FacilityCreateWithoutContractFacilitiesInputSchema: z.ZodType<Prism
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutContractFacilitiesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutContractFacilitiesInput> = z.strictObject({
@@ -44000,6 +44182,7 @@ export const FacilityUncheckedCreateWithoutContractFacilitiesInputSchema: z.ZodT
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutContractFacilitiesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutContractFacilitiesInput> = z.strictObject({
@@ -44177,6 +44360,7 @@ export const FacilityUpdateWithoutContractFacilitiesInputSchema: z.ZodType<Prism
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutContractFacilitiesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutContractFacilitiesInput> = z.strictObject({
@@ -44215,6 +44399,7 @@ export const FacilityUncheckedUpdateWithoutContractFacilitiesInputSchema: z.ZodT
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const ContractCreateWithoutTermsInputSchema: z.ZodType<Prisma.ContractCreateWithoutTermsInput> = z.strictObject({
@@ -47220,6 +47405,7 @@ export const FacilityCreateWithoutContractPeriodsInputSchema: z.ZodType<Prisma.F
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutContractPeriodsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutContractPeriodsInput> = z.strictObject({
@@ -47258,6 +47444,7 @@ export const FacilityUncheckedCreateWithoutContractPeriodsInputSchema: z.ZodType
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutContractPeriodsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutContractPeriodsInput> = z.strictObject({
@@ -47479,6 +47666,7 @@ export const FacilityUpdateWithoutContractPeriodsInputSchema: z.ZodType<Prisma.F
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutContractPeriodsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutContractPeriodsInput> = z.strictObject({
@@ -47517,6 +47705,7 @@ export const FacilityUncheckedUpdateWithoutContractPeriodsInputSchema: z.ZodType
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const RebateUpsertWithWhereUniqueWithoutPeriodInputSchema: z.ZodType<Prisma.RebateUpsertWithWhereUniqueWithoutPeriodInput> = z.strictObject({
@@ -48368,6 +48557,7 @@ export const FacilityCreateWithoutPendingContractsInputSchema: z.ZodType<Prisma.
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutPendingContractsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutPendingContractsInput> = z.strictObject({
@@ -48406,6 +48596,7 @@ export const FacilityUncheckedCreateWithoutPendingContractsInputSchema: z.ZodTyp
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutPendingContractsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutPendingContractsInput> = z.strictObject({
@@ -48545,6 +48736,7 @@ export const FacilityUpdateWithoutPendingContractsInputSchema: z.ZodType<Prisma.
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutPendingContractsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutPendingContractsInput> = z.strictObject({
@@ -48583,6 +48775,7 @@ export const FacilityUncheckedUpdateWithoutPendingContractsInputSchema: z.ZodTyp
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const ContractCreateWithoutChangeProposalsInputSchema: z.ZodType<Prisma.ContractCreateWithoutChangeProposalsInput> = z.strictObject({
@@ -48861,6 +49054,7 @@ export const FacilityCreateWithoutCogRecordsInputSchema: z.ZodType<Prisma.Facili
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutCogRecordsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutCogRecordsInput> = z.strictObject({
@@ -48899,6 +49093,7 @@ export const FacilityUncheckedCreateWithoutCogRecordsInputSchema: z.ZodType<Pris
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutCogRecordsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutCogRecordsInput> = z.strictObject({
@@ -49087,6 +49282,7 @@ export const FacilityUpdateWithoutCogRecordsInputSchema: z.ZodType<Prisma.Facili
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutCogRecordsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutCogRecordsInput> = z.strictObject({
@@ -49125,6 +49321,7 @@ export const FacilityUncheckedUpdateWithoutCogRecordsInputSchema: z.ZodType<Pris
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutCogRecordsInputSchema: z.ZodType<Prisma.VendorUpsertWithoutCogRecordsInput> = z.strictObject({
@@ -49388,6 +49585,7 @@ export const FacilityCreateWithoutPricingFilesInputSchema: z.ZodType<Prisma.Faci
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutPricingFilesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutPricingFilesInput> = z.strictObject({
@@ -49426,6 +49624,7 @@ export const FacilityUncheckedCreateWithoutPricingFilesInputSchema: z.ZodType<Pr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutPricingFilesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutPricingFilesInput> = z.strictObject({
@@ -49565,6 +49764,7 @@ export const FacilityUpdateWithoutPricingFilesInputSchema: z.ZodType<Prisma.Faci
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutPricingFilesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutPricingFilesInput> = z.strictObject({
@@ -49603,6 +49803,7 @@ export const FacilityUncheckedUpdateWithoutPricingFilesInputSchema: z.ZodType<Pr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityCreateWithoutFileImportsInputSchema: z.ZodType<Prisma.FacilityCreateWithoutFileImportsInput> = z.strictObject({
@@ -49641,6 +49842,7 @@ export const FacilityCreateWithoutFileImportsInputSchema: z.ZodType<Prisma.Facil
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutFileImportsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutFileImportsInput> = z.strictObject({
@@ -49679,6 +49881,7 @@ export const FacilityUncheckedCreateWithoutFileImportsInputSchema: z.ZodType<Pri
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutFileImportsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutFileImportsInput> = z.strictObject({
@@ -49876,6 +50079,7 @@ export const FacilityUpdateWithoutFileImportsInputSchema: z.ZodType<Prisma.Facil
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutFileImportsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutFileImportsInput> = z.strictObject({
@@ -49914,6 +50118,7 @@ export const FacilityUncheckedUpdateWithoutFileImportsInputSchema: z.ZodType<Pri
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutFileImportsInputSchema: z.ZodType<Prisma.VendorUpsertWithoutFileImportsInput> = z.strictObject({
@@ -50170,6 +50375,7 @@ export const FacilityCreateWithoutAlertsInputSchema: z.ZodType<Prisma.FacilityCr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutAlertsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutAlertsInput> = z.strictObject({
@@ -50208,6 +50414,7 @@ export const FacilityUncheckedCreateWithoutAlertsInputSchema: z.ZodType<Prisma.F
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutAlertsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutAlertsInput> = z.strictObject({
@@ -50464,6 +50671,7 @@ export const FacilityUpdateWithoutAlertsInputSchema: z.ZodType<Prisma.FacilityUp
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutAlertsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutAlertsInput> = z.strictObject({
@@ -50502,6 +50710,7 @@ export const FacilityUncheckedUpdateWithoutAlertsInputSchema: z.ZodType<Prisma.F
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutAlertsInputSchema: z.ZodType<Prisma.VendorUpsertWithoutAlertsInput> = z.strictObject({
@@ -50625,6 +50834,7 @@ export const FacilityCreateWithoutPurchaseOrdersInputSchema: z.ZodType<Prisma.Fa
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutPurchaseOrdersInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutPurchaseOrdersInput> = z.strictObject({
@@ -50663,6 +50873,7 @@ export const FacilityUncheckedCreateWithoutPurchaseOrdersInputSchema: z.ZodType<
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutPurchaseOrdersInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutPurchaseOrdersInput> = z.strictObject({
@@ -50993,6 +51204,7 @@ export const FacilityUpdateWithoutPurchaseOrdersInputSchema: z.ZodType<Prisma.Fa
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutPurchaseOrdersInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutPurchaseOrdersInput> = z.strictObject({
@@ -51031,6 +51243,7 @@ export const FacilityUncheckedUpdateWithoutPurchaseOrdersInputSchema: z.ZodType<
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutPurchaseOrdersInputSchema: z.ZodType<Prisma.VendorUpsertWithoutPurchaseOrdersInput> = z.strictObject({
@@ -51404,6 +51617,7 @@ export const FacilityCreateWithoutInvoicesInputSchema: z.ZodType<Prisma.Facility
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutInvoicesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutInvoicesInput> = z.strictObject({
@@ -51442,6 +51656,7 @@ export const FacilityUncheckedCreateWithoutInvoicesInputSchema: z.ZodType<Prisma
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutInvoicesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutInvoicesInput> = z.strictObject({
@@ -51648,6 +51863,7 @@ export const FacilityUpdateWithoutInvoicesInputSchema: z.ZodType<Prisma.Facility
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutInvoicesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutInvoicesInput> = z.strictObject({
@@ -51686,6 +51902,7 @@ export const FacilityUncheckedUpdateWithoutInvoicesInputSchema: z.ZodType<Prisma
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutInvoicesInputSchema: z.ZodType<Prisma.VendorUpsertWithoutInvoicesInput> = z.strictObject({
@@ -52452,6 +52669,7 @@ export const FacilityCreateWithoutRebatesInputSchema: z.ZodType<Prisma.FacilityC
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutRebatesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutRebatesInput> = z.strictObject({
@@ -52490,6 +52708,7 @@ export const FacilityUncheckedCreateWithoutRebatesInputSchema: z.ZodType<Prisma.
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutRebatesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutRebatesInput> = z.strictObject({
@@ -52710,6 +52929,7 @@ export const FacilityUpdateWithoutRebatesInputSchema: z.ZodType<Prisma.FacilityU
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutRebatesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutRebatesInput> = z.strictObject({
@@ -52748,6 +52968,7 @@ export const FacilityUncheckedUpdateWithoutRebatesInputSchema: z.ZodType<Prisma.
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const ContractPeriodUpsertWithoutRebatesInputSchema: z.ZodType<Prisma.ContractPeriodUpsertWithoutRebatesInput> = z.strictObject({
@@ -53192,6 +53413,7 @@ export const FacilityCreateWithoutPaymentsInputSchema: z.ZodType<Prisma.Facility
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutPaymentsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutPaymentsInput> = z.strictObject({
@@ -53230,6 +53452,7 @@ export const FacilityUncheckedCreateWithoutPaymentsInputSchema: z.ZodType<Prisma
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutPaymentsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutPaymentsInput> = z.strictObject({
@@ -53462,6 +53685,7 @@ export const FacilityUpdateWithoutPaymentsInputSchema: z.ZodType<Prisma.Facility
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutPaymentsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutPaymentsInput> = z.strictObject({
@@ -53500,6 +53724,7 @@ export const FacilityUncheckedUpdateWithoutPaymentsInputSchema: z.ZodType<Prisma
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const UserUpsertWithoutPaymentsInputSchema: z.ZodType<Prisma.UserUpsertWithoutPaymentsInput> = z.strictObject({
@@ -53716,6 +53941,7 @@ export const FacilityCreateWithoutCreditEntriesInputSchema: z.ZodType<Prisma.Fac
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutCreditEntriesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutCreditEntriesInput> = z.strictObject({
@@ -53754,6 +53980,7 @@ export const FacilityUncheckedCreateWithoutCreditEntriesInputSchema: z.ZodType<P
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutCreditEntriesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutCreditEntriesInput> = z.strictObject({
@@ -53986,6 +54213,7 @@ export const FacilityUpdateWithoutCreditEntriesInputSchema: z.ZodType<Prisma.Fac
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutCreditEntriesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutCreditEntriesInput> = z.strictObject({
@@ -54024,6 +54252,7 @@ export const FacilityUncheckedUpdateWithoutCreditEntriesInputSchema: z.ZodType<P
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const UserUpsertWithoutCreditsInputSchema: z.ZodType<Prisma.UserUpsertWithoutCreditsInput> = z.strictObject({
@@ -54085,6 +54314,89 @@ export const UserUncheckedUpdateWithoutCreditsInputSchema: z.ZodType<Prisma.User
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutUserNestedInputSchema).optional(),
   notifications: z.lazy(() => NotificationUncheckedUpdateManyWithoutUserNestedInputSchema).optional(),
   contractExtractionCache: z.lazy(() => ContractExtractionCacheUncheckedUpdateManyWithoutUserNestedInputSchema).optional(),
+});
+
+export const FacilityCreateWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.FacilityCreateWithoutVendorNameMappingsInput> = z.strictObject({
+  id: z.cuid().optional(),
+  name: z.string(),
+  type: z.lazy(() => FacilityTypeSchema).optional(),
+  address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zip: z.string().optional().nullable(),
+  beds: z.number().optional().nullable(),
+  status: z.string().optional(),
+  createdAt: z.coerce.date().optional(),
+  updatedAt: z.coerce.date().optional(),
+  healthSystem: z.lazy(() => HealthSystemCreateNestedOneWithoutFacilitiesInputSchema).optional(),
+  organization: z.lazy(() => OrganizationCreateNestedOneWithoutFacilityInputSchema).optional(),
+  contracts: z.lazy(() => ContractCreateNestedManyWithoutFacilityInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractCreateNestedManyWithoutFacilityInputSchema).optional(),
+  cogRecords: z.lazy(() => COGRecordCreateNestedManyWithoutFacilityInputSchema).optional(),
+  pricingFiles: z.lazy(() => PricingFileCreateNestedManyWithoutFacilityInputSchema).optional(),
+  fileImports: z.lazy(() => FileImportCreateNestedManyWithoutFacilityInputSchema).optional(),
+  purchaseOrders: z.lazy(() => PurchaseOrderCreateNestedManyWithoutFacilityInputSchema).optional(),
+  invoices: z.lazy(() => InvoiceCreateNestedManyWithoutFacilityInputSchema).optional(),
+  alerts: z.lazy(() => AlertCreateNestedManyWithoutFacilityInputSchema).optional(),
+  contractPeriods: z.lazy(() => ContractPeriodCreateNestedManyWithoutFacilityInputSchema).optional(),
+  rebates: z.lazy(() => RebateCreateNestedManyWithoutFacilityInputSchema).optional(),
+  payments: z.lazy(() => PaymentCreateNestedManyWithoutFacilityInputSchema).optional(),
+  creditEntries: z.lazy(() => CreditCreateNestedManyWithoutFacilityInputSchema).optional(),
+  cases: z.lazy(() => CaseCreateNestedManyWithoutFacilityInputSchema).optional(),
+  surgeonUsages: z.lazy(() => SurgeonUsageCreateNestedManyWithoutFacilityInputSchema).optional(),
+  connections: z.lazy(() => ConnectionCreateNestedManyWithoutFacilityInputSchema).optional(),
+  featureFlags: z.lazy(() => FeatureFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
+  aiCredits: z.lazy(() => AICreditCreateNestedManyWithoutFacilityInputSchema).optional(),
+  reportSchedules: z.lazy(() => ReportScheduleCreateNestedManyWithoutFacilityInputSchema).optional(),
+  contractFacilities: z.lazy(() => ContractFacilityCreateNestedManyWithoutFacilityInputSchema).optional(),
+  payorContracts: z.lazy(() => PayorContractCreateNestedManyWithoutFacilityInputSchema).optional(),
+  rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
+  rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
+  crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+});
+
+export const FacilityUncheckedCreateWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutVendorNameMappingsInput> = z.strictObject({
+  id: z.cuid().optional(),
+  name: z.string(),
+  type: z.lazy(() => FacilityTypeSchema).optional(),
+  address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zip: z.string().optional().nullable(),
+  beds: z.number().optional().nullable(),
+  healthSystemId: z.string().optional().nullable(),
+  status: z.string().optional(),
+  organizationId: z.string().optional().nullable(),
+  createdAt: z.coerce.date().optional(),
+  updatedAt: z.coerce.date().optional(),
+  contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  cogRecords: z.lazy(() => COGRecordUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  pricingFiles: z.lazy(() => PricingFileUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  fileImports: z.lazy(() => FileImportUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  purchaseOrders: z.lazy(() => PurchaseOrderUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  invoices: z.lazy(() => InvoiceUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  alerts: z.lazy(() => AlertUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  contractPeriods: z.lazy(() => ContractPeriodUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  rebates: z.lazy(() => RebateUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  payments: z.lazy(() => PaymentUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  creditEntries: z.lazy(() => CreditUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  cases: z.lazy(() => CaseUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  surgeonUsages: z.lazy(() => SurgeonUsageUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  connections: z.lazy(() => ConnectionUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  featureFlags: z.lazy(() => FeatureFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  aiCredits: z.lazy(() => AICreditUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  reportSchedules: z.lazy(() => ReportScheduleUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  contractFacilities: z.lazy(() => ContractFacilityUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  payorContracts: z.lazy(() => PayorContractUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+});
+
+export const FacilityCreateOrConnectWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutVendorNameMappingsInput> = z.strictObject({
+  where: z.lazy(() => FacilityWhereUniqueInputSchema),
+  create: z.union([ z.lazy(() => FacilityCreateWithoutVendorNameMappingsInputSchema), z.lazy(() => FacilityUncheckedCreateWithoutVendorNameMappingsInputSchema) ]),
 });
 
 export const VendorCreateWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.VendorCreateWithoutVendorNameMappingsInput> = z.strictObject({
@@ -54164,6 +54476,95 @@ export const VendorUncheckedCreateWithoutVendorNameMappingsInputSchema: z.ZodTyp
 export const VendorCreateOrConnectWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.VendorCreateOrConnectWithoutVendorNameMappingsInput> = z.strictObject({
   where: z.lazy(() => VendorWhereUniqueInputSchema),
   create: z.union([ z.lazy(() => VendorCreateWithoutVendorNameMappingsInputSchema), z.lazy(() => VendorUncheckedCreateWithoutVendorNameMappingsInputSchema) ]),
+});
+
+export const FacilityUpsertWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.FacilityUpsertWithoutVendorNameMappingsInput> = z.strictObject({
+  update: z.union([ z.lazy(() => FacilityUpdateWithoutVendorNameMappingsInputSchema), z.lazy(() => FacilityUncheckedUpdateWithoutVendorNameMappingsInputSchema) ]),
+  create: z.union([ z.lazy(() => FacilityCreateWithoutVendorNameMappingsInputSchema), z.lazy(() => FacilityUncheckedCreateWithoutVendorNameMappingsInputSchema) ]),
+  where: z.lazy(() => FacilityWhereInputSchema).optional(),
+});
+
+export const FacilityUpdateToOneWithWhereWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.FacilityUpdateToOneWithWhereWithoutVendorNameMappingsInput> = z.strictObject({
+  where: z.lazy(() => FacilityWhereInputSchema).optional(),
+  data: z.union([ z.lazy(() => FacilityUpdateWithoutVendorNameMappingsInputSchema), z.lazy(() => FacilityUncheckedUpdateWithoutVendorNameMappingsInputSchema) ]),
+});
+
+export const FacilityUpdateWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.FacilityUpdateWithoutVendorNameMappingsInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  type: z.union([ z.lazy(() => FacilityTypeSchema), z.lazy(() => EnumFacilityTypeFieldUpdateOperationsInputSchema) ]).optional(),
+  address: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  city: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  state: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  zip: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  beds: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  status: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  healthSystem: z.lazy(() => HealthSystemUpdateOneWithoutFacilitiesNestedInputSchema).optional(),
+  organization: z.lazy(() => OrganizationUpdateOneWithoutFacilityNestedInputSchema).optional(),
+  contracts: z.lazy(() => ContractUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  cogRecords: z.lazy(() => COGRecordUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  pricingFiles: z.lazy(() => PricingFileUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  fileImports: z.lazy(() => FileImportUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  purchaseOrders: z.lazy(() => PurchaseOrderUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  invoices: z.lazy(() => InvoiceUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  alerts: z.lazy(() => AlertUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  contractPeriods: z.lazy(() => ContractPeriodUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  rebates: z.lazy(() => RebateUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  payments: z.lazy(() => PaymentUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  creditEntries: z.lazy(() => CreditUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  cases: z.lazy(() => CaseUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  surgeonUsages: z.lazy(() => SurgeonUsageUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  connections: z.lazy(() => ConnectionUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  featureFlags: z.lazy(() => FeatureFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  aiCredits: z.lazy(() => AICreditUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  reportSchedules: z.lazy(() => ReportScheduleUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  contractFacilities: z.lazy(() => ContractFacilityUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  payorContracts: z.lazy(() => PayorContractUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+});
+
+export const FacilityUncheckedUpdateWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutVendorNameMappingsInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  type: z.union([ z.lazy(() => FacilityTypeSchema), z.lazy(() => EnumFacilityTypeFieldUpdateOperationsInputSchema) ]).optional(),
+  address: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  city: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  state: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  zip: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  beds: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  healthSystemId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  status: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  organizationId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  cogRecords: z.lazy(() => COGRecordUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  pricingFiles: z.lazy(() => PricingFileUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  fileImports: z.lazy(() => FileImportUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  purchaseOrders: z.lazy(() => PurchaseOrderUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  invoices: z.lazy(() => InvoiceUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  alerts: z.lazy(() => AlertUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  contractPeriods: z.lazy(() => ContractPeriodUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  rebates: z.lazy(() => RebateUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  payments: z.lazy(() => PaymentUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  creditEntries: z.lazy(() => CreditUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  cases: z.lazy(() => CaseUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  surgeonUsages: z.lazy(() => SurgeonUsageUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  connections: z.lazy(() => ConnectionUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  featureFlags: z.lazy(() => FeatureFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  aiCredits: z.lazy(() => AICreditUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  reportSchedules: z.lazy(() => ReportScheduleUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  contractFacilities: z.lazy(() => ContractFacilityUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  payorContracts: z.lazy(() => PayorContractUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutVendorNameMappingsInputSchema: z.ZodType<Prisma.VendorUpsertWithoutVendorNameMappingsInput> = z.strictObject({
@@ -54451,6 +54852,7 @@ export const FacilityCreateWithoutCasesInputSchema: z.ZodType<Prisma.FacilityCre
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutCasesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutCasesInput> = z.strictObject({
@@ -54489,6 +54891,7 @@ export const FacilityUncheckedCreateWithoutCasesInputSchema: z.ZodType<Prisma.Fa
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutCasesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutCasesInput> = z.strictObject({
@@ -54601,6 +55004,7 @@ export const FacilityUpdateWithoutCasesInputSchema: z.ZodType<Prisma.FacilityUpd
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutCasesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutCasesInput> = z.strictObject({
@@ -54639,6 +55043,7 @@ export const FacilityUncheckedUpdateWithoutCasesInputSchema: z.ZodType<Prisma.Fa
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const CaseProcedureUpsertWithWhereUniqueWithoutCaseRecordInputSchema: z.ZodType<Prisma.CaseProcedureUpsertWithWhereUniqueWithoutCaseRecordInput> = z.strictObject({
@@ -55061,6 +55466,7 @@ export const FacilityCreateWithoutSurgeonUsagesInputSchema: z.ZodType<Prisma.Fac
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutSurgeonUsagesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutSurgeonUsagesInput> = z.strictObject({
@@ -55099,6 +55505,7 @@ export const FacilityUncheckedCreateWithoutSurgeonUsagesInputSchema: z.ZodType<P
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutSurgeonUsagesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutSurgeonUsagesInput> = z.strictObject({
@@ -55276,6 +55683,7 @@ export const FacilityUpdateWithoutSurgeonUsagesInputSchema: z.ZodType<Prisma.Fac
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutSurgeonUsagesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutSurgeonUsagesInput> = z.strictObject({
@@ -55314,6 +55722,7 @@ export const FacilityUncheckedUpdateWithoutSurgeonUsagesInputSchema: z.ZodType<P
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityCreateWithoutPayorContractsInputSchema: z.ZodType<Prisma.FacilityCreateWithoutPayorContractsInput> = z.strictObject({
@@ -55352,6 +55761,7 @@ export const FacilityCreateWithoutPayorContractsInputSchema: z.ZodType<Prisma.Fa
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutPayorContractsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutPayorContractsInput> = z.strictObject({
@@ -55390,6 +55800,7 @@ export const FacilityUncheckedCreateWithoutPayorContractsInputSchema: z.ZodType<
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutPayorContractsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutPayorContractsInput> = z.strictObject({
@@ -55444,6 +55855,7 @@ export const FacilityUpdateWithoutPayorContractsInputSchema: z.ZodType<Prisma.Fa
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutPayorContractsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutPayorContractsInput> = z.strictObject({
@@ -55482,6 +55894,7 @@ export const FacilityUncheckedUpdateWithoutPayorContractsInputSchema: z.ZodType<
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityCreateWithoutConnectionsInputSchema: z.ZodType<Prisma.FacilityCreateWithoutConnectionsInput> = z.strictObject({
@@ -55520,6 +55933,7 @@ export const FacilityCreateWithoutConnectionsInputSchema: z.ZodType<Prisma.Facil
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutConnectionsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutConnectionsInput> = z.strictObject({
@@ -55558,6 +55972,7 @@ export const FacilityUncheckedCreateWithoutConnectionsInputSchema: z.ZodType<Pri
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutConnectionsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutConnectionsInput> = z.strictObject({
@@ -55691,6 +56106,7 @@ export const FacilityUpdateWithoutConnectionsInputSchema: z.ZodType<Prisma.Facil
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutConnectionsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutConnectionsInput> = z.strictObject({
@@ -55729,6 +56145,7 @@ export const FacilityUncheckedUpdateWithoutConnectionsInputSchema: z.ZodType<Pri
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutConnectionsInputSchema: z.ZodType<Prisma.VendorUpsertWithoutConnectionsInput> = z.strictObject({
@@ -55852,6 +56269,7 @@ export const FacilityCreateWithoutFeatureFlagsInputSchema: z.ZodType<Prisma.Faci
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutFeatureFlagsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutFeatureFlagsInput> = z.strictObject({
@@ -55890,6 +56308,7 @@ export const FacilityUncheckedCreateWithoutFeatureFlagsInputSchema: z.ZodType<Pr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutFeatureFlagsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutFeatureFlagsInput> = z.strictObject({
@@ -55944,6 +56363,7 @@ export const FacilityUpdateWithoutFeatureFlagsInputSchema: z.ZodType<Prisma.Faci
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutFeatureFlagsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutFeatureFlagsInput> = z.strictObject({
@@ -55982,6 +56402,7 @@ export const FacilityUncheckedUpdateWithoutFeatureFlagsInputSchema: z.ZodType<Pr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityCreateWithoutAiCreditsInputSchema: z.ZodType<Prisma.FacilityCreateWithoutAiCreditsInput> = z.strictObject({
@@ -56020,6 +56441,7 @@ export const FacilityCreateWithoutAiCreditsInputSchema: z.ZodType<Prisma.Facilit
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutAiCreditsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutAiCreditsInput> = z.strictObject({
@@ -56058,6 +56480,7 @@ export const FacilityUncheckedCreateWithoutAiCreditsInputSchema: z.ZodType<Prism
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutAiCreditsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutAiCreditsInput> = z.strictObject({
@@ -56223,6 +56646,7 @@ export const FacilityUpdateWithoutAiCreditsInputSchema: z.ZodType<Prisma.Facilit
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutAiCreditsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutAiCreditsInput> = z.strictObject({
@@ -56261,6 +56685,7 @@ export const FacilityUncheckedUpdateWithoutAiCreditsInputSchema: z.ZodType<Prism
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const VendorUpsertWithoutAiCreditsInputSchema: z.ZodType<Prisma.VendorUpsertWithoutAiCreditsInput> = z.strictObject({
@@ -56603,6 +57028,7 @@ export const FacilityCreateWithoutReportSchedulesInputSchema: z.ZodType<Prisma.F
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutReportSchedulesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutReportSchedulesInput> = z.strictObject({
@@ -56641,6 +57067,7 @@ export const FacilityUncheckedCreateWithoutReportSchedulesInputSchema: z.ZodType
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutReportSchedulesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutReportSchedulesInput> = z.strictObject({
@@ -56695,6 +57122,7 @@ export const FacilityUpdateWithoutReportSchedulesInputSchema: z.ZodType<Prisma.F
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutReportSchedulesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutReportSchedulesInput> = z.strictObject({
@@ -56733,6 +57161,7 @@ export const FacilityUncheckedUpdateWithoutReportSchedulesInputSchema: z.ZodType
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const UserCreateWithoutContractExtractionCacheInputSchema: z.ZodType<Prisma.UserCreateWithoutContractExtractionCacheInput> = z.strictObject({
@@ -56887,6 +57316,7 @@ export const FacilityCreateWithoutRebateInsightCachesInputSchema: z.ZodType<Pris
   payorContracts: z.lazy(() => PayorContractCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutRebateInsightCachesInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutRebateInsightCachesInput> = z.strictObject({
@@ -56925,6 +57355,7 @@ export const FacilityUncheckedCreateWithoutRebateInsightCachesInputSchema: z.Zod
   payorContracts: z.lazy(() => PayorContractUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutRebateInsightCachesInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutRebateInsightCachesInput> = z.strictObject({
@@ -56979,6 +57410,7 @@ export const FacilityUpdateWithoutRebateInsightCachesInputSchema: z.ZodType<Pris
   payorContracts: z.lazy(() => PayorContractUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutRebateInsightCachesInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutRebateInsightCachesInput> = z.strictObject({
@@ -57017,6 +57449,7 @@ export const FacilityUncheckedUpdateWithoutRebateInsightCachesInputSchema: z.Zod
   payorContracts: z.lazy(() => PayorContractUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityCreateWithoutRebateInsightFlagsInputSchema: z.ZodType<Prisma.FacilityCreateWithoutRebateInsightFlagsInput> = z.strictObject({
@@ -57055,6 +57488,7 @@ export const FacilityCreateWithoutRebateInsightFlagsInputSchema: z.ZodType<Prism
   payorContracts: z.lazy(() => PayorContractCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightCaches: z.lazy(() => RebateInsightCacheCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityUncheckedCreateWithoutRebateInsightFlagsInputSchema: z.ZodType<Prisma.FacilityUncheckedCreateWithoutRebateInsightFlagsInput> = z.strictObject({
@@ -57093,6 +57527,7 @@ export const FacilityUncheckedCreateWithoutRebateInsightFlagsInputSchema: z.ZodT
   payorContracts: z.lazy(() => PayorContractUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedCreateNestedManyWithoutFacilityInputSchema).optional(),
 });
 
 export const FacilityCreateOrConnectWithoutRebateInsightFlagsInputSchema: z.ZodType<Prisma.FacilityCreateOrConnectWithoutRebateInsightFlagsInput> = z.strictObject({
@@ -57202,6 +57637,7 @@ export const FacilityUpdateWithoutRebateInsightFlagsInputSchema: z.ZodType<Prism
   payorContracts: z.lazy(() => PayorContractUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutRebateInsightFlagsInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutRebateInsightFlagsInput> = z.strictObject({
@@ -57240,6 +57676,7 @@ export const FacilityUncheckedUpdateWithoutRebateInsightFlagsInputSchema: z.ZodT
   payorContracts: z.lazy(() => PayorContractUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const UserUpsertWithoutRebateInsightFlagsInputSchema: z.ZodType<Prisma.UserUpsertWithoutRebateInsightFlagsInput> = z.strictObject({
@@ -58290,6 +58727,7 @@ export const FacilityUpdateWithoutHealthSystemInputSchema: z.ZodType<Prisma.Faci
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateWithoutHealthSystemInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateWithoutHealthSystemInput> = z.strictObject({
@@ -58328,6 +58766,7 @@ export const FacilityUncheckedUpdateWithoutHealthSystemInputSchema: z.ZodType<Pr
   rebateInsightCaches: z.lazy(() => RebateInsightCacheUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   rebateInsightFlags: z.lazy(() => RebateInsightFlagUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   crossVendorTieIns: z.lazy(() => CrossVendorTieInUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+  vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
 });
 
 export const FacilityUncheckedUpdateManyWithoutHealthSystemInputSchema: z.ZodType<Prisma.FacilityUncheckedUpdateManyWithoutHealthSystemInput> = z.strictObject({
@@ -58724,6 +59163,16 @@ export const CrossVendorTieInCreateManyFacilityInputSchema: z.ZodType<Prisma.Cro
   expirationDate: z.coerce.date(),
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
+});
+
+export const VendorNameMappingCreateManyFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingCreateManyFacilityInput> = z.strictObject({
+  id: z.cuid().optional(),
+  cogVendorName: z.string(),
+  mappedVendorId: z.string().optional().nullable(),
+  mappedVendorName: z.string().optional().nullable(),
+  confidenceScore: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  isConfirmed: z.boolean().optional(),
+  createdAt: z.coerce.date().optional(),
 });
 
 export const ContractUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.ContractUpdateWithoutFacilityInput> = z.strictObject({
@@ -59931,6 +60380,36 @@ export const CrossVendorTieInUncheckedUpdateManyWithoutFacilityInputSchema: z.Zo
   updatedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
 
+export const VendorNameMappingUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingUpdateWithoutFacilityInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  cogVendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  mappedVendorName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  confidenceScore: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  isConfirmed: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  vendor: z.lazy(() => VendorUpdateOneWithoutVendorNameMappingsNestedInputSchema).optional(),
+});
+
+export const VendorNameMappingUncheckedUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedUpdateWithoutFacilityInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  cogVendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  mappedVendorId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  mappedVendorName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  confidenceScore: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  isConfirmed: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const VendorNameMappingUncheckedUpdateManyWithoutFacilityInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedUpdateManyWithoutFacilityInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  cogVendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  mappedVendorId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  mappedVendorName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  confidenceScore: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  isConfirmed: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
 export const VendorCreateManyParentVendorInputSchema: z.ZodType<Prisma.VendorCreateManyParentVendorInput> = z.strictObject({
   id: z.cuid().optional(),
   name: z.string(),
@@ -60139,6 +60618,7 @@ export const AlertCreateManyVendorInputSchema: z.ZodType<Prisma.AlertCreateManyV
 
 export const VendorNameMappingCreateManyVendorInputSchema: z.ZodType<Prisma.VendorNameMappingCreateManyVendorInput> = z.strictObject({
   id: z.cuid().optional(),
+  facilityId: z.string(),
   cogVendorName: z.string(),
   mappedVendorName: z.string().optional().nullable(),
   confidenceScore: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
@@ -60915,10 +61395,12 @@ export const VendorNameMappingUpdateWithoutVendorInputSchema: z.ZodType<Prisma.V
   confidenceScore: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   isConfirmed: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  facility: z.lazy(() => FacilityUpdateOneRequiredWithoutVendorNameMappingsNestedInputSchema).optional(),
 });
 
 export const VendorNameMappingUncheckedUpdateWithoutVendorInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedUpdateWithoutVendorInput> = z.strictObject({
   id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  facilityId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   cogVendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   mappedVendorName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   confidenceScore: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
@@ -60928,6 +61410,7 @@ export const VendorNameMappingUncheckedUpdateWithoutVendorInputSchema: z.ZodType
 
 export const VendorNameMappingUncheckedUpdateManyWithoutVendorInputSchema: z.ZodType<Prisma.VendorNameMappingUncheckedUpdateManyWithoutVendorInput> = z.strictObject({
   id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  facilityId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   cogVendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   mappedVendorName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   confidenceScore: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
