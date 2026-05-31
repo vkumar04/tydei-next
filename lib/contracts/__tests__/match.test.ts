@@ -60,6 +60,31 @@ describe("matchCOGRecordToContract", () => {
     expect(result.status).toBe("out_of_scope")
   })
 
+  // #2 (Vick 2026-05-31): grouped contracts must match COG from ANY
+  // participating vendor against the contract's price-file ref numbers.
+  it("matches a COG row from an ADDITIONAL group vendor by ref number", () => {
+    const record = { ...baseRecord, vendorId: "vendor-2" } // a group member, not primary
+    const grouped = baseContract({
+      vendorId: "vendor-1", // primary
+      additionalVendorIds: ["vendor-2", "vendor-3"],
+    })
+    const result = matchCOGRecordToContract(record, [grouped])
+    expect(result.status).toBe("on_contract")
+    if (result.status === "on_contract") {
+      expect(result.contractId).toBe("c-1")
+    }
+  })
+
+  it("does NOT match a vendor that is not in the group", () => {
+    const record = { ...baseRecord, vendorId: "vendor-99" } // not primary, not additional
+    const grouped = baseContract({
+      vendorId: "vendor-1",
+      additionalVendorIds: ["vendor-2"],
+    })
+    const result = matchCOGRecordToContract(record, [grouped])
+    expect(result.status).toBe("off_contract_item")
+  })
+
   it("returns out_of_scope when transactionDate is outside contract window", () => {
     const r = { ...baseRecord, transactionDate: new Date("2027-01-15") }
     const result = matchCOGRecordToContract(r, [baseContract()])
