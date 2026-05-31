@@ -773,6 +773,44 @@ export async function createContract(
   }
 }
 
+/**
+ * Error-as-value variant of createContract for production resilience.
+ *
+ * Vick 2026-05-30: in production Next.js 16 builds, Errors thrown
+ * from Server Actions are stripped — the client only sees a generic
+ * "An error occurred in the Server Components render." digest. Even
+ * a thoughtfully-humanized `throw new Error(...)` is discarded for
+ * security. This wrapper RETURNS the error as a serializable value
+ * instead, which crosses the action boundary intact.
+ *
+ * Use this from React Query mutations; throw from the mutationFn
+ * if `!result.ok` so the rest of the React Query API (onError,
+ * isError) keeps working.
+ */
+export async function createContractSafe(
+  input: CreateContractInput & { terms?: TermFormValues[] },
+): Promise<
+  | { ok: true; contract: Awaited<ReturnType<typeof _createContractImpl>> }
+  | { ok: false; error: string; code?: string }
+> {
+  try {
+    const contract = await _createContractImpl(input)
+    return { ok: true, contract }
+  } catch (err) {
+    console.error("[createContractSafe]", err, {
+      name: input.name,
+      vendorId: input.vendorId,
+      contractType: input.contractType,
+      termCount: Array.isArray(input.terms) ? input.terms.length : 0,
+    })
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as { code?: unknown }).code ?? "")
+        : undefined
+    return { ok: false, error: humanizeCreateContractError(err), code }
+  }
+}
+
 function humanizeCreateContractError(err: unknown): string {
   // Zod validation: include the path + first issue.
   if (err && typeof err === "object" && "issues" in err) {

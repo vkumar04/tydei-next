@@ -6,7 +6,7 @@ import {
   getContracts,
   getContract,
   getContractStats,
-  createContract,
+  createContractSafe,
   updateContract,
   deleteContract,
 } from "@/lib/actions/contracts"
@@ -62,7 +62,22 @@ export function useCreateContract() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: createContract,
+    // Use createContractSafe (returns an error-as-value) so the actual
+    // failure reason survives Next.js 16's server-action error
+    // redaction. If we threw from the action the client would only
+    // ever see "An error occurred in the Server Components render"
+    // and the user's toast would be the generic digest-hash fallback.
+    mutationFn: async (
+      input: Parameters<typeof createContractSafe>[0],
+    ) => {
+      const result = await createContractSafe(input)
+      if (!result.ok) {
+        const err = new Error(result.error)
+        if (result.code) (err as { code?: string }).code = result.code
+        throw err
+      }
+      return result.contract
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all })
       toast.success("Contract created successfully")
@@ -93,13 +108,24 @@ function humanizeServerActionError(
 ): string {
   const msg =
     error instanceof Error ? error.message : String(error ?? "")
-  if (!msg) return fallback
+  // Next.js 16 production builds redact server-action error messages
+  // and attach a `digest` hash that correlates to the server log
+  // entry. The hash is the only way to find the actual error in the
+  // logs, so surface it in the toast — pre-fix the user got a
+  // generic "ask an engineer" message with no handle into the log.
+  const digest =
+    error instanceof Error && "digest" in error
+      ? String((error as { digest?: unknown }).digest ?? "")
+      : ""
+  if (!msg) return digest ? `${fallback} (digest ${digest})` : fallback
   if (
     msg.startsWith("An error occurred in the Server Components render") ||
     msg.includes("specific message could not be") ||
     msg.includes("digest property")
   ) {
-    return `${fallback}. The server logged the specific reason — ask an engineer to grep the server logs for the digest hash.`
+    return digest
+      ? `${fallback}. Server-log digest: ${digest}. Share this hash with engineering to find the underlying error.`
+      : `${fallback}. The server logged the specific reason — ask an engineer to grep the server logs for the digest hash.`
   }
   return msg
 }
