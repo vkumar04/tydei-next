@@ -16,7 +16,7 @@ import {
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import { resolveVendorIdsBulk } from "@/lib/vendors/resolve"
-import { resolveCategoryNamesBulk } from "@/lib/categories/resolve"
+import { resolveCategoryNamesBulk, isPlaceholderCategory } from "@/lib/categories/resolve"
 
 // How far back (ms) to look when scoping "this import" stats without a
 // FileImport row. Matches the plan's interim approximation — replace with
@@ -145,7 +145,8 @@ async function runBulkImport(
     { createMissing: true, source: "cog" },
   )
   const canonicalize = (raw: string | null | undefined): string | null => {
-    if (!raw) return null
+    // Bug 5: "0" / numeric / placeholder is not a category.
+    if (!raw || isPlaceholderCategory(raw)) return null
     const key = raw.trim().toLowerCase().replace(/\s+/g, " ")
     return canonicalCategoryMap.get(key) ?? (raw.trim() || null)
   }

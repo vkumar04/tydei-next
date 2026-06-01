@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
-import { resolveCategoryNamesBulk } from "@/lib/categories/resolve"
+import { resolveCategoryNamesBulk, isPlaceholderCategory } from "@/lib/categories/resolve"
 import {
   pricingFiltersSchema,
   bulkImportPricingSchema,
@@ -132,7 +132,8 @@ export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
     { createMissing: true, source: "pricing_file" },
   )
   const canonicalize = (raw: string | null | undefined): string | null => {
-    if (!raw) return null
+    // Bug 5: "0" / numeric / placeholder is not a category.
+    if (!raw || isPlaceholderCategory(raw)) return null
     const key = raw.trim().toLowerCase().replace(/\s+/g, " ")
     return canonicalCategoryMap.get(key) ?? (raw.trim() || null)
   }
@@ -467,7 +468,8 @@ export async function importContractPricing(input: {
     { createMissing: true, source: "pricing_file" },
   )
   const canonicalizeCategory = (raw: string | undefined): string | undefined => {
-    if (!raw) return undefined
+    // Bug 5: "0" / numeric / placeholder is not a category.
+    if (!raw || isPlaceholderCategory(raw)) return undefined
     const key = raw.trim().toLowerCase().replace(/\s+/g, " ")
     return categoryMap.get(key) ?? (raw.trim() || undefined)
   }

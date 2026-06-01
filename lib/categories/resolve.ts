@@ -26,6 +26,21 @@ type CategoryRow = { id: string; name: string }
 const normalize = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, " ")
 
 /**
+ * Bug 5 (Vick 2026-06-01): COG/price files ship junk in the category
+ * column — a literal "0", a numeric code, or an "N/A"-style placeholder
+ * (the report screenshot showed a category named "0" holding 5.4% market
+ * share). Categories are product-category NAMES, never bare numbers, so
+ * treat these as uncategorized (null) rather than coining a "0" category.
+ */
+export function isPlaceholderCategory(s: string): boolean {
+  const t = s.trim().toLowerCase()
+  if (!t) return true
+  // Pure number / punctuation: "0", "0.0", "123", "-", "—".
+  if (/^[\d.,\s/+\-–—]+$/.test(t)) return true
+  return ["n/a", "na", "none", "null", "unknown", "tbd", "n.a.", "#n/a"].includes(t)
+}
+
+/**
  * #4 (Vick 2026-05-31): load confirmed CategoryMapping rules as a lookup
  * map — normalized `cogCategory` → `contractCategory`. This is the
  * category twin of the vendor resolver's confirmed-mapping Pass 0 (#1):
@@ -70,7 +85,7 @@ export async function resolveCategoryName(
 ): Promise<string | null> {
   const createMissing = opts.createMissing ?? false
   const trimmed = (rawName ?? "").trim()
-  if (!trimmed) return null
+  if (!trimmed || isPlaceholderCategory(trimmed)) return null
 
   // Pass 0 (#4): a confirmed category mapping wins over the
   // ProductCategory match, so mapped variants unify on every import.
@@ -118,7 +133,9 @@ export async function resolveCategoryNamesBulk(
     new Set(
       rawNames
         .map((n) => (n ?? "").trim())
-        .filter(Boolean),
+        // Bug 5: drop "0" / numeric / placeholder junk so it never becomes
+        // a category (or maps via Pass 0). Callers leave the row null.
+        .filter((n) => n && !isPlaceholderCategory(n)),
     ),
   )
   if (unique.length === 0) return result

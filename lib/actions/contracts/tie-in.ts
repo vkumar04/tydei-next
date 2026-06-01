@@ -262,9 +262,21 @@ function addMonths(date: Date, months: number): Date {
  * lengths produce zero rows past their own end (the longest term
  * defines schedule length).
  */
+type Cadence = "monthly" | "quarterly" | "semi_annual" | "annual"
+
+const CADENCES: readonly string[] = ["monthly", "quarterly", "semi_annual", "annual"]
+/** Coerce a contract's rebatePayPeriod (PerformancePeriod enum) to a Cadence. */
+function toCadence(s: string | null | undefined): Cadence | undefined {
+  return s && CADENCES.includes(s) ? (s as Cadence) : undefined
+}
+
 function aggregatePerItemSchedules(
   items: ReadonlyArray<NormalizedCapitalLineItem>,
-): { entries: AmortizationEntry[]; period: "monthly" | "quarterly" | "semi_annual" | "annual" } {
+  // Bug 3: when set, every item amortizes on this cadence instead of its
+  // own stored paymentCadence — used to make the schedule follow the
+  // contract's rebatePayPeriod.
+  cadenceOverride?: Cadence,
+): { entries: AmortizationEntry[]; period: Cadence } {
   if (items.length === 0) return { entries: [], period: "monthly" }
   // Bug #11 defense-in-depth: if every item has zero financed principal
   // (e.g. user set Initial Sales == Contract Total), there's nothing to
@@ -279,13 +291,17 @@ function aggregatePerItemSchedules(
   if (totalFinanced <= 0) return { entries: [], period: "monthly" }
 
   // Find the finest cadence (smallest months-per-period) so we render
-  // on the densest possible grid.
+  // on the densest possible grid — unless the caller overrides it.
   const cadences = new Set(items.map((i) => i.paymentCadence))
-  const period: "monthly" | "quarterly" | "semi_annual" | "annual" = cadences.has("monthly")
-    ? "monthly"
-    : cadences.has("quarterly")
-      ? "quarterly"
-      : "annual"
+  const period: Cadence =
+    cadenceOverride ??
+    (cadences.has("monthly")
+      ? "monthly"
+      : cadences.has("quarterly")
+        ? "quarterly"
+        : cadences.has("semi_annual")
+          ? "semi_annual"
+          : "annual")
   const stepMonths = monthsPerPeriod(period)
 
   // Build each item's schedule on its own cadence, then map onto the
@@ -304,13 +320,14 @@ function aggregatePerItemSchedules(
   for (const item of items) {
     const itemFinanced = Math.max(0, item.contractTotal - item.initialSales)
     if (itemFinanced <= 0 || item.termMonths <= 0) continue
+    const itemCadence = cadenceOverride ?? item.paymentCadence
     const sched = buildTieInAmortizationSchedule({
       capitalCost: itemFinanced,
       interestRate: item.interestRate,
       termMonths: item.termMonths,
-      period: item.paymentCadence,
+      period: itemCadence,
     })
-    const itemStep = monthsPerPeriod(item.paymentCadence)
+    const itemStep = monthsPerPeriod(itemCadence)
     // Charles audit final: project the per-item schedule onto the
     // combined grid, carrying balances forward in non-payment periods
     // so the running-balance display stays smooth instead of
@@ -381,6 +398,12 @@ export async function getContractCapitalSchedule(
       effectiveDate: true,
       facilityId: true,
       amortizationShape: true,
+      // Bug 3 (Vick 2026-06-01): the capital amortization is paid down by
+      // rebates, which pay on the contract's rebatePayPeriod — so the
+      // schedule cadence should follow that, not the per-line-item default
+      // (which is "monthly" and made a semi-annual contract still render
+      // monthly capital rows).
+      rebatePayPeriod: true,
       amortizationRows: {
         orderBy: { periodNumber: "asc" },
       },
@@ -446,6 +469,10 @@ export async function getContractCapitalSchedule(
   const lineItems = normalizeCapitalLineItems(contract)
   if (lineItems.length === 0) return empty
 
+  // Bug 3: the amortization cadence follows the contract's rebatePayPeriod
+  // (rebates pay down capital on that period) when set.
+  const contractCadence = toCadence(contract.rebatePayPeriod)
+
   const capitalCost = sumCapitalCost(lineItems)
   const downPayment = sumInitialSales(lineItems)
   const financedPrincipal = sumFinancedPrincipal(lineItems)
@@ -474,17 +501,16 @@ export async function getContractCapitalSchedule(
       amortizationDue: Number(r.amortizationDue),
       closingBalance: Number(r.closingBalance),
     }))
-    period = lineItems[0]!.paymentCadence
+    period = contractCadence ?? lineItems[0]!.paymentCadence
   } else {
     // Sum per-item PMT schedules so multi-asset capital deals (the v0
     // shape) aggregate correctly. Each item amortizes against its own
     // financed principal / rate / term; we add the per-period rows
-    // together to produce the combined view.
-    const agg = aggregatePerItemSchedules(lineItems)
+    // together to produce the combined view. Bug 3: when the contract has
+    // a rebatePayPeriod, the whole schedule follows it (rebates pay down
+    // capital on that cadence) instead of the line-item monthly default.
+    const agg = aggregatePerItemSchedules(lineItems, contractCadence)
     entries = agg.entries
-    // Use the densest cadence chosen by the aggregator so periodDate
-    // alignment + monthsRemaining stay consistent regardless of item
-    // ordering.
     period = agg.period
   }
 
