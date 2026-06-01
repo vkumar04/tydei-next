@@ -500,6 +500,18 @@ export function ContractDetailClient({
                     Not specified on contract
                   </p>
                 )}
+                {/* Bug 1 (Vick 2026-06-01): a contract value below the
+                    trailing-12-month spend is almost always a data-entry
+                    error (the value was mis-keyed, or annual was entered as
+                    total). Flag it rather than silently rendering a
+                    nonsensical "31% of commitment > 100%" downstream. */}
+                {stats.totalValue > 0 &&
+                  stats.totalSpend > stats.totalValue && (
+                    <p className="mt-0.5 text-xs font-medium text-amber-500">
+                      ⚠ Below 12-mo spend ({formatCurrency(stats.totalSpend)})
+                      — check the contract value
+                    </p>
+                  )}
               </div>
             </CardContent>
           </Card>

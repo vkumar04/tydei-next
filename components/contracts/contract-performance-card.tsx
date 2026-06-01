@@ -140,7 +140,13 @@ export function ContractPerformanceCard({
             <Progress value={Math.min(100, util.utilizationPct)} />
             <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
               <div>
-                <p>Actual rebate</p>
+                {/* Bug 4/6/7 (Vick 2026-06-01): this is the tier engine run
+                    on the contract's TOTAL spend — a projection of what that
+                    spend earns at the tier, NOT the earned-to-date figure in
+                    the header "Rebates Earned" card (which counts only closed
+                    periods). Labeling it "Actual rebate" made the two numbers
+                    look contradictory. */}
+                <p>Rebate at current spend</p>
                 <p className="font-medium text-foreground tabular-nums">
                   {formatCurrency(util.actualRebate)}
                 </p>
@@ -173,6 +179,11 @@ export function ContractPerformanceCard({
              * tier by definition earns the top rate on all spend. Showing
              * the active method + tier count makes the math legible.
              */}
+            <p className="text-xs text-muted-foreground">
+              Projection of what current spend earns at the tier — not
+              earned-to-date. The header &ldquo;Rebates Earned&rdquo; counts
+              only closed periods, so it&rsquo;s usually lower.
+            </p>
             <p className="text-xs text-muted-foreground">
               Method:{" "}
               <span className="font-medium text-foreground">
