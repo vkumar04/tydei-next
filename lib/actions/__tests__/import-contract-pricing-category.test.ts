@@ -48,6 +48,9 @@ vi.mock("@/lib/actions/contracts-auth", () => ({
 vi.mock("@/lib/categories/resolve", () => ({
   resolveCategoryNamesBulk: (...args: unknown[]) =>
     resolveCategoryNamesBulkMock(...args),
+  // Bug 5: importContractPricing now guards categories through this.
+  isPlaceholderCategory: (s: string) =>
+    !s?.trim() || /^[\d.,\s/+\-–—]+$/.test(s.trim()),
 }))
 
 vi.mock("@/lib/contracts/populate-carveout-terms", () => ({
