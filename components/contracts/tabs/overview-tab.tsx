@@ -23,6 +23,7 @@ import { ContractAmortizationCard } from "@/components/contracts/contract-amorti
 import { OffContractSpendCard } from "@/components/contracts/off-contract-spend-card"
 import { CategoryMarketShareCard } from "@/components/contracts/category-market-share-card"
 import { ContractChangeProposalsCard } from "@/components/contracts/contract-change-proposals-card"
+import { ContractCategoryHealthBanner } from "@/components/contracts/contract-category-health-banner"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -77,6 +78,9 @@ export function OverviewTab({
 }: OverviewTabProps) {
   return (
     <TabsContent value="overview" className="mt-6 space-y-6">
+      {/* Bug 1/10 follow-up: nudge when this contract's vendors have
+          unmapped category names (spend that won't attribute). */}
+      <ContractCategoryHealthBanner contractId={contractId} />
       {/* Pending vendor-submitted change proposals — hidden when none. */}
       <ContractChangeProposalsCard contractId={contractId} />
       {/* Tie-in bundle card — renders only when this contract is a bundle primary */}

@@ -25,6 +25,12 @@ vi.mock("@/lib/db", () => ({
     categoryMapping: {
       findMany: vi.fn(async () => []),
     },
+    productCategory: {
+      findMany: vi.fn(async () => [
+        { name: "Joint Replacement" },
+        { name: "Sports Medicine" },
+      ]),
+    },
   },
 }))
 

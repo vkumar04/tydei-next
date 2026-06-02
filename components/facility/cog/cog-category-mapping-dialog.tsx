@@ -274,6 +274,17 @@ function MappingRow({
             </Button>
           )}
         </div>
+        {/* Bug 1/10 follow-up: pre-proposed canonical target for unmapped
+            rows. One click fills it in; the user still presses Apply. */}
+        {pending === null && row.suggestedTarget && (
+          <button
+            type="button"
+            className="mt-1 text-xs text-primary hover:underline"
+            onClick={() => setPending(row.suggestedTarget)}
+          >
+            Suggested: {row.suggestedTarget} — click to use
+          </button>
+        )}
       </TableCell>
       <TableCell>
         <Button
