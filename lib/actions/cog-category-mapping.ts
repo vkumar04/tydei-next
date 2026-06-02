@@ -29,18 +29,33 @@ export interface CogCategoryMapping {
 }
 
 /**
- * Distinct COG categories at this facility + their current confirmed
- * mapping target (if any). Drives the Category Mapping dialog.
+ * Distinct categories at this facility + their current confirmed mapping
+ * target (if any). Drives the Category Mapping dialog.
+ *
+ * Bug 1/10 (Vick 2026-06-02): "when you upload a price file it needs to map
+ * categories ... like Cogs." The dialog previously listed only COGRecord
+ * categories, so a category that lives only in a price file
+ * (`ContractPricing.category`, e.g. "Joints-Ortho") never showed up to be
+ * mapped. Union both sources so the price-file flow gets the same
+ * category-value mapping COG has. CategoryMapping is global, so a rule made
+ * here applies to every future COG AND price-file import via the resolver.
  */
 export async function getCOGCategoryMappings(): Promise<CogCategoryMapping[]> {
   const { facility } = await requireFacility()
 
-  const grouped = await prisma.cOGRecord.groupBy({
-    by: ["category"],
-    where: { facilityId: facility.id, category: { not: null } },
-    _count: { _all: true },
-    _sum: { extendedPrice: true },
-  })
+  const [cogGrouped, pricingGrouped] = await Promise.all([
+    prisma.cOGRecord.groupBy({
+      by: ["category"],
+      where: { facilityId: facility.id, category: { not: null } },
+      _count: { _all: true },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.contractPricing.groupBy({
+      by: ["category"],
+      where: { category: { not: null }, contract: { facilityId: facility.id } },
+      _count: { _all: true },
+    }),
+  ])
 
   const confirmed = await prisma.categoryMapping.findMany({
     where: { isConfirmed: true, contractCategory: { not: null } },
@@ -51,18 +66,33 @@ export async function getCOGCategoryMappings(): Promise<CogCategoryMapping[]> {
     if (m.contractCategory) byName.set(normalize(m.cogCategory), m.contractCategory)
   }
 
-  return grouped
-    .map((g) => {
-      const category = (g.category ?? "").trim()
-      return {
-        category,
-        recordCount: g._count?._all ?? 0,
-        totalSpend: Number(g._sum?.extendedPrice ?? 0),
-        mappedTo: byName.get(normalize(category)) ?? null,
-      }
-    })
-    .filter((r) => r.category)
-    .sort((a, b) => b.totalSpend - a.totalSpend)
+  // Merge COG + price-file categories keyed by normalized name; keep the
+  // first-seen display label and sum record counts. Price-file rows carry
+  // no spend (ContractPricing is a price list, not purchases), so spend
+  // comes from COG only.
+  const merged = new Map<
+    string,
+    { category: string; recordCount: number; totalSpend: number }
+  >()
+  const add = (raw: string | null, count: number, spend: number) => {
+    const category = (raw ?? "").trim()
+    if (!category) return
+    const key = normalize(category)
+    const cur = merged.get(key) ?? { category, recordCount: 0, totalSpend: 0 }
+    cur.recordCount += count
+    cur.totalSpend += spend
+    merged.set(key, cur)
+  }
+  for (const g of cogGrouped) {
+    add(g.category, g._count?._all ?? 0, Number(g._sum?.extendedPrice ?? 0))
+  }
+  for (const g of pricingGrouped) {
+    add(g.category, g._count?._all ?? 0, 0)
+  }
+
+  return Array.from(merged.values())
+    .map((r) => ({ ...r, mappedTo: byName.get(normalize(r.category)) ?? null }))
+    .sort((a, b) => b.totalSpend - a.totalSpend || b.recordCount - a.recordCount)
 }
 
 /**
@@ -106,6 +136,17 @@ export async function remapCOGCategory(input: {
       data: { category: to },
     })
     recordsUpdated = updated.count
+
+    // Bug 1/10: retag matching price-file rows too, so the contract's
+    // pricing categories line up with COG immediately (not just on the
+    // next import). Scoped to this facility via the contract relation.
+    await prisma.contractPricing.updateMany({
+      where: {
+        category: { equals: from, mode: "insensitive" },
+        contract: { facilityId: facility.id },
+      },
+      data: { category: to },
+    })
 
     // Persist the confirmed rule (upsert on cogCategory).
     // auth-scope-scanner-skip: CategoryMapping is global taxonomy (no

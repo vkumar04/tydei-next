@@ -500,6 +500,20 @@ export function ContractDetailClient({
                     Not specified on contract
                   </p>
                 )}
+                {/* Bug 2/9 (Vick 2026-06-02): "Contract value vs current
+                    spend don't make sense ... for tie-in contracts only."
+                    A tie-in's Contract Value is the full-term commitment
+                    INCLUDING capital equipment, so it dwarfs the trailing-
+                    12-month consumable spend below — unlike a simple spend
+                    contract where the two track closely. Say so explicitly
+                    so the gap reads as expected, not as a bug. */}
+                {stats.totalValue > 0 &&
+                  contract.contractType === "tie_in" && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Full-term value incl. capital equipment — Current Spend
+                      below is trailing 12 months of consumables only.
+                    </p>
+                  )}
                 {/* Bug 1 (Vick 2026-06-01): a contract value below the
                     trailing-12-month spend is almost always a data-entry
                     error (the value was mis-keyed, or annual was entered as

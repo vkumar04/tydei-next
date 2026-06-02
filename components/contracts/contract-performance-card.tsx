@@ -14,6 +14,8 @@ import { formatCurrency } from "@/lib/formatting"
 import { Activity, AlertTriangle, PieChart, Target } from "lucide-react"
 import { getContractPerformance } from "@/lib/actions/contracts/performance-read"
 import { getCategoryMarketShareForVendor } from "@/lib/actions/cog/category-market-share"
+import { getCarveOutRebate } from "@/lib/actions/contracts/carve-out"
+import { Scissors } from "lucide-react"
 
 /**
  * Surfaces the v0-aligned performance helpers on the contract detail
@@ -63,8 +65,22 @@ export function ContractPerformanceCard({
     enabled: !!vendorId,
   })
 
+  // Bug 8 (Vick 2026-06-02): "No carve out calculations are going up in
+  // Performance." Carve-out contracts aren't tiered, so `utilization` is
+  // null and the card showed nothing about the carve-out rebate. Pull it
+  // here so a carve-out / tie-in contract's Performance tab surfaces the
+  // earned carve-out rebate alongside utilization + share.
+  const { data: carveOut } = useQuery({
+    queryKey: ["contract-performance-carveout", contractId],
+    queryFn: () => getCarveOutRebate(contractId),
+  })
+
   if (isLoading || !data) return null
-  if (!data.utilization && !data.renewalRisk && !vendorId) return null
+  const carveOutLineCount = carveOut?.carveOutLines?.length ?? 0
+  const hasCarveOut =
+    !!carveOut && (carveOut.rebateEarned > 0 || carveOutLineCount > 0)
+  if (!data.utilization && !data.renewalRisk && !vendorId && !hasCarveOut)
+    return null
 
   const util = data.utilization
   const risk = data.renewalRisk
@@ -205,6 +221,26 @@ export function ContractPerformanceCard({
                   · Single-tier contract: actual always equals max.
                 </>
               )}
+            </p>
+          </div>
+        )}
+        {hasCarveOut && carveOut && (
+          <div className="space-y-2 rounded-md border bg-card p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Scissors className="h-3.5 w-3.5" />
+                Carve-out rebate
+              </div>
+              <span className="text-lg font-semibold tabular-nums">
+                {formatCurrency(carveOut.rebateEarned)}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {/* Carve-out = per-SKU rate from the pricing file applied to
+                  matched spend. Distinct from tiered rebates above. */}
+              {carveOutLineCount} carved-out SKU
+              {carveOutLineCount === 1 ? "" : "s"} ·{" "}
+              {formatCurrency(carveOut.eligibleSpend)} eligible spend
             </p>
           </div>
         )}

@@ -19,6 +19,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { calculateCarveOut } from "@/lib/rebates/engine/carve-out"
 import type {
   CarveOutConfig,
@@ -50,8 +51,16 @@ export async function getCarveOutRebate(
 
   const contract = await prisma.contract.findFirstOrThrow({
     where: contractOwnershipWhere(contractId, facility.id),
-    select: { id: true, vendorId: true },
+    select: { id: true, vendorId: true, additionalVendorIds: true },
   })
+
+  // Bug 3 (Vick 2026-06-02): grouped (tie-in) carve-out contracts span
+  // several vendors. The accrual WRITER (recompute/carve-out.ts) already
+  // counts the full vendor set, but this on-the-fly READ scoped to the
+  // primary vendor only — so the carve-out rebate read low/"wrong" for a
+  // grouped contract while the persisted Rebate rows said otherwise. Use
+  // the canonical contractVendorIds() so read and writer agree.
+  const vendorIds = contractVendorIds(contract)
 
   const [pricingItems, cogRecords] = await Promise.all([
     prisma.contractPricing.findMany({
@@ -69,7 +78,9 @@ export async function getCarveOutRebate(
         facilityId: facility.id,
         OR: [
           { contractId: contract.id },
-          { contractId: null, vendorId: contract.vendorId },
+          ...(vendorIds.length
+            ? [{ contractId: null, vendorId: { in: vendorIds } }]
+            : []),
         ],
         matchStatus: { in: ["on_contract", "price_variance"] },
       },

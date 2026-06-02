@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/table"
 import { formatCurrency } from "@/lib/formatting"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
+import { CogCategoryMappingDialog } from "@/components/facility/cog/cog-category-mapping-dialog"
+import { Tags } from "lucide-react"
 
 interface ContractPricingTabProps {
   contractId: string
@@ -50,6 +52,9 @@ export function ContractPricingTab({
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
   const [autoMapping, setAutoMapping] = useState<Record<string, string>>({})
   const [pendingFileName, setPendingFileName] = useState<string | null>(null)
+  // Bug 1/10: category-value mapping for the price-file flow, same dialog
+  // (and global CategoryMapping rules) the COG page uses.
+  const [categoryMapOpen, setCategoryMapOpen] = useState(false)
 
   const pricingQueryKey = ["contract-pricing", contractId] as const
   const { data: pricing, isLoading } = useQuery({
@@ -156,6 +161,10 @@ export function ContractPricingTab({
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setCategoryMapOpen(true)}>
+            <Tags className="mr-2 h-4 w-4" />
+            Map Categories
+          </Button>
           <Button
             variant="outline"
             onClick={() => {
@@ -287,6 +296,13 @@ export function ContractPricingTab({
         sampleRows={rawRows}
         autoMapping={autoMapping}
         onApply={handleMappingApply}
+      />
+      <CogCategoryMappingDialog
+        open={categoryMapOpen}
+        onOpenChange={(o) => {
+          setCategoryMapOpen(o)
+          if (!o) void queryClient.invalidateQueries({ queryKey: pricingQueryKey })
+        }}
       />
     </Card>
   )
