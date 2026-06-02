@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { serialize } from "@/lib/serialize"
 
 export interface OffContractSpendItem {
@@ -55,15 +56,24 @@ export async function getOffContractSpend(
   const { facility } = await requireFacility()
   const contract = await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(contractId, facility.id),
-    select: { id: true, vendorId: true },
+    select: { id: true, vendorId: true, additionalVendorIds: true },
   })
 
-  // Scope to rows enriched for this contract, plus un-enriched rows for the
-  // same vendor (so pre-enrichment data still counts). This prevents spend
-  // from a sibling contract on the same vendor from leaking in.
+  // Bug 11/12 (Vick 2026-06-02): group contracts carry additional vendors
+  // (additionalVendorIds). The prior scope only counted contract.vendorId,
+  // so a grouped contract's "On Contract" total dropped every other vendor's
+  // spend — the user saw 500K when the real grouped spend was many times
+  // that. Use the canonical contractVendorIds() so un-enriched same-group
+  // rows count for ALL the contract's vendors, not just the primary.
+  const vendorIds = contractVendorIds(contract)
+
+  // Scope to rows enriched for this contract, plus un-enriched rows for any
+  // of the contract's (grouped) vendors (so pre-enrichment data still
+  // counts). This prevents spend from a sibling contract on the same vendor
+  // from leaking in.
   const scopeOR = [
     { contractId: contract.id },
-    { contractId: null, vendorId: contract.vendorId },
+    { contractId: null, vendorId: { in: vendorIds } },
   ]
 
   const [

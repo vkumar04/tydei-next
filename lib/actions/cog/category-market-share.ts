@@ -16,6 +16,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { serialize } from "@/lib/serialize"
 import {
   computeCategoryMarketShare,
@@ -47,11 +48,26 @@ export async function getCategoryMarketShareForVendor(input: {
     // Tolerate any non-array shape (old contracts / hand-edits) by
     // treating it as an empty map.
     const commitmentByCategory = new Map<string, number>()
+    // Bug 7/11 (Vick 2026-06-02): for a GROUPED contract the share
+    // numerator must sum every participating vendor, not just the primary.
+    // Default to the single input vendor; widen to the contract's full
+    // vendor set when a contractId is supplied and the contract is grouped.
+    let numeratorVendorIds: string | string[] = input.vendorId
     if (input.contractId) {
       const c = await prisma.contract.findFirst({
         where: contractOwnershipWhere(input.contractId, facility.id),
-        select: { marketShareCommitmentByCategory: true },
+        select: {
+          marketShareCommitmentByCategory: true,
+          vendorId: true,
+          additionalVendorIds: true,
+        },
       })
+      if (c) {
+        const groupIds = contractVendorIds(c)
+        // Only widen when the input vendor actually belongs to the
+        // contract's group (defensive: don't silently swap vendors).
+        if (groupIds.includes(input.vendorId)) numeratorVendorIds = groupIds
+      }
       const raw = c?.marketShareCommitmentByCategory
       if (Array.isArray(raw)) {
         for (const entry of raw) {
@@ -105,7 +121,7 @@ export async function getCategoryMarketShareForVendor(input: {
     const computed = computeCategoryMarketShare({
       rows: cogRows,
       contractCategoryMap,
-      vendorId: input.vendorId,
+      vendorId: numeratorVendorIds,
       commitmentByCategory,
     })
 

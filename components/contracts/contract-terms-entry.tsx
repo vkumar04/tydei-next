@@ -687,30 +687,20 @@ export function ContractTermsEntry({
                     </Field>
                   )}
 
+                  {/* Bug 5 (Vick 2026-06-02): "Payment Timing can be removed
+                      because that all coincides with evaluation period." The
+                      field is not wired into the rebate engine (see the TODO
+                      in lib/rebates/calculate.ts) and duplicated the
+                      Evaluation Period cadence, so it's dropped from the form.
+                      The schema column + "quarterly" default stay for
+                      AI-extract / import back-compat; nothing reads it for
+                      math. Evaluation Period is now the single cadence. */}
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="Evaluation Period">
                       <Select
                         value={term.evaluationPeriod}
                         onValueChange={(v) =>
                           updateTerm(termIdx, { evaluationPeriod: v })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="quarterly">Quarterly</SelectItem>
-                          <SelectItem value="semi_annual">Semi-Annual</SelectItem>
-                          <SelectItem value="annual">Annual</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field label="Payment Timing">
-                      <Select
-                        value={term.paymentTiming}
-                        onValueChange={(v) =>
-                          updateTerm(termIdx, { paymentTiming: v })
                         }
                       >
                         <SelectTrigger>

@@ -508,8 +508,12 @@ export function ContractDetailClient({
                 {stats.totalValue > 0 &&
                   stats.totalSpend > stats.totalValue && (
                     <p className="mt-0.5 text-xs font-medium text-amber-500">
-                      ⚠ Below 12-mo spend ({formatCurrency(stats.totalSpend)})
-                      — check the contract value
+                      {/* Bug 6 (Vick 2026-06-02): the prior "Below 12-mo
+                          spend" copy was cryptic. Spell out what the flag
+                          means and the most likely data-entry cause. */}
+                      ⚠ Contract Value is lower than the last 12 months of
+                      spend ({formatCurrency(stats.totalSpend)}). It may have
+                      been entered as an annual figure or mis-keyed — check it.
                     </p>
                   )}
               </div>

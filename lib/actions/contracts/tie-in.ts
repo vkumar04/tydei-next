@@ -398,11 +398,13 @@ export async function getContractCapitalSchedule(
       effectiveDate: true,
       facilityId: true,
       amortizationShape: true,
-      // Bug 3 (Vick 2026-06-01): the capital amortization is paid down by
-      // rebates, which pay on the contract's rebatePayPeriod — so the
-      // schedule cadence should follow that, not the per-line-item default
-      // (which is "monthly" and made a semi-annual contract still render
-      // monthly capital rows).
+      // Bug 3/4 (Vick): the capital amortization cadence follows the
+      // contract's cadence, not the per-line-item default ("monthly").
+      // The user sets it via the "Performance Period" field
+      // (performancePeriod) — #39 keyed off rebatePayPeriod by mistake, so
+      // a semi-annual contract still rendered monthly. Prefer
+      // performancePeriod, fall back to rebatePayPeriod, then line items.
+      performancePeriod: true,
       rebatePayPeriod: true,
       amortizationRows: {
         orderBy: { periodNumber: "asc" },
@@ -469,9 +471,13 @@ export async function getContractCapitalSchedule(
   const lineItems = normalizeCapitalLineItems(contract)
   if (lineItems.length === 0) return empty
 
-  // Bug 3: the amortization cadence follows the contract's rebatePayPeriod
-  // (rebates pay down capital on that period) when set.
-  const contractCadence = toCadence(contract.rebatePayPeriod)
+  // Bug 3/4: the amortization cadence follows the contract's cadence. The
+  // user sets it via the "Performance Period" field (performancePeriod) —
+  // #39 keyed off rebatePayPeriod by mistake, so a semi-annual contract
+  // still rendered monthly. Prefer performancePeriod, then rebatePayPeriod,
+  // then the per-line-item default (monthly).
+  const contractCadence =
+    toCadence(contract.performancePeriod) ?? toCadence(contract.rebatePayPeriod)
 
   const capitalCost = sumCapitalCost(lineItems)
   const downPayment = sumInitialSales(lineItems)

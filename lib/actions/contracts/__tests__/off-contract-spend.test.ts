@@ -180,10 +180,14 @@ describe("getOffContractSpend (4-way partition)", () => {
     for (const where of allWheres) {
       expect(where.facilityId).toBe("fac-1")
       expect(where).not.toHaveProperty("vendorId")
+      // Bug 11/12: un-enriched rows are now scoped via the group-aware
+      // contractVendorIds() set (`vendorId: { in: [...] }`), which for a
+      // single-vendor contract is `{ in: ["v-1"] }` — semantically the
+      // same row set as the old bare `vendorId: "v-1"`.
       expect(where.OR).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ contractId: "c-1" }),
-          expect.objectContaining({ contractId: null, vendorId: "v-1" }),
+          expect.objectContaining({ contractId: null, vendorId: { in: ["v-1"] } }),
         ]),
       )
     }

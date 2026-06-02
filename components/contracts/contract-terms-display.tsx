@@ -483,12 +483,8 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend, cur
                         {term.evaluationPeriod}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Payment: </span>
-                      <span className="capitalize">
-                        {term.paymentTiming.replace("_", " ")}
-                      </span>
-                    </div>
+                    {/* Bug 5 (Vick 2026-06-02): Payment Timing removed — it
+                        duplicated Evaluation Period and isn't engine-wired. */}
                     <div>
                       <span className="text-muted-foreground">Scope: </span>
                       <span className="capitalize">
