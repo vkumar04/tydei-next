@@ -25,7 +25,11 @@ skip brainstorming and ship directly. Use judgment — when in doubt, brainstorm
 
 - **Stack:** Next.js 16 App Router, React 19, Prisma 7, TypeScript strict, Vitest,
   TanStack Query, shadcn/ui, recharts, better-auth.
-- **DB:** `postgresql://tydei:tydei_dev_password@localhost:5432/tydei` (local).
+- **DB:** `postgresql://tydei:tydei_dev_password@localhost:5435/tydei` (local;
+  the `docker-compose.yml` Postgres maps host **5435**→5432, since 5432 is often
+  taken by other projects. The authoritative value is `.env`'s `DATABASE_URL` —
+  trust it over this note). Start it with `docker compose up -d`; the oracle
+  runner now preflights and tells you if it's down.
   **Primary demo facility is "Lighthouse Surgical Center"** — it's what
   `scripts/qa-sanity.ts getDemoFacility()` targets and what the seed
   loads most COG/contracts against. "Lighthouse Community Hospital" is

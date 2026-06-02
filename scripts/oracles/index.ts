@@ -21,8 +21,36 @@ import {
 } from "./_shared/runner"
 import { writeReport, printConsoleSummary } from "./_shared/report"
 import { loadPriorReport, diffAgainstBaseline } from "./_shared/baseline"
+import { prisma } from "@/lib/db"
 
 const ORACLES_DIR = "scripts/oracles"
+
+/**
+ * DB preflight. Without it, a stopped dev-DB container makes EVERY
+ * DB-touching oracle throw an opaque, reason-less Prisma error
+ * (`Invalid prisma.x.findFirst() invocation` with no cause) — which
+ * reads like a code bug when it's really "the database isn't up".
+ * One clear message + the fix command saves the next person the
+ * false trail. (Vick 2026-06-02.)
+ */
+async function preflightDb(): Promise<void> {
+  // Surface the host:port the client will actually dial (the real dev
+  // port is whatever DATABASE_URL says — the container maps 5435, not
+  // the default 5432).
+  const url = process.env.DATABASE_URL ?? "(DATABASE_URL unset)"
+  const hostPort = url.replace(/^.*@/, "").replace(/\/.*$/, "") || url
+  try {
+    await prisma.$queryRaw`SELECT 1`
+  } catch {
+    console.error(
+      `\n✖ Cannot reach the database at ${hostPort}.\n` +
+        `  The dev Postgres container is probably stopped. Start it with:\n` +
+        `    docker compose up -d\n` +
+        `  (then \`bun run db:seed\` if the volume is fresh), and re-run the oracles.\n`,
+    )
+    process.exit(1)
+  }
+}
 
 function parseArgs(argv: string[]): { filter: string | null } {
   const idx = argv.indexOf("--filter")
@@ -75,6 +103,7 @@ function reportDrift(name: string, current: OracleResult): void {
 }
 
 async function main() {
+  await preflightDb()
   const { filter } = parseArgs(process.argv.slice(2))
   const all = await discover()
   const selected = filter ? all.filter((o) => o.name.includes(filter)) : all
