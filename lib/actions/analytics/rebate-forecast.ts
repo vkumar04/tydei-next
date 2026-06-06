@@ -16,6 +16,7 @@ import {
   type RebateForecast as EngineRebateForecast,
   type RebateForecastPoint as EngineRebateForecastPoint,
 } from "@/lib/contracts/rebate-forecast-engine"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 // Re-exported from the pure engine so callers (UI, tests) keep
 // importing from this action module. The engine owns the canonical
@@ -51,6 +52,7 @@ async function _getRebateForecastImpl(
     where: { id: contractId },
     select: {
       vendorId: true,
+      additionalVendorIds: true,
       effectiveDate: true,
       terms: {
         select: {
@@ -69,6 +71,13 @@ async function _getRebateForecastImpl(
         // terms below and use the lowest-threshold ladder.
         orderBy: { createdAt: "asc" },
       },
+      // Carve-out rate source (Charles 2026-06-06): every carved-out
+      // pricing row, keyed by vendorItemNo. Used to derive the flat
+      // effective rate the forecast engine applies.
+      pricingItems: {
+        where: { carveOutPercent: { not: null } },
+        select: { vendorItemNo: true, carveOutPercent: true },
+      },
     },
   })
 
@@ -76,22 +85,59 @@ async function _getRebateForecastImpl(
   const today = new Date()
   const since = new Date(today)
   since.setMonth(since.getMonth() - 24)
+  // Group-drift guard: a grouped/tie-in contract spans several vendors.
+  // Scoping to the primary vendorId alone drops the group's spend.
+  const vendorIds = contractVendorIds(contract)
   const cog = await prisma.cOGRecord.findMany({
     where: {
       facilityId: { in: scope.cogScopeFacilityIds },
-      vendorId: contract.vendorId,
+      vendorId: { in: vendorIds },
       transactionDate: { gte: since, lte: today },
     },
-    select: { transactionDate: true, extendedPrice: true },
+    select: {
+      transactionDate: true,
+      extendedPrice: true,
+      vendorItemNo: true,
+    },
   })
 
-  // Bucket by YYYY-MM.
+  // rate lookup keyed by lowercased vendorItemNo (carve-out lines use
+  // vendorItemNo as the reference number — see lib/actions/contracts/carve-out.ts).
+  const rateByItem = new Map<string, number>()
+  for (const p of contract.pricingItems) {
+    if (p.carveOutPercent != null) {
+      rateByItem.set(p.vendorItemNo.toLowerCase(), Number(p.carveOutPercent))
+    }
+  }
+
+  // Bucket by YYYY-MM and, in the same pass, sum trailing total spend and
+  // trailing carve-out rebate so we can derive a single flat effective rate.
   const monthly = new Map<string, number>()
+  let trailingTotalSpend = 0
+  let trailingCarveRebate = 0
   for (const r of cog) {
+    const spend = Number(r.extendedPrice)
     const d = new Date(r.transactionDate)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-    monthly.set(key, (monthly.get(key) ?? 0) + Number(r.extendedPrice))
+    monthly.set(key, (monthly.get(key) ?? 0) + spend)
+    trailingTotalSpend += spend
+    const rate = r.vendorItemNo
+      ? rateByItem.get(r.vendorItemNo.toLowerCase())
+      : undefined
+    if (rate !== undefined) trailingCarveRebate += spend * rate
   }
+
+  // Carve-out style = has carve-out pricing rows AND no spend-based tier
+  // ladder that would take precedence (matches the engine's term priority).
+  // Note: "tie_in" is a ContractType, not a TermType; spend_rebate is the
+  // only spend-based TermType that carries a tier ladder in the DB.
+  const hasTieredSpendTerm = contract.terms.some(
+    (t) => t.termType === "spend_rebate" && t.tiers.length > 0,
+  )
+  const carveOutEffectiveRate =
+    !hasTieredSpendTerm && rateByItem.size > 0 && trailingTotalSpend > 0
+      ? trailingCarveRebate / trailingTotalSpend
+      : 0
 
   // Math is now in @/lib/contracts/rebate-forecast-engine. The action
   // owns auth + Prisma; the engine owns projection so it can be tested
@@ -103,6 +149,7 @@ async function _getRebateForecastImpl(
       tiers: t.tiers,
     })),
     forecastMonths,
+    carveOutEffectiveRate,
   })
 
   return serialize(result)

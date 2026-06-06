@@ -85,6 +85,7 @@ export async function loadContractsForVendor(
         select: {
           appliesTo: true,
           categories: true,
+          referenceNumbers: true,
         },
       },
     },
@@ -117,6 +118,13 @@ export async function loadContractsForVendor(
         appliesTo: t.appliesTo,
         categories: t.categories,
       })),
+      referenceNumbers: Array.from(
+        new Set(
+          (c.terms ?? []).flatMap((t) =>
+            (t.referenceNumbers ?? []).map((r) => r.toLowerCase()),
+          ),
+        ),
+      ),
     }
   })
 }
@@ -275,6 +283,7 @@ export async function recomputeMatchStatusesForVendor(
       // Charles W1.W-C4: thread category into the matcher so
       // `specific_category` terms can enforce scope.
       category: true,
+      manufacturerNo: true,
     },
   })
 
@@ -340,6 +349,7 @@ export async function recomputeMatchStatusesForVendor(
         transactionDate: r.transactionDate,
         // W1.W-C4: include category so specific_category terms are respected.
         category: r.category,
+        manufacturerNo: r.manufacturerNo,
       },
       contracts,
     )
