@@ -297,27 +297,51 @@ No bug. The two concepts are cleanly separated:
   `carriedForwardShortfall`. The min-annual floor check itself is a stateless
   rolling-12 snapshot with **no** carry-forward.
 
+### Charles's answers (2026-06-06) — questions resolved
+
+The four open questions were answered the same day. They are now **decided**,
+which converts E from a doc-only deliverable into a scoped follow-up work
+package. One answer (E4) **changes existing behavior**.
+
+1. **Baseline-as-floor fallback — KEEP, but disclose.** "I actually think that
+   works just fine if nothing is selected, maybe make sure the user knows that
+   in entry." → Keep using `spendBaseline` as the min-annual floor when
+   `minimumPurchaseCommitment` is null, **and** add a clear inline note in the
+   contract-term entry UI so the user knows the baseline is acting as the floor.
+   *Work: UI disclosure only; no math change.*
+
+2. **Carry-forward persistence — YES.** "Tracked for sure, the more detail the
+   better." → Persist tie-in capital shortfall carry-forward (a DB field /
+   per-period record) instead of a runtime-only parameter, with detail
+   surfaced for auditability. *Work: schema migration + writer + display.*
+
+3. **Forward-looking minimum — YES to both, with manual override.** "Yes to
+   both, but the trailing 12 for this can sometimes be contracted at different
+   times and the user should be able to manually enter that in if needed." →
+   Add a forward-looking pace metric: (a) will the facility hit the minimum by
+   contract end at current pace, and (b) the spend-per-month required.
+   **Plus:** the trailing-12 window can start at different times per contract,
+   so the user must be able to **manually enter** the trailing-12 figure/window
+   when the default rolling window is wrong. *Work: new metric + manual-entry
+   field.*
+
+4. **Multiple minimums — use the LOWEST (behavior change), and disclose.**
+   "Let's do the lowest number but there needs to be something that lets the
+   user know that as well. That would be very rare use case." → The system
+   currently surfaces the **maximum** across tie-in terms
+   (`lib/actions/contracts/tie-in.ts` ~L666-693). Change it to the **lowest**
+   `minimumPurchaseCommitment`, and add UI disclosure of which floor governs.
+   Rare case, but it is a real change to existing logic. *Work: change the
+   selection from max→min + regression test + UI disclosure.*
+
 ### Deliverable
 
-Write `docs/superpowers/specs/2026-06-06-baseline-vs-min-annual-clarification.md`
-(a sibling reference doc, written during implementation) containing:
-1. Plain-language definition of each concept with the backing schema field and
-   the consuming calculation (file:line).
-2. A worked numeric example for each (e.g. $120K spend / $100K baseline →
-   growth slice $20K × 5% = $1,000; MIN_ANNUAL $400K / rolling-12 $312,056 →
-   gap $87,944, `met=false`).
-3. The four open product questions for Charles:
-   - Should `spendBaseline` keep silently doubling as the min-annual fallback
-     when `minimumPurchaseCommitment` is null, or should the floor be explicit?
-   - Should tie-in capital shortfall carry-forward be **persisted** (DB field)
-     rather than a runtime parameter callers must thread?
-   - Should there be a forward-looking "pace needed to meet minimum annual by
-     contract end" metric (current check is backward-looking rolling-12)?
-   - When a contract has multiple tie-in terms with different
-     `minimumPurchaseCommitment` values, which floor governs (system currently
-     uses the maximum)?
-
-No code change this session; the answers feed a future spec.
+A short clarification reference doc
+(`docs/superpowers/specs/2026-06-06-baseline-vs-min-annual-clarification.md`)
+plus a **separate follow-up implementation plan** covering E1–E4 above. E is no
+longer doc-only, but it remains a distinct work package from A–D (different
+files: tie-in action, schema, contract-term entry UI) and is sequenced after
+the A–D math fixes land.
 
 ---
 
@@ -349,5 +373,6 @@ Per CLAUDE.md release hygiene:
 - Category mapping during pricing-file upload (meeting item 1).
 - Group list selection scrolling bug and the capital-"link"-only-for-capital
   gating (contained UI fixes — separate quick-bug-bash session).
-- Any change to how carry-forward or min-annual is computed (pending Charles's
-  answers from E).
+- The baseline / min-annual work (E1–E4) is now **unblocked** by Charles's
+  answers but gets its **own follow-up plan** — it is not part of the A–D
+  implementation plan (`docs/superpowers/plans/2026-06-06-math-stabilization.md`).
