@@ -77,6 +77,7 @@ export async function loadContractsForVendor(
           // filled from the pricing row if empty. Driven here to keep
           // the select consistent with what the matcher returns.
           category: true,
+          manufacturerNo: true,
         },
       },
       // Charles W1.W-C4: load term scope so the matcher can enforce
@@ -100,6 +101,7 @@ export async function loadContractsForVendor(
       unitPrice: Number(p.unitPrice),
       listPrice: p.listPrice === null ? null : Number(p.listPrice),
       category: (p as { category?: string | null }).category ?? null,
+      manufacturerNo: (p as { manufacturerNo?: string | null }).manufacturerNo ?? null,
     }))
     return {
       id: c.id,
@@ -275,6 +277,7 @@ export async function recomputeMatchStatusesForVendor(
       // Charles W1.W-C4: thread category into the matcher so
       // `specific_category` terms can enforce scope.
       category: true,
+      manufacturerNo: true,
     },
   })
 
@@ -340,6 +343,7 @@ export async function recomputeMatchStatusesForVendor(
         transactionDate: r.transactionDate,
         // W1.W-C4: include category so specific_category terms are respected.
         category: r.category,
+        manufacturerNo: r.manufacturerNo,
       },
       contracts,
     )
