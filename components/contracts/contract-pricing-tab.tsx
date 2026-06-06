@@ -216,6 +216,7 @@ export function ContractPricingTab({
                 <TableHead className="text-right">Contract Price</TableHead>
                 <TableHead>UOM</TableHead>
                 <TableHead>Category</TableHead>
+                <TableHead className="text-right">Carve-Out %</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -237,6 +238,11 @@ export function ContractPricingTab({
                   </TableCell>
                   <TableCell>{r.uom}</TableCell>
                   <TableCell>{r.category ?? "—"}</TableCell>
+                  <TableCell className="text-right">
+                    {r.carveOutPercent != null
+                      ? `${(Number(r.carveOutPercent) * 100).toFixed(2)}%`
+                      : "—"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
