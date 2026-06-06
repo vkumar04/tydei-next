@@ -41,14 +41,36 @@ export interface RecomputeTieInShortfallResult {
  * Recompute + persist the shortfall carry-forward waterfall for one contract.
  * No-op (periodsPersisted 0) for non-tie-in/capital contracts or contracts
  * with no amortization schedule. Never throws on a non-capital contract.
+ *
+ * Auth-gated entry point — resolves the facility from the session, then
+ * delegates to `_recomputeTieInShortfallLedgerWithFacility`. Called from the
+ * contract-detail "Recompute Earned Rebates" button.
  */
 export async function recomputeTieInShortfallLedger(
   contractId: string,
 ): Promise<RecomputeTieInShortfallResult> {
   const { facility } = await requireFacility()
+  return _recomputeTieInShortfallLedgerWithFacility(contractId, facility.id)
+}
 
+/**
+ * Auth-bypassing engine. Same logic as `recomputeTieInShortfallLedger` but
+ * with the facility id passed in directly instead of resolved from the
+ * session. Mirrors `_recomputeAccrualForContractWithFacility` — used by the
+ * COG-import recompute pipeline (`refreshContractMetricsForVendor`), which
+ * already holds facility context and must populate the ledger automatically
+ * so its UI section appears without a manual button click. The persist below
+ * is still facility-scoped via `contractOwnershipWhere(contractId,
+ * facilityId)`, so this can never write across facilities.
+ *
+ * Production UI should call the auth-gated `recomputeTieInShortfallLedger`.
+ */
+export async function _recomputeTieInShortfallLedgerWithFacility(
+  contractId: string,
+  facilityId: string,
+): Promise<RecomputeTieInShortfallResult> {
   const contract = await prisma.contract.findFirst({
-    where: contractOwnershipWhere(contractId, facility.id),
+    where: contractOwnershipWhere(contractId, facilityId),
     select: {
       id: true,
       contractType: true,
