@@ -39,8 +39,6 @@ export type CogRecordForMatch = {
 
 export type ContractPricingItemForMatch = {
   vendorItemNo: string
-  /** Manufacturer / cross-vendor reference number on the pricing row. */
-  manufacturerNo?: string | null
   unitPrice: number
   listPrice: number | null
   /**
@@ -81,6 +79,13 @@ export type ContractForMatch = {
   expirationDate: Date | null
   facilityIds: string[]
   pricingItems: ContractPricingItemForMatch[]
+  /**
+   * Union of cross-vendor reference numbers covered by this contract, from
+   * each term's `referenceNumbers[]`. Normalized lowercase by the caller.
+   * Used as the cross-vendor fallback match key when a per-vendor SKU
+   * lookup misses (Charles 2026-06-06). Optional for back-compat.
+   */
+  referenceNumbers?: string[]
   /**
    * Optional — when omitted the matcher falls back to pre-W1.W
    * behavior (no category scoping). See
@@ -238,9 +243,9 @@ export function matchCOGRecordToContract(
   }
 
   // 5. Item lookup across candidate contracts.
-  //    Primary key: vendorItemNo (per-vendor SKU, most precise).
-  //    Fallback key: manufacturerNo (cross-vendor reference number) — stable
-  //    across the group's vendor-name/SKU inconsistencies (Charles 2026-06-06).
+  //    Primary key: vendorItemNo (per-vendor SKU, most precise — carries price).
+  //    Fallback key: manufacturerNo matched against the contract's
+  //    referenceNumbers (cross-vendor membership, no price). Charles 2026-06-06.
   const itemNoLower = record.vendorItemNo?.toLowerCase() ?? null
   const mfrLower = record.manufacturerNo?.toLowerCase() ?? null
 
@@ -262,13 +267,24 @@ export function matchCOGRecordToContract(
     }
   }
 
-  // Fallback: cross-vendor reference number.
+  // Fallback: cross-vendor reference number (ContractTerm.referenceNumbers).
+  // Membership-only — the contract covers this reference number but carries
+  // no per-item contract price for it, so we record on_contract with no
+  // price-variance claim (Charles 2026-06-06).
   if (mfrLower) {
     for (const contract of byCategory) {
-      const item = contract.pricingItems.find(
-        (p) => (p.manufacturerNo?.toLowerCase() ?? null) === mfrLower,
+      const covered = (contract.referenceNumbers ?? []).some(
+        (rn) => rn.toLowerCase() === mfrLower,
       )
-      if (item) return priceResultFor(contract, item, record)
+      if (covered) {
+        return {
+          status: "on_contract",
+          contractId: contract.id,
+          contractPrice: record.unitCost,
+          savings: 0,
+          matchedCategory: record.category ?? null,
+        }
+      }
     }
   }
 

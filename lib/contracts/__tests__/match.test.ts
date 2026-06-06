@@ -244,17 +244,11 @@ describe("matchCOGRecordToContract — reference-number fallback", () => {
     facilityIds: ["f1"],
   }
 
-  it("matches by manufacturerNo when the SKU is absent from the pricing file", () => {
+  it("matches by reference number when SKU is absent (membership, no savings)", () => {
     const contract: ContractForMatch = {
       ...base,
-      pricingItems: [
-        {
-          vendorItemNo: "SKU-A",
-          manufacturerNo: "MFR-123",
-          unitPrice: 100,
-          listPrice: 120,
-        },
-      ],
+      pricingItems: [{ vendorItemNo: "SKU-A", unitPrice: 100, listPrice: 120 }],
+      referenceNumbers: ["mfr-123"],
     }
     const record: CogRecordForMatch = {
       facilityId: "f1",
@@ -270,22 +264,15 @@ describe("matchCOGRecordToContract — reference-number fallback", () => {
     expect(result.status).toBe("on_contract")
     if (result.status === "on_contract") {
       expect(result.contractId).toBe("c1")
-      expect(result.contractPrice).toBe(100)
-      expect(result.savings).toBe((120 - 100) * 2)
+      expect(result.savings).toBe(0)
     }
   })
 
-  it("still resolves when the COG row has no vendorItemNo but has a manufacturerNo", () => {
+  it("resolves when COG row has no vendorItemNo but a manufacturerNo in the reference set", () => {
     const contract: ContractForMatch = {
       ...base,
-      pricingItems: [
-        {
-          vendorItemNo: "SKU-A",
-          manufacturerNo: "MFR-999",
-          unitPrice: 50,
-          listPrice: null,
-        },
-      ],
+      pricingItems: [{ vendorItemNo: "SKU-A", unitPrice: 50, listPrice: null }],
+      referenceNumbers: ["mfr-999"],
     }
     const record: CogRecordForMatch = {
       facilityId: "f1",
@@ -299,5 +286,28 @@ describe("matchCOGRecordToContract — reference-number fallback", () => {
     }
     const result = matchCOGRecordToContract(record, [contract])
     expect(result.status).toBe("on_contract")
+  })
+
+  it("SKU match takes precedence and carries price over a reference-number membership", () => {
+    const contract: ContractForMatch = {
+      ...base,
+      pricingItems: [{ vendorItemNo: "SKU-A", unitPrice: 100, listPrice: 120 }],
+      referenceNumbers: ["mfr-123"],
+    }
+    const record: CogRecordForMatch = {
+      facilityId: "f1",
+      vendorId: "v-primary",
+      vendorName: "ACME",
+      vendorItemNo: "SKU-A",
+      manufacturerNo: "MFR-123",
+      unitCost: 100,
+      quantity: 3,
+      transactionDate: new Date("2026-03-01"),
+    }
+    const result = matchCOGRecordToContract(record, [contract])
+    expect(result.status).toBe("on_contract")
+    if (result.status === "on_contract") {
+      expect(result.savings).toBe((120 - 100) * 3)
+    }
   })
 })

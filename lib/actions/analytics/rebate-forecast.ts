@@ -98,25 +98,15 @@ async function _getRebateForecastImpl(
       transactionDate: true,
       extendedPrice: true,
       vendorItemNo: true,
-      manufacturerNo: true,
     },
   })
 
-  // rate lookups keyed by lowercased vendorItemNo and (fallback)
-  // manufacturerNo — mirrors the matcher's precedence so a carve-out
-  // purchase matched cross-vendor by manufacturerNo still contributes its
-  // rebate to the effective-rate numerator.
+  // rate lookup keyed by lowercased vendorItemNo (carve-out lines use
+  // vendorItemNo as the reference number — see lib/actions/contracts/carve-out.ts).
   const rateByItem = new Map<string, number>()
-  const rateByMfr = new Map<string, number>()
   for (const p of contract.pricingItems) {
     if (p.carveOutPercent != null) {
-      const rate = Number(p.carveOutPercent)
-      rateByItem.set(p.vendorItemNo.toLowerCase(), rate)
-      // ContractPricing does not have a manufacturerNo column in the
-      // current schema; the cast mirrors recompute.ts line 104 which
-      // uses the same workaround while the field is pending migration.
-      const mfr = (p as { manufacturerNo?: string | null }).manufacturerNo
-      if (mfr) rateByMfr.set(mfr.toLowerCase(), rate)
+      rateByItem.set(p.vendorItemNo.toLowerCase(), Number(p.carveOutPercent))
     }
   }
 
@@ -131,9 +121,9 @@ async function _getRebateForecastImpl(
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
     monthly.set(key, (monthly.get(key) ?? 0) + spend)
     trailingTotalSpend += spend
-    const rate =
-      (r.vendorItemNo ? rateByItem.get(r.vendorItemNo.toLowerCase()) : undefined) ??
-      (r.manufacturerNo ? rateByMfr.get(r.manufacturerNo.toLowerCase()) : undefined)
+    const rate = r.vendorItemNo
+      ? rateByItem.get(r.vendorItemNo.toLowerCase())
+      : undefined
     if (rate !== undefined) trailingCarveRebate += spend * rate
   }
 
