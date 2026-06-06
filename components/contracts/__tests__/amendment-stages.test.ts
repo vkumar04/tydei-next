@@ -14,8 +14,24 @@ import {
   nextStage,
   sanitizeInteger,
   sanitizeNumeric,
+  isAutoApplicableField,
+  isPayPeriodRelated,
+  partitionChanges,
+  AUTO_APPLICABLE_FIELDS,
   type Stage,
 } from "@/components/contracts/amendment-extractor"
+import type { AmendmentChange } from "@/app/api/ai/extract-amendment/route"
+
+function change(over: Partial<AmendmentChange>): AmendmentChange {
+  return {
+    field: "x",
+    label: "X",
+    oldValue: "a",
+    newValue: "b",
+    type: "modified",
+    ...over,
+  }
+}
 
 describe("amendment-extractor stage progression", () => {
   it("advances upload → review → confirm → applying → done", () => {
@@ -82,5 +98,101 @@ describe("sanitizeInteger", () => {
 
   it("throws on unparseable input", () => {
     expect(() => sanitizeInteger("not a number")).toThrow()
+  })
+})
+
+describe("isAutoApplicableField", () => {
+  it("accepts allow-listed scalar fields", () => {
+    expect(isAutoApplicableField("effectiveDate")).toBe(true)
+    expect(isAutoApplicableField("totalValue")).toBe(true)
+    expect(isAutoApplicableField("autoRenewal")).toBe(true)
+    expect(isAutoApplicableField("contractNumber")).toBe(true)
+  })
+
+  it("rejects term/tier/pricing structure fields", () => {
+    expect(
+      isAutoApplicableField("term:spend_rebate:tier_1_rebatePercent"),
+    ).toBe(false)
+    expect(isAutoApplicableField("pricing:item_42_unitPrice")).toBe(false)
+    expect(isAutoApplicableField("rebatePayPeriod")).toBe(false)
+    expect(isAutoApplicableField("spendBaseline")).toBe(false)
+  })
+
+  it("matches the switch cases in handleApply", () => {
+    // Guard against drift: these are exactly the keys the apply switch writes.
+    expect([...AUTO_APPLICABLE_FIELDS].sort()).toEqual(
+      [
+        "annualValue",
+        "autoRenewal",
+        "contractNumber",
+        "description",
+        "effectiveDate",
+        "expirationDate",
+        "gpoAffiliation",
+        "name",
+        "notes",
+        "terminationNoticeDays",
+        "totalValue",
+      ].sort(),
+    )
+  })
+})
+
+describe("isPayPeriodRelated", () => {
+  it("flags pay-period / payment-timing fields", () => {
+    expect(
+      isPayPeriodRelated(change({ field: "rebatePayPeriod", label: "Rebate Pay Period" })),
+    ).toBe(true)
+    expect(
+      isPayPeriodRelated(change({ field: "term:x:paymentTiming", label: "Payment Timing" })),
+    ).toBe(true)
+    expect(
+      isPayPeriodRelated(change({ field: "x", label: "Performance Period" })),
+    ).toBe(true)
+  })
+
+  it("does not flag unrelated fields", () => {
+    expect(
+      isPayPeriodRelated(change({ field: "totalValue", label: "Total Value" })),
+    ).toBe(false)
+    expect(
+      isPayPeriodRelated(change({ field: "expirationDate", label: "Expiration Date" })),
+    ).toBe(false)
+  })
+})
+
+describe("partitionChanges", () => {
+  it("auto-applies allow-listed scalars and surfaces the rest", () => {
+    const changes: AmendmentChange[] = [
+      change({ field: "totalValue", label: "Total Value" }),
+      change({ field: "term:spend:tier_1_rebatePercent", label: "Tier 1 Rebate %" }),
+      change({ field: "expirationDate", label: "Expiration Date" }),
+      change({ field: "pricing:item_1", label: "Item 1 Price", type: "added" }),
+    ]
+    const { autoApplied, notAutoApplied } = partitionChanges(changes)
+    expect(autoApplied.map((c) => c.field)).toEqual([
+      "totalValue",
+      "expirationDate",
+    ])
+    expect(notAutoApplied.map((c) => c.field)).toEqual([
+      "term:spend:tier_1_rebatePercent",
+      "pricing:item_1",
+    ])
+  })
+
+  it("never auto-applies removed changes even on allow-listed fields", () => {
+    const { autoApplied, notAutoApplied } = partitionChanges([
+      change({ field: "totalValue", label: "Total Value", type: "removed" }),
+    ])
+    expect(autoApplied).toHaveLength(0)
+    expect(notAutoApplied.map((c) => c.field)).toEqual(["totalValue"])
+  })
+
+  it("collects pay-period flags from any bucket", () => {
+    const { payPeriodFlags } = partitionChanges([
+      change({ field: "rebatePayPeriod", label: "Rebate Pay Period" }),
+      change({ field: "totalValue", label: "Total Value" }),
+    ])
+    expect(payPeriodFlags.map((c) => c.field)).toEqual(["rebatePayPeriod"])
   })
 })
