@@ -162,6 +162,36 @@ Do NOT return an empty tiers array for a usage contract that clearly has a
 tier structure. If the document is ambiguous, still emit your best-guess tiers
 with rebateType="percent_of_spend" rather than dropping them entirely.
 
+── VARIABLE / IRREGULAR PAY PERIODS (per term) ──
+Charles 2026-06-06: the rebate accrual engine requires a rigid payout
+cadence enum (monthly / quarterly / semi_annual / annual). Many real
+contracts pay rebates on an IRREGULAR schedule that does not fit a single
+enum value. We capture that irregularity separately so the facility review
+team can verify the cadence against their books — it is NOT used to drive
+math automatically.
+
+A term has VARIABLE / IRREGULAR pay periods when ANY of these is true:
+- Rebate is paid N days after the period close
+  ("paid 60 days after quarter-end", "remitted within 45 days of year-end").
+- Only certain periods pay out ("rebates paid in Q1 and Q3 only",
+  "annual true-up paid each January").
+- The cadence differs per tier ("Tier 1 monthly, Tier 2+ quarterly").
+- Payout is keyed to specific calendar dates ("paid on March 31 and
+  September 30").
+- Payout is volume-triggered rather than time-based ("paid once cumulative
+  spend crosses $X", "paid upon reaching each tier").
+
+Rules per term:
+- If the term pays on a STANDARD cadence with no exceptions: set
+  paymentTiming to the matching enum value, leave hasVariablePayPeriods
+  false/absent, and leave payPeriodDetail empty.
+- If the term has ANY irregularity from the list above: set paymentTiming
+  to the best-guess BASE cadence (or null if there is no sensible base),
+  set hasVariablePayPeriods: true, and put the exact specifics — quoted
+  from the contract where possible — in payPeriodDetail. Example:
+  paymentTiming="quarterly", hasVariablePayPeriods=true,
+  payPeriodDetail="Paid 60 days after each calendar quarter-end".
+
 ── LEGACY FALLBACK SHAPE ──
 If the rich schema validation fails, respond with the legacy shape instead:
 {

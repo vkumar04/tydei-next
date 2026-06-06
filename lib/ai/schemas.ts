@@ -164,6 +164,24 @@ export const extractedContractSchema = z.object({
         .enum(["monthly", "quarterly", "semi_annual", "annual"])
         .optional()
         .describe("How often rebates are paid out."),
+      // Charles 2026-06-06: the accrual engine requires a rigid
+      // PerformancePeriod enum, so variable / irregular rebate timing
+      // can't drive math. Instead we CAPTURE the irregularity as a flag
+      // + free-text, SURFACE it in the review UI for human verification,
+      // and PERSIST the detail to the contract's notes. paymentTiming
+      // above stays the best-guess base cadence.
+      hasVariablePayPeriods: z
+        .boolean()
+        .optional()
+        .describe(
+          "True when the contract specifies irregular / non-uniform rebate payment timing (e.g. paid 60 days after quarter-end, Q1/Q3 only, per-tier variation, specific calendar dates) that does not fit a single standard cadence.",
+        ),
+      payPeriodDetail: z
+        .string()
+        .optional()
+        .describe(
+          "Free-text description of the irregular rebate payment timing when hasVariablePayPeriods is true. E.g. 'Paid 60 days after quarter-end' or 'Tier 1 monthly, Tier 2+ quarterly'. Empty when the term uses a standard paymentTiming.",
+        ),
       appliesTo: z
         .string()
         .optional()
@@ -340,6 +358,20 @@ export const richContractExtractSchema = z.object({
         effectiveFrom: z.string().nullable().describe("Term start date"),
         effectiveTo: z.string().nullable().describe("Term end date"),
         performancePeriod: z.enum(["monthly", "quarterly", "semi_annual", "annual"]).nullable(),
+        // Charles 2026-06-06: per-term rebate payout cadence + variable
+        // pay-period capture. The legacy extractedContractSchema term
+        // carries the same trio; the runtime ingest path receives the
+        // legacy shape cast as rich (see mass-upload.tsx handleComplete),
+        // so these must exist on BOTH term shapes or the ingest mapper
+        // drops them. paymentTiming is the best-guess base cadence;
+        // hasVariablePayPeriods + payPeriodDetail capture irregularity
+        // the rigid accrual engine can't model, surfaced for human review.
+        paymentTiming: z
+          .enum(["monthly", "quarterly", "semi_annual", "annual"])
+          .nullable()
+          .optional(),
+        hasVariablePayPeriods: z.boolean().nullable().optional(),
+        payPeriodDetail: z.string().nullable().optional(),
         volumeType: z.enum(["product_category", "catalog_cap_based", "procedure_code"]).nullable(),
 
         // Tier structure
