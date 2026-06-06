@@ -20,6 +20,7 @@ import type { AmortizationEntry } from "@/lib/rebates/engine/types"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { sumRebateAppliedToCapital } from "@/lib/contracts/rebate-capital-filter"
+import { selectMinAnnualPurchase } from "@/lib/contracts/min-annual-selection"
 import type { CollectedRebateLike } from "@/lib/contracts/rebate-collected-filter"
 import {
   normalizeCapitalLineItems,
@@ -219,10 +220,25 @@ export interface ContractCapitalScheduleResult {
   /** Charles W1.Y-D — contract type, so the card can conditionally render
    * the tie-in-only Minimum Annual Purchase + retirement block. */
   contractType: string
-  /** Charles W1.Y-D — minimum annual purchase floor, sourced from the
-   * largest `minimumPurchaseCommitment` across the contract's terms (the
-   * tie-in term typically carries this). Null when no term has one. */
+  /** Charles W1.Y-D — minimum annual purchase floor. E4 (Charles
+   * 2026-06-06): now the LOWEST positive `minimumPurchaseCommitment` across
+   * the contract's terms (was largest), falling back to the lowest positive
+   * `spendBaseline`. Null when no term has either. */
   minAnnualPurchase: number | null
+  /** E4 (Charles 2026-06-06) — where `minAnnualPurchase` came from, so the
+   * card can disclose the choice. Null when there's no floor at all. */
+  minAnnualPurchaseSource: "commitment" | "baseline" | null
+  /** E4 (Charles 2026-06-06) — count of terms carrying a positive
+   * `minimumPurchaseCommitment`; lets the UI say "lowest of N". 0 when the
+   * floor came from a baseline fallback or there's no floor. */
+  minAnnualPurchaseCommitmentCount: number
+  /** E3 (Charles 2026-06-06) — forward-looking pace toward the floor at the
+   * current rolling-12 run rate. Null when there's no floor. */
+  minAnnualPace: {
+    projectedAnnualSpend: number
+    onPaceToMeet: boolean
+    monthlySpendNeeded: number
+  } | null
   /** Charles W1.Y-D — trailing-12mo spend, computed via the same cascade
    * as `getContract` (ContractPeriod → COG contract-scoped → COG
    * vendor-scoped). Feeds `computeMinAnnualShortfall`. */
@@ -457,6 +473,9 @@ export async function getContractCapitalSchedule(
     projectedEndOfTermBalance: null,
     contractType: contract?.contractType ?? "usage",
     minAnnualPurchase: null,
+    minAnnualPurchaseSource: null,
+    minAnnualPurchaseCommitmentCount: 0,
+    minAnnualPace: null,
     rolling12Spend: 0,
     currentTierPercent: 0,
     monthsRemaining: 0,
@@ -663,34 +682,20 @@ export async function getContractCapitalSchedule(
   // Capital" block. These are derived here so the card stays a thin
   // renderer and the math lives alongside the schedule read.
 
-  // minAnnualPurchase: largest explicit `minimumPurchaseCommitment` across
-  // terms. If no term carries one, fall back to the largest `spendBaseline`
-  // across terms — user note 2026-04-23: "That is technically the
-  // definition of the Baseline that is in the Term/Tiers for a rebate."
-  // A tie-in contract's capital term typically carries
-  // `minimumPurchaseCommitment`; picking the max avoids surfacing a second
-  // term's smaller per-term commitment. The baseline fallback means a
-  // contract that defined its spend commitment at the term-level Baseline
-  // field still drives the Min Annual Purchase card instead of showing `—`.
-  let minAnnualPurchase: number | null = null
-  for (const t of contract.terms) {
-    if (t.minimumPurchaseCommitment == null) continue
-    const n = Number(t.minimumPurchaseCommitment)
-    if (!Number.isFinite(n) || n <= 0) continue
-    if (minAnnualPurchase == null || n > minAnnualPurchase) {
-      minAnnualPurchase = n
-    }
-  }
-  if (minAnnualPurchase == null) {
-    for (const t of contract.terms) {
-      if (t.spendBaseline == null) continue
-      const n = Number(t.spendBaseline)
-      if (!Number.isFinite(n) || n <= 0) continue
-      if (minAnnualPurchase == null || n > minAnnualPurchase) {
-        minAnnualPurchase = n
-      }
-    }
-  }
+  // E4 (Charles 2026-06-06): when multiple terms carry a
+  // `minimumPurchaseCommitment`, surface the LOWEST (was: largest). The UI
+  // discloses the choice via `minAnnualPurchaseSource` +
+  // `minAnnualPurchaseCommitmentCount` ("lowest of N"). Falls back to the
+  // lowest positive `spendBaseline` when no term carries an explicit
+  // commitment (E1: baseline acts as the floor — user note 2026-04-23:
+  // "That is technically the definition of the Baseline that is in the
+  // Term/Tiers for a rebate."). Pure selection lives in
+  // `selectMinAnnualPurchase` so it's unit-testable outside `"use server"`.
+  const {
+    value: minAnnualPurchase,
+    source: minAnnualPurchaseSource,
+    commitmentCount: minAnnualPurchaseCommitmentCount,
+  } = selectMinAnnualPurchase(contract.terms)
 
   // Rolling-12 spend cascade (mirrors `getContract` in lib/actions/
   // contracts.ts so the card agrees with the detail header).
@@ -728,6 +733,23 @@ export async function getContractCapitalSchedule(
   const periodSpend = Number(periodAgg._sum.totalSpend ?? 0)
   const rolling12Spend =
     periodSpend > 0 ? periodSpend : cogSpend > 0 ? cogSpend : cogVendorSpend
+
+  // E3 (Charles 2026-06-06): forward-looking pace toward the minimum annual
+  // purchase. paceMonthlyRunRate = rolling12Spend / 12. projectedAnnualSpend
+  // continues that pace for a full year. monthlySpendNeeded closes any gap to
+  // the floor over the next 12 months. Null when there is no floor.
+  const paceMonthlyRunRate = rolling12Spend / 12
+  const minAnnualPace =
+    minAnnualPurchase == null
+      ? null
+      : {
+          projectedAnnualSpend: paceMonthlyRunRate * 12,
+          onPaceToMeet: paceMonthlyRunRate * 12 >= minAnnualPurchase,
+          monthlySpendNeeded: Math.max(
+            0,
+            (minAnnualPurchase - rolling12Spend) / 12,
+          ),
+        }
 
   // Current tier percent: first term with tiers, evaluated at rolling-12
   // spend. `computeRebateFromPrismaTiers` handles the FRACTION→INTEGER
@@ -769,6 +791,9 @@ export async function getContractCapitalSchedule(
     projectedEndOfTermBalance,
     contractType: contract.contractType,
     minAnnualPurchase,
+    minAnnualPurchaseSource,
+    minAnnualPurchaseCommitmentCount,
+    minAnnualPace,
     rolling12Spend,
     currentTierPercent,
     monthsRemaining,
@@ -832,6 +857,9 @@ export async function getVendorContractCapitalSchedule(
     projectedEndOfTermBalance: null,
     contractType: contract?.contractType ?? "usage",
     minAnnualPurchase: null,
+    minAnnualPurchaseSource: null,
+    minAnnualPurchaseCommitmentCount: 0,
+    minAnnualPace: null,
     rolling12Spend: 0,
     currentTierPercent: 0,
     monthsRemaining: 0,
@@ -964,6 +992,9 @@ export async function getVendorContractCapitalSchedule(
     projectedEndOfTermBalance: null,
     contractType: contract.contractType,
     minAnnualPurchase: null,
+    minAnnualPurchaseSource: null,
+    minAnnualPurchaseCommitmentCount: 0,
+    minAnnualPace: null,
     rolling12Spend: 0,
     currentTierPercent: 0,
     monthsRemaining: Math.max(

@@ -182,6 +182,18 @@ function AddTransactionButtons({
       } catch (err) {
         console.warn("[recompute] refreshContractMetrics failed", err)
       }
+      // E2 (Charles 2026-06-06): persist the tie-in capital shortfall
+      // carry-forward ledger on the same click. Best-effort — a ledger
+      // failure must never surface a recompute success as an error, and
+      // the writer is a no-op for non-capital contracts.
+      try {
+        const { recomputeTieInShortfallLedger } = await import(
+          "@/lib/actions/contracts/tie-in-shortfall"
+        )
+        await recomputeTieInShortfallLedger(contractId)
+      } catch (err) {
+        console.error("[recompute] recomputeTieInShortfallLedger failed", err)
+      }
       return result
     },
     onSuccess: (result) => {
@@ -216,6 +228,10 @@ function AddTransactionButtons({
       })
       queryClient.invalidateQueries({
         queryKey: queryKeys.contracts.detail(contractId),
+      })
+      // E2: refresh the shortfall carry-forward ledger section.
+      queryClient.invalidateQueries({
+        queryKey: ["tie-in-shortfall-ledger", contractId],
       })
     },
     onError: () => {

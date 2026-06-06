@@ -1055,6 +1055,9 @@ export function ContractTermsEntry({
                                 ? "Floor. If 12-month spend falls below this, the contract will not retire its capital on schedule. Drives the at-risk badge on the Capital Amortization card."
                                 : "Reference only — not enforced in rebate math today."}
                             </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              If left blank, the term baseline is used as the minimum annual purchase floor.
+                            </p>
                             {(term.minimumPurchaseCommitment == null ||
                               term.minimumPurchaseCommitment === 0) && (
                               <p className="inline-flex items-start gap-1 text-[11px] text-amber-700 dark:text-amber-400">

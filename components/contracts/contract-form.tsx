@@ -136,7 +136,7 @@ export function ContractFormBasicInfo({
   const { data: contractsData } = useQuery({
     queryKey: ["contracts", "link-options"],
     queryFn: () => getContracts({ pageSize: 100 }),
-    enabled: contractType === "tie_in" || contractType === "capital",
+    enabled: contractType === "capital",
   })
 
   // Auto-populate contract total from vendor COG spend when vendor changes
@@ -331,8 +331,8 @@ export function ContractFormBasicInfo({
         </CardContent>
       </Card>
 
-      {/* Linked Contract (for Tie-In and Capital types) */}
-      {(contractType === "tie_in" || contractType === "capital") && (
+      {/* Linked Contract (capital contracts only — Charles 2026-06-06) */}
+      {contractType === "capital" && (
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2">
@@ -340,9 +340,7 @@ export function ContractFormBasicInfo({
               Linked Contract
             </CardTitle>
             <CardDescription>
-              {contractType === "tie_in"
-                ? "Tie this contract to the capital equipment purchase it pays down with rebates."
-                : "Link this capital equipment contract to an existing contract."}
+              Link this capital equipment contract to an existing contract.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

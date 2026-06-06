@@ -19,15 +19,21 @@
  */
 
 import { useQuery } from "@tanstack/react-query"
-import { HelpCircle } from "lucide-react"
+import { ChevronDown, HelpCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { getTieInShortfallLedger } from "@/lib/actions/contracts/tie-in-shortfall"
 import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import {
   getContractCapitalSchedule,
@@ -258,6 +264,11 @@ export function ContractAmortizationCard({
           <TieInMinPurchaseBlock data={data} />
         ) : null}
 
+        {/* ── Shortfall carry-forward ledger (E2) ──────────────────── */}
+        {scope === "facility" && (
+          <ShortfallLedgerSection contractId={contractId} />
+        )}
+
         {/* ── Schedule table (A1) ──────────────────────────────────── */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -386,6 +397,23 @@ function TieInMinPurchaseBlock({
         <p className="mt-1 text-[11px] text-muted-foreground">
           Rolling-12 spend: {formatCurrency(shortfall.spend)}
         </p>
+        {data.minAnnualPurchase != null && data.minAnnualPurchaseSource === "baseline" && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Using the term baseline as the floor (no explicit minimum annual purchase set).
+          </p>
+        )}
+        {data.minAnnualPurchase != null && data.minAnnualPurchaseCommitmentCount > 1 && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Lowest of {data.minAnnualPurchaseCommitmentCount} minimum commitments on this contract.
+          </p>
+        )}
+        {data.minAnnualPurchase != null && data.minAnnualPace != null && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {data.minAnnualPace.onPaceToMeet
+              ? "On pace to meet the minimum at current spend."
+              : `Behind pace — about ${formatCurrency(data.minAnnualPace.monthlySpendNeeded)}/mo needed to reach the minimum.`}
+          </p>
+        )}
       </div>
       <div className="rounded-md border bg-card p-3">
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -423,6 +451,91 @@ function TieInMinPurchaseBlock({
         </p>
       </div>
     </div>
+  )
+}
+
+/**
+ * E2 (Charles 2026-06-06): read-only render of the persisted tie-in capital
+ * shortfall carry-forward ledger. Renders nothing when there are no rows (no
+ * empty card). Data comes from `getTieInShortfallLedger`, written by
+ * `recomputeTieInShortfallLedger` on the "Recompute Earned Rebates" click.
+ */
+function ShortfallLedgerSection({ contractId }: { contractId: string }) {
+  const { data } = useQuery({
+    queryKey: ["tie-in-shortfall-ledger", contractId],
+    queryFn: () => getTieInShortfallLedger(contractId),
+  })
+
+  if (!data || data.length === 0) return null
+
+  const outstanding = data.length > 0 ? data[data.length - 1]!.runningBalance : 0
+
+  return (
+    <Collapsible className="rounded-md border">
+      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
+        <span className="text-sm font-medium">Shortfall Carry-Forward</span>
+        <span className="flex items-center gap-2">
+          <span className="text-xs tabular-nums text-muted-foreground">
+            Outstanding: {formatCurrency(outstanding)}
+          </span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="overflow-x-auto border-t">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-muted-foreground">
+              <tr className="border-b">
+                <th className="py-2 pl-3 pr-3 text-left font-medium">Period</th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  Scheduled Due
+                </th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  Rebate Earned
+                </th>
+                <th className="py-2 pr-3 text-right font-medium">Shortfall</th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  Carried Balance
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row) => (
+                <tr key={row.id} className="border-b last:border-0">
+                  <td className="py-2 pl-3 pr-3 font-medium">
+                    {row.periodNumber}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {formatCurrency(row.scheduledDue)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {formatCurrency(row.rebateEarned)}
+                  </td>
+                  <td
+                    className={
+                      "py-2 pr-3 text-right tabular-nums " +
+                      (row.periodShortfall > 0
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-muted-foreground")
+                    }
+                  >
+                    {formatCurrency(row.periodShortfall)}
+                  </td>
+                  <td
+                    className={
+                      "py-2 pr-3 text-right tabular-nums " +
+                      (row.runningBalance > 0 ? "font-medium" : "text-muted-foreground")
+                    }
+                  >
+                    {formatCurrency(row.runningBalance)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 

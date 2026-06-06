@@ -12,7 +12,6 @@
 import { useMemo, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { X } from "lucide-react"
 
@@ -116,7 +115,7 @@ export function GroupedVendorPicker({
             </div>
           )}
 
-          <ScrollArea className="h-48 rounded-md border p-2">
+          <div className="max-h-48 overflow-y-auto rounded-md border p-2">
             <ul className="space-y-1">
               {filtered.map((vendor) => (
                 <li
@@ -131,7 +130,7 @@ export function GroupedVendorPicker({
                 </li>
               ))}
             </ul>
-          </ScrollArea>
+          </div>
 
           <p className="text-xs text-muted-foreground">
             {selected.length} additional vendor{selected.length === 1 ? "" : "s"} selected
