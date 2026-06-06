@@ -386,6 +386,23 @@ function TieInMinPurchaseBlock({
         <p className="mt-1 text-[11px] text-muted-foreground">
           Rolling-12 spend: {formatCurrency(shortfall.spend)}
         </p>
+        {data.minAnnualPurchase != null && data.minAnnualPurchaseSource === "baseline" && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Using the term baseline as the floor (no explicit minimum annual purchase set).
+          </p>
+        )}
+        {data.minAnnualPurchase != null && data.minAnnualPurchaseCommitmentCount > 1 && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Lowest of {data.minAnnualPurchaseCommitmentCount} minimum commitments on this contract.
+          </p>
+        )}
+        {data.minAnnualPurchase != null && data.minAnnualPace != null && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {data.minAnnualPace.onPaceToMeet
+              ? "On pace to meet the minimum at current spend."
+              : `Behind pace — about ${formatCurrency(data.minAnnualPace.monthlySpendNeeded)}/mo needed to reach the minimum.`}
+          </p>
+        )}
       </div>
       <div className="rounded-md border bg-card p-3">
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
