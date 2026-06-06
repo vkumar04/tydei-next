@@ -41,11 +41,7 @@ export interface ForecastTermLike {
   }>
 }
 
-const SPEND_BASED_TERM_TYPES = new Set([
-  "spend_rebate",
-  "tie_in",
-  "carve_out",
-])
+const SPEND_BASED_TERM_TYPES = new Set(["spend_rebate", "tie_in"])
 
 export interface ComputeRebateForecastInput {
   /** YYYY-MM → spend $ for that month. Must contain at least 3 months
@@ -57,6 +53,14 @@ export interface ComputeRebateForecastInput {
   terms: ReadonlyArray<ForecastTermLike>
   /** How many months of forecast to project. Default 12. */
   forecastMonths?: number
+  /**
+   * Flat carve-out rate (decimal, e.g. 0.03 = 3%). When > 0, the engine
+   * bypasses the tier ladder and applies this rate to every history +
+   * forecast point's spend. Carve-out terms have no tiers, so the tier
+   * projection would otherwise return $0. Derived by the caller from
+   * ContractPricing.carveOutPercent (see rebate-forecast.ts).
+   */
+  carveOutEffectiveRate?: number
 }
 
 export function computeRebateForecast(
@@ -99,7 +103,16 @@ export function computeRebateForecast(
     terms[0]
   const tiers = spendTerm?.tiers ?? []
 
-  const projectTier = (cumulativeYtd: number) => {
+  const carveOutRate = input.carveOutEffectiveRate ?? 0
+  const isCarveOut = carveOutRate > 0
+
+  const projectRate = (
+    cumulativeYtd: number,
+  ): { achievedTier: number; rate: number } => {
+    if (isCarveOut) {
+      // Flat per-reference rate — no tier ladder for carve-outs.
+      return { achievedTier: 0, rate: carveOutRate }
+    }
     let achievedTier = 0
     let rate = 0
     for (const t of tiers) {
@@ -117,7 +130,7 @@ export function computeRebateForecast(
     isForecast: boolean,
     cumulative: number,
   ): RebateForecastPoint => {
-    const { achievedTier, rate } = projectTier(cumulative)
+    const { achievedTier, rate } = projectRate(cumulative)
     return {
       period: key,
       spend: Math.round(spend * 100) / 100,
