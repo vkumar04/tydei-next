@@ -44,7 +44,106 @@ function countUnionLeaves(def: unknown): number {
 }
 
 describe("extract schemas — Anthropic tool-input compatibility", () => {
-  it("extractedContractSchema has at most 16 union-typed leaves", () => {
-    expect(countUnionLeaves(extractedContractSchema._def)).toBeLessThanOrEqual(16)
+  it("extractedContractSchema has at most 18 union-typed leaves", () => {
+    expect(countUnionLeaves(extractedContractSchema._def)).toBeLessThanOrEqual(18)
+  })
+})
+
+describe("extractedContractSchema — variable pay periods", () => {
+  // A minimal-but-complete extracted contract with one term that carries
+  // the new variable-pay-period fields.
+  const baseContract = {
+    contractName: "Acme Spine Rebate Agreement",
+    vendorName: "Acme",
+    contractType: "usage" as const,
+    effectiveDate: "2026-01-01",
+    expirationDate: "2026-12-31",
+    terms: [
+      {
+        termName: "Spend Rebate",
+        termType: "spend_rebate",
+        tiers: [
+          {
+            tierNumber: 1,
+            spendMin: 0,
+            rebateType: "percent_of_spend",
+            rebateValue: 3,
+          },
+        ],
+      },
+    ],
+  }
+
+  it("round-trips hasVariablePayPeriods + payPeriodDetail on a term", () => {
+    const input = {
+      ...baseContract,
+      terms: [
+        {
+          ...baseContract.terms[0],
+          paymentTiming: "quarterly" as const,
+          hasVariablePayPeriods: true,
+          payPeriodDetail: "Paid 60 days after quarter-end",
+        },
+      ],
+    }
+    const parsed = extractedContractSchema.parse(input)
+    expect(parsed.terms[0]!.hasVariablePayPeriods).toBe(true)
+    expect(parsed.terms[0]!.payPeriodDetail).toBe(
+      "Paid 60 days after quarter-end",
+    )
+  })
+
+  it("parses an older-shape term WITHOUT the new fields (backward compat)", () => {
+    const parsed = extractedContractSchema.parse(baseContract)
+    expect(parsed.terms[0]!.hasVariablePayPeriods).toBeUndefined()
+    expect(parsed.terms[0]!.payPeriodDetail).toBeUndefined()
+  })
+})
+
+describe("mergeExtractedContracts — variable pay periods survive merge", () => {
+  it("keeps hasVariablePayPeriods/payPeriodDetail from whichever chunk set them", async () => {
+    const { mergeExtractedContracts } = await import(
+      "@/lib/ai/contract-extract-merger"
+    )
+    // Chunk 1: header + the term WITHOUT variable-period detail (e.g. a
+    // cover page that lists the term name but not the payment footnote).
+    const chunk1 = {
+      contractName: "Acme Spine Rebate Agreement",
+      vendorName: "Acme",
+      contractType: "usage" as const,
+      effectiveDate: "2026-01-01",
+      expirationDate: "2026-12-31",
+      terms: [
+        {
+          termName: "Spend Rebate",
+          termType: "spend_rebate",
+          tiers: [{ tierNumber: 1, spendMin: 0, rebateValue: 3 }],
+        },
+      ],
+    }
+    // Chunk 2: SAME term (same name+type) but now with the variable-period
+    // footnote, and one MORE tier so the "more tiers wins" rule selects it.
+    const chunk2 = {
+      ...chunk1,
+      terms: [
+        {
+          termName: "Spend Rebate",
+          termType: "spend_rebate",
+          paymentTiming: "quarterly" as const,
+          hasVariablePayPeriods: true,
+          payPeriodDetail: "Paid 60 days after quarter-end",
+          tiers: [
+            { tierNumber: 1, spendMin: 0, rebateValue: 3 },
+            { tierNumber: 2, spendMin: 100000, rebateValue: 5 },
+          ],
+        },
+      ],
+    }
+    const merged = mergeExtractedContracts([chunk1, chunk2])
+    expect(merged.terms).toHaveLength(1)
+    expect(merged.terms[0]!.hasVariablePayPeriods).toBe(true)
+    expect(merged.terms[0]!.payPeriodDetail).toBe(
+      "Paid 60 days after quarter-end",
+    )
   })
 })

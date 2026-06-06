@@ -341,7 +341,18 @@ export function VendorContractSubmission({
       if (!isNaN(expDate.getTime())) setExpirationDate(expDate)
     }
     if (data.totalValue) setContractTotal(String(data.totalValue))
-    if (data.description) setDescription(data.description)
+    // Charles 2026-06-06: the rebate engine can't model irregular payout
+    // timing, so the AI captures it as per-term free-text. Fold any
+    // variable pay-period detail into the description (which becomes the
+    // PendingContract.notes on submit) so it isn't lost on the vendor path.
+    const variablePayPeriodNote = data.terms
+      .filter((t) => t.hasVariablePayPeriods && t.payPeriodDetail)
+      .map((t) => `[${t.termName}] Variable pay period: ${t.payPeriodDetail}`)
+      .join(" | ")
+    const mergedDescription = [data.description, variablePayPeriodNote]
+      .filter((s): s is string => Boolean(s && s.trim()))
+      .join(" — ")
+    if (mergedDescription) setDescription(mergedDescription)
 
     // Charles 2026-04-29 Bug B: capital/tie-in PDFs now auto-fill the
     // capital fields. Pre-fix the form's capital inputs stayed empty

@@ -403,6 +403,24 @@ export function AIExtractReview({
                   </div>
                 </div>
 
+                {/* Charles 2026-06-06: variable pay-period callout. The
+                    accrual engine can't model irregular timing, so we flag
+                    it for the reviewer to confirm against their books. */}
+                {term.hasVariablePayPeriods && (
+                  <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Variable Pay Period
+                    </div>
+                    <p className="mt-1 text-xs text-foreground/90 leading-relaxed">
+                      {term.payPeriodDetail || "No details extracted"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+                      Review this to confirm it matches your payment schedule.
+                    </p>
+                  </div>
+                )}
+
                 {showTerms && term.tiers.length > 0 && (
                   <div className="mt-3 pt-3 border-t grid gap-1.5">
                     {term.tiers.map((tier, ti) => (

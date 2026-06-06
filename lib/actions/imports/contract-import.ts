@@ -66,6 +66,18 @@ export async function ingestExtractedContracts(
       const effectiveDate = toSafeDate(extracted.effectiveDate, today)
       const expirationDate = toSafeDate(extracted.expirationDate, inOneYear)
 
+      // Charles 2026-06-06: the accrual engine requires a rigid
+      // PerformancePeriod enum, so variable / irregular rebate timing
+      // can't drive math. Collect the per-term free-text detail the AI
+      // captured (hasVariablePayPeriods + payPeriodDetail) and persist it
+      // to Contract.notes so it isn't lost — the facility reviews it
+      // against their books. Empty string → null (no irregularity found).
+      const variablePayPeriodNote =
+        (extracted.terms ?? [])
+          .filter((t) => t.hasVariablePayPeriods && t.payPeriodDetail)
+          .map((t) => `[${t.termName}] ${t.payPeriodDetail}`)
+          .join(" | ") || null
+
       const contract = await prisma.contract.create({
         data: {
           name: displayName,
@@ -81,6 +93,7 @@ export async function ingestExtractedContracts(
             extracted.specialConditions && extracted.specialConditions.length > 0
               ? extracted.specialConditions.join(" · ")
               : null,
+          notes: variablePayPeriodNote,
           rebatePayPeriod: toPerfPeriod(extracted.rebatePayPeriod) ?? "quarterly",
           isGrouped: extracted.isGroupedContract ?? false,
           isMultiFacility:
@@ -125,7 +138,18 @@ export async function ingestExtractedContracts(
                     effectiveStart: toSafeDate(term.effectiveFrom, effectiveDate),
                     effectiveEnd: toSafeDate(term.effectiveTo, expirationDate),
                     evaluationPeriod: term.performancePeriod ?? "annual",
-                    paymentTiming: extracted.rebatePayPeriod ?? "quarterly",
+                    // Charles 2026-06-06 bug fix: this previously read
+                    // `extracted.rebatePayPeriod`, a TOP-LEVEL field that
+                    // does NOT exist on the runtime (legacy-shaped) extract
+                    // — so per-term payment timing was silently dropped and
+                    // every term defaulted to "quarterly". Use the extracted
+                    // PER-TERM value, falling back to the term's evaluation
+                    // cadence, then the top-level pay period, then quarterly.
+                    paymentTiming:
+                      term.paymentTiming ??
+                      term.performancePeriod ??
+                      extracted.rebatePayPeriod ??
+                      "quarterly",
                     ...(term.tiers && term.tiers.length > 0
                       ? {
                           tiers: {
