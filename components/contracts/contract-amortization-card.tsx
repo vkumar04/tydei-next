@@ -260,7 +260,7 @@ export function ContractAmortizationCard({
             entry.tsx). Math is delegated to the canonical
             `computeMinAnnualShortfall` and `computeCapitalRetirementNeeded`
             reducers so this surface cannot drift from peer surfaces. */}
-        {data.contractType === "tie_in" ? (
+        {data.contractType === "tie_in" || data.contractType === "capital" ? (
           <TieInMinPurchaseBlock data={data} />
         ) : null}
 
