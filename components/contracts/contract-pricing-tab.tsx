@@ -32,6 +32,7 @@ import {
 import { formatCurrency } from "@/lib/formatting"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 import { CogCategoryMappingDialog } from "@/components/facility/cog/cog-category-mapping-dialog"
+import { PricingCategoryRemapDialog } from "@/components/pricing/pricing-category-remap-dialog"
 import { Tags } from "lucide-react"
 
 interface ContractPricingTabProps {
@@ -55,6 +56,11 @@ export function ContractPricingTab({
   // Bug 1/10: category-value mapping for the price-file flow, same dialog
   // (and global CategoryMapping rules) the COG page uses.
   const [categoryMapOpen, setCategoryMapOpen] = useState(false)
+  // Charles 2026-06-06: pre-import realign step — match detected category
+  // names to canonical ones before the import runs.
+  const [remapOpen, setRemapOpen] = useState(false)
+  const [pendingItems, setPendingItems] = useState<ContractPricingItem[]>([])
+  const [detectedCategories, setDetectedCategories] = useState<string[]>([])
 
   const pricingQueryKey = ["contract-pricing", contractId] as const
   const { data: pricing, isLoading } = useQuery({
@@ -62,12 +68,16 @@ export function ContractPricingTab({
     queryFn: () => getContractPricing(contractId),
   })
 
-  async function importItems(items: ContractPricingItem[]) {
+  async function importItems(
+    items: ContractPricingItem[],
+    categoryRemap?: Record<string, string>,
+  ) {
     // Safe (error-as-value) variant — surfaces the real failure reason
     // instead of Next.js 16's redacted production digest.
     const result = await importContractPricingSafe({
       contractId,
       items,
+      categoryRemap,
     })
     if (!result.ok) {
       toast.error(`Pricing import failed: ${result.error}`)
@@ -75,6 +85,42 @@ export function ContractPricingTab({
     }
     toast.success(`Imported ${result.data.imported} pricing records`)
     await queryClient.invalidateQueries({ queryKey: pricingQueryKey })
+  }
+
+  // Charles 2026-06-06: insert the category-realign step before import.
+  // When the parsed file has detected categories, stash the items and open
+  // the remap dialog; otherwise import straight through (unchanged flow).
+  async function importWithRemapStep(items: ContractPricingItem[]) {
+    const categories = Array.from(
+      new Set(
+        items
+          .map((i) => i.category?.trim())
+          .filter((c): c is string => !!c),
+      ),
+    )
+    if (categories.length === 0) {
+      await importItems(items)
+      return
+    }
+    setPendingItems(items)
+    setDetectedCategories(categories)
+    setRemapOpen(true)
+  }
+
+  async function handleRemapApply(categoryRemap: Record<string, string>) {
+    setRemapOpen(false)
+    setUploading(true)
+    try {
+      await importItems(pendingItems, categoryRemap)
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to import pricing file",
+      )
+    } finally {
+      setUploading(false)
+      setPendingItems([])
+      setDetectedCategories([])
+    }
   }
 
   async function handleFile(file: File) {
@@ -96,7 +142,7 @@ export function ContractPricingTab({
         )
         return
       }
-      await importItems(parsed.items)
+      await importWithRemapStep(parsed.items)
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to upload pricing file",
@@ -119,7 +165,7 @@ export function ContractPricingTab({
         toast.error("No valid pricing items found with the selected mapping.")
         return
       }
-      await importItems(items)
+      await importWithRemapStep(items)
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to import pricing file",
@@ -309,6 +355,20 @@ export function ContractPricingTab({
           setCategoryMapOpen(o)
           if (!o) void queryClient.invalidateQueries({ queryKey: pricingQueryKey })
         }}
+      />
+      <PricingCategoryRemapDialog
+        open={remapOpen}
+        onOpenChange={(o) => {
+          setRemapOpen(o)
+          if (!o) {
+            // User cancelled the realign step — drop the pending import.
+            setUploading(false)
+            setPendingItems([])
+            setDetectedCategories([])
+          }
+        }}
+        detectedCategories={detectedCategories}
+        onApply={handleRemapApply}
       />
     </Card>
   )

@@ -34,6 +34,10 @@ export const bulkImportPricingSchema = z.object({
   vendorId: z.string().min(1),
   facilityId: z.string().min(1),
   records: z.array(pricingFileInputSchema).min(1),
+  // Charles 2026-06-06: user-chosen raw-detected-category → canonical
+  // remap, applied BEFORE canonicalization. Optional — empty/absent means
+  // "no realignment", and import behaves exactly as before.
+  categoryRemap: z.record(z.string(), z.string()).optional(),
 })
 
 export type BulkImportPricingInput = z.infer<typeof bulkImportPricingSchema>

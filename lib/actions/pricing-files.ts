@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { resolveCategoryNamesBulk, isPlaceholderCategory } from "@/lib/categories/resolve"
+import { applyCategoryRemap } from "@/lib/categories/apply-category-remap"
 import {
   pricingFiltersSchema,
   bulkImportPricingSchema,
@@ -17,6 +18,57 @@ import { populateCarveOutTermsForContract } from "@/lib/contracts/populate-carve
 import { sanitizePricingRow } from "@/lib/contracts/pricing-row-sanitize"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import type { ContractPricingItem } from "./pricing-files-types"
+
+// ─── Persist user-chosen category remaps ────────────────────────
+//
+// Charles 2026-06-06: when the user realigns detected pricing categories to
+// canonical ones during upload, persist each pick as a confirmed
+// CategoryMapping rule so future imports auto-apply it (Pass 0 of
+// resolveCategoryNamesBulk reads these). Mirrors remapCOGCategory's upsert.
+// Non-exported (the file is `"use server"`, but only EXPORTS must be async
+// fns) so it never crosses the action boundary on its own.
+//
+// auth-scope-scanner-skip: CategoryMapping is global taxonomy (no facilityId
+// column, same as ProductCategory) — cannot be tenant-scoped. Callers gate
+// with requireFacility before reaching here. Failures are swallowed: a
+// mapping-persist hiccup must never roll back the pricing import the user is
+// waiting on (the in-import remap already applied).
+async function persistConfirmedCategoryRemap(
+  categoryRemap: Record<string, string> | undefined,
+): Promise<void> {
+  if (!categoryRemap) return
+  for (const [rawDetected, canonical] of Object.entries(categoryRemap)) {
+    const from = rawDetected.trim()
+    const to = canonical.trim()
+    if (!from || !to || from.toLowerCase() === to.toLowerCase()) continue
+    try {
+      // auth-scope-scanner-skip: CategoryMapping is global taxonomy (no
+      // facilityId column, same as ProductCategory) — cannot be tenant-scoped.
+      const existing = await prisma.categoryMapping.findFirst({
+        where: { cogCategory: { equals: from, mode: "insensitive" } },
+        select: { id: true },
+      })
+      if (existing) {
+        // auth-scope-scanner-skip: global taxonomy; updating the row found by
+        // cogCategory above (action gated by requireFacility upstream).
+        await prisma.categoryMapping.update({
+          where: { id: existing.id },
+          data: { contractCategory: to, isConfirmed: true },
+        })
+      } else {
+        await prisma.categoryMapping.create({
+          data: { cogCategory: from, contractCategory: to, isConfirmed: true },
+        })
+      }
+    } catch (err) {
+      console.warn(
+        "[pricing-import] persist category remap failed:",
+        err,
+        { rawDetected: from, canonical: to },
+      )
+    }
+  }
+}
 
 // ─── List Pricing Files ─────────────────────────────────────────
 
@@ -127,15 +179,21 @@ export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
   // against the ProductCategory table so two imports of "Ortho-
   // Extremity" / "ortho-extremity" / "Ortho Extremity " collapse
   // to one canonical name. Mirror of the cog-import.ts wiring.
+  // Charles 2026-06-06: the user may have realigned detected categories to
+  // canonical ones in the upload's remap step. Apply that explicit choice
+  // FIRST (the user's pick wins), then run the existing canonicalize pass on
+  // the remapped value so the chosen canonical name is matched/registered.
+  const remap = data.categoryRemap ?? {}
   const canonicalCategoryMap = await resolveCategoryNamesBulk(
-    data.records.map((r) => r.category),
+    data.records.map((r) => applyCategoryRemap(r.category, remap)),
     { createMissing: true, source: "pricing_file" },
   )
   const canonicalize = (raw: string | null | undefined): string | null => {
+    const effective = applyCategoryRemap(raw, remap)
     // Bug 5: "0" / numeric / placeholder is not a category.
-    if (!raw || isPlaceholderCategory(raw)) return null
-    const key = raw.trim().toLowerCase().replace(/\s+/g, " ")
-    return canonicalCategoryMap.get(key) ?? (raw.trim() || null)
+    if (!effective || isPlaceholderCategory(effective)) return null
+    const key = effective.trim().toLowerCase().replace(/\s+/g, " ")
+    return canonicalCategoryMap.get(key) ?? (effective.trim() || null)
   }
 
   for (let i = 0; i < data.records.length; i += PRICING_BATCH_SIZE) {
@@ -163,6 +221,9 @@ export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
       errors += batch.length
     }
   }
+
+  // Charles 2026-06-06: persist the realign picks so future imports auto-apply.
+  await persistConfirmedCategoryRemap(data.categoryRemap)
 
   await logAudit({
     userId: user.id,
@@ -402,6 +463,9 @@ export type { ContractPricingItem } from "./pricing-files-types"
 export async function importContractPricing(input: {
   contractId: string
   items: ContractPricingItem[]
+  // Charles 2026-06-06: user-chosen raw-detected-category → canonical remap
+  // from the pricing-upload realign step. Applied before canonicalization.
+  categoryRemap?: Record<string, string>
 }) {
   // Charles audit round-7 BLOCKER: verify contract ownership before
   // writing pricing rows. Pre-fix any facility user could inject
@@ -463,15 +527,20 @@ export async function importContractPricing(input: {
   // a new pricing category is registered (source="pricing_file") for
   // admin audit. The closure key matches resolveCategoryNamesBulk's
   // normalize(): trim → lowercase → collapse whitespace.
+  // Charles 2026-06-06: apply the user's realign choice (detected → canonical)
+  // BEFORE canonicalization, then feed the remapped value through the existing
+  // resolver so the chosen canonical name is matched/registered.
+  const remap = input.categoryRemap ?? {}
   const categoryMap = await resolveCategoryNamesBulk(
-    dedupedItems.map((it) => it.category),
+    dedupedItems.map((it) => applyCategoryRemap(it.category, remap)),
     { createMissing: true, source: "pricing_file" },
   )
   const canonicalizeCategory = (raw: string | undefined): string | undefined => {
+    const effective = applyCategoryRemap(raw, remap)
     // Bug 5: "0" / numeric / placeholder is not a category.
-    if (!raw || isPlaceholderCategory(raw)) return undefined
-    const key = raw.trim().toLowerCase().replace(/\s+/g, " ")
-    return categoryMap.get(key) ?? (raw.trim() || undefined)
+    if (!effective || isPlaceholderCategory(effective)) return undefined
+    const key = effective.trim().toLowerCase().replace(/\s+/g, " ")
+    return categoryMap.get(key) ?? (effective.trim() || undefined)
   }
 
   const BATCH = 1000
@@ -525,6 +594,9 @@ export async function importContractPricing(input: {
   // the pricing rows whose carveOutPercent > 0, so the engine
   // applies the carve-out math only to SKUs the pricing file
   // flagged. Skipped silently when no carve_out terms exist.
+  // Charles 2026-06-06: persist the realign picks so future imports auto-apply.
+  await persistConfirmedCategoryRemap(input.categoryRemap)
+
   let carveOutLinked = 0
   try {
     const r = await populateCarveOutTermsForContract(input.contractId)
@@ -558,6 +630,7 @@ export async function importContractPricing(input: {
 export async function importContractPricingSafe(input: {
   contractId: string
   items: ContractPricingItem[]
+  categoryRemap?: Record<string, string>
 }): Promise<SafeResult<Awaited<ReturnType<typeof importContractPricing>>>> {
   return toSafeResult(
     "importContractPricing",
