@@ -250,40 +250,42 @@ export function BasicInformationCard({
           )}
         </div>
 
-        {/* Capital Tie-In */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-            <Checkbox
-              id="capitalTieIn"
-              checked={capitalTieIn}
-              onCheckedChange={(checked) => {
-                onCapitalTieInChange(checked === true)
-              }}
-            />
-            <div className="grid gap-0.5">
-              <label
-                htmlFor="capitalTieIn"
-                className="flex items-center gap-2 cursor-pointer font-medium"
-              >
-                Capital Tie-In
-              </label>
-              <p className="text-xs text-muted-foreground">
-                Link this contract to a capital equipment agreement
-              </p>
-            </div>
-          </div>
-          {capitalTieIn && (
-            <div className="space-y-2">
-              <Label htmlFor="tieInRef">Capital Contract Reference</Label>
-              <Input
-                id="tieInRef"
-                value={tieInRef}
-                onChange={(e) => onTieInRefChange(e.target.value)}
-                placeholder="e.g., CAP-2024-001"
+        {/* Capital Tie-In (capital contracts only — Charles 2026-06-06) */}
+        {contractType === "capital" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+              <Checkbox
+                id="capitalTieIn"
+                checked={capitalTieIn}
+                onCheckedChange={(checked) => {
+                  onCapitalTieInChange(checked === true)
+                }}
               />
+              <div className="grid gap-0.5">
+                <label
+                  htmlFor="capitalTieIn"
+                  className="flex items-center gap-2 cursor-pointer font-medium"
+                >
+                  Capital Tie-In
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Link this contract to a capital equipment agreement
+                </p>
+              </div>
             </div>
-          )}
-        </div>
+            {capitalTieIn && (
+              <div className="space-y-2">
+                <Label htmlFor="tieInRef">Capital Contract Reference</Label>
+                <Input
+                  id="tieInRef"
+                  value={tieInRef}
+                  onChange={(e) => onTieInRefChange(e.target.value)}
+                  placeholder="e.g., CAP-2024-001"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Description / Special Terms */}
         <div className="space-y-2">
