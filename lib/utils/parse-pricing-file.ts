@@ -117,6 +117,28 @@ export function detectPricingColumnMapping(rawHeaders: string[]): Record<string,
   return autoMap
 }
 
+/**
+ * Decide whether the upload must route through the manual column-mapper.
+ *
+ * Always true when the REQUIRED columns (vendorItemNo, unitPrice) weren't
+ * auto-detected. Also true when no category column was detected BUT the file
+ * has at least one column we didn't map to anything — that leftover column is
+ * very likely an unrecognized category header (e.g. "Dept", "Prod Line"), and
+ * silently importing would drop the category so the realign step never fires
+ * ("no category mapping is happening", Charles 2026-06-06). Files whose every
+ * column is already mapped (a plain item+price[+list/uom] price list with no
+ * category at all) import straight through — no added friction.
+ */
+export function pricingNeedsManualMapping(
+  autoMap: Record<string, string>,
+  rawHeaders: string[],
+): boolean {
+  if (!autoMap.vendorItemNo || !autoMap.unitPrice) return true
+  if (autoMap.category) return false
+  const mapped = new Set(Object.values(autoMap))
+  return rawHeaders.some((h) => h.trim() !== "" && !mapped.has(h))
+}
+
 // ─── Build pricing items from raw rows + mapping ─────────────────
 export function buildPricingItems(
   dataRows: string[][],
@@ -247,7 +269,7 @@ export async function parsePricingFile(file: File): Promise<ParsedPricingFile> {
   }
 
   const autoMap = detectPricingColumnMapping(rawHeaders)
-  const needsManualMapping = !autoMap.vendorItemNo || !autoMap.unitPrice
+  const needsManualMapping = pricingNeedsManualMapping(autoMap, rawHeaders)
 
   const recordRows = dataRows.map((vals) => {
     const row: Record<string, string> = {}
