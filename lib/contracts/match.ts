@@ -24,6 +24,12 @@ export type CogRecordForMatch = {
   vendorId: string | null
   vendorName: string | null
   vendorItemNo: string | null
+  /**
+   * Manufacturer / cross-vendor reference number. Stable across vendor
+   * name + SKU variations within a group — the robust cross-vendor key.
+   * Optional for back-compat. (Charles 2026-06-06.)
+   */
+  manufacturerNo?: string | null
   unitCost: number
   quantity: number
   transactionDate: Date
@@ -33,6 +39,8 @@ export type CogRecordForMatch = {
 
 export type ContractPricingItemForMatch = {
   vendorItemNo: string
+  /** Manufacturer / cross-vendor reference number on the pricing row. */
+  manufacturerNo?: string | null
   unitPrice: number
   listPrice: number | null
   /**
@@ -125,6 +133,42 @@ export function cogCategoryCoveredByContract(
   return covered.has(cogCategory)
 }
 
+/** Build the on_contract / price_variance result for a matched pricing item. */
+function priceResultFor(
+  contract: ContractForMatch,
+  item: ContractPricingItemForMatch,
+  record: CogRecordForMatch,
+): MatchResult {
+  // Sign convention: variancePercent > 0 means facility OVERPAID vs contract.
+  const variancePercent =
+    item.unitPrice === 0
+      ? 0
+      : ((record.unitCost - item.unitPrice) / item.unitPrice) * 100
+
+  if (Math.abs(variancePercent) > PRICE_VARIANCE_THRESHOLD) {
+    return {
+      status: "price_variance",
+      contractId: contract.id,
+      contractPrice: item.unitPrice,
+      variancePercent,
+      matchedCategory: item.category ?? null,
+    }
+  }
+
+  const savings =
+    item.listPrice === null
+      ? 0
+      : (item.listPrice - item.unitPrice) * record.quantity
+
+  return {
+    status: "on_contract",
+    contractId: contract.id,
+    contractPrice: item.unitPrice,
+    savings,
+    matchedCategory: item.category ?? null,
+  }
+}
+
 /**
  * Returns a MatchResult describing how a COG record relates to a set of
  * candidate contracts. See file header for algorithm + sign convention.
@@ -193,49 +237,38 @@ export function matchCOGRecordToContract(
     }
   }
 
-  // 5. Item lookup across candidate contracts
+  // 5. Item lookup across candidate contracts.
+  //    Primary key: vendorItemNo (per-vendor SKU, most precise).
+  //    Fallback key: manufacturerNo (cross-vendor reference number) — stable
+  //    across the group's vendor-name/SKU inconsistencies (Charles 2026-06-06).
   const itemNoLower = record.vendorItemNo?.toLowerCase() ?? null
-  if (!itemNoLower) {
+  const mfrLower = record.manufacturerNo?.toLowerCase() ?? null
+
+  if (!itemNoLower && !mfrLower) {
     return {
       status: "off_contract_item",
-      reason: "record has no vendorItemNo to match against contract pricing",
+      reason:
+        "record has no vendorItemNo or manufacturerNo to match against contract pricing",
     }
   }
 
-  for (const contract of byCategory) {
-    const item = contract.pricingItems.find(
-      (p) => p.vendorItemNo.toLowerCase() === itemNoLower,
-    )
-    if (!item) continue
-
-    // Sign convention: variancePercent > 0 means facility OVERPAID vs contract.
-    const variancePercent =
-      item.unitPrice === 0
-        ? 0
-        : ((record.unitCost - item.unitPrice) / item.unitPrice) * 100
-
-    if (Math.abs(variancePercent) > PRICE_VARIANCE_THRESHOLD) {
-      return {
-        status: "price_variance",
-        contractId: contract.id,
-        contractPrice: item.unitPrice,
-        variancePercent,
-        matchedCategory: item.category ?? null,
-      }
+  // Primary: SKU match.
+  if (itemNoLower) {
+    for (const contract of byCategory) {
+      const item = contract.pricingItems.find(
+        (p) => p.vendorItemNo.toLowerCase() === itemNoLower,
+      )
+      if (item) return priceResultFor(contract, item, record)
     }
+  }
 
-    // Savings convention: positive = facility paid less than list.
-    const savings =
-      item.listPrice === null
-        ? 0
-        : (item.listPrice - item.unitPrice) * record.quantity
-
-    return {
-      status: "on_contract",
-      contractId: contract.id,
-      contractPrice: item.unitPrice,
-      savings,
-      matchedCategory: item.category ?? null,
+  // Fallback: cross-vendor reference number.
+  if (mfrLower) {
+    for (const contract of byCategory) {
+      const item = contract.pricingItems.find(
+        (p) => (p.manufacturerNo?.toLowerCase() ?? null) === mfrLower,
+      )
+      if (item) return priceResultFor(contract, item, record)
     }
   }
 

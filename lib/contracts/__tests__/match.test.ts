@@ -232,3 +232,72 @@ describe("matchCOGRecordToContract", () => {
     })
   })
 })
+
+describe("matchCOGRecordToContract — reference-number fallback", () => {
+  const base = {
+    id: "c1",
+    vendorId: "v-primary",
+    additionalVendorIds: ["v-secondary"],
+    status: "active" as const,
+    effectiveDate: new Date("2026-01-01"),
+    expirationDate: null,
+    facilityIds: ["f1"],
+  }
+
+  it("matches by manufacturerNo when the SKU is absent from the pricing file", () => {
+    const contract: ContractForMatch = {
+      ...base,
+      pricingItems: [
+        {
+          vendorItemNo: "SKU-A",
+          manufacturerNo: "MFR-123",
+          unitPrice: 100,
+          listPrice: 120,
+        },
+      ],
+    }
+    const record: CogRecordForMatch = {
+      facilityId: "f1",
+      vendorId: "v-secondary",
+      vendorName: "Smith & Nephew, Inc.",
+      vendorItemNo: "DIFFERENT-SKU",
+      manufacturerNo: "MFR-123",
+      unitCost: 100,
+      quantity: 2,
+      transactionDate: new Date("2026-03-01"),
+    }
+    const result = matchCOGRecordToContract(record, [contract])
+    expect(result.status).toBe("on_contract")
+    if (result.status === "on_contract") {
+      expect(result.contractId).toBe("c1")
+      expect(result.contractPrice).toBe(100)
+      expect(result.savings).toBe((120 - 100) * 2)
+    }
+  })
+
+  it("still resolves when the COG row has no vendorItemNo but has a manufacturerNo", () => {
+    const contract: ContractForMatch = {
+      ...base,
+      pricingItems: [
+        {
+          vendorItemNo: "SKU-A",
+          manufacturerNo: "MFR-999",
+          unitPrice: 50,
+          listPrice: null,
+        },
+      ],
+    }
+    const record: CogRecordForMatch = {
+      facilityId: "f1",
+      vendorId: "v-primary",
+      vendorName: "ACME",
+      vendorItemNo: null,
+      manufacturerNo: "MFR-999",
+      unitCost: 50,
+      quantity: 1,
+      transactionDate: new Date("2026-02-01"),
+    }
+    const result = matchCOGRecordToContract(record, [contract])
+    expect(result.status).toBe("on_contract")
+  })
+})
