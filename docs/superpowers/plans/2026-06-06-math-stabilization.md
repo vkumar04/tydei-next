@@ -770,7 +770,18 @@ Center** → contract detail → **Performance** tab. Confirm:
   write a failing test that reproduces it, fix the single offending file, rerun
   the oracle + parity test, and commit with a message naming the defect.
 
-**Outcome (fill in during execution):** _______________________________________
+**Outcome (2026-06-06):** RESOLVED, no code change. Aggregation verified correct
+— `market-share-parity.test.ts` (3/3) and the `market-share` oracle (5/5) both
+green. The per-category market-share card is **independent** of the forecast: it
+fetches via `getCategoryMarketShareForVendor` with its own React Query, is not
+part of `getContractPerformanceBundle`, shares no error boundary with the
+forecast card, and has no carve-out/grouped contract-type gating
+(`components/contracts/category-market-share-card.tsx`,
+`lib/actions/cog/category-market-share.ts`). So the carve-out $0 forecast bug
+could not have blanked it. The real "shows very little" symptom was the
+grouped-numerator truncation already fixed in `76f6bb4` (Jun 2). Remaining
+empty-state cases (`totalVendorSpend === 0`, all-uncategorized rows) are
+legitimate no-data states. **Charles to re-test on the current build.**
 
 ---
 
