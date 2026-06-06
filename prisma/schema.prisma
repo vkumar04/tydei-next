@@ -745,6 +745,7 @@ model Contract {
   priceVariances       InvoicePriceVariance[]
   accruals             RebateAccrual[]
   renewalBriefCaches   RenewalBriefCache[]
+  tieInShortfallLedger ContractTieInShortfallLedger[]
 
   @@index([vendorId])
   @@index([facilityId])
@@ -964,6 +965,34 @@ model ContractCapitalLineItem {
 
   @@index([contractId])
   @@map("contract_capital_line_item")
+}
+
+// E2 (Charles 2026-06-06): persist the tie-in CAPITAL shortfall
+// carry-forward per period. The engine (lib/rebates/engine/tie-in-capital.ts)
+// computes this at runtime via `options.carriedForwardShortfall`; persisting
+// the waterfall makes it tracked + auditable. One row per
+// (contract, lineItem, period). `runningBalance` is the carry-forward AFTER
+// the period (>=0; only positive shortfall carries when
+// shortfallHandling = carry_forward). See
+// lib/contracts/tie-in-shortfall-waterfall.ts for the pure logic.
+model ContractTieInShortfallLedger {
+  id                    String   @id @default(cuid())
+  contractId            String
+  lineItemId            String?
+  periodNumber          Int
+  scheduledDue          Decimal  @db.Decimal(14, 2)
+  rebateEarned          Decimal  @db.Decimal(14, 2)
+  periodShortfall       Decimal  @db.Decimal(14, 2)
+  carriedForwardBalance Decimal  @default(0) @db.Decimal(14, 2)
+  runningBalance        Decimal  @db.Decimal(14, 2)
+  shortfallHandling     TrueUpShortfallHandling
+  createdAt             DateTime @default(now())
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, lineItemId, periodNumber])
+  @@index([contractId])
+  @@map("contract_tie_in_shortfall_ledger")
 }
 
 model ContractDocument {
