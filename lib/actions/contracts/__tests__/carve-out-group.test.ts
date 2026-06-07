@@ -16,6 +16,10 @@ const groupedContract = {
   id: "c_group",
   vendorId: MAIN_VENDOR,
   additionalVendorIds: [GROUP_VENDOR],
+  // Charles 2026-06-07: carve-out now only computes when a carve_out term
+  // is present — give the grouped contract one so the COG-scope assertion
+  // still exercises the compute path.
+  terms: [{ termType: "carve_out" }],
 }
 
 let cogWhere: Record<string, unknown> | null = null
