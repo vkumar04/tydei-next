@@ -490,13 +490,19 @@ export async function getContractCapitalSchedule(
   const lineItems = normalizeCapitalLineItems(contract)
   if (lineItems.length === 0) return empty
 
-  // Bug 3/4: the amortization cadence follows the contract's cadence. The
-  // user sets it via the "Performance Period" field (performancePeriod) —
-  // #39 keyed off rebatePayPeriod by mistake, so a semi-annual contract
-  // still rendered monthly. Prefer performancePeriod, then rebatePayPeriod,
-  // then the per-line-item default (monthly).
-  const contractCadence =
+  // Cadence source of truth = the per-line-item `paymentCadence` (the capital
+  // editor writes it). `contract.performancePeriod` is NON-NULL and defaults to
+  // "monthly", so the old performancePeriod-first logic silently forced every
+  // line item to monthly — a quarterly / semi-annual line item still rendered a
+  // monthly schedule (Charles 2026-06-07). Only fall back to the contract-level
+  // period (the #39 case, where cadence was set at the contract level rather
+  // than per item) when EVERY line item is still at the default monthly cadence.
+  const allLineItemsMonthly = lineItems.every(
+    (i) => i.paymentCadence === "monthly",
+  )
+  const contractLevelCadence =
     toCadence(contract.performancePeriod) ?? toCadence(contract.rebatePayPeriod)
+  const contractCadence = allLineItemsMonthly ? contractLevelCadence : undefined
 
   const capitalCost = sumCapitalCost(lineItems)
   const downPayment = sumInitialSales(lineItems)

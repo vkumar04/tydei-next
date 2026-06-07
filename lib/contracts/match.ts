@@ -16,6 +16,8 @@
  * This module is pure. No DB calls. Callers load contracts + pass them in.
  */
 
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
+
 /** Match threshold: any |variancePercent| strictly above this is `price_variance`. */
 export const PRICE_VARIANCE_THRESHOLD = 2 // percent
 
@@ -246,10 +248,14 @@ export function matchCOGRecordToContract(
   //    Primary key: vendorItemNo (per-vendor SKU, most precise — carries price).
   //    Fallback key: manufacturerNo matched against the contract's
   //    referenceNumbers (cross-vendor membership, no price). Charles 2026-06-06.
-  const itemNoLower = record.vendorItemNo?.toLowerCase() ?? null
+  // Normalize the SKU on the COG side so it matches the contract-side
+  // normalization below. normalizeSku() returns "" for null/blank, which is
+  // falsy — so the both-null guard and the `if (skuKey)` skip below behave
+  // exactly as the old `?.toLowerCase() ?? null` did for empty SKUs.
+  const skuKey = normalizeSku(record.vendorItemNo)
   const mfrLower = record.manufacturerNo?.toLowerCase() ?? null
 
-  if (!itemNoLower && !mfrLower) {
+  if (!skuKey && !mfrLower) {
     return {
       status: "off_contract_item",
       reason:
@@ -257,11 +263,13 @@ export function matchCOGRecordToContract(
     }
   }
 
-  // Primary: SKU match.
-  if (itemNoLower) {
+  // Primary: SKU match. Normalize the contract-side SKU with the same
+  // helper so formatting drift (trailing space, hyphen vs none, case)
+  // doesn't drop the row to off_contract_item.
+  if (skuKey) {
     for (const contract of byCategory) {
       const item = contract.pricingItems.find(
-        (p) => p.vendorItemNo.toLowerCase() === itemNoLower,
+        (p) => normalizeSku(p.vendorItemNo) === skuKey,
       )
       if (item) return priceResultFor(contract, item, record)
     }

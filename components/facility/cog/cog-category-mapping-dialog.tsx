@@ -57,6 +57,11 @@ const currency = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 })
 
+// Sentinel for the "Keep as-is" target — maps the source category to
+// itself so it counts as a confirmed/recognized mapping rather than
+// showing "Unmapped" (mirrors the pricing remap dialog's KEEP_AS_IS).
+const KEEP_AS_IS = "__keep__"
+
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -191,11 +196,20 @@ function MappingRow({
     },
   })
 
-  // Targets: the canonical category list, minus this row's own name.
+  // Targets: the canonical category list, minus this row's own name (the
+  // own-name case is offered as the dedicated "Keep as-is" option below so
+  // it reads as confirming the current name rather than a remap).
   const options = useMemo(
     () => categories.filter((c) => c.toLowerCase() !== row.category.toLowerCase()),
     [categories, row.category],
   )
+
+  // "Keep as-is" is selected when the pending target equals this row's own
+  // category name (a self-mapping). Persisting it writes a confirmed
+  // CategoryMapping where contractCategory === cogCategory, so the resolver
+  // treats the category as recognized instead of leaving it "Unmapped".
+  const isKeepAsIs =
+    pending !== null && pending.toLowerCase() === row.category.toLowerCase()
 
   return (
     <TableRow>
@@ -217,10 +231,14 @@ function MappingRow({
                 className="w-[240px] justify-between"
               >
                 <span className="truncate">
-                  {pending ?? (
-                    <span className="text-muted-foreground italic">
-                      Unmapped
-                    </span>
+                  {isKeepAsIs ? (
+                    `Keep as-is (${row.category})`
+                  ) : (
+                    pending ?? (
+                      <span className="text-muted-foreground italic">
+                        Unmapped
+                      </span>
+                    )
                   )}
                 </span>
                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -238,6 +256,29 @@ function MappingRow({
                 <CommandInput placeholder="Search categories…" autoFocus />
                 <CommandList style={{ maxHeight: 320 }}>
                   <CommandEmpty>No categories found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value={`${KEEP_AS_IS} ${row.category}`}
+                      onSelect={() => {
+                        // Self-map: confirm this category's own name.
+                        setPending(row.category)
+                        setOpen(false)
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          isKeepAsIs ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      <span className="flex-1 truncate">
+                        Keep as-is{" "}
+                        <span className="text-muted-foreground">
+                          ({row.category})
+                        </span>
+                      </span>
+                    </CommandItem>
+                  </CommandGroup>
                   <CommandGroup heading={`${options.length} categories`}>
                     {options.map((c) => (
                       <CommandItem

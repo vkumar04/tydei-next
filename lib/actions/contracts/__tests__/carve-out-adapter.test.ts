@@ -18,6 +18,11 @@ let cogRows: Array<{
   transactionDate: Date
   category: string | null
 }> = []
+// Charles 2026-06-07: carve-out now only computes when the contract has a
+// `carve_out` term. Default the mock contract to having one so the
+// existing line-math assertions still exercise the compute path; the
+// term-gate regression test below flips this to a spend-rebate term.
+let contractTerms: Array<{ termType: string }> = [{ termType: "carve_out" }]
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -25,6 +30,7 @@ vi.mock("@/lib/db", () => ({
       findFirstOrThrow: vi.fn(async () => ({
         id: "c-1",
         vendorId: "v-1",
+        terms: contractTerms,
       })),
     },
     contractPricing: {
@@ -53,6 +59,29 @@ describe("getCarveOutRebate (W1.Z-A wire)", () => {
   beforeEach(() => {
     pricingRows = []
     cogRows = []
+    contractTerms = [{ termType: "carve_out" }]
+  })
+
+  it("spend-rebate contract (no carve_out term) → empty result even with carveOutPercent pricing (Charles 2026-06-07)", async () => {
+    // Regression: a pure spend-rebate contract whose pricing file carried
+    // carveOutPercent values showed a phantom carve-out rebate. The
+    // term-gate must return empty without scanning pricing/COG.
+    contractTerms = [{ termType: "spend_rebate" }]
+    pricingRows = [{ vendorItemNo: "SKU-A", carveOutPercent: 0.05 }]
+    cogRows = [
+      {
+        vendorItemNo: "SKU-A",
+        quantity: 10,
+        unitCost: 100,
+        extendedPrice: 10_000,
+        transactionDate: new Date("2026-03-01"),
+        category: null,
+      },
+    ]
+    const r = await getCarveOutRebate("c-1")
+    expect(r.rebateEarned).toBe(0)
+    expect(r.carveOutLines ?? []).toHaveLength(0)
+    expect(r.eligibleSpend).toBe(0)
   })
 
   it("empty contract → zero rebate, empty lines", async () => {

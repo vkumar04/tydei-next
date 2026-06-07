@@ -10,7 +10,10 @@ import {
   type RenewalRiskResult,
 } from "@/lib/contracts/performance"
 import type { TierLike } from "@/lib/rebates/calculate"
-import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import {
+  toDisplayRebateValue,
+  isPercentRebateType,
+} from "@/lib/contracts/rebate-value-normalize"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 /**
@@ -86,18 +89,38 @@ export async function getContractPerformance(contractId: string): Promise<{
     const actualSpend = Number(spendAgg._sum.extendedPrice ?? 0)
 
     const firstTerm = effectiveTerm
-    const tiers: TierLike[] = (firstTerm?.tiers ?? []).map((t) => ({
-      tierNumber: t.tierNumber,
-      tierName: t.tierName ?? null,
-      spendMin: Number(t.spendMin),
-      spendMax: t.spendMax != null ? Number(t.spendMax) : null,
-      // Boundary-scale: ContractTier.rebateValue is a fraction (0.03 =
-      // 3%). Engine expects integer percent per CLAUDE.md.
-      rebateValue: toDisplayRebateValue(
-        "percent_of_spend",
-        Number(t.rebateValue),
-      ),
-    }))
+    const tiers: TierLike[] = (firstTerm?.tiers ?? []).map((t) => {
+      // Charles 2026-06-07: this previously hardcoded "percent_of_spend"
+      // when scaling rebateValue, so a `fixed_rebate` tier (a flat DOLLAR
+      // amount, e.g. $10,000) got ×100'd and then multiplied by spend in
+      // `calculateRebateUtilization` → "Rebate at current spend"
+      // $38,104,500,000. Respect the real rebateType: route the fixed
+      // dollar amount through `fixedRebateAmount` (the canonical engine
+      // short-circuits to it — see lib/actions/contracts/accrual.ts) and
+      // force rebateValue to 0 so the percent path never multiplies it by
+      // spend. Percent tiers keep the fraction → integer-percent scaling.
+      const isPercent = isPercentRebateType(t.rebateType)
+      const isFixedRebate = t.rebateType === "fixed_rebate"
+      return {
+        tierNumber: t.tierNumber,
+        tierName: t.tierName ?? null,
+        spendMin: Number(t.spendMin),
+        spendMax: t.spendMax != null ? Number(t.spendMax) : null,
+        // Boundary-scale: ContractTier.rebateValue is a fraction (0.03 =
+        // 3%) for percent tiers. Engine expects integer percent per
+        // CLAUDE.md. Force 0 for every non-percent rebate type so the
+        // spend × rate utilization math never multiplies a dollar amount
+        // (or a per-unit count) by spend — this is a spend-based surface;
+        // unit-driven types (fixed_rebate_per_unit / per_procedure_rebate)
+        // have no meaningful spend-projection here.
+        rebateValue: isPercent
+          ? toDisplayRebateValue(t.rebateType, Number(t.rebateValue))
+          : 0,
+        // Only the truly flat-dollar tier routes through fixedRebateAmount
+        // so the canonical engine pays it on tier qualification.
+        fixedRebateAmount: isFixedRebate ? Number(t.rebateValue) : null,
+      }
+    })
     // Pass the term's rebateMethod so marginal contracts report the
     // true actual < max. Hardcoding cumulative made marginal terms
     // falsely display 100% utilization / $0 missed (user-reported

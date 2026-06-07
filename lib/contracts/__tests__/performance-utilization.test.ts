@@ -45,6 +45,65 @@ describe("calculateRebateUtilization — respects rebateMethod", () => {
     expect(r.utilizationPct).toBe(100)
   })
 
+  it("fixed_rebate tiers use the flat dollar amount, NOT spend × value (Charles 2026-06-07)", () => {
+    // Regression: a compliance_rebate term with fixed-dollar tiers
+    // ($10,000 / $17,500) was applied as a percent rate, so on a large
+    // spend "Rebate at current spend" and "Max at top tier" showed
+    // $38,104,500,000. fixed_rebate tiers carry their dollars in
+    // fixedRebateAmount with rebateValue forced to 0 (canonical mapping),
+    // so neither the actual nor the max may be multiplied by spend.
+    const FIXED_TIERS = [
+      {
+        tierNumber: 1,
+        spendMin: 0,
+        spendMax: 1_000_000,
+        rebateValue: 0,
+        fixedRebateAmount: 10_000,
+      },
+      {
+        tierNumber: 2,
+        spendMin: 1_000_001,
+        spendMax: null,
+        rebateValue: 0,
+        fixedRebateAmount: 17_500,
+      },
+    ]
+    const bigSpend = 3_810_450 // the spend that produced the absurd value
+    const r = calculateRebateUtilization(bigSpend, FIXED_TIERS, "cumulative")
+    // Top tier achieved → flat $17,500, never bigSpend × anything.
+    expect(r.actualRebate).toBe(17_500)
+    expect(r.maxPossibleRebate).toBe(17_500)
+    expect(r.utilizationPct).toBe(100)
+    expect(r.missedRebate).toBe(0)
+    // Sanity: nowhere near the billions the percent path produced.
+    expect(r.actualRebate).toBeLessThan(1_000_000)
+    expect(r.maxPossibleRebate).toBeLessThan(1_000_000)
+  })
+
+  it("fixed_rebate at a lower tier → that tier's flat amount, max = top tier flat amount", () => {
+    const FIXED_TIERS = [
+      {
+        tierNumber: 1,
+        spendMin: 0,
+        spendMax: 1_000_000,
+        rebateValue: 0,
+        fixedRebateAmount: 10_000,
+      },
+      {
+        tierNumber: 2,
+        spendMin: 1_000_001,
+        spendMax: null,
+        rebateValue: 0,
+        fixedRebateAmount: 17_500,
+      },
+    ]
+    // Spend only qualifies tier 1.
+    const r = calculateRebateUtilization(500_000, FIXED_TIERS, "cumulative")
+    expect(r.actualRebate).toBe(10_000)
+    expect(r.maxPossibleRebate).toBe(17_500)
+    expect(r.missedRebate).toBe(7_500)
+  })
+
   it("returns zeros for no-tier input", () => {
     const r = calculateRebateUtilization(100_000, [])
     expect(r).toEqual({

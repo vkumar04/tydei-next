@@ -14,6 +14,7 @@
  */
 
 import type { COGRecord } from "@/lib/generated/prisma/client"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 
 export type MatchMode =
   | "vendorItemNo"
@@ -39,7 +40,11 @@ export interface ContractCandidate {
 }
 
 export interface ResolveContext {
-  /** Keyed by exact vendorItemNo string (case folding is the caller's choice). */
+  /**
+   * Keyed by the NORMALIZED vendorItemNo (see normalizeSku). The caller MUST
+   * build this map with normalizeSku; the resolver normalizes the lookup key
+   * with the same helper so SKU formatting drift can't split a match.
+   */
   pricingByVendorItem: Map<string, PricingCandidate[]>
   /** Keyed by vendorId → all active contracts for that vendor. */
   activeContractsByVendor: Map<string, ContractCandidate[]>
@@ -72,9 +77,13 @@ export function resolveContractForCOG(
   if (!row.transactionDate) return { contractId: null, mode: "none" }
   const txMs = row.transactionDate.getTime()
 
-  // 1. vendorItemNo
-  if (row.vendorItemNo) {
-    const candidates = ctx.pricingByVendorItem.get(row.vendorItemNo) ?? []
+  // 1. vendorItemNo — normalize the lookup key so it matches the
+  //    normalized keys the caller built the map with (see
+  //    lib/cog/recompute.ts). Without matching normalization, SKU
+  //    formatting drift drops the row to mode:"none" → off_contract.
+  const skuKey = normalizeSku(row.vendorItemNo)
+  if (skuKey) {
+    const candidates = ctx.pricingByVendorItem.get(skuKey) ?? []
     const hit = candidates.find(
       (c) =>
         txMs >= c.effectiveStart.getTime() && txMs <= c.effectiveEnd.getTime(),

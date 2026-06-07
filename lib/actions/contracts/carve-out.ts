@@ -51,8 +51,33 @@ export async function getCarveOutRebate(
 
   const contract = await prisma.contract.findFirstOrThrow({
     where: contractOwnershipWhere(contractId, facility.id),
-    select: { id: true, vendorId: true, additionalVendorIds: true },
+    select: {
+      id: true,
+      vendorId: true,
+      additionalVendorIds: true,
+      // Charles 2026-06-07: carve-out must only compute when the contract
+      // genuinely has carve-out intent — i.e. a `carve_out` term. A pure
+      // spend-rebate contract whose pricing file happened to carry
+      // carveOutPercent values was showing a phantom carve-out rebate
+      // card. Gate on the term's presence below.
+      terms: { select: { termType: true } },
+    },
   })
+
+  // Term-gate: no `carve_out` term → no carve-out, regardless of whatever
+  // carveOutPercent values the pricing rows carry. Return the canonical
+  // empty result (same shape as the no-lines short-circuit below) without
+  // scanning pricing/COG.
+  const hasCarveOutTerm = contract.terms.some(
+    (t) => t.termType === "carve_out",
+  )
+  if (!hasCarveOutTerm) {
+    const empty = calculateCarveOut(
+      { type: "CARVE_OUT", lines: [] },
+      { purchases: [], totalSpend: 0, periodLabel: "no carve-out term" },
+    )
+    return serialize(empty)
+  }
 
   // Bug 3 (Vick 2026-06-02): grouped (tie-in) carve-out contracts span
   // several vendors. The accrual WRITER (recompute/carve-out.ts) already
