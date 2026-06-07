@@ -81,6 +81,11 @@ vi.mock("@/lib/db", () => ({
         return contractRow
       }),
     },
+    // Charles 2026-06-07: getVendorMarketShareByCategory now loads confirmed
+    // CategoryMapping rules. None in this fixture, so behavior is unchanged.
+    categoryMapping: {
+      findMany: vi.fn(async () => []),
+    },
   },
 }))
 

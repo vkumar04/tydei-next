@@ -23,7 +23,16 @@ import { prisma } from "@/lib/db"
 
 type CategoryRow = { id: string; name: string }
 
-const normalize = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, " ")
+/**
+ * The mapping-key normalization used by every CategoryMapping lookup
+ * (confirmed-mapping Pass 0 here, the Map-Categories dialog, and the
+ * market-share callers). Exported so non-import surfaces key the
+ * confirmed map identically — `normalizeCategoryKey(cogCategory)`.
+ */
+export const normalizeCategoryKey = (s: string): string =>
+  s.trim().toLowerCase().replace(/\s+/g, " ")
+
+const normalize = normalizeCategoryKey
 
 /**
  * Bug 5 (Vick 2026-06-01): COG/price files ship junk in the category
@@ -50,7 +59,7 @@ export function isPlaceholderCategory(s: string): boolean {
  * taxonomy (like ProductCategory), so the rules are global — no facility
  * scoping, unlike VendorNameMapping.
  */
-async function loadConfirmedCategoryMap(): Promise<Map<string, string>> {
+export async function loadConfirmedCategoryMap(): Promise<Map<string, string>> {
   const rows = await prisma.categoryMapping.findMany({
     where: { isConfirmed: true, contractCategory: { not: null } },
     select: { cogCategory: true, contractCategory: true },

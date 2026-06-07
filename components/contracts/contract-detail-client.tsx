@@ -520,7 +520,14 @@ export function ContractDetailClient({
                     total). Flag it rather than silently rendering a
                     nonsensical "31% of commitment > 100%" downstream. */}
                 {stats.totalValue > 0 &&
-                  stats.totalSpend > stats.totalValue && (
+                  stats.totalSpend > stats.totalValue &&
+                  // Tie-in/capital contracts store only the spend
+                  // commitment in totalValue (capital lives in separate
+                  // ContractCapitalLineItem rows), so trailing spend
+                  // legitimately exceeds it — the explanatory note above
+                  // already covers this. Suppress the false alarm.
+                  contract.contractType !== "tie_in" &&
+                  contract.contractType !== "capital" && (
                     <p className="mt-0.5 text-xs font-medium text-amber-500">
                       {/* Bug 6 (Vick 2026-06-02): the prior "Below 12-mo
                           spend" copy was cryptic. Spell out what the flag
@@ -723,7 +730,12 @@ export function ContractDetailClient({
           />
           <ContractPerformanceCharts contractId={contractId} />
           <ContractInsightsCards contractId={contractId} />
-          <ContractAccrualTimeline contractId={contractId} />
+          <ContractAccrualTimeline
+            contractId={contractId}
+            hasCarveOutTerm={
+              contract.terms?.some((t) => t.termType === "carve_out") ?? false
+            }
+          />
           <PerformanceSummary
             periods={periods ?? []}
             totalValue={stats?.totalValue ?? 0}

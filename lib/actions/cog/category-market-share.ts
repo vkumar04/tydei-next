@@ -18,6 +18,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { serialize } from "@/lib/serialize"
+import { loadConfirmedCategoryMap } from "@/lib/categories/resolve"
 import {
   computeCategoryMarketShare,
   type MarketShareResult,
@@ -118,11 +119,18 @@ export async function getCategoryMarketShareForVendor(input: {
       contractCategoryRows.map((c) => [c.id, c.productCategory?.name ?? null]),
     )
 
+    // Charles 2026-06-07: honor the user's confirmed CategoryMapping remaps
+    // so an explicit "Map Categories" rule (e.g. Ortho-Upper Extremity ->
+    // Ortho-Extremity) collapses the source into its target here, exactly as
+    // the import path applies it (resolveCategoryNamesBulk Pass 0).
+    const confirmedCategoryMap = await loadConfirmedCategoryMap()
+
     const computed = computeCategoryMarketShare({
       rows: cogRows,
       contractCategoryMap,
       vendorId: numeratorVendorIds,
       commitmentByCategory,
+      confirmedCategoryMap,
     })
 
     return serialize(computed)

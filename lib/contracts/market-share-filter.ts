@@ -19,6 +19,18 @@
 
 import { canonicalizeCategoryName } from "./category-canonical"
 
+/**
+ * Mapping-key normalization for confirmed `CategoryMapping` lookups.
+ * MUST stay identical to `normalizeCategoryKey` in
+ * `lib/categories/resolve.ts` (the import path's Pass-0 key) so a user's
+ * confirmed remap collapses the same way in market share as on import.
+ * Inlined (not imported) to keep this helper DB-free — `resolve.ts`
+ * imports prisma. Callers build the map via `loadConfirmedCategoryMap`,
+ * which keys by the same function.
+ */
+const normalizeCategoryKey = (s: string): string =>
+  s.trim().toLowerCase().replace(/\s+/g, " ")
+
 export interface MarketShareCogRow {
   vendorId: string | null
   category: string | null
@@ -63,6 +75,17 @@ export interface ComputeMarketShareInput {
   vendorId: string | string[]
   /** Optional category → commitment% overlay. */
   commitmentByCategory?: Map<string, number>
+  /**
+   * Confirmed `CategoryMapping` rules (Charles 2026-06-07): keyed by
+   * `normalizeCategoryKey(cogCategory)` → mapped target category name.
+   * Applied to a row's effective category BEFORE canonical grouping, so a
+   * user's explicit remap (e.g. "Ortho-Upper Extremity" → "Ortho-Extremity"
+   * via the Map Categories dialog) collapses the source into its target for
+   * BOTH the numerator (vendor spend) and the denominator (category total).
+   * Build it from `loadConfirmedCategoryMap` so market share and import
+   * agree. When omitted, behavior is unchanged (string-canonical grouping).
+   */
+  confirmedCategoryMap?: Map<string, string>
 }
 
 /**
@@ -74,10 +97,22 @@ export interface ComputeMarketShareInput {
 export function effectiveCategoryOf(
   row: MarketShareCogRow,
   contractCategoryMap: Map<string, string | null>,
+  confirmedCategoryMap?: Map<string, string>,
 ): string | null {
-  if (row.category) return row.category
-  if (row.contractId) return contractCategoryMap.get(row.contractId) ?? null
-  return null
+  const raw = row.category
+    ? row.category
+    : row.contractId
+      ? (contractCategoryMap.get(row.contractId) ?? null)
+      : null
+  if (raw == null) return null
+  // Apply a confirmed remap FIRST (source → target) so the mapped target
+  // is what canonical grouping later buckets on. Same key the import path
+  // uses (normalizeCategoryKey). Falls through to `raw` when unmapped.
+  if (confirmedCategoryMap) {
+    const mapped = confirmedCategoryMap.get(normalizeCategoryKey(raw))
+    if (mapped) return mapped
+  }
+  return raw
 }
 
 function toAmount(price: MarketShareCogRow["extendedPrice"]): number {
@@ -90,7 +125,13 @@ function toAmount(price: MarketShareCogRow["extendedPrice"]): number {
 export function computeCategoryMarketShare(
   input: ComputeMarketShareInput,
 ): MarketShareResult {
-  const { rows, contractCategoryMap, vendorId, commitmentByCategory } = input
+  const {
+    rows,
+    contractCategoryMap,
+    vendorId,
+    commitmentByCategory,
+    confirmedCategoryMap,
+  } = input
   // Normalize to a set so grouped contracts (array) and the common
   // single-vendor case share one code path.
   const vendorIdSet = new Set(Array.isArray(vendorId) ? vendorId : [vendorId])
@@ -110,7 +151,7 @@ export function computeCategoryMarketShare(
     if (amount <= 0) continue
 
     const isVendor = row.vendorId != null && vendorIdSet.has(row.vendorId)
-    const cat = effectiveCategoryOf(row, contractCategoryMap)
+    const cat = effectiveCategoryOf(row, contractCategoryMap, confirmedCategoryMap)
 
     if (isVendor) {
       totalVendorSpend += amount
