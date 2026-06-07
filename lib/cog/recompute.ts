@@ -119,11 +119,16 @@ export async function loadContractsForVendor(
         appliesTo: t.appliesTo,
         categories: t.categories,
       })),
+      // Charles 2026-06-06 — normalize with the SAME helper the matcher
+      // uses for the manufacturerNo side (normalizeSku: case + whitespace
+      // fold, preserves hyphen/dot/underscore/slash) so the stored set
+      // compares apples-to-apples. Drop blanks ("" from null/blank refs).
       referenceNumbers: Array.from(
         new Set(
-          (c.terms ?? []).flatMap((t) =>
-            (t.referenceNumbers ?? []).map((r) => r.toLowerCase()),
-          ),
+          (c.terms ?? [])
+            .flatMap((t) => t.referenceNumbers ?? [])
+            .map((r) => normalizeSku(r))
+            .filter((r) => r.length > 0),
         ),
       ),
     }

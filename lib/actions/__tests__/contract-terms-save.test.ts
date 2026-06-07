@@ -129,6 +129,50 @@ describe("createContractTerm — scope-field destructuring", () => {
     expect(callData.categories).toEqual(["cat-1", "cat-2"])
   })
 
+  // Charles 2026-06-06 — referenceNumbers had no capture path before this
+  // change (missing from the validator → stripped on save), so the
+  // grouped-vendor manufacturerNo→referenceNumbers match was dead. The
+  // field must now flow through the validator into prisma.contractTerm.create.
+  it("persists referenceNumbers (array) into prisma.contractTerm.create", async () => {
+    await createContractTerm({
+      contractId: "c-1",
+      termName: "Test",
+      termType: "spend_rebate",
+      baselineType: "spend_based",
+      evaluationPeriod: "annual",
+      paymentTiming: "quarterly",
+      rebateMethod: "cumulative",
+      appliesTo: "all_products",
+      effectiveStart: "2026-01-01",
+      effectiveEnd: "2027-01-01",
+      referenceNumbers: ["6-820-00", "REF-1234"],
+      tiers: [],
+    })
+    const callData = createMock.mock.calls[0][0].data
+    expect(callData.referenceNumbers).toEqual(["6-820-00", "REF-1234"])
+  })
+
+  it("trims + drops blanks on referenceNumbers via the validator preprocess", async () => {
+    await createContractTerm({
+      contractId: "c-1",
+      termName: "Test",
+      termType: "spend_rebate",
+      baselineType: "spend_based",
+      evaluationPeriod: "annual",
+      paymentTiming: "quarterly",
+      rebateMethod: "cumulative",
+      appliesTo: "all_products",
+      effectiveStart: "2026-01-01",
+      effectiveEnd: "2027-01-01",
+      // mix of whitespace padding, blanks, and a comma-joined entry — the
+      // validator's normalizeReferenceNumbers should split/trim/drop.
+      referenceNumbers: ["  6-820-00 ", "", "A, B", "   "],
+      tiers: [],
+    })
+    const callData = createMock.mock.calls[0][0].data
+    expect(callData.referenceNumbers).toEqual(["6-820-00", "A", "B"])
+  })
+
   it("writes scopedItemNumbers as ContractTermProduct rows", async () => {
     await createContractTerm({
       contractId: "c-1",
@@ -165,6 +209,16 @@ describe("updateContractTerm — scope-field destructuring", () => {
     expect(callData.scopedCategoryId).toBeUndefined()
     expect(callData.scopedCategoryIds).toBeUndefined()
     expect(callData.scopedItemNumbers).toBeUndefined()
+  })
+
+  // Charles 2026-06-06 — referenceNumbers must round-trip on update too
+  // (edit-contract-client passes it explicitly in the update payload).
+  it("persists referenceNumbers into prisma.contractTerm.update", async () => {
+    await updateContractTerm("term-1", {
+      referenceNumbers: ["6-820-00", "REF-1234"],
+    })
+    const callData = updateMock.mock.calls[0][0].data
+    expect(callData.referenceNumbers).toEqual(["6-820-00", "REF-1234"])
   })
 
   it("replaces ContractTermProduct rows (deleteMany + createMany)", async () => {

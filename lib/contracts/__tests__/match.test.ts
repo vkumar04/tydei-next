@@ -310,4 +310,57 @@ describe("matchCOGRecordToContract — reference-number fallback", () => {
       expect(result.savings).toBe((120 - 100) * 3)
     }
   })
+
+  // Charles 2026-06-06 — ref-number matching is now normalized with
+  // normalizeSku (case + whitespace fold) like SKUs, so a grouped vendor's
+  // COG row whose manufacturerNo differs only by case/whitespace from the
+  // contract term's referenceNumbers still resolves on_contract.
+  it("normalizes case + whitespace on the reference-number key (grouped vendor)", () => {
+    const contract: ContractForMatch = {
+      ...base,
+      // Stored on the term as a human-entered ref; recompute pre-normalizes,
+      // but the matcher must also tolerate raw/mixed-format contract-side refs.
+      pricingItems: [{ vendorItemNo: "SKU-A", unitPrice: 100, listPrice: 120 }],
+      referenceNumbers: ["REF 6-820-00"],
+    }
+    const record: CogRecordForMatch = {
+      facilityId: "f1",
+      // Purchased by the group's SECONDARY vendor with a totally different SKU.
+      vendorId: "v-secondary",
+      vendorName: "Different Vendor Name LLC",
+      vendorItemNo: "VENDOR-B-SKU",
+      // Same reference number, drifted by case + internal whitespace.
+      manufacturerNo: "ref 6-820-00",
+      unitCost: 100,
+      quantity: 1,
+      transactionDate: new Date("2026-03-01"),
+    }
+    const result = matchCOGRecordToContract(record, [contract])
+    expect(result.status).toBe("on_contract")
+    if (result.status === "on_contract") {
+      expect(result.contractId).toBe("c1")
+    }
+  })
+
+  // Conservative-by-design: normalizeSku preserves hyphens, so a ref with
+  // separators must NOT collapse onto a separator-stripped variant.
+  it("keeps hyphenated reference numbers distinct (does not strip separators)", () => {
+    const contract: ContractForMatch = {
+      ...base,
+      pricingItems: [],
+      referenceNumbers: ["6-820-00"],
+    }
+    const record: CogRecordForMatch = {
+      facilityId: "f1",
+      vendorId: "v-secondary",
+      vendorName: "X",
+      vendorItemNo: null,
+      manufacturerNo: "682000",
+      unitCost: 10,
+      quantity: 1,
+      transactionDate: new Date("2026-03-01"),
+    }
+    const result = matchCOGRecordToContract(record, [contract])
+    expect(result.status).toBe("off_contract_item")
+  })
 })

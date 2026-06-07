@@ -83,7 +83,9 @@ export type ContractForMatch = {
   pricingItems: ContractPricingItemForMatch[]
   /**
    * Union of cross-vendor reference numbers covered by this contract, from
-   * each term's `referenceNumbers[]`. Normalized lowercase by the caller.
+   * each term's `referenceNumbers[]`. The matcher re-normalizes each entry
+   * with `normalizeSku` at compare time, so the caller may pass raw or
+   * pre-normalized values (recompute pre-normalizes; both are idempotent).
    * Used as the cross-vendor fallback match key when a per-vendor SKU
    * lookup misses (Charles 2026-06-06). Optional for back-compat.
    */
@@ -253,9 +255,16 @@ export function matchCOGRecordToContract(
   // falsy — so the both-null guard and the `if (skuKey)` skip below behave
   // exactly as the old `?.toLowerCase() ?? null` did for empty SKUs.
   const skuKey = normalizeSku(record.vendorItemNo)
-  const mfrLower = record.manufacturerNo?.toLowerCase() ?? null
+  // Charles 2026-06-06 — normalize the reference-number key with the SAME
+  // helper as SKUs (normalizeSku: case + whitespace fold, preserves
+  // hyphen/dot/underscore/slash). Previously this used a bare
+  // `.toLowerCase()`, so formatting drift (trailing space, internal space)
+  // dropped a ref that should have matched. Conservative on purpose:
+  // "6-820-00" stays distinct from "682000". normalizeSku() returns "" for
+  // null/blank — falsy, so the both-null guard below is preserved.
+  const mfrKey = normalizeSku(record.manufacturerNo)
 
-  if (!skuKey && !mfrLower) {
+  if (!skuKey && !mfrKey) {
     return {
       status: "off_contract_item",
       reason:
@@ -279,10 +288,10 @@ export function matchCOGRecordToContract(
   // Membership-only — the contract covers this reference number but carries
   // no per-item contract price for it, so we record on_contract with no
   // price-variance claim (Charles 2026-06-06).
-  if (mfrLower) {
+  if (mfrKey) {
     for (const contract of byCategory) {
       const covered = (contract.referenceNumbers ?? []).some(
-        (rn) => rn.toLowerCase() === mfrLower,
+        (rn) => normalizeSku(rn) === mfrKey,
       )
       if (covered) {
         return {
