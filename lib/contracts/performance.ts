@@ -60,7 +60,16 @@ export function calculateRebateUtilization(
       additionalSpendForMaxTier: 0,
     }
   }
-  const maxPossibleRebate = actualSpend * (Number(maxTier.rebateValue) / 100)
+  // Fixed-dollar tiers (rebateType === "fixed_rebate") carry their dollar
+  // amount in `fixedRebateAmount`, NOT a percent in `rebateValue`. For
+  // those, "max at top tier" is simply the top tier's flat dollar amount —
+  // it must NOT be multiplied by spend (Charles 2026-06-07: a fixed_rebate
+  // tier was applied as a percent rate, so "Rebate at current spend" showed
+  // billions). Percent tiers keep the spend × rate math.
+  const maxPossibleRebate =
+    maxTier.fixedRebateAmount != null
+      ? Number(maxTier.fixedRebateAmount)
+      : actualSpend * (Number(maxTier.rebateValue) / 100)
   const actual =
     method === "marginal"
       ? calculateMarginal(actualSpend, tiers)
