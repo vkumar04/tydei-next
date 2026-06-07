@@ -79,6 +79,15 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(async () => contracts),
       findFirst: vi.fn(async () => null),
     },
+    // loadConfirmedCategoryMap (Charles 2026-06-07): both callers now load
+    // confirmed CategoryMapping rules. No mappings in this fixture, so parity
+    // and fallback assertions are unchanged.
+    categoryMapping: {
+      findMany: vi.fn(async () => []),
+    },
+    productCategory: {
+      findMany: vi.fn(async () => []),
+    },
   },
 }))
 

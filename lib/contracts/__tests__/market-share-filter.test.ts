@@ -113,4 +113,91 @@ describe("computeCategoryMarketShare", () => {
     })
     expect(result.rows.map((r) => r.category)).toEqual(["Joint Replacement", "Spine"])
   })
+
+  describe("confirmedCategoryMap (Charles 2026-06-07 remap honoring)", () => {
+    // The user mapped "Ortho-Upper Extremity" -> "Ortho-Extremity" via the
+    // Map Categories dialog (a confirmed CategoryMapping). Market share must
+    // collapse the source into the target. The map is keyed by the same
+    // normalization the import path uses: trim/lowercase/collapse-whitespace.
+    const confirmedCategoryMap = new Map<string, string>([
+      ["ortho-upper extremity", "Ortho-Extremity"],
+    ])
+
+    it("collapses a remapped source category into its target (single vendor)", () => {
+      const result = computeCategoryMarketShare({
+        rows: [
+          { vendorId: VENDOR, category: "Ortho-Upper Extremity", extendedPrice: 60, contractId: null },
+          { vendorId: VENDOR, category: "Ortho-Extremity", extendedPrice: 40, contractId: null },
+        ],
+        contractCategoryMap: new Map(),
+        vendorId: VENDOR,
+        confirmedCategoryMap,
+      })
+      // ONE row, summing both sources.
+      expect(result.rows).toHaveLength(1)
+      expect(result.rows[0]).toMatchObject({
+        category: "Ortho-Extremity",
+        vendorSpend: 100,
+        categoryTotal: 100,
+        sharePct: 100,
+      })
+    })
+
+    it("applies the remap to BOTH numerator and denominator", () => {
+      const result = computeCategoryMarketShare({
+        rows: [
+          // Vendor under the source label, competitor under the target label.
+          { vendorId: VENDOR, category: "Ortho-Upper Extremity", extendedPrice: 80, contractId: null },
+          { vendorId: OTHER, category: "Ortho-Extremity", extendedPrice: 20, contractId: null },
+        ],
+        contractCategoryMap: new Map(),
+        vendorId: VENDOR,
+        confirmedCategoryMap,
+      })
+      expect(result.rows).toHaveLength(1)
+      // Numerator includes the remapped vendor row (80); denominator includes
+      // both, so share is 80/100 — not two separate rows at 100% each.
+      expect(result.rows[0]).toMatchObject({
+        category: "Ortho-Extremity",
+        vendorSpend: 80,
+        categoryTotal: 100,
+        sharePct: 80,
+        competingVendors: 2,
+      })
+    })
+
+    it("applies the remap through the contract-category fallback too", () => {
+      const result = computeCategoryMarketShare({
+        rows: [
+          { vendorId: VENDOR, category: null, extendedPrice: 50, contractId: "c1" },
+          { vendorId: VENDOR, category: "Ortho-Extremity", extendedPrice: 50, contractId: null },
+        ],
+        contractCategoryMap: new Map([["c1", "Ortho-Upper Extremity"]]),
+        vendorId: VENDOR,
+        confirmedCategoryMap,
+      })
+      expect(result.rows).toHaveLength(1)
+      expect(result.rows[0]).toMatchObject({
+        category: "Ortho-Extremity",
+        vendorSpend: 100,
+        categoryTotal: 100,
+      })
+    })
+
+    it("is a no-op when no map is supplied (back-compat)", () => {
+      const result = computeCategoryMarketShare({
+        rows: [
+          { vendorId: VENDOR, category: "Ortho-Upper Extremity", extendedPrice: 60, contractId: null },
+          { vendorId: VENDOR, category: "Ortho-Extremity", extendedPrice: 40, contractId: null },
+        ],
+        contractCategoryMap: new Map(),
+        vendorId: VENDOR,
+      })
+      // Without the map these are two distinct canonical categories.
+      expect(result.rows.map((r) => r.category).sort()).toEqual([
+        "Ortho-Extremity",
+        "Ortho-Upper Extremity",
+      ])
+    })
+  })
 })

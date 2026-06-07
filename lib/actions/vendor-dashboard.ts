@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
+import { loadConfirmedCategoryMap } from "@/lib/categories/resolve"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 
 // ─── Vendor Dashboard Stats ─────────────────────────────────────
@@ -145,10 +146,16 @@ export async function getVendorMarketShareByCategory(
     contractCategoryRows.map((c) => [c.id, c.productCategory?.name ?? null]),
   )
 
+  // Charles 2026-06-07: apply the user's confirmed CategoryMapping remaps
+  // (same source the import path uses) so market share matches the facility
+  // action and a remapped source category collapses into its target.
+  const confirmedCategoryMap = await loadConfirmedCategoryMap()
+
   const computed = computeCategoryMarketShare({
     rows: cogRows,
     contractCategoryMap,
     vendorId,
+    confirmedCategoryMap,
   })
 
   // Map to the existing UI-compatible row shape. The chart uses `share`

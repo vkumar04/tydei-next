@@ -61,6 +61,11 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(async () => []),
       findFirst: vi.fn(async () => groupedContract),
     },
+    // Charles 2026-06-07: callers now load confirmed CategoryMapping rules.
+    // None in this fixture, so grouping behavior is unchanged.
+    categoryMapping: {
+      findMany: vi.fn(async () => []),
+    },
   },
 }))
 
