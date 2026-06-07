@@ -7,10 +7,11 @@ import {
 const ctx: ResolveContext = {
   // The resolver normalizes its lookup key with normalizeSku, and the
   // production caller (lib/cog/recompute.ts) builds this map with the same
-  // helper. So the map MUST be keyed on the normalized SKU: "STK-1" → "stk1".
+  // helper. So the map MUST be keyed on the normalized SKU. normalizeSku is
+  // conservative (folds case + whitespace, PRESERVES hyphens): "STK-1" → "stk-1".
   pricingByVendorItem: new Map([
     [
-      "stk1",
+      "stk-1",
       [
         {
           contractId: "c-1",
