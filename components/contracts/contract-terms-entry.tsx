@@ -73,14 +73,18 @@ interface ContractTermsEntryProps {
 /*
  * Visible term-type picker.
  *
- * Display order (Charles Bugs.rtfd 2026-05-25):
- *   1. Order        → po_rebate
- *   2. Spend        → spend_rebate
- *   3. Market Share Spend → market_share
- *   4. Volume       → volume_rebate
- *   5. Carve Out    → carve_out
- *   6. Price reduction → price_reduction
- *   7. Market share Price reduction → market_share_price_reduction
+ * Display order:
+ *   1. Spend        → spend_rebate
+ *   2. Market Share Spend → market_share
+ *   3. Volume       → volume_rebate
+ *   4. Carve Out    → carve_out
+ *   5. Price reduction → price_reduction
+ *   6. Market share Price reduction → market_share_price_reduction
+ *
+ * "Order" (po_rebate) was removed from the selectable picker + legend on
+ * Charles 2026-06-07 (unused). It stays in the Prisma TermType enum and the
+ * `hidden`-list below for back-compat with existing rows; the renderer still
+ * shows it when an existing term already uses it (`tt.value === term.termType`).
  *
  * `growth_rebate` was retired this same session — growth is now a
  * property of any spend-basis term (`growthOnly: true`) rather than a
@@ -94,34 +98,36 @@ interface ContractTermsEntryProps {
  */
 const termTypes = [
   // ── Visible (in display order) ─────────────────────────────────
-  // 1. Order — po_rebate counts qualifying PurchaseOrder rows (status
-  // submitted | approved | received) at the contract's vendor +
-  // facility within the term's evaluation period. Tier thresholds are
-  // PO COUNTS, rebateValue is dollars-per-PO at the achieved tier.
-  { value: "po_rebate", label: "Order", icon: DollarSign, description: "Per-order rebate. Tier thresholds are order counts; rebate values are dollars per order.", disabled: false },
-  // 2. Spend
+  // 1. Spend
   { value: "spend_rebate", label: "Spend", icon: DollarSign, description: "Rebate based on spend thresholds. Pair with the \"Growth\" baseline calculation method to rebate only spend above a baseline.", disabled: false },
-  // 3. Market Share Spend — flat tier dollar amount per evaluation
+  // 2. Market Share Spend — flat tier dollar amount per evaluation
   // period when `Contract.currentMarketShare` crosses the tier's
   // threshold. Threshold = spendMin column (interpreted as %);
   // rebate = rebateValue (flat $).
   { value: "market_share", label: "Market Share Spend", icon: PieChart, description: "Flat per-period rebate when current market share % crosses tier threshold. Update Current Market Share on the contract.", disabled: false },
-  // 4. Volume — counts CPT-coded procedure occurrences across the
+  // 3. Volume — counts CPT-coded procedure occurrences across the
   // facility's Cases (deduped by case+CPT) within the term window.
   { value: "volume_rebate", label: "Volume", icon: TrendingUp, description: "Rebate based on procedure count. Set CPT codes on the term; tier thresholds are interpreted as occurrences (not dollars).", disabled: false },
-  // 5. Carve Out — specific items excluded from the broader contract
+  // 4. Carve Out — specific items excluded from the broader contract
   // terms; per-line carve-out percent applied via the Pricing tab.
   { value: "carve_out", label: "Carve Out", icon: Shield, description: "Specific items excluded from the broader contract terms — per-line carve-out percent applied via the Pricing tab.", disabled: false },
-  // 6. Price reduction — no separate rebate accrual; enforced by the
+  // 5. Price reduction — no separate rebate accrual; enforced by the
   // contract's ContractPricing rows (the matched price IS the reduced
   // price).
   { value: "price_reduction", label: "Price reduction", icon: Percent, description: "Pricing-only contract — discounted prices applied via the Pricing tab. No separate rebate accrual.", disabled: false },
-  // 7. Market share Price reduction — pricing-only; discount applies
+  // 6. Market share Price reduction — pricing-only; discount applies
   // once market share target is met. Configured via ContractPricing.
   // (Unhidden 2026-05-25 per Charles Bugs.rtfd.)
   { value: "market_share_price_reduction", label: "Market share Price reduction", icon: PieChart, description: "Pricing-only — discounted prices once market share target is met. Configure prices on the Pricing tab.", disabled: false },
 
   // ── Hidden (legacy / advanced types kept for back-compat) ──────
+  // Order — po_rebate counts qualifying PurchaseOrder rows (status
+  // submitted | approved | received) at the contract's vendor +
+  // facility within the term's evaluation period. Tier thresholds are
+  // PO COUNTS, rebateValue is dollars-per-PO at the achieved tier.
+  // Removed from the selectable picker 2026-06-07 (Charles, unused);
+  // hidden:true keeps it visible only on existing po_rebate terms.
+  { value: "po_rebate", label: "Order", icon: DollarSign, description: "Per-order rebate. Tier thresholds are order counts; rebate values are dollars per order.", disabled: false, hidden: true },
   // Pricing-only — procedure-spend trigger.
   { value: "capitated_price_reduction", label: "Capitated Price Reduction", icon: BarChart3, description: "Pricing-only — discounted procedures once spend threshold is met. Configure prices on the Pricing tab.", disabled: false, hidden: true },
   // Per-procedure rebate. Routes through the volume bridge.
