@@ -9,7 +9,7 @@ import { useContractForm } from "@/hooks/use-contract-form"
 import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractDocumentSafe } from "@/lib/actions/contracts"
 import { importContractPricingSafe, type ContractPricingItem } from "@/lib/actions/pricing-files"
-import { parsePricingFile, detectPricingColumnMapping } from "@/lib/utils/parse-pricing-file"
+import { parsePricingFile, buildPricingItems } from "@/lib/utils/parse-pricing-file"
 import { createCategory, getCategories } from "@/lib/actions/categories"
 import { computePricingVsCOG } from "@/lib/actions/cog-records"
 import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-cog"
@@ -23,6 +23,7 @@ import type {
 import { normalizeAIRebateValue, toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { computeContractYears } from "@/lib/contracts/term-years"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
+import { PricingCategoryRemapDialog } from "@/components/pricing/pricing-category-remap-dialog"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
 import { ContractTermsEntry } from "@/components/contracts/contract-terms-entry"
 import { ContractFormReview } from "@/components/contracts/contract-form-review"
@@ -79,6 +80,25 @@ export function NewContractClient({
   const [pricingRawRows, setPricingRawRows] = useState<Record<string, string>[]>([])
   const [pricingAutoMapping, setPricingAutoMapping] = useState<Record<string, string>>({})
   const [pricingFileRef, setPricingFileRef] = useState<File | null>(null)
+  // Charles 2026-06-06: pre-import category-realign capture. The contract
+  // doesn't exist yet at upload time, so we open the realign dialog now,
+  // stash the chosen detected→canonical map, and thread it into the
+  // deferred post-create import (runPostCreateSideEffects).
+  const [pricingRemapOpen, setPricingRemapOpen] = useState(false)
+  const [pricingCategoryRemap, setPricingCategoryRemap] = useState<
+    Record<string, string> | undefined
+  >(undefined)
+  // Items waiting for the realign step before they're committed to
+  // `pricingItems`. Captured the file name so finalize can label them.
+  const [pendingPricingItems, setPendingPricingItems] = useState<
+    ContractPricingItem[]
+  >([])
+  const [pendingPricingFileName, setPendingPricingFileName] = useState<
+    string | null
+  >(null)
+  const [pendingPricingCategories, setPendingPricingCategories] = useState<
+    string[]
+  >([])
   const [contractS3Key, setContractS3Key] = useState<string | null>(null)
   const [contractFileName, setContractFileName] = useState<string | null>(null)
   const [additionalDocs, setAdditionalDocs] = useState<
@@ -126,162 +146,85 @@ export function NewContractClient({
     [watchedVendorId, watchedEffective, watchedExpiration],
   )
 
+  // Charles 2026-06-06: create-flow pricing parity. This now routes through
+  // the SHARED parse/build helpers (parsePricingFile / buildPricingItems) so
+  // carve-out % survives, and through pricingNeedsManualMapping so unrecognized
+  // category columns also open the mapper. Because the contract doesn't exist
+  // yet, the realign step (PricingCategoryRemapDialog) only CAPTURES the chosen
+  // map; the actual import is deferred to runPostCreateSideEffects.
   const handlePricingUpload = useCallback(async (file: File) => {
-    const ext = file.name.split(".").pop()?.toLowerCase()
-    if (!["csv", "xlsx", "xls"].includes(ext ?? "")) {
-      toast.error("Please upload a CSV or Excel (.xlsx/.xls) pricing file")
-      return
-    }
-
-    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
-
-    let rawHeaders: string[] = []
-    let dataRows: string[][] = []
-
+    let parsed
     try {
-      if (ext === "xlsx" || ext === "xls") {
-        // Send Excel files to server-side parser
-        const formData = new FormData()
-        formData.append("file", file)
-        const res = await fetch("/api/parse-file", {
-          method: "POST",
-          body: formData,
-        })
-        if (!res.ok) {
-          const body = await res.json().catch(() => null)
-          toast.error((body as { error?: string } | null)?.error ?? "Failed to parse Excel file")
-          return
-        }
-        const parsed = (await res.json()) as { headers: string[]; rows: Record<string, string>[] }
-        rawHeaders = parsed.headers
-        dataRows = parsed.rows.map((row) => rawHeaders.map((h) => row[h] ?? ""))
-      } else {
-        // CSV: parse client-side using shared parser
-        const result = await parsePricingFile(file)
-        rawHeaders = result.rawHeaders
-        dataRows = result.rawRows.map((row) => rawHeaders.map((h) => row[h] ?? ""))
-      }
-    } catch {
-      toast.error("Failed to read the file. Please check the format.")
+      parsed = await parsePricingFile(file)
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to read the pricing file. Please check the format.",
+      )
       return
     }
 
-    const normHeaders = rawHeaders.map(norm)
-
-    const find = (...aliases: string[]) =>
-      aliases.map(norm).reduce<number>(
-        (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
-        -1,
-      )
-
-    const idxItem = find(
-      "vendor_item_no", "vendoritemno", "vendoritem",
-      "item_no", "itemno", "sku",
-      "part_no", "partnumber", "partno", "catalog_no",
-      "itemnumber", "item", "itemid", "itemcode",
-      "stockno", "stocknumber", "materialid", "materialnumber",
-      "productid", "productcode", "vendorpart", "vendorcatalog",
-      "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
-      "referencenumber", "reference",
-      "vendor_item_number", "vendoritemnumber", "item_number",
-      "productno", "productnumber", "productref", "productrefnumber",
-    )
-    const idxDesc = find(
-      "description", "desc", "product_description", "productdescription", "item_description",
-      "productdesc", "itemname", "materialname", "materialdesc",
-      "fulldescription",
-    )
-    const idxPrice = find(
-      "contract_price", "contractprice", "unit_price", "unitprice", "price", "cost",
-      "netprice", "yourprice", "discountprice", "discountedprice",
-      "negotiatedprice", "agreementprice", "contractcost", "netcost",
-      "sellprice", "sellingprice", "customerprice",
-    )
-    const idxList = find(
-      "list_price", "listprice", "msrp", "retail_price",
-      "catalogprice", "regularprice", "standardprice",
-      "fullprice", "originalprice",
-    )
-    const idxCat = find(
-      "category", "product_category", "department",
-      "productcategory", "productcatgory",
-      "productline", "productgroup", "producttype",
-      "segment", "classification", "dept", "division",
-    )
-    const idxUom = find(
-      "uom", "unit_of_measure", "unit",
-      "unitofmeasure", "packsize", "packaging", "pkg", "measure",
-    )
-
-    // Build auto-mapping from detected indices
-    const autoMap: Record<string, string> = {}
-    if (idxItem >= 0) autoMap.vendorItemNo = rawHeaders[idxItem]
-    if (idxDesc >= 0) autoMap.description = rawHeaders[idxDesc]
-    if (idxPrice >= 0) autoMap.unitPrice = rawHeaders[idxPrice]
-    if (idxList >= 0) autoMap.listPrice = rawHeaders[idxList]
-    if (idxCat >= 0) autoMap.category = rawHeaders[idxCat]
-    if (idxUom >= 0) autoMap.uom = rawHeaders[idxUom]
-
-    // Build record-style rows for the mapper dialog
-    const recordRows = dataRows.map((vals) => {
-      const row: Record<string, string> = {}
-      rawHeaders.forEach((h, i) => { row[h] = vals[i] ?? "" })
-      return row
-    })
-
-    // If auto-mapping is incomplete (missing vendorItemNo OR unitPrice), open mapper
-    if (!autoMap.vendorItemNo || !autoMap.unitPrice) {
-      setPricingRawHeaders(rawHeaders)
-      setPricingRawRows(recordRows)
-      setPricingAutoMapping(autoMap)
+    // Incomplete auto-mapping (missing required columns, or an unrecognized
+    // category column) → open the column mapper. `needsManualMapping` is the
+    // shared result that also catches stray category headers.
+    if (parsed.needsManualMapping) {
+      setPricingRawHeaders(parsed.rawHeaders)
+      setPricingRawRows(parsed.rawRows)
+      setPricingAutoMapping(parsed.autoMapping)
       setPricingFileRef(file)
       setPricingMapperOpen(true)
       return
     }
 
-    // Auto-mapping succeeded — build items directly
-    const items = buildPricingItems(dataRows, rawHeaders, autoMap)
-
-    if (items.length === 0) {
+    if (parsed.items.length === 0) {
       toast.error("No valid pricing items found. Check your file has columns like vendor_item_no and contract_price.")
       return
     }
 
-    finalizePricingImport(items, file.name)
+    await stageItemsWithRemapStep(parsed.items, file.name)
+    // stageItemsWithRemapStep/finalizePricingImport read these via closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, liveCategories, queryClient])
 
-  /** Build ContractPricingItem[] from raw data rows using a column mapping */
-  function buildPricingItems(
-    dataRows: string[][],
-    rawHeaders: string[],
-    colMapping: Record<string, string>,
-  ): ContractPricingItem[] {
-    const indexOf = (field: string) => {
-      const col = colMapping[field]
-      return col ? rawHeaders.indexOf(col) : -1
+  /**
+   * Pre-import realign capture. When the parsed items carry detected
+   * categories, open the realign dialog so the user can match them to the
+   * canonical set; the chosen map is captured into state and applied during
+   * the deferred post-create import. When no categories are detected, finalize
+   * straight through (unchanged, no friction).
+   */
+  async function stageItemsWithRemapStep(
+    items: ContractPricingItem[],
+    fileName: string,
+  ) {
+    const categories = Array.from(
+      new Set(
+        items
+          .map((i) => i.category?.trim())
+          .filter((c): c is string => !!c),
+      ),
+    )
+    if (categories.length === 0) {
+      setPricingCategoryRemap(undefined)
+      await finalizePricingImport(items, fileName)
+      return
     }
+    setPendingPricingItems(items)
+    setPendingPricingCategories(categories)
+    setPendingPricingFileName(fileName)
+    setPricingRemapOpen(true)
+  }
 
-    const idxItem = indexOf("vendorItemNo")
-    const idxDesc = indexOf("description")
-    const idxPrice = indexOf("unitPrice")
-    const idxList = indexOf("listPrice")
-    const idxCat = indexOf("category")
-    const idxUom = indexOf("uom")
-
-    return dataRows
-      .map((vals) => {
-        const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
-        return {
-          vendorItemNo: g(idxItem),
-          description: g(idxDesc) || undefined,
-          unitPrice: parseFloat(g(idxPrice).replace(/[^0-9.-]/g, "") || "0"),
-          listPrice:
-            parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
-          category: g(idxCat) || undefined,
-          uom: g(idxUom) || "EA",
-        }
-      })
-      .filter((i) => i.vendorItemNo)
+  /** Realign dialog applied — capture the map, then finalize the staged items. */
+  async function handlePricingRemapApply(remap: Record<string, string>) {
+    setPricingRemapOpen(false)
+    setPricingCategoryRemap(Object.keys(remap).length > 0 ? remap : undefined)
+    await finalizePricingImport(
+      pendingPricingItems,
+      pendingPricingFileName ?? "pricing-file",
+    )
+    setPendingPricingItems([])
+    setPendingPricingCategories([])
+    setPendingPricingFileName(null)
   }
 
   /** Shared finalization: set state, compute totals, auto-create categories, show toast */
@@ -351,7 +294,7 @@ export function NewContractClient({
   }
 
   /** Called when user applies mapping from the column mapper dialog */
-  function handleMappingApply(mapping: Record<string, string>) {
+  async function handleMappingApply(mapping: Record<string, string>) {
     setPricingMapperOpen(false)
 
     // Reconstruct dataRows (string[][]) from the stored record rows
@@ -359,6 +302,7 @@ export function NewContractClient({
       pricingRawHeaders.map((h) => row[h] ?? "")
     )
 
+    // Shared builder — includes carveOutPercent.
     const items = buildPricingItems(dataRows, pricingRawHeaders, mapping)
 
     if (items.length === 0) {
@@ -366,7 +310,7 @@ export function NewContractClient({
       return
     }
 
-    finalizePricingImport(items, pricingFileRef?.name ?? "pricing-file")
+    await stageItemsWithRemapStep(items, pricingFileRef?.name ?? "pricing-file")
   }
 
   async function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string, aiPricingItems?: ContractPricingItem[], aiPricingCategories?: string[]) {
@@ -602,9 +546,11 @@ export function NewContractClient({
       )
     }
 
-    // If pricing items were provided from the AI review step, finalize them
+    // If pricing items were provided from the AI review step, stage them
+    // through the realign step (same shared path as the Upload-PDF tab) so a
+    // detected→canonical category map is captured for the deferred import.
     if (aiPricingItems && aiPricingItems.length > 0) {
-      await finalizePricingImport(aiPricingItems, "pricing-file")
+      await stageItemsWithRemapStep(aiPricingItems, "pricing-file")
       if (aiPricingCategories) setPricingCategories(aiPricingCategories)
       toast.success(`Contract data extracted with ${aiPricingItems.length} pricing items`)
     } else {
@@ -719,7 +665,14 @@ export function NewContractClient({
       }
     }
     if (pricingItems.length > 0) {
-      const res = await importContractPricingSafe({ contractId, items: pricingItems })
+      // Charles 2026-06-06: pass the realign map captured at upload time so
+      // the deferred import applies it ahead of canonicalization (parity with
+      // the contract-detail Pricing tab's importWithRemapStep).
+      const res = await importContractPricingSafe({
+        contractId,
+        items: pricingItems,
+        categoryRemap: pricingCategoryRemap,
+      })
       if (!res.ok) {
         toast.error(`Contract saved, but pricing import failed: ${res.error}`)
       }
@@ -807,6 +760,24 @@ export function NewContractClient({
           sampleRows={pricingRawRows}
           autoMapping={pricingAutoMapping}
           onApply={handleMappingApply}
+        />
+
+        {/* Charles 2026-06-06: pre-import category realign. Captures the
+            detected→canonical map for the deferred post-create import; if the
+            user cancels, the staged items are dropped (no import). */}
+        <PricingCategoryRemapDialog
+          open={pricingRemapOpen}
+          onOpenChange={(o) => {
+            setPricingRemapOpen(o)
+            if (!o) {
+              // Cancelled the realign step — drop the staged items.
+              setPendingPricingItems([])
+              setPendingPricingCategories([])
+              setPendingPricingFileName(null)
+            }
+          }}
+          detectedCategories={pendingPricingCategories}
+          onApply={handlePricingRemapApply}
         />
 
         {/* 3-tab entry mode (AI Assistant / Upload PDF / Manual Entry) —

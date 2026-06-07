@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   ShieldQuestion,
+  AlertTriangle,
 } from "lucide-react"
 import {
   Dialog,
@@ -81,6 +82,105 @@ export function nextStage(current: Stage): Stage | null {
   ]
   const i = order.indexOf(current)
   return i >= 0 && i < order.length - 1 ? order[i + 1] : null
+}
+
+/**
+ * The set of `change.field` keys the amendment flow can auto-apply via
+ * `updateContract`. Everything else (term/tier/pricing/rebate structure,
+ * pay-period timing, etc.) is intentionally NOT applied here — applying those
+ * is a larger feature (it needs term/tier writes, not a flat scalar update).
+ *
+ * This is the single source of truth for the allow-list: both the apply
+ * `switch` in `handleApply` and the "detected but not auto-applied" review
+ * surface derive from it, so they cannot drift.
+ */
+export const AUTO_APPLICABLE_FIELDS = new Set<string>([
+  "effectiveDate",
+  "expirationDate",
+  "totalValue",
+  "annualValue",
+  "terminationNoticeDays",
+  "autoRenewal",
+  "description",
+  "notes",
+  "gpoAffiliation",
+  "name",
+  "contractNumber",
+])
+
+/**
+ * True when the amendment flow can auto-apply this change's `field` as a flat
+ * scalar update. "removed" changes are never auto-applied (we don't clear
+ * fields on the contract from an amendment).
+ */
+export function isAutoApplicableField(field: string): boolean {
+  return AUTO_APPLICABLE_FIELDS.has(field)
+}
+
+/**
+ * Heuristic: does this `change.field` (or label) describe pay-period /
+ * payment-timing / payment-frequency? The amendment route does NOT return a
+ * structured `hasVariablePayPeriods` flag (unlike the create/import extract),
+ * so we detect timing-related changes by key/label and flag them so the
+ * reviewer can confirm the cadence against their payment schedule — mirroring
+ * the create-flow variable-pay-period callout.
+ */
+export function isPayPeriodRelated(change: {
+  field: string
+  label: string
+}): boolean {
+  const haystack = `${change.field} ${change.label}`.toLowerCase()
+  return (
+    haystack.includes("paypperiod") ||
+    haystack.includes("pay period") ||
+    haystack.includes("pay-period") ||
+    haystack.includes("payment timing") ||
+    haystack.includes("paymenttiming") ||
+    haystack.includes("payment schedule") ||
+    haystack.includes("payment frequency") ||
+    haystack.includes("rebatepayperiod") ||
+    haystack.includes("rebate pay period") ||
+    haystack.includes("performance period") ||
+    haystack.includes("evaluation period")
+  )
+}
+
+/**
+ * Partition extracted amendment changes into:
+ *  - `autoApplied`:   scalar fields the flow writes to the contract.
+ *  - `notAutoApplied`: detected changes the flow does NOT write (term/tier/
+ *                      pricing/rebate structure, etc.) — surfaced for manual
+ *                      review instead of being silently dropped.
+ *  - `payPeriodFlags`: subset of changes (from either bucket) that look like
+ *                      payment-timing/pay-period changes, flagged amber so the
+ *                      reviewer confirms the cadence.
+ *
+ * "removed" changes are never auto-applied, so they always land in
+ * `notAutoApplied`.
+ */
+export function partitionChanges(
+  changes: AmendmentChange[],
+): {
+  autoApplied: AmendmentChange[]
+  notAutoApplied: AmendmentChange[]
+  payPeriodFlags: AmendmentChange[]
+} {
+  const autoApplied: AmendmentChange[] = []
+  const notAutoApplied: AmendmentChange[] = []
+  const payPeriodFlags: AmendmentChange[] = []
+
+  for (const change of changes) {
+    if (isPayPeriodRelated(change)) {
+      payPeriodFlags.push(change)
+    }
+    if (change.type !== "removed" && isAutoApplicableField(change.field)) {
+      autoApplied.push(change)
+    } else {
+      notAutoApplied.push(change)
+    }
+  }
+
+  return { autoApplied, notAutoApplied, payPeriodFlags }
 }
 
 /**
@@ -342,18 +442,37 @@ export function AmendmentExtractor({
         await updateContract(contractId, updatePayload)
       }
 
+      // Count detected changes the flow does NOT auto-apply (term/tier/
+      // pricing/pay-period structure) so the toast nudges manual review
+      // instead of leaving the user thinking everything was handled.
+      const manualReviewCount = partitionChanges(changes).notAutoApplied.length
+
       if (appliedCount > 0) {
-        const msg =
-          skippedChanges.length > 0
-            ? `Applied ${appliedCount} change${appliedCount === 1 ? "" : "s"}. Skipped ${skippedChanges.length}: ${skippedChanges.map((s) => s.label).join(", ")} (non-numeric).`
-            : `Amendment applied (${appliedCount} change${appliedCount === 1 ? "" : "s"}).`
-        toast.success(msg)
+        const parts = [
+          `Amendment applied (${appliedCount} change${appliedCount === 1 ? "" : "s"}).`,
+        ]
+        if (skippedChanges.length > 0) {
+          parts.push(
+            `Skipped ${skippedChanges.length}: ${skippedChanges.map((s) => s.label).join(", ")} (non-numeric).`,
+          )
+        }
+        if (manualReviewCount > 0) {
+          parts.push(
+            `${manualReviewCount} change${manualReviewCount === 1 ? "" : "s"} need manual review (term/tier/pricing/pay-period) — see "Detected but not auto-applied".`,
+          )
+        }
+        toast.success(parts.join(" "))
         onApplied()
         onOpenChange(false)
         resetState()
       } else if (skippedChanges.length > 0) {
         toast.error(
           `No changes applied — all ${skippedChanges.length} required-numeric fields were non-numeric (${skippedChanges.map((s) => s.label).join(", ")}). Manually edit these fields instead.`,
+        )
+        setStage("review")
+      } else if (manualReviewCount > 0) {
+        toast.info(
+          `No changes were auto-applied. ${manualReviewCount} detected change${manualReviewCount === 1 ? "" : "s"} (term/tier/pricing/pay-period) need manual review — see "Detected but not auto-applied" below.`,
         )
         setStage("review")
       } else {
@@ -387,6 +506,11 @@ export function AmendmentExtractor({
   const confidence = getConfidenceLevel(changes.length)
   const confConfig = confidenceConfig[confidence]
   const ConfIcon = confConfig.icon
+
+  // Split detected changes so the review UI can surface what the flow will NOT
+  // auto-apply (term/tier/pricing/pay-period structure) instead of silently
+  // dropping it via the `default: break` in `handleApply`.
+  const { notAutoApplied, payPeriodFlags } = partitionChanges(changes)
 
   // 3-stage breadcrumb mapping for v0 parity. Internal `extracting` maps to
   // "upload" (same breadcrumb step), and `review`/`applying`/`done` map to
@@ -612,6 +736,85 @@ export function AmendmentExtractor({
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Variable / unusual pay-period flag. The amendment route
+                    does not return a structured hasVariablePayPeriods flag
+                    (unlike the create/import extract), so we detect timing
+                    changes by field/label and mirror the create-flow callout
+                    so the reviewer confirms cadence against their schedule. */}
+                {payPeriodFlags.length > 0 && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                      <AlertTriangle className="size-3.5 shrink-0" />
+                      Variable Pay Period
+                    </div>
+                    <p className="mt-1 text-xs text-foreground/90 leading-relaxed">
+                      This amendment changes payment timing or pay-period
+                      cadence. The accrual engine can&apos;t model irregular
+                      timing automatically.
+                    </p>
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {payPeriodFlags.map((c, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="font-medium shrink-0">{c.label}:</span>
+                          <span className="text-muted-foreground break-words">
+                            {c.oldValue || "—"} {"→"}{" "}
+                            {c.type === "removed" ? "—" : c.newValue}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-[11px] text-muted-foreground leading-relaxed">
+                      Review this to confirm it matches your payment schedule.
+                    </p>
+                  </div>
+                )}
+
+                {/* Detected but not auto-applied. The flow only writes
+                    allow-listed scalar fields; term/tier/pricing/rebate
+                    structure changes are surfaced here for manual editing
+                    instead of being silently dropped. */}
+                {notAutoApplied.length > 0 && (
+                  <Card className="border-amber-500/40">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <AlertTriangle className="size-4 text-amber-600 shrink-0" />
+                        Detected but not auto-applied
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        These changes were detected but cannot be applied
+                        automatically (term, tier, rebate, pricing, or pay-period
+                        structure). Review and edit the contract manually.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="space-y-2 text-sm">
+                        {notAutoApplied.map((c, i) => (
+                          <li
+                            key={i}
+                            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
+                          >
+                            <Badge
+                              variant="outline"
+                              className="shrink-0 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800"
+                            >
+                              {c.type === "added"
+                                ? "Added"
+                                : c.type === "removed"
+                                  ? "Removed"
+                                  : "Modified"}
+                            </Badge>
+                            <span className="font-medium">{c.label}</span>
+                            <span className="text-muted-foreground break-words">
+                              {c.oldValue || "—"} {"→"}{" "}
+                              {c.type === "removed" ? "—" : c.newValue}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Validation Questions */}
                 <Card className="border-primary/30">

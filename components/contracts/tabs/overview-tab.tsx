@@ -97,10 +97,13 @@ export function OverviewTab({
       {/* Wave A: tie-in amortization + capital summary.
           Shows only for tie-in contracts that either link to a capital
           contract or carry capital fields on a term themselves. */}
-      {contract.contractType === "tie_in" && (
+      {(contract.contractType === "tie_in" ||
+        contract.contractType === "capital") && (
         // Charles audit suggestion #4 (v0-port): always render — the
         // card itself shows an empty state when no capital line
         // items exist (the legacy capitalCost null-check was here).
+        // Cluster #3: capital contracts also carry capital line items /
+        // a min-annual floor, so they get the amortization card too.
         <ContractAmortizationCard contractId={contractId} />
       )}
       {/* Wave C — shortfall handling banner + run-rate projection

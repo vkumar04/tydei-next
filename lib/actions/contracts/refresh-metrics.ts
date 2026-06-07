@@ -170,7 +170,7 @@ export async function refreshContractMetricsForVendor(input: {
       ],
       status: { in: ["active", "expiring"] },
     },
-    select: { id: true },
+    select: { id: true, contractType: true },
   })
 
   let refreshed = 0
@@ -187,6 +187,29 @@ export async function refreshContractMetricsForVendor(input: {
         `[refreshContractMetricsForVendor] contract ${c.id} failed:`,
         err,
       )
+    }
+
+    // E2 (Charles 2026-06-06): populate the tie-in capital shortfall
+    // carry-forward ledger from the same recompute pipeline. The writer
+    // was previously fired only by the contract-detail "Recompute Earned
+    // Rebates" button, so for imported contracts the ledger stayed empty
+    // and its UI section never appeared. Only tie_in/capital contracts
+    // carry a capital shortfall — skip the rest to avoid needless work.
+    // Best-effort: a ledger failure must NEVER break metrics refresh or
+    // the import. The helper takes facilityId directly (no requireFacility)
+    // so it mirrors this bulk path's auth model.
+    if (c.contractType === "tie_in" || c.contractType === "capital") {
+      try {
+        const { _recomputeTieInShortfallLedgerWithFacility } = await import(
+          "@/lib/actions/contracts/tie-in-shortfall"
+        )
+        await _recomputeTieInShortfallLedgerWithFacility(
+          c.id,
+          input.facilityId,
+        )
+      } catch (err) {
+        console.error("[shortfall-ledger]", err, { contractId: c.id })
+      }
     }
   }
   return { refreshed, changed, errored }

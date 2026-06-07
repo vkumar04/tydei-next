@@ -11,6 +11,7 @@ import {
 } from "@/lib/contracts/performance"
 import type { TierLike } from "@/lib/rebates/calculate"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 /**
  * Load the data needed for `<ContractPerformanceCard>` and compute
@@ -74,7 +75,7 @@ export async function getContractPerformance(contractId: string): Promise<{
     const spendAgg = await prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
-        vendorId: contract.vendorId,
+        vendorId: { in: contractVendorIds(contract) },
         transactionDate: {
           gte: contract.effectiveDate,
           ...(contract.expirationDate ? { lte: contract.expirationDate } : {}),

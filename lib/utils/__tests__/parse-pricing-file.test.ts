@@ -2,7 +2,38 @@ import { describe, it, expect } from "vitest"
 import {
   detectPricingColumnMapping,
   buildPricingItems,
+  pricingNeedsManualMapping,
 } from "@/lib/utils/parse-pricing-file"
+
+describe("pricingNeedsManualMapping (category-realign trigger — Charles 2026-06-06)", () => {
+  it("does NOT require manual mapping when a standard category column is detected", () => {
+    const headers = ["vendor_item_no", "contract_price", "category"]
+    const autoMap = detectPricingColumnMapping(headers)
+    expect(pricingNeedsManualMapping(autoMap, headers)).toBe(false)
+  })
+
+  it("REQUIRES manual mapping when category is undetected but an unrecognized column exists", () => {
+    // "Prod Line" is almost certainly the category but isn't a known alias.
+    const headers = ["vendor_item_no", "contract_price", "Prod Line"]
+    const autoMap = detectPricingColumnMapping(headers)
+    expect(autoMap.category).toBeUndefined()
+    // Without this, the realign dialog would never open and the category drops.
+    expect(pricingNeedsManualMapping(autoMap, headers)).toBe(true)
+  })
+
+  it("does NOT add friction for a plain price list with no category and no spare columns", () => {
+    const headers = ["vendor_item_no", "contract_price", "list_price", "uom"]
+    const autoMap = detectPricingColumnMapping(headers)
+    expect(autoMap.category).toBeUndefined()
+    expect(pricingNeedsManualMapping(autoMap, headers)).toBe(false)
+  })
+
+  it("requires manual mapping when a required column (price) is missing", () => {
+    const headers = ["vendor_item_no", "category"]
+    const autoMap = detectPricingColumnMapping(headers)
+    expect(pricingNeedsManualMapping(autoMap, headers)).toBe(true)
+  })
+})
 
 describe("detectPricingColumnMapping", () => {
   it("maps canonical snake_case headers", () => {
