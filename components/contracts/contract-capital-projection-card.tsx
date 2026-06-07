@@ -79,13 +79,14 @@ export function ContractCapitalProjectionCard({
               Projected months to payoff
             </div>
             <div className="text-lg font-semibold tabular-nums">
-              {projectedMonthsToPayoff != null
+              {!zeroVelocity && projectedMonthsToPayoff != null
                 ? `${projectedMonthsToPayoff} mo`
                 : "—"}
             </div>
             {zeroVelocity && (
               <p className="text-xs text-muted-foreground">
-                No rebate activity in the last 90 days.
+                No rebate velocity yet — projection appears once rebates
+                start being collected.
               </p>
             )}
           </div>
