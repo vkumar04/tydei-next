@@ -27,6 +27,7 @@ import {
 } from "@/lib/cog/match"
 import { prisma as defaultPrisma } from "@/lib/db"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 
 type Db = PrismaClient | Prisma.TransactionClient
 
@@ -203,7 +204,11 @@ export async function recomputeMatchStatusesForVendor(
     })
     for (const p of rows) {
       if (!p.vendorItemNo || p.contractPrice == null) continue
-      const sku = p.vendorItemNo.toLowerCase()
+      // Normalize the key so it matches the COG-side lookup below; SKU
+      // formatting drift between the PricingFile and COG must not split
+      // the same item into two keys.
+      const sku = normalizeSku(p.vendorItemNo)
+      if (!sku) continue
       // First write wins — pricing files have effectiveDate ordering
       // we don't replay here; assume the latest-imported is acceptable
       // for the variance signal until proper effective-date routing
@@ -252,9 +257,14 @@ export async function recomputeMatchStatusesForVendor(
         effectiveStart: c.effectiveDate,
         effectiveEnd: c.expirationDate,
       }
-      const list = pricingByVendorItem.get(p.vendorItemNo) ?? []
+      // Key the cascade map on the normalized SKU so it matches the
+      // resolver lookup (lib/cog/match.ts) — both sides MUST use
+      // normalizeSku or they silently disagree and rows fall off-contract.
+      const skuKey = normalizeSku(p.vendorItemNo)
+      if (!skuKey) continue
+      const list = pricingByVendorItem.get(skuKey) ?? []
       list.push(pricingCandidate)
-      pricingByVendorItem.set(p.vendorItemNo, list)
+      pricingByVendorItem.set(skuKey, list)
     }
   }
 
@@ -379,10 +389,10 @@ export async function recomputeMatchStatusesForVendor(
     // price_variance (or on_contract if equal) using the PricingFile
     // unitPrice. Drives the savings/variance + category-mapping cards
     // the PO flagged.
-    const skuLower = r.vendorItemNo?.toLowerCase()
+    const skuKey = normalizeSku(r.vendorItemNo)
     const pricingFileHit =
-      result.status === "off_contract_item" && skuLower
-        ? pricingFileBySku.get(skuLower)
+      result.status === "off_contract_item" && skuKey
+        ? pricingFileBySku.get(skuKey)
         : undefined
     let effectiveResult: MatchResult
     if (pricingFileHit && cascade.contractId) {
