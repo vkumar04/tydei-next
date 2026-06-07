@@ -730,7 +730,12 @@ export function ContractDetailClient({
           />
           <ContractPerformanceCharts contractId={contractId} />
           <ContractInsightsCards contractId={contractId} />
-          <ContractAccrualTimeline contractId={contractId} />
+          <ContractAccrualTimeline
+            contractId={contractId}
+            hasCarveOutTerm={
+              contract.terms?.some((t) => t.termType === "carve_out") ?? false
+            }
+          />
           <PerformanceSummary
             periods={periods ?? []}
             totalValue={stats?.totalValue ?? 0}

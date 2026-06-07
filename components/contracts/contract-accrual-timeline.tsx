@@ -16,11 +16,17 @@ interface ContractAccrualTimelineProps {
   fetcher?: (
     contractId: string,
   ) => ReturnType<typeof getAccrualTimeline>
+  /** When the contract has a `carve_out` term it earns rebate per
+   *  matched line item (carveOutPercent), not via spend tiers — so the
+   *  "no tiers" empty state is misleading. Lets the parent flag it so
+   *  the empty state reads correctly. */
+  hasCarveOutTerm?: boolean
 }
 
 export function ContractAccrualTimeline({
   contractId,
   fetcher = getAccrualTimeline,
+  hasCarveOutTerm = false,
 }: ContractAccrualTimelineProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["contract-accrual-timeline", contractId],
@@ -47,7 +53,9 @@ export function ContractAccrualTimeline({
           <CardTitle>Accrual Timeline</CardTitle>
         </CardHeader>
         <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          No tiers defined yet — add terms and tiers to see accrual schedule.
+          {hasCarveOutTerm
+            ? "Carve-out contract — rebate accrues per matched line item (see the Pricing tab for carve-out rates), not by spend tier."
+            : "No tiers defined yet — add terms and tiers to see accrual schedule."}
         </CardContent>
       </Card>
     )
