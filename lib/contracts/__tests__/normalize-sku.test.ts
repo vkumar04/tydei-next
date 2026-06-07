@@ -2,13 +2,21 @@ import { describe, it, expect } from "vitest"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
 
 describe("normalizeSku", () => {
-  it("folds case, whitespace, hyphen, dot, underscore to one canonical key", () => {
-    const canonical = normalizeSku("ABC-123")
-    expect(normalizeSku("abc 123")).toBe(canonical)
-    expect(normalizeSku("ABC.123 ")).toBe(canonical)
-    expect(normalizeSku("abc_123")).toBe(canonical)
-    expect(normalizeSku(" abc/123 ")).toBe(canonical)
-    expect(canonical).toBe("abc123")
+  it("folds case and ALL whitespace (trailing/leading/internal)", () => {
+    expect(normalizeSku("ABC-123")).toBe("abc-123")
+    expect(normalizeSku("  ABC-123  ")).toBe("abc-123")
+    expect(normalizeSku("ABC 123")).toBe("abc123")
+    expect(normalizeSku("abc\t123")).toBe("abc123")
+  })
+
+  it("PRESERVES meaningful separators (hyphen/dot/underscore/slash) — they distinguish SKUs", () => {
+    // Conservative: these must NOT all collapse to one key (false-match risk).
+    expect(normalizeSku("ABC-123")).not.toBe(normalizeSku("ABC123"))
+    expect(normalizeSku("abc.123")).toBe("abc.123")
+    expect(normalizeSku("abc_123")).toBe("abc_123")
+    expect(normalizeSku("abc/123")).toBe("abc/123")
+    // "AB-12" vs "AB1-2" stay distinct (would collapse under separator folding).
+    expect(normalizeSku("AB-12")).not.toBe(normalizeSku("AB1-2"))
   })
 
   it("lowercases a plain alphanumeric SKU", () => {
