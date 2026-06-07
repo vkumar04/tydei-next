@@ -25,6 +25,26 @@ import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 const uncappedIfNegative = (v: unknown): unknown =>
   typeof v === "number" && v < 0 ? undefined : v
 
+// Charles 2026-06-06 — reference numbers come in two shapes: a string[]
+// from the chip-input form, or a comma/newline-separated free-text string
+// from AI extraction / bulk paste. Normalize both to a clean string[]:
+// split on comma/newline, trim each entry, drop blanks. Leave undefined
+// alone so an omitted field doesn't clobber the column on partial update.
+// We do NOT case-fold or strip separators here — match-time normalization
+// (normalizeSku in match.ts) owns format-robust comparison; storage keeps
+// the user's exact reference numbers.
+const normalizeReferenceNumbers = (v: unknown): unknown => {
+  if (v == null) return v
+  const raw: string[] = Array.isArray(v)
+    ? v.flatMap((entry) =>
+        typeof entry === "string" ? entry.split(/[\n,]+/) : [],
+      )
+    : typeof v === "string"
+      ? v.split(/[\n,]+/)
+      : []
+  return raw.map((s) => s.trim()).filter((s) => s.length > 0)
+}
+
 export const tierInputSchema = z.object({
   id: z.string().optional(),
   tierNumber: z.number().int().min(1).default(1),
@@ -174,6 +194,14 @@ export const createTermSchema = z.object({
   // when any tier has rebateType === "per_procedure_rebate": each code
   // is matched against case-costing records to count procedures.
   cptCodes: z.array(z.string()).optional(),
+  // Charles 2026-06-06 — cross-vendor reference numbers on ContractTerm
+  // (String[]). The matcher uses these as the cross-vendor fallback key
+  // (manufacturerNo → referenceNumbers) so a SKU bought by ANY grouped
+  // vendor resolves to the contract regardless of vendor-name drift.
+  // Until now this column had no capture path (only the seed wrote it),
+  // so the fallback was dead in practice. preprocess trims each entry and
+  // drops blanks so the stored set is clean for normalized matching.
+  referenceNumbers: z.preprocess(normalizeReferenceNumbers, z.array(z.string()).optional()),
   // Tie-in capital schedule fields (nullable on ContractTerm; only used
   // when contract.contractType === "tie_in").
   capitalCost: z.number().nullable().optional(),
@@ -266,6 +294,8 @@ export const termFormSchema = z.object({
   scopedItemNumbers: z.array(z.string()).optional(),
   // Charles W1.X-A6 — CPT codes (see createTermSchema above).
   cptCodes: z.array(z.string()).optional(),
+  // Charles 2026-06-06 — cross-vendor reference numbers (see createTermSchema).
+  referenceNumbers: z.preprocess(normalizeReferenceNumbers, z.array(z.string()).optional()),
   // Tie-in capital schedule fields (nullable on ContractTerm; only used
   // when contract.contractType === "tie_in").
   capitalCost: z.number().nullable().optional(),

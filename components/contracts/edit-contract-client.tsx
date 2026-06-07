@@ -150,6 +150,9 @@ export function EditContractClient({
           // in the DB (2026-04-23).
           scopedCategoryIds: t.categories ?? [],
           cptCodes: t.cptCodes ?? [],
+          // Charles 2026-06-06 — round-trip cross-vendor reference numbers
+          // so the chip input renders the saved set on edit.
+          referenceNumbers: t.referenceNumbers ?? [],
           minimumPurchaseCommitment:
             t.minimumPurchaseCommitment != null
               ? Number(t.minimumPurchaseCommitment)
@@ -341,6 +344,8 @@ export function EditContractClient({
               scopedCategoryId: term.scopedCategoryId,
               scopedCategoryIds: term.scopedCategoryIds,
               scopedItemNumbers: term.scopedItemNumbers,
+              cptCodes: term.cptCodes,
+              referenceNumbers: term.referenceNumbers,
               minimumPurchaseCommitment: term.minimumPurchaseCommitment,
             })
             await upsertContractTiers(term.id, term.tiers)

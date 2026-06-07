@@ -51,6 +51,7 @@ import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
 import { SpecificItemsPicker, type VendorItem } from "./specific-items-picker"
 import { isCarveOutScopeLocked } from "@/lib/contracts/carve-out-scope"
 import { CptCodeList } from "./_form/_cpt-code-list"
+import { ReferenceNumberList } from "./_form/_reference-number-list"
 import { CategoryMappingSuggestions } from "./_form/_category-mapping-suggestions"
 
 interface ContractTermsEntryProps {
@@ -998,6 +999,23 @@ export function ContractTermsEntry({
                       />
                     </Field>
                   )}
+
+                  {/* Charles 2026-06-06 — cross-vendor reference numbers.
+                      Always available (not gated by term type): they're
+                      the robust cross-vendor match key for grouped
+                      contracts where vendor names / SKUs drift. The COG
+                      matcher uses these as the manufacturerNo fallback
+                      (lib/contracts/match.ts). Without a capture path the
+                      fallback was dead in practice. */}
+                  <Field label="Reference Numbers">
+                    <ReferenceNumberList
+                      values={term.referenceNumbers ?? []}
+                      onChange={(next) =>
+                        updateTerm(termIdx, { referenceNumbers: next })
+                      }
+                    />
+                  </Field>
+
 
                   {contractType === "tie_in" && (
                     <div className="space-y-5 rounded-md border p-4">
