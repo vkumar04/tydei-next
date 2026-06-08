@@ -10,7 +10,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const termFindMany = vi.fn()
+const termFindFirst = vi.fn()
+const termCreate = vi.fn()
 const pricingFindMany = vi.fn()
+const pricingCount = vi.fn()
+const contractFindUnique = vi.fn()
 const termProductDeleteMany = vi.fn()
 const termProductCreateMany = vi.fn()
 const termUpdate = vi.fn()
@@ -18,12 +22,18 @@ const transaction = vi.fn()
 
 vi.mock("@/lib/db", () => ({
   prisma: {
+    contract: {
+      findUnique: contractFindUnique,
+    },
     contractTerm: {
       findMany: termFindMany,
+      findFirst: termFindFirst,
+      create: termCreate,
       update: termUpdate,
     },
     contractPricing: {
       findMany: pricingFindMany,
+      count: pricingCount,
     },
     contractTermProduct: {
       deleteMany: termProductDeleteMany,
@@ -167,5 +177,87 @@ describe("populateCarveOutTermsForContract", () => {
     // 2500 SKUs → 3 batches (1000 + 1000 + 500)
     expect(termProductCreateMany).toHaveBeenCalledTimes(3)
     expect(r.productsLinked).toBe(2500)
+  })
+})
+
+describe("ensureCarveOutTermFromPricing", () => {
+  it("auto-creates exactly one carve_out term when pricing has carveOutPercent>0 and none exists", async () => {
+    // Pricing file carries carve-out flags (the SYK signal)…
+    pricingCount.mockResolvedValueOnce(50)
+    // …and the contract has no carve_out term yet.
+    termFindFirst.mockResolvedValueOnce(null)
+    contractFindUnique.mockResolvedValueOnce({
+      effectiveDate: new Date(Date.UTC(2025, 0, 1)),
+      expirationDate: new Date(Date.UTC(2026, 11, 31)),
+    })
+    termCreate.mockResolvedValueOnce({ id: "new-term" })
+
+    const { ensureCarveOutTermFromPricing } = await import(
+      "../populate-carveout-terms"
+    )
+    const r = await ensureCarveOutTermFromPricing("c1")
+
+    expect(r).toEqual({
+      created: true,
+      termId: "new-term",
+      carveOutSkuCount: 50,
+    })
+    expect(termCreate).toHaveBeenCalledTimes(1)
+    const arg = termCreate.mock.calls[0][0]
+    expect(arg.data).toMatchObject({
+      contractId: "c1",
+      termType: "carve_out",
+      appliesTo: "specific_items",
+      termName: "Carve-Out (from pricing file)",
+    })
+    // Scoped to the contract's window.
+    expect(arg.data.effectiveStart).toEqual(new Date(Date.UTC(2025, 0, 1)))
+    expect(arg.data.effectiveEnd).toEqual(new Date(Date.UTC(2026, 11, 31)))
+  })
+
+  it("creates NO term for a pure spend-rebate file (no carveOutPercent rows)", async () => {
+    pricingCount.mockResolvedValueOnce(0)
+
+    const { ensureCarveOutTermFromPricing } = await import(
+      "../populate-carveout-terms"
+    )
+    const r = await ensureCarveOutTermFromPricing("c1")
+
+    expect(r).toEqual({ created: false, termId: null, carveOutSkuCount: 0 })
+    expect(termFindFirst).not.toHaveBeenCalled()
+    expect(termCreate).not.toHaveBeenCalled()
+  })
+
+  it("is idempotent: does not create a second term when one already exists", async () => {
+    pricingCount.mockResolvedValueOnce(50)
+    termFindFirst.mockResolvedValueOnce({ id: "existing-term" })
+
+    const { ensureCarveOutTermFromPricing } = await import(
+      "../populate-carveout-terms"
+    )
+    const r = await ensureCarveOutTermFromPricing("c1")
+
+    expect(r).toEqual({
+      created: false,
+      termId: "existing-term",
+      carveOutSkuCount: 50,
+    })
+    expect(termCreate).not.toHaveBeenCalled()
+  })
+
+  it("falls back to evergreen sentinels when the contract has no dates", async () => {
+    pricingCount.mockResolvedValueOnce(1)
+    termFindFirst.mockResolvedValueOnce(null)
+    contractFindUnique.mockResolvedValueOnce(null)
+    termCreate.mockResolvedValueOnce({ id: "new-term" })
+
+    const { ensureCarveOutTermFromPricing } = await import(
+      "../populate-carveout-terms"
+    )
+    await ensureCarveOutTermFromPricing("c1")
+
+    const arg = termCreate.mock.calls[0][0]
+    expect(arg.data.effectiveStart).toEqual(new Date(Date.UTC(1970, 0, 1)))
+    expect(arg.data.effectiveEnd).toEqual(new Date(Date.UTC(9999, 11, 31)))
   })
 })

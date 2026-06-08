@@ -14,7 +14,10 @@ import {
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
-import { populateCarveOutTermsForContract } from "@/lib/contracts/populate-carveout-terms"
+import {
+  ensureCarveOutTermFromPricing,
+  populateCarveOutTermsForContract,
+} from "@/lib/contracts/populate-carveout-terms"
 import { sanitizePricingRow } from "@/lib/contracts/pricing-row-sanitize"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
@@ -603,6 +606,24 @@ export async function importContractPricing(input: {
   await persistConfirmedCategoryRemap(input.categoryRemap)
 
   let carveOutLinked = 0
+  let carveOutTermCreated = false
+  try {
+    // Charles 2026-06-07 (SYK Carve out.xlsx): a pricing file with explicit
+    // "Carve out %" values IS a carve-out contract. The carve-out math +
+    // display are term-gated (getCarveOutRebate, b015fec) and the populate
+    // helper only LINKS to an existing carve_out term — so importing a
+    // carve-out file alone produced no carve-out anywhere. Auto-create the
+    // term first (idempotent; no-op for pure-spend files with no carve-out
+    // column → no carveOutPercent rows → no term), then link the SKUs below.
+    const ensured = await ensureCarveOutTermFromPricing(input.contractId)
+    carveOutTermCreated = ensured.created
+  } catch (err) {
+    console.warn(
+      "[importContractPricing] carve-out term auto-create failed:",
+      err,
+      { contractId: input.contractId },
+    )
+  }
   try {
     const r = await populateCarveOutTermsForContract(input.contractId)
     carveOutLinked = r.productsLinked
@@ -653,7 +674,7 @@ export async function importContractPricing(input: {
     }
   }
 
-  return { imported, carveOutLinked }
+  return { imported, carveOutLinked, carveOutTermCreated }
 }
 
 /**
