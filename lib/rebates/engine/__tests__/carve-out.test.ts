@@ -230,6 +230,54 @@ describe("calculateCarveOut — no matching purchases", () => {
   })
 })
 
+describe("calculateCarveOut — SKU matching is case/whitespace-insensitive (2026-06-08)", () => {
+  // Bug "carve out is not calculating any transaction": COG and pricing-file
+  // SKUs drift in case/whitespace, but the COG→contract matcher keys on
+  // normalizeSku. Carve-out must match the same way or an on-contract row
+  // contributes $0.
+  it("matches a line to a purchase that differs only by case + whitespace", () => {
+    const config: CarveOutConfig = {
+      type: "CARVE_OUT",
+      lines: [
+        { referenceNumber: "3910-080-020", rateType: "PERCENT_OF_SPEND", rebatePercent: 0.1 },
+      ],
+    }
+    const purchases: PurchaseRecord[] = [
+      // Same SKU, different surface form (uppercase already, trailing space).
+      mkPurchase({ referenceNumber: " 3910-080-020 ", quantity: 1, unitPrice: 1000, extendedPrice: 1000 }),
+      // Pure case difference on a plain alphanumeric SKU.
+      mkPurchase({ referenceNumber: "abc123", quantity: 1, unitPrice: 500, extendedPrice: 500 }),
+    ]
+    const config2: CarveOutConfig = {
+      type: "CARVE_OUT",
+      lines: [{ referenceNumber: "ABC123", rateType: "PERCENT_OF_SPEND", rebatePercent: 0.2 }],
+    }
+
+    const r1 = calculateCarveOut(config, mkPeriod(purchases))
+    expect(r1.rebateEarned).toBeCloseTo(100, 10) // 10% of $1000
+    expect(r1.carveOutLines?.[0]?.totalSpend).toBe(1000)
+
+    const r2 = calculateCarveOut(config2, mkPeriod(purchases))
+    expect(r2.rebateEarned).toBeCloseTo(100, 10) // 20% of $500
+    // Display keeps the original pricing-file SKU form, not the normalized key.
+    expect(r2.carveOutLines?.[0]?.referenceNumber).toBe("ABC123")
+  })
+
+  it("does NOT collapse separator-distinct SKUs (3910-080-020 ≠ 3910080020)", () => {
+    const config: CarveOutConfig = {
+      type: "CARVE_OUT",
+      lines: [
+        { referenceNumber: "3910-080-020", rateType: "PERCENT_OF_SPEND", rebatePercent: 0.1 },
+      ],
+    }
+    const purchases: PurchaseRecord[] = [
+      mkPurchase({ referenceNumber: "3910080020", quantity: 1, unitPrice: 1000, extendedPrice: 1000 }),
+    ]
+    const r = calculateCarveOut(config, mkPeriod(purchases))
+    expect(r.rebateEarned).toBe(0)
+  })
+})
+
 describe("calculateCarveOut — empty config", () => {
   it("empty lines → zero rebate, no warnings, no errors", () => {
     const config: CarveOutConfig = {
