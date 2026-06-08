@@ -52,14 +52,22 @@ export async function getCOGVendorMappings(): Promise<CogVendorMapping[]> {
   // Coalesce rows that share a vendorName but differ on vendorId (rare —
   // happens when a name was partially remapped). Keep the most-frequent
   // vendorId as the "current" mapping; sum counts/spend across both.
+  //
+  // Vick 2026-06-07: the coalesce key is CASE-INSENSITIVE so two casings of
+  // the same vendor — "Smith and nephew" vs "Smith and Nephew" — collapse
+  // into ONE mapping row with summed spend/counts (previously a bare
+  // `.trim()` left them split, showing different numbers despite being the
+  // same mapped vendor). The display `vendorName` keeps the first-seen
+  // original casing.
   const byName = new Map<string, CogVendorMapping>()
   for (const g of grouped) {
-    const key = (g.vendorName ?? "").trim()
-    if (!key) continue
+    const display = (g.vendorName ?? "").trim()
+    if (!display) continue
+    const key = display.toLowerCase()
     const vendor = g.vendorId ? vendorMap.get(g.vendorId) : null
     const existing = byName.get(key)
     const row: CogVendorMapping = {
-      vendorName: key,
+      vendorName: existing?.vendorName ?? display,
       recordCount: (existing?.recordCount ?? 0) + (g._count?._all ?? 0),
       totalSpend:
         (existing?.totalSpend ?? 0) + Number(g._sum?.extendedPrice ?? 0),
