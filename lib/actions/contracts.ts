@@ -23,6 +23,7 @@ import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
+import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
 import {
   termFormSchemaWithTierCheck,
   type TermFormValues,
@@ -1168,6 +1169,23 @@ async function _createContractImpl(
     for (const facilityId of facilityIds) {
       for (const vendorId of vendorIds) {
         await recomputeMatchStatusesForVendor(prisma, { vendorId, facilityId })
+        // 2026-06-07 (Vick "every time a contract is created these should
+        // auto run"): refresh the persisted derived metrics
+        // (complianceRate, currentMarketShare, annualValue) right after the
+        // match recompute — same fan-out as bulkImportCOGRecords. Before this,
+        // a contract created AFTER its COG was imported showed no
+        // matches/market-share until the user manually edited+saved or hit
+        // "Recompute Earned Rebates". Best-effort: a metrics-refresh failure
+        // must never roll back or surface from the create (mirrors the
+        // rebate-accrual / case-supply recompute pattern below).
+        try {
+          await refreshContractMetricsForVendor({ vendorId, facilityId })
+        } catch (err) {
+          console.warn(
+            `[createContract] refreshContractMetricsForVendor(${vendorId}, ${facilityId}) failed:`,
+            err,
+          )
+        }
       }
       // Charles 2026-04-25 (Bug 27 part 2): keep CaseSupply.isOnContract
       // in sync with the contract catalog so Case Costing's "Avg
