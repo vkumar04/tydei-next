@@ -109,3 +109,20 @@ describe("localMapColumns — category column header variants/typos", () => {
     expect(mapping.category).toBe(expected)
   })
 })
+
+describe("localMapColumns — SKU column header variants (Catalog Item / Reference Number)", () => {
+  // Stryker joint price/COG files label the SKU column "Catalog Item"; without
+  // this alias the SKU came back null → matcher couldn't join pricing → every
+  // purchase fell to off-catalog. Charles 2026-06-07.
+  const TARGET = [{ key: "vendorItemNo", label: "Vendor Item No", required: false }] as const
+
+  it.each([
+    ["Catalog Item", "Catalog Item"],
+    ["Reference Number", "Reference Number"],
+    ["ReferenceNumber", "ReferenceNumber"],
+  ])("detects %s as the SKU (vendorItemNo) column", (header, expected) => {
+    const headers = [header, "Description", "Product Category", "Price"]
+    const mapping = localMapColumns(headers, [...TARGET])
+    expect(mapping.vendorItemNo).toBe(expected)
+  })
+})
