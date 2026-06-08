@@ -80,6 +80,13 @@ export function sumInitialSales(
 function normalizeCadence(
   raw: string | null | undefined,
 ): "monthly" | "quarterly" | "semi_annual" | "annual" {
-  if (raw === "quarterly" || raw === "annual") return raw
+  // Bug 2026-06-08 ("monthly amortization schedule going back to monthly
+  // again — I selected semi annual"): `semi_annual` was missing from the
+  // allow-list, so a semi-annual capital line item silently downgraded to
+  // monthly in the amortization schedule. Include every cadence the enum
+  // (and the form's selector) supports.
+  if (raw === "quarterly" || raw === "semi_annual" || raw === "annual") {
+    return raw
+  }
   return "monthly"
 }

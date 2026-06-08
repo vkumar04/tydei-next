@@ -34,6 +34,7 @@ import type {
   PurchaseRecord,
   RebateResult,
 } from "./types"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 
 function aggregateLinePurchases(
   line: CarveOutLineConfig,
@@ -41,8 +42,19 @@ function aggregateLinePurchases(
 ): { totalSpend: number; totalUnits: number } {
   let totalSpend = 0
   let totalUnits = 0
+  // Bug 2026-06-08 ("carve out is not calculating any transaction"): COG and
+  // pricing-file SKUs drift in case/whitespace, and the COG→contract matcher
+  // already keys on `normalizeSku`. Matching the carve-out line to its
+  // purchases by RAW string equality meant an on-contract COG row whose
+  // vendorItemNo differed from the pricing SKU only by case/whitespace
+  // contributed $0. Match on the canonical SKU key so carve-out agrees with
+  // the rest of the matching pipeline. (normalizeSku is conservative — it
+  // folds only case + whitespace, never separators, so distinct SKUs stay
+  // distinct.)
+  const lineKey = normalizeSku(line.referenceNumber)
+  if (!lineKey) return { totalSpend, totalUnits }
   for (const p of purchases) {
-    if (p.referenceNumber !== line.referenceNumber) continue
+    if (normalizeSku(p.referenceNumber) !== lineKey) continue
     totalSpend += p.extendedPrice
     totalUnits += p.quantity
   }
