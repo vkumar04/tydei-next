@@ -81,3 +81,31 @@ describe("localMapColumns — Charles short COG CSV (W2.C-A)", () => {
     expect(mapping.inventoryDescription).toBe("Inventory Description")
   })
 })
+
+describe("localMapColumns — category column header variants/typos", () => {
+  // Root cause of "all dollars in 1 category": the client's COG/price files
+  // label the category column "Product Catgory" (a typo). The old alias list
+  // didn't include it, so COG.category came back null and the per-category
+  // market-share card collapsed every line into the contract's single
+  // productCategory. These cases lock the variant detection. 2026-06-07.
+  const TARGET = [{ key: "category", label: "Category", required: false }] as const
+
+  it("detects the 'Product Catgory' typo as the category column", () => {
+    const headers = ["ReferenceNumber", "Description", "Product Catgory", "UOM", "Price"]
+    const mapping = localMapColumns(headers, [...TARGET])
+    expect(mapping.category).toBe("Product Catgory")
+  })
+
+  it.each([
+    ["Product Category", "Product Category"],
+    ["product_category", "product_category"],
+    ["Product Type", "Product Type"],
+    ["Classification", "Classification"],
+    ["Division", "Division"],
+    ["Department", "Department"],
+  ])("detects %s as the category column", (header, expected) => {
+    const headers = ["ReferenceNumber", "Description", header, "UOM", "Price"]
+    const mapping = localMapColumns(headers, [...TARGET])
+    expect(mapping.category).toBe(expected)
+  })
+})

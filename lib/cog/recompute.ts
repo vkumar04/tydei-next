@@ -90,6 +90,15 @@ export async function loadContractsForVendor(
         },
       },
     },
+    // Vick 2026-06-07: deterministic ordering. The matcher is
+    // first-match-wins (`byCategory.find(...)` in lib/contracts/match.ts),
+    // so when a SKU is priced on multiple candidate contracts, the contract
+    // a COG row attaches to depends entirely on the order rows come back in.
+    // Without an explicit orderBy Postgres returns rows in unspecified order,
+    // so a rematch could silently move spend between contracts. Most-recent
+    // effective date first (the current contract usually wins), tie-broken by
+    // id so the order is fully stable across runs.
+    orderBy: [{ effectiveDate: "desc" }, { id: "asc" }],
   })
 
   return contracts.map((c) => {

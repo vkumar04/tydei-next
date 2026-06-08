@@ -301,9 +301,11 @@ const BASELINE_HITS = new Set<string>([
   // again 2026-05-05 after Bug #9 added a `humanizeCreateContractError`
   // helper above the contractDocument operations; bumped again
   // 2026-05-31 after createContractDocumentSafe (#31) + the group-aware
-  // getContracts/getContract changes (#33) shifted them).
-  "lib/actions/contracts.ts:1498",
-  "lib/actions/contracts.ts:1518",
+  // getContracts/getContract changes (#33) shifted them; bumped again
+  // 2026-06-07 after createContract gained an auto refreshContractMetrics
+  // recompute block (+ its import) above these operations.
+  "lib/actions/contracts.ts:1516",
+  "lib/actions/contracts.ts:1536",
   // imports/case-costing-import.ts: facility-scoped via upstream batch
   "lib/actions/imports/case-costing-import.ts:243",
   "lib/actions/imports/case-costing-import.ts:380",

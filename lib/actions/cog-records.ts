@@ -402,15 +402,20 @@ export async function getCOGStats(facilityId: string) {
       _sum: { savingsAmount: true },
       _count: { _all: true },
     }),
+    // Vick 2026-06-07: group by vendorId (not raw vendorName) so two
+    // casings of the same vendor — e.g. "Smith and nephew" vs "Smith and
+    // Nephew" — that were remapped to ONE vendorId collapse into a single
+    // bucket. Grouping by raw case-sensitive vendorName over-counted
+    // uniqueVendors and split topVendors. Rows with a null vendorId (never
+    // remapped) are bucketed case-insensitively by name in JS below.
     prisma.cOGRecord.groupBy({
-      by: ["vendorName"],
+      by: ["vendorId", "vendorName"],
       where: {
         facilityId: facility.id,
         vendorName: { not: null },
         NOT: { vendorName: "" },
       },
       _count: { id: true },
-      orderBy: { _count: { id: "desc" } },
     }),
     prisma.cOGRecord.aggregate({
       where: { facilityId: facility.id },
@@ -421,11 +426,61 @@ export async function getCOGStats(facilityId: string) {
 
   const totalSpend = Number(totalSpendResult._sum.extendedPrice ?? 0)
   const offContractCount = totalItems - onContractCount
-  const uniqueVendors = vendorGroups.length
-  const topVendors = vendorGroups.slice(0, 5).map((g) => ({
-    name: g.vendorName ?? "Unknown",
-    count: g._count.id,
-  }))
+
+  // Vick 2026-06-07: collapse vendorGroups into one bucket per real vendor.
+  // Mapped rows (vendorId set) key on vendorId; their display name comes
+  // from the Vendor row so a remap is reflected immediately. Unmapped rows
+  // (null vendorId) key on a case-insensitive name so two casings merge
+  // into one bucket showing the first-seen original casing.
+  const mappedVendorIds = Array.from(
+    new Set(
+      vendorGroups
+        .map((g) => g.vendorId)
+        .filter((v): v is string => !!v),
+    ),
+  )
+  // auth-scope-scanner-skip: Vendor is a global (non-tenant) table; this is
+  // a display-name lookup for vendorIds already scoped to this facility's
+  // COG rows above.
+  const vendorRows = mappedVendorIds.length
+    ? await prisma.vendor.findMany({
+        where: { id: { in: mappedVendorIds } },
+        select: { id: true, name: true, displayName: true },
+      })
+    : []
+  const vendorNameById = new Map(
+    vendorRows.map((v) => [v.id, v.displayName ?? v.name]),
+  )
+
+  const buckets = new Map<string, { name: string; count: number }>()
+  for (const g of vendorGroups) {
+    const count = g._count.id
+    if (g.vendorId) {
+      const existing = buckets.get(g.vendorId)
+      buckets.set(g.vendorId, {
+        name:
+          existing?.name ??
+          vendorNameById.get(g.vendorId) ??
+          g.vendorName ??
+          "Unknown",
+        count: (existing?.count ?? 0) + count,
+      })
+    } else {
+      const raw = g.vendorName ?? ""
+      const key = `name:${raw.trim().toLowerCase()}`
+      const existing = buckets.get(key)
+      buckets.set(key, {
+        // Keep the first-seen original casing as the display name.
+        name: existing?.name ?? (raw.trim() || "Unknown"),
+        count: (existing?.count ?? 0) + count,
+      })
+    }
+  }
+  const sortedVendors = Array.from(buckets.values()).sort(
+    (a, b) => b.count - a.count,
+  )
+  const uniqueVendors = sortedVendors.length
+  const topVendors = sortedVendors.slice(0, 5)
 
   const matchedCount = matchedAggregate._count._all
   const totalSavings =
