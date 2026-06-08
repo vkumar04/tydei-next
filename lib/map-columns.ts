@@ -55,9 +55,18 @@ const ALIASES: Record<string, string[]> = {
     "contractend",
   ],
   category: [
+    // Aliases are compared via `norm()` (lowercase, strip non-alphanumeric),
+    // so "Product Category" / "product_category" both normalise to
+    // "productcategory". This list MIRRORS the pricing-file parser's category
+    // detection (lib/utils/parse-pricing-file.ts) so COG and price files
+    // agree on what counts as a category column. Without "productcatgory"
+    // (a real client header typo, "Product Catgory") the category column went
+    // undetected → COG.category null → per-category market share collapsed all
+    // spend into the contract's single productCategory. 2026-06-07.
     "category", "cat", "productcategory", "itemcategory",
     "department", "dept", "group", "productgroup", "productline",
-    "segment",
+    "segment", "productcatgory", "producttype", "classification",
+    "division",
   ],
   uom: [
     "uom", "unitofmeasure", "unit", "measure", "um", "uofm",
