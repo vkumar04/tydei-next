@@ -27,6 +27,12 @@ const ALIASES: Record<string, string[]> = {
     // The matcher joins pricing on vendorItemNo, so every such row
     // became unmatchable. User-reported regression 2026-04-23.
     "productrefnumber", "productref", "refnumber", "refno",
+    // "Catalog Item" (Stryker joint price/COG files) + "Reference Number"
+    // (Arthrex/SYK). These SKU-column labels weren't recognized, so the
+    // row's SKU stayed null and the matcher couldn't join pricing → every
+    // such purchase fell to off-catalog. Charles 2026-06-07.
+    "catalogitem", "catalogitemno", "catalog",
+    "referencenumber", "referenceno", "reference",
   ],
   productDescription: [
     "productdescription", "description", "desc", "itemdescription",

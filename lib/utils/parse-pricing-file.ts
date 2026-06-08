@@ -32,6 +32,10 @@ export function detectPricingColumnMapping(rawHeaders: string[]): Record<string,
     "productid", "productcode", "vendorpart", "vendorcatalog",
     "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
     "referencenumber", "reference",
+    // "Catalog Item" — Stryker joint price/COG files label the SKU column
+    // this way; without it the auto-detector misses the SKU → manual mapping
+    // or off-catalog. Charles 2026-06-07.
+    "catalogitem", "catalogitemno", "catalog",
     // Bug B 2026-05-25 (Charles Bugs.rtfd "Carve out xls price file
     // not working"): the SYK Carve out workbook ships with the header
     // typo "Reference numer" (missing 'b'). Add the typo variant so
