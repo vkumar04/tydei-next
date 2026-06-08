@@ -16,6 +16,9 @@ import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { populateCarveOutTermsForContract } from "@/lib/contracts/populate-carveout-terms"
 import { sanitizePricingRow } from "@/lib/contracts/pricing-row-sanitize"
+import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import type { ContractPricingItem } from "./pricing-files-types"
 
@@ -472,9 +475,11 @@ export async function importContractPricing(input: {
   // ContractPricing rows into ANY other facility's contracts,
   // corrupting price-variance / savings math for the victim.
   const { facility } = await requireFacility()
-  await prisma.contract.findUniqueOrThrow({
+  const contract = await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(input.contractId, facility.id),
-    select: { id: true },
+    // Vick 2026-06-07 (Fix C): load the participating vendor set so we can
+    // re-run COG match + metrics after import (see post-transaction block).
+    select: { id: true, vendorId: true, additionalVendorIds: true },
   })
 
   if (input.items.length === 0) return { imported: 0 }
@@ -610,6 +615,42 @@ export async function importContractPricing(input: {
       err,
       { contractId: input.contractId },
     )
+  }
+
+  // Vick 2026-06-07 (Fix C): re-run COG match + persisted metrics for this
+  // contract's vendor set so freshly-imported pricing rows immediately
+  // re-categorize COG and move rows on-contract — without the user having
+  // to hit "Recompute" manually. Mirrors the pattern in
+  // bulkImportCOGRecords / createContract. Fired ONCE after the
+  // transaction (not per row). Best-effort per vendor: a recompute or
+  // metrics-refresh failure logs but never breaks the import the user is
+  // waiting on.
+  const vendorIds = contractVendorIds(contract)
+  for (const vendorId of vendorIds) {
+    try {
+      await recomputeMatchStatusesForVendor(prisma, {
+        vendorId,
+        facilityId: facility.id,
+      })
+    } catch (err) {
+      console.error(
+        `[importContractPricing] recomputeMatchStatusesForVendor(${vendorId}, ${facility.id}) failed:`,
+        err,
+        { contractId: input.contractId },
+      )
+    }
+    try {
+      await refreshContractMetricsForVendor({
+        vendorId,
+        facilityId: facility.id,
+      })
+    } catch (err) {
+      console.error(
+        `[importContractPricing] refreshContractMetricsForVendor(${vendorId}, ${facility.id}) failed:`,
+        err,
+        { contractId: input.contractId },
+      )
+    }
   }
 
   return { imported, carveOutLinked }
