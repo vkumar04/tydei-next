@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
+import {
+  pickThresholdMetric,
+  isSpendDollarThresholdTermType,
+} from "@/lib/contracts/tier-metric"
 
 describe("pickThresholdMetric", () => {
   const metrics = {
@@ -44,5 +47,54 @@ describe("pickThresholdMetric", () => {
     expect(
       pickThresholdMetric("volume_rebate", { ...metrics, currentVolume: null }),
     ).toBe(0)
+  })
+})
+
+describe("isSpendDollarThresholdTermType", () => {
+  // 2026-06-08: the spend × rate utilization card must only run for term
+  // types whose tier `spendMin` is dollars. market_share (% threshold) and
+  // count-based types must be excluded — feeding them dollar spend always
+  // "achieves" the top tier (spend ≫ a 0–100 % threshold).
+  it.each(["spend_rebate", "carve_out", "tie_in", "price_reduction", "unknown_termtype"])(
+    "%s → spend-dollar threshold (true)",
+    (termType) => {
+      expect(isSpendDollarThresholdTermType(termType)).toBe(true)
+    },
+  )
+
+  it.each([
+    "market_share",
+    "compliance_rebate",
+    "volume_rebate",
+    "rebate_per_use",
+    "capitated_pricing_rebate",
+    "po_rebate",
+    "payment_rebate",
+  ])("%s → NOT spend-dollar threshold (false)", (termType) => {
+    expect(isSpendDollarThresholdTermType(termType)).toBe(false)
+  })
+
+  it("mirrors pickThresholdMetric: false exactly when the metric is not currentSpend", () => {
+    const probe = {
+      currentSpend: 999,
+      currentMarketShare: 1,
+      complianceRate: 1,
+      currentVolume: 1,
+    }
+    for (const tt of [
+      "spend_rebate",
+      "carve_out",
+      "tie_in",
+      "market_share",
+      "compliance_rebate",
+      "volume_rebate",
+      "rebate_per_use",
+      "capitated_pricing_rebate",
+      "po_rebate",
+      "payment_rebate",
+    ]) {
+      const usesSpend = pickThresholdMetric(tt, probe) === probe.currentSpend
+      expect(isSpendDollarThresholdTermType(tt)).toBe(usesSpend)
+    }
   })
 })

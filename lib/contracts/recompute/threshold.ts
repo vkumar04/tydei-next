@@ -145,9 +145,28 @@ export async function recomputeThresholdAccrualForTerm(input: {
 }): Promise<{ inserted: number; sumEarned: number }> {
   const { contractId, facilityId, term, isTieIn } = input
 
-  // No metric value = no qualification. (e.g. complianceRate is null
-  // on contracts where we haven't tracked compliance yet.)
-  if (input.metricValue == null || input.metricValue < 0) {
+  // Resolve the metric value used for tier qualification.
+  //
+  // Bug 2026-06-08 ("market share needs 0% to get a rebate and nothing is
+  // coming up"): a `market_share` tier whose threshold is 0% means "always
+  // qualifies." But `currentMarketShare` is frequently null (not set / no
+  // categorized COG to derive from), and a null metric early-returned with
+  // zero rows — so the 0%-threshold tier never paid. For market_share,
+  // treat null as 0% so the 0-threshold tier qualifies; the
+  // `periodPayment <= 0` guard below still suppresses $0 fleets (a
+  // percent_of_spend tier with no in-scope spend stays $0).
+  //
+  // complianceRate keeps null → no qualification: a null compliance rate
+  // means "not tracked yet," not "0% compliant," and writing flat payouts
+  // there would be wrong (locked by recompute-threshold-accrual.test.ts).
+  const metricValue =
+    input.metricValue != null
+      ? input.metricValue
+      : input.metric === "currentMarketShare"
+        ? 0
+        : null
+
+  if (metricValue == null || metricValue < 0) {
     return { inserted: 0, sumEarned: 0 }
   }
 
@@ -222,20 +241,7 @@ export async function recomputeThresholdAccrualForTerm(input: {
     .sort((a, b) => a.thresholdMin - b.thresholdMin)
   if (tiers.length === 0) return { inserted: 0, sumEarned: 0 }
 
-  // Charles 2026-04-28: when the contract's metricValue is null
-  // (Contract.currentMarketShare or .complianceRate not set yet),
-  // skip the recompute entirely instead of writing a fleet of $0
-  // Rebate rows. The user-facing fix is to set the metric on the
-  // contract; in the meantime, no rows is more honest than a
-  // confusing "$0 earned" surface. Follow-up: derive
-  // currentMarketShare dynamically from `computeCategoryMarketShare`
-  // for the contract's vendor + category instead of requiring manual
-  // entry.
-  if (input.metricValue == null) {
-    return { inserted: 0, sumEarned: 0 }
-  }
-
-  const achieved = determineTier(input.metricValue, tiers, "EXCLUSIVE")
+  const achieved = determineTier(metricValue, tiers, "EXCLUSIVE")
   const flatPerPeriodPayment = achieved ? achieved.rebateValue : 0
 
   // Bug #21: market_share + percent_of_spend pays a percent of the
@@ -355,8 +361,8 @@ export async function recomputeThresholdAccrualForTerm(input: {
       payPeriodEnd: r.periodEnd,
       collectionDate: isTieIn ? r.periodEnd : null,
       notes: isMarketSharePercentOfSpend
-        ? `${termPrefix} · ${input.metric}=${input.metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · spend=$${r.spendInScope.toFixed(2)} × ${(percentFraction * 100).toFixed(2)}% = $${r.periodPayment.toFixed(2)}`
-        : `${termPrefix} · ${input.metric}=${input.metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · $${r.periodPayment.toFixed(2)}`,
+        ? `${termPrefix} · ${input.metric}=${metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · spend=$${r.spendInScope.toFixed(2)} × ${(percentFraction * 100).toFixed(2)}% = $${r.periodPayment.toFixed(2)}`
+        : `${termPrefix} · ${input.metric}=${metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · $${r.periodPayment.toFixed(2)}`,
     })
   }
   if (toInsert.length > 0) {

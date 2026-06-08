@@ -186,10 +186,18 @@ function createEmptyTier(
   //   - recompute-threshold-accrual.ts (per-period payoutForTier)
   // All other term types (spend_rebate, growth_rebate, …) keep the
   // percent_of_spend default.
+  // Bug 2026-06-08 ("hit a particular % → get a particular rebate; this is
+  // just showing a dollar amount"): `market_share` was defaulting new tiers
+  // to fixed_rebate, so a user building a "hit X% share → earn Y% on
+  // category spend" rebate got flat dollars. Default market_share tiers to
+  // percent_of_spend instead — the threshold writer already handles
+  // market_share + percent_of_spend (per-period spend × percent). Users who
+  // genuinely want a flat per-period payout can still switch the tier's
+  // rebate type to Fixed Rebate. market_share_price_reduction is
+  // pricing-only and never reaches this tier-default path.
   const flatPayoutTermTypes = new Set([
     "fixed_fee",
     "compliance_rebate",
-    "market_share",
     "payment_rebate",
     "rebate_per_use",
     "capitated_pricing_rebate",
@@ -366,6 +374,14 @@ export function ContractTermsEntry({
   function addTier(termIndex: number) {
     const term = terms[termIndex]
     const newTier = createEmptyTier(term.tiers.length + 1, term.termType)
+    // Bug 2026-06-08 ("just showing a dollar amount"): a market-share rebate
+    // that mixed a percent_of_spend tier 1 with fixed_rebate tiers 2/3 read
+    // as incoherent ($ on the higher tiers). Inherit the previous tier's
+    // rebate type so a term stays internally consistent — the user sets the
+    // type once on tier 1 and added tiers follow. They can still override
+    // per tier afterward.
+    const prevTier = term.tiers[term.tiers.length - 1]
+    if (prevTier) newTier.rebateType = prevTier.rebateType
     updateTerm(termIndex, { tiers: [...term.tiers, newTier] })
   }
 
@@ -519,9 +535,23 @@ export function ContractTermsEntry({
                                     : t,
                                 )
                               : (term.tiers ?? [])
+                          // Bug 2026-06-08 ("when market share is selected,
+                          // categories need to be chosen"): market share is
+                          // inherently per-category, so default the scope to
+                          // Specific Category when switching to a market-share
+                          // term that's still scoped to All Products. The
+                          // Categories field below is already `required`.
+                          const isMarketShareType =
+                            nextType === "market_share" ||
+                            nextType === "market_share_price_reduction"
+                          const appliesToForType =
+                            isMarketShareType && term.appliesTo === "all_products"
+                              ? "specific_category"
+                              : term.appliesTo
                           updateTerm(termIdx, {
                             termType: nextType,
                             baselineType: baselineForType,
+                            appliesTo: appliesToForType,
                             // For procedure-driven types, default volumeType
                             // to procedure_code so CPT-code field semantics
                             // line up. For non-procedure volume rebate, leave

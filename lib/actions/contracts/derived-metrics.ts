@@ -25,6 +25,8 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { loadConfirmedCategoryMap } from "@/lib/categories/resolve"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 export interface ContractMetricsInput {
@@ -176,17 +178,29 @@ export async function computeContractMetrics(
   // COG.category + no matched-contract fallback) live in
   // `msComputed.uncategorizedSpend` and don't count toward share — a
   // real data-quality gap, not market share.
+  // Bug 2026-06-08 ("I selected categories that were mapped differently"):
+  // the scope comparison below previously used RAW category strings
+  // (`scopeSet.has(row.category)`). The term scope ("Joints-Ortho") never
+  // string-equals the COG display name ("Ortho-Joints") even though
+  // `computeCategoryMarketShare` canonicalizes internally — so those
+  // categories silently contributed 0 to currentMarketShare. Compare by
+  // canonical key, and pass the confirmed CategoryMapping so genuine
+  // remaps (e.g. "Ortho-Upper Extremity" → "Ortho-Extremity") reconcile
+  // for both numerator and denominator. Mirrors the per-category card
+  // (lib/actions/cog/category-market-share.ts).
+  const confirmedCategoryMap = await loadConfirmedCategoryMap()
   const msComputed = computeCategoryMarketShare({
     rows: cogRowsForMetrics,
     contractCategoryMap,
     vendorId: vendorIds,
+    confirmedCategoryMap,
   })
   const vendorIdSet = new Set(vendorIds)
-  const scopeSet = new Set(categories)
+  const canonicalScopeSet = new Set(categories.map(canonicalizeCategoryName))
   let vendorSpendInCategories = 0
   let totalSpendInCategories = 0
   for (const row of msComputed.rows) {
-    if (!scopeSet.has(row.category)) continue
+    if (!canonicalScopeSet.has(canonicalizeCategoryName(row.category))) continue
     vendorSpendInCategories += row.vendorSpend
     totalSpendInCategories += row.categoryTotal
   }
@@ -203,7 +217,10 @@ export async function computeContractMetrics(
       : row.contractId
         ? contractCategoryMap.get(row.contractId) ?? null
         : null
-    if (!cat || !scopeSet.has(cat)) continue
+    // Canonical comparison (same fix as market share above) so a term
+    // category like "Joints-Ortho" still matches a COG row tagged
+    // "Ortho-Joints".
+    if (!cat || !canonicalScopeSet.has(canonicalizeCategoryName(cat))) continue
     cogRowsTotal++
     if (row.matchStatus === "on_contract") cogRowsOnContract++
   }

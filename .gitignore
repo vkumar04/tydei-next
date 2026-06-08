@@ -64,3 +64,6 @@ docs/superpowers/diagnostics/oracle-runs/
 # graphify knowledge-graph output (generated, multi-MB)
 graphify-out/
 
+
+# gstack/browse skill local state
+.gstack/

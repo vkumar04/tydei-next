@@ -71,6 +71,10 @@ const cOGCount = vi.fn()
 const cOGFindMany = vi.fn()
 const contractFindFirstOrThrow = vi.fn()
 const contractFindMany = vi.fn()
+// 2026-06-08: computeContractMetrics now loads the confirmed CategoryMapping
+// so term/COG category names reconcile (canonical scope comparison). Mock it
+// to an empty rule set — these tests use already-matching category names.
+const categoryMappingFindMany = vi.fn()
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -82,11 +86,15 @@ vi.mock("@/lib/db", () => ({
       findFirstOrThrow: contractFindFirstOrThrow,
       findMany: contractFindMany,
     },
+    categoryMapping: {
+      findMany: categoryMappingFindMany,
+    },
   },
 }))
 
 beforeEach(() => {
   vi.clearAllMocks()
+  categoryMappingFindMany.mockResolvedValue([])
   cOGCount.mockResolvedValue(0)
   contractFindFirstOrThrow.mockResolvedValue({
     vendorId: VENDOR_ID,
