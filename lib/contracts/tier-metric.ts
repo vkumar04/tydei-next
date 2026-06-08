@@ -56,3 +56,37 @@ export function pickThresholdMetric(
       return metrics.currentSpend
   }
 }
+
+/**
+ * Term types whose tier `spendMin` is a market-share PERCENT (0–100) or a
+ * unit COUNT rather than DOLLARS of spend. For these, comparing a dollar
+ * spend figure against the tier threshold is meaningless — see the
+ * spend-utilization card bug (2026-06-08): a `market_share` term's tiers
+ * (thresholds 0/60/100 %) were fed dollar spend ($96K–$20M) into
+ * `calculateCumulative`, so spend always dwarfed the top threshold and the
+ * card projected the top tier as "achieved" (false 100% utilization / a
+ * `10% × $20.9M = $2,094,670` projection).
+ *
+ * Mirrors the non-`currentSpend` branches of `pickThresholdMetric` above —
+ * keep the two in sync.
+ */
+const NON_SPEND_DOLLAR_THRESHOLD_TERM_TYPES = new Set([
+  "market_share",
+  "compliance_rebate",
+  "volume_rebate",
+  "rebate_per_use",
+  "capitated_pricing_rebate",
+  "po_rebate",
+  "payment_rebate",
+])
+
+/**
+ * True when a term type's tier thresholds are denominated in DOLLARS of
+ * spend (so the spend × rate utilization card is meaningful). False for
+ * percent-threshold (`market_share`, `compliance_rebate`) and count-based
+ * term types. Single source of truth for any spend-based projection
+ * surface so they don't drift.
+ */
+export function isSpendDollarThresholdTermType(termType: string): boolean {
+  return !NON_SPEND_DOLLAR_THRESHOLD_TERM_TYPES.has(termType)
+}

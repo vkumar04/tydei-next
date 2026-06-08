@@ -15,6 +15,7 @@ import {
   isPercentRebateType,
 } from "@/lib/contracts/rebate-value-normalize"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
+import { isSpendDollarThresholdTermType } from "@/lib/contracts/tier-metric"
 
 /**
  * Load the data needed for `<ContractPerformanceCard>` and compute
@@ -61,15 +62,26 @@ export async function getContractPerformance(contractId: string): Promise<{
     })
     if (!contract) return { utilization: null, renewalRisk: null }
     const today = new Date()
+    // 2026-06-08: the spend × rate utilization card only makes sense for
+    // term types whose tier `spendMin` is DOLLARS. A `market_share` term's
+    // thresholds are market-share PERCENTS (0/60/100), and `compliance`/
+    // count types are likewise non-dollar — feeding dollar `actualSpend`
+    // into `calculateCumulative` against those thresholds always "achieves"
+    // the top tier (spend ≫ 100), projecting a bogus $2M / 100% utilization.
+    // Restrict candidates to spend-dollar terms; when none exist the tile
+    // is hidden (the per-category market-share rows carry the real picture).
+    const spendTerms = contract.terms.filter((t) =>
+      isSpendDollarThresholdTermType(t.termType),
+    )
     const effectiveTerm =
-      contract.terms.find(
+      spendTerms.find(
         (t) =>
           t.tiers.length > 1 &&
           (!t.effectiveStart || t.effectiveStart <= today) &&
           (!t.effectiveEnd || t.effectiveEnd >= today),
       ) ??
-      contract.terms.find((t) => t.tiers.length > 1) ??
-      contract.terms[0]
+      spendTerms.find((t) => t.tiers.length > 1) ??
+      spendTerms[0]
 
     // Spend for utilization = sum of COG extendedPrice scoped to this
     // contract's vendor within its effective window. Simple, consistent
