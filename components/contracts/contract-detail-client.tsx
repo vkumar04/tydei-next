@@ -31,6 +31,7 @@ import { calculateTierProgress } from "@/lib/contracts/tier-progress"
 import { computeProjectedRebate } from "@/lib/contracts/projected-rebate"
 import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
 import { ContractTermsDisplay } from "@/components/contracts/contract-terms-display"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
@@ -736,34 +737,48 @@ export function ContractDetailClient({
               contract.terms?.some((t) => t.termType === "carve_out") ?? false
             }
           />
-          <PerformanceSummary
-            periods={periods ?? []}
-            totalValue={stats?.totalValue ?? 0}
-            evaluationPeriod={
-              (contract.terms?.find((t) => t.tiers.length > 0)
-                ?.evaluationPeriod ?? null) as
-                | "monthly"
-                | "quarterly"
-                | "semi_annual"
-                | "annual"
-                | null
-            }
-            contractTiers={
-              // Charles 2026-04-25: feed the contract's first-term tier
-              // ladder into the Tier Achievement panel so it computes
-              // tier from period.totalSpend (the same way the timeline
-              // does) instead of trusting the stale ContractPeriod
-              // .tierAchieved rollup. Without this the panel can show
-              // "Tier 3" while the timeline shows the contract only
-              // reached Tier 1 in the same month.
-              contract.terms
-                ?.find((t) => t.tiers.length > 0)
-                ?.tiers.map((t) => ({
-                  tierNumber: t.tierNumber,
-                  spendMin: Number(t.spendMin),
-                })) ?? []
-            }
-          />
+          {(() => {
+            // 2026-06-08 (Charles "carve out has NOT tiers but it has
+            // tiers 4,3,7"): the Tier Achievement panel must read tiers ONLY
+            // from a term with a REAL spend-dollar ladder. The bare
+            // `find((t) => t.tiers.length > 0)` previously grabbed whatever
+            // term had tiers — on a tie-in carve-out that's a `market_share`
+            // term whose thresholds are PERCENTS (0/50/65) stored in
+            // `spendMin`, so the dollar-spend-vs-threshold walk in
+            // PerformanceSummary forced every period to the top tier
+            // ("Tier 7/3/4"). `hasSpendDollarTierLadder` excludes
+            // market_share/compliance (percent), volume (count), and the
+            // carve_out/tie_in PLACEHOLDER tier (rebateValue 0). When no
+            // such term exists and the contract IS a carve-out, render a
+            // carve-out notice instead of bogus tiers.
+            const tierTerm = contract.terms?.find((t) =>
+              hasSpendDollarTierLadder(t),
+            )
+            const carveOutNotice =
+              !tierTerm &&
+              (contract.terms?.some((t) => t.termType === "carve_out") ?? false)
+            return (
+              <PerformanceSummary
+                periods={periods ?? []}
+                totalValue={stats?.totalValue ?? 0}
+                carveOutNotice={carveOutNotice}
+                evaluationPeriod={
+                  (tierTerm?.evaluationPeriod ?? null) as
+                    | "monthly"
+                    | "quarterly"
+                    | "semi_annual"
+                    | "annual"
+                    | null
+                }
+                contractTiers={
+                  tierTerm?.tiers.map((t) => ({
+                    tierNumber: t.tierNumber,
+                    spendMin: Number(t.spendMin),
+                  })) ?? []
+                }
+              />
+            )
+          })()}
         </TabsContent>
 
         {/* ── Rebates & Tiers Tab ──────────────────────────────── */}

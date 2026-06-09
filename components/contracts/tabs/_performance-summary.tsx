@@ -18,9 +18,19 @@ export function PerformanceSummary({
   totalValue,
   contractTiers,
   evaluationPeriod,
+  carveOutNotice = false,
 }: {
   periods: PeriodData[]
   totalValue: number
+  /**
+   * 2026-06-08: true when the contract is a carve-out with no real
+   * spend-dollar tier ladder. The Tier Achievement card then shows a
+   * carve-out explanation instead of deriving bogus tier numbers from a
+   * percent-threshold term (Charles "carve out has NOT tiers but it has
+   * tiers 4,3,7"). Carve-out rebate is per-SKU — see the "Carve-out
+   * rebate" card on the Performance tab.
+   */
+  carveOutNotice?: boolean
   /**
    * Charles 2026-04-25: tier ladder from the contract's first
    * tiered term. The Tier Achievement panel now derives each
@@ -157,6 +167,13 @@ export function PerformanceSummary({
           )}
         </CardHeader>
         <CardContent>
+          {carveOutNotice ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              This is a carve-out contract — rebates come from per-SKU
+              carve-out rates, not spend tiers, so there are no tiers to
+              achieve. See the &ldquo;Carve-out rebate&rdquo; card on this tab.
+            </p>
+          ) : (
           <div className="space-y-3">
             {(() => {
               // Charles 2026-04-28: when the term is quarterly/semi/annual,
@@ -273,6 +290,7 @@ export function PerformanceSummary({
               )
             })}
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

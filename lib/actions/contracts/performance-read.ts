@@ -15,7 +15,7 @@ import {
   isPercentRebateType,
 } from "@/lib/contracts/rebate-value-normalize"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
-import { isSpendDollarThresholdTermType } from "@/lib/contracts/tier-metric"
+import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 
 /**
  * Load the data needed for `<ContractPerformanceCard>` and compute
@@ -70,9 +70,15 @@ export async function getContractPerformance(contractId: string): Promise<{
     // the top tier (spend ≫ 100), projecting a bogus $2M / 100% utilization.
     // Restrict candidates to spend-dollar terms; when none exist the tile
     // is hidden (the per-category market-share rows carry the real picture).
-    const spendTerms = contract.terms.filter((t) =>
-      isSpendDollarThresholdTermType(t.termType),
-    )
+    // 2026-06-08: require a REAL spend-dollar tier ladder, not just a
+    // spend-dollar term type. `carve_out`/`tie_in` are spend-dollar but
+    // earn per-SKU (ContractPricing.carveOutPercent); their lone
+    // placeholder tier (rebateValue 0) drove `$0 / $0 → 0.0%` utilization
+    // (Charles "rebate utilization not calculating"). `hasSpendDollarTier
+    // Ladder` excludes that placeholder so the tile hides for carve-outs;
+    // the dedicated "Carve-out rebate" card (with effective rate) carries
+    // the picture instead.
+    const spendTerms = contract.terms.filter((t) => hasSpendDollarTierLadder(t))
     const effectiveTerm =
       spendTerms.find(
         (t) =>

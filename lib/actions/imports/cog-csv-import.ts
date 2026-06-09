@@ -99,6 +99,21 @@ export async function ingestCOGRecordsRows(
           "Multiplier / Case Pack / Units per Line / Conversion Factor / Conversion Factor Ordered",
         required: false,
       },
+      {
+        // 2026-06-08 (Charles "No category in the Cog"): the COG mapper
+        // never had a `category` target, so a Category column in the source
+        // file was silently dropped and category only ever got backfilled
+        // from ProductBenchmark / matched-contract inference (which can't
+        // cover un-benchmarked, unmatched rows). The rich alias list added
+        // in 7419329 lives in lib/map-columns.ts on the PRICING path, which
+        // the COG importer never consults — hence the recurrence. Map it
+        // here so a labeled Category column persists straight through
+        // bulkImportCOGRecords (which already canonicalizes record.category).
+        key: "category",
+        label:
+          "Category / Product Category / Item Category / Class / Commodity / Commodity Code / Department / Product Group / Product Line / Segment / Classification / Spend Category / UNSPSC",
+        required: false,
+      },
     ],
     rows,
   )
@@ -128,6 +143,7 @@ export async function ingestCOGRecordsRows(
           : unitCost * quantity * multiplier
 
       const poNumber = get(row, mapping, "poNumber") || undefined
+      const category = get(row, mapping, "category") || undefined
 
       return {
         vendorName,
@@ -135,6 +151,7 @@ export async function ingestCOGRecordsRows(
         inventoryDescription: description || refNumber || "Unknown item",
         vendorItemNo: refNumber || undefined,
         poNumber,
+        category,
         unitCost,
         extendedPrice: extended,
         quantity,

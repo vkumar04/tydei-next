@@ -143,6 +143,18 @@ export function getCOGColumns({
         row.original.vendor?.name ?? row.original.vendorName ?? "\u2014",
     },
     {
+      // 2026-06-08 (Charles "No category in the Cog"): the COG table never
+      // rendered a Category column, so even rows with a populated category
+      // (imported or inferred) showed nothing. Render it explicitly.
+      accessorKey: "category",
+      header: "Category",
+      cell: ({ row }) => (
+        <span className={row.original.category ? "" : "text-muted-foreground"}>
+          {row.original.category ?? "\u2014"}
+        </span>
+      ),
+    },
+    {
       accessorKey: "quantity",
       header: "Qty",
       cell: ({ row }) => (

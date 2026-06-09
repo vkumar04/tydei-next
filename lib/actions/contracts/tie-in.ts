@@ -438,6 +438,7 @@ export async function getContractCapitalSchedule(
       },
       terms: {
         select: {
+          termType: true,
           minimumPurchaseCommitment: true,
           spendBaseline: true,
           rebateMethod: true,
@@ -768,8 +769,41 @@ export async function getContractCapitalSchedule(
       t.tiers,
       { method: t.rebateMethod ?? "cumulative" },
     )
-    currentTierPercent = rebatePercent
+    if (rebatePercent > 0) {
+      currentTierPercent = rebatePercent
+    } else {
+      // 2026-06-08 (Charles "annual spend needed to hit not coming up"):
+      // below-baseline rolling-12 spend makes the engine return 0%, which
+      // collapses "Annual Spend Needed to Retire Capital" to "—". Fall back
+      // to the lowest DEFINED percent tier so the retirement math always
+      // has a rate to project against. `rebateValue` is a fraction (0.03 =
+      // 3%) → ×100 to the integer percent the retirement reducer expects.
+      const firstPct = t.tiers
+        .filter((x) => x.rebateType === "percent_of_spend")
+        .map((x) => Number(x.rebateValue) * 100)
+        .find((p) => p > 0)
+      currentTierPercent = firstPct ?? 0
+    }
     break
+  }
+
+  // 2026-06-08: carve-out tie-ins have no standard tier ladder — their
+  // rebate is per-SKU (ContractPricing.carveOutPercent, a Decimal(5,4)
+  // FRACTION). When the tier path above yielded 0% (placeholder/no tiers),
+  // derive a representative rate from the carve-out lines so the retirement
+  // tile shows a real "annual spend needed" estimate on a carve-out tie-in
+  // instead of "—". Average rate is an estimate; the tile is a labeled
+  // projection, not an earned figure.
+  if (
+    currentTierPercent === 0 &&
+    contract.terms.some((t) => t.termType === "carve_out")
+  ) {
+    const carveAgg = await prisma.contractPricing.aggregate({
+      where: { contractId: contract.id, carveOutPercent: { not: null } },
+      _avg: { carveOutPercent: true },
+    })
+    const avgCarveFraction = Number(carveAgg._avg.carveOutPercent ?? 0)
+    if (avgCarveFraction > 0) currentTierPercent = avgCarveFraction * 100
   }
 
   // Months remaining: unelapsed periods × months/period.
@@ -1180,7 +1214,24 @@ export async function getContractCapitalProjection(
   })
   const trailing90Rebate = Number(rebateAgg._sum.rebateEarned ?? 0)
   // Spec: "divided by 90 * 30 for a monthly rate" — daily average × 30.
-  const monthlyPaydownRun = (trailing90Rebate / 90) * 30
+  let monthlyPaydownRun = (trailing90Rebate / 90) * 30
+
+  // 2026-06-08 (Charles "no projection" on a semi-annual carve-out tie-in):
+  // the trailing-90-day window misses contracts that book rebates only
+  // semi-annually or annually — the most recent booked period is routinely
+  // >90 days old, so `trailing90Rebate` is 0 and the projection blanks even
+  // though lifetime rebate HAS been applied to capital (`paidToDate` > 0).
+  // When the short window is empty but capital has paid down, fall back to
+  // the lifetime-average velocity (paidToDate ÷ months elapsed since the
+  // contract started) so an infrequent cadence still yields a projection.
+  if (monthlyPaydownRun <= 0 && paidToDate > 0) {
+    const monthsElapsed = Math.max(
+      1,
+      (today.getTime() - new Date(contract.effectiveDate).getTime()) /
+        (1000 * 60 * 60 * 24 * 30),
+    )
+    monthlyPaydownRun = paidToDate / monthsElapsed
+  }
 
   const projectedMonthsToPayoff =
     monthlyPaydownRun > 0 && remainingBalance > 0

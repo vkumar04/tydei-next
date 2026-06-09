@@ -242,6 +242,24 @@ export function ContractPerformanceCard({
               {carveOutLineCount === 1 ? "" : "s"} ·{" "}
               {formatCurrency(carveOut.eligibleSpend)} eligible spend
             </p>
+            {/* 2026-06-08 (Charles "rebate utilization not calculating"):
+                tier utilization is meaningless for a carve-out, so the tile
+                above hides itself. Show the blended effective rate
+                (rebate ÷ eligible spend) — the carve-out analogue of
+                utilization — so the Performance tab still surfaces a rate. */}
+            {carveOut.eligibleSpend > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Effective carve-out rate:{" "}
+                <span className="font-medium tabular-nums text-foreground">
+                  {(
+                    (carveOut.rebateEarned / carveOut.eligibleSpend) *
+                    100
+                  ).toFixed(1)}
+                  %
+                </span>{" "}
+                of eligible spend
+              </p>
+            )}
           </div>
         )}
         {vendorId && (

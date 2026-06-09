@@ -90,3 +90,32 @@ const NON_SPEND_DOLLAR_THRESHOLD_TERM_TYPES = new Set([
 export function isSpendDollarThresholdTermType(termType: string): boolean {
   return !NON_SPEND_DOLLAR_THRESHOLD_TERM_TYPES.has(termType)
 }
+
+/**
+ * True when a term carries a REAL spend-dollar tier ladder that should drive
+ * spend-tier display surfaces (Tier Achievement, Rebate utilization).
+ *
+ * `isSpendDollarThresholdTermType` alone is not enough: `carve_out` and
+ * `tie_in` are classified as spend-dollar (their threshold metric IS spend),
+ * but their rebate comes from per-SKU `ContractPricing.carveOutPercent`, not
+ * tiers. Auto-created carve-out terms carry a single PLACEHOLDER tier
+ * (`spendMin: 0, rebateValue: 0`). Feeding that placeholder into the spend ×
+ * rate utilization math yields `$0 / $0 → 0.0%`, and into the Tier
+ * Achievement walk yields a bogus "Tier 1"/top-tier badge on a contract that
+ * has no real tiers (2026-06-08 Charles "carve out has NOT tiers but it has
+ * tiers 4,3,7"). Requiring at least one tier with a non-zero `rebateValue`
+ * excludes the placeholder (and any all-zero ladder), so carve-out contracts
+ * correctly fall through to their dedicated carve-out surfaces.
+ */
+export function hasSpendDollarTierLadder(term: {
+  termType: string
+  tiers: Array<{ rebateValue: unknown }>
+}): boolean {
+  return (
+    isSpendDollarThresholdTermType(term.termType) &&
+    term.termType !== "carve_out" &&
+    term.termType !== "tie_in" &&
+    term.tiers.length > 0 &&
+    term.tiers.some((t) => Number(t.rebateValue) > 0)
+  )
+}
