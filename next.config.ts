@@ -2,6 +2,14 @@ import type { NextConfig } from "next"
 import bundleAnalyzer from "@next/bundle-analyzer"
 
 const config: NextConfig = {
+  // 2026-06-09: standalone output for Railway — produces a minimal traced
+  // `.next/standalone/server.js` so the runtime image is a fraction of the
+  // full build, cutting container boot time (the "Deploying…" phase). The
+  // build copies `.next/static` into the standalone dir (see package.json
+  // build script) and start runs the traced server with HOSTNAME=0.0.0.0.
+  // serverExternalPackages (prisma adapter, pdf-parse/pdfjs-dist) are traced
+  // into .next/standalone/node_modules by Next's file tracing.
+  output: "standalone",
   serverExternalPackages: [
     "@prisma/client",
     "@prisma/adapter-pg",

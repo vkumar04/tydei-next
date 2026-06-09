@@ -7,9 +7,9 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build && bash scripts/standalone-postbuild.sh",
     "build:analyze": "ANALYZE=true bun run build",
-    "start": "next start",
+    "start": "HOSTNAME=0.0.0.0 bun .next/standalone/server.js",
     "lint": "oxlint .",
     "db:push": "prisma db push --config prisma/prisma.config.ts",
     "db:migrate": "prisma migrate dev --config prisma/prisma.config.ts",
