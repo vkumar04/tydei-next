@@ -8,6 +8,12 @@ import { getContractCapitalProjection } from "@/lib/actions/contracts/tie-in"
 
 interface ContractCapitalProjectionCardProps {
   contractId: string
+  /**
+   * 2026-06-09 facility→vendor port: override the data source so the vendor
+   * portal can pass `getVendorContractCapitalProjection` (same shape, vendor
+   * auth) — the fetcher-prop pattern from ContractAccrualTimeline.
+   */
+  fetcher?: typeof getContractCapitalProjection
 }
 
 /**
@@ -23,10 +29,11 @@ interface ContractCapitalProjectionCardProps {
  */
 export function ContractCapitalProjectionCard({
   contractId,
+  fetcher = getContractCapitalProjection,
 }: ContractCapitalProjectionCardProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["contract-capital-projection", contractId],
-    queryFn: () => getContractCapitalProjection(contractId),
+    queryFn: () => fetcher(contractId),
   })
 
   if (isLoading) {

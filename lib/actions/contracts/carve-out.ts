@@ -17,7 +17,7 @@
  * track W1.Z-A.
  */
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { calculateCarveOut } from "@/lib/rebates/engine/carve-out"
@@ -55,6 +55,7 @@ export async function getCarveOutRebate(
       id: true,
       vendorId: true,
       additionalVendorIds: true,
+      facilityId: true,
       // Charles 2026-06-07: carve-out must only compute when the contract
       // genuinely has carve-out intent — i.e. a `carve_out` term. A pure
       // spend-rebate contract whose pricing file happened to carry
@@ -63,7 +64,40 @@ export async function getCarveOutRebate(
       terms: { select: { termType: true } },
     },
   })
+  return _buildCarveOutRebate(contract, facility.id)
+}
 
+/**
+ * Vendor-scoped carve-out rebate read — 2026-06-09 facility→vendor feature
+ * port. Same engine + scoping as the facility card; auth pivots on
+ * `Contract.vendorId === session.vendor.id` like the other getVendor* reads.
+ */
+export async function getVendorCarveOutRebate(
+  contractId: string,
+): Promise<RebateResult> {
+  const { vendor } = await requireVendor()
+  const contract = await prisma.contract.findFirstOrThrow({
+    where: { id: contractId, vendorId: vendor.id },
+    select: {
+      id: true,
+      vendorId: true,
+      additionalVendorIds: true,
+      facilityId: true,
+      terms: { select: { termType: true } },
+    },
+  })
+  return _buildCarveOutRebate(contract, contract.facilityId)
+}
+
+async function _buildCarveOutRebate(
+  contract: {
+    id: string
+    vendorId: string | null
+    additionalVendorIds: string[]
+    terms: Array<{ termType: string }>
+  },
+  facilityId: string | null,
+): Promise<RebateResult> {
   // Term-gate: no `carve_out` term → no carve-out, regardless of whatever
   // carveOutPercent values the pricing rows carry. Return the canonical
   // empty result (same shape as the no-lines short-circuit below) without
@@ -100,7 +134,7 @@ export async function getCarveOutRebate(
     }),
     prisma.cOGRecord.findMany({
       where: {
-        facilityId: facility.id,
+        ...(facilityId ? { facilityId } : {}),
         OR: [
           { contractId: contract.id },
           ...(vendorIds.length

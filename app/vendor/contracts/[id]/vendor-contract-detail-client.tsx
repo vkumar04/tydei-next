@@ -41,7 +41,12 @@ const ServiceSlaCard = dynamic(
     ),
   { ssr: false },
 )
-import { getVendorContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
+import {
+  getVendorContractCapitalSchedule,
+  getVendorContractCapitalProjection,
+} from "@/lib/actions/contracts/tie-in"
+import { ContractCapitalProjectionCard } from "@/components/contracts/contract-capital-projection-card"
+import { VendorCarveOutCard } from "@/components/vendor/contracts/vendor-carve-out-card"
 import type { getVendorContractDetail } from "@/lib/actions/vendor-contracts"
 
 type ContractDetail = Awaited<ReturnType<typeof getVendorContractDetail>>
@@ -135,6 +140,13 @@ export function VendorContractDetailClient({
               fetcher={getVendorContractCapitalSchedule}
               scope="vendor"
             />
+            {/* 2026-06-09 facility→vendor port: Capital Payoff Projection
+                (run-rate velocity + months-to-payoff) — same card the
+                facility Amortization surface shows, vendor-scoped fetcher. */}
+            <ContractCapitalProjectionCard
+              contractId={contract.id}
+              fetcher={getVendorContractCapitalProjection}
+            />
             <ContractAmortizationCard
               contractId={contract.id}
               fetcher={getVendorContractCapitalSchedule}
@@ -153,6 +165,10 @@ export function VendorContractDetailClient({
           {contract.contractType === "service" ? (
             <ServiceSlaCard contractId={contract.id} />
           ) : null}
+          {/* 2026-06-09 facility→vendor port: per-SKU carve-out rebate +
+              effective rate — the vendor's flagship contract is a carve-out
+              tie-in and had no carve-out surface. Self-hides when empty. */}
+          <VendorCarveOutCard contractId={contract.id} />
           <RebateForecastCard
             contractId={contract.id}
             initialData={initialPerformanceBundle?.forecast}

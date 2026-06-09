@@ -7,6 +7,7 @@
  * debt split). Re-exported from there for backward-compat.
  */
 import { prisma } from "@/lib/db"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 import {
@@ -1083,6 +1084,39 @@ function monthsPerPeriodLocal(
   }
 }
 
+// Shared select for the projection read — used by both the facility and
+// vendor entry points so the body sees one shape.
+const PROJECTION_SELECT = {
+  id: true,
+  name: true,
+  contractType: true,
+  effectiveDate: true,
+  expirationDate: true,
+  facilityId: true,
+  // Charles audit suggestion #4 (v0-port): capital lives in line items.
+  capitalLineItems: { orderBy: { createdAt: "asc" as const } },
+  rebates: {
+    select: {
+      collectionDate: true,
+      rebateCollected: true,
+    },
+  },
+} as const
+
+const EMPTY_PROJECTION: ContractCapitalProjection = {
+  hasProjection: false,
+  monthlyPaydownRun: 0,
+  projectedMonthsToPayoff: null,
+  projectedEndOfTermBalance: 0,
+  termMonthsRemaining: 0,
+  paidOffBeforeTermEnd: false,
+  remainingBalance: 0,
+}
+
+type _ProjectionContract = Prisma.ContractGetPayload<{
+  select: typeof PROJECTION_SELECT
+}>
+
 export async function getContractCapitalProjection(
   contractId: string,
 ): Promise<ContractCapitalProjection> {
@@ -1099,35 +1133,37 @@ export async function getContractCapitalProjection(
   // Payoff Projection card.
   const contract = await prisma.contract.findFirst({
     where: contractOwnershipWhere(contractId, facility.id),
-    select: {
-      id: true,
-      name: true,
-      contractType: true,
-      effectiveDate: true,
-      expirationDate: true,
-      facilityId: true,
-      // Charles audit suggestion #4 (v0-port): capital lives in line items.
-      capitalLineItems: { orderBy: { createdAt: "asc" } },
-      rebates: {
-        select: {
-          collectionDate: true,
-          rebateCollected: true,
-        },
-      },
-    },
+    select: PROJECTION_SELECT,
   })
+  if (!contract) return EMPTY_PROJECTION
+  return _projectCapital(contract, facility.id)
+}
 
-  const empty: ContractCapitalProjection = {
-    hasProjection: false,
-    monthlyPaydownRun: 0,
-    projectedMonthsToPayoff: null,
-    projectedEndOfTermBalance: 0,
-    termMonthsRemaining: 0,
-    paidOffBeforeTermEnd: false,
-    remainingBalance: 0,
-  }
+/**
+ * Vendor-scoped Capital Payoff Projection — 2026-06-09 facility→vendor
+ * feature port ("copy similar features from facilities to the vendor
+ * side"). Same math as the facility card; auth pivots on
+ * `Contract.vendorId === session.vendor.id` like the other getVendor*
+ * tie-in reads, and the rebate queries key off the contract's primary
+ * facilityId.
+ */
+export async function getVendorContractCapitalProjection(
+  contractId: string,
+): Promise<ContractCapitalProjection> {
+  const { vendor } = await requireVendor()
+  const contract = await prisma.contract.findFirst({
+    where: { id: contractId, vendorId: vendor.id },
+    select: PROJECTION_SELECT,
+  })
+  if (!contract || !contract.facilityId) return EMPTY_PROJECTION
+  return _projectCapital(contract, contract.facilityId)
+}
 
-  if (!contract) return empty
+async function _projectCapital(
+  contract: _ProjectionContract,
+  facilityId: string,
+): Promise<ContractCapitalProjection> {
+  const empty = EMPTY_PROJECTION
 
   // Charles audit suggestion #4 (v0-port): aggregate from line items.
   const lineItems = normalizeCapitalLineItems(contract)
@@ -1167,7 +1203,7 @@ export async function getContractCapitalProjection(
       where: {
         contract: {
           tieInCapitalContractId: contract.id,
-          facilityId: facility.id,
+          facilityId,
         },
       },
       select: { collectionDate: true, rebateCollected: true },
@@ -1197,17 +1233,17 @@ export async function getContractCapitalProjection(
           OR: [
             {
               contract: {
-                tieInCapitalContractId: contractId,
-                facilityId: facility.id,
+                tieInCapitalContractId: contract.id,
+                facilityId,
               },
             },
-            { contractId, facilityId: facility.id },
+            { contractId: contract.id, facilityId },
           ],
           payPeriodEnd: { gte: ninetyDaysAgo, lte: today },
         }
       : {
-          contractId,
-          facilityId: facility.id,
+          contractId: contract.id,
+          facilityId,
           payPeriodEnd: { gte: ninetyDaysAgo, lte: today },
         },
     _sum: { rebateEarned: true },
