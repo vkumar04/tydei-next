@@ -76,6 +76,20 @@ export async function getOffContractSpend(
     { contractId: null, vendorId: { in: vendorIds } },
   ]
 
+  // 2026-06-09 (Charles "these numbers are still a big problem — very
+  // inconsistent compared to [the header]"): this card previously had NO date
+  // clamp, so it summed the group's ENTIRE lifetime catalog ($3.96M) while the
+  // header's "Current Spend (Last 12 Months)" is trailing-12mo ($118,999) —
+  // the two were never measuring the same window. Clamp to the SAME trailing
+  // 12 months the header uses (lib/actions/contracts.ts getContract) so the
+  // cards reconcile.
+  const windowEnd = new Date()
+  const windowStart = new Date(windowEnd)
+  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const dateWindow = {
+    transactionDate: { gte: windowStart, lte: windowEnd },
+  }
+
   const [
     onAgg,
     notPricedAgg,
@@ -89,6 +103,7 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
+        ...dateWindow,
         OR: scopeOR,
         matchStatus: { in: ["on_contract", "price_variance"] },
       },
@@ -97,6 +112,7 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
+        ...dateWindow,
         OR: scopeOR,
         matchStatus: "off_contract_item",
       },
@@ -105,6 +121,7 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
+        ...dateWindow,
         OR: scopeOR,
         matchStatus: "out_of_scope",
       },
@@ -113,6 +130,7 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
+        ...dateWindow,
         OR: scopeOR,
         matchStatus: "unknown_vendor",
       },
@@ -122,6 +140,7 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
+        ...dateWindow,
         OR: scopeOR,
         matchStatus: { in: ["on_contract", "price_variance"] },
         vendorItemNo: { not: null },
@@ -134,6 +153,7 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
+        ...dateWindow,
         OR: scopeOR,
         matchStatus: "off_contract_item",
         vendorItemNo: { not: null },
@@ -146,6 +166,7 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
+        ...dateWindow,
         OR: scopeOR,
         matchStatus: "out_of_scope",
         vendorItemNo: { not: null },
@@ -158,6 +179,7 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
+        ...dateWindow,
         OR: scopeOR,
         matchStatus: "unknown_vendor",
         vendorItemNo: { not: null },

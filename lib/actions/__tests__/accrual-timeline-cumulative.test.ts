@@ -153,12 +153,18 @@ function seedContract(evaluationPeriod: string) {
 }
 
 describe("getAccrualTimeline cumulative column", () => {
-  it("annual eval: carries cumulative across months in the same year", async () => {
+  // 2026-06-09 (Charles "quarterly contract showing monthly accrual"): the
+  // timeline now ROLLS per-month rows up into evaluation-period buckets, so a
+  // quarterly/annual contract shows one row per quarter/year (not per month).
+  // The cumulative-reset semantics are preserved: each period row carries that
+  // period's total. Monthly eval still shows per-month rows.
+  it("annual eval: rolls the 3 months into a single 2025 row", async () => {
     seedContract("annual")
     const result = (await getAccrualTimeline("c-1")) as TimelineResult
-    expect(result.rows.map((r) => r.spend)).toEqual([100, 0, 50])
-    // All 3 months live in calendar-year 2025, so no reset.
-    expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([100, 100, 150])
+    // Jan $100 + Feb $0 + Mar $50, all in calendar-year 2025 → one row.
+    expect(result.rows.map((r) => r.month)).toEqual(["2025"])
+    expect(result.rows.map((r) => r.spend)).toEqual([150])
+    expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([150])
   })
 
   it("monthly eval: cumulative resets every month (matches tier math)", async () => {
@@ -169,10 +175,12 @@ describe("getAccrualTimeline cumulative column", () => {
     expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([100, 0, 50])
   })
 
-  it("quarterly eval: cumulative resets at calendar-quarter boundaries", async () => {
+  it("quarterly eval: rolls Q1 months into a single 2025-Q1 row", async () => {
     seedContract("quarterly")
     const result = (await getAccrualTimeline("c-1")) as TimelineResult
-    // Jan/Feb/Mar all live in Q1 2025 — no reset across them.
-    expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([100, 100, 150])
+    // Jan/Feb/Mar all live in Q1 2025 → one rolled-up row with the Q1 total.
+    expect(result.rows.map((r) => r.month)).toEqual(["2025-Q1"])
+    expect(result.rows.map((r) => r.spend)).toEqual([150])
+    expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([150])
   })
 })

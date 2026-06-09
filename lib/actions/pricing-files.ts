@@ -20,6 +20,7 @@ import {
 } from "@/lib/contracts/populate-carveout-terms"
 import { sanitizePricingRow } from "@/lib/contracts/pricing-row-sanitize"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
@@ -672,6 +673,26 @@ export async function importContractPricing(input: {
         { contractId: input.contractId },
       )
     }
+  }
+
+  // 2026-06-09 (Charles "for a carve out it does not calculate rebates unless
+  // you go into transactions and hit the orange button"): this import path
+  // CREATES carve-out contracts (ensureCarveOutTermFromPricing above), but it
+  // only refreshed match-statuses + metrics — it never ran the accrual engine,
+  // so NO Rebate rows were written until the user manually clicked "Recompute
+  // Earned Rebates". Mirror bulkImportCOGRecords / createContract: run the
+  // full accrual engine (which includes the carve-out dispatcher) for this
+  // contract, once, after match-statuses are settled. Idempotent (deletes its
+  // own [auto-accrual]/[auto-carve-out-accrual] rows, preserves collected
+  // rows); best-effort so a recompute failure never breaks the import.
+  try {
+    await recomputeAccrualForContract(input.contractId)
+  } catch (err) {
+    console.error(
+      `[importContractPricing] recomputeAccrualForContract(${input.contractId}) failed:`,
+      err,
+      { contractId: input.contractId },
+    )
   }
 
   return { imported, carveOutLinked, carveOutTermCreated }
