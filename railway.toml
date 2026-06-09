@@ -7,7 +7,13 @@ buildCommand = "bun install --frozen-lockfile && bun run build"
 
 [deploy]
 startCommand = "bun run start"
-healthcheckPath = "/"
+# 2026-06-09: point the healthcheck at a trivial liveness route
+# (app/api/health) instead of "/". "/" renders a real page (auth/redirect),
+# so Railway waited longer than necessary before switching traffic to a new
+# deploy. /api/health returns 200 the instant the server is listening, so the
+# cutover happens as soon as the container can serve — shrinking the
+# "Deploying…" phase. See app/api/health/route.ts.
+healthcheckPath = "/api/health"
 # 2026-04-26: switched from `prisma db push --accept-data-loss` to a
 # proper migrate-deploy flow. db push silently destroys data on schema
 # drift; migrate deploy refuses to apply destructive changes outside

@@ -40,14 +40,16 @@ export function proxy(request: NextRequest) {
   return response
 }
 
-// The matcher excludes /api/auth/ and /api/webhooks/ via negative lookahead
-// so the proxy isn't invoked for unauthenticated routes — saves a function
-// call per better-auth round-trip and per webhook delivery.
+// The matcher excludes /api/auth/, /api/webhooks/, and /api/health via
+// negative lookahead so the proxy isn't invoked for unauthenticated routes —
+// saves a function call per better-auth round-trip and per webhook delivery.
+// /api/health MUST stay public: it's the Railway healthcheck (railway.toml),
+// and a 401 there would make the healthcheck never pass → deploys would hang.
 export const config = {
   matcher: [
     "/dashboard/:path*",
     "/vendor/:path*",
     "/admin/:path*",
-    "/api/((?!auth/|webhooks/).*)",
+    "/api/((?!auth/|webhooks/|health).*)",
   ],
 }
