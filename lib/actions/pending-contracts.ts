@@ -13,6 +13,7 @@ import { serialize } from "@/lib/serialize"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
+import { isPercentRebateType } from "@/lib/contracts/rebate-value-normalize"
 import { normalizeCadence } from "@/lib/contracts/capital-line-items"
 import {
   notifyFacilityOfPendingContract,
@@ -203,7 +204,10 @@ function buildCapitalLineItemsFromPending(pending: {
       termMonths: pending.termMonths ?? 60,
       paymentType:
         pending.amortizationShape === "custom" ? "variable" : "fixed",
-      paymentCadence: pending.paymentCadence ?? "monthly",
+      // 2026-06-09 audit: route through normalizeCadence like the JSON
+      // line-item path above — a raw legacy value here bypassed the
+      // semi_annual-preserving allow-list (the recurring cadence-drop class).
+      paymentCadence: normalizeCadence(pending.paymentCadence),
     },
   ]
 }
@@ -328,7 +332,23 @@ function extractPendingTerms(termsJson: unknown, contractEffectiveDate?: Date | 
           tier.marketShareMax === null || tier.marketShareMax === undefined
             ? null
             : coerceNumber(tier.marketShareMax)
-        const rebateValue = coerceNumber(tier.rebateValue) ?? 0
+        const rebateType = coerceString(tier.rebateType) ?? "percent_of_spend"
+        let rebateValue = coerceNumber(tier.rebateValue) ?? 0
+        // 2026-06-09 audit: percent-type tiers store FRACTIONS (0.2 = 20%),
+        // but legacy/AI pending payloads (pre the 2026-04-26 form
+        // normalization) carry percent-points — three live prod rows have
+        // rebateValue 20/5/3, which would approve into 2000%/500%/300%
+        // tiers. The facility validator rejects stored >1 for percent
+        // types; mirror that here by normalizing points → fraction. A
+        // value still >1 after one division is garbage — warn loudly.
+        if (isPercentRebateType(rebateType) && rebateValue > 1) {
+          rebateValue = rebateValue / 100
+          if (rebateValue > 1) {
+            console.warn(
+              `[extractPendingTerms] tier rebateValue ${rebateValue * 100} still >100% after percent-point normalization — check the submission payload`,
+            )
+          }
+        }
 
         // Charles 2026-04-25 (audit Bug 3): mirror dedicated column
         // values into the spendMin/spendMax columns the engine reads
@@ -384,7 +404,7 @@ function extractPendingTerms(termsJson: unknown, contractEffectiveDate?: Date | 
           marketShareMin: rawMarketShareMin,
           marketShareMax: rawMarketShareMax,
           rebateValue,
-          rebateType: coerceString(tier.rebateType) ?? "percent_of_spend",
+          rebateType,
         }
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -710,6 +730,19 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
     where: { id, facilityId: facility.id },
   })
 
+  // 2026-06-09 audit: only a "submitted" row is approvable. Without this
+  // guard, re-approving an already-approved (or rejected/withdrawn) row
+  // created a DUPLICATE Contract — prod had 7 approved rows whose contracts
+  // were later deleted, each one re-approve away from a dupe.
+  if (pending.status !== "submitted") {
+    throw new Error(
+      `This submission is "${pending.status}" — only submitted contracts can be approved.` +
+        (pending.status === "approved"
+          ? " It was already approved; ask the vendor to resubmit if a new contract is needed."
+          : " Ask the vendor to (re)submit it."),
+    )
+  }
+
   // F3 — port pricingData JSON into ContractPricing rows. Defensively
   // extract only items that look real (vendorItemNo + numeric unitPrice).
   const pricingItems = extractPendingPricingItems(pending.pricingData)
@@ -743,7 +776,14 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
       vendorId: pending.vendorId,
       facilityId: facility.id,
       contractType: pending.contractType,
-      status: "active",
+      // 2026-06-09 audit: derive status from the expiration date instead of
+      // hardcoding "active" — two prod rows (exp 2024-12-31) were approved
+      // as "active" though already expired, violating the
+      // status/expirationDate invariant (scripts/oracles/schema-invariants).
+      status:
+        pending.expirationDate && pending.expirationDate < new Date()
+          ? "expired"
+          : "active",
       effectiveDate: pending.effectiveDate ?? new Date(),
       // Evergreen sentinel (see lib/actions/contracts.ts:728). Previously
       // the fallback was now + 365d which silently created a contract
@@ -937,6 +977,48 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
       })
     if (docs.length > 0) {
       await prisma.contractDocument.createMany({ data: docs })
+    }
+  }
+
+  // 2026-06-09 audit: transfer contract-level CATEGORIES. The approve path
+  // previously wrote neither productCategoryId nor ContractProductCategory
+  // join rows — and the join is the primary category-scope source for
+  // market share / compliance (lib/actions/contracts/derived-metrics.ts).
+  // Vendor-approved contracts therefore computed over an EMPTY scope (the
+  // exact "$105K of $3.29M" bug class fixed on the facility side today).
+  // Sources: term scopedCategoryIds (already resolved to names above) plus
+  // pricing-file category names, matched case-insensitively against
+  // existing ProductCategory rows (no auto-create — unresolvable names are
+  // skipped, same posture as the facility import path's strict mode).
+  const categoryNameSet = new Set<string>()
+  for (const names of resolvedCategoryNamesByTerm.values()) {
+    for (const n of names) categoryNameSet.add(n)
+  }
+  for (const p of pricingItems) {
+    if (p.category) categoryNameSet.add(p.category)
+  }
+  if (categoryNameSet.size > 0) {
+    const allCats = await prisma.productCategory.findMany({
+      select: { id: true, name: true },
+    })
+    const idByLower = new Map(
+      allCats.map((c) => [c.name.trim().toLowerCase(), c.id]),
+    )
+    const categoryIds = Array.from(
+      new Set(
+        Array.from(categoryNameSet)
+          .map((n) => idByLower.get(n.trim().toLowerCase()))
+          .filter((v): v is string => !!v),
+      ),
+    )
+    if (categoryIds.length > 0) {
+      await prisma.contractProductCategory.createMany({
+        data: categoryIds.map((productCategoryId) => ({
+          contractId: contract.id,
+          productCategoryId,
+        })),
+        skipDuplicates: true,
+      })
     }
   }
 

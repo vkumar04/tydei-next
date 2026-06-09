@@ -115,7 +115,16 @@ function extractPendingTerms(termsJson: unknown) {
           tier.marketShareMax === null || tier.marketShareMax === undefined
             ? null
             : coerceNumber(tier.marketShareMax)
-        const rebateValue = coerceNumber(tier.rebateValue) ?? 0
+        // Mirrors lib/actions/pending-contracts.ts (2026-06-09 percent guard):
+        // percent-type tiers store FRACTIONS; legacy payloads carry
+        // percent-points → normalize >1 by ÷100.
+        const rebateType = coerceString(tier.rebateType) ?? "percent_of_spend"
+        // (PERCENT_REBATE_TYPES in lib/contracts/rebate-value-normalize.ts)
+        const isPercentType = rebateType === "percent_of_spend"
+        let rebateValue = coerceNumber(tier.rebateValue) ?? 0
+        if (isPercentType && rebateValue > 1) {
+          rebateValue = rebateValue / 100
+        }
 
         let spendMin = rawSpendMin ?? 0
         let spendMax = rawSpendMax
@@ -159,7 +168,7 @@ function extractPendingTerms(termsJson: unknown) {
           marketShareMin: rawMarketShareMin,
           marketShareMax: rawMarketShareMax,
           rebateValue,
-          rebateType: coerceString(tier.rebateType) ?? "percent_of_spend",
+          rebateType,
         }
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -555,5 +564,38 @@ describe("extractPendingTerms — rebateMethod default (Bug 4)", () => {
       },
     ])
     expect(out[0]!.rebateMethod).toBe("cumulative")
+  })
+
+  // 2026-06-09 prod audit: three live pending rows carried percent-POINT
+  // rebateValues (20 / 5 / 3) from pre-2026-04-26 submissions. Approving
+  // them verbatim would create 2000% / 500% / 300% tiers (rebateValue is a
+  // FRACTION for percent types: 0.2 = 20%). The extract now normalizes.
+  it("normalizes percent-point rebateValue (>1) to a fraction for percent tiers", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Legacy points",
+        termType: "spend_rebate",
+        tiers: [
+          { tierNumber: 1, spendMin: 0, rebateValue: 20, rebateType: "percent_of_spend" },
+          { tierNumber: 2, spendMin: 100, rebateValue: 0.05, rebateType: "percent_of_spend" },
+        ],
+      },
+    ])
+    // 20 percent-points → 0.2 fraction; an already-fraction 0.05 unchanged.
+    expect(out[0]!.tiers[0]!.rebateValue).toBeCloseTo(0.2, 10)
+    expect(out[0]!.tiers[1]!.rebateValue).toBeCloseTo(0.05, 10)
+  })
+
+  it("does NOT divide non-percent rebate types (fixed dollar amounts stay raw)", () => {
+    const out = extractPendingTerms([
+      {
+        termName: "Flat",
+        termType: "spend_rebate",
+        tiers: [
+          { tierNumber: 1, spendMin: 0, rebateValue: 500, rebateType: "fixed_rebate" },
+        ],
+      },
+    ])
+    expect(out[0]!.tiers[0]!.rebateValue).toBe(500)
   })
 })
