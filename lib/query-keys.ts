@@ -253,6 +253,8 @@ export const queryKeys = {
       ["analytics", "renewalRisk", contractId] as const,
     rebateForecast: (contractId: string, months: number) =>
       ["analytics", "rebateForecast", contractId, months] as const,
+    priceReduction: (contractId: string) =>
+      ["analytics", "priceReduction", contractId] as const,
     spendConcentration: (facilityId: string, trailingDays: number) =>
       ["analytics", "spendConcentration", facilityId, trailingDays] as const,
     purchaseCompliance: (facilityId: string, range: DateRange) =>

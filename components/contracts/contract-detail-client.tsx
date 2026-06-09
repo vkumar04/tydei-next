@@ -55,6 +55,13 @@ const RebateForecastCard = dynamic(
     ),
   { ssr: false },
 )
+const PriceReductionCard = dynamic(
+  () =>
+    import("@/components/contracts/analytics/price-reduction-card").then(
+      (m) => m.PriceReductionCard,
+    ),
+  { ssr: false },
+)
 const TieInComplianceCard = dynamic(
   () =>
     import("@/components/contracts/analytics/tie-in-compliance-card").then(
@@ -724,6 +731,13 @@ export function ContractDetailClient({
           ) : null}
           {contract.contractType === "service" ? (
             <ServiceSlaCard contractId={contractId} />
+          ) : null}
+          {/* 2026-06-08 (Charles): price-reduction contracts earn no rebate —
+              surface the paid-vs-reduced-price benefit. The card self-hides
+              when there's no price_reduction term, but gate the mount too so
+              non-price-reduction contracts skip the fetch. */}
+          {contract.terms?.some((t) => t.termType === "price_reduction") ? (
+            <PriceReductionCard contractId={contractId} />
           ) : null}
           <RebateForecastCard
             contractId={contractId}
