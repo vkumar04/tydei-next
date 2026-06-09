@@ -102,6 +102,7 @@ beforeEach(() => {
     expirationDate: new Date("2026-12-31"),
     productCategory: { name: "Spine" },
     terms: [],
+    contractCategories: [],
   })
   contractFindMany.mockResolvedValue(contracts)
   cOGFindMany.mockResolvedValue(fixture)
@@ -154,6 +155,34 @@ describe("computeContractMetrics market share fallback", () => {
     expect(result.cogRowsTotal).toBe(2)
     expect(result.cogRowsOnContract).toBe(1)
     expect(result.complianceRate).toBe(50.0)
+  })
+
+  it("includes categories from the ContractProductCategory join (Charles 2026-06-09)", async () => {
+    // The contract's SELECTED categories live in the contractCategories join,
+    // NOT productCategory (single primary) or term.categories (empty). Prior
+    // to the fix, a contract whose scope is ONLY in the join computed market
+    // share over an empty/primary-only scope — on prod, a Mako contract with
+    // 8 selected categories computed over 1 ($105K of $3.29M → 1.3% vs 22.6%).
+    // Here: productCategory is OUT of the COG categories; the real scope
+    // ("Spine") comes only from the join, so it must still be counted.
+    contractFindFirstOrThrow.mockResolvedValueOnce({
+      vendorId: VENDOR_ID,
+      effectiveDate: new Date("2025-01-01"),
+      expirationDate: new Date("2026-12-31"),
+      productCategory: { name: "Trauma" }, // primary not present in COG
+      terms: [],
+      contractCategories: [{ productCategory: { name: "Spine" } }],
+    })
+    const { computeContractMetrics } = await import(
+      "@/lib/actions/contracts/derived-metrics"
+    )
+
+    const result = await computeContractMetrics({ contractId: "c_target" })
+
+    // Spine spend is in scope ONLY because the join supplied it.
+    expect(result.vendorSpendInCategories).toBe(340)
+    expect(result.totalSpendInCategories).toBe(500)
+    expect(result.currentMarketShare).toBe(68.0)
   })
 
   it("ignores spend in categories outside the contract's scope", async () => {

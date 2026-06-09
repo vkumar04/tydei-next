@@ -73,12 +73,27 @@ export async function computeContractMetrics(
         expirationDate: true,
         productCategory: { select: { name: true } },
         terms: { select: { categories: true, appliesTo: true } },
+        // 2026-06-09 (Charles "I selected every category … not all the spend
+        // is brought in"): the contract's SELECTED categories live in the
+        // ContractProductCategory join, NOT productCategory (the single
+        // primary) or term.categories (empty — no contract uses
+        // specific_category). Omitting the join collapsed the market-share /
+        // compliance scope to just the primary category, so a contract with
+        // 8 categories computed over 1 (proven on prod: $105K of $3.29M →
+        // 1.3% instead of 22.6%). Include the join in the scope union.
+        contractCategories: {
+          select: { productCategory: { select: { name: true } } },
+        },
       },
     })
     vendorIds = contractVendorIds(contract)
-    // Union: explicit productCategory + every term.categories array.
+    // Union: explicit primary productCategory + the ContractProductCategory
+    // join (the user-selected categories) + every term.categories array.
     const cats = new Set<string>()
     if (contract.productCategory?.name) cats.add(contract.productCategory.name)
+    for (const cc of contract.contractCategories) {
+      if (cc.productCategory?.name) cats.add(cc.productCategory.name)
+    }
     for (const t of contract.terms) {
       for (const c of t.categories) cats.add(c)
     }
