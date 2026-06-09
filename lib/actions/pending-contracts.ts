@@ -1027,7 +1027,16 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
   // auth-scope-scanner-skip: gated mutation following the authorized read.
   await prisma.pendingContract.update({
     where: { id },
-    data: { status: "approved", reviewedAt: new Date(), reviewedBy },
+    data: {
+      status: "approved",
+      reviewedAt: new Date(),
+      reviewedBy,
+      // 2026-06-09 audit: durable link to the created Contract (FK with
+      // onDelete: SetNull) — an "approved" row whose approvedContractId is
+      // null afterwards means its contract was deleted. Pre-fix this link
+      // lived only in a console.info; prod had 7 such undetectable orphans.
+      approvedContractId: contract.id,
+    },
   })
 
   // Charles 2026-04-25 (vendor-mirror Phase 1): close the loop with

@@ -121,8 +121,13 @@ export function TieInComplianceCard({
                   label="Effective rate"
                   value={`${data.allOrNothing.applicableRate.toFixed(2)}%`}
                 />
+                {/* 2026-06-09 audit: this value is bundle rate × YTD spend —
+                    a PROJECTION from the bundle engine, not the earned
+                    ledger (canonical YTD = sumEarnedRebatesYTD on the
+                    header). It was labeled "Rebate earned (YTD)", which
+                    contradicted the header ($8,563 vs $0 on prod). */}
                 <Stat
-                  label="Rebate earned (YTD)"
+                  label="Projected rebate (YTD pace)"
                   value={fmtUsd(data.allOrNothing.rebateEarned)}
                 />
               </div>
@@ -137,11 +142,17 @@ export function TieInComplianceCard({
                   value={`${data.proportional.effectiveRate.toFixed(2)}%`}
                 />
                 <Stat
-                  label="Rebate earned (YTD)"
+                  label="Projected rebate (YTD pace)"
                   value={fmtUsd(data.proportional.rebateEarned)}
                 />
               </div>
             )}
+            <p className="text-[11px] text-muted-foreground">
+              Projected rebate = bundle rate × YTD spend at the current
+              compliance level — a projection, not the earned ledger. Earned
+              to date lives in the contract header (&ldquo;Rebates
+              Earned&rdquo;).
+            </p>
 
             <div className="space-y-3">
               <h4 className="text-sm font-semibold text-muted-foreground">

@@ -746,6 +746,8 @@ model Contract {
   accruals             RebateAccrual[]
   renewalBriefCaches   RenewalBriefCache[]
   tieInShortfallLedger ContractTieInShortfallLedger[]
+  // 2026-06-09: back-relation for PendingContract.approvedContractId.
+  approvedFromPending  PendingContract[]              @relation("ApprovedFromPending")
 
   @@index([vendorId])
   @@index([facilityId])
@@ -1262,6 +1264,15 @@ model PendingContract {
   reviewedAt     DateTime?
   reviewedBy     String?
   reviewNotes    String?
+  // 2026-06-09 audit: link the approved submission to the Contract it
+  // created. Pre-fix the link existed only in a console.info, so when an
+  // approved contract was later deleted (7 such orphans on prod) the
+  // pending row still claimed "approved" with no way to detect it.
+  // onDelete: SetNull → deleting the Contract nulls this out, so an
+  // approved row with a null approvedContractId after approval is the
+  // "contract was deleted" signal.
+  approvedContractId String?
+  approvedContract   Contract? @relation("ApprovedFromPending", fields: [approvedContractId], references: [id], onDelete: SetNull)
 
   vendor   Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   facility Facility? @relation(fields: [facilityId], references: [id])
@@ -1269,6 +1280,7 @@ model PendingContract {
   @@index([vendorId])
   @@index([facilityId])
   @@index([status])
+  @@index([approvedContractId])
   @@map("pending_contract")
 }
 
