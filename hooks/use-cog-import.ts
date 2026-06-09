@@ -181,12 +181,22 @@ export function useCOGImport() {
   /** After vendor matching, proceed to duplicate check */
   const goToDuplicateCheck = useCallback(() => {
     setState((prev) => {
-      // Apply vendor IDs from vendorMappings to mappedRecords
+      // 2026-06-09 (Charles "I mapped 'smith and nephew' and 'Smith and
+      // Nephew' as the same but get different numbers"): vendorMappings was
+      // keyed by the RAW vendor name, and this apply step looked it up by raw
+      // name too. So records whose casing differed from the mapped key kept a
+      // different / no vendorId — the same vendor split across two vendorIds on
+      // the persisted COGRecord rows, and every vendorId-keyed aggregation
+      // (market share, vendor spend) under-merged. Resolve case-insensitively
+      // so every casing of a mapped name collapses to ONE vendorId.
+      const normalizedMappings = new Map<string, string>()
+      for (const [name, vid] of Object.entries(prev.vendorMappings)) {
+        normalizedMappings.set(name.trim().toLowerCase(), vid)
+      }
       const updated = prev.mappedRecords.map((r) => {
-        if (r.vendorName && prev.vendorMappings[r.vendorName]) {
-          return { ...r, vendorId: prev.vendorMappings[r.vendorName] }
-        }
-        return r
+        if (!r.vendorName) return r
+        const vid = normalizedMappings.get(r.vendorName.trim().toLowerCase())
+        return vid ? { ...r, vendorId: vid } : r
       })
       return { ...prev, mappedRecords: updated, step: "duplicate_check" }
     })

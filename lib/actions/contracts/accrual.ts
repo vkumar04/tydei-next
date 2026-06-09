@@ -31,6 +31,7 @@ import {
   buildCategoryWhereClause,
   buildUnionCategoryWhereClause,
 } from "@/lib/contracts/cog-category-filter"
+import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 
 export async function getAccrualTimeline(contractId: string) {
@@ -227,7 +228,14 @@ async function _buildAccrualTimelineForContract(
     appliesTo: term.appliesTo,
     categories: term.categories,
   }))
-  const unionCategoryWhere = buildUnionCategoryWhereClause(termScopes)
+  // 2026-06-08: expand to drifted COG category variants (canonical match) so
+  // the timeline doesn't drop case/word-order-different rows. Reused for the
+  // union SQL fetch, per-term in-memory partition, and the volume fallback.
+  const cogCategoryUniverse = await facilityCogCategoryUniverse(facilityId)
+  const unionCategoryWhere = buildUnionCategoryWhereClause(
+    termScopes,
+    cogCategoryUniverse,
+  )
 
   // Charles R5.12 — bucket spend by the actual transaction date, not the
   // DB insertion timestamp. Using `createdAt` collapsed every seeded
@@ -294,7 +302,10 @@ async function _buildAccrualTimelineForContract(
   // on-the-fly timeline and the persisted Rebate ledger agree.
   const perTermResults = termsWithTiers.map((term, idx) => {
     const termScope = { appliesTo: term.appliesTo, categories: term.categories }
-    const termCategoryWhere = buildCategoryWhereClause(termScope)
+    const termCategoryWhere = buildCategoryWhereClause(
+      termScope,
+      cogCategoryUniverse,
+    )
     const series = buildSeries(cogRecords, termCategoryWhere)
     const rows = buildMonthlyAccruals(
       series,
@@ -406,6 +417,7 @@ async function _buildAccrualTimelineForContract(
           appliesTo: t.appliesTo,
           categories: t.categories,
         })),
+        cogCategoryUniverse,
       )
       const cogVolRows = await prisma.cOGRecord.findMany({
         where: {
@@ -425,7 +437,7 @@ async function _buildAccrualTimelineForContract(
           appliesTo: term.appliesTo,
           categories: term.categories,
         }
-        const where = buildCategoryWhereClause(termScope)
+        const where = buildCategoryWhereClause(termScope, cogCategoryUniverse)
         const categoryIn = where.category?.in ?? null
         const categorySet = categoryIn ? new Set(categoryIn) : null
         for (const r of cogVolRows) {
@@ -586,6 +598,59 @@ async function _buildAccrualTimelineForContract(
     | "annual"
     | "lifetime" = primaryEval
 
+  // 2026-06-09 (Charles "in performance in tie in it is showing accrued
+  // rebates on a monthly basis but this is a quarterly contract"): the rows
+  // above are emitted one-per-MONTH regardless of cadence — the quarterly
+  // `evaluationPeriod` only reset the tier-math window, never the row
+  // granularity. Roll the per-month rows up into evaluation-period buckets
+  // (one row per quarter / half / year) so a quarterly contract displays
+  // quarterly: sum spend + accrued + volume, take the period-end cumulative
+  // (rows already reset cumulative per period via periodKeyFor), and keep the
+  // best tier/rate achieved in the period. Monthly-eval and multi-term
+  // ("lifetime") contracts keep per-month rows. Reuses periodKeyFor so the
+  // bucket boundaries match the cumulative-reset logic exactly.
+  const displayRows: TimelineRowWithVolume[] =
+    primaryEval === "monthly" || primaryEval === "lifetime"
+      ? rows
+      : (() => {
+          const byBucket = new Map<string, TimelineRowWithVolume>()
+          const order: string[] = []
+          for (const r of rows) {
+            const key = periodKeyFor(r.month)
+            const prev = byBucket.get(key)
+            if (!prev) {
+              order.push(key)
+              byBucket.set(key, { ...r, month: key })
+              continue
+            }
+            const better =
+              r.tierAchieved > prev.tierAchieved ||
+              (r.tierAchieved === prev.tierAchieved &&
+                r.rebatePercent > prev.rebatePercent)
+            byBucket.set(key, {
+              ...prev,
+              spend: prev.spend + r.spend,
+              // period-end running total (cumulative already resets per period)
+              cumulativeSpend: r.cumulativeSpend,
+              accruedAmount: prev.accruedAmount + r.accruedAmount,
+              volume: prev.volume + r.volume,
+              tierAchieved: better ? r.tierAchieved : prev.tierAchieved,
+              rebatePercent: better ? r.rebatePercent : prev.rebatePercent,
+              achievedRebateType: better
+                ? r.achievedRebateType
+                : prev.achievedRebateType,
+              achievedRebateValue: better
+                ? r.achievedRebateValue
+                : prev.achievedRebateValue,
+              termContributions: [
+                ...prev.termContributions,
+                ...r.termContributions,
+              ],
+            })
+          }
+          return order.map((k) => byBucket.get(k)!)
+        })()
+
   // Per-term labels so the Accrual Timeline UI can render each term's
   // contribution on multi-term contracts instead of collapsing to the
   // "best" term. Without this, a contract with a spend rebate + a
@@ -597,7 +662,13 @@ async function _buildAccrualTimelineForContract(
     evaluationPeriod: t.evaluationPeriod ?? "annual",
   }))
 
-  return serialize({ rows, method, termLabels, cumulativeReset, isVolumeRebate })
+  return serialize({
+    rows: displayRows,
+    method,
+    termLabels,
+    cumulativeReset,
+    isVolumeRebate,
+  })
 }
 
 // Local month-key helpers duplicated from `lib/contracts/accrual.ts` —

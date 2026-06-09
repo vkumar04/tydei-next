@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   buildCategoryWhereClause,
   buildUnionCategoryWhereClause,
+  expandCategoriesToCogVariants,
 } from "@/lib/contracts/cog-category-filter"
 
 // Charles W1.U-A: this helper is the single place the category
@@ -124,5 +125,81 @@ describe("buildUnionCategoryWhereClause", () => {
 
   it("empty terms list returns empty fragment", () => {
     expect(buildUnionCategoryWhereClause([])).toEqual({})
+  })
+})
+
+// 2026-06-09 (Charles "I selected every category … not all the spend is
+// brought in. The category check must be off"): Prisma `category: { in }` is
+// case-sensitive exact match, so a COG row stored as "Joint replacement"
+// never matched the selected "Joint Replacement". When the caller supplies
+// the facility's distinct COG category strings, the IN list expands to every
+// stored variant that shares a canonical key.
+describe("expandCategoriesToCogVariants", () => {
+  const universe = [
+    "Joint Replacement", // exact
+    "Joint replacement", // case drift
+    "JOINT REPLACEMENT", // upper
+    "Replacement Joint", // word order
+    "Joint-Replacement", // separator
+    "Spine", // unrelated
+    "Arthroscopy", // unrelated
+  ]
+
+  it("expands a selected category to every casing / order / separator variant", () => {
+    const out = expandCategoriesToCogVariants(["Joint Replacement"], universe)
+    expect(out).toContain("Joint Replacement")
+    expect(out).toContain("Joint replacement")
+    expect(out).toContain("JOINT REPLACEMENT")
+    expect(out).toContain("Replacement Joint")
+    expect(out).toContain("Joint-Replacement")
+    // unrelated categories are NOT pulled in
+    expect(out).not.toContain("Spine")
+    expect(out).not.toContain("Arthroscopy")
+  })
+
+  it("always keeps the selected name even if not in the universe", () => {
+    expect(expandCategoriesToCogVariants(["Brand New Cat"], universe)).toContain(
+      "Brand New Cat",
+    )
+  })
+
+  it("empty universe ⇒ selected unchanged (raw behavior, backward compatible)", () => {
+    expect(expandCategoriesToCogVariants(["Spine", "Spine"], [])).toEqual([
+      "Spine",
+    ])
+  })
+})
+
+describe("buildCategoryWhereClause — canonical universe expansion", () => {
+  const universe = ["Joint Replacement", "joint replacement", "Spine"]
+
+  it("without a universe returns the raw selected list (backward compatible)", () => {
+    expect(
+      buildCategoryWhereClause({
+        appliesTo: "specific_category",
+        categories: ["Joint Replacement"],
+      }),
+    ).toEqual({ category: { in: ["Joint Replacement"] } })
+  })
+
+  it("with a universe expands the IN list to drifted COG variants", () => {
+    const out = buildCategoryWhereClause(
+      { appliesTo: "specific_category", categories: ["Joint Replacement"] },
+      universe,
+    )
+    expect(out.category?.in).toEqual(
+      expect.arrayContaining(["Joint Replacement", "joint replacement"]),
+    )
+    expect(out.category?.in).not.toContain("Spine")
+  })
+
+  it("union builder expands too", () => {
+    const out = buildUnionCategoryWhereClause(
+      [{ appliesTo: "specific_category", categories: ["Joint Replacement"] }],
+      universe,
+    )
+    expect(out.category?.in).toEqual(
+      expect.arrayContaining(["Joint Replacement", "joint replacement"]),
+    )
   })
 })

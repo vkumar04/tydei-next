@@ -281,8 +281,10 @@ const BASELINE_HITS = new Set<string>([
   // the windowed match can fall back to oldest-uncollected. The pre-
   // authorized rebate.update call still verifies ownership via the
   // same prior contract-find guard at the top of createContractTransaction).
-  "lib/actions/contract-periods.ts:417",
-  "lib/actions/contract-periods.ts:646",
+  // bumped 2026-06-09 after the COG category-universe fetch (drifted-
+  // category canonical match) added lines above these re-reads.
+  "lib/actions/contract-periods.ts:425",
+  "lib/actions/contract-periods.ts:654",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:94",
@@ -303,9 +305,11 @@ const BASELINE_HITS = new Set<string>([
   // 2026-05-31 after createContractDocumentSafe (#31) + the group-aware
   // getContracts/getContract changes (#33) shifted them; bumped again
   // 2026-06-07 after createContract gained an auto refreshContractMetrics
-  // recompute block (+ its import) above these operations.
-  "lib/actions/contracts.ts:1516",
-  "lib/actions/contracts.ts:1536",
+  // recompute block (+ its import) above these operations; bumped again
+  // 2026-06-09 after the COG category-universe import + per-detail fetch
+  // (drifted-category canonical match) shifted them.
+  "lib/actions/contracts.ts:1525",
+  "lib/actions/contracts.ts:1545",
   // imports/case-costing-import.ts: facility-scoped via upstream batch
   "lib/actions/imports/case-costing-import.ts:243",
   "lib/actions/imports/case-costing-import.ts:380",

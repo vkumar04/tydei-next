@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   matchCOGRecordToContract,
+  cogCategoryCoveredByContract,
   PRICE_VARIANCE_THRESHOLD,
   type CogRecordForMatch,
   type ContractForMatch,
@@ -362,5 +363,43 @@ describe("matchCOGRecordToContract — reference-number fallback", () => {
     }
     const result = matchCOGRecordToContract(record, [contract])
     expect(result.status).toBe("off_contract_item")
+  })
+})
+
+// 2026-06-09 (Charles "I selected every category … not all the spend is
+// brought in. The category check must be off"): the eligibility gate must
+// compare category names canonically (case / separator / word-order / plural
+// insensitive), not by raw string equality — else a COG row stored as "Joint
+// replacement" gets tagged out_of_scope against the selected "Joint
+// Replacement", under-counting eligible spend and inflating "Pre-Match".
+describe("cogCategoryCoveredByContract — canonical category match", () => {
+  const term = (categories: string[]) => [
+    { appliesTo: "specific_category" as const, categories },
+  ]
+
+  it("no terms / no scope ⇒ covered (no narrowing)", () => {
+    expect(cogCategoryCoveredByContract("Anything", undefined)).toBe(true)
+    expect(cogCategoryCoveredByContract("Anything", [])).toBe(true)
+  })
+
+  it("matches despite casing / word-order / separator drift", () => {
+    const t = term(["Joint Replacement"])
+    expect(cogCategoryCoveredByContract("Joint Replacement", t)).toBe(true)
+    expect(cogCategoryCoveredByContract("Joint replacement", t)).toBe(true)
+    expect(cogCategoryCoveredByContract("JOINT REPLACEMENT", t)).toBe(true)
+    expect(cogCategoryCoveredByContract("Replacement Joint", t)).toBe(true)
+    expect(cogCategoryCoveredByContract("Joint-Replacement", t)).toBe(true)
+  })
+
+  it("still excludes genuinely different categories", () => {
+    const t = term(["Joint Replacement"])
+    expect(cogCategoryCoveredByContract("Spine", t)).toBe(false)
+    expect(cogCategoryCoveredByContract("Arthroscopy", t)).toBe(false)
+  })
+
+  it("null COG category is out-of-scope for a category-locked contract", () => {
+    expect(cogCategoryCoveredByContract(null, term(["Joint Replacement"]))).toBe(
+      false,
+    )
   })
 })

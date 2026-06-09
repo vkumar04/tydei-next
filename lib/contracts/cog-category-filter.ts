@@ -32,6 +32,8 @@
  * (the name used in the plan and some client surfaces) so either can be
  * passed through transparently.
  */
+import { canonicalizeCategoryName } from "./category-canonical"
+
 export interface CategoryScopedTermLike {
   categories?: string[] | null | undefined
   /** Prisma column on ContractTerm. Values: "all_products" | "specific_category" | other */
@@ -55,6 +57,7 @@ export interface CategoryScopedTermLike {
  */
 export function buildCategoryWhereClause(
   term: CategoryScopedTermLike,
+  cogCategoryUniverse?: readonly string[],
 ): { category?: { in: string[] } } {
   const scope = term.appliesTo ?? term.productScope ?? null
   const categories = term.categories ?? []
@@ -63,7 +66,18 @@ export function buildCategoryWhereClause(
   // De-dup while preserving order so the generated SQL `IN` list is stable
   // across identical inputs (helps query-plan cache + test assertions).
   const unique = Array.from(new Set(categories))
-  return { category: { in: unique } }
+  // 2026-06-08 (Charles "category check is off — not all the spend is brought
+  // in"): Prisma `category: { in }` is case-SENSITIVE exact match, so a COG
+  // row stored as "Joint replacement" never matches the selected "Joint
+  // Replacement". When the caller passes the facility's distinct COG category
+  // strings, expand the IN list to every stored variant that shares a
+  // canonical key (case / separator / word-order / plural insensitive) so the
+  // SQL filter stops dropping drifted rows. Without a universe the behavior is
+  // unchanged (backward compatible — keeps the W1.U-A parity tests green).
+  const inList = cogCategoryUniverse
+    ? expandCategoriesToCogVariants(unique, cogCategoryUniverse)
+    : unique
+  return { category: { in: inList } }
 }
 
 /**
@@ -81,6 +95,7 @@ export function buildCategoryWhereClause(
  */
 export function buildUnionCategoryWhereClause(
   terms: readonly CategoryScopedTermLike[],
+  cogCategoryUniverse?: readonly string[],
 ): { category?: { in: string[] } } {
   if (terms.length === 0) return {}
   const union = new Set<string>()
@@ -95,5 +110,39 @@ export function buildUnionCategoryWhereClause(
     for (const c of cats) union.add(c)
   }
   if (union.size === 0) return {}
-  return { category: { in: Array.from(union) } }
+  const selected = Array.from(union)
+  // See buildCategoryWhereClause — expand to canonical COG-side variants when
+  // the caller supplies the facility's distinct COG categories.
+  const inList = cogCategoryUniverse
+    ? expandCategoriesToCogVariants(selected, cogCategoryUniverse)
+    : selected
+  return { category: { in: inList } }
+}
+
+/**
+ * Expand a contract's selected category NAMES to every distinct
+ * `COGRecord.category` string that shares a canonical key — so a
+ * case-sensitive Prisma `category: { in }` still matches drifted rows
+ * ("Joint Replacement" selected ⇒ also matches stored "Joint replacement",
+ * "JOINT REPLACEMENT", "Replacement Joint", "Joint-Replacement").
+ *
+ * `cogCategoryUniverse` = the facility's distinct `COGRecord.category` values
+ * (one cheap `findMany({ distinct: ["category"] })`). The selected names are
+ * always kept in the output so an exact match never regresses.
+ *
+ * Single source of truth for category-name comparison at the SQL boundary;
+ * mirrors `canonicalizeCategoryName` (JS boundary) and `normalizeSku`.
+ */
+export function expandCategoriesToCogVariants(
+  selected: readonly string[],
+  cogCategoryUniverse: readonly string[],
+): string[] {
+  const wanted = new Set(
+    selected.map(canonicalizeCategoryName).filter((k) => k.length > 0),
+  )
+  const out = new Set<string>(selected)
+  for (const c of cogCategoryUniverse) {
+    if (c && wanted.has(canonicalizeCategoryName(c))) out.add(c)
+  }
+  return Array.from(out)
 }

@@ -108,11 +108,19 @@ export async function getContractPeriods(contractId: string) {
   const { buildUnionCategoryWhereClause } = await import(
     "@/lib/contracts/cog-category-filter"
   )
+  const { facilityCogCategoryUniverse } = await import(
+    "@/lib/contracts/cog-category-universe"
+  )
   const termScopes = contract.terms.map((t) => ({
     appliesTo: t.appliesTo,
     categories: t.categories,
   }))
-  const unionCategoryWhere = buildUnionCategoryWhereClause(termScopes)
+  // 2026-06-08: expand to drifted COG category variants (see cog-category-filter).
+  const cogUniverse = await facilityCogCategoryUniverse(facility.id)
+  const unionCategoryWhere = buildUnionCategoryWhereClause(
+    termScopes,
+    cogUniverse,
+  )
   const cogRows = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,

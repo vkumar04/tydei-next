@@ -17,6 +17,7 @@
  */
 
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 
 /** Match threshold: any |variancePercent| strictly above this is `price_variance`. */
 export const PRICE_VARIANCE_THRESHOLD = 2 // percent
@@ -131,15 +132,27 @@ export function cogCategoryCoveredByContract(
   terms: readonly ContractTermScopeForMatch[] | undefined,
 ): boolean {
   if (!terms || terms.length === 0) return true
+  // 2026-06-08 (Charles "I selected every category … not all the spend is
+  // brought in. The category check must be off"): this gate previously
+  // compared RAW category strings, so a COG row stored as "Joint replacement"
+  // (vendor casing) failed to match the contract's selected "Joint
+  // Replacement" and got tagged out_of_scope — under-counting eligible spend
+  // AND inflating the "Pre-Match" total. Canonicalize BOTH sides (case /
+  // separator / word-order / plural insensitive), mirroring the SKU path
+  // (normalizeSku) and the already-fixed market-share card
+  // (canonicalizeCategoryName in derived-metrics.ts).
   const covered = new Set<string>()
   for (const t of terms) {
     const scope = t.appliesTo ?? null
     if (scope !== "specific_category") return true
-    for (const c of t.categories ?? []) covered.add(c)
+    for (const c of t.categories ?? []) {
+      const key = canonicalizeCategoryName(c)
+      if (key) covered.add(key)
+    }
   }
   if (covered.size === 0) return true
   if (!cogCategory) return false
-  return covered.has(cogCategory)
+  return covered.has(canonicalizeCategoryName(cogCategory))
 }
 
 /** Build the on_contract / price_variance result for a matched pricing item. */

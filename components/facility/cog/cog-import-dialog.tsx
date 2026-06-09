@@ -109,11 +109,16 @@ export function COGImportDialog({
   // Extract unique vendor names from mapped records for the vendor matching step
   const uniqueVendorNames = useMemo(() => {
     if (importState.step !== "vendor_match") return []
-    const names = new Set<string>()
+    // 2026-06-09 (Charles "smith and nephew vs Smith and Nephew"): dedupe by
+    // lowercased name (keep first-seen display casing) so two casings of the
+    // same vendor render as ONE row. The apply step normalizes case-insensitively.
+    const byKey = new Map<string, string>()
     for (const r of importState.mappedRecords) {
-      if (r.vendorName) names.add(r.vendorName)
+      if (!r.vendorName) continue
+      const key = r.vendorName.trim().toLowerCase()
+      if (!byKey.has(key)) byKey.set(key, r.vendorName.trim())
     }
-    return Array.from(names).sort()
+    return Array.from(byKey.values()).sort()
   }, [importState.step, importState.mappedRecords])
 
   const queryClient = useQueryClient()
@@ -378,8 +383,9 @@ export function COGImportDialog({
                 </TableHeader>
                 <TableBody>
                   {uniqueVendorNames.map((name) => {
+                    const nameKey = name.trim().toLowerCase()
                     const count = importState.mappedRecords.filter(
-                      (r) => r.vendorName === name
+                      (r) => (r.vendorName ?? "").trim().toLowerCase() === nameKey
                     ).length
                     return (
                       <TableRow key={name}>

@@ -40,6 +40,7 @@ import {
   sumEarnedRebatesYTD,
 } from "@/lib/contracts/rebate-earned-filter"
 import { buildUnionCategoryWhereClause, buildCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
+import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
@@ -247,6 +248,10 @@ export async function getContracts(input: ContractFilters) {
     vendorIds: string[]
     categories: Set<string>
   }> = []
+  // 2026-06-08: expand selected categories to the facility's drifted COG
+  // category variants so the cascade's category-scoped spend doesn't drop
+  // case/word-order-different rows (Charles "not all the spend is brought in").
+  const listCogUniverse = await facilityCogCategoryUniverse(facility.id)
   for (const c of contracts) {
     // #2: a grouped contract's category-scoped spend spans every
     // participating vendor.
@@ -256,7 +261,7 @@ export async function getContracts(input: ContractFilters) {
       appliesTo: t.appliesTo,
       categories: t.categories,
     }))
-    const unionWhere = buildUnionCategoryWhereClause(termScopes)
+    const unionWhere = buildUnionCategoryWhereClause(termScopes, listCogUniverse)
     const cats = unionWhere.category?.in
     if (!cats || cats.length === 0) continue
     categoryScopedContracts.push({
@@ -665,11 +670,15 @@ export async function getContract(
   // projections to the Qualified Annual Spend Rebate term because both
   // were multiplying contract-wide spend by their tier rate.
   const termScopedSpend: Record<string, number> = {}
+  const detailCogUniverse = await facilityCogCategoryUniverse(facility.id)
   for (const t of contract.terms ?? []) {
-    const catWhere = buildCategoryWhereClause({
-      appliesTo: t.appliesTo,
-      categories: t.categories,
-    })
+    const catWhere = buildCategoryWhereClause(
+      {
+        appliesTo: t.appliesTo,
+        categories: t.categories,
+      },
+      detailCogUniverse,
+    )
     // Short-circuit: all_products (empty where) → reuse currentSpend.
     if (Object.keys(catWhere).length === 0) {
       termScopedSpend[t.id] = currentSpend

@@ -49,6 +49,7 @@ import {
   buildCategoryWhereClause,
   buildUnionCategoryWhereClause,
 } from "@/lib/contracts/cog-category-filter"
+import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import { ENGINE_VERSION } from "@/lib/rebates/engine-version"
 
@@ -310,7 +311,14 @@ export async function _recomputeAccrualForContractWithFacility(
     appliesTo: term.appliesTo,
     categories: term.categories,
   }))
-  const unionCategoryWhere = buildUnionCategoryWhereClause(termScopes)
+  // 2026-06-08: expand category scope to the facility's drifted COG variants
+  // (canonical match) so accrual doesn't drop case/word-order-different rows
+  // — both the union SQL fetch below and the per-term in-memory partition.
+  const cogCategoryUniverse = await facilityCogCategoryUniverse(facilityId)
+  const unionCategoryWhere = buildUnionCategoryWhereClause(
+    termScopes,
+    cogCategoryUniverse,
+  )
 
   // Charles W1.V — scale `rebateValue` by 100 at the Prisma boundary for
   // `percent_of_spend` tiers (same convention as `getAccrualTimeline`
@@ -464,7 +472,10 @@ export async function _recomputeAccrualForContractWithFacility(
   const monthlyPerTermResults = monthlyEvalIdx.map((origIdx) => {
     const term = termsWithTiers[origIdx]
     const termScope = { appliesTo: term.appliesTo, categories: term.categories }
-    const termCategoryWhere = buildCategoryWhereClause(termScope)
+    const termCategoryWhere = buildCategoryWhereClause(
+      termScope,
+      cogCategoryUniverse,
+    )
     const series = buildSeries(cogRecords, termCategoryWhere)
     const rows = buildMonthlyAccruals(
       series,
@@ -624,7 +635,10 @@ export async function _recomputeAccrualForContractWithFacility(
     const term = termsWithTiers[origIdx]
     const config = termConfigs[origIdx]
     const termScope = { appliesTo: term.appliesTo, categories: term.categories }
-    const termCategoryWhere = buildCategoryWhereClause(termScope)
+    const termCategoryWhere = buildCategoryWhereClause(
+      termScope,
+      cogCategoryUniverse,
+    )
     const series = buildSeries(cogRecords, termCategoryWhere)
 
     const windowAnchor = term.effectiveStart ?? contract.effectiveDate

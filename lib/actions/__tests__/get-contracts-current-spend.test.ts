@@ -188,12 +188,17 @@ describe("getContracts — currentSpend trailing-12mo cascade", () => {
     const oneYearMs = 365 * 24 * 60 * 60 * 1000
     expect(Math.abs(lte - gte - oneYearMs)).toBeLessThan(86_400_000 * 2)
 
-    // Both COG aggregations must filter by transactionDate.
+    // Both COG SPEND aggregations must filter by transactionDate. Exclude
+    // the category-universe groupBy (by: ["category"], facility-scoped, no
+    // date window — added 2026-06-09 for drifted-category canonical match).
     const cogCalls = prisma.cOGRecord.groupBy.mock.calls as Array<
-      [{ where: { transactionDate?: { gte?: Date; lte?: Date } } }]
+      [{ by: string[]; where: { transactionDate?: { gte?: Date; lte?: Date } } }]
     >
-    expect(cogCalls.length).toBeGreaterThanOrEqual(1)
-    for (const [arg] of cogCalls) {
+    const aggCalls = cogCalls.filter(
+      ([arg]) => arg.by.includes("contractId") || arg.by.includes("vendorId"),
+    )
+    expect(aggCalls.length).toBeGreaterThanOrEqual(1)
+    for (const [arg] of aggCalls) {
       expect(arg.where.transactionDate?.gte).toBeInstanceOf(Date)
       expect(arg.where.transactionDate?.lte).toBeInstanceOf(Date)
     }

@@ -59,15 +59,23 @@ export function VendorNameMatcher({
 
   // Extract unique vendor names and find matches
   useEffect(() => {
-    const vendorCounts = new Map<string, number>()
+    // 2026-06-09 (Charles "smith and nephew vs Smith and Nephew = different
+    // numbers"): collapse vendor-name casings into ONE row keyed by the
+    // lowercased name (keep first-seen display casing), so the user maps the
+    // vendor once and both casings resolve to it. The apply step
+    // (use-cog-import goToDuplicateCheck) matches case-insensitively.
+    const vendorCounts = new Map<string, { count: number; display: string }>()
     for (const r of records) {
       if (r.vendorName) {
-        vendorCounts.set(r.vendorName, (vendorCounts.get(r.vendorName) ?? 0) + 1)
+        const key = r.vendorName.trim().toLowerCase()
+        const existing = vendorCounts.get(key)
+        if (existing) existing.count += 1
+        else vendorCounts.set(key, { count: 1, display: r.vendorName.trim() })
       }
     }
 
     const newMappings: VendorMapping[] = []
-    for (const [name, count] of vendorCounts) {
+    for (const [, { count, display: name }] of vendorCounts) {
       // Check for exact match first (case-insensitive)
       const exact = vendors.find(
         (v) => v.name.toLowerCase() === name.toLowerCase()

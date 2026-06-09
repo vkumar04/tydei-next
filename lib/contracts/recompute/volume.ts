@@ -41,6 +41,8 @@
  */
 import { prisma } from "@/lib/db"
 import { calculateRebate } from "@/lib/rebates/engine"
+import { expandCategoriesToCogVariants } from "@/lib/contracts/cog-category-filter"
+import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import type {
   PeriodData,
   PurchaseRecord,
@@ -341,8 +343,18 @@ export async function recomputeVolumeAccrualForTerm(input: {
       term.appliesTo === "specific_category" &&
       Array.isArray(term.categories) &&
       (term.categories?.length ?? 0) > 0
+    // 2026-06-08: expand to drifted COG category variants (canonical match)
+    // so percent-of-spend volume terms don't drop case/word-order-different
+    // rows (Charles "category check is off").
     const categoryFilter = isSpecificCategory
-      ? { category: { in: Array.from(new Set(term.categories ?? [])) } }
+      ? {
+          category: {
+            in: expandCategoriesToCogVariants(
+              Array.from(new Set(term.categories ?? [])),
+              await facilityCogCategoryUniverse(facilityId),
+            ),
+          },
+        }
       : {}
     const cogForSpend = await prisma.cOGRecord.findMany({
       where: {
@@ -667,7 +679,14 @@ async function recomputeVolumeFromCogRecords(input: {
     Array.isArray(term.categories) &&
     term.categories.length > 0
   const categoryFilter = isSpecificCategory
-    ? { category: { in: Array.from(new Set(term.categories ?? [])) } }
+    ? {
+        category: {
+          in: expandCategoriesToCogVariants(
+            Array.from(new Set(term.categories ?? [])),
+            await facilityCogCategoryUniverse(facilityId),
+          ),
+        },
+      }
     : {}
 
   const cogRecords = await prisma.cOGRecord.findMany({
