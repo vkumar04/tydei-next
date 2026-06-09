@@ -271,8 +271,10 @@ const BASELINE_HITS = new Set<string>([
   // categories.ts: requireAdmin gates via admin-only UI; scanner
   // already exempts requireAdmin functions but these are public
   // reads / user-create paths
-  "lib/actions/categories.ts:98",
-  "lib/actions/categories.ts:142",
+  // bumped 2026-06-09 after removeInverseCategoryMapping import + the
+  // confirm-mapping cycle guard added lines.
+  "lib/actions/categories.ts:99",
+  "lib/actions/categories.ts:143",
   // change-proposals.ts: post-mutation re-read
   "lib/actions/change-proposals.ts:175",
   // contract-periods.ts: post-period-mutation re-reads. Lines drift
@@ -308,8 +310,10 @@ const BASELINE_HITS = new Set<string>([
   // recompute block (+ its import) above these operations; bumped again
   // 2026-06-09 after the COG category-universe import + per-detail fetch
   // (drifted-category canonical match) shifted them.
-  "lib/actions/contracts.ts:1525",
-  "lib/actions/contracts.ts:1545",
+  // bumped again 2026-06-09 after the audit #2/#4 fixes (hoisted category
+  // universe + union clause above the currentSpend cascade) shifted them.
+  "lib/actions/contracts.ts:1546",
+  "lib/actions/contracts.ts:1566",
   // imports/case-costing-import.ts: facility-scoped via upstream batch
   "lib/actions/imports/case-costing-import.ts:243",
   "lib/actions/imports/case-costing-import.ts:380",

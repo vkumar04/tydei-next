@@ -266,11 +266,16 @@ describe("getContract — currentSpend is trailing 12 months (Charles R5.28)", (
       where: {
         contractId?: string
         periodStart?: { gte?: Date }
-        periodEnd?: { lte?: Date }
+        periodEnd?: { gte?: Date; lte?: Date }
       }
     }
     expect(call.where.contractId).toBe("c-1")
-    expect(call.where.periodStart?.gte).toBeInstanceOf(Date)
+    // 2026-06-09 audit (#2): the predicate now matches the LIST — a period
+    // counts when its END falls inside the trailing-12mo window, so a
+    // period straddling the boundary (started >12mo ago, ended inside) is
+    // included on BOTH surfaces. No periodStart constraint anymore.
+    expect(call.where.periodStart).toBeUndefined()
+    expect(call.where.periodEnd?.gte).toBeInstanceOf(Date)
     expect(call.where.periodEnd?.lte).toBeInstanceOf(Date)
   })
 

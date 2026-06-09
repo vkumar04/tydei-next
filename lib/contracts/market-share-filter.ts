@@ -189,7 +189,14 @@ export function computeCategoryMarketShare(
       category: bucket.displayName,
       vendorSpend,
       categoryTotal: bucket.total,
-      sharePct: bucket.total > 0 ? (vendorSpend / bucket.total) * 100 : 0,
+      // Clamp to 100: vendorSpend ⊆ bucket.total by construction, but the
+      // numerator (per-vendor map) and denominator (running total) accumulate
+      // in different orders, so FP noise can yield 100.00000000000003
+      // (observed in the 2026-06-09 prod audit). Never a real >100 share.
+      sharePct:
+        bucket.total > 0
+          ? Math.min(100, (vendorSpend / bucket.total) * 100)
+          : 0,
       competingVendors: bucket.byVendor.size,
       commitmentPct:
         commitmentByCategory?.get(bucket.displayName) ??

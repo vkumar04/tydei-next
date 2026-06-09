@@ -18,6 +18,7 @@ import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { suggestTarget } from "@/lib/categories/category-suggest"
+import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
 import { serialize } from "@/lib/serialize"
 import { revalidatePath } from "next/cache"
 
@@ -262,6 +263,10 @@ export async function remapCOGCategory(input: {
         data: { cogCategory: from, contractCategory: to, isConfirmed: true },
       })
     }
+    // 2026-06-09 audit: saving from→to supersedes any confirmed inverse
+    // (to→from). Leaving both creates a swap cycle that flips the two
+    // names between buckets instead of merging them.
+    await removeInverseCategoryMapping(from, to)
   } else {
     // Unmap — drop any rule for this category.
     await prisma.categoryMapping.deleteMany({

@@ -72,6 +72,30 @@ export async function loadConfirmedCategoryMap(): Promise<Map<string, string>> {
 }
 
 /**
+ * 2026-06-09 prod audit: confirmed swap-pair mappings (A→B AND B→A) were
+ * found in production — e.g. "instruments-ortho"→"Surgical Instrumentation"
+ * alongside "surgical instrumentation"→"Instruments-Ortho". With both
+ * confirmed, single-pass remapping SWAPS the two names between buckets
+ * instead of merging them, and a scope that lists only one of them silently
+ * loses the other's spend. Saving a mapping `from → to` therefore implies
+ * the inverse rule is obsolete: delete any confirmed `to → from` so a cycle
+ * can never form. Call this from EVERY writer that confirms a mapping
+ * (cog-category-mapping, pricing-files import, categories confirm).
+ */
+export async function removeInverseCategoryMapping(
+  from: string,
+  to: string,
+): Promise<number> {
+  const res = await prisma.categoryMapping.deleteMany({
+    where: {
+      cogCategory: { equals: to, mode: "insensitive" },
+      contractCategory: { equals: from, mode: "insensitive" },
+    },
+  })
+  return res.count
+}
+
+/**
  * Resolve a single category name to a canonical name (the one in the
  * ProductCategory table). Returns the canonical name string, NOT the
  * id, because COGRecord.category and ContractTermProduct.category are

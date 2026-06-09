@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireAdmin, requireAuth, requireFacility } from "@/lib/actions/auth"
 import type { ProductCategory } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
+import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -139,8 +140,12 @@ export async function confirmCategoryMapping(
 ) {
   await requireFacility()
 
-  await prisma.categoryMapping.update({
+  const row = await prisma.categoryMapping.update({
     where: { id },
     data: { contractCategory, isConfirmed: true },
+    select: { cogCategory: true },
   })
+  // 2026-06-09 audit: drop any confirmed inverse (to→from) so a swap cycle
+  // can never form — see removeInverseCategoryMapping.
+  await removeInverseCategoryMapping(row.cogCategory, contractCategory)
 }

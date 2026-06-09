@@ -622,6 +622,21 @@ export async function getContract(
   // detail "Current Spend (12mo)" card stays in lockstep with the list and
   // grouped contracts don't under-report.
   const detailVendorIds = contractVendorIds(contract)
+  // 2026-06-09 audit (#4): the tier-3 vendor-wide fallback must apply the
+  // same category narrowing the LIST applies (its W1.U-A per-contract
+  // category slice) — otherwise a fully category-scoped contract with no
+  // periods and no contract-stamped COG shows different spend on the two
+  // surfaces. Hoisted the COG category universe fetch (also used by the
+  // per-term scoped spend below) so the union clause expands to drifted
+  // category variants.
+  const detailCogUniverse = await facilityCogCategoryUniverse(facility.id)
+  const detailUnionCategoryWhere = buildUnionCategoryWhereClause(
+    (contract.terms ?? []).map((t) => ({
+      appliesTo: t.appliesTo,
+      categories: t.categories,
+    })),
+    detailCogUniverse,
+  )
   const [cogAgg, cogVendorAgg, periodAgg] = await Promise.all([
     prisma.cOGRecord.aggregate({
       where: {
@@ -636,6 +651,7 @@ export async function getContract(
         facilityId: facility.id,
         vendorId: { in: detailVendorIds },
         transactionDate: { gte: windowStart, lte: windowEnd },
+        ...detailUnionCategoryWhere,
       },
       _sum: { extendedPrice: true },
     }),
@@ -648,8 +664,13 @@ export async function getContract(
               periodEnd: { lte: period.periodEnd },
             }
           : {
-              periodStart: { gte: windowStart },
-              periodEnd: { lte: windowEnd },
+              // 2026-06-09 audit (#2): match the LIST's predicate
+              // (periodEnd inside the window) — the previous
+              // periodStart >= windowStart additionally excluded periods
+              // that STARTED before the 12-month boundary but ended
+              // inside it, so a straddling period counted on the list
+              // but not here. Keep both surfaces identical.
+              periodEnd: { gte: windowStart, lte: windowEnd },
             }),
       },
       _sum: { totalSpend: true },
@@ -670,7 +691,7 @@ export async function getContract(
   // projections to the Qualified Annual Spend Rebate term because both
   // were multiplying contract-wide spend by their tier rate.
   const termScopedSpend: Record<string, number> = {}
-  const detailCogUniverse = await facilityCogCategoryUniverse(facility.id)
+  // detailCogUniverse hoisted above the currentSpend cascade (audit #4).
   for (const t of contract.terms ?? []) {
     const catWhere = buildCategoryWhereClause(
       {

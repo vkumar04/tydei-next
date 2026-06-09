@@ -3,7 +3,11 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
-import { resolveCategoryNamesBulk, isPlaceholderCategory } from "@/lib/categories/resolve"
+import {
+  resolveCategoryNamesBulk,
+  isPlaceholderCategory,
+  removeInverseCategoryMapping,
+} from "@/lib/categories/resolve"
 import { applyCategoryRemap } from "@/lib/categories/apply-category-remap"
 import {
   pricingFiltersSchema,
@@ -67,6 +71,9 @@ async function persistConfirmedCategoryRemap(
           data: { cogCategory: from, contractCategory: to, isConfirmed: true },
         })
       }
+      // 2026-06-09 audit: drop any confirmed inverse (to→from) so a swap
+      // cycle can never form — see removeInverseCategoryMapping.
+      await removeInverseCategoryMapping(from, to)
     } catch (err) {
       console.warn(
         "[pricing-import] persist category remap failed:",

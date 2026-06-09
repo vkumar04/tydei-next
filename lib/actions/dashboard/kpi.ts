@@ -241,16 +241,21 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
     // `sumEarnedRebatesLifetime` helper in
     // `lib/contracts/rebate-earned-filter.ts` — keep both in sync
     // (Charles W1.U-B).
+    // 2026-06-09 audit (#3): scope via the canonical contractsOwnedByFacility
+    // (primary facilityId OR the contractFacilities join) — the bare
+    // `contract: { facilityId }` missed multi-facility shared contracts, so
+    // the dashboard would under-count vs the list/reports the moment one
+    // exists. Same helper the contract KPIs above already use.
     prisma.rebate.aggregate({
       where: {
-        contract: { facilityId },
+        contract: contractsOwnedByFacility(facilityId),
         payPeriodEnd: { lte: referenceDate },
       },
       _sum: { rebateEarned: true },
     }),
     prisma.rebate.aggregate({
       where: {
-        contract: { facilityId },
+        contract: contractsOwnedByFacility(facilityId),
         collectionDate: { not: null },
       },
       _sum: { rebateCollected: true },
