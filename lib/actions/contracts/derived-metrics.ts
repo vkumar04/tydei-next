@@ -24,7 +24,10 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
-import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
+import {
+  computeCategoryMarketShare,
+  effectiveCategoryOf,
+} from "@/lib/contracts/market-share-filter"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { loadConfirmedCategoryMap } from "@/lib/categories/resolve"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
@@ -227,11 +230,15 @@ export async function computeContractMetrics(
   let cogRowsOnContract = 0
   for (const row of cogRowsForMetrics) {
     if (!row.vendorId || !vendorIdSet.has(row.vendorId)) continue
-    const cat = row.category
-      ? row.category
-      : row.contractId
-        ? contractCategoryMap.get(row.contractId) ?? null
-        : null
+    // 2026-06-09 audit: this loop previously hand-rolled the category
+    // fallback WITHOUT the confirmed CategoryMapping remap, while the
+    // market-share path (computeCategoryMarketShare → effectiveCategoryOf)
+    // applied it — so the two metrics measured DIFFERENT row universes.
+    // On prod, 262 rows whose raw category ("Ortho-Sports") only enters
+    // scope via the confirmed remap ("ortho-sports" → "Ortho-Sports Med")
+    // counted toward market share but were excluded from compliance.
+    // Route through the same canonical resolver so both metrics agree.
+    const cat = effectiveCategoryOf(row, contractCategoryMap, confirmedCategoryMap)
     // Canonical comparison (same fix as market share above) so a term
     // category like "Joints-Ortho" still matches a COG row tagged
     // "Ortho-Joints".
