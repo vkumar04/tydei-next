@@ -77,7 +77,7 @@ export function sumInitialSales(
   return items.reduce((acc, i) => acc + i.initialSales, 0)
 }
 
-function normalizeCadence(
+export function normalizeCadence(
   raw: string | null | undefined,
 ): "monthly" | "quarterly" | "semi_annual" | "annual" {
   // Bug 2026-06-08 ("monthly amortization schedule going back to monthly

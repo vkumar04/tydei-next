@@ -54,7 +54,14 @@ export function DashboardSpendConcentrationCard({
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Top vendor share</span>
+                <span className="text-muted-foreground">
+                  Top vendor share
+                  {data.topVendors?.[0] ? (
+                    <span className="ml-1 font-medium text-foreground">
+                      · {data.topVendors[0].vendorName}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="font-mono">
                   {data.topVendorSharePct.toFixed(1)}%
                 </span>
@@ -70,6 +77,21 @@ export function DashboardSpendConcentrationCard({
               </div>
               <Progress value={data.top3SharePct} />
             </div>
+            {data.topVendors && data.topVendors.length > 0 ? (
+              <ul className="space-y-1 border-t pt-3">
+                {data.topVendors.map((v) => (
+                  <li
+                    key={v.vendorName}
+                    className="flex items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="truncate font-medium">{v.vendorName}</span>
+                    <span className="shrink-0 font-mono text-muted-foreground">
+                      {v.pct.toFixed(1)}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               HHI &lt; 1500 = low, &lt; 2500 = moderate, ≥ 2500 = high.
               Higher concentration = more vendor lock-in risk.

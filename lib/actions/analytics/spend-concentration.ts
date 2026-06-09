@@ -62,5 +62,19 @@ async function _getFacilitySpendConcentrationImpl(input?: {
   }))
 
   const result = v0SpendConcentration(vendorSpends)
-  return serialize(result)
+
+  // 2026-06-08 (Charles "Top vendor share … should have the names of the
+  // vendors as well"): v0SpendConcentration returns name-free aggregates.
+  // Attach the named top-5 so the dashboard card can label the shares.
+  const total = Array.from(byId.values()).reduce((s, v) => s + v, 0)
+  const topVendors = Array.from(byId.entries())
+    .map(([id, spend]) => ({
+      vendorName: nameById.get(id) ?? "Unknown vendor",
+      spend,
+      pct: total > 0 ? (spend / total) * 100 : 0,
+    }))
+    .sort((a, b) => b.spend - a.spend)
+    .slice(0, 5)
+
+  return serialize({ ...result, topVendors })
 }

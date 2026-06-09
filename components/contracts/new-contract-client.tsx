@@ -366,38 +366,14 @@ export function NewContractClient({
       setCapitalItems([seeded])
     }
 
-    // Merge product categories from the extraction. Prefer the plural
-    // `productCategories` (multi-category contracts — Subsystem 9.12)
-    // and fall back to the legacy singular `productCategory` when only
-    // a primary category is returned. Names are matched case-insensitively
-    // against the live category list; unmatched names are skipped here
-    // (pricing-file import handles auto-create).
-    if (data.productCategories && data.productCategories.length > 0) {
-      const matchedIds: string[] = []
-      for (const extractedName of data.productCategories) {
-        const found = liveCategories.find(
-          (c) => c.name.toLowerCase() === extractedName.toLowerCase(),
-        )
-        if (found) matchedIds.push(found.id)
-      }
-      if (matchedIds.length > 0) {
-        const existing = form.getValues("categoryIds") ?? []
-        const merged = Array.from(new Set([...existing, ...matchedIds]))
-        form.setValue("categoryIds", merged)
-        form.setValue("productCategoryId", merged[0])
-      }
-    } else if (data.productCategory) {
-      // Legacy single-category fallback.
-      const found = liveCategories.find(
-        (c) => c.name.toLowerCase() === data.productCategory!.toLowerCase(),
-      )
-      if (found) {
-        const existing = form.getValues("categoryIds") ?? []
-        const merged = Array.from(new Set([...existing, found.id]))
-        form.setValue("categoryIds", merged)
-        form.setValue("productCategoryId", merged[0])
-      }
-    }
+    // 2026-06-08 (Charles "when using AI assist to add a contract categories
+    // do not add here"): do NOT auto-fill the Categories field from the AI
+    // PDF extraction. Contract categories are user-selected or COG/pricing-
+    // derived (see contract-form.tsx "Calculated from COG + pricing files"),
+    // not lifted from the contract PDF. The AI still extracts
+    // `productCategories` for confidence/merger, but it must not write into
+    // the form here. The pricing-file import path (finalizePricingImport)
+    // still populates categories from the uploaded spreadsheet.
 
     // Try to match vendor by name, auto-create if not found
     const matchedId = matchOrCreateVendorId(data.vendorName ?? "", vendors)

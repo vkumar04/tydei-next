@@ -25,6 +25,7 @@ import {
   updateCapitalLineItem,
   deleteCapitalLineItem,
 } from "@/lib/actions/contracts/capital-line-items"
+import { normalizeCadence } from "@/lib/contracts/capital-line-items"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -194,10 +195,12 @@ export function EditContractClient({
           paymentType: (r.paymentType === "variable"
             ? "variable"
             : "fixed") as "fixed" | "variable",
-          paymentCadence: ((r.paymentCadence === "quarterly" ||
-          r.paymentCadence === "annual"
-            ? r.paymentCadence
-            : "monthly") as "monthly" | "quarterly" | "semi_annual" | "annual"),
+          // 2026-06-08 (Charles "monthly amortization going back to monthly
+          // again — I selected semi annual"): this hydration allow-list
+          // dropped `semi_annual` → it downgraded to monthly, and on save
+          // overwrote ContractCapitalLineItem.paymentCadence in the DB.
+          // Route through the canonical normalizeCadence so this can't drift.
+          paymentCadence: normalizeCadence(r.paymentCadence),
         }))
         setCapitalItems(drafts)
         initialCapitalItemsRef.current = drafts

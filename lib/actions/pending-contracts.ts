@@ -13,6 +13,7 @@ import { serialize } from "@/lib/serialize"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
+import { normalizeCadence } from "@/lib/contracts/capital-line-items"
 import {
   notifyFacilityOfPendingContract,
   notifyVendorOfPendingDecision,
@@ -169,7 +170,7 @@ function buildCapitalLineItemsFromPending(pending: {
       items.push(r as Record<string, unknown>)
     }
     return items.map((r) => {
-      const cadence = r.paymentCadence
+      const cadence = r.paymentCadence as string | null | undefined
       return {
         description:
           typeof r.description === "string" && r.description.trim().length > 0
@@ -185,10 +186,9 @@ function buildCapitalLineItemsFromPending(pending: {
         termMonths: Number(r.termMonths ?? 60),
         paymentType:
           r.paymentType === "variable" ? "variable" : "fixed",
-        paymentCadence:
-          cadence === "quarterly" || cadence === "annual"
-            ? (cadence as string)
-            : "monthly",
+        // 2026-06-08: vendor-approval path dropped `semi_annual` (downgraded
+        // to monthly on approve). Route through canonical normalizeCadence.
+        paymentCadence: normalizeCadence(cadence),
       }
     })
   }

@@ -317,6 +317,7 @@ export function CapitalLineItemsEditor({
                                 paymentCadence: v as
                                   | "monthly"
                                   | "quarterly"
+                                  | "semi_annual"
                                   | "annual",
                               })
                             }

@@ -146,9 +146,11 @@ export function TieInAmortizationPreview({
     if (symmetricalSchedule.length === 0) return []
     const start = effectiveStart ? new Date(effectiveStart) : new Date()
     const step = monthsPerPeriod(cadence)
-    const interestPerPeriod =
-      Number(interestRate ?? 0) /
-      (cadence === "annual" ? 1 : cadence === "quarterly" ? 4 : 12)
+    // 2026-06-08: derive the per-period interest from `step` (months per
+    // period) instead of a parallel cadence→divisor list that omitted
+    // semi_annual (it fell into the /12 monthly branch). annualRate × months
+    // ÷ 12 = per-period rate for any cadence.
+    const interestPerPeriod = (Number(interestRate ?? 0) * step) / 12
 
     let opening = Math.max(
       0,
