@@ -102,6 +102,7 @@ async function _buildAccrualTimelineForContract(
         termName: string
         evaluationPeriod: string
       }>,
+      cumulativeReset: "monthly" as const,
       isVolumeRebate,
     })
   }
@@ -117,6 +118,7 @@ async function _buildAccrualTimelineForContract(
         termName: string
         evaluationPeriod: string
       }>,
+      cumulativeReset: "monthly" as const,
       isVolumeRebate,
     })
   }
@@ -126,6 +128,25 @@ async function _buildAccrualTimelineForContract(
   // Rebate ledger. Pre-fix, multi-term contracts showed only the first
   // term's accrued values in the Performance tab timeline.
   const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
+  // 2026-06-09 (Charles "contracts on the vendor side is broken"): a
+  // carve-out contract's tiers are PHANTOM (rebateValue 0 scaffolds), so the
+  // tier engine accrues $0 for them — the Accruals tab showed "Total
+  // accrued: $0" on both portals while the Rebate ledger held $564K. The
+  // real carve-out accrual is persisted by the carve-out recompute writer
+  // as `[auto-carve-out-accrual]` Rebate rows (the doctrine-canonical
+  // earned source). Overlay those rows into the timeline buckets below.
+  const hasCarveOutTerm = contract.terms.some(
+    (t) => t.termType === "carve_out",
+  )
+  const carveOutRebateRows = hasCarveOutTerm
+    ? await prisma.rebate.findMany({
+        where: {
+          contractId: contract.id,
+          notes: { startsWith: "[auto-carve-out-accrual]" },
+        },
+        select: { rebateEarned: true, payPeriodEnd: true },
+      })
+    : []
   if (termsWithTiers.length === 0) {
     return serialize({
       rows: [],
@@ -135,6 +156,7 @@ async function _buildAccrualTimelineForContract(
         termName: string
         evaluationPeriod: string
       }>,
+      cumulativeReset: "monthly" as const,
       isVolumeRebate,
     })
   }
@@ -650,6 +672,46 @@ async function _buildAccrualTimelineForContract(
           }
           return order.map((k) => byBucket.get(k)!)
         })()
+
+  // 2026-06-09: overlay the persisted carve-out accrual into the bucketed
+  // rows (see hasCarveOutTerm above). Each `[auto-carve-out-accrual]` Rebate
+  // row lands in the bucket containing its payPeriodEnd; buckets with no
+  // tier-engine row are appended so semi-annual carve accrual outside the
+  // COG-spend window still shows. Tier/Rate stay untouched (carve-out has
+  // no real tiers).
+  if (carveOutRebateRows.length > 0) {
+    const byKey = new Map(displayRows.map((r) => [r.month, r]))
+    for (const cr of carveOutRebateRows) {
+      if (!cr.payPeriodEnd) continue
+      const monthKey = `${cr.payPeriodEnd.getUTCFullYear()}-${String(
+        cr.payPeriodEnd.getUTCMonth() + 1,
+      ).padStart(2, "0")}`
+      const key = periodKeyFor(monthKey)
+      const earned = Number(cr.rebateEarned ?? 0)
+      const existing = byKey.get(key)
+      if (existing) {
+        existing.accruedAmount += earned
+      } else {
+        const synthetic: TimelineRowWithVolume = {
+          month: key,
+          spend: 0,
+          cumulativeSpend: 0,
+          accruedAmount: earned,
+          tierAchieved: 0,
+          rebatePercent: 0,
+          termContributions: [],
+          volume: 0,
+          achievedRebateType: null,
+          achievedRebateValue: 0,
+        }
+        byKey.set(key, synthetic)
+        displayRows.push(synthetic)
+      }
+    }
+    // Keep chronological order — bucket keys within one scheme
+    // (YYYY-MM / YYYY-QN / YYYY-HN / YYYY) sort lexicographically.
+    displayRows.sort((a, b) => (a.month < b.month ? -1 : 1))
+  }
 
   // Per-term labels so the Accrual Timeline UI can render each term's
   // contribution on multi-term contracts instead of collapsing to the

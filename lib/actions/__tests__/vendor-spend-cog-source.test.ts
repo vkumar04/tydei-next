@@ -217,7 +217,14 @@ describe("getVendorContractDetail — spendToDate cOG fallback (Bug 3)", () => {
     expect(result.lifetimeTotals.spend).toBe(1_033_798)
   })
 
-  it("scopes the cOG aggregate to {contractId, vendorId} (no leak)", async () => {
+  it("scopes the cOG aggregate to contractId only (group-aware, 2026-06-09)", async () => {
+    // 2026-06-09 vendor audit: the aggregate previously ALSO filtered by
+    // `vendorId: vendor.id`, which dropped grouped-member rows (FLEX
+    // FINANCIAL under the Stryker group — $4,991.14 on prod). Contract-
+    // stamped rows already belong to this contract, and the contract
+    // lookup itself is vendor-constrained ({id, vendorId: vendor.id}), so
+    // there is no cross-tenant leak: contractId-only matches the facility
+    // tier-2 cascade.
     contractRow = {
       id: "c-1",
       vendorId: "v-stryker",
@@ -235,13 +242,21 @@ describe("getVendorContractDetail — spendToDate cOG fallback (Bug 3)", () => {
     )
     await getVendorContractDetail("c-1")
     const { prisma } = (await import("@/lib/db")) as unknown as {
-      prisma: { cOGRecord: { aggregate: ReturnType<typeof vi.fn> } }
+      prisma: {
+        cOGRecord: { aggregate: ReturnType<typeof vi.fn> }
+        contract: { findUniqueOrThrow: ReturnType<typeof vi.fn> }
+      }
     }
     const call = prisma.cOGRecord.aggregate.mock.calls[0][0] as {
       where: { contractId?: string; vendorId?: string }
     }
     expect(call.where.contractId).toBe("c-1")
-    expect(call.where.vendorId).toBe("v-stryker")
+    expect(call.where.vendorId).toBeUndefined()
+    // The tenant gate lives on the contract lookup, not the aggregate.
+    const lookup = prisma.contract.findUniqueOrThrow.mock.calls[0][0] as {
+      where: { id?: string; vendorId?: string }
+    }
+    expect(lookup.where.vendorId).toBe("v-stryker")
   })
 })
 

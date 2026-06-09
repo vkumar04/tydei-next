@@ -305,7 +305,13 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
                         </div>
                       </div>
 
-                      {term.tiers && term.tiers.length > 0 && (
+                      {/* 2026-06-09 vendor audit: carve_out terms earn via
+                          per-SKU rates on the pricing file, not tiers — their
+                          tier rows are phantom scaffolds (rebateValue 0). The
+                          facility portal suppresses this ladder
+                          (contract-terms-display.tsx); mirror it so the
+                          vendor doesn't see seven bogus "0.0%" tiers. */}
+                      {term.termType !== "carve_out" && term.tiers && term.tiers.length > 0 && (
                         <div className="space-y-2">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tiers</p>
                           {term.tiers.map((tier) => (

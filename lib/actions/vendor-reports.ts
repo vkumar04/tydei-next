@@ -63,9 +63,13 @@ export async function getVendorReportData(_vendorId?: string): Promise<VendorCon
   const cogAggByContract = contractIds.length
     ? await prisma.cOGRecord.groupBy({
         by: ["contractId"],
+        // 2026-06-09 vendor audit: contractIds are already vendor-owned
+        // (the contracts query above filters vendorId), so the extra
+        // vendorId filter only dropped grouped-member rows — the
+        // contractVendorIds() drift class. contractId-only, like the
+        // facility tier-2.
         where: {
           contractId: { in: contractIds },
-          vendorId: vendor.id,
         },
         _sum: { extendedPrice: true },
       })
@@ -255,14 +259,15 @@ export async function getVendorPerformanceSummary(
     },
   })
 
-  // Window-scoped COG fallback (per-contract, vendor-scoped).
+  // Window-scoped COG fallback (per-contract; contractIds are already
+  // vendor-owned — 2026-06-09 vendor audit dropped the extra vendorId
+  // filter that excluded grouped-member rows).
   const contractIds = contracts.map((c) => c.id)
   const cogAggByContract = contractIds.length
     ? await prisma.cOGRecord.groupBy({
         by: ["contractId"],
         where: {
           contractId: { in: contractIds },
-          vendorId: vendor.id,
           transactionDate: { gte: start, lte: end },
         },
         _sum: { extendedPrice: true },

@@ -58,8 +58,11 @@ export function MarketShareClient({ vendorId }: MarketShareClientProps) {
       totalMarketSpend > 0
         ? Math.round((totalVendorSpend / totalMarketSpend) * 1000) / 10
         : 0
-    const activeContracts = data.byFacility.length
-    const revenueRank = data.byCategory.length > 0 ? 1 : 0
+    // 2026-06-09 audit: these were fake — byFacility.length labeled as
+    // "active contracts" and a hardcoded rank of 1. The action now returns
+    // the real contract count + the vendor's spend rank in scope.
+    const activeContracts = data.activeContracts
+    const revenueRank = data.revenueRank ?? 0
     return {
       totalCategories,
       overallSharePct,

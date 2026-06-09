@@ -92,7 +92,11 @@ export async function getCategoryMarketShareForVendor(input: {
     const cogRows = await prisma.cOGRecord.findMany({
       where: {
         facilityId: facility.id,
-        transactionDate: { gte: since },
+        // 2026-06-09 vendor audit: bound the window at NOW — prod carries
+        // $12.4M of future-dated COG (transactionDate up to 2026-12) which
+        // a gte-only window silently included, inflating "trailing N
+        // months" market share. Future transactions are not current share.
+        transactionDate: { gte: since, lte: new Date() },
       },
       select: {
         vendorId: true,

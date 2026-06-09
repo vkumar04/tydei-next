@@ -5,6 +5,8 @@ import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
+import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
+import { loadConfirmedCategoryMap } from "@/lib/categories/resolve"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -18,6 +20,12 @@ export interface MarketShareData {
   byCategory: MarketShareEntry[]
   byFacility: { facility: string; share: number }[]
   trend: { month: string; share: number }[]
+  /** Vendor's real active contract count (2026-06-09 audit — the client
+   * previously displayed byFacility.length labeled "active contracts"). */
+  activeContracts: number
+  /** Vendor's 1-based rank by total spend among all vendors at the
+   * facilities in scope (previously hardcoded to 1 in the client). */
+  revenueRank: number | null
 }
 
 export interface VendorPerformanceData {
@@ -94,43 +102,89 @@ export async function getVendorMarketShare(input: {
   const vendorId = vendor.id
   const { facilityId, dateFrom, dateTo } = input
 
-  const cogWhere: Record<string, unknown> = { vendorId }
-  if (facilityId) cogWhere.facilityId = facilityId
-  if (dateFrom && dateTo) {
-    cogWhere.transactionDate = {
-      gte: new Date(dateFrom),
-      lte: new Date(dateTo),
-    }
-  }
+  // 2026-06-09 vendor audit: this previously raw-groupBy'd `category`
+  // with no confirmed CategoryMapping remap, no contract-category fallback
+  // and no canonical bucketing — so the /vendor/market-share page showed
+  // DIFFERENT category names (raw "Joints-Ortho") than the vendor
+  // dashboard widget ("Ortho-Joints") for the same dollars, and a new
+  // raw-variant import would have split buckets. Route through the
+  // canonical computeCategoryMarketShare like every other share surface
+  // (CLAUDE.md invariants table). Scope: vendor's facilities (or the
+  // requested one), window bounded at NOW so future-dated COG rows don't
+  // inflate the totals.
+  const scopeFacilityIds = facilityId
+    ? [facilityId]
+    : (
+        await prisma.cOGRecord.findMany({
+          where: { vendorId },
+          select: { facilityId: true },
+          distinct: ["facilityId"],
+        })
+      ).map((r) => r.facilityId)
 
-  const vendorRecords = await prisma.cOGRecord.groupBy({
-    by: ["category"],
-    where: cogWhere,
-    _sum: { extendedPrice: true },
+  const dateWindow =
+    dateFrom && dateTo
+      ? { transactionDate: { gte: new Date(dateFrom), lte: new Date(dateTo) } }
+      : { transactionDate: { lte: new Date() } }
+
+  const cogRows =
+    scopeFacilityIds.length > 0
+      ? await prisma.cOGRecord.findMany({
+          where: { facilityId: { in: scopeFacilityIds }, ...dateWindow },
+          select: {
+            vendorId: true,
+            category: true,
+            extendedPrice: true,
+            contractId: true,
+          },
+        })
+      : []
+
+  const shareContractIds = Array.from(
+    new Set(cogRows.map((r) => r.contractId).filter((v): v is string => !!v)),
+  )
+  const shareContractRows =
+    shareContractIds.length > 0
+      ? await prisma.contract.findMany({
+          where: { id: { in: shareContractIds } },
+          select: { id: true, productCategory: { select: { name: true } } },
+        })
+      : []
+  const shareContractCategoryMap = new Map<string, string | null>(
+    shareContractRows.map((c) => [c.id, c.productCategory?.name ?? null]),
+  )
+  const confirmedCategoryMap = await loadConfirmedCategoryMap()
+
+  const computed = computeCategoryMarketShare({
+    rows: cogRows,
+    contractCategoryMap: shareContractCategoryMap,
+    vendorId,
+    confirmedCategoryMap,
   })
 
-  const totalWhere: Record<string, unknown> = {}
-  if (facilityId) totalWhere.facilityId = facilityId
-  if (dateFrom && dateTo) {
-    totalWhere.transactionDate = {
-      gte: new Date(dateFrom),
-      lte: new Date(dateTo),
-    }
-  }
-
-  const totalRecords = await prisma.cOGRecord.groupBy({
-    by: ["category"],
-    where: totalWhere,
-    _sum: { extendedPrice: true },
-  })
-
-  const totalMap = new Map(totalRecords.map((r) => [r.category, Number(r._sum.extendedPrice ?? 0)]))
-
-  const byCategory = vendorRecords.map((r) => ({
-    category: r.category ?? "Uncategorized",
-    vendorShare: Number(r._sum.extendedPrice ?? 0),
-    totalMarket: totalMap.get(r.category) ?? 0,
+  const byCategory = computed.rows.map((r) => ({
+    category: r.category,
+    vendorShare: r.vendorSpend,
+    totalMarket: r.categoryTotal,
   }))
+
+  // Real stats for the client header (2026-06-09 audit): actual active
+  // contract count, and the vendor's rank by total spend among all vendors
+  // at the in-scope facilities — computed from rows already in memory.
+  const activeContracts = await prisma.contract.count({
+    where: { vendorId, status: "active" },
+  })
+  const spendByVendor = new Map<string, number>()
+  for (const r of cogRows) {
+    if (!r.vendorId) continue
+    spendByVendor.set(
+      r.vendorId,
+      (spendByVendor.get(r.vendorId) ?? 0) + Number(r.extendedPrice ?? 0),
+    )
+  }
+  const ranked = Array.from(spendByVendor.entries()).sort((a, b) => b[1] - a[1])
+  const rankIdx = ranked.findIndex(([vid]) => vid === vendorId)
+  const revenueRank = rankIdx >= 0 ? rankIdx + 1 : null
 
   // By facility — `share` is the vendor's PERCENTAGE of each facility's
   // total spend, not the raw dollars. Pre-fix the chart's `${v}%` axis
@@ -176,7 +230,7 @@ export async function getVendorMarketShare(input: {
     }
   })
 
-  return serialize({ byCategory, byFacility, trend: [] })
+  return serialize({ byCategory, byFacility, trend: [], activeContracts, revenueRank })
 }
 
 // ─── Performance KPIs ───────────────────────────────────────────
@@ -228,7 +282,16 @@ export async function getVendorPerformance(_vendorId?: string): Promise<VendorPe
     ])
 
   const totalSpend = Number(cogAgg._sum.extendedPrice ?? 0)
-  const totalRebate = sumEarnedRebatesLifetime(rebateRows, now)
+  // 2026-06-09 audit: this divided LIFETIME rebate by TRAILING-12MO spend
+  // (mixed windows → 18.43% on prod where 12mo/12mo is 17.03%). Window the
+  // numerator to the same trailing 12 months as the spend denominator,
+  // keeping the canonical earned rule (payPeriodEnd <= today) via the helper.
+  const totalRebate = sumEarnedRebatesLifetime(
+    rebateRows.filter(
+      (r) => r.payPeriodEnd && r.payPeriodEnd >= trailing12MoStart,
+    ),
+    now,
+  )
   const avgRebateRate = totalSpend > 0 ? (totalRebate / totalSpend) * 100 : 0
 
   const totalTarget = contracts.reduce(

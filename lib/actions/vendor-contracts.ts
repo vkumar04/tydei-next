@@ -110,7 +110,13 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
       _sum: { totalSpend: true },
     }),
     prisma.cOGRecord.aggregate({
-      where: { contractId: id, vendorId: vendor.id },
+      // 2026-06-09 vendor audit: contract-stamped rows already belong to
+      // this contract (and the contract lookup above is vendor-constrained),
+      // so the extra `vendorId: vendor.id` filter only DROPPED grouped-member
+      // rows (e.g. FLEX FINANCIAL under the Stryker group — $4,991.14 on
+      // prod). The recurring contractVendorIds() drift class; match the
+      // facility tier-2: contractId-only.
+      where: { contractId: id },
       _sum: { extendedPrice: true },
     }),
     prisma.rebate.findMany({

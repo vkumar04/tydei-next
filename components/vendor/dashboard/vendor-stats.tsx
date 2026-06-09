@@ -41,11 +41,15 @@ export function VendorStats({ stats }: VendorStatsProps) {
         icon={FileSignature}
         description={`of ${stats.totalContracts} total contracts`}
       />
+      {/* 2026-06-09 audit: the underlying KPI sums ALL of the vendor's
+          recorded COG (on prod, ~49% of it is not attached to any
+          contract), so "Total Sales on Contract" overstated on-contract
+          sales ~2×. Label it for what it measures. */}
       <MetricCard
-        title="Total Sales on Contract"
+        title="Total Sales"
         value={formatCurrencyShort(stats.totalSpend)}
         icon={DollarSign}
-        description="current period"
+        description="all recorded purchases"
       />
       <MetricCard
         title="Market Share"

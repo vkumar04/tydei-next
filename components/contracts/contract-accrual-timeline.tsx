@@ -128,7 +128,21 @@ export function ContractAccrualTimeline({
           )}
         </div>
         <Badge variant="secondary" className="shrink-0">
-          {data.rows.length} {data.rows.length === 1 ? "month" : "months"}
+          {/* 2026-06-09: rows are evaluation-period buckets since the
+              quarterly-rollup fix — label them by cadence, not "months". */}
+          {(() => {
+            const unit =
+              data.cumulativeReset === "quarterly"
+                ? "quarter"
+                : data.cumulativeReset === "semi_annual"
+                  ? "half-year"
+                  : data.cumulativeReset === "annual"
+                    ? "year"
+                    : data.cumulativeReset === "lifetime"
+                      ? "month"
+                      : "month"
+            return `${data.rows.length} ${unit}${data.rows.length === 1 ? "" : "s"}`
+          })()}
         </Badge>
       </CardHeader>
       <CardContent>
