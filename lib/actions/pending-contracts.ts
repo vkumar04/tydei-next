@@ -770,7 +770,17 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
     }
   }
 
-  const contract = await prisma.contract.create({
+  // 2026-06-09 audit: the approval writes (contract + nested terms/tiers/
+  // pricing, documents, category links, pending-row status flip) were
+  // sequential — a mid-flight crash could create the Contract without
+  // flipping the pending row (the status guard above makes that benign but
+  // manual to clean up). Run them as ONE interactive transaction so an
+  // approval either fully lands or fully rolls back. Timeout is generous
+  // because pricing payloads can be large (one prod submission carries
+  // ~46K ContractPricing rows in the nested create).
+  const contract = await prisma.$transaction(
+    async (tx) => {
+  const contract = await tx.contract.create({
     data: {
       name: pending.contractName,
       vendorId: pending.vendorId,
@@ -976,7 +986,7 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
         }
       })
     if (docs.length > 0) {
-      await prisma.contractDocument.createMany({ data: docs })
+      await tx.contractDocument.createMany({ data: docs })
     }
   }
 
@@ -998,7 +1008,7 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
     if (p.category) categoryNameSet.add(p.category)
   }
   if (categoryNameSet.size > 0) {
-    const allCats = await prisma.productCategory.findMany({
+    const allCats = await tx.productCategory.findMany({
       select: { id: true, name: true },
     })
     const idByLower = new Map(
@@ -1012,7 +1022,7 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
       ),
     )
     if (categoryIds.length > 0) {
-      await prisma.contractProductCategory.createMany({
+      await tx.contractProductCategory.createMany({
         data: categoryIds.map((productCategoryId) => ({
           contractId: contract.id,
           productCategoryId,
@@ -1025,7 +1035,7 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
   // id was already validated by the facility-scoped findUniqueOrThrow at the
   // top of approvePendingContract (where: { id, facilityId: facility.id }).
   // auth-scope-scanner-skip: gated mutation following the authorized read.
-  await prisma.pendingContract.update({
+  await tx.pendingContract.update({
     where: { id },
     data: {
       status: "approved",
@@ -1038,6 +1048,13 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
       approvedContractId: contract.id,
     },
   })
+
+  return contract
+    },
+    // Large nested pricing createMany (≈46K rows on one prod submission)
+    // needs more than the 5s default.
+    { timeout: 120_000, maxWait: 10_000 },
+  )
 
   // Charles 2026-04-25 (vendor-mirror Phase 1): close the loop with
   // the vendor — they need to know their submission landed as a real
