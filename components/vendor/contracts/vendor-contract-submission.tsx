@@ -10,6 +10,13 @@ import type { ContractPricingItem } from "@/lib/actions/pricing-files"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import { normalizeAIRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
+import {
+  parsePricingFile,
+  buildPricingItems,
+  type ParsedPricingFile,
+} from "@/lib/utils/parse-pricing-file"
+import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
+import { PricingCategoryRemapDialog } from "@/components/pricing/pricing-category-remap-dialog"
 import { toast } from "sonner"
 
 import {
@@ -104,6 +111,16 @@ export function VendorContractSubmission({
   const [pricingFile, setPricingFile] = useState<File | null>(null)
   const [pricingFileData, setPricingFileData] = useState<PricingFileData | null>(null)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
+  // 2026-06-10 vendor/facility parity: shared column-mapper + category
+  // realign dialogs (same flow as new-contract-client.tsx).
+  const [pricingMapperOpen, setPricingMapperOpen] = useState(false)
+  const [pricingRawHeaders, setPricingRawHeaders] = useState<string[]>([])
+  const [pricingRawRows, setPricingRawRows] = useState<Record<string, string>[]>([])
+  const [pricingAutoMapping, setPricingAutoMapping] = useState<Record<string, string>>({})
+  const [pricingRemapOpen, setPricingRemapOpen] = useState(false)
+  const [pendingPricingItems, setPendingPricingItems] = useState<ContractPricingItem[]>([])
+  const [pendingPricingCategories, setPendingPricingCategories] = useState<string[]>([])
+  const [pendingPricingFileName, setPendingPricingFileName] = useState<string | null>(null)
 
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([])
   const [isPending, startTransition] = useTransition()
@@ -156,138 +173,122 @@ export function VendorContractSubmission({
     if (!checked) setTieInRef("")
   }, [])
 
-  /** Pricing file upload with broad header alias matching (same as facility side) */
-  const processPricingFile = useCallback(
-    async (file: File) => {
-      const ext = file.name.split(".").pop()?.toLowerCase()
-      if (!["csv", "xlsx", "xls"].includes(ext ?? "")) {
-        toast.error("Please upload a CSV or Excel (.xlsx/.xls) pricing file")
-        return
-      }
-
-      setPricingFile(file)
-
-      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
-
-      let rawHeaders: string[] = []
-      let dataRows: string[][] = []
-
-      try {
-        if (ext === "xlsx" || ext === "xls") {
-          const formData = new FormData()
-          formData.append("file", file)
-          const res = await fetch("/api/parse-file", {
-            method: "POST",
-            body: formData,
-          })
-          if (!res.ok) {
-            const body = await res.json().catch(() => null)
-            toast.error((body as { error?: string } | null)?.error ?? "Failed to parse Excel file")
-            setPricingFile(null)
-            return
-          }
-          const parsed = (await res.json()) as { headers: string[]; rows: Record<string, string>[] }
-          rawHeaders = parsed.headers
-          dataRows = parsed.rows.map((row) => rawHeaders.map((h) => row[h] ?? ""))
-        } else {
-          const text = await file.text()
-          const lines = text.split(/\r?\n/).filter((l) => l.trim())
-          rawHeaders = lines[0]?.split(",").map((h) => h.trim().replace(/^"|"$/g, "")) ?? []
-          dataRows = lines.slice(1).map((line) =>
-            line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""))
-          )
-        }
-      } catch {
-        setPricingFile(null)
-        setPricingFileData(null)
-        toast.error("Failed to read the file. Please check the format.")
-        return
-      }
-
-      const normHeaders = rawHeaders.map(norm)
-
-      const find = (...aliases: string[]) =>
-        aliases.map(norm).reduce<number>(
-          (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
-          -1,
-        )
-
-      const idxItem = find(
-        "vendor_item_no", "vendoritemno", "vendoritem",
-        "item_no", "itemno", "sku",
-        "part_no", "partnumber", "partno", "catalog_no",
-        "itemnumber", "item", "itemid", "itemcode",
-        "stockno", "stocknumber", "materialid", "materialnumber",
-        "productid", "productcode", "vendorpart", "vendorcatalog",
-        "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
-        "referencenumber", "reference",
-        "vendor_item_number", "vendoritemnumber", "item_number",
-        "productno", "productnumber", "productref", "productrefnumber",
-      )
-      const idxDesc = find(
-        "description", "desc", "product_description", "productdescription", "item_description",
-        "productdesc", "itemname", "materialname", "materialdesc",
-        "fulldescription",
-      )
-      const idxPrice = find(
-        "contract_price", "contractprice", "unit_price", "unitprice", "price", "cost",
-        "netprice", "yourprice", "discountprice", "discountedprice",
-        "negotiatedprice", "agreementprice", "contractcost", "netcost",
-        "sellprice", "sellingprice", "customerprice",
-      )
-      const idxList = find(
-        "list_price", "listprice", "msrp", "retail_price",
-        "catalogprice", "regularprice", "standardprice",
-        "fullprice", "originalprice",
-      )
-      const idxCat = find(
-        "category", "product_category", "department",
-        "productcategory", "productcatgory",
-        "productline", "productgroup", "producttype",
-        "segment", "classification", "dept", "division",
-      )
-      const idxUom = find(
-        "uom", "unit_of_measure", "unit",
-        "unitofmeasure", "packsize", "packaging", "pkg", "measure",
-      )
-
-      const items: ContractPricingItem[] = dataRows.map((vals) => {
-        const g = (idx: number) => (idx >= 0 ? vals[idx] ?? "" : "")
-        return {
-          vendorItemNo: g(idxItem),
-          description: g(idxDesc) || undefined,
-          unitPrice: parseFloat(g(idxPrice).replace(/[^0-9.-]/g, "") || "0"),
-          listPrice: parseFloat(g(idxList).replace(/[^0-9.-]/g, "") || "0") || undefined,
-          category: g(idxCat) || undefined,
-          uom: g(idxUom) || "EA",
-        }
-      }).filter((i) => i.vendorItemNo)
-
-      if (items.length === 0) {
-        toast.error("No valid pricing items found. Check your file has columns like vendor_item_no and contract_price.")
-        setPricingFile(null)
-        setPricingFileData(null)
-        return
-      }
-
-      // Extract unique categories
+  /**
+   * Pricing file upload — 2026-06-10 vendor/facility parity: routes through
+   * the SHARED parse/build helpers (parsePricingFile / buildPricingItems),
+   * the PricingColumnMapper for files whose headers don't auto-map, and the
+   * PricingCategoryRemapDialog so detected categories realign to the
+   * canonical taxonomy before submission (same flow as
+   * new-contract-client.tsx). The old hand-rolled header matcher silently
+   * dropped files it couldn't auto-map.
+   */
+  const finalizeVendorPricing = useCallback(
+    (items: ContractPricingItem[], fileName: string) => {
       const cats = Array.from(
-        new Set(items.map((i) => i.category).filter((c): c is string => !!c))
+        new Set(items.map((i) => i.category).filter((c): c is string => !!c)),
       )
-
-      // Calculate total
       const total = items.reduce((sum, i) => sum + i.unitPrice, 0)
-
       setPricingItems(items)
       setPricingFileData({ total, categories: cats, itemCount: items.length })
-
       if (total > 0 && !contractTotal) {
         setContractTotal(total.toFixed(2))
       }
-
-      toast.success(`Loaded ${items.length} pricing items from ${file.name}`)
+      toast.success(`Loaded ${items.length} pricing items from ${fileName}`)
     },
-    [contractTotal]
+    [contractTotal],
+  )
+
+  const stageVendorPricingItems = useCallback(
+    (items: ContractPricingItem[], fileName: string) => {
+      const cats = Array.from(
+        new Set(
+          items.map((i) => i.category?.trim()).filter((c): c is string => !!c),
+        ),
+      )
+      if (cats.length === 0) {
+        finalizeVendorPricing(items, fileName)
+        return
+      }
+      setPendingPricingItems(items)
+      setPendingPricingCategories(cats)
+      setPendingPricingFileName(fileName)
+      setPricingRemapOpen(true)
+    },
+    [finalizeVendorPricing],
+  )
+
+  const processPricingFile = useCallback(
+    async (file: File) => {
+      let parsed: ParsedPricingFile
+      try {
+        parsed = await parsePricingFile(file)
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Failed to read the pricing file. Please check the format.",
+        )
+        return
+      }
+      setPricingFile(file)
+
+      // Incomplete auto-mapping → open the shared column mapper instead of
+      // silently failing (facility-side parity).
+      if (parsed.needsManualMapping) {
+        setPricingRawHeaders(parsed.rawHeaders)
+        setPricingRawRows(parsed.rawRows)
+        setPricingAutoMapping(parsed.autoMapping)
+        setPricingMapperOpen(true)
+        return
+      }
+
+      if (parsed.items.length === 0) {
+        toast.error(
+          "No valid pricing items found. Check your file has columns like vendor_item_no and contract_price.",
+        )
+        setPricingFile(null)
+        setPricingFileData(null)
+        return
+      }
+
+      stageVendorPricingItems(parsed.items, file.name)
+    },
+    [stageVendorPricingItems],
+  )
+
+  /** Column mapper applied — rebuild items with the chosen mapping. */
+  const handlePricingMappingApply = useCallback(
+    (mapping: Record<string, string>) => {
+      setPricingMapperOpen(false)
+      const dataRows = pricingRawRows.map((row) =>
+        pricingRawHeaders.map((h) => row[h] ?? ""),
+      )
+      const items = buildPricingItems(dataRows, pricingRawHeaders, mapping)
+      if (items.length === 0) {
+        toast.error("No valid pricing items found with the selected mapping.")
+        setPricingFile(null)
+        return
+      }
+      stageVendorPricingItems(items, pricingFile?.name ?? "pricing-file")
+    },
+    [pricingRawHeaders, pricingRawRows, pricingFile, stageVendorPricingItems],
+  )
+
+  /** Realign dialog applied — rename detected categories, then finalize. */
+  const handlePricingRemapApply = useCallback(
+    (remap: Record<string, string>) => {
+      setPricingRemapOpen(false)
+      const items = pendingPricingItems.map((i) =>
+        i.category && remap[i.category]
+          ? { ...i, category: remap[i.category] }
+          : i,
+      )
+      finalizeVendorPricing(items, pendingPricingFileName ?? "pricing-file")
+      setPendingPricingItems([])
+      setPendingPricingCategories([])
+      setPendingPricingFileName(null)
+    },
+    [pendingPricingItems, pendingPricingFileName, finalizeVendorPricing],
   )
 
   const handleClearPricingFile = useCallback(() => {
@@ -727,6 +728,22 @@ export function VendorContractSubmission({
         onExtracted={handleAIExtract}
         initialFile={droppedFile}
         lockedVendorName={vendorName}
+      />
+
+      {/* 2026-06-10 vendor/facility parity: shared pricing-file dialogs. */}
+      <PricingColumnMapper
+        open={pricingMapperOpen}
+        onOpenChange={setPricingMapperOpen}
+        headers={pricingRawHeaders}
+        sampleRows={pricingRawRows.slice(0, 5)}
+        autoMapping={pricingAutoMapping}
+        onApply={handlePricingMappingApply}
+      />
+      <PricingCategoryRemapDialog
+        open={pricingRemapOpen}
+        onOpenChange={setPricingRemapOpen}
+        detectedCategories={pendingPricingCategories}
+        onApply={handlePricingRemapApply}
       />
 
       <EntryModeTabs
