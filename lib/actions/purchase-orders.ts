@@ -151,7 +151,7 @@ export async function createPurchaseOrder(input: CreatePOInput) {
   // contractId (header + per-line) belongs to this facility.
   // Pre-fix a facility could tag its PO/line items with another
   // facility's contract id, polluting joined views and savings math.
-  const { facility } = await requireFacility()
+  const { facility, user } = await requireFacility()
   const data = createPOSchema.parse(input)
   const contractIds = new Set<string>()
   if (data.contractId) contractIds.add(data.contractId)
@@ -291,7 +291,9 @@ export async function createPurchaseOrder(input: CreatePOInput) {
   const { po, poNumber } = created
 
   await logAudit({
-    userId: facility.id,
+    // 2026-06-10 prod log sweep: facility.id here violated
+    // audit_log_userId_fkey — PO audit rows silently failed to write.
+    userId: user.id,
     action: "purchaseOrder.created",
     entityType: "purchaseOrder",
     entityId: po.id,
@@ -306,7 +308,7 @@ export async function createPurchaseOrder(input: CreatePOInput) {
 // ─── Update PO Status ───────────────────────────────────────────
 
 export async function updatePOStatus(id: string, status: POStatus) {
-  const { facility } = await requireFacility()
+  const { facility, user } = await requireFacility()
 
   // H4 (2026-06-09 audit): validate the transition server-side against the
   // canonical PO_STATUS_FLOW map. Previously any status jump (including
@@ -327,7 +329,8 @@ export async function updatePOStatus(id: string, status: POStatus) {
   })
 
   await logAudit({
-    userId: facility.id,
+    // 2026-06-10 prod log sweep: facility.id violated audit_log_userId_fkey.
+    userId: user.id,
     action: `purchaseOrder.${status}`,
     entityType: "purchaseOrder",
     entityId: id,

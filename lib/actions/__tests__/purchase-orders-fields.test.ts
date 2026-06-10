@@ -62,7 +62,7 @@ const PATIENT_FIELDS = ["patientMrn", "patientInitials", "procedureDate"] as con
 
 beforeEach(() => {
   vi.clearAllMocks()
-  requireFacilityMock.mockResolvedValue({ facility: { id: "fac-1" } })
+  requireFacilityMock.mockResolvedValue({ facility: { id: "fac-1" }, user: { id: "user-1" } })
   requireVendorMock.mockResolvedValue({ vendor: { id: "ven-1" } })
   contractCountMock.mockResolvedValue(1)
   cogCountMock.mockResolvedValue(0)
