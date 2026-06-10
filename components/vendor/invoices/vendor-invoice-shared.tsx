@@ -31,10 +31,25 @@ export type InvoiceRow = {
   invoiceDate: Date | string
   totalInvoiceCost: number | string | null
   status: string
+  /**
+   * H3: facility-side flagInvoiceAsDisputed sets disputeStatus (NOT
+   * status) — vendor surfaces must check BOTH:
+   * `status === "disputed" || disputeStatus === "disputed"`.
+   */
+  disputeStatus?: "none" | "disputed" | "resolved" | "rejected"
   lineItemCount: number
   flaggedCount: number
   variance: number
   variancePercent: number
+}
+
+/** H3: an invoice is disputed if either the lifecycle status or the
+ * facility-side dispute flag says so. */
+export function isDisputedInvoice(inv: {
+  status: string
+  disputeStatus?: string | null
+}): boolean {
+  return inv.status === "disputed" || inv.disputeStatus === "disputed"
 }
 
 export interface StatusConfigEntry {

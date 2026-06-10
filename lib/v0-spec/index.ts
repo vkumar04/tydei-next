@@ -16,7 +16,8 @@ export * from "./cog"
 export * from "./margins"
 export * from "./case-costing"
 export * from "./proposal-scoring"
-export * from "./invoice-validation"
+// invoice-validation: removed — `classifyInvoicePriority` in
+// lib/invoices/priority.ts is the single priority helper (L20).
 export * from "./multi-facility"
 export * from "./contract-performance"
 export * from "./alerts"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -31,7 +31,6 @@ import {
   Zap,
   ScanLine,
   Plus,
-  FileSpreadsheet,
   FileText,
   Building2,
   Hash,
@@ -57,7 +56,12 @@ interface InvoiceImportDialogProps {
   onComplete: () => void
 }
 
-type ImportMethod = "edi" | "ocr" | "manual" | null
+// H5: EDI + OCR import are NOT built — the previous stubs fabricated
+// success (hardcoded "2 discrepancies found totaling $1,240",
+// Math.random invoice numbers, file content discarded). Until real
+// pipelines exist, those tiles are disabled with an honest
+// "Coming soon" state. Only Manual Entry actually imports.
+type ImportMethod = "manual" | null
 
 interface ManualLineItem {
   lineNumber: number
@@ -78,7 +82,6 @@ export function InvoiceImportDialog({
 }: InvoiceImportDialogProps) {
   const importInvoice = useImportInvoice()
   const [importMethod, setImportMethod] = useState<ImportMethod>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
 
   // Manual entry state
   const [manualInvoice, setManualInvoice] = useState({
@@ -144,93 +147,39 @@ export function InvoiceImportDialog({
     if (!open) {
       setImportMethod(null)
       resetForm()
-      setIsProcessing(false)
     }
     onOpenChange(open)
   }
 
   const handleProcessImport = async () => {
-    if (importMethod === "manual") {
-      // Use real import for manual entry
-      if (
-        !manualInvoice.invoiceNumber ||
-        !manualInvoice.vendor ||
-        manualInvoice.lineItems.length === 0
-      ) {
-        toast.error("Please fill in required fields and add at least one line item")
-        return
-      }
-
-      try {
-        await importInvoice.mutateAsync({
-          facilityId,
-          vendorId: manualInvoice.vendor,
-          invoiceNumber: manualInvoice.invoiceNumber,
-          invoiceDate:
-            manualInvoice.invoiceDate || new Date().toISOString().split("T")[0],
-          lineItems: manualInvoice.lineItems.map((li) => ({
-            inventoryDescription: li.description || li.itemNumber,
-            vendorItemNo: li.itemNumber || undefined,
-            invoicePrice: li.unitPrice,
-            invoiceQuantity: li.quantity,
-          })),
-        })
-        onComplete()
-        handleClose(false)
-      } catch {
-        // error handled by mutation
-      }
+    // Manual entry is the only real import path (see ImportMethod note).
+    if (
+      !manualInvoice.invoiceNumber ||
+      !manualInvoice.vendor ||
+      manualInvoice.lineItems.length === 0
+    ) {
+      toast.error("Please fill in required fields and add at least one line item")
       return
     }
 
-    // Simulate processing for EDI/OCR
-    setIsProcessing(true)
-    const processingTime = importMethod === "ocr" ? 3000 : 2000
-
-    setTimeout(() => {
-      setIsProcessing(false)
-      handleClose(false)
-      toast.success("Invoice imported and validated", {
-        description:
-          "Invoice compared against PO and contract pricing. 2 discrepancies found totaling $1,240",
+    try {
+      await importInvoice.mutateAsync({
+        facilityId,
+        vendorId: manualInvoice.vendor,
+        invoiceNumber: manualInvoice.invoiceNumber,
+        invoiceDate:
+          manualInvoice.invoiceDate || new Date().toISOString().split("T")[0],
+        lineItems: manualInvoice.lineItems.map((li) => ({
+          inventoryDescription: li.description || li.itemNumber,
+          vendorItemNo: li.itemNumber || undefined,
+          invoicePrice: li.unitPrice,
+          invoiceQuantity: li.quantity,
+        })),
       })
-    }, processingTime)
-  }
-
-  const handleOCRUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setIsProcessing(true)
-      setTimeout(() => {
-        setManualInvoice((prev) => ({
-          ...prev,
-          invoiceNumber: "OCR-" + Math.random().toString().slice(2, 8),
-          vendor: vendors[0]?.id ?? "",
-          poNumber: "PO-2024-001",
-          invoiceDate: new Date().toISOString().slice(0, 10),
-          totalAmount: "52450.00",
-        }))
-        setIsProcessing(false)
-        toast.success("Invoice scanned", {
-          description:
-            "Data extracted from document. Please verify before submitting.",
-        })
-      }, 2500)
-    }
-  }
-
-  const handleEDIUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setIsProcessing(true)
-      setTimeout(() => {
-        setIsProcessing(false)
-        toast.success("EDI file processed", {
-          description:
-            "3 invoices imported. Comparing against POs and contracts...",
-        })
-        handleProcessImport()
-      }, 2000)
+      onComplete()
+      handleClose(false)
+    } catch {
+      // error handled by mutation
     }
   }
 
@@ -287,17 +236,19 @@ export function InvoiceImportDialog({
         <DialogHeader>
           <DialogTitle>Import New Invoices</DialogTitle>
           <DialogDescription>
-            Import invoices via EDI, scan with OCR, or enter manually. The
-            system will compare against referenced POs and contract pricing to
-            detect discrepancies.
+            Enter invoices manually — the system compares line items against
+            contract pricing to detect discrepancies. EDI and OCR import are
+            coming soon.
           </DialogDescription>
         </DialogHeader>
 
         {!importMethod ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-6">
+            {/* H5: EDI + OCR are not implemented — disabled, no fake flows. */}
             <button
-              onClick={() => setImportMethod("edi")}
-              className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed hover:border-primary hover:bg-muted/50 transition-colors"
+              disabled
+              aria-disabled="true"
+              className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed opacity-60 cursor-not-allowed"
             >
               <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
                 <Zap className="h-6 w-6 text-blue-600" />
@@ -305,14 +256,15 @@ export function InvoiceImportDialog({
               <div className="text-center">
                 <p className="font-medium">EDI Import</p>
                 <p className="text-sm text-muted-foreground">
-                  Upload EDI 810 files
+                  Coming soon — use Manual Entry for now
                 </p>
               </div>
             </button>
 
             <button
-              onClick={() => setImportMethod("ocr")}
-              className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed hover:border-primary hover:bg-muted/50 transition-colors"
+              disabled
+              aria-disabled="true"
+              className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-dashed opacity-60 cursor-not-allowed"
             >
               <div className="p-3 rounded-full bg-green-100 dark:bg-green-900">
                 <ScanLine className="h-6 w-6 text-green-600 dark:text-green-400" />
@@ -320,7 +272,7 @@ export function InvoiceImportDialog({
               <div className="text-center">
                 <p className="font-medium">OCR Scan</p>
                 <p className="text-sm text-muted-foreground">
-                  Scan PDF/image invoices
+                  Coming soon — use Manual Entry for now
                 </p>
               </div>
             </button>
@@ -353,79 +305,6 @@ export function InvoiceImportDialog({
             >
               Back to options
             </Button>
-
-            {importMethod === "edi" && (
-              <div className="space-y-4">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                  <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-lg font-medium mb-2">
-                    Upload EDI 810 Invoice File
-                  </p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Supports X12 810 format. Multiple invoices per file
-                    supported.
-                  </p>
-                  <Input
-                    type="file"
-                    accept=".edi,.txt,.x12"
-                    className="max-w-xs mx-auto"
-                    onChange={handleEDIUpload}
-                    disabled={isProcessing}
-                  />
-                </div>
-                {isProcessing && (
-                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Processing EDI file...
-                  </div>
-                )}
-              </div>
-            )}
-
-            {importMethod === "ocr" && (
-              <div className="space-y-4">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                  <ScanLine className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-lg font-medium mb-2">
-                    Scan Invoice Document
-                  </p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Upload PDF or image. OCR will extract invoice details
-                    automatically.
-                  </p>
-                  <Input
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    className="max-w-xs mx-auto"
-                    onChange={handleOCRUpload}
-                    disabled={isProcessing}
-                  />
-                </div>
-                {isProcessing && (
-                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Scanning and extracting data...
-                  </div>
-                )}
-                {manualInvoice.invoiceNumber && !isProcessing && (
-                  <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200">
-                    <p className="font-medium text-green-800 dark:text-green-400 mb-2">
-                      Data Extracted
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <p>Invoice: {manualInvoice.invoiceNumber}</p>
-                      <p>
-                        Vendor:{" "}
-                        {vendors.find((v) => v.id === manualInvoice.vendor)
-                          ?.name ?? manualInvoice.vendor}
-                      </p>
-                      <p>PO Reference: {manualInvoice.poNumber}</p>
-                      <p>Amount: ${manualInvoice.totalAmount}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             {importMethod === "manual" && (
               <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
@@ -901,13 +780,9 @@ export function InvoiceImportDialog({
           {importMethod && (
             <Button
               onClick={handleProcessImport}
-              disabled={
-                isProcessing ||
-                importInvoice.isPending ||
-                (importMethod === "manual" && !manualInvoice.invoiceNumber)
-              }
+              disabled={importInvoice.isPending || !manualInvoice.invoiceNumber}
             >
-              {isProcessing || importInvoice.isPending ? (
+              {importInvoice.isPending ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   Processing...

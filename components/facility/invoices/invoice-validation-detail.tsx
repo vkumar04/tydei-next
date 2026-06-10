@@ -8,6 +8,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
+import {
+  severityFor,
+  type VarianceSeverity,
+} from "@/lib/contracts/price-variance"
 import { DisputeDialog } from "./dispute-dialog"
 import { InvoiceDisputeDialog } from "./invoice-dispute-dialog"
 import { useFlagInvoiceLineItem, useResolveInvoiceLineItem } from "@/hooks/use-invoices"
@@ -49,20 +53,21 @@ interface InvoiceValidationDetailProps {
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-function severityFor(
+// L20: severity classification routes through the canonical
+// `severityFor` in lib/contracts/price-variance.ts (≤2% acceptable,
+// ≤5% warning, >5% critical) — the local minor/moderate/major copy
+// with a 10% threshold silently disagreed with the variance engine.
+function severityForDisplay(
   variancePercent: number | null
-): "none" | "minor" | "moderate" | "major" {
+): VarianceSeverity | "none" {
   if (variancePercent === null) return "none"
-  const abs = Math.abs(variancePercent)
-  if (abs < 2) return "minor"
-  if (abs < 10) return "moderate"
-  return "major"
+  return severityFor(Math.abs(variancePercent))
 }
 
 function SeverityBadge({
   severity,
 }: {
-  severity: "none" | "minor" | "moderate" | "major"
+  severity: VarianceSeverity | "none"
 }) {
   if (severity === "none") {
     return (
@@ -71,23 +76,23 @@ function SeverityBadge({
       </Badge>
     )
   }
-  if (severity === "minor") {
+  if (severity === "acceptable") {
     return (
       <Badge className="border-0 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-        Minor
+        Acceptable
       </Badge>
     )
   }
-  if (severity === "moderate") {
+  if (severity === "warning") {
     return (
       <Badge className="border-0 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
-        Moderate
+        Warning
       </Badge>
     )
   }
   return (
     <Badge className="border-0 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
-      Major
+      Critical
     </Badge>
   )
 }
@@ -274,7 +279,7 @@ export function InvoiceValidationDetail({
                 </TableRow>
               ) : (
                 validation.lineItems.map((li) => {
-                  const severity = severityFor(li.variancePercent)
+                  const severity = severityForDisplay(li.variancePercent)
                   return (
                     <TableRow
                       key={li.lineItemId}

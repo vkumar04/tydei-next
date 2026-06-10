@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useInvoiceSummary, useInvoices } from "@/hooks/use-invoices"
+import {
+  useApproveInvoice,
+  useInvoiceSummary,
+  useInvoices,
+} from "@/hooks/use-invoices"
 import { toast } from "sonner"
 import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
 import {
@@ -30,7 +34,7 @@ import {
  * Analysis pages):
  *
  *   1. Hero — four big-number KPIs (Total Invoices, Awaiting Review,
- *      Flagged Variance, Recovered YTD) with a headline + status pill.
+ *      Flagged Variance, Recovered) with a headline + status pill.
  *   2. ControlBar — search, vendor filter, dispute-only toggle, and
  *      Upload/Export CTAs. Tabs below own the status axis.
  *   3. Tabs — Awaiting Review / Flagged Variances / Approved / Disputed
@@ -74,11 +78,14 @@ export function InvoiceValidationClient({
   const { data, isLoading: tableLoading } = useInvoices(facilityId, {
     facilityId,
     vendorId: vendorFilter === "all" ? undefined : vendorFilter,
+    // M8: fetch one large page (server cap 200) so the hero, tab
+    // counts, and CSV export cover the whole set — neither invoice
+    // client paginates yet; slicing stays client-side.
+    pageSize: 200,
   })
 
   const invoices = (data?.invoices ?? []) as InvoiceRow[]
 
-  const totalVariance = summary?.totalVariance ?? 0
   const variancePercent = summary?.variancePercent ?? 0
 
   // ─── Base filter (search + dispute toggle) ─────────────────────
@@ -125,14 +132,24 @@ export function InvoiceValidationClient({
       (sum, inv) => (inv.variance > 0 ? sum + inv.variance : sum),
       0,
     )
+    // M16: "Recovered" = overcharge variance on invoices whose dispute
+    // was resolved — not the total open variance (which is the
+    // opposite of recovered).
+    const recovered = invoices.reduce(
+      (sum, inv) =>
+        inv.disputeStatus === "resolved" && inv.variance > 0
+          ? sum + inv.variance
+          : sum,
+      0,
+    )
     return {
       totalInvoices: invoices.length,
       awaitingReview: invoices.filter((i) => i.status === "pending").length,
-      flaggedVariance: flaggedVariance || totalVariance,
-      recoveredYTD: totalVariance > 0 ? totalVariance : 0,
+      flaggedVariance,
+      recovered,
       variancePercent,
     }
-  }, [invoices, totalVariance, variancePercent])
+  }, [invoices, variancePercent])
 
   // ─── Action handlers ──────────────────────────────────────────
   const toggleSelectInvoice = (id: string) => {
@@ -150,10 +167,11 @@ export function InvoiceValidationClient({
     setDisputeDialogInvoice(invoice)
   }
 
-  const handleApproveInvoice = (_invoiceId: string) => {
-    toast.success("Invoice approved", {
-      description: "Invoice has been marked as verified",
-    })
+  // H4: real status writer — approveInvoice server action flips
+  // pending → verified; the hook invalidates + toasts.
+  const approveInvoice = useApproveInvoice()
+  const handleApproveInvoice = (invoiceId: string) => {
+    approveInvoice.mutate(invoiceId)
   }
 
   const handleBulkDispute = () => {
@@ -197,7 +215,8 @@ export function InvoiceValidationClient({
         {
           key: "totalContractCost",
           label: "Contract Amount",
-          format: (v) => formatExportDollars(v as number),
+          // H1: null when the invoice has no line items (no contract basis)
+          format: (v) => (v == null ? "" : formatExportDollars(v as number)),
         },
         {
           key: "variance",

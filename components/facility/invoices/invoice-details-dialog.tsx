@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCalendarDate, formatCurrency } from "@/lib/formatting"
 
 import type { InvoiceRow } from "./invoice-discrepancy-table"
 
@@ -39,7 +39,7 @@ export function InvoiceDetailsDialog({
           </DialogTitle>
           <DialogDescription>
             {invoice?.vendor.name} -{" "}
-            {invoice ? formatDate(invoice.invoiceDate) : ""}
+            {invoice ? formatCalendarDate(invoice.invoiceDate) : ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -55,14 +55,17 @@ export function InvoiceDetailsDialog({
               <div className="rounded-lg bg-muted/50 p-4">
                 <p className="text-sm text-muted-foreground">Contract Price</p>
                 <p className="text-xl font-bold tabular-nums">
-                  {formatCurrency(invoice.totalContractCost)}
+                  {invoice.totalContractCost !== null
+                    ? formatCurrency(invoice.totalContractCost)
+                    : "—"}
                 </p>
               </div>
               <div className="rounded-lg bg-red-50 p-4 dark:bg-red-950/30">
                 <p className="text-sm text-muted-foreground">Variance</p>
                 <p className="text-xl font-bold tabular-nums text-red-600 dark:text-red-400">
-                  {invoice.variance > 0 ? "+" : ""}
-                  {formatCurrency(invoice.variance)}
+                  {invoice.totalContractCost === null
+                    ? "—"
+                    : `${invoice.variance > 0 ? "+" : ""}${formatCurrency(invoice.variance)}`}
                 </p>
               </div>
             </div>

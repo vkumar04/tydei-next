@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCalendarDate, formatCurrency } from "@/lib/formatting"
 
 type DisputeStatus = "none" | "disputed" | "resolved" | "rejected"
 
@@ -23,7 +23,8 @@ export type InvoiceRow = {
   vendor: { name: string }
   invoiceDate: Date | string
   totalInvoiceCost: number | string | null
-  totalContractCost: number
+  /** Null when the invoice has no line items (no contract basis — H1). */
+  totalContractCost: number | null
   variance: number
   variancePercent: number
   status: string
@@ -134,15 +135,22 @@ export function InvoiceDiscrepancyTable({
                   </div>
                 </TableCell>
                 <TableCell>{invoice.vendor.name}</TableCell>
-                <TableCell>{formatDate(invoice.invoiceDate)}</TableCell>
+                {/* invoiceDate is @db.Date — UTC-pinned formatter (L19) */}
+                <TableCell>{formatCalendarDate(invoice.invoiceDate)}</TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatCurrency(Number(invoice.totalInvoiceCost ?? 0))}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {formatCurrency(invoice.totalContractCost)}
+                  {invoice.totalContractCost !== null ? (
+                    formatCurrency(invoice.totalContractCost)
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {invoice.variance > 0.01 ? (
+                  {invoice.totalContractCost === null ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : invoice.variance > 0.01 ? (
                     <div className="flex items-center justify-end gap-2">
                       <span className="font-medium text-red-600 dark:text-red-400">
                         +{formatCurrency(invoice.variance)}

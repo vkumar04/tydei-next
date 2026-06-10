@@ -6,10 +6,8 @@ import {
   CalendarDays,
   CheckCircle2,
   DollarSign,
-  Download,
   FileText,
   Package,
-  Send,
   TrendingDown,
   TrendingUp,
 } from "lucide-react"
@@ -24,8 +22,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
-import { formatCurrency, formatDate } from "@/lib/formatting"
-import { statusConfig, type InvoiceRow } from "./vendor-invoice-shared"
+import { formatCalendarDate, formatCurrency } from "@/lib/formatting"
+import {
+  isDisputedInvoice,
+  statusConfig,
+  type InvoiceRow,
+} from "./vendor-invoice-shared"
 
 export interface VendorInvoiceDetailDialogProps {
   invoice: InvoiceRow | null
@@ -99,8 +101,9 @@ export function VendorInvoiceDetailDialog({
                 </p>
                 <div className="flex items-center gap-1.5">
                   <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                  {/* invoiceDate is @db.Date — UTC-pinned formatter (L19) */}
                   <p className="font-medium text-sm">
-                    {formatDate(invoice.invoiceDate)}
+                    {formatCalendarDate(invoice.invoiceDate)}
                   </p>
                 </div>
               </div>
@@ -216,7 +219,8 @@ export function VendorInvoiceDetailDialog({
               </div>
             )}
 
-            {invoice.status === "disputed" && (
+            {/* H3: facility disputes set disputeStatus, not status */}
+            {isDisputedInvoice(invoice) && (
               <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4">
                 <div className="flex items-center gap-2 text-red-800 dark:text-red-300">
                   <AlertTriangle className="h-5 w-5" />
@@ -229,20 +233,14 @@ export function VendorInvoiceDetailDialog({
               </div>
             )}
 
+            {/* H4: "Download PDF" + "Submit Invoice" no-op buttons
+                removed — no PDF generation exists, and submission is
+                handled by the Submit Invoice dialog (which calls
+                submitVendorInvoice). */}
             <DialogFooter className="gap-2 sm:gap-0">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Close
               </Button>
-              <Button variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Download PDF
-              </Button>
-              {invoice.status === "draft" && (
-                <Button>
-                  <Send className="mr-2 h-4 w-4" />
-                  Submit Invoice
-                </Button>
-              )}
             </DialogFooter>
           </>
         )}

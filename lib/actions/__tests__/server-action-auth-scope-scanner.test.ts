@@ -324,12 +324,14 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/imports/case-costing-import.ts:250",
   "lib/actions/imports/case-costing-import.ts:390",
   // invoices/dispute.ts: post-fetch facility equality check
-  "lib/actions/invoices/dispute.ts:36",
-  "lib/actions/invoices/dispute.ts:97",
+  "lib/actions/invoices/dispute.ts:43",
+  "lib/actions/invoices/dispute.ts:104",
   // invoices.ts: post-fetch ownership probe before mutation
-  "lib/actions/invoices.ts:215",
-  "lib/actions/invoices.ts:325",
-  "lib/actions/invoices.ts:375",
+  // (invoices.ts:325 removed 2026-06-09 — validateInvoice's render-time
+  // line-item write moved into revalidateInvoice, which carries an
+  // explicit auth-scope-scanner-skip on its facility-scoped update.)
+  "lib/actions/invoices.ts:243",
+  "lib/actions/invoices.ts:507",
   // payor-contracts.ts: FIXED 2026-06-09 (audit BLOCKER) — the
   // calculatePayorMargins read is now facility-scoped (findFirstOrThrow
   // with facilityId).

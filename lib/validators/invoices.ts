@@ -25,7 +25,9 @@ export const invoiceFiltersSchema = z.object({
   vendorId: z.string().optional(),
   status: z.string().optional(),
   page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  // M8: 200 cap — both invoice clients fetch a single page and slice
+  // client-side; real server pagination is future work.
+  pageSize: z.number().int().min(1).max(200).optional(),
 })
 
 export type InvoiceFilters = z.infer<typeof invoiceFiltersSchema>

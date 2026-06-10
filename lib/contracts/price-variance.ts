@@ -53,7 +53,12 @@ export interface VarianceAnalysis {
   lines: AnalyzedLine[]
 }
 
-function severityFor(absVariancePercent: number): VarianceSeverity {
+/**
+ * Canonical severity classifier for invoice-line price variance.
+ * Exported so display surfaces (e.g. invoice-validation-detail) use
+ * the same thresholds as the variance engine instead of local copies.
+ */
+export function severityFor(absVariancePercent: number): VarianceSeverity {
   if (absVariancePercent <= 2) return "acceptable"
   if (absVariancePercent <= 5) return "warning"
   return "critical"

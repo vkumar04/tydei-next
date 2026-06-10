@@ -9,6 +9,7 @@ import {
   getInvoiceSummary,
   importInvoice,
   validateInvoice,
+  approveInvoice,
   flagInvoiceLineItem,
   resolveInvoiceLineItem,
   deleteInvoice,
@@ -68,6 +69,20 @@ export function useValidateInvoice(id: string) {
     queryKey: queryKeys.invoices.validation(id),
     queryFn: () => validateInvoice(id),
     enabled: !!id,
+  })
+}
+
+export function useApproveInvoice() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: approveInvoice,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
+      toast.success("Invoice approved", {
+        description: "Invoice has been marked as verified",
+      })
+    },
+    onError: (e) => toast.error(e.message || "Failed to approve invoice"),
   })
 }
 

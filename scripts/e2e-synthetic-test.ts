@@ -1740,14 +1740,16 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
   }
 
   // ─── v0 Invoice validation priority ─────────────────────────────
-  const { v0InvoicePriority } = await import("@/lib/v0-spec/invoice-validation")
-  if (v0InvoicePriority({ variancePct: 6 }) !== "high") {
+  // (L20: classifyInvoicePriority in lib/invoices/priority.ts is the
+  // single priority helper; the v0-spec duplicate was removed.)
+  const { classifyInvoicePriority } = await import("@/lib/invoices/priority")
+  if (classifyInvoicePriority({ variancePct: 6 }) !== "high") {
     failures.push({ where: "v0 invoice priority >5%", detail: "expected high" })
   }
-  if (v0InvoicePriority({ variancePct: 3 }) !== "medium") {
+  if (classifyInvoicePriority({ variancePct: 3 }) !== "medium") {
     failures.push({ where: "v0 invoice priority 3%", detail: "expected medium" })
   }
-  if (v0InvoicePriority({ variancePct: 0, nonMatchingItem: true }) !== "high") {
+  if (classifyInvoicePriority({ variancePct: 0, nonMatchingItem: true }) !== "high") {
     failures.push({ where: "v0 non-matching", detail: "expected high" })
   }
 

@@ -5,7 +5,6 @@ import type { ColumnDef } from "@tanstack/react-table"
 import {
   Building2,
   CalendarDays,
-  Download,
   Eye,
   Hash,
   MoreHorizontal,
@@ -23,12 +22,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useVendorInvoices } from "@/hooks/use-invoices"
-import { formatCurrency, formatDate } from "@/lib/formatting"
-import { v0InvoicePriority } from "@/lib/v0-spec/invoice-validation"
+import { formatCalendarDate, formatCurrency } from "@/lib/formatting"
+import { classifyInvoicePriority } from "@/lib/invoices/priority"
 import { VendorInvoiceControlBar } from "./vendor-invoice-control-bar"
 import { VendorInvoiceDetailDialog } from "./vendor-invoice-detail-dialog"
 import { VendorInvoiceHero } from "./vendor-invoice-hero"
 import {
+  isDisputedInvoice,
   statusConfig,
   statusTabs,
   type InvoiceRow,
@@ -48,9 +48,11 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
 
 
-  const { data, isLoading } = useVendorInvoices(vendorId, (statusFilter !== "all" && statusFilter !== "submitted"
-      ? { status: statusFilter as never }
-      : {}))
+  // M17: fetch ONCE, unfiltered — hero stats and tab counts derive
+  // from the full set; the status tab slices client-side below
+  // (mirrors the facility page). M8: single large page (server cap
+  // 200) since this surface doesn't paginate yet.
+  const { data, isLoading } = useVendorInvoices(vendorId, { pageSize: 200 })
 
   const allInvoices = (data?.invoices as unknown as InvoiceRow[]) ?? []
 
@@ -64,7 +66,9 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
   }, [allInvoices])
 
-  // Apply client-side search + facility + "Sent" tab (draft/submitted/pending alias).
+  // Apply client-side search + facility + status tab. "Sent" aliases
+  // draft/submitted/pending; "Disputed" includes facility-side
+  // disputeStatus flags (H3).
   const invoices = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return allInvoices.filter((inv) => {
@@ -79,6 +83,10 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
         ) {
           return false
         }
+      } else if (statusFilter === "disputed") {
+        if (!isDisputedInvoice(inv)) return false
+      } else if (statusFilter !== "all" && inv.status !== statusFilter) {
+        return false
       }
       if (q.length === 0) return true
       return (
@@ -97,14 +105,17 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     for (const inv of allInvoices) {
       const amt = Number(inv.totalInvoiceCost ?? 0)
       totalInvoiced += amt
+      // H3: facility disputes live in disputeStatus, not status.
+      const disputed = isDisputedInvoice(inv)
+      if (disputed) disputedCount += 1
       if (inv.status === "paid") paidAmount += amt
-      else if (inv.status === "disputed") disputedCount += 1
       else if (
-        inv.status === "draft" ||
-        inv.status === "submitted" ||
-        inv.status === "pending" ||
-        inv.status === "validated" ||
-        inv.status === "approved"
+        !disputed &&
+        (inv.status === "draft" ||
+          inv.status === "submitted" ||
+          inv.status === "pending" ||
+          inv.status === "validated" ||
+          inv.status === "approved")
       ) {
         outstandingAmount += amt
       }
@@ -121,6 +132,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = { all: allInvoices.length }
     let sent = 0
+    let disputed = 0
     for (const inv of allInvoices) {
       counts[inv.status] = (counts[inv.status] ?? 0) + 1
       if (
@@ -130,8 +142,11 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
       ) {
         sent += 1
       }
+      // H3: count facility-side disputeStatus flags too.
+      if (isDisputedInvoice(inv)) disputed += 1
     }
     counts.submitted = sent
+    counts.disputed = disputed
     return counts
   }, [allInvoices])
 
@@ -189,7 +204,10 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <CalendarDays className="h-3.5 w-3.5" />
-          <span className="text-sm">{formatDate(row.original.invoiceDate)}</span>
+          {/* invoiceDate is @db.Date — UTC-pinned formatter (L19) */}
+          <span className="text-sm">
+            {formatCalendarDate(row.original.invoiceDate)}
+          </span>
         </div>
       ),
     },
@@ -226,7 +244,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
       // |pct| > 5 → high, > 2 → medium, > 0 → low, else none.
       cell: ({ row }) => {
         const pct = row.original.variancePercent ?? 0
-        const priority = v0InvoicePriority({ variancePct: pct })
+        const priority = classifyInvoicePriority({ variancePct: pct })
         if (priority === "none")
           return <span className="text-sm text-muted-foreground">—</span>
         const cls =
@@ -267,10 +285,8 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
               <Eye className="mr-2 h-4 w-4" />
               View Details
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Download className="mr-2 h-4 w-4" />
-              Download PDF
-            </DropdownMenuItem>
+            {/* H4: "Download PDF" no-op menu item removed — no PDF
+                generation exists yet. */}
             {/* 2026-04-26 (V1-M4): "Submit" + "Delete" menu items removed
                 from the vendor invoice list. Submit is handled by the
                 Submit Invoice dialog (which calls submitVendorInvoice).

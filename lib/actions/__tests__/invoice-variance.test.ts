@@ -26,6 +26,8 @@ type PricingRow = {
   vendorItemNo: string
   unitPrice: number
   vendorId: string
+  additionalVendorIds?: string[]
+  facilityId: string
   status: "active" | "expired" | "pending"
 }
 
@@ -62,21 +64,33 @@ const invoiceFindMany = vi.fn(
   },
 )
 
+// H2: the action now fetches pricing for the vendor's active,
+// FACILITY-scoped contracts (incl. grouped additionalVendorIds) with a
+// deterministic orderBy, and matches SKUs in JS at the normalizeSku
+// boundary — no `vendorItemNo: { in }` clause anymore.
 const contractPricingFindMany = vi.fn(
   async ({
     where,
   }: {
     where: {
-      vendorItemNo: { in: string[] }
-      contract: { vendorId: string; status: string }
+      contract: {
+        OR: Array<
+          | { vendorId: string }
+          | { additionalVendorIds: { has: string } }
+        >
+        status: string
+        facilityId: string
+      }
     }
   }) => {
+    const vendorId = (where.contract.OR[0] as { vendorId: string }).vendorId
     return pricingRows
-      .filter((p) => where.vendorItemNo.in.includes(p.vendorItemNo))
       .filter(
         (p) =>
-          p.vendorId === where.contract.vendorId &&
-          p.status === where.contract.status,
+          (p.vendorId === vendorId ||
+            (p.additionalVendorIds ?? []).includes(vendorId)) &&
+          p.status === where.contract.status &&
+          p.facilityId === where.contract.facilityId,
       )
       .map((p) => ({
         contractId: p.contractId,
@@ -97,6 +111,24 @@ const varianceUpsert = vi.fn(async (args: UpsertCall) => {
   return varianceStore[key]
 })
 
+// M9: stale-row purge — delete rows for the invoice's line items that
+// the engine no longer produces.
+const varianceDeleteMany = vi.fn(
+  async (args: {
+    where: { invoiceLineItemId: { in: string[]; notIn?: string[] } }
+  }) => {
+    const { in: inIds, notIn = [] } = args.where.invoiceLineItemId
+    let count = 0
+    for (const key of Object.keys(varianceStore)) {
+      if (inIds.includes(key) && !notIn.includes(key)) {
+        delete varianceStore[key]
+        count++
+      }
+    }
+    return { count }
+  },
+)
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     invoice: {
@@ -108,13 +140,22 @@ vi.mock("@/lib/db", () => ({
     contractPricing: {
       findMany: (args: {
         where: {
-          vendorItemNo: { in: string[] }
-          contract: { vendorId: string; status: string }
+          contract: {
+            OR: Array<
+              | { vendorId: string }
+              | { additionalVendorIds: { has: string } }
+            >
+            status: string
+            facilityId: string
+          }
         }
       }) => contractPricingFindMany(args),
     },
     invoicePriceVariance: {
       upsert: (args: UpsertCall) => varianceUpsert(args),
+      deleteMany: (args: {
+        where: { invoiceLineItemId: { in: string[]; notIn?: string[] } }
+      }) => varianceDeleteMany(args),
     },
   },
 }))
@@ -183,6 +224,7 @@ describe("recomputeInvoiceVariance — happy path", () => {
         vendorItemNo: "SKU-A",
         unitPrice: 100,
         vendorId: "vnd-1",
+        facilityId: "fac-1",
         status: "active",
       },
       {
@@ -190,6 +232,7 @@ describe("recomputeInvoiceVariance — happy path", () => {
         vendorItemNo: "SKU-B",
         unitPrice: 50,
         vendorId: "vnd-1",
+        facilityId: "fac-1",
         status: "active",
       },
       {
@@ -197,6 +240,7 @@ describe("recomputeInvoiceVariance — happy path", () => {
         vendorItemNo: "SKU-C",
         unitPrice: 100,
         vendorId: "vnd-1",
+        facilityId: "fac-1",
         status: "active",
       },
     ]
@@ -245,6 +289,7 @@ describe("recomputeInvoiceVariance — skip logic", () => {
         vendorItemNo: "SKU-MATCH",
         unitPrice: 100,
         vendorId: "vnd-1",
+        facilityId: "fac-1",
         status: "active",
       },
     ]
@@ -282,6 +327,7 @@ describe("recomputeInvoiceVariance — skip logic", () => {
         vendorItemNo: "SKU-X",
         unitPrice: 100,
         vendorId: "vnd-1",
+        facilityId: "fac-1",
         status: "active",
       },
       {
@@ -289,6 +335,7 @@ describe("recomputeInvoiceVariance — skip logic", () => {
         vendorItemNo: "SKU-Y",
         unitPrice: 100,
         vendorId: "vnd-1",
+        facilityId: "fac-1",
         status: "active",
       },
     ]
@@ -343,6 +390,7 @@ describe("recomputeInvoiceVariance — idempotency", () => {
         vendorItemNo: "SKU-A",
         unitPrice: 100,
         vendorId: "vnd-1",
+        facilityId: "fac-1",
         status: "active",
       },
     ]
@@ -411,6 +459,7 @@ describe("recomputeInvoiceVariance — contract scoping", () => {
         vendorItemNo: "SKU-A",
         unitPrice: 100,
         vendorId: "vnd-other",
+        facilityId: "fac-1",
         status: "active",
       },
     ]
@@ -421,7 +470,14 @@ describe("recomputeInvoiceVariance — contract scoping", () => {
     expect(contractPricingFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          contract: { vendorId: "vnd-1", status: "active" },
+          contract: {
+            OR: [
+              { vendorId: "vnd-1" },
+              { additionalVendorIds: { has: "vnd-1" } },
+            ],
+            status: "active",
+            facilityId: "fac-1",
+          },
         }),
       }),
     )
@@ -482,6 +538,7 @@ describe("recomputeAllInvoiceVariances", () => {
         vendorItemNo: "SKU-A",
         unitPrice: 100,
         vendorId: "vnd-1",
+        facilityId: "fac-1",
         status: "active",
       },
     ]

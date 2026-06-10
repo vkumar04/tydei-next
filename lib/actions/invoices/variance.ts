@@ -6,6 +6,7 @@ import {
   computeInvoiceVariances,
   type InvoiceLineForVariance,
 } from "@/lib/data-pipeline/invoice-variance"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 
 // ─── Invoice variance population — data-pipeline subsystem 1 ────
 //
@@ -67,49 +68,73 @@ export async function recomputeInvoiceVariance(invoiceId: string): Promise<{
     throw new Error("Invoice not found")
   }
 
-  const vendorItemNos = invoice.lineItems
-    .map((li) => li.vendorItemNo)
-    .filter((v): v is string => typeof v === "string" && v.length > 0)
+  const lineItemIds = invoice.lineItems.map((li) => li.id)
 
-  if (vendorItemNos.length === 0) {
+  // H2(c): match SKUs at the normalizeSku boundary, never raw `===`
+  // or SQL `IN` on the raw string.
+  const normalizedItemNos = new Set(
+    invoice.lineItems
+      .map((li) => normalizeSku(li.vendorItemNo))
+      .filter((k) => k.length > 0)
+  )
+
+  if (normalizedItemNos.size === 0) {
+    // M9: still purge stale variance rows (e.g. line items edited to
+    // drop their SKUs) before bailing.
+    await prisma.invoicePriceVariance.deleteMany({
+      where: { invoiceLineItemId: { in: lineItemIds } },
+    })
     return { variancesWritten: 0 }
   }
 
-  // Fetch every active contract-pricing row for this vendor that could
-  // match one of the invoice's line items. A single vendorItemNo may
-  // resolve to multiple contracts (e.g. overlapping tiers); we keep
-  // the first match per vendorItemNo — consistent with how
-  // `validateInvoice` treats the first active contract as the
-  // authoritative price.
+  // Fetch every active contract-pricing row that could match one of
+  // the invoice's line items. H2(a): facility-scoped — never another
+  // facility's pricing. H2(b): grouped vendors (`additionalVendorIds`)
+  // count as the vendor. H2(d): rows are ordered deterministically in
+  // SQL and the FIRST match per SKU wins — same rule as
+  // `validateInvoice`/`revalidateInvoice` in lib/actions/invoices.ts.
   const pricingRows = await prisma.contractPricing.findMany({
     where: {
-      vendorItemNo: { in: vendorItemNos },
-      contract: { vendorId: invoice.vendorId, status: "active" },
+      contract: {
+        OR: [
+          { vendorId: invoice.vendorId },
+          { additionalVendorIds: { has: invoice.vendorId } },
+        ],
+        status: "active",
+        facilityId: facility.id,
+      },
     },
     select: { contractId: true, vendorItemNo: true, unitPrice: true },
+    orderBy: [
+      { effectiveDate: { sort: "desc", nulls: "last" } },
+      { id: "asc" },
+    ],
   })
 
   const priceLookup = new Map<string, number>()
   const contractByVendorItem = new Map<string, string>()
   for (const p of pricingRows) {
-    const key = `${p.contractId}::${p.vendorItemNo}`
+    const sku = normalizeSku(p.vendorItemNo)
+    if (!sku || !normalizedItemNos.has(sku)) continue
+    const key = `${p.contractId}::${sku}`
     if (!priceLookup.has(key)) {
       priceLookup.set(key, Number(p.unitPrice))
     }
-    if (!contractByVendorItem.has(p.vendorItemNo)) {
-      contractByVendorItem.set(p.vendorItemNo, p.contractId)
+    if (!contractByVendorItem.has(sku)) {
+      contractByVendorItem.set(sku, p.contractId)
     }
   }
 
   const linesForVariance: InvoiceLineForVariance[] = []
   for (const li of invoice.lineItems) {
-    if (!li.vendorItemNo) continue
-    const contractId = contractByVendorItem.get(li.vendorItemNo)
+    const sku = normalizeSku(li.vendorItemNo)
+    if (!sku) continue
+    const contractId = contractByVendorItem.get(sku)
     if (!contractId) continue
     linesForVariance.push({
       id: li.id,
       contractId,
-      vendorItemNo: li.vendorItemNo,
+      vendorItemNo: sku,
       invoicePrice: Number(li.invoicePrice),
       invoiceQuantity: li.invoiceQuantity,
     })
@@ -147,6 +172,18 @@ export async function recomputeInvoiceVariance(invoiceId: string): Promise<{
     })
     variancesWritten++
   }
+
+  // M9: delete stale variance rows the engine no longer produces
+  // (line item re-priced to exact match, contract expired, SKU edited)
+  // so re-runs converge instead of accreting.
+  await prisma.invoicePriceVariance.deleteMany({
+    where: {
+      invoiceLineItemId: {
+        in: lineItemIds,
+        notIn: rows.map((r) => r.invoiceLineItemId),
+      },
+    },
+  })
 
   return { variancesWritten }
 }

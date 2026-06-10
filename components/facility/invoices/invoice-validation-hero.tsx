@@ -19,7 +19,7 @@ export interface InvoiceValidationHeroStats {
   totalInvoices: number
   awaitingReview: number
   flaggedVariance: number
-  recoveredYTD: number
+  recovered: number
   variancePercent: number
 }
 
@@ -36,7 +36,7 @@ export function InvoiceValidationHero({
     totalInvoices,
     awaitingReview,
     flaggedVariance,
-    recoveredYTD,
+    recovered,
     variancePercent,
   } = stats
 
@@ -107,10 +107,10 @@ export function InvoiceValidationHero({
           tone={flaggedVariance > 0 ? "negative" : "muted"}
         />
         <HeroStat
-          label="Recovered YTD"
-          value={loading ? null : formatCurrency(recoveredYTD)}
-          sublabel="from resolved cases"
-          tone={recoveredYTD > 0 ? "positive" : "muted"}
+          label="Recovered"
+          value={loading ? null : formatCurrency(recovered)}
+          sublabel="from resolved disputes"
+          tone={recovered > 0 ? "positive" : "muted"}
         />
       </div>
     </section>

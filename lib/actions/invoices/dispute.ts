@@ -27,10 +27,17 @@ export async function flagInvoiceAsDisputed(input: {
   // Ownership check — scope invoice to this facility.
   const existing = await prisma.invoice.findUnique({
     where: { id: input.invoiceId, facilityId: facility.id },
-    select: { id: true, invoiceNumber: true },
+    select: { id: true, invoiceNumber: true, disputeStatus: true },
   })
   if (!existing) {
     throw new Error("Invoice not found")
+  }
+  // L22: don't silently re-flag (and overwrite the note/timestamp of)
+  // an open dispute — resolve it first.
+  if (existing.disputeStatus === "disputed") {
+    throw new Error(
+      "Invoice is already disputed — resolve the existing dispute first"
+    )
   }
 
   const updated = await prisma.invoice.update({

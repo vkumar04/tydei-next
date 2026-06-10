@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { submitVendorInvoice } from "@/lib/actions/vendor-invoices"
+import { queryKeys } from "@/lib/query-keys"
 import { getVendorFacilities } from "@/lib/actions/vendor-purchase-orders"
 
 export interface VendorInvoiceSubmitDialogProps {
@@ -64,7 +65,9 @@ export function VendorInvoiceSubmitDialog({
     mutationFn: submitVendorInvoice,
     onSuccess: () => {
       toast.success("Invoice submitted")
-      queryClient.invalidateQueries({ queryKey: ["vendor-invoices"] })
+      // M13: the vendor list keys on queryKeys.invoices.* — the old
+      // ["vendor-invoices"] key matched nothing.
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all })
       onOpenChange(false)
       setForm(EMPTY_FORM)
     },
