@@ -102,6 +102,55 @@ vi.mock("@/lib/db", () => ({
           return row
         },
       ),
+      // 2026-06-09: the synthesizer persists via createMany/updateMany
+      // (two statements instead of N — the per-row array transaction blew
+      // the 5s timeout against prod volume). Mocks mirror Prisma's batch
+      // semantics on top of the same in-memory stores.
+      createMany: vi.fn(
+        async ({ data }: { data: Array<Record<string, unknown>> }) => {
+          for (const d of data) {
+            createdAlerts.push(d)
+            alertRows.push({
+              id: `new-${createdAlerts.length}`,
+              facilityId: (d.facilityId as string) ?? "",
+              portalType: (d.portalType as string) ?? "facility",
+              alertType: (d.alertType as string) ?? "other",
+              title: (d.title as string) ?? "",
+              description: (d.description as string) ?? null,
+              severity: (d.severity as AlertRow["severity"]) ?? "medium",
+              status: "new_alert",
+              contractId: (d.contractId as string | null) ?? null,
+              vendorId: (d.vendorId as string | null) ?? null,
+              metadata: (d.metadata as Record<string, unknown>) ?? {},
+              actionLink: (d.actionLink as string | null) ?? null,
+              createdAt: new Date(),
+              readAt: null,
+              resolvedAt: null,
+              dismissedAt: null,
+            })
+          }
+          return { count: data.length }
+        },
+      ),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: { in: string[] } }
+          data: Record<string, unknown>
+        }) => {
+          let count = 0
+          for (const row of alertRows) {
+            if (where.id.in.includes(row.id)) {
+              updatedAlerts.push({ id: row.id, data })
+              Object.assign(row, data)
+              count++
+            }
+          }
+          return { count }
+        },
+      ),
       update: vi.fn(
         async ({
           where,

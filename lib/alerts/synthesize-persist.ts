@@ -320,10 +320,15 @@ export async function runAlertSynthesisForFacility(
   const now = new Date()
 
   if (result.toCreate.length > 0 || result.toResolve.length > 0) {
-    await prisma.$transaction([
-      ...result.toCreate.map((a) =>
-        prisma.alert.create({
-          data: {
+    // 2026-06-09 prod backfill failure: the previous per-row create/update
+    // array transaction (~258 networked statements on first run) blew
+    // Prisma's 5s default transaction timeout against the prod DB.
+    // createMany + updateMany are two statements regardless of volume;
+    // the bumped timeout is belt-and-braces for very large facilities.
+    await prisma.$transaction(
+      [
+        prisma.alert.createMany({
+          data: result.toCreate.map((a) => ({
             portalType: a.portalType,
             alertType: a.alertType,
             title: a.title,
@@ -334,18 +339,17 @@ export async function runAlertSynthesisForFacility(
             vendorId: a.vendorId ?? null,
             actionLink: a.actionLink ?? null,
             metadata: a.metadata as Prisma.InputJsonValue,
-          },
+          })),
         }),
-      ),
-      ...result.toResolve.map((id) =>
-        prisma.alert.update({
+        prisma.alert.updateMany({
           // Resolve targets come from the existing-alert load above,
           // which is already scoped to this facility.
-          where: { id },
+          where: { id: { in: result.toResolve } },
           data: { status: "resolved", resolvedAt: now },
         }),
-      ),
-    ])
+      ],
+      { timeout: 60_000, maxWait: 10_000 },
+    )
   }
 
   if (opts?.auditUserId) {
