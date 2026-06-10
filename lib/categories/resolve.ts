@@ -72,6 +72,31 @@ export async function loadConfirmedCategoryMap(): Promise<Map<string, string>> {
 }
 
 /**
+ * Charles 2026-06-10 ("still showing categories I mapped away"): apply the
+ * confirmed mapping to a list of display names at READ time. Stored
+ * `ContractTerm.categories` / ProductCategory references can hold a name
+ * that was later mapped away (the retro-rewrite in remapCOGCategory only
+ * reaches rows that exist when the mapping is confirmed) — surfaces that
+ * render category names must pass them through this so a superseded name
+ * can never be displayed. Dedupes by normalized key, first occurrence wins.
+ */
+export function applyConfirmedCategoryMapToNames(
+  names: string[],
+  confirmedMap: Map<string, string>,
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const n of names) {
+    const mapped = confirmedMap.get(normalize(n)) ?? n
+    const key = normalize(mapped)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(mapped)
+  }
+  return out
+}
+
+/**
  * 2026-06-09 prod audit: confirmed swap-pair mappings (A→B AND B→A) were
  * found in production — e.g. "instruments-ortho"→"Surgical Instrumentation"
  * alongside "surgical instrumentation"→"Instruments-Ortho". With both

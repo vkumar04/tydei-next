@@ -297,7 +297,10 @@ export function ContractDetailClient({
   }, [contract])
 
   // Build a deduped, ordered list of product categories: primary first,
-  // then remaining join-table categories alphabetically. Dedupe by id.
+  // then remaining join-table categories alphabetically. Dedupe by id AND
+  // by normalized name — getContract now applies the confirmed category
+  // mapping at read time (Charles 2026-06-10), so two stale rows mapped to
+  // the same target must collapse to one entry instead of rendering twice.
   const productCategories = useMemo<Array<{ id: string; name: string }>>(() => {
     if (!contract) return []
 
@@ -310,20 +313,24 @@ export function ContractDetailClient({
       )
 
     const seen = new Set<string>()
+    const seenNames = new Set<string>()
+    const nameKey = (n: string) => n.trim().toLowerCase().replace(/\s+/g, " ")
     const ordered: Array<{ id: string; name: string }> = []
 
     if (primary) {
       seen.add(primary.id)
+      seenNames.add(nameKey(primary.name))
       ordered.push({ id: primary.id, name: primary.name })
     }
 
     const rest = joined
-      .filter((pc) => !seen.has(pc.id))
+      .filter((pc) => !seen.has(pc.id) && !seenNames.has(nameKey(pc.name)))
       .sort((a, b) => a.name.localeCompare(b.name))
 
     for (const pc of rest) {
-      if (seen.has(pc.id)) continue
+      if (seen.has(pc.id) || seenNames.has(nameKey(pc.name))) continue
       seen.add(pc.id)
+      seenNames.add(nameKey(pc.name))
       ordered.push({ id: pc.id, name: pc.name })
     }
 

@@ -28,7 +28,26 @@ export async function getCategories() {
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   })
-  return serialize(categories)
+  // Charles 2026-06-10 ("the categories here should reflect the names of
+  // what was mapped not what was on the price file"): a name that is the
+  // SOURCE of a confirmed mapping is superseded — remapCOGCategory deletes
+  // its taxonomy row only when nothing references it anymore, so it can
+  // linger here and reappear in every term/category picker. Hide it from
+  // option lists; the mapping target is the pickable name.
+  const confirmedSources = await prisma.categoryMapping.findMany({
+    where: { isConfirmed: true, contractCategory: { not: null } },
+    select: { cogCategory: true },
+  })
+  const superseded = new Set(
+    confirmedSources.map((m) =>
+      m.cogCategory.trim().toLowerCase().replace(/\s+/g, " "),
+    ),
+  )
+  return serialize(
+    categories.filter(
+      (c) => !superseded.has(c.name.trim().toLowerCase().replace(/\s+/g, " ")),
+    ),
+  )
 }
 
 // ─── Get Category Tree ──────────────────────────────────────────

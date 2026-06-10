@@ -41,6 +41,10 @@ import {
 } from "@/lib/contracts/rebate-earned-filter"
 import { buildUnionCategoryWhereClause, buildCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
+import {
+  applyConfirmedCategoryMapToNames,
+  loadConfirmedCategoryMap,
+} from "@/lib/categories/resolve"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
@@ -733,8 +737,35 @@ export async function getContract(
         })
       : []
 
+  // Charles 2026-06-10 ("still showing categories I mapped away" / "the
+  // categories here should reflect the names of what was mapped"): apply the
+  // confirmed CategoryMapping at read time so term chips, market-share rows,
+  // and category badges can never display a superseded name — even when the
+  // stored rows predate the mapping (the retro-rewrite in remapCOGCategory
+  // only reaches rows that exist at confirm time).
+  const confirmedCategoryMap = await loadConfirmedCategoryMap()
+  const mapName = <T extends { name: string } | null>(pc: T): T =>
+    pc
+      ? {
+          ...pc,
+          name: applyConfirmedCategoryMapToNames([pc.name], confirmedCategoryMap)[0],
+        }
+      : pc
+  const mappedTerms = contract.terms.map((t) => ({
+    ...t,
+    categories: applyConfirmedCategoryMapToNames(t.categories, confirmedCategoryMap),
+  }))
+  const mappedProductCategory = mapName(contract.productCategory)
+  const mappedContractCategories = contract.contractCategories.map((cc) => ({
+    ...cc,
+    productCategory: mapName(cc.productCategory),
+  }))
+
   return serialize({
     ...contract,
+    terms: mappedTerms,
+    productCategory: mappedProductCategory,
+    contractCategories: mappedContractCategories,
     rebateEarned,
     rebateEarnedYTD,
     rebateCollected,

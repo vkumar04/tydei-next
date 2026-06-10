@@ -19,6 +19,7 @@ import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { suggestTarget } from "@/lib/categories/category-suggest"
 import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { serialize } from "@/lib/serialize"
 import { revalidatePath } from "next/cache"
 
@@ -290,16 +291,36 @@ export async function remapCOGCategory(input: {
       },
       data: { category: to },
     })
+    // 2026-06-10 (Charles "still showing categories I mapped away"): match
+    // terms by CANONICAL key, not exact stored string. `hasSome: variants`
+    // only caught whitespace variants of the dialog row — a term storing a
+    // word-order/punctuation variant ("Joints-Ortho" vs "Joints Ortho")
+    // survived the rewrite and kept rendering the dead name. Fetch every
+    // scoped term at the facility and compare canonically.
+    const fromCanonical = canonicalizeCategoryName(from)
     const scopedTerms = await prisma.contractTerm.findMany({
       where: {
-        categories: { hasSome: variants },
+        categories: { isEmpty: false },
         contract: { facilityId: facility.id },
       },
       select: { id: true, categories: true },
     })
     for (const t of scopedTerms) {
+      const matches = t.categories.some(
+        (c) =>
+          normalize(c) === fromKey ||
+          canonicalizeCategoryName(c) === fromCanonical,
+      )
+      if (!matches) continue
       const next = Array.from(
-        new Set(t.categories.map((c) => (normalize(c) === fromKey ? to : c))),
+        new Set(
+          t.categories.map((c) =>
+            normalize(c) === fromKey ||
+            canonicalizeCategoryName(c) === fromCanonical
+              ? to
+              : c,
+          ),
+        ),
       )
       // auth-scope-scanner-skip: term ids come from the facility-scoped findMany above.
       await prisma.contractTerm.update({
