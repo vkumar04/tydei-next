@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Target, TrendingUp, ArrowUpRight, Gauge, Plus } from "lucide-react"
+import { Target, TrendingUp, Plus } from "lucide-react"
 import { formatCurrency } from "@/lib/formatting"
 import { StatusBadge } from "./shared"
 import type { VendorProposal } from "@/lib/actions/prospective"
@@ -23,16 +23,17 @@ export function OpportunitiesSection({
   totalProjectedSpend,
   onNewProposal,
 }: Props) {
+  // Audit L9: the "Avg Growth Potential" / "Avg Opportunity Score" tiles
+  // were hardcoded "--" placeholders with no data source — removed
+  // rather than shipping permanently-empty metrics.
   const metrics = [
     { icon: Target, label: "Total Opportunities", value: String(totalProposals), color: "text-primary", bg: "bg-primary/10" },
     { icon: TrendingUp, label: "Potential Revenue", value: formatCurrency(totalProjectedSpend), color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30" },
-    { icon: ArrowUpRight, label: "Avg Growth Potential", value: "--", color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/30" },
-    { icon: Gauge, label: "Avg Opportunity Score", value: "--", color: "text-blue-600", bg: "bg-blue-100 dark:bg-blue-900/30" },
   ]
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         {metrics.map((m) => (
           <Card key={m.label}>
             <CardContent className="pt-6">

@@ -298,11 +298,11 @@ export function FacilitySelector({
                 placeholder="e.g., Orthopedics, Cardiology, Neurology"
                 defaultValue=""
                 onBlur={(e) => {
+                  // Audit L13: divisions get their own key — they used to
+                  // overwrite productCategories, silently destroying the
+                  // user's category selection.
                   const divisions = e.target.value.split(",").map(d => d.trim()).filter(d => d)
-                  setNewProposal(prev => ({
-                    ...prev,
-                    productCategories: divisions.length > 0 ? divisions : prev.productCategories,
-                  }))
+                  setNewProposal(prev => ({ ...prev, divisions }))
                 }}
               />
               <p className="text-xs text-muted-foreground mt-1">

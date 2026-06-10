@@ -89,6 +89,77 @@ describe("analyzeVendorProspective", () => {
     ).toBe(true)
   })
 
+  it("uses facilityCurrentVendorRevenue directly for revenue-at-risk and penetration (audit H3)", () => {
+    // Backfill semantics: the action knows the vendor's own sales
+    // ($90k) and derived facility total = 90k / 0.2 = 450k. The
+    // analyzer must NOT re-derive current revenue as spend × share —
+    // it takes the known vendor revenue directly.
+    const result = analyzeVendorProspective(
+      baseInput({
+        facilityEstimatedAnnualSpend: 450_000,
+        facilityCurrentVendorRevenue: 90_000,
+        facilityCurrentVendorShare: 0.2,
+        targetVendorShare: 0.5,
+      }),
+    )
+    expect(result.revenueAtRisk).toBe(90_000)
+    expect(result.penetrationAnalysis.currentAnnualRevenue).toBe(90_000)
+    expect(result.penetrationAnalysis.targetAnnualRevenue).toBe(225_000) // 450k * 50%
+    expect(result.penetrationAnalysis.incrementalRevenueOpportunity).toBe(
+      135_000, // 225k - 90k
+    )
+  })
+
+  it("falls back to spend × share when no explicit vendor revenue is supplied", () => {
+    const result = analyzeVendorProspective(baseInput())
+    expect(result.revenueAtRisk).toBe(100_000) // 500k * 20%
+    expect(result.penetrationAnalysis.currentAnnualRevenue).toBe(100_000)
+  })
+
+  it("keeps a vendor-revenue-only input coherent when no share is known", () => {
+    // No-share backfill: action passes vendor spend as BOTH the spend
+    // proxy and the revenue (plus a warning at the action layer).
+    const result = analyzeVendorProspective(
+      baseInput({
+        facilityEstimatedAnnualSpend: 90_000,
+        facilityCurrentVendorRevenue: 90_000,
+        facilityCurrentVendorShare: undefined,
+        targetVendorShare: undefined,
+      }),
+    )
+    expect(result.revenueAtRisk).toBe(90_000)
+    // Default target share is 50% of the (proxy) spend = 45k < current
+    // revenue → incremental opportunity clamps to 0 rather than going
+    // negative.
+    expect(
+      result.penetrationAnalysis.incrementalRevenueOpportunity,
+    ).toBe(0)
+  })
+
+  it("does NOT fall back to nationalAvgPrice for the benchmark list discount (audit M8)", () => {
+    const result = analyzeVendorProspective(
+      baseInput({
+        benchmarks: [
+          // National-average row only — arbitrary first-row fallback
+          // used to leak in as a fake "internal list price".
+          { vendorItemNo: "RANDOM-1", nationalAvgPrice: 999 },
+        ],
+      }),
+    )
+    for (const s of result.scenarioResults) {
+      expect(s.discountFromBenchmarkList).toBeNull()
+    }
+  })
+
+  it("still computes discountFromBenchmarkList from a real internal list price", () => {
+    const result = analyzeVendorProspective(baseInput())
+    const floor = result.scenarioResults.find(
+      (s) => s.scenarioName === "Floor",
+    )!
+    // internalListPrice 150, unitPrice 100 → 33.3% discount.
+    expect(floor.discountFromBenchmarkList).toBeCloseTo(1 / 3, 5)
+  })
+
   it("computes capital payback when variant is CAPITAL_TIE_IN", () => {
     const result = analyzeVendorProspective(
       baseInput({

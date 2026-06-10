@@ -42,6 +42,10 @@ export interface NewProposalState {
   productCategories: string[]
   isGrouped: boolean
   groupName: string
+  /** Organization division names for grouped proposals (audit L13 —
+   *  previously the divisions input clobbered `productCategories`).
+   *  Optional so the builder's initial state needn't set it. */
+  divisions?: string[]
   contractLength: number
   projectedSpend: number
   projectedVolume: number

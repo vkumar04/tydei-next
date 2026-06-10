@@ -3,8 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import {
-  scoreDeal,
-  getFinancialProjections,
   createProposal,
   deleteProposal,
   getVendorProposals,
@@ -12,25 +10,10 @@ import {
 } from "@/lib/actions/prospective"
 import { toast } from "sonner"
 
-export function useScoreDeal() {
-  return useMutation({
-    mutationFn: scoreDeal,
-    onError: (err) => toast.error(err.message || "Scoring failed"),
-  })
-}
-
-export function useFinancialProjections(
-  contractId: string,
-  months: number,
-  enabled = true
-) {
-  return useQuery({
-    queryKey: ["analysis", "financialProjections", contractId, months],
-    queryFn: () =>
-      getFinancialProjections({ contractId, projectionMonths: months }),
-    enabled: enabled && !!contractId,
-  })
-}
+// NOTE: useScoreDeal / useFinancialProjections were removed on
+// 2026-06-10 (audit H2) — both hooks had zero consumers. Proposal
+// scoring now flows through the Deal Scorer
+// (getVendorProspectiveAnalysis with a proposalRowId).
 
 export function useCreateProposal() {
   const qc = useQueryClient()
@@ -38,7 +21,7 @@ export function useCreateProposal() {
     mutationFn: createProposal,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["prospective"] })
-      toast.success("Proposal submitted")
+      toast.success("Proposal draft created")
     },
     onError: (err) => toast.error(err.message || "Failed to create proposal"),
   })

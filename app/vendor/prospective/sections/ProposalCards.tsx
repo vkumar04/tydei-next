@@ -30,7 +30,6 @@ import {
   DollarSign,
   Plus,
   Eye,
-  Pencil,
   Trash2,
   MoreHorizontal,
   Package,
@@ -53,12 +52,12 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
   const [viewTarget, setViewTarget] = useState<VendorProposal | null>(null)
   const deleteMut = useDeleteProposal()
 
-  // Only proposals that have a real, server-attached deal score are
-  // eligible to show a numeric score. Previously this list rendered a
-  // deterministic mock score seeded by id which Charles correctly
-  // flagged as "all hard coded." Real scoring lives in the Deal
-  // Scorer pipeline (`scoreDeal` in lib/actions/prospective.ts) and
-  // is attached to the proposal once computed.
+  // Only proposals that have a real, server-attached deal score show a
+  // numeric score. Previously this list rendered a deterministic mock
+  // score seeded by id which Charles correctly flagged as "all hard
+  // coded." Real scoring lives in the Deal Scorer tab
+  // (`getVendorProspectiveAnalysis` with a proposal selected persists
+  // `pricingData.dealScore` on the row — audit H2).
   const enrichedProposals = useMemo(() => proposals, [proposals])
 
   function handleConfirmDelete() {
@@ -79,7 +78,8 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
             </Badge>
           </h3>
           <p className="text-sm text-muted-foreground">
-            Internal vendor analysis documents - edit and rework proposals as needed
+            Internal vendor analysis documents — score them in the Deal
+            Scorer tab, or delete and recreate to rework
           </p>
         </div>
         <Button size="sm" onClick={onNewProposal}>
@@ -130,8 +130,8 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
                             </span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            Score not yet computed. Run this proposal through
-                            the Deal Scorer to attach one.
+                            Score not yet computed. Run the Deal Scorer with
+                            this proposal selected to attach a score.
                           </TooltipContent>
                         </Tooltip>
                       )}
@@ -172,10 +172,8 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem disabled>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
+                        {/* No Edit item: no edit flow exists for proposals
+                            (audit L9) — delete + recreate is the rework path. */}
                         <DropdownMenuItem
                           className="text-destructive"
                           onClick={() => setDeleteTarget(p)}

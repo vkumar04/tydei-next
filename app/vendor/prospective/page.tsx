@@ -1,20 +1,17 @@
 import { requireVendor } from "@/lib/actions/auth"
-import { prisma } from "@/lib/db"
+import { getVendorRelatedFacilities } from "@/lib/actions/vendor-prospective"
 import { VendorProspectiveClient } from "./prospective-client"
 
 export default async function VendorProspectivePage() {
   const { vendor } = await requireVendor()
 
-  // Facilities the vendor can write proposals for — every active facility
-  // in the platform. The proposal builder's FacilitySelector was
-  // previously receiving an empty array, which silently made it
-  // impossible to select a facility and therefore impossible to upload
-  // pricing (the Products section won't commit without one).
-  const facilities = await prisma.facility.findMany({
-    where: { status: "active" },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  })
+  // Audit M5: scope the facility list to facilities this vendor has a
+  // real relationship with (contract incl. grouped additionalVendorIds
+  // membership, COG sales history, or a PendingContract) — previously
+  // this listed EVERY active facility on the platform. An empty list is
+  // fine: the proposal builder still allows custom facility names, and
+  // the Deal Scorer shows an honest empty hint.
+  const facilities = await getVendorRelatedFacilities()
 
   return <VendorProspectiveClient vendorId={vendor.id} facilities={facilities} />
 }

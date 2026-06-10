@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,7 @@ import type {
   VendorContractVariant,
   VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
+import type { VendorProposal } from "@/lib/actions/prospective"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -36,7 +37,12 @@ interface FacilityOption {
 
 interface DealScorerSectionProps {
   facilities: FacilityOption[]
+  /** Existing draft proposals — selecting one attaches the computed
+   *  score to it (persisted server-side, audit H2). */
+  proposals: VendorProposal[]
 }
+
+const NO_PROPOSAL = "__none__"
 
 interface ScenarioForm {
   scenarioName: string
@@ -53,8 +59,10 @@ const DEFAULT_SCENARIOS: ScenarioForm[] = [
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function DealScorerSection({ facilities }: DealScorerSectionProps) {
+export function DealScorerSection({ facilities, proposals }: DealScorerSectionProps) {
+  const queryClient = useQueryClient()
   const [facilityId, setFacilityId] = useState<string>("")
+  const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
   const [contractVariant, setContractVariant] =
     useState<VendorContractVariant>("USAGE_SPEND")
   const [scenarios, setScenarios] = useState<ScenarioForm[]>(DEFAULT_SCENARIOS)
@@ -65,6 +73,10 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
   const [estimatedSpend, setEstimatedSpend] = useState("")
   const [equipmentCost, setEquipmentCost] = useState("")
   const [maintenanceCost, setMaintenanceCost] = useState("")
+  // Audit L10: previously hardcoded to 60 / 0.05 / 0.10 server-input.
+  const [termMonths, setTermMonths] = useState("60")
+  const [interestRate, setInterestRate] = useState("5")
+  const [discountRate, setDiscountRate] = useState("10")
 
   const isCapital = useMemo(
     () =>
@@ -77,6 +89,14 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
   const mutation = useMutation({
     mutationFn: (input: VendorProspectiveAnalysisInput) =>
       getVendorProspectiveAnalysis(input),
+    onSuccess: (_result, input) => {
+      if (input.proposalRowId) {
+        // The score was persisted onto the proposal row — refresh the
+        // proposals list so the card shows it.
+        queryClient.invalidateQueries({ queryKey: ["prospective"] })
+        toast.success("Score attached to the selected proposal")
+      }
+    },
     onError: (err: Error) =>
       toast.error(err.message || "Failed to analyze deal"),
   })
@@ -120,11 +140,12 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
               annualMaintenanceCost: maintenanceCost
                 ? Number(maintenanceCost)
                 : 0,
-              termMonths: 60,
-              interestRate: 0.05,
-              discountRate: 0.1,
+              termMonths: Number(termMonths) > 0 ? Number(termMonths) : 60,
+              interestRate: Number(interestRate) >= 0 ? Number(interestRate) / 100 : 0.05,
+              discountRate: Number(discountRate) >= 0 ? Number(discountRate) / 100 : 0.1,
             }
           : undefined,
+      proposalRowId: proposalRowId !== NO_PROPOSAL ? proposalRowId : undefined,
     })
   }
 
@@ -141,7 +162,7 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
           <CardTitle className="text-base">Deal Scorer</CardTitle>
           <CardDescription>
             Model floor / target / ceiling pricing and see margin, payback,
-            and tier upside before you submit.
+            and penetration upside before you submit.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -160,6 +181,13 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
                   ))}
                 </SelectContent>
               </Select>
+              {facilities.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No facilities related to your organization yet — facilities
+                  appear here once you have a contract, sales history, or
+                  submitted proposal with them.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="variant">Contract variant</Label>
@@ -184,6 +212,33 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="attach-proposal">
+              Attach score to proposal (optional)
+            </Label>
+            <Select value={proposalRowId} onValueChange={setProposalRowId}>
+              <SelectTrigger id="attach-proposal">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_PROPOSAL}>
+                  Don&apos;t attach — just analyze
+                </SelectItem>
+                {proposals.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    #{p.id.slice(0, 8)} — {p.itemCount} items,{" "}
+                    {formatCurrency(p.totalProposedCost)}
+                    {p.dealScore ? ` (scored ${p.dealScore.overall})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              The overall score is saved on the selected proposal and shown
+              on its card in My Proposals.
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -289,10 +344,16 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
             <Input
               id="estimated-spend"
               type="number"
-              placeholder="leave blank to use COG trailing-12mo"
+              placeholder="leave blank to estimate from your own sales"
               value={estimatedSpend}
               onChange={(e) => setEstimatedSpend(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              The facility&apos;s TOTAL category spend across all vendors.
+              Left blank, it&apos;s estimated from your own trailing-12mo
+              sales to this facility — divided by Current share % when you
+              provide one; otherwise penetration deltas are approximate.
+            </p>
           </div>
 
           {isCapital && (
@@ -315,6 +376,36 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
                   onChange={(e) => setMaintenanceCost(e.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="term-months">Term (months)</Label>
+                <Input
+                  id="term-months"
+                  type="number"
+                  inputMode="numeric"
+                  value={termMonths}
+                  onChange={(e) => setTermMonths(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="interest-rate">Interest %</Label>
+                <Input
+                  id="interest-rate"
+                  type="number"
+                  inputMode="decimal"
+                  value={interestRate}
+                  onChange={(e) => setInterestRate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="discount-rate">Discount %</Label>
+                <Input
+                  id="discount-rate"
+                  type="number"
+                  inputMode="decimal"
+                  value={discountRate}
+                  onChange={(e) => setDiscountRate(e.target.value)}
+                />
+              </div>
             </div>
           )}
 
@@ -335,6 +426,16 @@ export function DealScorerSection({ facilities }: DealScorerSectionProps) {
 // ─── Results ───────────────────────────────────────────────────
 
 function ResultsView({ result }: { result: VendorProspectiveResult }) {
+  // Audit M6: no caller supplies a proposedRebateConfig today, so the
+  // tier-optimization result is the "No tiered rebate config supplied"
+  // sentinel (all three numeric fields null). Hide the card rather than
+  // render a permanently-dead "Achieved tier: none" panel.
+  const t = result.tierOptimization
+  const hasTierAnalysis =
+    t.achievedTier != null ||
+    t.distanceToNextTier != null ||
+    t.additionalRebateAtNextTier != null
+
   return (
     <div className="space-y-4">
       {result.warnings.length > 0 && (
@@ -354,7 +455,7 @@ function ResultsView({ result }: { result: VendorProspectiveResult }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <PenetrationCard result={result} />
-        <TierOptimizationCard result={result} />
+        {hasTierAnalysis && <TierOptimizationCard result={result} />}
       </div>
 
       {result.capitalAnalysis && <CapitalCard result={result} />}
@@ -542,7 +643,7 @@ function CapitalCard({ result }: { result: VendorProspectiveResult }) {
               : "never (margin too thin)"
           }
         />
-        <Row label="NPV @ 10%" value={formatCurrency(c.npv)} emphasis />
+        <Row label="NPV (at your discount rate)" value={formatCurrency(c.npv)} emphasis />
         {c.facilityBreakEvenPaymentPerPeriod != null && (
           <Row
             label="Facility break-even / mo"

@@ -100,6 +100,16 @@ export interface VendorProspectiveInput {
 
   /** Estimated total annual spend from the facility on this category. */
   facilityEstimatedAnnualSpend: number
+  /**
+   * The vendor's own current annual revenue at this facility, when known
+   * directly (e.g. backfilled from the vendor's own COG sales). When
+   * provided, penetration analysis uses it as `currentAnnualRevenue` /
+   * `revenueAtRisk` instead of deriving `spend × currentShare` — the
+   * derivation is wrong when the spend figure itself came from the
+   * vendor's own sales (2026-06-10 audit H3: vendor-only COG was being
+   * treated as facility TOTAL category spend).
+   */
+  facilityCurrentVendorRevenue?: number
   /** Vendor's current share of that spend, decimal (0.0–1.0). */
   facilityCurrentVendorShare?: number
   /** Vendor's target share for this proposal, decimal (0.0–1.0). */
@@ -229,17 +239,25 @@ export function analyzeVendorProspective(
   const currentShare = input.facilityCurrentVendorShare ?? 0
   const targetShare =
     input.targetVendorShare ?? Math.max(currentShare, 0.5) // default: try for 50%
-  const revenueAtRisk = input.facilityEstimatedAnnualSpend * currentShare
+  // Prefer the directly-known vendor revenue (e.g. from the vendor's own
+  // COG sales) over the spend × share derivation. See input doc on
+  // `facilityCurrentVendorRevenue`.
+  const currentAnnualRevenue =
+    input.facilityCurrentVendorRevenue ??
+    input.facilityEstimatedAnnualSpend * currentShare
+  const revenueAtRisk = currentAnnualRevenue
 
   // ── 4. Penetration analysis ──────────────────────────────────
+  const targetAnnualRevenue = input.facilityEstimatedAnnualSpend * targetShare
   const penetrationAnalysis: PenetrationAnalysis = {
     currentShare,
     targetShare,
-    currentAnnualRevenue: revenueAtRisk,
-    targetAnnualRevenue: input.facilityEstimatedAnnualSpend * targetShare,
-    incrementalRevenueOpportunity:
-      input.facilityEstimatedAnnualSpend *
-      Math.max(0, targetShare - currentShare),
+    currentAnnualRevenue,
+    targetAnnualRevenue,
+    incrementalRevenueOpportunity: Math.max(
+      0,
+      targetAnnualRevenue - currentAnnualRevenue,
+    ),
   }
 
   // ── 5. Capital analysis ──────────────────────────────────────
@@ -333,12 +351,11 @@ function pickInternalListPrice(
       return b.internalListPrice
     }
   }
-  // fall back to national avg if no internal list
-  for (const b of benchmarks) {
-    if (b.nationalAvgPrice != null && b.nationalAvgPrice > 0) {
-      return b.nationalAvgPrice
-    }
-  }
+  // NO fallback to nationalAvgPrice: scenarios don't carry item numbers,
+  // so the first benchmark row in the (arbitrary) load order has no
+  // relationship to the scored items — `discountFromBenchmarkList`
+  // computed against it was noise (2026-06-10 audit M8). When no
+  // internal list price is supplied the discount stays null.
   return null
 }
 

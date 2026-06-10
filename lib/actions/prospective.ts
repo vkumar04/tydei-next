@@ -32,6 +32,19 @@ export interface DealScore {
   recommendation: "strong_accept" | "accept" | "negotiate" | "reject"
 }
 
+/**
+ * The persisted deal score attached to a proposal by the Deal Scorer
+ * (`getVendorProspectiveAnalysis` with a `proposalRowId` writes
+ * `pricingData.dealScore = { score, scoredAt }` — audit H2). The
+ * recommendation is derived from the score at read time using the
+ * legacy 80/65/40 thresholds.
+ */
+export interface ProposalDealScore {
+  overall: number
+  recommendation: "strong_accept" | "accept" | "negotiate" | "reject"
+  scoredAt: string | null
+}
+
 export interface FinancialProjection {
   month: number
   label: string
@@ -55,7 +68,7 @@ export interface VendorProposal {
   status: "draft" | "submitted" | "accepted" | "rejected"
   itemCount: number
   totalProposedCost: number
-  dealScore: DealScore | null
+  dealScore: ProposalDealScore | null
   createdAt: string
   /** Charles 2026-04-26 #67: richer fields from the proposal builder.
    *  All optional so historic alerts (which lack them) still load. */
@@ -78,52 +91,20 @@ export interface VendorProposal {
 // export in the codebase. See
 // `docs/superpowers/audits/2026-05-04-prospective-analysis-audit.md`.
 
-// ─── Score a Deal ───────────────────────────────────────────────
+// NOTE: the facility-gated `scoreDeal` action (a pure weighted average
+// with zero consumers) was removed on 2026-06-10 (audit H2). Vendor
+// proposal scores now come from the Deal Scorer pipeline:
+// `getVendorProspectiveAnalysis` persists `pricingData.dealScore` on
+// the draft proposal row, and `payloadToProposal` below reads it back.
 
-export async function scoreDeal(input: {
-  financialValue: number
-  rebateEfficiency: number
-  pricingCompetitiveness: number
-  marketShareAlignment: number
-  complianceLikelihood: number
-}): Promise<DealScore> {
-  await requireFacility()
-  return computeDealScore(input)
-}
-
-function computeDealScore(input: {
-  financialValue: number
-  rebateEfficiency: number
-  pricingCompetitiveness: number
-  marketShareAlignment: number
-  complianceLikelihood: number
-}): DealScore {
-  const weights = {
-    financialValue: 0.3,
-    rebateEfficiency: 0.15,
-    pricingCompetitiveness: 0.25,
-    marketShareAlignment: 0.15,
-    complianceLikelihood: 0.15,
-  }
-
-  const overall = Math.round(
-    input.financialValue * weights.financialValue +
-      input.rebateEfficiency * weights.rebateEfficiency +
-      input.pricingCompetitiveness * weights.pricingCompetitiveness +
-      input.marketShareAlignment * weights.marketShareAlignment +
-      input.complianceLikelihood * weights.complianceLikelihood
-  )
-
-  let recommendation: DealScore["recommendation"] = "negotiate"
-  if (overall >= 80) recommendation = "strong_accept"
-  else if (overall >= 65) recommendation = "accept"
-  else if (overall < 40) recommendation = "reject"
-
-  return {
-    overall,
-    ...input,
-    recommendation,
-  }
+/** Read-time recommendation thresholds (legacy scorer parity: 80/65/40). */
+function recommendationForScore(
+  score: number,
+): ProposalDealScore["recommendation"] {
+  if (score >= 80) return "strong_accept"
+  if (score >= 65) return "accept"
+  if (score < 40) return "reject"
+  return "negotiate"
 }
 
 // ─── Financial Projections ──────────────────────────────────────
@@ -178,6 +159,9 @@ export async function createProposal(input: {
    *  facility-side analyzer flow (which only knows pricing + basic terms)
    *  still works. */
   productCategories?: string[]
+  /** Organization division names for grouped proposals (audit L13 —
+   *  previously the builder clobbered `productCategories` with these). */
+  divisions?: string[]
   projectedSpend?: number
   projectedVolume?: number
   marketShareCommitment?: number
@@ -217,6 +201,7 @@ export async function createProposal(input: {
           terms: input.terms,
           totalCost,
           productCategories: input.productCategories,
+          divisions: input.divisions,
           projectedSpend: input.projectedSpend,
           projectedVolume: input.projectedVolume,
           marketShareCommitment: input.marketShareCommitment,
@@ -244,22 +229,29 @@ export async function createProposal(input: {
   })
   const memberUserIds =
     vendorOrg?.organization?.members.map((m) => m.user.id) ?? []
+  // Audit M7: the builder writes ["none"] when no facility was picked —
+  // don't count that placeholder as a targeted facility.
+  const targetedFacilityCount = input.facilityIds.filter(
+    (id) => id && id !== "none",
+  ).length
   if (memberUserIds.length > 0) {
     void createInAppNotificationsInternal({
       userIds: memberUserIds,
       type: "vendor_proposal_created",
-      title: `Proposal submitted to ${input.facilityIds.length} facilities`,
+      title: `Proposal draft created — ${targetedFacilityCount} ${targetedFacilityCount === 1 ? "facility" : "facilities"} targeted`,
       body: `${input.pricingItems.length} items, $${totalCost.toLocaleString()} total`,
       payload: { proposalId: row.id },
       actionUrl: "/vendor/prospective",
     })
   }
 
+  // Audit M7: the row is written with status "draft" — surface that
+  // truthfully instead of pretending it was submitted.
   return serialize({
     id: row.id,
     vendorId: vendor.id,
     facilityIds: input.facilityIds,
-    status: "submitted",
+    status: "draft",
     itemCount: input.pricingItems.length,
     totalProposedCost: totalCost,
     dealScore: null,
@@ -350,18 +342,25 @@ export interface VendorBenchmarkRow {
 export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
   const { vendor } = await requireVendor()
 
-  // 1) Direct vendor benchmarks
+  // 1) Direct vendor benchmarks (audit M8: deterministic order + cap)
   const direct = await prisma.productBenchmark.findMany({
     where: { vendorId: vendor.id },
     orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
+    take: 500,
   })
 
   // 2) National benchmarks (no vendorId) that match this vendor's catalog
   // (item numbers seen in COGRecord under this vendor).
+  // Group-vendor drift (project_group_vendor_drift): scoped by the bare
+  // session vendorId — vendor orgs spanning grouped vendor records would
+  // under-count, but no vendor-side "all vendor ids in my group" helper
+  // exists (COGRecord carries a single vendorId). Smallest correct
+  // change: keep the bare id and flag the class.
   const cogItems = await prisma.cOGRecord.findMany({
     where: { vendorId: vendor.id },
     select: { vendorItemNo: true },
     distinct: ["vendorItemNo"],
+    orderBy: { vendorItemNo: "asc" },
     take: 500,
   })
   const cogItemNos = cogItems
@@ -373,6 +372,7 @@ export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
       ? await prisma.productBenchmark.findMany({
           where: { vendorId: null, vendorItemNo: { in: cogItemNos } },
           orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
+          take: 500,
         })
       : []
 
@@ -419,14 +419,32 @@ function payloadToProposal(
   const terms = meta.terms as
     | { contractLength?: number; notes?: string }
     | undefined
+  // Audit H2: read the persisted Deal Scorer result
+  // (`pricingData.dealScore = { score, scoredAt }`, written by
+  // getVendorProspectiveAnalysis) instead of hardcoding null.
+  const rawScore = meta.dealScore as
+    | { score?: unknown; scoredAt?: unknown }
+    | undefined
+  const dealScore: ProposalDealScore | null =
+    rawScore && typeof rawScore.score === "number"
+      ? {
+          overall: Math.round(rawScore.score),
+          recommendation: recommendationForScore(rawScore.score),
+          scoredAt:
+            typeof rawScore.scoredAt === "string" ? rawScore.scoredAt : null,
+        }
+      : null
   return {
     id,
     vendorId,
     facilityIds: (meta.facilityIds as string[]) ?? [],
-    status: "submitted" as const,
+    // Audit M7: these rows ARE drafts (vendor-internal analysis docs,
+    // status "draft" in PendingContract; legacy alert rows were never
+    // submitted to a facility either). Don't claim "submitted".
+    status: "draft" as const,
     itemCount: ((meta.pricingItems as unknown[]) ?? []).length,
     totalProposedCost: Number(meta.totalCost ?? 0),
-    dealScore: null,
+    dealScore,
     createdAt: createdAt.toISOString(),
     productCategories: (meta.productCategories as string[]) ?? undefined,
     contractLengthMonths: terms?.contractLength,
@@ -458,9 +476,13 @@ export async function getVendorProposals(
 ): Promise<VendorProposal[]> {
   const { vendor } = await requireVendor()
 
+  // Audit L13: select only the columns the mapper reads — the payload
+  // sent to the client is already count-mapped (itemCount, not the full
+  // pricingItems array), so don't drag whole rows out of the DB either.
   const [pendingRows, legacyAlerts] = await Promise.all([
     prisma.pendingContract.findMany({
       where: { vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+      select: { id: true, submittedAt: true, pricingData: true },
       orderBy: { submittedAt: "desc" },
     }),
     prisma.alert.findMany({
@@ -469,6 +491,7 @@ export async function getVendorProposals(
         alertType: "compliance",
         ...onlyVendorProposalAlerts(),
       },
+      select: { id: true, createdAt: true, metadata: true },
       orderBy: { createdAt: "desc" },
     }),
   ])
