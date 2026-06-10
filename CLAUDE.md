@@ -38,7 +38,15 @@ skip brainstorming and ship directly. Use judgment — when in doubt, brainstorm
   literal `cmo6j6fx…`-style cuid you find in older notes is stale.
 - **No `any` in TypeScript.** Strict mode is on; use proper types.
 - **Server actions** live under `lib/actions/`. `"use server"` files can ONLY
-  export async functions (interfaces/types are fine — they're erased).
+  export async functions. `export interface` / `export type X = …` declarations
+  are fine (erased), and so is the **from-form** type re-export
+  (`export type { X } from "module"`). But a LOCAL clause
+  `export type { X }` (no `from`) is **NOT** erased by Turbopack's prod
+  server-action transform — it emits `registerServerReference(X, …)` which
+  throws `ReferenceError: X is not defined` at module evaluation and kills
+  EVERY action in the file (prod-only; dev works — Charles "Analysis is
+  still broken" 2026-06-09, digest 3119269338). Guarded by
+  `lib/actions/__tests__/use-server-async-export-scanner.test.ts`.
 - **Prisma client:** `import { prisma } from "@/lib/db"`. Don't construct your own.
 - **Auth gates:** `requireFacility()` / `requireVendor()` / `requireAdmin()` from
   `@/lib/actions/auth`. Use these, never raw session checks.

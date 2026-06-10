@@ -48,6 +48,7 @@ import {
   type CogCategoryMapping,
 } from "@/lib/actions/cog-category-mapping"
 import { getCategories } from "@/lib/actions/categories"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
 
@@ -211,6 +212,20 @@ function MappingRow({
   const isKeepAsIs =
     pending !== null && pending.toLowerCase() === row.category.toLowerCase()
 
+  // Charles 2026-06-09 ("Says unmapped here instead of Keep as is"):
+  // a category that IS a canonical ProductCategory name (typically the
+  // TARGET of his other mappings — "Ortho-Joints", "Spine", …) has no
+  // mapping rule of its own, but it isn't "Unmapped" — the resolver
+  // recognizes exact canonical names as-is. Labeling these "Unmapped"
+  // reads like every row still needs fixing. Display-only: no rule is
+  // written until the user explicitly picks "Keep as-is" + Apply.
+  const isCanonicalAsIs =
+    pending === null &&
+    categories.some(
+      (c) =>
+        canonicalizeCategoryName(c) === canonicalizeCategoryName(row.category),
+    )
+
   return (
     <TableRow>
       <TableCell className="font-medium">{row.category}</TableCell>
@@ -233,6 +248,8 @@ function MappingRow({
                 <span className="truncate">
                   {isKeepAsIs ? (
                     `Keep as-is (${row.category})`
+                  ) : isCanonicalAsIs ? (
+                    "Keep as-is"
                   ) : (
                     pending ?? (
                       <span className="text-muted-foreground italic">
