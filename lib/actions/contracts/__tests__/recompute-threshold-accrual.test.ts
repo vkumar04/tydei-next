@@ -4,14 +4,18 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-const { deleteManyMock, createManyMock } = vi.hoisted(() => ({
-  deleteManyMock: vi.fn(),
-  createManyMock: vi.fn(),
-}))
+const { deleteManyMock, createManyMock, cogFindManyMock, cogGroupByMock } =
+  vi.hoisted(() => ({
+    deleteManyMock: vi.fn(),
+    createManyMock: vi.fn(),
+    cogFindManyMock: vi.fn(),
+    cogGroupByMock: vi.fn(),
+  }))
 
 vi.mock("@/lib/db", () => ({
   prisma: {
     rebate: { deleteMany: deleteManyMock, createMany: createManyMock },
+    cOGRecord: { findMany: cogFindManyMock, groupBy: cogGroupByMock },
   },
 }))
 
@@ -32,6 +36,8 @@ const TERM = {
 beforeEach(() => {
   deleteManyMock.mockReset().mockResolvedValue({ count: 0 })
   createManyMock.mockReset().mockResolvedValue({ count: 0 })
+  cogFindManyMock.mockReset().mockResolvedValue([])
+  cogGroupByMock.mockReset().mockResolvedValue([])
 })
 
 describe("recomputeThresholdAccrualForTerm", () => {
@@ -176,5 +182,65 @@ describe("recomputeThresholdAccrualForTerm", () => {
     })
     expect(r).toEqual({ inserted: 0, sumEarned: 0 })
     expect(createManyMock).not.toHaveBeenCalled()
+  })
+
+  // Charles 2026-06-10 ("market share is calculating 2% rebate for market
+  // share when it should be at 10 ... the other term is not calculating
+  // still"): the per-period market-share path filtered COG by the RAW
+  // stored term categories in a case-sensitive Prisma `in`. A term scoped
+  // to "Ortho-Extremity" matched zero rows stored as "ORTHO EXTREMITY" →
+  // window share 0% → tier 0 → $0 rows, while the tier panel (which
+  // canonicalizes) showed the achieved tier. The filter must expand
+  // through the facility's COG category universe.
+  it("market_share per-period: category filter expands to canonical COG variants", async () => {
+    // Facility's stored COG spellings differ in case/punctuation from the
+    // term's scoped name.
+    cogGroupByMock.mockResolvedValue([
+      { category: "ORTHO EXTREMITY" },
+      { category: "Spine" },
+    ])
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date(Date.UTC(2025, 5, 15)),
+        extendedPrice: 700,
+      },
+    ])
+    await recomputeThresholdAccrualForTerm({
+      contractId: "c-1",
+      facilityId: "f-1",
+      contractEffectiveDate: new Date(Date.UTC(2025, 0, 1)),
+      contractExpirationDate: new Date(Date.UTC(2025, 11, 31)),
+      metric: "currentMarketShare",
+      metricValue: 70.5,
+      term: {
+        ...TERM,
+        termType: "market_share",
+        vendorId: "v-1",
+        vendorIds: ["v-1"],
+        appliesTo: "specific_category",
+        categories: ["Ortho-Extremity"],
+        tiers: [
+          {
+            tierNumber: 1,
+            tierName: "T1",
+            spendMin: 70,
+            spendMax: null,
+            rebateValue: 0.1,
+            rebateType: "percent_of_spend",
+          },
+        ],
+      },
+    })
+    // Both COG queries (vendor numerator + facility denominator) must carry
+    // the expanded variant list — the term's spelling AND the stored COG
+    // spelling.
+    expect(cogFindManyMock).toHaveBeenCalled()
+    for (const call of cogFindManyMock.mock.calls) {
+      const where = call[0].where
+      expect(where.category.in).toEqual(
+        expect.arrayContaining(["Ortho-Extremity", "ORTHO EXTREMITY"]),
+      )
+      expect(where.category.in).not.toContain("Spine")
+    }
   })
 })

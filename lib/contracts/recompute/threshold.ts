@@ -25,6 +25,8 @@
 import { prisma } from "@/lib/db"
 import type { RebateTier } from "@/lib/rebates/engine/types"
 import { determineTier } from "@/lib/rebates/engine/shared/determine-tier"
+import { expandCategoriesToCogVariants } from "@/lib/contracts/cog-category-filter"
+import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 
 const AUTO_THRESHOLD_PREFIX = "[auto-threshold-accrual]"
 
@@ -307,19 +309,40 @@ export async function recomputeThresholdAccrualForTerm(input: {
   // current scalar onto history. Two whole-window queries (vendor-set
   // numerator + facility-wide denominator), partitioned in memory per
   // bucket — same single-query pattern the old percent branch used.
+  // 2026-06-10 (Charles "market share is calculating 2% rebate for market
+  // share when it should be at 10 ... the other term is not calculating
+  // still"): the category filter previously used the RAW stored names in a
+  // case-SENSITIVE Prisma `in` — the invariant-table violation class. A term
+  // scoped to "Ortho-Extremity" matched zero COG rows stored as variants, so
+  // the window share computed 0% → tier 0 → $0 rows, while the tier panel
+  // (which canonicalizes) showed 70.5% → tier 2. Expand through the
+  // facility's COG category universe so every canonical variant counts.
+  const scopedCategoryNames =
+    term.appliesTo === "specific_category" &&
+    Array.isArray(term.categories) &&
+    term.categories.length > 0
+      ? Array.from(new Set(term.categories))
+      : term.categoryName
+        ? [term.categoryName]
+        : []
+  const buildScopedCategoryFilter = async (): Promise<
+    Record<string, never> | { category: { in: string[] } }
+  > => {
+    if (scopedCategoryNames.length === 0) return {}
+    const universe = await facilityCogCategoryUniverse(facilityId)
+    return {
+      category: {
+        in: expandCategoriesToCogVariants(scopedCategoryNames, universe),
+      },
+    }
+  }
+
   const perBucketShare = new Map<
     number,
     { share: number; tierNumber: number }
   >()
   if (isPerPeriodMarketShare && results.length > 0) {
-    const categoryFilter =
-      term.appliesTo === "specific_category" &&
-      Array.isArray(term.categories) &&
-      term.categories.length > 0
-        ? { category: { in: Array.from(new Set(term.categories)) } }
-        : term.categoryName
-          ? { category: term.categoryName }
-          : {}
+    const categoryFilter = await buildScopedCategoryFilter()
     const vendorIdSet = term.vendorIds ?? (term.vendorId ? [term.vendorId] : [])
     const [vendorRows, facilityRows] = await Promise.all([
       prisma.cOGRecord.findMany({
@@ -385,15 +408,9 @@ export async function recomputeThresholdAccrualForTerm(input: {
     }
   } else if (isMarketSharePercentOfSpend && term.vendorId && results.length > 0) {
     // Fallback (vendor info missing from the per-period path): the legacy
-    // scalar percent-of-spend branch — Bug #21 math.
-    const categoryFilter =
-      term.appliesTo === "specific_category" &&
-      Array.isArray(term.categories) &&
-      term.categories.length > 0
-        ? { category: { in: Array.from(new Set(term.categories)) } }
-        : term.categoryName
-          ? { category: term.categoryName }
-          : {}
+    // scalar percent-of-spend branch — Bug #21 math. Same canonical
+    // category expansion as the per-period path (2026-06-10).
+    const categoryFilter = await buildScopedCategoryFilter()
     const cogRows = await prisma.cOGRecord.findMany({
       where: {
         facilityId,

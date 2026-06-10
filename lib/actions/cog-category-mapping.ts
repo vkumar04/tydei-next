@@ -17,6 +17,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { suggestTarget } from "@/lib/categories/category-suggest"
 import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
@@ -258,6 +259,9 @@ export async function remapCOGCategory(input: {
     .filter((v): v is string => !!v)
 
   let recordsUpdated = 0
+  // Contracts whose persisted accrual must be rebuilt after the retag —
+  // term-scope rewrites and category-scoped spend both move when names merge.
+  const rewrittenTermContractIds = new Set<string>()
   if (to) {
     const updated = await prisma.cOGRecord.updateMany({
       where: {
@@ -303,7 +307,7 @@ export async function remapCOGCategory(input: {
         categories: { isEmpty: false },
         contract: { facilityId: facility.id },
       },
-      select: { id: true, categories: true },
+      select: { id: true, categories: true, contractId: true },
     })
     for (const t of scopedTerms) {
       const matches = t.categories.some(
@@ -327,6 +331,7 @@ export async function remapCOGCategory(input: {
         where: { id: t.id },
         data: { categories: next },
       })
+      rewrittenTermContractIds.add(t.contractId)
     }
 
     // Persist the confirmed rule (upsert on cogCategory).
@@ -441,6 +446,38 @@ export async function remapCOGCategory(input: {
 
   for (const vendorId of vendorIds) {
     await recomputeMatchStatusesForVendor(vendorId, facility.id)
+  }
+
+  // Bug #3 (Charles 2026-06-10 "rebates earned and what is calculated in
+  // performance are different ... after I edited and saved the rebate and
+  // performance rebate now match"): a category remap changes which COG rows
+  // fall in a term's scope, but the persisted Rebate accrual rows were only
+  // rebuilt on term save / COG import — so the header (persisted) and the
+  // Performance timeline (live) diverged until the user happened to re-save
+  // a term. Recompute accrual for every contract the remap touched: rewritten
+  // term scopes + any contract on the affected vendors.
+  if (to) {
+    const vendorContracts =
+      vendorIds.length > 0
+        ? await prisma.contract.findMany({
+            where: { facilityId: facility.id, vendorId: { in: vendorIds } },
+            select: { id: true },
+          })
+        : []
+    const contractIdsToRecompute = new Set([
+      ...rewrittenTermContractIds,
+      ...vendorContracts.map((c) => c.id),
+    ])
+    for (const cId of contractIdsToRecompute) {
+      try {
+        await recomputeAccrualForContract(cId)
+      } catch (err) {
+        console.warn(
+          `[remapCOGCategory] recomputeAccrualForContract(${cId}) failed:`,
+          err,
+        )
+      }
+    }
   }
 
   revalidatePath("/dashboard/cog-data")

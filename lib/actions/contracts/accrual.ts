@@ -675,6 +675,10 @@ async function _buildAccrualTimelineForContract(
      * passed to the engine). Used by the UI to render unit/flat dollar
      * labels for non-percent tiers. */
     achievedRebateValue: number
+    /** 2026-06-10: true for the bold evaluation-period subtotal rows
+     * interleaved between the monthly rows (quarter / half / year where the
+     * tier settles). Consumers summing accrual MUST skip these rows. */
+    isPeriodSubtotal?: boolean
   }
   const rows: TimelineRowWithVolume[] = monthsTimeline.map((month, i) => {
     let totalSpend = 0
@@ -772,80 +776,26 @@ async function _buildAccrualTimelineForContract(
     | "annual"
     | "lifetime" = primaryEval
 
-  // 2026-06-09 (Charles "in performance in tie in it is showing accrued
-  // rebates on a monthly basis but this is a quarterly contract"): the rows
-  // above are emitted one-per-MONTH regardless of cadence — the quarterly
-  // `evaluationPeriod` only reset the tier-math window, never the row
-  // granularity. Roll the per-month rows up into evaluation-period buckets
-  // (one row per quarter / half / year) so a quarterly contract displays
-  // quarterly: sum spend + accrued + volume, take the period-end cumulative
-  // (rows already reset cumulative per period via periodKeyFor), and keep the
-  // best tier/rate achieved in the period. Monthly-eval and multi-term
-  // ("lifetime") contracts keep per-month rows. Reuses periodKeyFor so the
-  // bucket boundaries match the cumulative-reset logic exactly.
-  const displayRows: TimelineRowWithVolume[] =
-    primaryEval === "monthly" || primaryEval === "lifetime"
-      ? rows
-      : (() => {
-          const byBucket = new Map<string, TimelineRowWithVolume>()
-          const order: string[] = []
-          for (const r of rows) {
-            const key = periodKeyFor(r.month)
-            const prev = byBucket.get(key)
-            if (!prev) {
-              order.push(key)
-              byBucket.set(key, { ...r, month: key })
-              continue
-            }
-            const better =
-              r.tierAchieved > prev.tierAchieved ||
-              (r.tierAchieved === prev.tierAchieved &&
-                r.rebatePercent > prev.rebatePercent)
-            byBucket.set(key, {
-              ...prev,
-              spend: prev.spend + r.spend,
-              // period-end running total (cumulative already resets per period)
-              cumulativeSpend: r.cumulativeSpend,
-              accruedAmount: prev.accruedAmount + r.accruedAmount,
-              volume: prev.volume + r.volume,
-              tierAchieved: better ? r.tierAchieved : prev.tierAchieved,
-              rebatePercent: better ? r.rebatePercent : prev.rebatePercent,
-              achievedRebateType: better
-                ? r.achievedRebateType
-                : prev.achievedRebateType,
-              achievedRebateValue: better
-                ? r.achievedRebateValue
-                : prev.achievedRebateValue,
-              termContributions: [
-                ...prev.termContributions,
-                ...r.termContributions,
-              ],
-            })
-          }
-          return order.map((k) => byBucket.get(k)!)
-        })()
-
-  // 2026-06-09: overlay the persisted carve-out accrual into the bucketed
-  // rows (see hasCarveOutTerm above). Each `[auto-carve-out-accrual]` Rebate
-  // row lands in the bucket containing its payPeriodEnd; buckets with no
-  // tier-engine row are appended so semi-annual carve accrual outside the
-  // COG-spend window still shows. Tier/Rate stay untouched (carve-out has
-  // no real tiers).
+  // 2026-06-09: overlay the persisted carve-out / threshold accrual into the
+  // MONTHLY rows (see hasOverlayTerm above). Each `[auto-carve-out-accrual]`
+  // / `[auto-threshold-accrual]` Rebate row lands in the month containing its
+  // payPeriodEnd; months with no tier-engine row are appended so accrual
+  // outside the COG-spend window still shows. Tier/Rate stay untouched
+  // (overlay terms have no spend-dollar tiers).
   if (carveOutRebateRows.length > 0) {
-    const byKey = new Map(displayRows.map((r) => [r.month, r]))
+    const byKey = new Map(rows.map((r) => [r.month, r]))
     for (const cr of carveOutRebateRows) {
       if (!cr.payPeriodEnd) continue
       const monthKey = `${cr.payPeriodEnd.getUTCFullYear()}-${String(
         cr.payPeriodEnd.getUTCMonth() + 1,
       ).padStart(2, "0")}`
-      const key = periodKeyFor(monthKey)
       const earned = Number(cr.rebateEarned ?? 0)
-      const existing = byKey.get(key)
+      const existing = byKey.get(monthKey)
       if (existing) {
         existing.accruedAmount += earned
       } else {
         const synthetic: TimelineRowWithVolume = {
-          month: key,
+          month: monthKey,
           spend: 0,
           cumulativeSpend: 0,
           accruedAmount: earned,
@@ -856,14 +806,69 @@ async function _buildAccrualTimelineForContract(
           achievedRebateType: null,
           achievedRebateValue: 0,
         }
-        byKey.set(key, synthetic)
-        displayRows.push(synthetic)
+        byKey.set(monthKey, synthetic)
+        rows.push(synthetic)
       }
     }
-    // Keep chronological order — bucket keys within one scheme
-    // (YYYY-MM / YYYY-QN / YYYY-HN / YYYY) sort lexicographically.
-    displayRows.sort((a, b) => (a.month < b.month ? -1 : 1))
+    // Keep chronological order (YYYY-MM sorts lexicographically).
+    rows.sort((a, b) => (a.month < b.month ? -1 : 1))
   }
+
+  // 2026-06-10 (Charles "the monthly data was removed it is just showing
+  // cumulative annuals"): the 2026-06-09 quarterly fix collapsed per-month
+  // rows into evaluation-period buckets, which fixed the tier-math window
+  // but deleted monthly visibility. Now: keep EVERY month row, and insert a
+  // bold subtotal row at each evaluation-period boundary (quarter / half /
+  // year) where the tier actually settles. Tier evaluation still runs at
+  // the term cadence — only the display changed. Monthly-eval and
+  // multi-term ("lifetime") contracts keep plain per-month rows.
+  const displayRows: TimelineRowWithVolume[] =
+    primaryEval === "monthly" || primaryEval === "lifetime"
+      ? rows
+      : (() => {
+          const out: TimelineRowWithVolume[] = []
+          let bucket: TimelineRowWithVolume | null = null
+          const flush = () => {
+            if (bucket) out.push(bucket)
+            bucket = null
+          }
+          for (const r of rows) {
+            const key = periodKeyFor(r.month)
+            if (bucket && bucket.month !== key) flush()
+            out.push(r)
+            const cur: TimelineRowWithVolume | null = bucket
+            if (!cur) {
+              bucket = { ...r, month: key, isPeriodSubtotal: true }
+              continue
+            }
+            const better: boolean =
+              r.tierAchieved > cur.tierAchieved ||
+              (r.tierAchieved === cur.tierAchieved &&
+                r.rebatePercent > cur.rebatePercent)
+            bucket = {
+              ...cur,
+              spend: cur.spend + r.spend,
+              // period-end running total (cumulative already resets per period)
+              cumulativeSpend: r.cumulativeSpend,
+              accruedAmount: cur.accruedAmount + r.accruedAmount,
+              volume: cur.volume + r.volume,
+              tierAchieved: better ? r.tierAchieved : cur.tierAchieved,
+              rebatePercent: better ? r.rebatePercent : cur.rebatePercent,
+              achievedRebateType: better
+                ? r.achievedRebateType
+                : cur.achievedRebateType,
+              achievedRebateValue: better
+                ? r.achievedRebateValue
+                : cur.achievedRebateValue,
+              termContributions: [
+                ...cur.termContributions,
+                ...r.termContributions,
+              ],
+            }
+          }
+          flush()
+          return out
+        })()
 
   // Per-term labels so the Accrual Timeline UI can render each term's
   // contribution on multi-term contracts instead of collapsing to the

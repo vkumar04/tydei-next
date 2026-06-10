@@ -743,7 +743,12 @@ export async function getContract(
   // and category badges can never display a superseded name — even when the
   // stored rows predate the mapping (the retro-rewrite in remapCOGCategory
   // only reaches rows that exist at confirm time).
-  const confirmedCategoryMap = await loadConfirmedCategoryMap()
+  // Defensive: the mapping is a display concern — a read failure must not
+  // take down the whole contract detail. Fall back to pass-through names.
+  const confirmedCategoryMap = await loadConfirmedCategoryMap().catch((err) => {
+    console.warn(`[getContract] loadConfirmedCategoryMap failed:`, err)
+    return new Map<string, string>()
+  })
   const mapName = <T extends { name: string } | null>(pc: T): T =>
     pc
       ? {
@@ -751,15 +756,20 @@ export async function getContract(
           name: applyConfirmedCategoryMapToNames([pc.name], confirmedCategoryMap)[0],
         }
       : pc
-  const mappedTerms = contract.terms.map((t) => ({
+  const mappedTerms = (contract.terms ?? []).map((t) => ({
     ...t,
-    categories: applyConfirmedCategoryMapToNames(t.categories, confirmedCategoryMap),
+    categories: applyConfirmedCategoryMapToNames(
+      t.categories ?? [],
+      confirmedCategoryMap,
+    ),
   }))
-  const mappedProductCategory = mapName(contract.productCategory)
-  const mappedContractCategories = contract.contractCategories.map((cc) => ({
-    ...cc,
-    productCategory: mapName(cc.productCategory),
-  }))
+  const mappedProductCategory = mapName(contract.productCategory ?? null)
+  const mappedContractCategories = (contract.contractCategories ?? []).map(
+    (cc) => ({
+      ...cc,
+      productCategory: mapName(cc.productCategory),
+    }),
+  )
 
   return serialize({
     ...contract,

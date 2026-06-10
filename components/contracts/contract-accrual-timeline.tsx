@@ -61,7 +61,16 @@ export function ContractAccrualTimeline({
     )
   }
 
-  const totalAccrued = data.rows.reduce((s, r) => s + Number(r.accruedAmount), 0)
+  // 2026-06-10: evaluation-period subtotal rows are interleaved with the
+  // monthly rows (Charles "the monthly data was removed") — they restate
+  // the months around them, so sums MUST skip them or double-count.
+  const isSubtotal = (r: (typeof data.rows)[number]): boolean =>
+    Boolean((r as unknown as { isPeriodSubtotal?: boolean }).isPeriodSubtotal)
+  const monthRows = data.rows.filter((r) => !isSubtotal(r))
+  const totalAccrued = monthRows.reduce(
+    (s, r) => s + Number(r.accruedAmount),
+    0,
+  )
   const latest = data.rows[data.rows.length - 1]
   const termLabels = data.termLabels ?? []
   const isMultiTerm = termLabels.length > 1
@@ -128,21 +137,9 @@ export function ContractAccrualTimeline({
           )}
         </div>
         <Badge variant="secondary" className="shrink-0">
-          {/* 2026-06-09: rows are evaluation-period buckets since the
-              quarterly-rollup fix — label them by cadence, not "months". */}
-          {(() => {
-            const unit =
-              data.cumulativeReset === "quarterly"
-                ? "quarter"
-                : data.cumulativeReset === "semi_annual"
-                  ? "half-year"
-                  : data.cumulativeReset === "annual"
-                    ? "year"
-                    : data.cumulativeReset === "lifetime"
-                      ? "month"
-                      : "month"
-            return `${data.rows.length} ${unit}${data.rows.length === 1 ? "" : "s"}`
-          })()}
+          {/* 2026-06-10: monthly rows are back (with period subtotal rows
+              interleaved) — count the months, not the subtotals. */}
+          {`${monthRows.length} month${monthRows.length === 1 ? "" : "s"}`}
         </Badge>
       </CardHeader>
       <CardContent>
@@ -164,17 +161,26 @@ export function ContractAccrualTimeline({
             <tbody>
               {data.rows.map((row) => {
                 const contributions = row.termContributions ?? []
+                const subtotal = isSubtotal(row)
                 // Only render per-term breakdown when the contract has
                 // more than one rebate term AND at least one contribution
                 // exists. Single-term contracts keep the compact display.
+                // Subtotal rows stay compact — their months above carry
+                // the breakdown.
                 const showBreakdown =
-                  isMultiTerm && contributions.length > 0
+                  isMultiTerm && contributions.length > 0 && !subtotal
                 return (
                   <tr
-                    key={row.month}
-                    className="border-b last:border-0 hover:bg-muted/30 align-top"
+                    key={subtotal ? `subtotal-${row.month}` : row.month}
+                    className={
+                      subtotal
+                        ? "border-b last:border-0 bg-muted/40 font-semibold align-top"
+                        : "border-b last:border-0 hover:bg-muted/30 align-top"
+                    }
                   >
-                    <td className="py-2">{row.month}</td>
+                    <td className="py-2">
+                      {subtotal ? `${row.month} · total` : row.month}
+                    </td>
                     <td className="py-2 text-right tabular-nums">
                       {formatCurrency(Number(row.spend))}
                     </td>

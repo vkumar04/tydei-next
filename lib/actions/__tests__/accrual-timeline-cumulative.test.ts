@@ -91,6 +91,7 @@ type TimelineRow = {
   spend: number
   cumulativeSpend: number
   accruedAmount: number
+  isPeriodSubtotal?: boolean
 }
 
 type TimelineResult = {
@@ -158,13 +159,30 @@ describe("getAccrualTimeline cumulative column", () => {
   // quarterly/annual contract shows one row per quarter/year (not per month).
   // The cumulative-reset semantics are preserved: each period row carries that
   // period's total. Monthly eval still shows per-month rows.
-  it("annual eval: rolls the 3 months into a single 2025 row", async () => {
+  it("annual eval: keeps monthly rows and appends a 2025 subtotal row", async () => {
+    // 2026-06-10 (Charles "the monthly data was removed it is just showing
+    // cumulative annuals"): the 2026-06-09 rollup collapsed months into one
+    // bucket row; now every month stays visible and a bold subtotal row is
+    // interleaved at each evaluation-period boundary.
     seedContract("annual")
     const result = (await getAccrualTimeline("c-1")) as TimelineResult
-    // Jan $100 + Feb $0 + Mar $50, all in calendar-year 2025 → one row.
-    expect(result.rows.map((r) => r.month)).toEqual(["2025"])
-    expect(result.rows.map((r) => r.spend)).toEqual([150])
-    expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([150])
+    expect(result.rows.map((r) => r.month)).toEqual([
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025",
+    ])
+    expect(result.rows.map((r) => Boolean(r.isPeriodSubtotal))).toEqual([
+      false,
+      false,
+      false,
+      true,
+    ])
+    const subtotal = result.rows[3]
+    expect(subtotal.spend).toBe(150)
+    expect(subtotal.cumulativeSpend).toBe(150)
+    // Monthly rows keep their own spend so the user sees the detail.
+    expect(result.rows.slice(0, 3).map((r) => r.spend)).toEqual([100, 0, 50])
   })
 
   it("monthly eval: cumulative resets every month (matches tier math)", async () => {
@@ -175,12 +193,19 @@ describe("getAccrualTimeline cumulative column", () => {
     expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([100, 0, 50])
   })
 
-  it("quarterly eval: rolls Q1 months into a single 2025-Q1 row", async () => {
+  it("quarterly eval: keeps monthly rows and appends a 2025-Q1 subtotal row", async () => {
     seedContract("quarterly")
     const result = (await getAccrualTimeline("c-1")) as TimelineResult
-    // Jan/Feb/Mar all live in Q1 2025 → one rolled-up row with the Q1 total.
-    expect(result.rows.map((r) => r.month)).toEqual(["2025-Q1"])
-    expect(result.rows.map((r) => r.spend)).toEqual([150])
-    expect(result.rows.map((r) => r.cumulativeSpend)).toEqual([150])
+    // Jan/Feb/Mar all live in Q1 2025 → three month rows + the Q1 subtotal.
+    expect(result.rows.map((r) => r.month)).toEqual([
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-Q1",
+    ])
+    const subtotal = result.rows[3]
+    expect(subtotal.isPeriodSubtotal).toBe(true)
+    expect(subtotal.spend).toBe(150)
+    expect(subtotal.cumulativeSpend).toBe(150)
   })
 })

@@ -26,12 +26,16 @@ beforeEach(() => {
   findUniqueMock.mockResolvedValue({ id: "c-1", vendorId: "v-1" })
 })
 
-// Order of aggregates: onAgg, notPricedAgg, preMatchAgg, offAgg.
+// Order of aggregates: onAgg, on12moAgg, notPricedAgg, preMatchAgg, offAgg.
+// (on12moAgg is the trailing-12mo sublabel added 2026-06-10 when the
+// headline buckets went all-time — Charles "should be showing all spend
+// on this contract for all time".)
 // Order of groupBys:   onItems, notPricedItems, preMatchItems, offItems.
 describe("getOffContractSpend (4-way partition)", () => {
   it("splits spend across On Contract / Not Priced / Pre-Match / Off Contract buckets", async () => {
     aggregateMock
       .mockResolvedValueOnce({ _sum: { extendedPrice: 800_000 } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on12mo sublabel
       .mockResolvedValueOnce({ _sum: { extendedPrice: 150_000 } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: 40_000 } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: 10_000 } })
@@ -83,7 +87,8 @@ describe("getOffContractSpend (4-way partition)", () => {
   it("classifies same-vendor out_of_scope rows as preMatch, not offContract", async () => {
     // Pre-match bucket carries the $4.7M, offContract is $0.
     aggregateMock
-      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on12mo sublabel // on
       .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // not priced
       .mockResolvedValueOnce({ _sum: { extendedPrice: 4_700_000 } }) // preMatch
       .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // unknown_vendor
@@ -97,6 +102,7 @@ describe("getOffContractSpend (4-way partition)", () => {
   it("queries each of the 5 match statuses in the correct bucket", async () => {
     aggregateMock
       .mockResolvedValueOnce({ _sum: { extendedPrice: 1 } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on12mo sublabel
       .mockResolvedValueOnce({ _sum: { extendedPrice: 1 } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: 1 } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: 1 } })
@@ -105,9 +111,18 @@ describe("getOffContractSpend (4-way partition)", () => {
     await getOffContractSpend("c-1")
 
     const onWhere = aggregateMock.mock.calls[0][0].where
-    const notPricedWhere = aggregateMock.mock.calls[1][0].where
-    const preMatchWhere = aggregateMock.mock.calls[2][0].where
-    const offWhere = aggregateMock.mock.calls[3][0].where
+    const on12moWhere = aggregateMock.mock.calls[1][0].where
+    const notPricedWhere = aggregateMock.mock.calls[2][0].where
+    const preMatchWhere = aggregateMock.mock.calls[3][0].where
+    const offWhere = aggregateMock.mock.calls[4][0].where
+
+    // Headline buckets are ALL-TIME (no date clamp); only the trailing-12mo
+    // sublabel aggregate carries a transactionDate window.
+    expect(onWhere).not.toHaveProperty("transactionDate")
+    expect(on12moWhere.matchStatus).toEqual({
+      in: ["on_contract", "price_variance"],
+    })
+    expect(on12moWhere.transactionDate).toBeDefined()
 
     expect(onWhere.matchStatus).toEqual({
       in: ["on_contract", "price_variance"],
@@ -130,6 +145,7 @@ describe("getOffContractSpend (4-way partition)", () => {
   it("returns zeros when no COG records exist (guards null _sum)", async () => {
     aggregateMock
       .mockResolvedValueOnce({ _sum: { extendedPrice: null } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on12mo sublabel
       .mockResolvedValueOnce({ _sum: { extendedPrice: null } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: null } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: null } })
@@ -150,6 +166,7 @@ describe("getOffContractSpend (4-way partition)", () => {
   it("also handles undefined _sum safely (guards TS2532)", async () => {
     aggregateMock
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on12mo sublabel
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({})
@@ -165,6 +182,7 @@ describe("getOffContractSpend (4-way partition)", () => {
   it("filters COG rows by contractId so sibling-contract spend is excluded", async () => {
     aggregateMock
       .mockResolvedValueOnce({ _sum: { extendedPrice: 100 } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on12mo sublabel
       .mockResolvedValueOnce({ _sum: { extendedPrice: 50 } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: 25 } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: 10 } })
@@ -196,6 +214,7 @@ describe("getOffContractSpend (4-way partition)", () => {
   it("returns top on-contract items ordered by spend desc", async () => {
     aggregateMock
       .mockResolvedValueOnce({ _sum: { extendedPrice: 8_500 } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on12mo sublabel
       .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } })
       .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } })
@@ -225,7 +244,8 @@ describe("getOffContractSpend (4-way partition)", () => {
     // surfaces the top contributing SKUs so Charles can see where it
     // came from.
     aggregateMock
-      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // on12mo sublabel // on
       .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // not priced
       .mockResolvedValueOnce({ _sum: { extendedPrice: 4_711_378 } }) // preMatch
       .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } }) // offContract
