@@ -97,7 +97,12 @@ export function PerformanceClient({ vendorId }: PerformanceClientProps) {
     return [
       {
         metric: "Spend Compliance",
-        value: perfData.compliance ?? null,
+        // Canonical compliance is capped at 120 (VENDOR_COMPLIANCE_CAP_PCT);
+        // the radar axis tops at 100, so clamp at display time only.
+        value:
+          perfData.compliance == null
+            ? null
+            : Math.min(perfData.compliance, 100),
         fullMark: 100,
       },
       {

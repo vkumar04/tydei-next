@@ -53,6 +53,7 @@ export function VendorDashboardClient({ vendorId, vendorName }: VendorDashboardC
         vendorName={vendorName}
         activeContracts={statsData?.activeContracts ?? 0}
         totalContracts={statsData?.totalContracts ?? 0}
+        salesTrailing12Mo={statsData?.salesTrailing12Mo ?? 0}
         totalSpend={statsData?.totalSpend ?? 0}
         totalRebates={statsData?.totalRebates ?? 0}
         activeFacilities={statsData?.activeFacilities ?? 0}

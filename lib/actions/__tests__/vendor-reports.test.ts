@@ -18,7 +18,8 @@ type ContractRow = {
   expirationDate?: Date
   facilityId?: string
   facility?: { id: string; name: string } | null
-  complianceRate?: number | null
+  annualValue?: number | null
+  totalValue?: number | null
   currentMarketShare?: number | null
   periods?: Array<{ totalSpend: number }>
   rebates?: Array<{
@@ -35,6 +36,12 @@ let cogGroupBy: Array<{
   contractId: string | null
   _sum: { extendedPrice: number | null }
 }> = []
+// Trailing-12mo per-facility spend — numerator of the canonical
+// compliance definition (getVendorPerformanceSummary groupBy(facilityId)).
+let cogGroupByFacility: Array<{
+  facilityId: string | null
+  _sum: { extendedPrice: number | null }
+}> = []
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -42,7 +49,9 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(async () => contractFindMany),
     },
     cOGRecord: {
-      groupBy: vi.fn(async () => cogGroupBy),
+      groupBy: vi.fn(async (args: { by: string[] }) =>
+        args.by.includes("facilityId") ? cogGroupByFacility : cogGroupBy,
+      ),
     },
   },
 }))
@@ -62,6 +71,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   contractFindMany = []
   cogGroupBy = []
+  cogGroupByFacility = []
 })
 
 describe("getVendorRebateStatement", () => {
@@ -117,13 +127,14 @@ describe("getVendorRebateStatement", () => {
 })
 
 describe("getVendorPerformanceSummary", () => {
-  it("rolls multiple contracts up by facility with averaged compliance/share", async () => {
+  it("rolls multiple contracts up by facility with canonical compliance + averaged share", async () => {
     contractFindMany = [
       {
         id: "c-1",
         facilityId: "f-1",
         facility: { id: "f-1", name: "Lighthouse" },
-        complianceRate: 90,
+        status: "active",
+        annualValue: 10000,
         currentMarketShare: 60,
         periods: [{ totalSpend: 1000 }],
         rebates: [
@@ -139,7 +150,9 @@ describe("getVendorPerformanceSummary", () => {
         id: "c-2",
         facilityId: "f-1",
         facility: { id: "f-1", name: "Lighthouse" },
-        complianceRate: 70,
+        // Expired → its target must NOT enter the compliance denominator.
+        status: "expired",
+        annualValue: 99999,
         currentMarketShare: 40,
         periods: [{ totalSpend: 500 }],
         rebates: [],
@@ -147,6 +160,11 @@ describe("getVendorPerformanceSummary", () => {
     ]
     // No COG fallback needed (period spend > 0).
     cogGroupBy = []
+    // Trailing-12mo vendor COG at the facility — canonical compliance
+    // numerator (computeVendorCompliance: 7,500 / 10,000 = 75%).
+    cogGroupByFacility = [
+      { facilityId: "f-1", _sum: { extendedPrice: 7500 } },
+    ]
 
     const { getVendorPerformanceSummary } = await import(
       "@/lib/actions/vendor-reports"
@@ -160,7 +178,10 @@ describe("getVendorPerformanceSummary", () => {
       spend: 1500,
       earned: 25,
       collected: 25,
-      compliancePercent: 80, // (90 + 70) / 2
+      // Canonical definition (lib/contracts/vendor-compliance.ts):
+      // trailing-12mo spend / Σ active-contract targets — NOT an
+      // average of the persisted match-compliance Contract.complianceRate.
+      compliancePercent: 75,
       marketSharePercent: 50, // (60 + 40) / 2
     })
   })
@@ -171,7 +192,9 @@ describe("getVendorPerformanceSummary", () => {
         id: "c-1",
         facilityId: "f-1",
         facility: { id: "f-1", name: "Lighthouse" },
-        complianceRate: null,
+        status: "active",
+        annualValue: null,
+        totalValue: null,
         currentMarketShare: null,
         periods: [],
         rebates: [],

@@ -13,6 +13,16 @@ export async function getVendorDashboardStats(_vendorId?: string) {
   const { vendor: sessionVendor } = await requireVendor()
   const vendorId = sessionVendor.id
 
+  // 2026-06-09 audit: the dashboard's primary sales figure was LIFETIME
+  // COG while the facility side's "Current Spend" is trailing-12mo — the
+  // two sides of the same relationship disagreed by whole years of
+  // history. Primary is now trailing-12mo (same window/pattern as
+  // getVendorPerformance in vendor-analytics.ts); lifetime is kept as a
+  // sublabel so no information is lost.
+  const now = new Date()
+  const trailing12MoStart = new Date(now)
+  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+
   const [
     activeContracts,
     totalContracts,
@@ -20,6 +30,7 @@ export async function getVendorDashboardStats(_vendorId?: string) {
     rebateRows,
     activeFacilities,
     vendorSpendAgg,
+    vendorSpend12MoAgg,
     totalSpendAgg,
   ] = await Promise.all([
     prisma.contract.count({ where: { vendorId, status: "active" } }),
@@ -45,11 +56,19 @@ export async function getVendorDashboardStats(_vendorId?: string) {
       _sum: { extendedPrice: true },
     }),
     prisma.cOGRecord.aggregate({
+      where: {
+        vendorId,
+        transactionDate: { gte: trailing12MoStart, lte: now },
+      },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.cOGRecord.aggregate({
       _sum: { extendedPrice: true },
     }),
   ])
 
   const vendorCogSpend = Number(vendorSpendAgg._sum.extendedPrice ?? 0)
+  const vendorCogSpend12Mo = Number(vendorSpend12MoAgg._sum.extendedPrice ?? 0)
   const totalCogSpend = Number(totalSpendAgg._sum.extendedPrice ?? 0)
   const marketSharePercent =
     totalCogSpend > 0 ? (vendorCogSpend / totalCogSpend) * 100 : 0
@@ -59,10 +78,25 @@ export async function getVendorDashboardStats(_vendorId?: string) {
     where: { vendorId, status: "submitted" },
   }).catch(() => 0)
 
+  // Lifetime sales keep the legacy contract-value fallback for vendors
+  // with no recorded COG at all. The trailing-12mo primary follows the
+  // same fallback in that no-COG case (so primary + sublabel agree on
+  // the data source); when COG exists, a genuinely quiet last 12 months
+  // shows $0 truthfully.
+  const lifetimeSales =
+    vendorCogSpend > 0
+      ? vendorCogSpend
+      : Number(contractAgg._sum.totalValue ?? 0)
+  const salesTrailing12Mo =
+    vendorCogSpend > 0 ? vendorCogSpend12Mo : lifetimeSales
+
   return serialize({
     activeContracts,
     totalContracts: totalContracts + pendingCount,
-    totalSpend: vendorCogSpend > 0 ? vendorCogSpend : Number(contractAgg._sum.totalValue ?? 0),
+    /** Primary dashboard sales figure — trailing 12 months. */
+    salesTrailing12Mo,
+    /** Lifetime sales — rendered as the sublabel under the primary. */
+    totalSpend: lifetimeSales,
     totalRebates: sumEarnedRebatesLifetime(rebateRows),
     activeFacilities: activeFacilities.length,
     marketSharePercent,

@@ -18,6 +18,10 @@ export interface VendorDashboardHeroProps {
   vendorName: string
   activeContracts: number
   totalContracts: number
+  /** Trailing-12mo sales — the primary figure (2026-06-09 audit: align
+   *  with the facility side's trailing-12mo "Current Spend" window). */
+  salesTrailing12Mo: number
+  /** Lifetime sales — rendered as the sublabel so no info is lost. */
   totalSpend: number
   totalRebates: number
   activeFacilities: number
@@ -33,6 +37,7 @@ export function VendorDashboardHero({
   vendorName,
   activeContracts,
   totalContracts,
+  salesTrailing12Mo,
   totalSpend,
   totalRebates,
   activeFacilities,
@@ -85,10 +90,13 @@ export function VendorDashboardHero({
           value={isLoading ? null : formatCount(activeFacilities)}
           sublabel="With active contracts"
         />
+        {/* 2026-06-09 audit: primary sales figure is now trailing-12mo
+            (same window as the facility side's "Current Spend"); the
+            lifetime figure moves to the sublabel so no info is lost. */}
         <HeroStat
-          label="Total Sales on Contract"
-          value={isLoading ? null : formatCurrency(totalSpend)}
-          sublabel={`${marketSharePercent.toFixed(1)}% market share`}
+          label="Sales (Trailing 12 Mo)"
+          value={isLoading ? null : formatCurrency(salesTrailing12Mo)}
+          sublabel={`lifetime ${formatCurrency(totalSpend)} · ${marketSharePercent.toFixed(1)}% market share`}
           tone={marketSharePercent >= 10 ? "positive" : "muted"}
         />
         <HeroStat

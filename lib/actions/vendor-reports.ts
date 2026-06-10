@@ -8,6 +8,74 @@ import {
   sumEarnedRebatesLifetime,
   sumEarnedRebatesYTD,
 } from "@/lib/contracts/rebate-earned-filter"
+import { computeVendorCompliance } from "@/lib/contracts/vendor-compliance"
+
+// ─── Private window/spend helpers ────────────────────────────────
+//
+// 2026-06-09 audit (canonical-reducer unification): window-scoping
+// happens HERE (filter the rows into the window) and the SUMMING
+// happens in the canonical helpers (`sumEarnedRebatesLifetime` /
+// `sumCollectedRebates`) — the established pattern from
+// `getVendorPerformance` in vendor-analytics.ts. Never hand-roll the
+// earned ("payPeriodEnd <= today") or collected ("collectionDate is
+// set") filters in this file; those rules live in the helpers
+// (CLAUDE.md invariants table).
+
+function coerceDate(value: Date | string | null | undefined): Date | null {
+  if (value == null) return null
+  const d = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** Rows whose `payPeriodEnd` falls inside [start, end]. */
+function windowByPayPeriodEnd<
+  T extends { payPeriodEnd: Date | string | null },
+>(rows: readonly T[], start: Date, end: Date): T[] {
+  return rows.filter((r) => {
+    const d = coerceDate(r.payPeriodEnd)
+    return d !== null && d >= start && d <= end
+  })
+}
+
+/** Rows whose `collectionDate` falls inside [start, end]. */
+function windowByCollectionDate<
+  T extends { collectionDate: Date | string | null },
+>(rows: readonly T[], start: Date, end: Date): T[] {
+  return rows.filter((r) => {
+    const d = coerceDate(r.collectionDate)
+    return d !== null && d >= start && d <= end
+  })
+}
+
+/**
+ * Per-contract COG spend (Σ extendedPrice), optionally windowed by
+ * transactionDate. contractIds passed in are already vendor-owned
+ * (every caller filters contracts by vendorId first), so no extra
+ * vendorId filter — it would drop grouped-member rows (the
+ * contractVendorIds() drift class, 2026-06-09 vendor audit).
+ */
+async function sumCogSpendByContract(
+  contractIds: readonly string[],
+  window?: { start: Date; end: Date },
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>()
+  if (contractIds.length === 0) return map
+  const grouped = await prisma.cOGRecord.groupBy({
+    by: ["contractId"],
+    where: {
+      contractId: { in: [...contractIds] },
+      ...(window
+        ? { transactionDate: { gte: window.start, lte: window.end } }
+        : {}),
+    },
+    _sum: { extendedPrice: true },
+  })
+  for (const row of grouped) {
+    if (!row.contractId) continue
+    map.set(row.contractId, Number(row._sum.extendedPrice ?? 0))
+  }
+  return map
+}
 
 // ─── Existing: per-contract list rollup ──────────────────────────
 
@@ -58,27 +126,10 @@ export async function getVendorReportData(_vendorId?: string): Promise<VendorCon
     take: 50,
   })
 
-  // Single-batch COG fallback for contracts with no ContractPeriod rows.
+  // Single-batch COG fallback for contracts with no ContractPeriod rows
+  // (lifetime — no window).
   const contractIds = contracts.map((c) => c.id)
-  const cogAggByContract = contractIds.length
-    ? await prisma.cOGRecord.groupBy({
-        by: ["contractId"],
-        // 2026-06-09 vendor audit: contractIds are already vendor-owned
-        // (the contracts query above filters vendorId), so the extra
-        // vendorId filter only dropped grouped-member rows — the
-        // contractVendorIds() drift class. contractId-only, like the
-        // facility tier-2.
-        where: {
-          contractId: { in: contractIds },
-        },
-        _sum: { extendedPrice: true },
-      })
-    : []
-  const cogSpendByContract = new Map<string, number>()
-  for (const row of cogAggByContract) {
-    if (!row.contractId) continue
-    cogSpendByContract.set(row.contractId, Number(row._sum.extendedPrice ?? 0))
-  }
+  const cogSpendByContract = await sumCogSpendByContract(contractIds)
 
   return serialize(
     contracts.map((c) => {
@@ -157,26 +208,18 @@ export async function getVendorRebateStatement(
   const today = new Date()
 
   const rows = contracts.map((c) => {
-    // Earned this period: closed periods inside the window.
-    const earnedThisPeriod = c.rebates.reduce((sum, r) => {
-      const ppe = r.payPeriodEnd
-      if (!ppe) return sum
-      const d = ppe instanceof Date ? ppe : new Date(ppe)
-      if (Number.isNaN(d.getTime())) return sum
-      if (d > today) return sum
-      if (d < start || d > end) return sum
-      return sum + Number(r.rebateEarned ?? 0)
-    }, 0)
+    // Earned this period: window the rows, then let the canonical
+    // helper apply the "closed period" (payPeriodEnd <= today) rule.
+    const earnedThisPeriod = sumEarnedRebatesLifetime(
+      windowByPayPeriodEnd(c.rebates, start, end),
+      today,
+    )
 
-    // Collected this period: collectionDate inside the window.
-    const collectedThisPeriod = c.rebates.reduce((sum, r) => {
-      const cd = r.collectionDate
-      if (!cd) return sum
-      const d = cd instanceof Date ? cd : new Date(cd)
-      if (Number.isNaN(d.getTime())) return sum
-      if (d < start || d > end) return sum
-      return sum + Number(r.rebateCollected ?? 0)
-    }, 0)
+    // Collected this period: window by collectionDate, then the
+    // canonical helper applies the "collectionDate is set" rule.
+    const collectedThisPeriod = sumCollectedRebates(
+      windowByCollectionDate(c.rebates, start, end),
+    )
 
     // Outstanding (lifetime) — uses canonical helpers so the running
     // balance can never disagree with the contract-detail header card.
@@ -214,10 +257,21 @@ export interface VendorPerformanceSummaryRow {
  * Spend uses the COG cascade (ContractPeriod _sum when present, else
  * cOGRecord.extendedPrice) consistent with `getVendorContractDetail`.
  * Earned/collected route through the canonical helpers but narrowed to
- * the window. Compliance/market share are reported as the simple
- * average of `Contract.complianceRate` / `Contract.currentMarketShare`
- * across the facility's active contracts (those persisted-derived
- * fields are the "Strategic-direction Plan #1" canonical source).
+ * the window.
+ *
+ * Compliance (2026-06-09 unification) is the canonical vendor spend
+ * compliance — trailing-12mo vendor COG spend at the facility ÷ Σ
+ * active-contract annual targets — via `computeVendorCompliance`
+ * (lib/contracts/vendor-compliance.ts, CLAUDE.md invariants table).
+ * It is ALWAYS trailing-12mo, independent of the report window, so it
+ * matches the vendor /performance page for the same vendor+facility.
+ * (Previously this averaged the persisted `Contract.complianceRate`,
+ * a *match*-compliance metric — % of COG rows on-contract — which
+ * disagreed with both other vendor compliance surfaces.)
+ *
+ * Market share stays the simple average of
+ * `Contract.currentMarketShare` across the facility's contracts (the
+ * persisted-derived "Strategic-direction Plan #1" canonical source).
  */
 export async function getVendorPerformanceSummary(
   periodStart: string,
@@ -237,7 +291,9 @@ export async function getVendorPerformanceSummary(
       id: true,
       facilityId: true,
       facility: { select: { id: true, name: true } },
-      complianceRate: true,
+      status: true,
+      annualValue: true,
+      totalValue: true,
       currentMarketShare: true,
       periods: {
         where: {
@@ -260,26 +316,34 @@ export async function getVendorPerformanceSummary(
   })
 
   // Window-scoped COG fallback (per-contract; contractIds are already
-  // vendor-owned — 2026-06-09 vendor audit dropped the extra vendorId
-  // filter that excluded grouped-member rows).
+  // vendor-owned — see sumCogSpendByContract).
   const contractIds = contracts.map((c) => c.id)
-  const cogAggByContract = contractIds.length
-    ? await prisma.cOGRecord.groupBy({
-        by: ["contractId"],
-        where: {
-          contractId: { in: contractIds },
-          transactionDate: { gte: start, lte: end },
-        },
-        _sum: { extendedPrice: true },
-      })
-    : []
-  const cogSpendByContract = new Map<string, number>()
-  for (const row of cogAggByContract) {
-    if (!row.contractId) continue
-    cogSpendByContract.set(row.contractId, Number(row._sum.extendedPrice ?? 0))
-  }
+  const cogSpendByContract = await sumCogSpendByContract(contractIds, {
+    start,
+    end,
+  })
 
   const today = new Date()
+
+  // Trailing-12mo vendor COG per facility — the numerator of the
+  // canonical compliance definition (independent of the report window).
+  // Bare vendorId here mirrors getVendorPerformance's numerator.
+  const trailing12MoStart = new Date(today)
+  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+  const spend12ByFacilityRows = await prisma.cOGRecord.groupBy({
+    by: ["facilityId"],
+    where: {
+      vendorId: vendor.id,
+      transactionDate: { gte: trailing12MoStart, lte: today },
+    },
+    _sum: { extendedPrice: true },
+  })
+  const spend12ByFacility = new Map<string, number>(
+    spend12ByFacilityRows.map((r) => [
+      r.facilityId,
+      Number(r._sum.extendedPrice ?? 0),
+    ]),
+  )
 
   // Group contract-level metrics by facility.
   type Acc = {
@@ -288,7 +352,8 @@ export async function getVendorPerformanceSummary(
     spend: number
     earned: number
     collected: number
-    complianceSamples: number[]
+    /** annualValue || totalValue per ACTIVE contract at this facility. */
+    annualTargets: number[]
     marketShareSamples: number[]
   }
   const byFacility = new Map<string, Acc>()
@@ -303,24 +368,15 @@ export async function getVendorPerformanceSummary(
     const cogSpend = cogSpendByContract.get(c.id) ?? 0
     const spendForContract = periodSpend > 0 ? periodSpend : cogSpend
 
-    const earnedForContract = c.rebates.reduce((sum, r) => {
-      const ppe = r.payPeriodEnd
-      if (!ppe) return sum
-      const d = ppe instanceof Date ? ppe : new Date(ppe)
-      if (Number.isNaN(d.getTime())) return sum
-      if (d > today) return sum
-      if (d < start || d > end) return sum
-      return sum + Number(r.rebateEarned ?? 0)
-    }, 0)
-
-    const collectedForContract = c.rebates.reduce((sum, r) => {
-      const cd = r.collectionDate
-      if (!cd) return sum
-      const d = cd instanceof Date ? cd : new Date(cd)
-      if (Number.isNaN(d.getTime())) return sum
-      if (d < start || d > end) return sum
-      return sum + Number(r.rebateCollected ?? 0)
-    }, 0)
+    // Window the rows, then the canonical helpers apply the earned /
+    // collected rules (never hand-rolled here — CLAUDE.md invariants).
+    const earnedForContract = sumEarnedRebatesLifetime(
+      windowByPayPeriodEnd(c.rebates, start, end),
+      today,
+    )
+    const collectedForContract = sumCollectedRebates(
+      windowByCollectionDate(c.rebates, start, end),
+    )
 
     const acc = byFacility.get(fid) ?? {
       facilityId: fid,
@@ -328,13 +384,15 @@ export async function getVendorPerformanceSummary(
       spend: 0,
       earned: 0,
       collected: 0,
-      complianceSamples: [],
+      annualTargets: [],
       marketShareSamples: [],
     }
     acc.spend += spendForContract
     acc.earned += earnedForContract
     acc.collected += collectedForContract
-    if (c.complianceRate != null) acc.complianceSamples.push(Number(c.complianceRate))
+    if (c.status === "active") {
+      acc.annualTargets.push(Number(c.annualValue || c.totalValue || 0))
+    }
     if (c.currentMarketShare != null)
       acc.marketShareSamples.push(Number(c.currentMarketShare))
     byFacility.set(fid, acc)
@@ -346,9 +404,11 @@ export async function getVendorPerformanceSummary(
     spend: a.spend,
     earned: a.earned,
     collected: a.collected,
-    compliancePercent: a.complianceSamples.length
-      ? a.complianceSamples.reduce((s, n) => s + n, 0) / a.complianceSamples.length
-      : 0,
+    compliancePercent:
+      computeVendorCompliance({
+        spend12Mo: spend12ByFacility.get(a.facilityId) ?? 0,
+        annualTargets: a.annualTargets,
+      }) ?? 0,
     marketSharePercent: a.marketShareSamples.length
       ? a.marketShareSamples.reduce((s, n) => s + n, 0) /
         a.marketShareSamples.length

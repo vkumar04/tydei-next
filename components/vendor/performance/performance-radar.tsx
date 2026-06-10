@@ -24,7 +24,13 @@ interface PerformanceRadarProps {
 
 export function PerformanceRadar({ scores }: PerformanceRadarProps) {
   const data = [
-    { metric: "Spend Compliance", value: Math.round(scores.compliance) },
+    // Canonical compliance is capped at 120 (VENDOR_COMPLIANCE_CAP_PCT,
+    // lib/contracts/vendor-compliance.ts); this radar's domain is
+    // [0, 100], so clamp at display time only.
+    {
+      metric: "Spend Compliance",
+      value: Math.round(Math.min(scores.compliance, 100)),
+    },
     { metric: "On-Time Delivery", value: Math.round(scores.delivery) },
     { metric: "Quality Score", value: Math.round(scores.quality) },
     { metric: "Pricing", value: Math.round(scores.pricing) },

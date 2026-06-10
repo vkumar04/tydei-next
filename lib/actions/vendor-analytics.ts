@@ -12,6 +12,10 @@ import {
 } from "@/lib/categories/resolve"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
+import {
+  computeVendorCompliance,
+  computeContractCompliance,
+} from "@/lib/contracts/vendor-compliance"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -305,16 +309,22 @@ export async function getVendorPerformance(_vendorId?: string): Promise<VendorPe
   )
   const avgRebateRate = totalSpend > 0 ? (totalRebate / totalSpend) * 100 : 0
 
-  const totalTarget = contracts.reduce(
-    (s, c) => s + Number(c.annualValue || c.totalValue || 0),
-    0,
-  )
-  const compliance =
-    totalTarget > 0 ? Math.min(100, (totalSpend / totalTarget) * 100) : null
+  // 2026-06-09 audit (compliance unification): three vendor surfaces
+  // computed three different compliance values. This is now the ONE
+  // canonical definition — trailing-12mo vendor COG spend ÷ Σ
+  // active-contract annual targets, capped at VENDOR_COMPLIANCE_CAP_PCT
+  // — owned by lib/contracts/vendor-compliance.ts (CLAUDE.md
+  // invariants table). Note: previously capped at 100 here; the
+  // canonical cap is 120, so over-target vendors now read >100%.
+  const compliance = computeVendorCompliance({
+    spend12Mo: totalSpend,
+    annualTargets: contracts.map((c) =>
+      Number(c.annualValue || c.totalValue || 0),
+    ),
+  })
 
   return serialize({
-    compliance:
-      compliance === null ? null : Math.round(compliance * 10) / 10,
+    compliance,
     delivery: null,
     quality: null,
     pricing: null,
@@ -632,8 +642,14 @@ export async function getVendorPerformanceContracts(
   const rows: VendorPerformanceContractRow[] = contracts.map((c) => {
     const actualSpend = spendMap.get(c.id) ?? 0
     const targetSpend = Number(c.annualValue || c.totalValue || 0)
+    // Canonical per-contract compliance (lib/contracts/vendor-compliance.ts):
+    // trailing-12mo spend ÷ annual target, capped + rounded in ONE place.
+    // null (no target) renders as 0 to keep the row type numeric.
     const compliance =
-      targetSpend > 0 ? Math.min((actualSpend / targetSpend) * 100, 120) : 0
+      computeContractCompliance({
+        spend12Mo: actualSpend,
+        annualTarget: targetSpend,
+      }) ?? 0
     const status: "on-track" | "exceeding" | "at-risk" =
       compliance >= 100 ? "exceeding" : compliance >= 90 ? "on-track" : "at-risk"
     const contractRebates = rebatesByContract.get(c.id) ?? []
@@ -658,7 +674,7 @@ export async function getVendorPerformanceContracts(
       actualSpend,
       rebateRate: Math.round(rebateRate * 100) / 100,
       rebatePaid,
-      compliance: Math.round(compliance * 10) / 10,
+      compliance,
       status,
     }
   })
