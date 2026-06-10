@@ -57,19 +57,29 @@ import {
 import { extractClauses } from "@/lib/contracts/clause-extractor"
 
 // ─── Re-exported types for callers ──────────────────────────────────
+//
+// MUST use the `export type { X } from "module"` form, never a local
+// `export type { X }` clause. Turbopack's server-action transform
+// (Next 16, prod build) registers every name in a local export clause
+// as a runtime server reference — `registerServerReference(ProposalScores,…)`
+// — which throws `ReferenceError: ProposalScores is not defined` at
+// module evaluation and broke EVERY action in this file in prod
+// (Charles "Analysis is still broken", 2026-06-09, digest 3119269338).
+// The from-form is erased correctly (verified against the compiled
+// chunk for rebate-optimizer-engine.ts which already used it).
 
+export type { ProposalScores } from "@/lib/prospective-analysis/scoring"
+export type { DynamicRebateTier } from "@/lib/prospective-analysis/rebate-tiers"
+export type { Recommendation } from "@/lib/prospective-analysis/recommendation"
+export type { ComparisonResult } from "@/lib/prospective-analysis/comparison"
+export type { SpendPatternAnalysis } from "@/lib/prospective-analysis/cog-spend-analyzer"
+export type { ClauseAnalysis } from "@/lib/prospective-analysis/pdf-clause-analyzer"
 export type {
-  ProposalScores,
-  DynamicRebateTier,
-  Recommendation,
-  ComparisonResult,
-  SpendPatternAnalysis,
-  ClauseAnalysis,
   PDFContractAnalysisResult,
-  CanonicalContractClause,
+  ContractClause as CanonicalContractClause,
   UserSide,
   ContractVariant,
-}
+} from "@/lib/contracts/clause-risk-analyzer"
 
 // ─── analyzeProposal ────────────────────────────────────────────────
 

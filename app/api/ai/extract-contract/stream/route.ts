@@ -18,22 +18,21 @@
  * the client dialog reads either response identically.
  */
 
-import { generateObject, streamObject, NoObjectGeneratedError } from "ai"
+import { streamObject, NoObjectGeneratedError } from "ai"
 import { headers } from "next/headers"
 import { createHash } from "node:crypto"
 import { auth } from "@/lib/auth-server"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
-import { claudeModel, claudeHaiku } from "@/lib/ai/config"
-import { extractedContractSchema, type ExtractedContractData } from "@/lib/ai/schemas"
+import { claudeModel } from "@/lib/ai/config"
+import { extractedContractSchema } from "@/lib/ai/schemas"
 import { extractPdfText } from "@/lib/ai/pdf-text-helper"
-import { splitPdfByPages } from "@/lib/ai/pdf-chunker"
 import {
-  chunkExtractSchema,
-  mergeExtractedContracts,
-  type ChunkExtractData,
-} from "@/lib/ai/contract-extract-merger"
+  runChunkedExtraction,
+  MAX_PAGES_PER_CHUNK,
+  FALLBACK_PAGES_PER_CHUNK,
+} from "@/lib/ai/contract-extract-chunked"
 import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
 
 // 261-page Mako PDF chunks into ~33 parallel Anthropic calls; even
@@ -41,201 +40,15 @@ import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extrac
 // take 60-180s depending on Anthropic queue depth. Bump to 5 min.
 export const maxDuration = 300
 
-// Anthropic rate-limit at our current tier accepts a small burst
-// but rejects the rest with 429s. The first all-parallel run on a
-// 33-chunk PDF saw 26/33 chunks fail to that burst. 5 concurrent
-// keeps Anthropic's queue happy while only adding ~5s per batch
-// vs full parallel — net latency on the 261-page Mako file stays
-// ~30-90s with success rate close to 100%.
-const CHUNK_CONCURRENCY = 5
-
-async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = new Array(items.length)
-  let cursor = 0
-  const worker = async (): Promise<void> => {
-    while (true) {
-      const i = cursor++
-      if (i >= items.length) return
-      try {
-        const value = await fn(items[i]!, i)
-        results[i] = { status: "fulfilled", value }
-      } catch (reason) {
-        results[i] = { status: "rejected", reason }
-      }
-    }
-  }
-  const workerCount = Math.min(limit, items.length)
-  await Promise.all(Array.from({ length: workerCount }, worker))
-  return results
-}
-
 // Bug A 2026-05-25: bumped from 10MB → 25MB to match the non-streaming
 // /api/ai/extract-contract route. See that file for the rationale.
 const MAX_BYTES = 25 * 1024 * 1024
 
-// Bug 2026-05-25 (Vick): vision-only on a 30-page scanned Mako PDF
-// produced a 1.1M-token prompt and Anthropic 400'd with "prompt is too
-// long". Anything longer than this gets split into N-page sub-PDFs,
-// extracted per-chunk via generateObject, then merged via
-// mergeExtractedContracts. 10 pages × ~80K vision tokens ≈ 800K — under
-// the 1M cap with ~200K headroom for the system prompt + text hint.
-// Bumped from 8 → 10 after the Haiku switch made cost-per-call cheap
-// enough that fewer/bigger chunks beats more/smaller ones for wall
-// time without breaking the budget.
-const MAX_PAGES_PER_CHUNK = 10
-
-// Fallback chunk size when the single-call (small-PDF) path fails. A
-// born-digital 8-page contract takes the single Opus pass, but a SCANNED
-// 8-page contract (no text layer → vision-only) trips Anthropic's
-// `jsonTool` structured-output flakiness: Opus burns ~1k output tokens
-// of discarded reasoning and emits an empty `{}` tool input, failing
-// Zod's required contractName/vendorName → NoObjectGeneratedError
-// ("could not parse the response"). The chunked Haiku path with relaxed
-// per-chunk identity fields + forced vision on chunk 1 is reliable on
-// the same PDF (see scripts repro, 2026-06-07), so we re-slice into
-// SMALL chunks and run it as the fallback. 4 pages keeps each Haiku
-// vision call focused.
-const FALLBACK_PAGES_PER_CHUNK = 4
-
-interface ChunkedExtractResult {
-  merged: ExtractedContractData
-  chunkCount: number
-  failedCount: number
-}
-
-/**
- * Split a PDF into N-page sub-PDFs, extract each via Haiku
- * `generateObject`, and merge into one ExtractedContractData. Throws if
- * every chunk fails. Shared by the large-PDF branch and the small-PDF
- * fallback so both code paths stay in lockstep.
- */
-async function runChunkedExtraction(opts: {
-  fileData: Uint8Array
-  fileName: string
-  pageCount: number
-  maxPagesPerChunk: number
-  userInstructionsHint: string
-  abortSignal: AbortSignal
-}): Promise<ChunkedExtractResult> {
-  const { fileData, fileName, pageCount, maxPagesPerChunk, userInstructionsHint, abortSignal } = opts
-  const chunks = await splitPdfByPages(fileData, { maxPagesPerChunk })
-  console.info(
-    `[extract-contract/stream] chunking ${fileName} (${pageCount} pages) into ${chunks.length} sub-PDFs of ≤${maxPagesPerChunk} pages`,
-  )
-
-  // Chunked-path prompt deliberately OMITS the whole-PDF text hint that
-  // the single-call path includes — chunks send their own per-chunk text
-  // (cheaper, more focused).
-  const chunkPromptText = getActiveContractExtractPrompt().prompt + userInstructionsHint
-
-  const callChunk = async (
-    chunk: (typeof chunks)[number],
-    chunkIndex: number,
-  ): Promise<ChunkExtractData> => {
-    const chunkText = await extractPdfText(chunk.pdf)
-    // Force vision on the FIRST chunk (page 1 always has the cover page
-    // with contract title + vendor, which text-layer extraction garbles).
-    // Body chunks stay text-first when they have a text layer.
-    const isFirstChunk = chunkIndex === 0
-    const useVision = !chunkText.hasTextLayer || isFirstChunk
-
-    const sourceBlock = useVision
-      ? ({
-          type: "file" as const,
-          data: chunk.pdf,
-          mediaType: "application/pdf",
-          filename: `${fileName} (pages ${chunk.pageStart}-${chunk.pageEnd})`,
-        })
-      : ({
-          type: "text" as const,
-          text: `Extracted text layer (pages ${chunk.pageStart}-${chunk.pageEnd}):\n\n${chunkText.text}`,
-        })
-
-    const request = () =>
-      generateObject({
-        model: claudeHaiku,
-        schema: chunkExtractSchema,
-        abortSignal,
-        // Cap response so a runaway model can't spend more than ~$0.02 on
-        // output per chunk. Real chunk outputs are small JSON.
-        maxOutputTokens: 4000,
-        providerOptions: {
-          anthropic: { structuredOutputMode: "jsonTool" as const },
-        },
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: chunkPromptText,
-                providerOptions: {
-                  anthropic: {
-                    cacheControl: { type: "ephemeral" as const },
-                  },
-                },
-              },
-              {
-                type: "text",
-                text: `This is chunk ${chunk.pageStart}-${chunk.pageEnd} of a ${pageCount}-page PDF (${useVision ? "sent as image" : "text layer included"}). Extract only what's visible in these pages — if header fields (contract name, vendor, type) are not on these pages, return null for them. Per-chunk results are merged downstream.`,
-              },
-              sourceBlock,
-            ],
-          },
-        ],
-      }).then((r) => r.object as ChunkExtractData)
-    try {
-      return await request()
-    } catch (err) {
-      if (NoObjectGeneratedError.isInstance(err)) {
-        console.info(
-          `[extract-contract/stream] retry chunk pages ${chunk.pageStart}-${chunk.pageEnd} after NoObjectGeneratedError`,
-        )
-        return await request()
-      }
-      throw err
-    }
-  }
-
-  const settled = await mapWithConcurrency(chunks, CHUNK_CONCURRENCY, callChunk)
-
-  const successful: ChunkExtractData[] = []
-  const failed: { chunk: string; error: string }[] = []
-  settled.forEach((res, i) => {
-    const c = chunks[i]!
-    const label = `pages ${c.pageStart}-${c.pageEnd}`
-    if (res.status === "fulfilled") {
-      successful.push(res.value)
-    } else {
-      failed.push({
-        chunk: label,
-        error: res.reason instanceof Error ? res.reason.message : String(res.reason),
-      })
-    }
-  })
-
-  if (failed.length > 0) {
-    console.warn(
-      `[extract-contract/stream] ${failed.length}/${chunks.length} chunks failed — merging the rest`,
-      { failed },
-    )
-  }
-  if (successful.length === 0) {
-    throw new Error(
-      `All ${chunks.length} chunks failed; first failure: ${failed[0]?.error ?? "unknown"}`,
-    )
-  }
-
-  return {
-    merged: mergeExtractedContracts(successful),
-    chunkCount: chunks.length,
-    failedCount: failed.length,
-  }
-}
+// Chunking machinery (runChunkedExtraction, MAX_PAGES_PER_CHUNK,
+// FALLBACK_PAGES_PER_CHUNK) lives in lib/ai/contract-extract-chunked.ts
+// — shared with the non-stream route since 2026-06-09 ("Analysis is
+// still broken": the Analysis upload tab posts to the NON-stream route,
+// which lacked the chunked path + scanned-small-PDF fallback).
 
 /** Persist a finished extraction to the 30-day cache. Best-effort. */
 async function cacheExtraction(opts: {
@@ -400,6 +213,7 @@ export async function POST(req: Request) {
         maxPagesPerChunk: MAX_PAGES_PER_CHUNK,
         userInstructionsHint,
         abortSignal: req.signal,
+        logPrefix: "[extract-contract/stream]",
       })
 
       await cacheExtraction({
@@ -585,6 +399,7 @@ export async function POST(req: Request) {
               maxPagesPerChunk: FALLBACK_PAGES_PER_CHUNK,
               userInstructionsHint,
               abortSignal: req.signal,
+              logPrefix: "[extract-contract/stream]",
             })
             await cacheExtraction({
               userId,

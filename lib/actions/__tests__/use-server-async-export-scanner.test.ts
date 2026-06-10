@@ -71,7 +71,40 @@ function findViolations(file: string): Violation[] {
     const line = lines[i]
     const lno = i + 1
 
-    // Type / interface exports are erased — safe.
+    // `export type { X }` WITHOUT a `from` clause is NOT erased by
+    // Turbopack's server-action transform (Next 16 prod build): it
+    // registers each name as a runtime server reference —
+    // `registerServerReference(ProposalScores, …)` — which throws
+    // `ReferenceError: <name> is not defined` at module evaluation and
+    // takes down EVERY action in the file. This shipped in
+    // lib/actions/prospective-analysis.ts and broke the whole
+    // Analysis page in prod (Charles 2026-06-09, digest 3119269338).
+    // The `export type { X } from "module"` form IS erased correctly
+    // (verified against compiled chunks) — require it.
+    const localTypeClause = line.match(/^\s*export\s+type\s+\{/)
+    if (localTypeClause) {
+      // Find the closing brace (may span lines) and check for `from`.
+      let j = i
+      let tail = line
+      while (!/\}/.test(tail) && j + 1 < lines.length) {
+        j++
+        tail = lines[j]
+      }
+      const closing = tail.slice(tail.indexOf("}"))
+      if (!/\}\s*from\s+["']/.test(closing)) {
+        out.push({
+          file,
+          line: lno,
+          kind: "LOCAL export-type clause (Turbopack registers it as a server action)",
+          name: "",
+          snippet: line.trim(),
+        })
+      }
+      i = j
+      continue
+    }
+
+    // Other type / interface exports are erased — safe.
     if (/^\s*export\s+(type|interface)\s/.test(line)) continue
 
     // Class / enum / let / var exports → banned outright (Next 16

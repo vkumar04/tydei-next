@@ -17,6 +17,15 @@ import { recordClaudeUsage } from "@/lib/ai/record-usage"
 import { createHash } from "node:crypto"
 
 import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
+import {
+  runChunkedExtraction,
+  MAX_PAGES_PER_CHUNK,
+  FALLBACK_PAGES_PER_CHUNK,
+} from "@/lib/ai/contract-extract-chunked"
+
+// Chunked extraction can fan a large PDF into dozens of Anthropic
+// calls — same budget as the stream route.
+export const maxDuration = 300
 
 // Bug A 2026-05-25 (Charles Bugs.rtfd): "Mako Tie in carve out file
 // not working PDF." Larger contract PDFs (capital tie-ins with
@@ -187,10 +196,12 @@ ${text.trim()}`,
     // re-upload. Failure here never blocks the AI extraction; we just
     // omit pdfText from the response.
     let pdfTextLayer = ""
+    let pdfPageCount = 0
     try {
       const { extractPdfText } = await import("@/lib/ai/pdf-text-helper")
       const pdfRes = await extractPdfText(fileData)
       pdfTextLayer = pdfRes.text
+      pdfPageCount = pdfRes.pageCount
     } catch (pdfErr) {
       console.warn("[extract-contract] pdf-text-layer extraction failed:", pdfErr)
     }
@@ -254,12 +265,61 @@ ${text.trim()}`,
 
     const mediaType = "application/pdf" as const
 
+    const userInstructionsHint = userInstructions
+      ? `\n\nAdditional user instructions:\n${userInstructions}`
+      : ""
+
+    // ── Chunked path: large PDFs ─────────────────────────────────────
+    //
+    // 2026-06-09 (Charles "Analysis is still broken"): the Analysis
+    // page's Upload Proposal tab posts HERE, not to the stream route —
+    // and this route sent the whole PDF to one Opus call, which 400s
+    // ("prompt is too long") on big files and flakes to an empty `{}`
+    // jsonTool payload on scanned ones (his 12-page "mako COGS.pdf"
+    // 502'd every attempt while the SAME file chunked fine through AI
+    // Assist). Mirror the stream route: chunk large PDFs up front, and
+    // fall back to small-chunk extraction when the single call fails.
+    let extracted: ExtractedContractData | undefined
+    if (pdfPageCount > MAX_PAGES_PER_CHUNK) {
+      try {
+        const { merged } = await runChunkedExtraction({
+          fileData,
+          fileName: file.name,
+          pageCount: pdfPageCount,
+          maxPagesPerChunk: MAX_PAGES_PER_CHUNK,
+          userInstructionsHint,
+          abortSignal: request.signal,
+          logPrefix: "[extract-contract]",
+        })
+        extracted = merged
+      } catch (chunkErr) {
+        if (chunkErr instanceof Error && chunkErr.name === "AbortError") {
+          return new Response(null, { status: 499 })
+        }
+        console.error("[extract-contract] chunked extract error:", chunkErr, {
+          userId,
+          file: file.name,
+          pageCount: pdfPageCount,
+        })
+        return Response.json(
+          {
+            error: "AI extraction unavailable",
+            details:
+              chunkErr instanceof Error
+                ? chunkErr.message.substring(0, 400)
+                : "Chunked extraction failed",
+            s3Key,
+          },
+          { status: 502 },
+        )
+      }
+    }
+
     // Route PDF through the simpler legacy schema — the rich schema has
     // >16 union-typed fields which Anthropic's tool-input JSON Schema
     // validator rejects. See docs/superpowers/qa/2026-04-19-contracts-sweep.md
     // bug new-1.
-    let extracted: ExtractedContractData | undefined
-    try {
+    if (!extracted) try {
       const userContent: Array<
         | { type: "text"; text: string }
         | {
@@ -314,6 +374,9 @@ ${text.trim()}`,
         extracted = tryParseLegacy(rawText)
       }
     } catch (aiError: unknown) {
+      if (aiError instanceof Error && aiError.name === "AbortError") {
+        return new Response(null, { status: 499 })
+      }
       const errorMessage =
         aiError instanceof Error ? aiError.message : "Unknown error"
       // CLAUDE.md AI-action error path: log full context server-side
@@ -324,14 +387,44 @@ ${text.trim()}`,
         mediaType,
         s3Key,
       })
-      return Response.json(
-        {
-          error: "AI extraction unavailable",
-          details: errorMessage.substring(0, 400),
-          s3Key,
-        },
-        { status: 502 },
-      )
+      // ── Chunked fallback ───────────────────────────────────────────
+      // Scanned small PDFs trip Anthropic's jsonTool flakiness (empty
+      // `{}` tool input → NoObjectGeneratedError) on the single Opus
+      // pass; the small-chunk Haiku path recovers them reliably. Same
+      // fallback the stream route has had since 2026-06-07.
+      if (pdfPageCount > 0) {
+        try {
+          console.info(
+            `[extract-contract] single-call failed for ${file.name} — falling back to chunked extraction`,
+          )
+          const { merged } = await runChunkedExtraction({
+            fileData,
+            fileName: file.name,
+            pageCount: pdfPageCount,
+            maxPagesPerChunk: FALLBACK_PAGES_PER_CHUNK,
+            userInstructionsHint,
+            abortSignal: request.signal,
+            logPrefix: "[extract-contract]",
+          })
+          extracted = merged
+        } catch (fallbackErr) {
+          console.error(
+            "[extract-contract] chunked fallback also failed:",
+            fallbackErr,
+            { userId, file: file.name, pageCount: pdfPageCount },
+          )
+        }
+      }
+      if (!extracted) {
+        return Response.json(
+          {
+            error: "AI extraction unavailable",
+            details: errorMessage.substring(0, 400),
+            s3Key,
+          },
+          { status: 502 },
+        )
+      }
     }
 
     if (!extracted) {
