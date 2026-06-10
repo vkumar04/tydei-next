@@ -11,7 +11,7 @@ import {
   pendingContractSubmittedEmail,
   pendingContractDecisionEmail,
 } from "@/lib/email-templates"
-import { getNotificationPreferences } from "@/lib/actions/settings"
+import { readNotificationPrefsForEntity } from "@/lib/notifications/prefs"
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -116,7 +116,11 @@ async function shouldSendEmail(
   alertType?: string
 ): Promise<boolean> {
   try {
-    const prefs = await getNotificationPreferences(entityId)
+    // Server-internal by-entity read — `entityId` here comes from an
+    // owned row (alert.facilityId etc.), never from the wire. The
+    // session-scoped RPC in settings.ts no longer accepts foreign ids
+    // (2026-06-09 audit).
+    const prefs = await readNotificationPrefsForEntity(entityId)
     if (!prefs.emailEnabled) return false
     if (alertType) {
       const prefKey = ALERT_TYPE_TO_PREF[alertType]

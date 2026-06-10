@@ -13,12 +13,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * (no parallel source of truth — same code path).
  */
 
-const { memberCountMock } = vi.hoisted(() => ({
-  memberCountMock: vi.fn(),
+const { memberFindManyMock } = vi.hoisted(() => ({
+  memberFindManyMock: vi.fn(),
 }))
 
 vi.mock("@/lib/db", () => ({
-  prisma: { member: { count: memberCountMock } },
+  // 2026-06-09 settings audit: the hook now counts admins by BASE role
+  // segment in JS (findMany + filter), because a raw Prisma
+  // `role IN ('admin','owner')` count misses vendor sub-roled admins.
+  prisma: { member: { findMany: memberFindManyMock } },
 }))
 
 import {
@@ -95,7 +98,7 @@ describe("organizationHooks — updateMemberRole", () => {
 
 describe("organizationHooks — removeMember last-admin protection", () => {
   it("rejects when removing the last admin of the org", async () => {
-    memberCountMock.mockResolvedValue(1)
+    memberFindManyMock.mockResolvedValue([{ role: "admin" }, { role: "member" }])
     await expect(
       _hookBeforeRemoveMember({
         memberRole: "admin",
@@ -106,7 +109,7 @@ describe("organizationHooks — removeMember last-admin protection", () => {
   })
 
   it("rejects when removing the last owner of the org", async () => {
-    memberCountMock.mockResolvedValue(1)
+    memberFindManyMock.mockResolvedValue([{ role: "owner" }, { role: "member" }])
     await expect(
       _hookBeforeRemoveMember({
         memberRole: "owner",
@@ -117,7 +120,11 @@ describe("organizationHooks — removeMember last-admin protection", () => {
   })
 
   it("permits removing an admin when more than one remains", async () => {
-    memberCountMock.mockResolvedValue(3)
+    memberFindManyMock.mockResolvedValue([
+      { role: "owner" },
+      { role: "admin" },
+      { role: "admin:salesEng" },
+    ])
     await expect(
       _hookBeforeRemoveMember({
         memberRole: "admin",
@@ -135,6 +142,36 @@ describe("organizationHooks — removeMember last-admin protection", () => {
         organizationId: "org-1",
       }),
     ).resolves.toBeUndefined()
-    expect(memberCountMock).not.toHaveBeenCalled()
+    expect(memberFindManyMock).not.toHaveBeenCalled()
+  })
+
+  it("counts vendor sub-roled admins by BASE segment (2026-06-09)", async () => {
+    // Two admins, both sub-roled — removal of one must be permitted.
+    memberFindManyMock.mockResolvedValue([
+      { role: "admin:owner" },
+      { role: "admin:salesEng" },
+    ])
+    await expect(
+      _hookBeforeRemoveMember({
+        memberRole: "admin:owner",
+        memberId: "m-1",
+        organizationId: "org-v",
+      }),
+    ).resolves.toBeUndefined()
+
+    // Lone sub-roled admin — removal must be blocked (pre-fix the IN
+    // count returned 0 and, worse, settings.ts skipped protection
+    // entirely for sub-roled targets).
+    memberFindManyMock.mockResolvedValue([
+      { role: "admin:owner" },
+      { role: "member:sales" },
+    ])
+    await expect(
+      _hookBeforeRemoveMember({
+        memberRole: "admin:owner",
+        memberId: "m-1",
+        organizationId: "org-v",
+      }),
+    ).rejects.toThrow(/Cannot remove the last admin/)
   })
 })

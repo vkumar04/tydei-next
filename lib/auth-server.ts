@@ -76,9 +76,17 @@ export async function _hookBeforeRemoveMember(args: {
 }): Promise<void> {
   const role = baseRole(args.memberRole)
   if (role !== "admin" && role !== "owner") return
-  const remaining = await prisma.member.count({
-    where: { organizationId: args.organizationId, role: { in: ["admin", "owner"] } },
+  // 2026-06-09 settings audit: count by BASE role segment in JS — a raw
+  // `role IN ('admin','owner')` misses vendor sub-roled admins
+  // ("admin:owner"), which both removed last-admin protection for
+  // vendor orgs and false-blocked removals in multi-admin vendor orgs.
+  const members = await prisma.member.findMany({
+    where: { organizationId: args.organizationId },
+    select: { role: true },
   })
+  const remaining = members.filter((m) =>
+    ["admin", "owner"].includes(baseRole(m.role)),
+  ).length
   if (remaining <= 1) {
     console.warn("[auth-server.beforeRemoveMember] last admin protection", {
       organizationId: args.organizationId,

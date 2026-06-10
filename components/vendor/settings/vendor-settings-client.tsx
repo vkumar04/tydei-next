@@ -70,15 +70,25 @@ export function VendorSettingsClient({
   const handleSendInvite = () => {
     const name = newInviteFacilityName.trim()
     if (!name) return
-    sendInvite.mutate({
-      toEmail: `admin@${name.toLowerCase().replace(/\s/g, "")}.com`,
-      toName: name,
-      message: newInviteMessage || undefined,
-    })
+    // 2026-06-09 settings audit: success used to toast unconditionally,
+    // hiding server failures (e.g. "Facility not found with that email").
+    sendInvite.mutate(
+      {
+        toEmail: `admin@${name.toLowerCase().replace(/\s/g, "")}.com`,
+        toName: name,
+        message: newInviteMessage || undefined,
+      },
+      {
+        onSuccess: () => toast.success(`Connection invite sent to ${name}`),
+        onError: (err) =>
+          toast.error(
+            err instanceof Error ? err.message : "Failed to send connection invite"
+          ),
+      }
+    )
     setNewInviteFacilityName("")
     setNewInviteMessage("")
     setInviteFacilityDialogOpen(false)
-    toast.success(`Connection invite sent to ${name}`)
   }
 
   const tabs: Array<{ value: string; label: string; Icon: typeof User }> = [

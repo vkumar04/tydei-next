@@ -1,7 +1,7 @@
 "use server"
 
 import { requireAdmin } from "@/lib/actions/auth"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
 import type { CreditTierId } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
@@ -41,6 +41,7 @@ export async function getSubscriptions(input: {
   const params: Record<string, unknown> = { limit: pageSize }
   if (status) params.status = status
 
+  const stripe = getStripe()
   const subs = await stripe.subscriptions.list(params as Parameters<typeof stripe.subscriptions.list>[0])
 
   return serialize({
@@ -70,6 +71,7 @@ export async function getStripeInvoices(input: {
   if (status === "paid") params.status = "paid"
   else if (status === "pending") params.status = "open"
 
+  const stripe = getStripe()
   const invoices = await stripe.invoices.list(params as Parameters<typeof stripe.invoices.list>[0])
 
   return serialize({
@@ -160,7 +162,7 @@ export async function createCheckoutSession(input: {
 }): Promise<{ url: string }> {
   await requireAdmin()
 
-  const session = await stripe.checkout.sessions.create({
+  const session = await getStripe().checkout.sessions.create({
     mode: "subscription",
     line_items: [{ price: input.priceId, quantity: 1 }],
     success_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin/billing?success=true`,
@@ -176,7 +178,7 @@ export async function createCheckoutSession(input: {
 export async function cancelSubscription(subscriptionId: string) {
   await requireAdmin()
 
-  await stripe.subscriptions.cancel(subscriptionId)
+  await getStripe().subscriptions.cancel(subscriptionId)
 }
 
 // ─── Create Billing Portal Session ─────────────────────────────
@@ -199,6 +201,7 @@ export async function createBillingPortalSession(input: {
   }
 
   // Search for a customer by metadata or create one
+  const stripe = getStripe()
   const customers = await stripe.customers.list({
     limit: 1,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -249,7 +252,7 @@ export async function getAvailablePlans(): Promise<PlanInfo[]> {
   await requireAdmin()
 
   try {
-    const prices = await stripe.prices.list({
+    const prices = await getStripe().prices.list({
       active: true,
       type: "recurring",
       expand: ["data.product"],
@@ -312,55 +315,12 @@ export async function getAvailablePlans(): Promise<PlanInfo[]> {
 }
 
 // ─── Handle Stripe Webhook Events ──────────────────────────────
-
-export async function handleStripeWebhook(event: import("stripe").Stripe.Event) {
-  switch (event.type) {
-    case "customer.subscription.created":
-    case "customer.subscription.updated": {
-      const sub = event.data.object as import("stripe").Stripe.Subscription
-      const orgId = sub.metadata?.organizationId
-      if (orgId) {
-        const facility = await prisma.facility.findFirst({
-          where: { organizationId: orgId },
-        })
-        if (facility) {
-          await prisma.facility.update({
-            where: { id: facility.id },
-            data: { status: sub.status === "active" ? "active" : "inactive" },
-          })
-        }
-      }
-      console.log(`[Stripe Webhook] Subscription ${event.type}: ${sub.id} (${sub.status})`)
-      break
-    }
-    case "customer.subscription.deleted": {
-      const sub = event.data.object as import("stripe").Stripe.Subscription
-      const orgId = sub.metadata?.organizationId
-      if (orgId) {
-        const facility = await prisma.facility.findFirst({
-          where: { organizationId: orgId },
-        })
-        if (facility) {
-          await prisma.facility.update({
-            where: { id: facility.id },
-            data: { status: "inactive" },
-          })
-        }
-      }
-      console.log(`[Stripe Webhook] Subscription cancelled: ${sub.id}`)
-      break
-    }
-    case "invoice.paid": {
-      const invoice = event.data.object as import("stripe").Stripe.Invoice
-      console.log(`[Stripe Webhook] Invoice paid: ${invoice.id}`)
-      break
-    }
-    case "invoice.payment_failed": {
-      const invoice = event.data.object as import("stripe").Stripe.Invoice
-      console.log(`[Stripe Webhook] Payment failed: ${invoice.id}`)
-      break
-    }
-    default:
-      console.log(`[Stripe Webhook] Unhandled event: ${event.type}`)
-  }
-}
+//
+// 2026-06-09 settings audit BLOCKER: `handleStripeWebhook` used to be
+// exported from this "use server" file, which made it a publicly
+// invokable server action — any client could POST a forged
+// subscription event (the Stripe signature is only checked in the
+// webhook route, not on the RPC path) and flip any facility's status.
+// It now lives in lib/billing/stripe-webhook.ts (plain module); the
+// only caller is app/api/webhooks/stripe/route.ts after signature
+// verification.

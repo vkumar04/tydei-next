@@ -148,6 +148,14 @@ export async function useAICredits(input: {
   userName?: string
   description: string
 }): Promise<{ success: boolean; remaining: number }> {
+  // 2026-06-09 settings audit: a NEGATIVE creditsUsed passed the
+  // `available < creditsUsed` check and then `increment`ed usedCredits
+  // by a negative number — i.e. self-served credit refunds. Reject
+  // non-positive / non-integer amounts up front.
+  if (!Number.isInteger(input.creditsUsed) || input.creditsUsed <= 0) {
+    throw new Error("creditsUsed must be a positive integer")
+  }
+
   // Ownership + session identity — pre-fix anyone could burn another
   // tenant's credits and attribute usage to an arbitrary userId/userName.
   const { credit, tenant } = await requireOwnedCredit(input.creditId)

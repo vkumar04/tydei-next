@@ -5,18 +5,19 @@ import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { auth } from "@/lib/auth-server"
 import {
-  requireAdmin,
   requireAuth,
   requireFacility,
   requireVendor,
 } from "@/lib/actions/auth"
 import {
+  notificationPreferencesSchema,
   updateFacilityProfileSchema,
   updateVendorProfileSchema,
   type UpdateFacilityProfileInput,
   type UpdateVendorProfileInput,
   type NotificationPreferences,
 } from "@/lib/validators/settings"
+import { parseNotificationPrefs } from "@/lib/notifications/prefs"
 import { serialize } from "@/lib/serialize"
 
 // ─── Role enums (Charles audit C2/C3) ─────────────────────────────
@@ -52,6 +53,14 @@ const inviteVendorTeamMemberInputSchema = z.object({
   subRole: safeRoleSegment,
 })
 
+// Vendor orgs store sub-roles as `"<base>:<sub>"` (e.g. "admin:owner").
+// Every role comparison in this file must look at the BASE segment —
+// raw `===` / Prisma `in` comparisons silently miss sub-roled members
+// (same class as the category/vendor canonical-name bugs).
+function baseRoleSegment(role: string): string {
+  return role.includes(":") ? (role.split(":")[0] ?? role) : role
+}
+
 async function assertNotLastAdmin(
   organizationId: string,
   targetMemberId: string,
@@ -68,11 +77,21 @@ async function assertNotLastAdmin(
     select: { role: true, organizationId: true },
   })
   if (!target || target.organizationId !== organizationId) return
-  if (target.role !== "admin" && target.role !== "owner") return
+  const targetBase = baseRoleSegment(target.role)
+  if (targetBase !== "admin" && targetBase !== "owner") return
 
-  const adminCount = await prisma.member.count({
-    where: { organizationId, role: { in: ["admin", "owner"] } },
+  // 2026-06-09 settings audit: a raw `role IN ('admin','owner')` count
+  // missed vendor sub-roled admins ("admin:owner"), so vendor orgs had
+  // NO last-admin protection (their lone "admin:x" never matched the
+  // target early-return) AND multi-admin vendor orgs false-blocked
+  // removals (count 0 <= 1). Compare base segments in JS instead.
+  const members = await prisma.member.findMany({
+    where: { organizationId },
+    select: { role: true },
   })
+  const adminCount = members.filter((m) =>
+    ["admin", "owner"].includes(baseRoleSegment(m.role)),
+  ).length
   if (adminCount <= 1) {
     throw new Error("Cannot remove the last admin of this organization")
   }
@@ -178,25 +197,58 @@ export async function updateVendorProfile(
   _vendorId: string,
   input: UpdateVendorProfileInput
 ): Promise<void> {
-  // Charles audit M1: Vendor is shared-write-restricted per the role
-  // model (`docs/architecture/role-model.md`). Pre-fix: any vendor user
-  // could overwrite contactEmail to intercept facility→vendor invites.
-  // NOTE: this currently breaks the vendor settings UI for non-admin
-  // users. The vendor settings page (components/vendor/settings/...) is
-  // expected to be re-gated to admin or moved server-side; until then
-  // a vendor-side write attempt will fail closed (intentional).
-  await requireAdmin()
+  // Charles audit M1 + 2026-06-09 settings audit: Vendor is a SHARED
+  // row, so writes are restricted — pre-M1-fix any vendor user could
+  // overwrite contactEmail to intercept facility→vendor invites. The
+  // M1 stopgap (requireAdmin only) also broke the vendor settings
+  // Organization tab for every vendor user. Final shape:
+  //   - platform admin (UserRole "admin") may update any vendor by id
+  //     (admin console path), OR
+  //   - a vendor-org member whose BASE member role is owner/admin may
+  //     update their OWN session vendor — the client-supplied id is
+  //     ignored on this path.
   const data = updateVendorProfileSchema.parse(input)
-
-  // Identity must come from the input here because requireAdmin doesn't
-  // resolve a vendor. Look up the vendor by id and update.
-  const vendor = await prisma.vendor.findUniqueOrThrow({
-    where: { id: _vendorId },
-    select: { id: true },
+  const session = await requireAuth()
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
   })
 
+  let targetVendorId: string
+  if (user?.role === "admin") {
+    // Platform admin manages all vendors by design.
+    // auth-scope-scanner-skip: requireAuth + UserRole "admin" gate above.
+    const vendor = await prisma.vendor.findUniqueOrThrow({
+      where: { id: _vendorId },
+      select: { id: true },
+    })
+    targetVendorId = vendor.id
+  } else {
+    if (user?.role !== "vendor") {
+      throw new Error("Not authorized: requires admin or vendor organization admin")
+    }
+    const member = await prisma.member.findFirst({
+      where: { userId: session.user.id },
+      select: {
+        role: true,
+        organization: { select: { vendor: { select: { id: true } } } },
+      },
+    })
+    const sessionVendor = member?.organization?.vendor
+    if (!sessionVendor) {
+      throw new Error("Not authorized: caller is not a member of a vendor organization")
+    }
+    const base = baseRoleSegment(member.role)
+    if (base !== "owner" && base !== "admin") {
+      throw new Error("Not authorized: requires admin or owner role")
+    }
+    targetVendorId = sessionVendor.id
+  }
+
+  // auth-scope-scanner-skip: targetVendorId is either admin-gated or the
+  // caller's own session vendor (see branch above).
   await prisma.vendor.update({
-    where: { id: vendor.id },
+    where: { id: targetVendorId },
     data: {
       name: data.name,
       displayName: data.displayName || null,
@@ -212,81 +264,66 @@ export async function updateVendorProfile(
 }
 
 // ─── Notification Preferences (stored as metadata on Organization) ─
+//
+// 2026-06-09 settings audit BLOCKER: both actions previously took
+// `entityId` (a facility or vendor id) from CLIENT input under
+// requireAuth() only — any authenticated user could read AND overwrite
+// any other tenant's notification prefs (and, because the update
+// round-trips the whole Organization.metadata JSON, race-clobber other
+// metadata keys). Scope now derives from the session member's org (same
+// pattern as ai-credits' sessionTenant); the entityId params are
+// ignored. Server-internal by-entity reads live in
+// lib/notifications/prefs.ts (used by the email pipeline).
 
-const DEFAULT_PREFS: NotificationPreferences = {
-  expiringContracts: true,
-  tierThresholds: true,
-  rebateDue: true,
-  paymentDue: true,
-  offContract: true,
-  pricingErrors: true,
-  compliance: true,
-  emailEnabled: true,
-  inAppEnabled: true,
-}
-
-export async function getNotificationPreferences(
-  entityId: string
-): Promise<NotificationPreferences> {
-  await requireAuth()
-
-  // Try to find organization linked to facility or vendor
-  const facility = await prisma.facility.findUnique({
-    where: { id: entityId },
-    select: { organization: { select: { metadata: true } } },
+async function sessionOrganization(): Promise<{
+  organizationId: string
+  metadata: string | null
+} | null> {
+  const session = await requireAuth()
+  const member = await prisma.member.findFirst({
+    where: { userId: session.user.id },
+    select: {
+      organizationId: true,
+      organization: { select: { metadata: true } },
+    },
   })
-
-  const vendor = !facility
-    ? await prisma.vendor.findUnique({
-        where: { id: entityId },
-        select: { organization: { select: { metadata: true } } },
-      })
-    : null
-
-  const metadata = facility?.organization?.metadata ?? vendor?.organization?.metadata
-  if (!metadata) return DEFAULT_PREFS
-
-  try {
-    const parsed = JSON.parse(String(metadata))
-    return { ...DEFAULT_PREFS, ...parsed.notificationPrefs }
-  } catch {
-    return DEFAULT_PREFS
+  if (!member?.organizationId) return null
+  return {
+    organizationId: member.organizationId,
+    metadata: member.organization?.metadata ?? null,
   }
 }
 
+export async function getNotificationPreferences(
+  /** @deprecated 2026-06-09 audit: ignored — derived from session. */
+  _entityId?: string
+): Promise<NotificationPreferences> {
+  const org = await sessionOrganization()
+  return parseNotificationPrefs(org?.metadata)
+}
+
 export async function updateNotificationPreferences(
-  entityId: string,
+  /** @deprecated 2026-06-09 audit: ignored — derived from session. */
+  _entityId: string,
   prefs: NotificationPreferences
 ): Promise<void> {
-  await requireAuth()
+  // Zod-parse so arbitrary JSON can't be injected into org metadata.
+  const parsedPrefs = notificationPreferencesSchema.parse(prefs)
+  const org = await sessionOrganization()
+  if (!org) return
 
-  const facility = await prisma.facility.findUnique({
-    where: { id: entityId },
-    select: { organizationId: true, organization: { select: { metadata: true } } },
-  })
-
-  const vendor = !facility
-    ? await prisma.vendor.findUnique({
-        where: { id: entityId },
-        select: { organizationId: true, organization: { select: { metadata: true } } },
-      })
-    : null
-
-  const orgId = facility?.organizationId ?? vendor?.organizationId
-  if (!orgId) return
-
-  const existing = facility?.organization?.metadata ?? vendor?.organization?.metadata
   let parsed: Record<string, unknown> = {}
   try {
-    parsed = JSON.parse(String(existing ?? "{}"))
+    parsed = JSON.parse(String(org.metadata ?? "{}"))
   } catch {
     /* ignore */
   }
 
-  parsed.notificationPrefs = prefs
+  parsed.notificationPrefs = parsedPrefs
 
+  // auth-scope-scanner-skip: org id comes from the session member row.
   await prisma.organization.update({
-    where: { id: orgId },
+    where: { id: org.organizationId },
     data: { metadata: JSON.stringify(parsed) },
   })
 }
@@ -326,10 +363,29 @@ async function assertCallerIsMember(
 async function assertCallerCanManage(
   userId: string,
   organizationId: string,
-): Promise<void> {
+): Promise<{ role: string }> {
   const { role } = await assertCallerIsMember(userId, organizationId)
-  if (role !== "owner" && role !== "admin") {
+  // Base-segment compare so vendor sub-roled admins ("admin:owner")
+  // can manage their org — raw === locked them out pre-2026-06-09.
+  const base = baseRoleSegment(role)
+  if (base !== "owner" && base !== "admin") {
     throw new Error("Not authorized: requires admin or owner role")
+  }
+  return { role }
+}
+
+/**
+ * 2026-06-09 settings audit: an org ADMIN must not be able to remove or
+ * demote the org OWNER (that's how an admin could displace the owner —
+ * the C2/C3 fixes blocked owner *assignment* but not owner *takedown*).
+ * Only an owner may act on an owner.
+ */
+function assertOwnerProtected(targetRole: string, callerRole: string): void {
+  if (
+    baseRoleSegment(targetRole) === "owner" &&
+    baseRoleSegment(callerRole) !== "owner"
+  ) {
+    throw new Error("Not authorized: only the owner can modify the owner")
   }
 }
 
@@ -386,9 +442,11 @@ export async function removeTeamMember(memberId: string): Promise<void> {
   const session = await requireAuth()
   const target = await prisma.member.findUniqueOrThrow({
     where: { id: memberId },
-    select: { organizationId: true },
+    select: { organizationId: true, role: true },
   })
-  await assertCallerCanManage(session.user.id, target.organizationId)
+  const caller = await assertCallerCanManage(session.user.id, target.organizationId)
+  // 2026-06-09 settings audit: an admin cannot remove the owner.
+  assertOwnerProtected(target.role, caller.role)
   // Charles audit C3: prevent bricking the org by removing the last admin.
   await assertNotLastAdmin(target.organizationId, memberId)
   await prisma.member.delete({ where: { id: memberId } })
@@ -404,9 +462,11 @@ export async function updateTeamMemberRole(
   const session = await requireAuth()
   const target = await prisma.member.findUniqueOrThrow({
     where: { id: memberId },
-    select: { organizationId: true },
+    select: { organizationId: true, role: true },
   })
-  await assertCallerCanManage(session.user.id, target.organizationId)
+  const caller = await assertCallerCanManage(session.user.id, target.organizationId)
+  // 2026-06-09 settings audit: an admin cannot demote the owner.
+  assertOwnerProtected(target.role, caller.role)
   // If the new role is non-admin, ensure we're not demoting the last admin.
   if (parsedRole !== "admin") {
     await assertNotLastAdmin(target.organizationId, memberId)
@@ -443,16 +503,27 @@ export async function getFeatureFlags(_facilityId?: string): Promise<FeatureFlag
   })
 }
 
+// Zod-strip so unknown keys from the wire can't reach the Prisma write
+// (Prisma throws an opaque 500 on unknown args; stripping is safer).
+const featureFlagsUpdateSchema = z.object({
+  purchaseOrdersEnabled: z.boolean().optional(),
+  aiAgentEnabled: z.boolean().optional(),
+  vendorPortalEnabled: z.boolean().optional(),
+  advancedReportsEnabled: z.boolean().optional(),
+  caseCostingEnabled: z.boolean().optional(),
+})
+
 export async function updateFeatureFlags(
   _facilityId: string,
   flags: Partial<FeatureFlagData>
 ): Promise<void> {
   const { facility } = await requireFacility()
+  const parsed = featureFlagsUpdateSchema.parse(flags)
 
   await prisma.featureFlag.upsert({
     where: { facilityId: facility.id },
-    create: { facilityId: facility.id, ...flags },
-    update: flags,
+    create: { facilityId: facility.id, ...parsed },
+    update: parsed,
   })
 }
 

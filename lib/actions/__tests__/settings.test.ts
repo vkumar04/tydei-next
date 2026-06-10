@@ -27,6 +27,7 @@ const {
   vendorFindUniqueOrThrowMock,
   vendorUpdateMock,
   userFindUniqueMock,
+  organizationUpdateMock,
   authGetSessionMock,
   authCreateInvitationMock,
 } = vi.hoisted(() => ({
@@ -41,6 +42,7 @@ const {
   vendorFindUniqueOrThrowMock: vi.fn(),
   vendorUpdateMock: vi.fn(),
   userFindUniqueMock: vi.fn(),
+  organizationUpdateMock: vi.fn(),
   authGetSessionMock: vi.fn(),
   authCreateInvitationMock: vi.fn(),
 }))
@@ -62,6 +64,7 @@ vi.mock("@/lib/db", () => ({
       update: vendorUpdateMock,
     },
     user: { findUnique: userFindUniqueMock },
+    organization: { update: organizationUpdateMock },
   },
 }))
 
@@ -89,6 +92,7 @@ import {
   removeTeamMember,
   getVendorTeamMembers,
   updateVendorProfile,
+  updateNotificationPreferences,
 } from "@/lib/actions/settings"
 
 beforeEach(() => {
@@ -179,13 +183,16 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
   describe("C3a updateTeamMemberRole", () => {
     it("rejects when demoting the last admin", async () => {
       asUser("u-owner", "facility")
-      memberFindUniqueOrThrowMock.mockResolvedValue({ organizationId: "org-1" })
+      memberFindUniqueOrThrowMock.mockResolvedValue({
+        organizationId: "org-1",
+        role: "owner",
+      })
       memberFindFirstMock.mockResolvedValue({ role: "owner" }) // caller can manage
       memberFindUniqueMock.mockResolvedValue({
         role: "owner",
         organizationId: "org-1",
       })
-      memberCountMock.mockResolvedValue(1) // only one admin/owner left
+      memberFindManyMock.mockResolvedValue([{ role: "owner" }]) // only one admin/owner left
 
       await expect(
         updateTeamMemberRole("m-self", "member"),
@@ -204,13 +211,16 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
 
     it("permits demotion when there is more than one admin", async () => {
       asUser("u-owner", "facility")
-      memberFindUniqueOrThrowMock.mockResolvedValue({ organizationId: "org-1" })
+      memberFindUniqueOrThrowMock.mockResolvedValue({
+        organizationId: "org-1",
+        role: "admin",
+      })
       memberFindFirstMock.mockResolvedValue({ role: "owner" })
       memberFindUniqueMock.mockResolvedValue({
         role: "admin",
         organizationId: "org-1",
       })
-      memberCountMock.mockResolvedValue(2)
+      memberFindManyMock.mockResolvedValue([{ role: "owner" }, { role: "admin" }])
       memberUpdateMock.mockResolvedValue({})
 
       await expect(
@@ -218,18 +228,35 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
       ).resolves.toBeUndefined()
       expect(memberUpdateMock).toHaveBeenCalledOnce()
     })
+
+    it("2026-06-09: an ADMIN cannot demote the OWNER", async () => {
+      asUser("u-admin", "facility")
+      memberFindUniqueOrThrowMock.mockResolvedValue({
+        organizationId: "org-1",
+        role: "owner", // target is the owner
+      })
+      memberFindFirstMock.mockResolvedValue({ role: "admin" }) // caller is admin
+
+      await expect(
+        updateTeamMemberRole("m-owner", "member"),
+      ).rejects.toThrow(/only the owner can modify the owner/)
+      expect(memberUpdateMock).not.toHaveBeenCalled()
+    })
   })
 
   describe("C3b removeTeamMember", () => {
     it("rejects when removing the last admin", async () => {
       asUser("u-owner", "facility")
-      memberFindUniqueOrThrowMock.mockResolvedValue({ organizationId: "org-1" })
+      memberFindUniqueOrThrowMock.mockResolvedValue({
+        organizationId: "org-1",
+        role: "owner",
+      })
       memberFindFirstMock.mockResolvedValue({ role: "owner" })
       memberFindUniqueMock.mockResolvedValue({
         role: "owner",
         organizationId: "org-1",
       })
-      memberCountMock.mockResolvedValue(1)
+      memberFindManyMock.mockResolvedValue([{ role: "owner" }])
 
       await expect(removeTeamMember("m-self")).rejects.toThrow(
         /Cannot remove the last admin of this organization/,
@@ -239,7 +266,10 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
 
     it("permits removing a non-admin member", async () => {
       asUser("u-owner", "facility")
-      memberFindUniqueOrThrowMock.mockResolvedValue({ organizationId: "org-1" })
+      memberFindUniqueOrThrowMock.mockResolvedValue({
+        organizationId: "org-1",
+        role: "member",
+      })
       memberFindFirstMock.mockResolvedValue({ role: "owner" })
       memberFindUniqueMock.mockResolvedValue({
         role: "member",
@@ -249,6 +279,45 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
 
       await expect(removeTeamMember("m-other")).resolves.toBeUndefined()
       expect(memberDeleteMock).toHaveBeenCalledOnce()
+    })
+
+    it("2026-06-09: an ADMIN cannot remove the OWNER", async () => {
+      asUser("u-admin", "facility")
+      memberFindUniqueOrThrowMock.mockResolvedValue({
+        organizationId: "org-1",
+        role: "owner",
+      })
+      memberFindFirstMock.mockResolvedValue({ role: "admin" })
+
+      await expect(removeTeamMember("m-owner")).rejects.toThrow(
+        /only the owner can modify the owner/,
+      )
+      expect(memberDeleteMock).not.toHaveBeenCalled()
+    })
+
+    it("2026-06-09: last-admin protection counts vendor sub-roled admins by BASE segment", async () => {
+      // Vendor org where the only admin is "admin:owner" — pre-fix the
+      // raw `role IN ('admin','owner')` count missed sub-roled admins
+      // entirely (target early-returned, no protection).
+      asUser("u-vendor-admin", "vendor")
+      memberFindUniqueOrThrowMock.mockResolvedValue({
+        organizationId: "org-v",
+        role: "admin:owner",
+      })
+      memberFindFirstMock.mockResolvedValue({ role: "admin:owner" })
+      memberFindUniqueMock.mockResolvedValue({
+        role: "admin:owner",
+        organizationId: "org-v",
+      })
+      memberFindManyMock.mockResolvedValue([
+        { role: "admin:owner" },
+        { role: "member:sales" },
+      ])
+
+      await expect(removeTeamMember("m-v-admin")).rejects.toThrow(
+        /Cannot remove the last admin of this organization/,
+      )
+      expect(memberDeleteMock).not.toHaveBeenCalled()
     })
   })
 
@@ -271,20 +340,112 @@ describe("Charles audit — settings.ts role-escalation gates", () => {
     })
   })
 
-  describe("M1 updateVendorProfile", () => {
-    it("rejects when caller is a vendor (not admin UserRole)", async () => {
-      // requireAdmin → requireRole("admin") will redirect (we mock as throw).
-      authGetSessionMock.mockResolvedValue({ user: { id: "u-vendor" } })
-      userFindUniqueMock.mockResolvedValue({ role: "vendor" })
+  describe("M1 updateVendorProfile (re-gated 2026-06-09)", () => {
+    const input = {
+      name: "Acme Surgical",
+      contactEmail: "contact@acme.com",
+    } as never
+
+    it("platform admin may update any vendor by id", async () => {
+      asUser("u-admin", "admin")
+      vendorFindUniqueOrThrowMock.mockResolvedValue({ id: "v-any" })
+      vendorUpdateMock.mockResolvedValue({})
+
+      await expect(updateVendorProfile("v-any", input)).resolves.toBeUndefined()
+      expect(vendorUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "v-any" } }),
+      )
+    })
+
+    it("vendor org admin updates their OWN vendor — client-supplied id ignored", async () => {
+      asUser("u-vendor-admin", "vendor")
+      memberFindFirstMock.mockResolvedValue({
+        role: "admin:owner",
+        organization: { vendor: { id: "v-own" } },
+      })
+      vendorUpdateMock.mockResolvedValue({})
+
+      // Caller passes a FOREIGN vendor id; the write must target v-own.
+      await expect(
+        updateVendorProfile("v-foreign", input),
+      ).resolves.toBeUndefined()
+      expect(vendorUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "v-own" } }),
+      )
+      expect(vendorFindUniqueOrThrowMock).not.toHaveBeenCalled()
+    })
+
+    it("rejects a plain vendor member (shared-write restriction)", async () => {
+      asUser("u-vendor-member", "vendor")
+      memberFindFirstMock.mockResolvedValue({
+        role: "member",
+        organization: { vendor: { id: "v-own" } },
+      })
+
+      await expect(updateVendorProfile("v-own", input)).rejects.toThrow(
+        /requires admin or owner role/,
+      )
+      expect(vendorUpdateMock).not.toHaveBeenCalled()
+    })
+
+    it("rejects a facility user", async () => {
+      asUser("u-facility", "facility")
+
+      await expect(updateVendorProfile("v-1", input)).rejects.toThrow(
+        /requires admin or vendor organization admin/,
+      )
+      expect(vendorUpdateMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("2026-06-09 notification prefs — session-scoped (BLOCKER class 2)", () => {
+    const PREFS = {
+      expiringContracts: true,
+      tierThresholds: true,
+      rebateDue: false,
+      paymentDue: true,
+      offContract: true,
+      pricingErrors: true,
+      compliance: true,
+      emailEnabled: false,
+      inAppEnabled: true,
+    }
+
+    it("updateNotificationPreferences writes the SESSION org, ignoring the entityId param", async () => {
+      authGetSessionMock.mockResolvedValue({ user: { id: "u-1" } })
+      memberFindFirstMock.mockResolvedValue({
+        organizationId: "org-session",
+        organization: { metadata: JSON.stringify({ keep: "me" }) },
+      })
+      organizationUpdateMock.mockResolvedValue({})
+
+      await updateNotificationPreferences("fac-FOREIGN", PREFS)
+
+      expect(organizationUpdateMock).toHaveBeenCalledOnce()
+      const call = organizationUpdateMock.mock.calls[0][0]
+      expect(call.where).toEqual({ id: "org-session" })
+      const written = JSON.parse(call.data.metadata)
+      expect(written.keep).toBe("me") // other metadata keys preserved
+      expect(written.notificationPrefs).toEqual(PREFS)
+    })
+
+    it("rejects a malformed prefs payload before any DB write (zod)", async () => {
+      await expect(
+        updateNotificationPreferences("any", {
+          emailEnabled: "yes-please",
+        } as never),
+      ).rejects.toThrow()
+      expect(organizationUpdateMock).not.toHaveBeenCalled()
+    })
+
+    it("no-ops when the caller has no organization", async () => {
+      authGetSessionMock.mockResolvedValue({ user: { id: "u-orphan" } })
+      memberFindFirstMock.mockResolvedValue(null)
 
       await expect(
-        updateVendorProfile("v-1", {
-          name: "Hijack Co",
-          contactEmail: "attacker@example.com",
-        } as never),
-      ).rejects.toThrow(/REDIRECT:/)
-
-      expect(vendorUpdateMock).not.toHaveBeenCalled()
+        updateNotificationPreferences("fac-x", PREFS),
+      ).resolves.toBeUndefined()
+      expect(organizationUpdateMock).not.toHaveBeenCalled()
     })
   })
 })

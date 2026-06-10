@@ -29,10 +29,11 @@ interface TeamTableProps {
   roles?: { value: string; label: string }[]
 }
 
+// Server enforces admin|member (settings.ts updateRoleSchema) —
+// "viewer" was a phantom option that always failed Zod (2026-06-09).
 const DEFAULT_ROLES = [
   { value: "admin", label: "Admin" },
   { value: "member", label: "Member" },
-  { value: "viewer", label: "Viewer" },
 ]
 
 export function TeamTable({
@@ -70,7 +71,10 @@ export function TeamTable({
               </div>
             </TableCell>
             <TableCell>
-              {isAdmin ? (
+              {/* Owner is creator-only: not in the assignable enum and
+                  protected server-side (only an owner can modify the
+                  owner) — render as a static badge, not a Select. */}
+              {isAdmin && m.role !== "owner" ? (
                 <Select
                   value={m.role}
                   onValueChange={(v) => onRoleChange(m.id, v)}
@@ -95,14 +99,16 @@ export function TeamTable({
             </TableCell>
             {isAdmin && (
               <TableCell>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="size-8 text-destructive"
-                  onClick={() => onRemove(m.id)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
+                {m.role !== "owner" && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 text-destructive"
+                    onClick={() => onRemove(m.id)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                )}
               </TableCell>
             )}
           </TableRow>

@@ -6,15 +6,17 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
   User,
   Shield,
-  Eye,
   UserPlus,
 } from "lucide-react"
 import type { TeamMember } from "@/lib/actions/settings"
 
+// Server enforces an admin|member enum (lib/actions/settings.ts
+// inviteRoleSchema / updateRoleSchema — "owner" is creator-only and
+// "viewer" doesn't exist). Offering "viewer" here made the option
+// throw an opaque Zod error on save (2026-06-09 settings audit).
 const TEAM_ROLES = [
   { value: "admin", label: "Admin" },
   { value: "member", label: "Member" },
-  { value: "viewer", label: "Viewer" },
 ]
 
 export interface MembersTabProps {
@@ -57,7 +59,7 @@ export function MembersTab({
           <div className="flex flex-wrap gap-4 mb-6 p-4 rounded-lg bg-muted/50">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-purple-500" />
-              <span className="text-sm"><strong>Super Admin:</strong> Full system access</span>
+              <span className="text-sm"><strong>Owner:</strong> Full control, assigned at org creation</span>
             </div>
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-blue-500" />
@@ -65,11 +67,7 @@ export function MembersTab({
             </div>
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-green-500" />
-              <span className="text-sm"><strong>User:</strong> Standard access</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm"><strong>Viewer:</strong> Read-only</span>
+              <span className="text-sm"><strong>Member:</strong> Standard access</span>
             </div>
           </div>
 

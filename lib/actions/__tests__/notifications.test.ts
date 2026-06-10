@@ -57,8 +57,13 @@ vi.mock("@/lib/email-templates", () => ({
   pendingContractSubmittedEmail: () => ({ subject: "", html: "" }),
   pendingContractDecisionEmail: () => ({ subject: "", html: "" }),
 }))
-vi.mock("@/lib/actions/settings", () => ({
-  getNotificationPreferences: vi.fn().mockResolvedValue({ emailEnabled: false }),
+// 2026-06-09 settings audit: shouldSendEmail now reads prefs through the
+// server-internal lib/notifications/prefs helper (the settings.ts RPC is
+// session-scoped and no longer accepts foreign entity ids).
+vi.mock("@/lib/notifications/prefs", () => ({
+  readNotificationPrefsForEntity: vi
+    .fn()
+    .mockResolvedValue({ emailEnabled: false }),
 }))
 
 import { notifyVendorOfPendingDecision } from "@/lib/actions/notifications"

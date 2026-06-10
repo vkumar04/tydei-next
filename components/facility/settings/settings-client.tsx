@@ -93,21 +93,34 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
   const handleSendConnectionInvite = useCallback(() => {
     const name = newInviteVendorName.trim()
     if (!name) return
-    sendInvite.mutate({
-      toEmail: `contact@${name.toLowerCase().replace(/\s/g, "")}.com`,
-      toName: name,
-      message: newInviteMessage || undefined,
-    })
+    // 2026-06-09 settings audit: success used to toast unconditionally,
+    // hiding server failures (e.g. "Vendor not found with that email").
+    // Toast from the mutation result instead.
+    sendInvite.mutate(
+      {
+        toEmail: `contact@${name.toLowerCase().replace(/\s/g, "")}.com`,
+        toName: name,
+        message: newInviteMessage || undefined,
+      },
+      {
+        onSuccess: () => toast.success(`Connection invite sent to ${name}`),
+        onError: (err) =>
+          toast.error(
+            err instanceof Error ? err.message : "Failed to send connection invite"
+          ),
+      }
+    )
     setNewInviteVendorName("")
     setNewInviteMessage("")
     setInviteVendorDialogOpen(false)
-    toast.success(`Connection invite sent to ${name}`)
   }, [newInviteVendorName, newInviteMessage, sendInvite])
 
   const handleUpdateFeatureFlags = useCallback(
     (flagData: Partial<FeatureFlagData>, message: string) => {
-      updateFlags.mutate(flagData)
-      toast.success(message)
+      updateFlags.mutate(flagData, {
+        onSuccess: () => toast.success(message),
+        onError: () => toast.error("Failed to update feature settings"),
+      })
     },
     [updateFlags]
   )
