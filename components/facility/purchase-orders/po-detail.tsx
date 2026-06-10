@@ -27,6 +27,11 @@ type PODetail = PurchaseOrder & {
 
 // ─── Sub-components ─────────────────────────────────────────────
 
+/** Mask a patient MRN to its last 4 characters, e.g. `•••1234`. */
+function maskMrn(mrn: string): string {
+  return `•••${mrn.slice(-4)}`
+}
+
 function OnContractBadge({ isOffContract }: { isOffContract: boolean }) {
   if (isOffContract) {
     return (
@@ -52,6 +57,13 @@ export function PODetailView({ order }: PODetailViewProps) {
   const router = useRouter()
   const updateStatus = useUpdatePOStatus()
   const nextStatuses = PO_STATUS_FLOW[order.status] ?? []
+
+  // Lot/serial columns only render when at least one line carries a value
+  // (legacy POs predate the columns; keep their table compact).
+  const hasLotSerial = useMemo(
+    () => order.lineItems.some((li) => li.lotNumber || li.serialNumber),
+    [order.lineItems],
+  )
 
   const summary = useMemo(() => {
     let offCount = 0
@@ -89,6 +101,45 @@ export function PODetailView({ order }: PODetailViewProps) {
           <div className="flex justify-between"><span className="text-muted-foreground">Total Cost</span><span className="font-medium">{formatCurrency(Number(order.totalCost ?? 0), true)}</span></div>
           {order.contract && (
             <div className="flex justify-between"><span className="text-muted-foreground">Contract</span><span>{order.contract.name}</span></div>
+          )}
+          {/* Order details (2026-06-10): bill-only context fields persisted
+              from the create form. Facility-side only — the vendor PO list
+              deliberately excludes the patient fields. MRN masked to last 4. */}
+          {(order.procedureDate || order.patientMrn || order.patientInitials ||
+            order.departmentCode || order.glCode || order.paymentTerms ||
+            order.billToAddress || order.specialInstructions || order.notes) && (
+            <div className="space-y-2 border-t pt-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Order details
+              </p>
+              {order.procedureDate && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Procedure Date</span><span>{formatCalendarDate(order.procedureDate)}</span></div>
+              )}
+              {order.patientMrn && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Patient MRN</span><span className="font-mono">{maskMrn(order.patientMrn)}</span></div>
+              )}
+              {order.patientInitials && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Patient Initials</span><span>{order.patientInitials}</span></div>
+              )}
+              {order.departmentCode && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Department Code</span><span>{order.departmentCode}</span></div>
+              )}
+              {order.glCode && (
+                <div className="flex justify-between"><span className="text-muted-foreground">GL Code</span><span>{order.glCode}</span></div>
+              )}
+              {order.paymentTerms && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Payment Terms</span><span>{order.paymentTerms}</span></div>
+              )}
+              {order.billToAddress && (
+                <div className="flex justify-between gap-4"><span className="shrink-0 text-muted-foreground">Bill To</span><span className="text-right">{order.billToAddress}</span></div>
+              )}
+              {order.specialInstructions && (
+                <div className="flex justify-between gap-4"><span className="shrink-0 text-muted-foreground">Special Instructions</span><span className="text-right">{order.specialInstructions}</span></div>
+              )}
+              {order.notes && (
+                <div className="flex justify-between gap-4"><span className="shrink-0 text-muted-foreground">Notes</span><span className="text-right">{order.notes}</span></div>
+              )}
+            </div>
           )}
           {nextStatuses.length > 0 && (
             <div className="flex gap-2 pt-2">
@@ -172,6 +223,8 @@ export function PODetailView({ order }: PODetailViewProps) {
               <TableRow>
                 <TableHead>Description</TableHead>
                 <TableHead>Item #</TableHead>
+                {hasLotSerial && <TableHead>Lot #</TableHead>}
+                {hasLotSerial && <TableHead>Serial #</TableHead>}
                 <TableHead>Qty</TableHead>
                 <TableHead>Unit Price</TableHead>
                 <TableHead>Extended</TableHead>
@@ -183,7 +236,7 @@ export function PODetailView({ order }: PODetailViewProps) {
               {order.lineItems.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={hasLotSerial ? 9 : 7}
                     className="h-24 text-center text-muted-foreground"
                   >
                     No line items on this PO.
@@ -194,6 +247,16 @@ export function PODetailView({ order }: PODetailViewProps) {
                   <TableRow key={li.id}>
                     <TableCell>{li.inventoryDescription}</TableCell>
                     <TableCell>{li.vendorItemNo ?? "-"}</TableCell>
+                    {hasLotSerial && (
+                      <TableCell className="font-mono text-sm">
+                        {li.lotNumber ?? "-"}
+                      </TableCell>
+                    )}
+                    {hasLotSerial && (
+                      <TableCell className="font-mono text-sm">
+                        {li.serialNumber ?? "-"}
+                      </TableCell>
+                    )}
                     <TableCell>{li.quantity}</TableCell>
                     <TableCell>
                       {formatCurrency(Number(li.unitPrice), true)}

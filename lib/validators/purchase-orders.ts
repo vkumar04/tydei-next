@@ -11,6 +11,10 @@ export const poLineItemSchema = z.object({
   uom: z.string().default("EA"),
   isOffContract: z.boolean().default(false),
   contractId: z.string().optional(),
+  // Bill-only traceability (2026-06-10): previously collected in the form's
+  // Lot #/Serial # inputs and stripped on submit.
+  lotNumber: z.string().trim().max(100).optional(),
+  serialNumber: z.string().trim().max(100).optional(),
 })
 
 export type POLineItemInput = z.infer<typeof poLineItemSchema>
@@ -20,6 +24,25 @@ export const createPOSchema = z.object({
   vendorId: z.string().min(1, "Vendor is required"),
   contractId: z.string().optional(),
   orderDate: z.string().min(1, "Order date is required"),
+  // Bill-only PO context (2026-06-10): the form collected all of these and
+  // silently discarded them. ISO date string, parsed like orderDate.
+  // patientMrn/patientInitials/procedureDate are PHI-adjacent — persisted
+  // for the facility side only; vendor reads exclude them.
+  procedureDate: z
+    .string()
+    .refine(
+      (s) => !Number.isNaN(new Date(s).getTime()),
+      "Invalid procedure date",
+    )
+    .optional(),
+  patientMrn: z.string().trim().max(64).optional(),
+  patientInitials: z.string().trim().max(10).optional(),
+  billToAddress: z.string().trim().max(500).optional(),
+  paymentTerms: z.string().trim().max(50).optional(),
+  departmentCode: z.string().trim().max(50).optional(),
+  glCode: z.string().trim().max(50).optional(),
+  specialInstructions: z.string().trim().max(2000).optional(),
+  notes: z.string().trim().max(2000).optional(),
   lineItems: z.array(poLineItemSchema).min(1, "At least one line item is required"),
   // H5 (2026-06-09 audit): "Submit PO" sends directly to the vendor
   // (status "sent"); "Save as Draft" keeps status "draft". Previously the

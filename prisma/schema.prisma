@@ -1464,6 +1464,19 @@ model PurchaseOrder {
   totalCost     Decimal? @db.Decimal(14, 2)
   status        POStatus @default(draft)
   isOffContract Boolean  @default(false)
+  // Bill-only PO context (2026-06-10): the create form collected these and
+  // silently discarded them. patientMrn/patientInitials/procedureDate are
+  // PHI-adjacent — facility-side surfaces only; vendor reads MUST use an
+  // explicit select that excludes them (see getVendorPurchaseOrders).
+  procedureDate       DateTime? @db.Date
+  patientMrn          String?
+  patientInitials     String?
+  billToAddress       String?
+  paymentTerms        String?
+  departmentCode      String?
+  glCode              String?
+  specialInstructions String?
+  notes               String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1495,6 +1508,10 @@ model POLineItem {
   uom                  String   @default("EA")
   isOffContract        Boolean  @default(false)
   contractId           String?
+  // Bill-only traceability (2026-06-10): collected per-line in the create
+  // form's Lot #/Serial # inputs, previously stripped on submit.
+  lotNumber            String?
+  serialNumber         String?
   createdAt            DateTime @default(now())
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)

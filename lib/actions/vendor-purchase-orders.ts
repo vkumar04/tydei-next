@@ -64,7 +64,20 @@ export async function getVendorPurchaseOrders(input?: {
   const [pos, total, sumAgg, statusGroups] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where,
-      include: {
+      // PHI exclusion (2026-06-10): PurchaseOrder now carries patient
+      // context (patientMrn, patientInitials, procedureDate) for the
+      // facility's bill-only workflow. Vendors must NEVER see those —
+      // explicit select instead of full-row include so new columns are
+      // opt-in here. Guarded by vendor-po-phi-exclusion.test.ts.
+      select: {
+        id: true,
+        poNumber: true,
+        facilityId: true,
+        orderDate: true,
+        totalCost: true,
+        status: true,
+        isOffContract: true,
+        updatedAt: true,
         facility: { select: { name: true } },
         _count: { select: { lineItems: true } },
       },

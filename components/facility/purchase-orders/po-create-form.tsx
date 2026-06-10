@@ -338,12 +338,28 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
       }
       // H5 (2026-06-09 audit): asDraft was silently ignored — every PO was
       // created as a draft regardless of which button was clicked.
+      // 2026-06-10: send EVERYTHING the form collects — procedure/patient/
+      // billing/GL fields and per-line lot/serial were previously stripped
+      // here and silently discarded. Empty fields are omitted (undefined).
       await create.mutateAsync({
         facilityId,
         vendorId,
         orderDate,
+        procedureDate: procedureDate || undefined,
+        patientMrn: patientMRN.trim() || undefined,
+        patientInitials: patientInitials.trim() || undefined,
+        billToAddress: billToAddress.trim() || undefined,
+        paymentTerms: paymentTerms.trim() || undefined,
+        departmentCode: departmentCode.trim() || undefined,
+        glCode: glCode.trim() || undefined,
+        specialInstructions: specialInstructions.trim() || undefined,
+        notes: poNotes.trim() || undefined,
         submit: !asDraft,
-        lineItems: lineItems.map(({ _id, lotNumber, serialNumber, ...rest }) => rest),
+        lineItems: lineItems.map(({ _id, lotNumber, serialNumber, ...rest }) => ({
+          ...rest,
+          lotNumber: lotNumber.trim() || undefined,
+          serialNumber: serialNumber.trim() || undefined,
+        })),
       })
       if (asDraft) {
         toast.success("PO saved as draft")
@@ -353,7 +369,24 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
       resetForm()
       onOpenChange(false)
     },
-    [lineItems, vendorId, facilityId, orderDate, create, resetForm, onOpenChange],
+    [
+      lineItems,
+      vendorId,
+      facilityId,
+      orderDate,
+      procedureDate,
+      patientMRN,
+      patientInitials,
+      billToAddress,
+      paymentTerms,
+      departmentCode,
+      glCode,
+      specialInstructions,
+      poNotes,
+      create,
+      resetForm,
+      onOpenChange,
+    ],
   )
 
   return (

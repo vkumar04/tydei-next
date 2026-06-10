@@ -231,6 +231,20 @@ export async function createPurchaseOrder(input: CreatePOInput) {
         contractId: data.contractId,
         orderDate: new Date(data.orderDate),
         totalCost,
+        // Bill-only PO context (2026-06-10): the form collected these and
+        // the action silently discarded them. Empty strings (cleared form
+        // fields) normalize to null. PHI-adjacent fields (procedureDate,
+        // patientMrn, patientInitials) are facility-side only — the vendor
+        // read path excludes them via explicit select.
+        procedureDate: data.procedureDate ? new Date(data.procedureDate) : null,
+        patientMrn: data.patientMrn || null,
+        patientInitials: data.patientInitials || null,
+        billToAddress: data.billToAddress || null,
+        paymentTerms: data.paymentTerms || null,
+        departmentCode: data.departmentCode || null,
+        glCode: data.glCode || null,
+        specialInstructions: data.specialInstructions || null,
+        notes: data.notes || null,
         // H5: the form's Submit button sends the PO directly to the
         // vendor; Save as Draft keeps it editable.
         status: data.submit ? "sent" : "draft",
@@ -250,6 +264,8 @@ export async function createPurchaseOrder(input: CreatePOInput) {
             uom: item.uom,
             isOffContract: item.isOffContract,
             contractId: item.contractId,
+            lotNumber: item.lotNumber || null,
+            serialNumber: item.serialNumber || null,
           })),
         },
       },
