@@ -55,6 +55,9 @@ import {
   type ContractVariant,
 } from "@/lib/contracts/clause-risk-analyzer"
 import { extractClauses } from "@/lib/contracts/clause-extractor"
+import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
+import { normalizeAIRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 
 // ─── Re-exported types for callers ──────────────────────────────────
 //
@@ -446,4 +449,230 @@ export async function compareStoredProposals(
   await requireFacility()
   void proposalIds // reserved for future persisted-proposal lookup
   return serialize(compareProposals([]))
+}
+
+// ─── getVendorLookbackComparison (Charles 2026-06-10) ───────────────
+
+export interface LookbackExtractedTier {
+  tierNumber: number
+  /** Spend threshold in dollars as the AI extracted it. */
+  spendMin: number
+  /** Raw AI rebate value — may be "3" meaning 3%; normalized server-side. */
+  rebateValue: number
+}
+
+export interface LookbackExistingContract {
+  id: string
+  name: string
+  status: string
+  expirationDate: string | null
+  annualValue: number | null
+  /** Lifetime earned via the canonical helper (explicit Rebate rows). */
+  lifetimeEarned: number
+  /** Lifetime contract-stamped COG spend. */
+  lifetimeSpend: number
+  /** lifetimeEarned ÷ lifetimeSpend × 100 — null when spend is 0. */
+  effectiveRatePct: number | null
+  /** Highest percent_of_spend tier across the contract's terms (display %). */
+  topTierRatePct: number | null
+}
+
+export interface VendorLookbackComparison {
+  vendorId: string | null
+  vendorName: string | null
+  /** Trailing-12-month COG spend for the vendor at this facility. */
+  trailing12moSpend: number
+  /**
+   * PROJECTION — what the proposal's extracted tier ladder would have paid
+   * on the trailing-12-month spend. Never an earned figure; surfaces must
+   * label it as a projection (CLAUDE.md rebates rule).
+   */
+  predicted: {
+    tierAchieved: number
+    rebatePercent: number
+    annualRebate: number
+  } | null
+  existingContracts: LookbackExistingContract[]
+}
+
+/**
+ * Charles 2026-06-10 ("When entering a PDF hard to know what the pricing
+ * would be ... should do a 12 month look back and predict what rebates etc
+ * would be and compare to other contracts from that vendor if they exist"):
+ * resolve the proposal's vendor (id wins; else case-insensitive name match —
+ * vendor names are never compared raw, see project memory), pull the
+ * trailing-12-month COG spend, run the extracted tier ladder through the
+ * projection engine, and summarize the vendor's existing contracts at this
+ * facility for side-by-side comparison.
+ */
+export async function getVendorLookbackComparison(input: {
+  vendorId?: string | null
+  vendorName?: string | null
+  extractedTiers: LookbackExtractedTier[]
+  rebateMethod?: "cumulative" | "marginal"
+}): Promise<VendorLookbackComparison> {
+  const { facility } = await requireFacility()
+  try {
+    // ── Resolve the vendor ────────────────────────────────────────────
+    let vendor: { id: string; name: string } | null = null
+    if (input.vendorId) {
+      vendor = await prisma.vendor.findUnique({
+        where: { id: input.vendorId },
+        select: { id: true, name: true },
+      })
+    }
+    if (!vendor && input.vendorName?.trim()) {
+      vendor = await prisma.vendor.findFirst({
+        where: { name: { equals: input.vendorName.trim(), mode: "insensitive" } },
+        select: { id: true, name: true },
+      })
+      if (!vendor) {
+        // Tolerate suffix drift ("Arthrex" vs "Arthrex, Inc.").
+        vendor = await prisma.vendor.findFirst({
+          where: {
+            name: { contains: input.vendorName.trim(), mode: "insensitive" },
+          },
+          select: { id: true, name: true },
+        })
+      }
+    }
+    if (!vendor) {
+      return serialize({
+        vendorId: null,
+        vendorName: input.vendorName ?? null,
+        trailing12moSpend: 0,
+        predicted: null,
+        existingContracts: [],
+      })
+    }
+
+    // ── Trailing-12-month lookback spend ──────────────────────────────
+    const windowEnd = new Date()
+    const windowStart = new Date(windowEnd)
+    windowStart.setFullYear(windowStart.getFullYear() - 1)
+    const spendAgg = await prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
+        vendorId: vendor.id,
+        transactionDate: { gte: windowStart, lte: windowEnd },
+      },
+      _sum: { extendedPrice: true },
+    })
+    const trailing12moSpend = Number(spendAgg._sum.extendedPrice ?? 0)
+
+    // ── Projection: extracted ladder × lookback spend ─────────────────
+    // normalizeAIRebateValue folds "3" → 0.03; the projection engine scales
+    // fractions ×100 at the Prisma boundary (CLAUDE.md rebate-units rule).
+    const tiers = input.extractedTiers
+      .filter((t) => Number.isFinite(t.spendMin) && Number.isFinite(t.rebateValue))
+      .map((t) => ({
+        tierNumber: t.tierNumber,
+        spendMin: t.spendMin,
+        spendMax: null,
+        rebateValue: normalizeAIRebateValue("percent_of_spend", t.rebateValue),
+        rebateType: "percent_of_spend" as const,
+      }))
+    const predicted =
+      tiers.length > 0 && trailing12moSpend > 0
+        ? (() => {
+            const r = computeRebateFromPrismaTiers(
+              trailing12moSpend,
+              tiers as unknown as Parameters<
+                typeof computeRebateFromPrismaTiers
+              >[1],
+              { method: input.rebateMethod ?? "cumulative" },
+            )
+            return r.tierAchieved > 0
+              ? {
+                  tierAchieved: r.tierAchieved,
+                  rebatePercent: r.rebatePercent,
+                  annualRebate: r.rebateEarned,
+                }
+              : null
+          })()
+        : null
+
+    // ── Existing contracts at this facility (group-aware) ─────────────
+    const contracts = await prisma.contract.findMany({
+      where: {
+        facilityId: facility.id,
+        OR: [
+          { vendorId: vendor.id },
+          { additionalVendorIds: { has: vendor.id } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        expirationDate: true,
+        annualValue: true,
+        rebates: {
+          select: { rebateEarned: true, payPeriodEnd: true },
+        },
+        terms: {
+          select: {
+            tiers: { select: { rebateValue: true, rebateType: true } },
+          },
+        },
+      },
+      orderBy: { expirationDate: "desc" },
+      take: 10,
+    })
+    const contractIds = contracts.map((c) => c.id)
+    const spendByContract =
+      contractIds.length > 0
+        ? await prisma.cOGRecord.groupBy({
+            by: ["contractId"],
+            where: { facilityId: facility.id, contractId: { in: contractIds } },
+            _sum: { extendedPrice: true },
+          })
+        : []
+    const spendMap = new Map(
+      spendByContract.map((r) => [
+        r.contractId,
+        Number(r._sum?.extendedPrice ?? 0),
+      ]),
+    )
+
+    const existingContracts: LookbackExistingContract[] = contracts.map((c) => {
+      const lifetimeEarned = sumEarnedRebatesLifetime(c.rebates)
+      const lifetimeSpend = spendMap.get(c.id) ?? 0
+      const topTierFraction = c.terms
+        .flatMap((t) => t.tiers)
+        .filter((t) => t.rebateType === "percent_of_spend")
+        .map((t) => Number(t.rebateValue ?? 0))
+        .reduce((max, v) => (v > max ? v : max), 0)
+      return {
+        id: c.id,
+        name: c.name,
+        status: String(c.status),
+        expirationDate: c.expirationDate
+          ? c.expirationDate.toISOString()
+          : null,
+        annualValue: c.annualValue == null ? null : Number(c.annualValue),
+        lifetimeEarned,
+        lifetimeSpend,
+        effectiveRatePct:
+          lifetimeSpend > 0 ? (lifetimeEarned / lifetimeSpend) * 100 : null,
+        topTierRatePct: topTierFraction > 0 ? topTierFraction * 100 : null,
+      }
+    })
+
+    return serialize({
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      trailing12moSpend,
+      predicted,
+      existingContracts,
+    })
+  } catch (err) {
+    console.error("[getVendorLookbackComparison]", err, {
+      facilityId: facility.id,
+      vendorId: input.vendorId ?? null,
+      vendorName: input.vendorName ?? null,
+    })
+    const reason = err instanceof Error ? err.message : String(err)
+    throw new Error(`Lookback comparison failed: ${reason}`)
+  }
 }

@@ -45,7 +45,13 @@ import { ScoredProposalCard } from "./scored-proposal-card"
 import { CogSpendPatternCard } from "./cog-spend-pattern-card"
 import { PdfClauseAnalyzerPanel } from "./pdf-clause-analyzer-panel"
 import { CanonicalClauseAnalyzerPanel } from "./canonical-clause-analyzer-panel"
-import type { AnalyzeProposalInput } from "@/lib/actions/prospective-analysis"
+import { ProposalLookbackCard } from "./proposal-lookback-card"
+import { ProposalPricingAskCard } from "./proposal-pricing-ask-card"
+import {
+  getVendorLookbackComparison,
+  type AnalyzeProposalInput,
+  type VendorLookbackComparison,
+} from "@/lib/actions/prospective-analysis"
 import type {
   ContractVariant,
   PDFContractAnalysisResult,
@@ -173,6 +179,11 @@ export function UploadProposalTab({
     extractedClauseCount: number
     truncated: boolean
   } | null>(null)
+  // Charles 2026-06-10: 12-month lookback projection + price-file ask.
+  const [lookback, setLookback] = useState<VendorLookbackComparison | null>(
+    null,
+  )
+  const [lookbackLoading, setLookbackLoading] = useState(false)
 
   const analyzeMutation = useAnalyzeProspectiveProposal()
   const clauseMutation = useAnalyzePDFClauses()
@@ -277,6 +288,32 @@ export function UploadProposalTab({
         onPhaseChange("complete")
         toast.success("Proposal scored")
 
+        // 12-month lookback + existing-contract comparison (Charles
+        // 2026-06-10). Fire-and-render: failures surface inline, never roll
+        // back the score above.
+        setLookbackLoading(true)
+        setLookback(null)
+        void getVendorLookbackComparison({
+          vendorId: selectedVendorId,
+          vendorName: extracted.vendorName ?? null,
+          extractedTiers: extracted.terms.flatMap((t) =>
+            t.tiers.map((tier) => ({
+              tierNumber: tier.tierNumber,
+              spendMin: tier.spendMin ?? 0,
+              rebateValue: tier.rebateValue ?? 0,
+            })),
+          ),
+        })
+          .then((result) => setLookback(result))
+          .catch((err) => {
+            toast.error(
+              err instanceof Error
+                ? err.message
+                : "12-month lookback failed",
+            )
+          })
+          .finally(() => setLookbackLoading(false))
+
         // Kick off the canonical (24-category, side-aware) clause
         // analyzer in the background so the user gets the rich clause
         // breakdown without a second click. Failures are toasted but
@@ -320,6 +357,7 @@ export function UploadProposalTab({
       contractVariant,
       onPhaseChange,
       onProposalScored,
+      selectedVendorId,
       side,
     ],
   )
@@ -452,6 +490,19 @@ export function UploadProposalTab({
         </Card>
 
         {lastScored ? <ScoredProposalCard proposal={lastScored} /> : null}
+
+        {/* Charles 2026-06-10: post-score prediction surfaces. */}
+        {lastScored ? (
+          <ProposalLookbackCard
+            lookback={lookback}
+            isLoading={lookbackLoading}
+          />
+        ) : null}
+        {lastScored ? (
+          <ProposalPricingAskCard
+            vendorId={lookback?.vendorId ?? selectedVendorId}
+          />
+        ) : null}
 
         <Card>
           <CardHeader>
