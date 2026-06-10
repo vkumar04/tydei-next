@@ -21,6 +21,8 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
+import { buildUnionCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
+import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { serialize } from "@/lib/serialize"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import {
@@ -195,6 +197,71 @@ export async function getRebateOpportunities(): Promise<RebateOptimizerActionRes
       0,
     )
     vendorSpendEntries.push([c.vendorId, groupSpend])
+  }
+
+  // ── Category-scoped contracts (2026-06-09 audit, cog-in-term-scope) ──
+  //
+  // A contract whose terms are category-scoped earns only on COG in
+  // those categories; counting the vendor's WHOLE spend overstated tier
+  // position. Mirror the contracts-list cascade: expand selected
+  // categories to the facility's drifted variants, sum per
+  // (vendor, category), and write a per-contract override the engine
+  // prefers over the vendor-level entry.
+  const cogUniverse = await facilityCogCategoryUniverse(facility.id)
+  const scopedContracts: Array<{
+    id: string
+    vendorIds: string[]
+    categories: Set<string>
+  }> = []
+  for (const c of contracts) {
+    if (!c.vendorId) continue
+    const termScopes = (c.terms ?? []).map((t) => ({
+      appliesTo: t.appliesTo,
+      categories: t.categories,
+    }))
+    const unionWhere = buildUnionCategoryWhereClause(termScopes, cogUniverse)
+    const cats = unionWhere.category?.in
+    if (!cats || cats.length === 0) continue
+    scopedContracts.push({
+      id: c.id,
+      vendorIds: contractVendorIds(c),
+      categories: new Set(cats),
+    })
+  }
+  if (scopedContracts.length > 0) {
+    const scopedVendorIds = Array.from(
+      new Set(scopedContracts.flatMap((s) => s.vendorIds)),
+    )
+    const scopedCategories = Array.from(
+      new Set(scopedContracts.flatMap((s) => Array.from(s.categories))),
+    )
+    const scopedRows = await prisma.cOGRecord.groupBy({
+      by: ["vendorId", "category"],
+      where: {
+        facilityId: facility.id,
+        vendorId: { in: scopedVendorIds },
+        category: { in: scopedCategories },
+        transactionDate: { gte: trailing12MoStart, lte: now },
+      },
+      _sum: { extendedPrice: true },
+    })
+    const byVendorCategory = new Map<string, number>()
+    for (const r of scopedRows) {
+      if (!r.vendorId || !r.category) continue
+      byVendorCategory.set(
+        `${r.vendorId}::${r.category}`,
+        Number(r._sum.extendedPrice ?? 0),
+      )
+    }
+    for (const s of scopedContracts) {
+      let sum = 0
+      for (const vid of s.vendorIds) {
+        for (const cat of s.categories) {
+          sum += byVendorCategory.get(`${vid}::${cat}`) ?? 0
+        }
+      }
+      vendorSpendEntries.push([`contract:${s.id}`, sum])
+    }
   }
   const vendorSpendMap: VendorSpendMap = new Map(vendorSpendEntries)
 

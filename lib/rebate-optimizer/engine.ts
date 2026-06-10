@@ -347,8 +347,14 @@ export function buildRebateOpportunities(
       continue
     }
 
-    // Step 3 — must have spend history to optimize.
-    const currentSpend = vendorSpendMap.get(contract.vendorId) ?? 0
+    // Step 3 — must have spend history to optimize. A per-CONTRACT
+    // entry (keyed `contract:<id>`) wins over the vendor-level entry —
+    // category-scoped contracts get spend restricted to their term
+    // categories (2026-06-09 audit, cog-in-term-scope class).
+    const currentSpend =
+      vendorSpendMap.get(`contract:${contract.contractId}`) ??
+      vendorSpendMap.get(contract.vendorId) ??
+      0
     if (currentSpend <= 0) {
       droppedContracts.push({
         contractId: contract.contractId,
