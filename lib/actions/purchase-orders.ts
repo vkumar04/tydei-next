@@ -184,11 +184,18 @@ export async function createPurchaseOrder(input: CreatePOInput) {
   // the vendor (incl. grouped membership) or prior COG history.
   const [vendorContractCount, vendorCogCount] = await Promise.all([
     prisma.contract.count({
+      // AND composition — contractsOwnedByFacility returns an OR clause
+      // itself; spreading it next to another OR key silently overwrote
+      // the facility scoping.
       where: {
-        ...contractsOwnedByFacility(facility.id),
-        OR: [
-          { vendorId: data.vendorId },
-          { additionalVendorIds: { has: data.vendorId } },
+        AND: [
+          contractsOwnedByFacility(facility.id),
+          {
+            OR: [
+              { vendorId: data.vendorId },
+              { additionalVendorIds: { has: data.vendorId } },
+            ],
+          },
         ],
       },
     }),
