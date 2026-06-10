@@ -190,6 +190,11 @@ export interface SynthResult {
 
 /** Off-contract vendor must exceed this total to raise an alert. */
 export const OFF_CONTRACT_DOLLAR_THRESHOLD = 1000
+/** Above this many distinct POs, a vendor gets ONE rollup alert instead
+ * of per-PO alerts (2026-06-09 prod backfill: per-PO exploded to 10k+). */
+export const OFF_CONTRACT_MAX_PO_ALERTS_PER_VENDOR = 5
+/** Cap on line items embedded in alert metadata (top by value). */
+export const OFF_CONTRACT_MAX_METADATA_ITEMS = 20
 /** Or meet this item count. */
 export const OFF_CONTRACT_COUNT_THRESHOLD = 3
 /** Contracts within N days of expiration raise an alert. */
@@ -282,6 +287,54 @@ function synthOffContract(input: SynthInput): {
       const arr = byPo.get(k)
       if (arr) arr.push(i)
       else byPo.set(k, [i])
+    }
+
+    // 2026-06-09 prod backfill: per-PO alerts exploded into 10,355 rows
+    // (every COG line carries a distinct poNumber at real volume) — the
+    // first live run created 11,309 alerts for one facility. PO-level
+    // granularity is only actionable for a handful of POs; past that,
+    // emit ONE vendor-level rollup. Metadata item lists are capped to
+    // the top entries by value so a rollup row doesn't carry megabytes
+    // of JSON.
+    if (byPo.size > OFF_CONTRACT_MAX_PO_ALERTS_PER_VENDOR) {
+      const dedupeKey = dedupeKeyFor("off_contract", vendorId, "rollup")
+      keepKeys.add(dedupeKey)
+      if (!findExistingByDedupe(input.existingAlerts, dedupeKey)) {
+        const topItems = [...items]
+          .sort(
+            (a, b) =>
+              (b.extendedPrice ?? b.unitCost * b.quantity) -
+              (a.extendedPrice ?? a.unitCost * a.quantity),
+          )
+          .slice(0, OFF_CONTRACT_MAX_METADATA_ITEMS)
+        const meta: OffContractMeta & { dedupeKey: string } = {
+          po_id: "",
+          vendor_name: vendorName,
+          item_count: count,
+          total_amount: total,
+          items: topItems.map((i) => ({
+            sku: i.inventoryNumber,
+            name: i.inventoryDescription,
+            quantity: i.quantity,
+            unitPrice: i.unitCost,
+            contractPrice: i.contractPrice,
+          })),
+          dedupeKey,
+        }
+        create.push({
+          portalType: "facility",
+          alertType: "off_contract",
+          title: `$${Math.round(total).toLocaleString()} off-contract spend from ${vendorName}`,
+          description: `${count.toLocaleString()} off-contract line item${count > 1 ? "s" : ""} across ${byPo.size.toLocaleString()} POs. Top items by value attached.`,
+          severity: total > 50000 ? "high" : total > 10000 ? "medium" : "low",
+          facilityId: input.facilityId,
+          vendorId,
+          actionLink: `/dashboard/purchase-orders`,
+          metadata: meta as unknown as Record<string, unknown>,
+          dedupeKey,
+        })
+      }
+      continue
     }
 
     for (const [poId, poItems] of byPo) {
