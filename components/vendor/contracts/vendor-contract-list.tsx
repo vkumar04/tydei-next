@@ -134,7 +134,11 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
   const columns = getVendorContractColumns((id) => {
     const isPending = mappedPending.some((pc) => pc.id === id)
     if (isPending) {
-      router.push(`/vendor/contracts/pending/${id}`)
+      // Review F1 (2026-06-10): /vendor/contracts/pending/[id] has no detail
+      // page — only [id]/edit exists. Route there so pending rows (now
+      // including rejected / revision_requested / draft after the tabs fix)
+      // don't 404; the edit page doubles as the submission's detail view.
+      router.push(`/vendor/contracts/pending/${id}/edit`)
     } else {
       router.push(`/vendor/contracts/${id}`)
     }
@@ -190,7 +194,17 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
   return (
     <div className="space-y-6">
       <VendorContractsHero
-        totalContracts={allContracts.length + mappedPending.length}
+        // Review F5 (2026-06-10): rejected/withdrawn submissions are
+        // browsable in their tabs but don't count as portfolio contracts.
+        totalContracts={
+          allContracts.length +
+          mappedPending.filter(
+            (pc) =>
+              pc.pendingStatus === "draft" ||
+              pc.pendingStatus === "submitted" ||
+              pc.pendingStatus === "revision_requested",
+          ).length
+        }
         activeCount={activeCount}
         facilitiesServed={facilitiesServed}
         totalValue={totalValue}

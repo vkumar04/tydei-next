@@ -33,20 +33,25 @@ export async function getCategories() {
   // SOURCE of a confirmed mapping is superseded — remapCOGCategory deletes
   // its taxonomy row only when nothing references it anymore, so it can
   // linger here and reappear in every term/category picker. Hide it from
-  // option lists; the mapping target is the pickable name.
+  // option lists — but ONLY when the mapping target exists as a pickable
+  // row (review F9: when the target has no taxonomy row, remap could not
+  // retarget the contract's categoryIds, so hiding the source would strand
+  // an invisible, unremovable selection in the pickers).
   const confirmedSources = await prisma.categoryMapping.findMany({
     where: { isConfirmed: true, contractCategory: { not: null } },
-    select: { cogCategory: true },
+    select: { cogCategory: true, contractCategory: true },
   })
+  const normKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ")
+  const presentNames = new Set(categories.map((c) => normKey(c.name)))
   const superseded = new Set(
-    confirmedSources.map((m) =>
-      m.cogCategory.trim().toLowerCase().replace(/\s+/g, " "),
-    ),
+    confirmedSources
+      .filter(
+        (m) => m.contractCategory && presentNames.has(normKey(m.contractCategory)),
+      )
+      .map((m) => normKey(m.cogCategory)),
   )
   return serialize(
-    categories.filter(
-      (c) => !superseded.has(c.name.trim().toLowerCase().replace(/\s+/g, " ")),
-    ),
+    categories.filter((c) => !superseded.has(normKey(c.name))),
   )
 }
 

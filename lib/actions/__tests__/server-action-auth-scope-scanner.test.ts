@@ -274,8 +274,8 @@ const BASELINE_HITS = new Set<string>([
   // reads / user-create paths
   // bumped 2026-06-09 after removeInverseCategoryMapping import + the
   // confirm-mapping cycle guard added lines.
-  "lib/actions/categories.ts:118",
-  "lib/actions/categories.ts:162",
+  "lib/actions/categories.ts:123",
+  "lib/actions/categories.ts:167",
   // change-proposals.ts: post-mutation re-read
   "lib/actions/change-proposals.ts:175",
   // contract-periods.ts: post-period-mutation re-reads. Lines drift
@@ -317,8 +317,8 @@ const BASELINE_HITS = new Set<string>([
   // (drifted-category canonical match) shifted them.
   // bumped again 2026-06-09 after the audit #2/#4 fixes (hoisted category
   // universe + union clause above the currentSpend cascade) shifted them.
-  "lib/actions/contracts.ts:1587",
-  "lib/actions/contracts.ts:1607",
+  "lib/actions/contracts.ts:1612",
+  "lib/actions/contracts.ts:1632",
   // imports/case-costing-import.ts: REMOVED from baseline 2026-06-09
   // (case-costing audit batch) — the remaining by-id ops (primaryCptCode
   // update, margin-rollup re-read + update) now carry inline

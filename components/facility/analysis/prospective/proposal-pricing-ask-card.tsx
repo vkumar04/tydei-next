@@ -73,7 +73,15 @@ export function ProposalPricingAskCard({
         const benchmarks = await getCogPricingBenchmarks({
           itemNumbers: items.map((i) => i.itemNumber),
           vendorId,
-        }).catch(() => [])
+        }).catch((err) => {
+          // Review R5: a failed join must be distinguishable from
+          // genuinely-unmatched SKUs (sibling Pricing tab warns the same way).
+          console.error("[proposal-pricing-ask] COG benchmark join failed:", err)
+          toast.warning(
+            "Couldn't load COG benchmarks — variance will only use the file's own current-price column.",
+          )
+          return []
+        })
         const bySku = new Map(benchmarks.map((b) => [b.skuKey, b]))
         const joined: PricingFileItem[] = items.map((i) => {
           const b = bySku.get(normalizeSku(i.itemNumber))

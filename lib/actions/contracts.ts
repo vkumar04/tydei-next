@@ -360,7 +360,32 @@ export async function getContracts(input: ContractFilters) {
     return { ...scalar, rebateEarned, rebateCollected, currentSpend }
   })
 
-  return serialize({ contracts: withDerived, total })
+  // Review F11 (2026-06-10): apply the confirmed category mapping to the
+  // list's Category column too — the detail page maps at read time, and the
+  // list showing the superseded name one click away re-creates Charles's
+  // "still showing categories I mapped away".
+  const listCategoryMap = await loadConfirmedCategoryMap().catch(() => {
+    return new Map<string, string>()
+  })
+  const mappedList =
+    listCategoryMap.size === 0
+      ? withDerived
+      : withDerived.map((c) =>
+          c.productCategory
+            ? {
+                ...c,
+                productCategory: {
+                  ...c.productCategory,
+                  name: applyConfirmedCategoryMapToNames(
+                    [c.productCategory.name],
+                    listCategoryMap,
+                  )[0],
+                },
+              }
+            : c,
+        )
+
+  return serialize({ contracts: mappedList, total })
 }
 
 // ─── Merged List (system + vendor-submitted pending) ─────────────

@@ -10,21 +10,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 const {
   vendorFindUnique,
   vendorFindFirst,
+  vendorFindMany,
   cogAggregate,
-  cogGroupBy,
   contractFindMany,
 } = vi.hoisted(() => ({
   vendorFindUnique: vi.fn(),
   vendorFindFirst: vi.fn(),
+  vendorFindMany: vi.fn(),
   cogAggregate: vi.fn(),
-  cogGroupBy: vi.fn(),
   contractFindMany: vi.fn(),
 }))
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    vendor: { findUnique: vendorFindUnique, findFirst: vendorFindFirst },
-    cOGRecord: { aggregate: cogAggregate, groupBy: cogGroupBy },
+    vendor: {
+      findUnique: vendorFindUnique,
+      findFirst: vendorFindFirst,
+      findMany: vendorFindMany,
+    },
+    cOGRecord: { aggregate: cogAggregate },
     contract: { findMany: contractFindMany },
   },
 }))
@@ -40,8 +44,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   vendorFindUnique.mockResolvedValue(null)
   vendorFindFirst.mockResolvedValue(null)
+  vendorFindMany.mockResolvedValue([])
   cogAggregate.mockResolvedValue({ _sum: { extendedPrice: 0 } })
-  cogGroupBy.mockResolvedValue([])
   contractFindMany.mockResolvedValue([])
 })
 
@@ -121,9 +125,11 @@ describe("getVendorLookbackComparison", () => {
         ],
       },
     ])
-    cogGroupBy.mockResolvedValueOnce([
-      { contractId: "c-1", _sum: { extendedPrice: 800_000 } },
-    ])
+    // First aggregate call = trailing-12mo vendor spend; second = the
+    // per-contract spend bounded to the last CLOSED period (review R4).
+    cogAggregate
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 0 } })
+      .mockResolvedValueOnce({ _sum: { extendedPrice: 800_000 } })
 
     const r = await getVendorLookbackComparison({
       vendorId: "v-1",
@@ -134,6 +140,13 @@ describe("getVendorLookbackComparison", () => {
     expect(c.lifetimeEarned).toBe(40_000)
     expect(c.lifetimeSpend).toBe(800_000)
     expect(c.effectiveRatePct).toBeCloseTo(5)
+    // R4: the per-contract spend query is clamped to the last closed
+    // payPeriodEnd (2025-06-30), not all-time.
+    const spendWhere = cogAggregate.mock.calls[1][0].where
+    expect(spendWhere.contractId).toBe("c-1")
+    expect(spendWhere.transactionDate.lte.toISOString()).toBe(
+      "2025-06-30T00:00:00.000Z",
+    )
     // Top tier rate considers only percent_of_spend tiers, scaled to %.
     expect(c.topTierRatePct).toBeCloseTo(7)
     // Group-aware: the where clause includes additionalVendorIds.

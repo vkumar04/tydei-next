@@ -45,9 +45,13 @@ export interface OffContractSpendResult {
   /** Top truly off-contract items (unknown_vendor). */
   topOffContract: OffContractSpendItem[]
   /**
-   * On-contract spend in the trailing 12 months — sublabel context so the
-   * card still ties out against the header's "Current Spend (Last 12
-   * Months)". The headline buckets above are LIFETIME.
+   * On-contract spend in the trailing 12 months — sublabel context next to
+   * the LIFETIME headline. NOTE: this is this card's own bucket (matched
+   * statuses over scopeOR) clamped to 12 months — it is NOT the header's
+   * "Current Spend (Last 12 Months)", which runs a 3-tier cascade
+   * (ContractPeriod → contract-stamped COG → vendor-wide) with no
+   * matchStatus filter. The two can legitimately differ; do not present
+   * them as the same number (review F6).
    */
   onContractLast12mo: number
 

@@ -293,11 +293,23 @@ export function UploadProposalTab({
         // back the score above.
         setLookbackLoading(true)
         setLookback(null)
+        // Review R1: only spend-dollar ladders may feed the spend projection
+        // (market_share tiers store % thresholds, carve-out/fixed tiers pay
+        // per-SKU or flat — the recurring type-confusion class). Terms with
+        // no/unknown termType default in (most proposals are spend rebates).
+        const SPEND_DOLLAR_TERM_TYPES = new Set([
+          "spend_rebate",
+          "growth_rebate",
+          "",
+        ])
+        const spendTerms = (extracted.terms ?? []).filter((t) =>
+          SPEND_DOLLAR_TERM_TYPES.has(String(t.termType ?? "").trim()),
+        )
         void getVendorLookbackComparison({
           vendorId: selectedVendorId,
           vendorName: extracted.vendorName ?? null,
-          extractedTiers: extracted.terms.flatMap((t) =>
-            t.tiers.map((tier) => ({
+          extractedTiers: spendTerms.flatMap((t) =>
+            (t.tiers ?? []).map((tier) => ({
               tierNumber: tier.tierNumber,
               spendMin: tier.spendMin ?? 0,
               rebateValue: tier.rebateValue ?? 0,

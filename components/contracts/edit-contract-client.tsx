@@ -135,6 +135,10 @@ export function EditContractClient({
           evaluationPeriod: t.evaluationPeriod,
           paymentTiming: t.paymentTiming,
           appliesTo: t.appliesTo,
+          // Review F7 (2026-06-10): volumeType was never hydrated, so a
+          // stored all_products volume term rendered as the form default
+          // ("Procedure code") and the scope lock never engaged on edit.
+          volumeType: t.volumeType ?? undefined,
           rebateMethod: t.rebateMethod ?? "cumulative",
           effectiveStart: new Date(t.effectiveStart).toISOString().split("T")[0],
           effectiveEnd: new Date(t.effectiveEnd).toISOString().split("T")[0],

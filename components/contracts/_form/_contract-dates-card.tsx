@@ -66,7 +66,13 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
   // Performance period and rebate pay period should match by default
   // (Charles 2026-06-10). Changing the performance period mirrors into the
   // pay period until the user deliberately picks a different pay period.
-  const payPeriodTouched = useRef(false)
+  // Review F3: on the EDIT form a contract may already carry a deliberate
+  // split (e.g. annual eval / quarterly pay) — seed the ref from the initial
+  // values so re-editing performance period never silently clobbers it.
+  const payPeriodTouched = useRef(
+    (watch("performancePeriod") ?? "monthly") !==
+      (watch("rebatePayPeriod") ?? "monthly"),
+  )
 
   return (
     <Card>

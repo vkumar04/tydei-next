@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useTransition } from "react"
+import { useState, useCallback, useEffect, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { getUploadUrl } from "@/lib/actions/uploads"
 import { useCreatePendingContract } from "@/hooks/use-pending-contracts"
@@ -57,6 +57,18 @@ export function VendorContractSubmission({
   const [expirationDate, setExpirationDate] = useState<Date>()
   const [performancePeriod, setPerformancePeriod] = useState("quarterly")
   const [rebatePayPeriod, setRebatePayPeriod] = useState("quarterly")
+  // Charles 2026-06-10 "should match" (review F4 — vendor surface was
+  // missed): performance period mirrors into pay period until the vendor
+  // deliberately overrides the pay period.
+  const payPeriodTouched = useRef(false)
+  const handlePerformancePeriodChange = useCallback((v: string) => {
+    setPerformancePeriod(v)
+    if (!payPeriodTouched.current) setRebatePayPeriod(v)
+  }, [])
+  const handleRebatePayPeriodChange = useCallback((v: string) => {
+    payPeriodTouched.current = true
+    setRebatePayPeriod(v)
+  }, [])
   const [contractTotal, setContractTotal] = useState("")
   const [description, setDescription] = useState("")
   const [isMultiFacility, setIsMultiFacility] = useState(false)
@@ -803,9 +815,9 @@ export function VendorContractSubmission({
               expirationDate={expirationDate}
               onExpirationDateChange={setExpirationDate}
               performancePeriod={performancePeriod}
-              onPerformancePeriodChange={setPerformancePeriod}
+              onPerformancePeriodChange={handlePerformancePeriodChange}
               rebatePayPeriod={rebatePayPeriod}
-              onRebatePayPeriodChange={setRebatePayPeriod}
+              onRebatePayPeriodChange={handleRebatePayPeriodChange}
             />
 
             <FinancialDetailsCard

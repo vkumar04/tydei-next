@@ -18,6 +18,7 @@ import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
+import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
 import { suggestTarget } from "@/lib/categories/category-suggest"
 import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
@@ -457,10 +458,41 @@ export async function remapCOGCategory(input: {
   // a term. Recompute accrual for every contract the remap touched: rewritten
   // term scopes + any contract on the affected vendors.
   if (to) {
+    // Review R3: the threshold scalar branches read persisted
+    // Contract.complianceRate / currentMarketShare — refresh them first
+    // (mirrors the cog-import pipeline's ordering) so compliance terms
+    // don't re-qualify tiers against pre-remap values.
+    for (const vendorId of vendorIds) {
+      try {
+        await refreshContractMetricsForVendor({
+          vendorId,
+          facilityId: facility.id,
+        })
+      } catch (err) {
+        console.warn(
+          `[remapCOGCategory] refreshContractMetricsForVendor(${vendorId}) failed:`,
+          err,
+        )
+      }
+    }
+    // Review R1: group-aware — a grouped contract whose MEMBER vendor's COG
+    // was retagged carries that vendor in additionalVendorIds, not vendorId
+    // (the recurring group-vendor drift class). Review R2: only live
+    // contracts accrue — match the cog-import fan-out's status filter so a
+    // broad category remap doesn't recompute every expired contract.
     const vendorContracts =
       vendorIds.length > 0
         ? await prisma.contract.findMany({
-            where: { facilityId: facility.id, vendorId: { in: vendorIds } },
+            where: {
+              facilityId: facility.id,
+              status: { in: ["active", "expiring"] },
+              OR: [
+                { vendorId: { in: vendorIds } },
+                ...vendorIds.map((v) => ({
+                  additionalVendorIds: { has: v },
+                })),
+              ],
+            },
             select: { id: true },
           })
         : []

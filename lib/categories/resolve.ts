@@ -20,6 +20,7 @@
  *      `source` column so admins can audit/dedupe later.
  */
 import { prisma } from "@/lib/db"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 
 type CategoryRow = { id: string; name: string }
 
@@ -84,10 +85,23 @@ export function applyConfirmedCategoryMapToNames(
   names: string[],
   confirmedMap: Map<string, string>,
 ): string[] {
+  // Review F10 (2026-06-10): the map is keyed by normalizeCategoryKey
+  // (case/whitespace), but stored names drift by word-order/punctuation too
+  // ("Joints-Ortho" vs "Joints Ortho"). Per the CLAUDE.md category-name
+  // invariant, fall back to a canonical-key lookup so a variant of a
+  // mapped-away name can't slip through the read-time guard.
+  const canonicalIndex = new Map<string, string>()
+  for (const [key, target] of confirmedMap) {
+    const ck = canonicalizeCategoryName(key)
+    if (ck) canonicalIndex.set(ck, target)
+  }
   const out: string[] = []
   const seen = new Set<string>()
   for (const n of names) {
-    const mapped = confirmedMap.get(normalize(n)) ?? n
+    const mapped =
+      confirmedMap.get(normalize(n)) ??
+      canonicalIndex.get(canonicalizeCategoryName(n)) ??
+      n
     const key = normalize(mapped)
     if (seen.has(key)) continue
     seen.add(key)

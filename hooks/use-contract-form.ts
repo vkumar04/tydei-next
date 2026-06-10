@@ -38,8 +38,12 @@ export function useContractForm(options?: UseContractFormOptions) {
       totalValue: 0,
       annualValue: 0,
       description: "",
+      // Charles 2026-06-10: "performance period and rebate pay period should
+      // match" — the defaults must match too, not just the sync-on-change
+      // (review F2: a user who never touched either still created a
+      // monthly/quarterly mismatch).
       performancePeriod: "monthly",
-      rebatePayPeriod: "quarterly",
+      rebatePayPeriod: "monthly",
       isMultiFacility: false,
       isGrouped: false,
       facilityIds: [],

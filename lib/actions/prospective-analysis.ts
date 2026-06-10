@@ -522,18 +522,38 @@ export async function getVendorLookbackComparison(input: {
       })
     }
     if (!vendor && input.vendorName?.trim()) {
+      const raw = input.vendorName.trim()
       vendor = await prisma.vendor.findFirst({
-        where: { name: { equals: input.vendorName.trim(), mode: "insensitive" } },
+        where: { name: { equals: raw, mode: "insensitive" } },
         select: { id: true, name: true },
       })
       if (!vendor) {
-        // Tolerate suffix drift ("Arthrex" vs "Arthrex, Inc.").
-        vendor = await prisma.vendor.findFirst({
-          where: {
-            name: { contains: input.vendorName.trim(), mode: "insensitive" },
-          },
-          select: { id: true, name: true },
-        })
+        // Review R3: tolerate suffix drift in BOTH directions — extracted
+        // "Arthrex, Inc." must find DB "Arthrex" too. Strip common corporate
+        // suffixes and retry exact-insensitive.
+        const stripped = raw
+          .replace(/[,.]?\s*(incorporated|inc|llc|corp(oration)?|co|ltd)\.?$/i, "")
+          .trim()
+        if (stripped && stripped.toLowerCase() !== raw.toLowerCase()) {
+          vendor = await prisma.vendor.findFirst({
+            where: { name: { equals: stripped, mode: "insensitive" } },
+            select: { id: true, name: true },
+          })
+        }
+        if (!vendor) {
+          // Review R3: contains is ambiguous ("Stryker" matches "Stryker
+          // Ortho" AND "Stryker Endoscopy") — accept ONLY a single match;
+          // otherwise return the null-vendor shell rather than scoping the
+          // projection to an arbitrary vendor.
+          const candidates = await prisma.vendor.findMany({
+            where: {
+              name: { contains: stripped || raw, mode: "insensitive" },
+            },
+            select: { id: true, name: true },
+            take: 2,
+          })
+          if (candidates.length === 1) vendor = candidates[0]
+        }
       }
     }
     if (!vendor) {
@@ -572,6 +592,11 @@ export async function getVendorLookbackComparison(input: {
         rebateValue: normalizeAIRebateValue("percent_of_spend", t.rebateValue),
         rebateType: "percent_of_spend" as const,
       }))
+      // Review R1: a non-percent tier (e.g. a flat $30,000 fixed rebate the
+      // extractor mislabeled) normalizes to 0 and would silently project 0%
+      // if it became the applicable tier — drop zero-rate tiers from the
+      // ladder instead of letting them poison the projection.
+      .filter((t) => t.rebateValue > 0)
     const predicted =
       tiers.length > 0 && trailing12moSpend > 0
         ? (() => {
@@ -619,20 +644,34 @@ export async function getVendorLookbackComparison(input: {
       orderBy: { expirationDate: "desc" },
       take: 10,
     })
-    const contractIds = contracts.map((c) => c.id)
-    const spendByContract =
-      contractIds.length > 0
-        ? await prisma.cOGRecord.groupBy({
-            by: ["contractId"],
-            where: { facilityId: facility.id, contractId: { in: contractIds } },
+    // Review R4: earned counts only CLOSED periods (payPeriodEnd ≤ today),
+    // so the effective-rate denominator must stop at each contract's last
+    // closed period too — all-time spend on an active contract systematically
+    // understates its effective rate and flatters the new proposal.
+    const today = new Date()
+    const spendMap = new Map<string, number>(
+      await Promise.all(
+        contracts.map(async (c): Promise<[string, number]> => {
+          const closedEnds = c.rebates
+            .map((r) => r.payPeriodEnd)
+            .filter((d): d is Date => d != null && d.getTime() <= today.getTime())
+          const lastClosed =
+            closedEnds.length > 0
+              ? new Date(Math.max(...closedEnds.map((d) => d.getTime())))
+              : null
+          const agg = await prisma.cOGRecord.aggregate({
+            where: {
+              facilityId: facility.id,
+              contractId: c.id,
+              ...(lastClosed
+                ? { transactionDate: { lte: lastClosed } }
+                : {}),
+            },
             _sum: { extendedPrice: true },
           })
-        : []
-    const spendMap = new Map(
-      spendByContract.map((r) => [
-        r.contractId,
-        Number(r._sum?.extendedPrice ?? 0),
-      ]),
+          return [c.id, Number(agg._sum?.extendedPrice ?? 0)]
+        }),
+      ),
     )
 
     const existingContracts: LookbackExistingContract[] = contracts.map((c) => {

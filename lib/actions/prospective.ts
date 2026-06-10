@@ -143,10 +143,22 @@ export async function getCogPricingBenchmarks(input: {
   const windowStart = new Date(windowEnd)
   windowStart.setFullYear(windowStart.getFullYear() - 1)
 
+  // Review R2 (prod scale): bound the query to the requested SKUs instead
+  // of scanning the facility's full 12-month COG table. The insensitive
+  // `in` over the raw + trimmed file values catches case drift; the JS
+  // normalizeSku pass below stays authoritative for exactness. Known
+  // narrowing: a DB SKU with INTERNAL whitespace ("STK 123" vs file
+  // "STK123") is missed by the prefilter — accepted, normalizeSku itself
+  // documents whitespace-internal variants as rare.
+  const rawSkuVariants = Array.from(
+    new Set(
+      input.itemNumbers.flatMap((s) => [s, s.trim()]).filter((s) => s.length > 0),
+    ),
+  )
   const rows = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,
-      vendorItemNo: { not: null },
+      vendorItemNo: { in: rawSkuVariants, mode: "insensitive" },
       transactionDate: { gte: windowStart, lte: windowEnd },
       ...(input.vendorId ? { vendorId: input.vendorId } : {}),
     },

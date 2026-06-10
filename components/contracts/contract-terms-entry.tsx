@@ -690,10 +690,15 @@ export function ContractTermsEntry({
                         onValueChange={(v) => {
                           const next = v as TermFormValues["volumeType"]
                           if (next === "all_products") {
+                            // Review F7: also clear any category scope so a
+                            // stale scopedCategoryIds can't ride along onto
+                            // an all-products term at save time.
                             updateTerm(termIdx, {
                               volumeType: next,
                               appliesTo: "all_products",
                               cptCodes: [],
+                              scopedCategoryId: undefined,
+                              scopedCategoryIds: undefined,
                             })
                           } else {
                             updateTerm(termIdx, { volumeType: next })
@@ -874,8 +879,13 @@ export function ContractTermsEntry({
                       <Select
                         value={term.appliesTo}
                         disabled={
+                          // Review F7: lock only when the state is CONSISTENT
+                          // (AI extracts can arrive with volumeType=all_products
+                          // but a category scope — leave the select editable so
+                          // the user can resolve it instead of being stranded).
                           term.termType === "volume_rebate" &&
-                          term.volumeType === "all_products"
+                          term.volumeType === "all_products" &&
+                          term.appliesTo === "all_products"
                         }
                         onValueChange={(v) =>
                           updateTerm(termIdx, {
@@ -903,7 +913,8 @@ export function ContractTermsEntry({
                         </SelectContent>
                       </Select>
                       {term.termType === "volume_rebate" &&
-                        term.volumeType === "all_products" && (
+                        term.volumeType === "all_products" &&
+                        term.appliesTo === "all_products" && (
                           <p className="text-xs text-muted-foreground">
                             Locked to All Products by &quot;All products on
                             contract&quot; above.
