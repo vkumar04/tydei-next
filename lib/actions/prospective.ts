@@ -11,6 +11,7 @@ import {
   onlyProspectiveProposalRows,
   PROSPECTIVE_PROPOSAL_KIND,
 } from "@/lib/prospective/proposal-rows"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -105,6 +106,80 @@ function recommendationForScore(
   if (score >= 65) return "accept"
   if (score < 40) return "reject"
   return "negotiate"
+}
+
+// ─── COG pricing benchmarks (Pricing tab join) ──────────────────
+
+export interface CogPricingBenchmark {
+  /** normalizeSku key the caller should match against. */
+  skuKey: string
+  /** Trailing-12mo quantity-weighted average unit cost from COG. */
+  currentPrice: number
+  /** Trailing-12mo purchased quantity (estimated annual qty). */
+  annualQty: number
+}
+
+/**
+ * Charles 2026-06-10 ("Analysis pricing not working to compare pricing"):
+ * the Pricing tab's analyzer is a pure function that expects items
+ * "already joined with COG current prices by the caller" — but no caller
+ * ever did the join, so unless the uploaded file happened to carry its own
+ * current_price column every line showed "0 matched to COG" and no
+ * variance. This action IS that join: trailing-12-month COG unit costs per
+ * SKU (normalizeSku keys per the SKU-class rule — never raw ===), scoped
+ * to the facility and optionally to a vendor.
+ */
+export async function getCogPricingBenchmarks(input: {
+  itemNumbers: string[]
+  vendorId?: string | null
+}): Promise<CogPricingBenchmark[]> {
+  const { facility } = await requireFacility()
+  const wanted = new Set(
+    input.itemNumbers.map((s) => normalizeSku(s)).filter((s) => s.length > 0),
+  )
+  if (wanted.size === 0) return []
+
+  const windowEnd = new Date()
+  const windowStart = new Date(windowEnd)
+  windowStart.setFullYear(windowStart.getFullYear() - 1)
+
+  const rows = await prisma.cOGRecord.findMany({
+    where: {
+      facilityId: facility.id,
+      vendorItemNo: { not: null },
+      transactionDate: { gte: windowStart, lte: windowEnd },
+      ...(input.vendorId ? { vendorId: input.vendorId } : {}),
+    },
+    select: {
+      vendorItemNo: true,
+      unitCost: true,
+      quantity: true,
+    },
+  })
+
+  const bySku = new Map<string, { cost: number; qty: number }>()
+  for (const r of rows) {
+    const key = normalizeSku(r.vendorItemNo)
+    if (!wanted.has(key)) continue
+    const qty = r.quantity ?? 0
+    const unit = r.unitCost == null ? null : Number(r.unitCost)
+    if (unit == null) continue
+    const cur = bySku.get(key) ?? { cost: 0, qty: 0 }
+    // Quantity-weighted: Σ(unit × qty) ÷ Σqty. Zero-qty rows count as 1
+    // unit so a price-only row still contributes a benchmark.
+    const w = qty > 0 ? qty : 1
+    cur.cost += unit * w
+    cur.qty += w
+    bySku.set(key, cur)
+  }
+
+  return serialize(
+    Array.from(bySku.entries()).map(([skuKey, v]) => ({
+      skuKey,
+      currentPrice: v.qty > 0 ? v.cost / v.qty : 0,
+      annualQty: v.qty,
+    })),
+  )
 }
 
 // ─── Financial Projections ──────────────────────────────────────

@@ -39,6 +39,8 @@ import {
   analyzePricingFile,
   type PricingFileItem,
 } from "@/lib/prospective-analysis/pricing-file-analysis"
+import { getCogPricingBenchmarks } from "@/lib/actions/prospective"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import type {
   PricingFileAnalysisRecord,
   VendorOption,
@@ -249,7 +251,34 @@ export function UploadPricingTab({
           )
           return
         }
-        const analysis = analyzePricingFile(items)
+        // Charles 2026-06-10 ("Analysis pricing not working to compare
+        // pricing"): the analyzer expects items "already joined with COG
+        // current prices by the caller" — this is that join. COG's
+        // trailing-12mo benchmark is authoritative for "current"; the
+        // file's own current_price column is only a fallback for SKUs the
+        // facility has never purchased. Quantities backfill the same way
+        // so savings-opportunity math has a real annual qty.
+        const benchmarks = await getCogPricingBenchmarks({
+          itemNumbers: items.map((i) => i.itemNumber),
+          vendorId: selectedVendorId,
+        }).catch((err) => {
+          console.error("[upload-pricing-tab] COG benchmark join failed:", err)
+          toast.warning(
+            "Couldn't load COG benchmarks — falling back to the file's own current-price column.",
+          )
+          return []
+        })
+        const benchmarkBySku = new Map(benchmarks.map((b) => [b.skuKey, b]))
+        const joined: PricingFileItem[] = items.map((i) => {
+          const b = benchmarkBySku.get(normalizeSku(i.itemNumber))
+          if (!b) return i
+          return {
+            ...i,
+            currentPrice: b.currentPrice,
+            estimatedAnnualQty: i.estimatedAnnualQty ?? b.annualQty,
+          }
+        })
+        const analysis = analyzePricingFile(joined)
         const vendorName =
           vendors.find((v) => v.id === selectedVendorId)?.displayName ??
           vendors.find((v) => v.id === selectedVendorId)?.name ??
