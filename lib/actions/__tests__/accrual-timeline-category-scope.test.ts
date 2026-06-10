@@ -138,12 +138,14 @@ describe("getAccrualTimeline — category-scoped term (Charles W1.U-A read path)
     const findArgs = cogFindManyMock.mock.calls[0][0] as {
       where: {
         category?: { in: string[] }
-        vendorId?: string
+        vendorId?: { in: string[] }
         facilityId?: string
       }
     }
     expect(findArgs.where.category).toEqual({ in: ["Cat A"] })
-    expect(findArgs.where.vendorId).toBe("v-1")
+    // 2026-06-09: group-aware vendor set (contractVendorIds) — single-vendor
+    // contracts wrap the id in an `in` list.
+    expect(findArgs.where.vendorId).toEqual({ in: ["v-1"] })
 
     // Locate the May 2025 row — the only month with COG spend.
     const may = result.rows.find((r) => r.month === "2025-05")

@@ -29,7 +29,9 @@ export async function getContractPerformanceHistory(contractId: string): Promise
         { contractId: contract.id },
         { contractId: null, vendorId: contract.vendorId },
       ],
-      transactionDate: { gte: since },
+      // 2026-06-09 audit: upper-bound at NOW — future-dated COG rows were
+      // charting months that haven't happened yet.
+      transactionDate: { gte: since, lte: new Date() },
     },
     select: { transactionDate: true, extendedPrice: true },
   })

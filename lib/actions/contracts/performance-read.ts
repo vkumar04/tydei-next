@@ -97,9 +97,16 @@ export async function getContractPerformance(contractId: string): Promise<{
       where: {
         facilityId: facility.id,
         vendorId: { in: contractVendorIds(contract) },
+        // 2026-06-09 audit: cap at NOW — prod carries $12.4M of future-dated
+        // COG (up to 2026-12) which inflated "rebate at current spend"
+        // (would have shown $851K incl. $387K of future rows on ROSA).
         transactionDate: {
           gte: contract.effectiveDate,
-          ...(contract.expirationDate ? { lte: contract.expirationDate } : {}),
+          lte: contract.expirationDate
+            ? new Date(
+                Math.min(Date.now(), contract.expirationDate.getTime()),
+              )
+            : new Date(),
         },
       },
       _sum: { extendedPrice: true },

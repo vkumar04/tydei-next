@@ -570,14 +570,22 @@ export async function _recomputeAccrualForContractWithFacility(
     },
     select: { payPeriodStart: true, payPeriodEnd: true },
   })
+  // 2026-06-09 prod audit (Bug 3): key on DATE-ONLY, not full ISO strings.
+  // The engine emits periodEnd = nextStart − 1ms (…T23:59:59.999Z), but
+  // Rebate.payPeriodStart/End are @db.Date — stored truncated to midnight —
+  // so the full-ISO comparison NEVER matched and every recompute after a
+  // collection re-inserted the period (live proof: a $391,846.83 row
+  // duplicated on prod 8 minutes apart). Date-only keys match what the DB
+  // actually stores.
+  const dateKey = (d: Date | string): string =>
+    new Date(d).toISOString().slice(0, 10)
   const preservedKeys = new Set(
     preservedCollected.map(
-      (r) =>
-        `${new Date(r.payPeriodStart).toISOString()}|${new Date(r.payPeriodEnd).toISOString()}`,
+      (r) => `${dateKey(r.payPeriodStart)}|${dateKey(r.payPeriodEnd)}`,
     ),
   )
   const periodKey = (start: Date, end: Date): string =>
-    `${new Date(start).toISOString()}|${new Date(end).toISOString()}`
+    `${dateKey(start)}|${dateKey(end)}`
 
   // Monthly-eval path (from W1.W-B): cadence-bucketed rows. Skip any
   // bucket whose period already has a preserved collected row.

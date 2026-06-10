@@ -241,16 +241,30 @@ export async function recomputeThresholdAccrualForTerm(input: {
     .sort((a, b) => a.thresholdMin - b.thresholdMin)
   if (tiers.length === 0) return { inserted: 0, sumEarned: 0 }
 
+  // 2026-06-09 (Charles "I think it is taking the last 12 month spend rate
+  // and applying that to all times for accrual" — exactly right): tier
+  // qualification previously ran ONCE on the contract-level scalar
+  // (Contract.currentMarketShare — a single trailing snapshot) and the
+  // resulting payment applied to EVERY historical evaluation period. A
+  // contract that only recently reached a tier got credited that tier's
+  // payout for all past periods (and vice versa). For market_share terms
+  // the share is now computed PER EVALUATION WINDOW from COG (vendor-set
+  // spend ÷ facility total spend within the window, category-scoped) and
+  // each window's tier qualifies independently. complianceRate keeps the
+  // scalar path — there is no per-period compliance history yet.
+  const isPerPeriodMarketShare =
+    input.metric === "currentMarketShare" &&
+    term.termType === "market_share" &&
+    (term.vendorIds?.length || term.vendorId)
+
   const achieved = determineTier(metricValue, tiers, "EXCLUSIVE")
   const flatPerPeriodPayment = achieved ? achieved.rebateValue : 0
 
   // Bug #21: market_share + percent_of_spend pays a percent of the
   // contract's in-scope vendor spend during the period, NOT a flat
-  // dollar amount. Look up the achieved tier's raw rebateType (the
-  // RebateTier shape above loses it via payoutForTier's scaling) so
-  // the percent branch below can apply the right math. Compliance
-  // stays flat-payment regardless of rebateType — its metric (% of
-  // line items on contract) has no per-period dollar base.
+  // dollar amount. (For the per-period path the achieved tier is
+  // re-determined per window below; this scalar branch remains for
+  // compliance and as the fallback when vendor info is missing.)
   const achievedRawTier = achieved
     ? term.tiers.find((t) => t.tierNumber === achieved.tierNumber)
     : null
@@ -288,11 +302,90 @@ export async function recomputeThresholdAccrualForTerm(input: {
     cursor = next
   }
 
-  // Bug #21: when market_share + percent_of_spend, per-period payment
-  // is (in-scope vendor spend during the period) × percent. Query
-  // COG records once for the whole window, then partition in memory
-  // by bucket — cheaper than N queries on contracts with many buckets.
-  if (isMarketSharePercentOfSpend && term.vendorId && results.length > 0) {
+  // Per-period evaluation for market_share terms (2026-06-09): compute each
+  // window's share from COG and qualify ITS tier, instead of stamping the
+  // current scalar onto history. Two whole-window queries (vendor-set
+  // numerator + facility-wide denominator), partitioned in memory per
+  // bucket — same single-query pattern the old percent branch used.
+  const perBucketShare = new Map<
+    number,
+    { share: number; tierNumber: number }
+  >()
+  if (isPerPeriodMarketShare && results.length > 0) {
+    const categoryFilter =
+      term.appliesTo === "specific_category" &&
+      Array.isArray(term.categories) &&
+      term.categories.length > 0
+        ? { category: { in: Array.from(new Set(term.categories)) } }
+        : term.categoryName
+          ? { category: term.categoryName }
+          : {}
+    const vendorIdSet = term.vendorIds ?? (term.vendorId ? [term.vendorId] : [])
+    const [vendorRows, facilityRows] = await Promise.all([
+      prisma.cOGRecord.findMany({
+        where: {
+          facilityId,
+          // #2: group-aware — spans the contract's full vendor set.
+          vendorId: { in: vendorIdSet },
+          transactionDate: { gte: start, lte: end },
+          ...categoryFilter,
+        },
+        select: { transactionDate: true, extendedPrice: true },
+      }),
+      prisma.cOGRecord.findMany({
+        where: {
+          facilityId,
+          transactionDate: { gte: start, lte: end },
+          ...categoryFilter,
+        },
+        select: { transactionDate: true, extendedPrice: true },
+      }),
+    ])
+    const sumInWindow = (
+      rows: Array<{ transactionDate: Date; extendedPrice: unknown }>,
+      ps: Date,
+      pe: Date,
+    ): number => {
+      let s = 0
+      for (const row of rows) {
+        const t = row.transactionDate.getTime()
+        if (t < ps.getTime() || t > pe.getTime()) continue
+        s += row.extendedPrice == null ? 0 : Number(row.extendedPrice)
+      }
+      return s
+    }
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i]
+      const vendorSpend = sumInWindow(vendorRows, r.periodStart, r.periodEnd)
+      const facilitySpend = sumInWindow(
+        facilityRows,
+        r.periodStart,
+        r.periodEnd,
+      )
+      const windowShare =
+        facilitySpend > 0 ? (vendorSpend / facilitySpend) * 100 : 0
+      const windowAchieved = determineTier(windowShare, tiers, "EXCLUSIVE")
+      perBucketShare.set(i, {
+        share: windowShare,
+        tierNumber: windowAchieved?.tierNumber ?? 0,
+      })
+      if (!windowAchieved) {
+        r.spendInScope = vendorSpend
+        r.periodPayment = 0
+        continue
+      }
+      const windowRawTier = term.tiers.find(
+        (t) => t.tierNumber === windowAchieved.tierNumber,
+      )
+      r.spendInScope = vendorSpend
+      r.periodPayment =
+        windowRawTier?.rebateType === "percent_of_spend"
+          ? vendorSpend * Number(windowRawTier.rebateValue ?? 0)
+          : windowAchieved.rebateValue
+    }
+  } else if (isMarketSharePercentOfSpend && term.vendorId && results.length > 0) {
+    // Fallback (vendor info missing from the per-period path): the legacy
+    // scalar percent-of-spend branch — Bug #21 math.
     const categoryFilter =
       term.appliesTo === "specific_category" &&
       Array.isArray(term.categories) &&
@@ -304,7 +397,6 @@ export async function recomputeThresholdAccrualForTerm(input: {
     const cogRows = await prisma.cOGRecord.findMany({
       where: {
         facilityId,
-        // #2: group-aware — spans the contract's full vendor set.
         vendorId: { in: term.vendorIds ?? (term.vendorId ? [term.vendorId] : []) },
         transactionDate: { gte: start, lte: end },
         ...categoryFilter,
@@ -347,9 +439,16 @@ export async function recomputeThresholdAccrualForTerm(input: {
     notes: string
   }> = []
   let totalEarned = 0
-  for (const r of results) {
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]
     if (r.periodPayment <= 0) continue
     totalEarned += r.periodPayment
+    // 2026-06-09: per-period rows note THIS window's share + tier (was the
+    // single scalar stamped on every row — "not showing the rate").
+    const windowInfo = perBucketShare.get(i)
+    const noteMetric = windowInfo
+      ? `${input.metric}=${windowInfo.share.toFixed(1)}% (period) · tier ${windowInfo.tierNumber}`
+      : `${input.metric}=${metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0}`
     toInsert.push({
       contractId,
       facilityId,
@@ -360,9 +459,10 @@ export async function recomputeThresholdAccrualForTerm(input: {
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
       collectionDate: isTieIn ? r.periodEnd : null,
-      notes: isMarketSharePercentOfSpend
-        ? `${termPrefix} · ${input.metric}=${metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · spend=$${r.spendInScope.toFixed(2)} × ${(percentFraction * 100).toFixed(2)}% = $${r.periodPayment.toFixed(2)}`
-        : `${termPrefix} · ${input.metric}=${metricValue.toFixed(1)}% · tier ${achieved?.tierNumber ?? 0} · $${r.periodPayment.toFixed(2)}`,
+      notes:
+        isMarketSharePercentOfSpend || windowInfo
+          ? `${termPrefix} · ${noteMetric} · spend=$${r.spendInScope.toFixed(2)} → $${r.periodPayment.toFixed(2)}`
+          : `${termPrefix} · ${noteMetric} · $${r.periodPayment.toFixed(2)}`,
     })
   }
   if (toInsert.length > 0) {

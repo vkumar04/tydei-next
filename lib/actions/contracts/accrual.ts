@@ -19,12 +19,14 @@ import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   buildMonthlyAccruals,
+  buildEvaluationPeriodAccruals,
   type EvaluationPeriod,
   type MonthlySpend,
   type MultiTermTimelineRow,
   type TermAccrualConfig,
 } from "@/lib/contracts/accrual"
 import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
+import { calculateCumulative, calculateMarginal } from "@/lib/rebates/calculate"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 import { serialize } from "@/lib/serialize"
 import {
@@ -33,6 +35,7 @@ import {
 } from "@/lib/contracts/cog-category-filter"
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 export async function getAccrualTimeline(contractId: string) {
   const { facility } = await requireFacility()
@@ -127,27 +130,88 @@ async function _buildAccrualTimelineForContract(
   // timeline matches what `recomputeAccrualForContract` writes to the
   // Rebate ledger. Pre-fix, multi-term contracts showed only the first
   // term's accrued values in the Performance tab timeline.
-  const termsWithTiers = contract.terms.filter((t) => t.tiers.length > 0)
+  //
+  // 2026-06-09 ("market share rebate performance is not calculating
+  // correctly or showing the rate"): market_share / compliance_rebate
+  // tiers store PERCENT thresholds (0-100) in spendMin — walking dollar
+  // spend against them is the recurring type-confusion class (spend ≫ 100
+  // always "achieves" the top tier). Exclude them from the tier walk;
+  // their real accrual is persisted by the threshold writer as
+  // `[auto-threshold-accrual]` Rebate rows and overlaid below.
+  const termsWithTiers = contract.terms.filter(
+    (t) =>
+      t.tiers.length > 0 &&
+      t.termType !== "market_share" &&
+      t.termType !== "compliance_rebate",
+  )
   // 2026-06-09 (Charles "contracts on the vendor side is broken"): a
   // carve-out contract's tiers are PHANTOM (rebateValue 0 scaffolds), so the
-  // tier engine accrues $0 for them — the Accruals tab showed "Total
-  // accrued: $0" on both portals while the Rebate ledger held $564K. The
-  // real carve-out accrual is persisted by the carve-out recompute writer
-  // as `[auto-carve-out-accrual]` Rebate rows (the doctrine-canonical
-  // earned source). Overlay those rows into the timeline buckets below.
-  const hasCarveOutTerm = contract.terms.some(
-    (t) => t.termType === "carve_out",
+  // tier engine accrues $0 for them. The real accrual for carve-out AND
+  // threshold (market_share / compliance) terms is persisted by their
+  // dedicated writers — the doctrine-canonical earned source. Overlay those
+  // rows into the timeline buckets below.
+  const hasOverlayTerm = contract.terms.some(
+    (t) =>
+      t.termType === "carve_out" ||
+      t.termType === "market_share" ||
+      t.termType === "compliance_rebate",
   )
-  const carveOutRebateRows = hasCarveOutTerm
+  const carveOutRebateRows = hasOverlayTerm
     ? await prisma.rebate.findMany({
         where: {
           contractId: contract.id,
-          notes: { startsWith: "[auto-carve-out-accrual]" },
+          OR: [
+            { notes: { startsWith: "[auto-carve-out-accrual]" } },
+            { notes: { startsWith: "[auto-threshold-accrual]" } },
+          ],
         },
         select: { rebateEarned: true, payPeriodEnd: true },
       })
     : []
   if (termsWithTiers.length === 0) {
+    // No spend-dollar tier terms — but overlay rows (carve-out /
+    // market-share / compliance accrual) may still exist. Render them as a
+    // minimal monthly timeline instead of a blank card.
+    if (carveOutRebateRows.length > 0) {
+      const byMonth = new Map<string, number>()
+      for (const r of carveOutRebateRows) {
+        if (!r.payPeriodEnd) continue
+        const key = `${r.payPeriodEnd.getUTCFullYear()}-${String(
+          r.payPeriodEnd.getUTCMonth() + 1,
+        ).padStart(2, "0")}`
+        byMonth.set(key, (byMonth.get(key) ?? 0) + Number(r.rebateEarned ?? 0))
+      }
+      const rows = Array.from(byMonth.entries())
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([month, accruedAmount]) => ({
+          month,
+          spend: 0,
+          cumulativeSpend: 0,
+          accruedAmount,
+          tierAchieved: 0,
+          rebatePercent: 0,
+          termContributions: [] as Array<{
+            termIndex: number
+            accruedAmount: number
+            tierAchieved: number
+            rebatePercent: number
+          }>,
+          volume: 0,
+          achievedRebateType: null as string | null,
+          achievedRebateValue: 0,
+        }))
+      return serialize({
+        rows,
+        method: "cumulative" as RebateMethodName,
+        termLabels: [] as Array<{
+          termIndex: number
+          termName: string
+          evaluationPeriod: string
+        }>,
+        cumulativeReset: "monthly" as const,
+        isVolumeRebate,
+      })
+    }
     return serialize({
       rows: [],
       method: "cumulative" as RebateMethodName,
@@ -230,6 +294,15 @@ async function _buildAccrualTimelineForContract(
       evaluationPeriod,
       effectiveStart: term.effectiveStart ?? null,
       effectiveEnd: term.effectiveEnd ?? null,
+      // 2026-06-09: thread the baseline like the writer does so the
+      // retroactive period re-budget below applies the same
+      // baseline-above math (Bug #22 rule: spendBaseline > 0 → tiers
+      // evaluate max(0, periodSpend − proRatedBaseline)).
+      spendBaseline:
+        term.spendBaseline === null || term.spendBaseline === undefined
+          ? null
+          : Number(term.spendBaseline),
+      baselineType: term.baselineType ?? null,
     }
   })
 
@@ -267,7 +340,11 @@ async function _buildAccrualTimelineForContract(
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
       facilityId,
-      vendorId: contract.vendorId,
+      // 2026-06-09 audit: group-aware vendor set (recurring drift class) —
+      // bare contract.vendorId blanked the timeline on grouped contracts
+      // whose spend sits under member vendors (prod: $0 shown vs $561,207
+      // writer basis). Same canonical helper the recompute writer uses.
+      vendorId: { in: contractVendorIds(contract) },
       transactionDate: {
         gte: contract.effectiveDate,
         lte: end,
@@ -338,30 +415,105 @@ async function _buildAccrualTimelineForContract(
     return { termIndex: idx, series, rows, config: termConfigs[idx] }
   })
 
-  // Charles 2026-04-25: annual-eval terms shouldn't show per-month
-  // slice contributions on the timeline — the rebate isn't earned
-  // until year-end. Re-budget each year's slices into the
-  // period-end month (or the last in-range month for a partial
-  // year). buildMonthlyAccruals stays untouched (unit-tested per-
-  // month math preserved); this re-budget is a presentation concern.
-  // tierAchieved + rebatePercent stay on each row so the timeline's
-  // Tier and Rate columns still show progress on mid-year months.
+  // 2026-06-09 (Charles "much larger rebate numbers vs performance" — prod
+  // audit Bug 1): the per-month tier walk is NOT retroactive. When
+  // cumulative spend crosses a tier mid-period, months already accrued at
+  // 0%/a lower rate were never trued up, so the timeline under-reported vs
+  // the persisted ledger on an IDENTICAL COG basis (live Arthrex:
+  // $96,264.06 shown vs $421,341.49 booked). The earlier annual-only
+  // re-budget summed the same under-counted monthly slices, so it didn't
+  // help. For EVERY non-monthly cadence, recompute each evaluation window
+  // through the WRITER's engine (buildEvaluationPeriodAccruals — whole-
+  // window spend, retroactive, baseline-aware) and re-budget the window's
+  // earned into its period-end month. Mid-window months keep their
+  // tier/rate progress columns with $0 accrued — matching the ledger,
+  // which books at period close. Timeline ≡ ledger by construction.
+  const nowForBudget = new Date()
   for (const r of perTermResults) {
-    if (r.config.evaluationPeriod !== "annual" || r.rows.length === 0) {
+    if (r.config.evaluationPeriod === "monthly" || r.rows.length === 0) {
       continue
     }
-    const yearKey = (m: string) => m.split("-")[0]
-    let runningSum = 0
+    const term = termsWithTiers[r.termIndex]
+    const windowAnchor = term.effectiveStart ?? contract.effectiveDate
+    const termWindowEnd = term.effectiveEnd
+      ? new Date(
+          Math.min(
+            nowForBudget.getTime(),
+            term.effectiveEnd.getTime(),
+            end.getTime(),
+          ),
+        )
+      : new Date(Math.min(nowForBudget.getTime(), end.getTime()))
+    const hasBaseline =
+      r.config.spendBaseline != null && r.config.spendBaseline > 0
+    const buckets = buildEvaluationPeriodAccruals(
+      r.series,
+      r.config.tiers,
+      r.config.method,
+      r.config.evaluationPeriod,
+      windowAnchor,
+      {
+        boundedUntil: termWindowEnd,
+        spendBaseline: hasBaseline ? (r.config.spendBaseline ?? null) : null,
+        growthBased: hasBaseline,
+      },
+    )
+    // Zero the per-month slices (tier/rate progress columns stay), then
+    // land each completed window's retroactive earned on its period-end
+    // month. Incomplete windows (periodEnd in the future) stay $0 — the
+    // rebate isn't earned until the period closes, same as the ledger.
     for (let i = 0; i < r.rows.length; i++) {
-      runningSum += r.rows[i].accruedAmount
-      const next = r.rows[i + 1]
-      const isYearLastMonth =
-        next == null || yearKey(next.month) !== yearKey(r.rows[i].month)
-      if (isYearLastMonth) {
-        r.rows[i] = { ...r.rows[i], accruedAmount: runningSum }
-        runningSum = 0
-      } else {
-        r.rows[i] = { ...r.rows[i], accruedAmount: 0 }
+      r.rows[i] = { ...r.rows[i], accruedAmount: 0 }
+    }
+    const rowIdxByMonth = new Map(r.rows.map((row, i) => [row.month, i]))
+    let bucketedSpend = 0
+    for (const b of buckets) {
+      bucketedSpend += b.totalSpend
+      if (b.rebateEarned <= 0) continue
+      if (b.periodEnd.getTime() > nowForBudget.getTime()) continue
+      const endKey = `${b.periodEnd.getUTCFullYear()}-${String(
+        b.periodEnd.getUTCMonth() + 1,
+      ).padStart(2, "0")}`
+      const idx = rowIdxByMonth.get(endKey) ?? r.rows.length - 1
+      r.rows[idx] = {
+        ...r.rows[idx],
+        accruedAmount: r.rows[idx].accruedAmount + b.rebateEarned,
+        tierAchieved: b.tierAchieved,
+        rebatePercent: b.rebatePercent,
+      }
+    }
+    // Open / partial TAIL window — the engine (like the writer) drops a
+    // window whose natural end exceeds boundedUntil, so a contract that
+    // expired mid-window (or whose current window is still running) would
+    // show $0 for that stretch. Keep the 2026-04-25 display intent: show
+    // the tail's accrued-TO-DATE on the latest in-range month. Closed
+    // windows above stay ≡ ledger.
+    const seriesSpend = r.series.reduce((s, m) => s + m.spend, 0)
+    const tailSpend = Math.max(0, seriesSpend - bucketedSpend)
+    if (tailSpend > 0 && r.rows.length > 0) {
+      const widthMonths =
+        r.config.evaluationPeriod === "quarterly"
+          ? 3
+          : r.config.evaluationPeriod === "semi_annual"
+            ? 6
+            : 12
+      const proRated =
+        hasBaseline && r.config.spendBaseline
+          ? r.config.spendBaseline * (widthMonths / 12)
+          : 0
+      const tailTierSpend = Math.max(0, tailSpend - proRated)
+      const res =
+        r.config.method === "marginal"
+          ? calculateMarginal(tailTierSpend, r.config.tiers)
+          : calculateCumulative(tailTierSpend, r.config.tiers)
+      if (res.rebateEarned > 0) {
+        const last = r.rows.length - 1
+        r.rows[last] = {
+          ...r.rows[last],
+          accruedAmount: r.rows[last].accruedAmount + res.rebateEarned,
+          tierAchieved: res.tierAchieved,
+          rebatePercent: res.rebatePercent,
+        }
       }
     }
   }

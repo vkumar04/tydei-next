@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import {
   computeRebateFromPrismaTiers,
   DEFAULT_COLLECTION_RATE,
@@ -72,6 +73,7 @@ export async function getContractPeriods(contractId: string) {
     select: {
       id: true,
       vendorId: true,
+      additionalVendorIds: true,
       facilityId: true,
       effectiveDate: true,
       expirationDate: true,
@@ -124,7 +126,8 @@ export async function getContractPeriods(contractId: string) {
   const cogRows = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,
-      vendorId: contract.vendorId,
+      // 2026-06-09 audit: group-aware vendor set (recurring drift class).
+      vendorId: { in: contractVendorIds(contract) },
       transactionDate: {
         gte: new Date(contract.effectiveDate),
         lte: new Date(contract.expirationDate),

@@ -284,9 +284,11 @@ const BASELINE_HITS = new Set<string>([
   // authorized rebate.update call still verifies ownership via the
   // same prior contract-find guard at the top of createContractTransaction).
   // bumped 2026-06-09 after the COG category-universe fetch (drifted-
-  // category canonical match) added lines above these re-reads.
-  "lib/actions/contract-periods.ts:425",
-  "lib/actions/contract-periods.ts:654",
+  // category canonical match) added lines above these re-reads; bumped
+  // again same day after the group-aware vendor set (contractVendorIds)
+  // import + select shifted them.
+  "lib/actions/contract-periods.ts:428",
+  "lib/actions/contract-periods.ts:657",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:94",
