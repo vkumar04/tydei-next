@@ -1,9 +1,16 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
+import { createInAppNotificationsInternal } from "@/lib/notifications/in-app-helper"
+import { onlyVendorProposalAlerts } from "@/lib/alerts/vendor-proposal-filter"
+import {
+  onlyProspectiveProposalRows,
+  PROSPECTIVE_PROPOSAL_KIND,
+} from "@/lib/prospective/proposal-rows"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -160,7 +167,7 @@ export async function getFinancialProjections(input: {
   return serialize(projections)
 }
 
-// ─── Vendor: Create Proposal (in-memory, stored as alert metadata) ──
+// ─── Vendor: Create Proposal (draft PendingContract row) ───────────
 
 export async function createProposal(input: {
   vendorId: string
@@ -185,42 +192,78 @@ export async function createProposal(input: {
     0
   )
 
-  // Store as an alert so we persist without schema migration
-  const alert = await prisma.alert.create({
+  // Proposal-feed split (2026-06-09): proposals used to be persisted as
+  // masquerade Alert rows (alertType "compliance", metadata
+  // `{ type: "vendor_proposal" }`) — frequently the only "alerts" a
+  // vendor ever saw. They now live as draft PendingContract rows:
+  // `status: "draft"` + `facilityId: null` keeps them out of every
+  // facility review surface, and `pricingData.kind` discriminates them
+  // from real submissions (see lib/prospective/proposal-rows.ts).
+  const row = await prisma.pendingContract.create({
     data: {
-      portalType: "vendor",
-      alertType: "compliance",
-      title: `Proposal submitted to ${input.facilityIds.length} facilities`,
-      description: `${input.pricingItems.length} items, $${totalCost.toLocaleString()} total`,
-      severity: "low",
-      status: "new_alert",
       vendorId: vendor.id,
-      metadata: JSON.parse(JSON.stringify({
-        type: "vendor_proposal",
-        facilityIds: input.facilityIds,
-        pricingItems: input.pricingItems,
-        terms: input.terms,
-        totalCost,
-        productCategories: input.productCategories,
-        projectedSpend: input.projectedSpend,
-        projectedVolume: input.projectedVolume,
-        marketShareCommitment: input.marketShareCommitment,
-        gpoFee: input.gpoFee,
-        aiNotes: input.aiNotes,
-        proposalTerms: input.proposalTerms,
-      })),
+      vendorName: vendor.name,
+      facilityId: null,
+      facilityName: null,
+      contractName: `Prospective proposal — ${input.pricingItems.length} item${input.pricingItems.length === 1 ? "" : "s"}`,
+      status: "draft",
+      totalValue: totalCost,
+      notes: input.aiNotes ?? input.terms.notes ?? null,
+      pricingData: JSON.parse(
+        JSON.stringify({
+          kind: PROSPECTIVE_PROPOSAL_KIND,
+          facilityIds: input.facilityIds,
+          pricingItems: input.pricingItems,
+          terms: input.terms,
+          totalCost,
+          productCategories: input.productCategories,
+          projectedSpend: input.projectedSpend,
+          projectedVolume: input.projectedVolume,
+          marketShareCommitment: input.marketShareCommitment,
+          gpoFee: input.gpoFee,
+          aiNotes: input.aiNotes,
+          proposalTerms: input.proposalTerms,
+        }),
+      ) as Prisma.InputJsonValue,
     },
   })
 
+  // Replace the old masquerade alert with a REAL in-app notification to
+  // the vendor's own org members (best-effort — the helper swallows and
+  // warn-logs failures). Same fan-out pattern as
+  // notifyVendorOfPendingDecision in lib/actions/notifications.ts.
+  const vendorOrg = await prisma.vendor.findUnique({
+    where: { id: vendor.id },
+    select: {
+      organization: {
+        select: {
+          members: { select: { user: { select: { id: true } } } },
+        },
+      },
+    },
+  })
+  const memberUserIds =
+    vendorOrg?.organization?.members.map((m) => m.user.id) ?? []
+  if (memberUserIds.length > 0) {
+    void createInAppNotificationsInternal({
+      userIds: memberUserIds,
+      type: "vendor_proposal_created",
+      title: `Proposal submitted to ${input.facilityIds.length} facilities`,
+      body: `${input.pricingItems.length} items, $${totalCost.toLocaleString()} total`,
+      payload: { proposalId: row.id },
+      actionUrl: "/vendor/prospective",
+    })
+  }
+
   return serialize({
-    id: alert.id,
+    id: row.id,
     vendorId: vendor.id,
     facilityIds: input.facilityIds,
     status: "submitted",
     itemCount: input.pricingItems.length,
     totalProposedCost: totalCost,
     dealScore: null,
-    createdAt: alert.createdAt.toISOString(),
+    createdAt: row.submittedAt.toISOString(),
     productCategories: input.productCategories,
     contractLengthMonths: input.terms.contractLength,
     projectedSpend: input.projectedSpend,
@@ -235,33 +278,44 @@ export async function createProposal(input: {
 // ─── Vendor: Delete Proposal ────────────────────────────────────
 
 /**
- * Delete a vendor's own proposal. Vendor proposals are persisted as
- * `Alert` rows with `metadata.type === "vendor_proposal"` (see
- * `createProposal` above). This action enforces vendor ownership of
- * the underlying alert before deleting.
+ * Delete a vendor's own proposal. New proposals are draft
+ * `PendingContract` rows (`pricingData.kind === "vendor_proposal"` —
+ * see `createProposal` above); proposals created before the
+ * 2026-06-09 proposal-feed split are legacy masquerade `Alert` rows
+ * (`metadata.type === "vendor_proposal"`). We no longer CREATE the
+ * alert rows, but the delete path stays tolerant of them so vendors
+ * can clean up their historic proposals. Both lookups are
+ * tenant-scoped to the calling vendor.
  *
  * The constraints in CLAUDE.md / V1 audit reserved `withdrawPendingContract`
  * for `PendingContract` rows submitted via the contract-submission flow;
- * those are a different table from the prospective proposals shown here.
+ * prospective drafts never enter that flow (status "draft",
+ * facilityId null).
  */
 export async function deleteProposal(id: string): Promise<void> {
   const { vendor } = await requireVendor()
 
-  // Look up the alert tenant-scoped to this vendor. A non-vendor row
+  // Current storage: draft PendingContract row, vendor-scoped.
+  const pending = await prisma.pendingContract.findFirst({
+    where: { id, vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+    select: { id: true },
+  })
+  if (pending) {
+    // auth-scope-scanner-skip: row authorized via vendor-scoped findFirst above
+    await prisma.pendingContract.delete({ where: { id: pending.id } })
+    return
+  }
+
+  // Legacy cleanup: pre-split masquerade Alert rows. A non-vendor row
   // or a row owned by another vendor is invisible here, which gives
   // us the auth gate in a single query.
   const alert = await prisma.alert.findFirst({
-    where: { id, vendorId: vendor.id },
-    select: { id: true, metadata: true },
+    where: { id, vendorId: vendor.id, ...onlyVendorProposalAlerts() },
+    select: { id: true },
   })
 
   if (!alert) {
     throw new Error("Proposal not found")
-  }
-
-  const meta = alert.metadata as Record<string, unknown> | null
-  if (meta?.type !== "vendor_proposal") {
-    throw new Error("Not a vendor proposal")
   }
 
   // auth-scope-scanner-skip: row authorized via vendor-scoped findFirst above
@@ -351,56 +405,94 @@ export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
 
 // ─── Vendor: Get Proposals ──────────────────────────────────────
 
+/**
+ * Map the shared proposal payload (PendingContract `pricingData` for
+ * new rows, Alert `metadata` for legacy rows — same field names apart
+ * from the `kind`/`type` discriminator) to the `VendorProposal` shape.
+ */
+function payloadToProposal(
+  id: string,
+  vendorId: string,
+  createdAt: Date,
+  meta: Record<string, unknown>,
+): VendorProposal {
+  const terms = meta.terms as
+    | { contractLength?: number; notes?: string }
+    | undefined
+  return {
+    id,
+    vendorId,
+    facilityIds: (meta.facilityIds as string[]) ?? [],
+    status: "submitted" as const,
+    itemCount: ((meta.pricingItems as unknown[]) ?? []).length,
+    totalProposedCost: Number(meta.totalCost ?? 0),
+    dealScore: null,
+    createdAt: createdAt.toISOString(),
+    productCategories: (meta.productCategories as string[]) ?? undefined,
+    contractLengthMonths: terms?.contractLength,
+    projectedSpend:
+      meta.projectedSpend != null ? Number(meta.projectedSpend) : undefined,
+    projectedVolume:
+      meta.projectedVolume != null ? Number(meta.projectedVolume) : undefined,
+    marketShareCommitment:
+      meta.marketShareCommitment != null
+        ? Number(meta.marketShareCommitment)
+        : undefined,
+    gpoFee: meta.gpoFee != null ? Number(meta.gpoFee) : undefined,
+    aiNotes:
+      (meta.aiNotes as string | undefined) ?? terms?.notes ?? undefined,
+    terms: (meta.proposalTerms as ProposalTermSummary[]) ?? undefined,
+  }
+}
+
+/**
+ * Proposal-feed split (2026-06-09): reads the REAL source — draft
+ * `PendingContract` rows with the `pricingData.kind` discriminator —
+ * plus a tolerant legacy read of pre-split masquerade `Alert` rows so
+ * historic proposals don't vanish from the list. `createProposal` no
+ * longer writes alert rows; once legacy databases are cleaned up the
+ * alert branch can be dropped.
+ */
 export async function getVendorProposals(
   _vendorId?: string
 ): Promise<VendorProposal[]> {
   const { vendor } = await requireVendor()
 
-  const alerts = await prisma.alert.findMany({
-    where: {
-      vendorId: vendor.id,
-      alertType: "compliance",
-    },
-    orderBy: { createdAt: "desc" },
-  })
-
-  return serialize(alerts
-    .filter((a) => {
-      const meta = a.metadata as Record<string, unknown> | null
-      return meta?.type === "vendor_proposal"
-    })
-    .map((a) => {
-      const meta = a.metadata as Record<string, unknown>
-      const terms = meta.terms as
-        | { contractLength?: number; notes?: string }
-        | undefined
-      return {
-        id: a.id,
+  const [pendingRows, legacyAlerts] = await Promise.all([
+    prisma.pendingContract.findMany({
+      where: { vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+      orderBy: { submittedAt: "desc" },
+    }),
+    prisma.alert.findMany({
+      where: {
         vendorId: vendor.id,
-        facilityIds: (meta.facilityIds as string[]) ?? [],
-        status: "submitted" as const,
-        itemCount: ((meta.pricingItems as unknown[]) ?? []).length,
-        totalProposedCost: Number(meta.totalCost ?? 0),
-        dealScore: null,
-        createdAt: a.createdAt.toISOString(),
-        productCategories: (meta.productCategories as string[]) ?? undefined,
-        contractLengthMonths: terms?.contractLength,
-        projectedSpend:
-          meta.projectedSpend != null ? Number(meta.projectedSpend) : undefined,
-        projectedVolume:
-          meta.projectedVolume != null
-            ? Number(meta.projectedVolume)
-            : undefined,
-        marketShareCommitment:
-          meta.marketShareCommitment != null
-            ? Number(meta.marketShareCommitment)
-            : undefined,
-        gpoFee: meta.gpoFee != null ? Number(meta.gpoFee) : undefined,
-        aiNotes:
-          (meta.aiNotes as string | undefined) ??
-          terms?.notes ??
-          undefined,
-        terms: (meta.proposalTerms as ProposalTermSummary[]) ?? undefined,
-      }
-    }))
+        alertType: "compliance",
+        ...onlyVendorProposalAlerts(),
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ])
+
+  const proposals = [
+    ...pendingRows.map((p) =>
+      payloadToProposal(
+        p.id,
+        vendor.id,
+        p.submittedAt,
+        (p.pricingData ?? {}) as Record<string, unknown>,
+      ),
+    ),
+    ...legacyAlerts.map((a) =>
+      payloadToProposal(
+        a.id,
+        vendor.id,
+        a.createdAt,
+        (a.metadata ?? {}) as Record<string, unknown>,
+      ),
+    ),
+  ].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+
+  return serialize(proposals)
 }

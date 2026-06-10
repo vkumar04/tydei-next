@@ -19,6 +19,7 @@ import {
   notifyFacilityOfPendingContract,
   notifyVendorOfPendingDecision,
 } from "@/lib/actions/notifications"
+import { excludeProspectiveProposalRows } from "@/lib/prospective/proposal-rows"
 import { revalidatePath } from "next/cache"
 
 /**
@@ -468,7 +469,11 @@ export async function getVendorPendingContracts(_vendorId?: string) {
   const { vendor } = await requireVendor()
 
   const contracts = await prisma.pendingContract.findMany({
-    where: { vendorId: vendor.id },
+    // Prospective proposals (lib/actions/prospective.ts createProposal)
+    // are stored as draft rows with `pricingData.kind = "vendor_proposal"`
+    // — they're internal analysis docs, not submissions, so keep them
+    // out of the submissions list (proposal-feed split, 2026-06-09).
+    where: { vendorId: vendor.id, ...excludeProspectiveProposalRows() },
     include: { facility: { select: { id: true, name: true } } },
     orderBy: { submittedAt: "desc" },
   })

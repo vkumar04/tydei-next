@@ -34,6 +34,10 @@ let alertRows: AlertRow[] = []
 let cogRows: Array<Record<string, unknown>> = []
 let contractRows: Array<Record<string, unknown>> = []
 let periodRows: Array<Record<string, unknown>> = []
+let renewalAlertSettingsRows: Array<{
+  expirationAlertDays: number
+  renewalReminderDaysBefore: number[]
+}> = []
 
 const createdAlerts: Array<Record<string, unknown>> = []
 const updatedAlerts: Array<{ id: string; data: Record<string, unknown> }> = []
@@ -131,6 +135,11 @@ vi.mock("@/lib/db", () => ({
     tieInBundle: {
       findMany: vi.fn(async () => []),
     },
+    // Per-facility expiring-contract window source. Empty → the
+    // synthesizer falls back to EXPIRING_CONTRACT_WINDOW_DAYS.
+    renewalAlertSettings: {
+      findMany: vi.fn(async () => renewalAlertSettingsRows),
+    },
     $transaction: vi.fn(
       async (ops: Promise<unknown>[]) => Promise.all(ops),
     ),
@@ -197,6 +206,7 @@ beforeEach(() => {
   cogRows = []
   contractRows = []
   periodRows = []
+  renewalAlertSettingsRows = []
   createdAlerts.length = 0
   updatedAlerts.length = 0
 })
@@ -463,6 +473,39 @@ describe("synthesizeAndPersistAlerts", () => {
     expect(created?.alertType).toBe("expiring_contract")
     expect(created?.contractId).toBe("c-1")
     expect(logAuditMock).toHaveBeenCalled()
+  })
+
+  it("widens the expiring window from facility members' RenewalAlertSettings", async () => {
+    // 120 days out — outside the default 90-day window, inside a
+    // configured 180-day reminder threshold.
+    const expDate = new Date()
+    expDate.setDate(expDate.getDate() + 120)
+    contractRows = [
+      {
+        id: "c-far",
+        name: "Far-out Supply",
+        status: "active",
+        expirationDate: expDate,
+        annualValue: 100_000,
+        vendorId: "v-1",
+        vendor: { name: "Acme" },
+        terms: [],
+        periods: [],
+      },
+    ]
+
+    // No settings → default 90-day window → nothing fires.
+    let result = await synthesizeAndPersistAlerts()
+    expect(result.created).toBe(0)
+
+    // A member configured a 180-day reminder → window widens → fires.
+    renewalAlertSettingsRows = [
+      { expirationAlertDays: 60, renewalReminderDaysBefore: [180, 90, 30] },
+    ]
+    result = await synthesizeAndPersistAlerts()
+    expect(result.created).toBe(1)
+    const created = alertRows.find((r) => r.alertType === "expiring_contract")
+    expect(created?.contractId).toBe("c-far")
   })
 
   it("is a no-op when state matches existing alerts", async () => {

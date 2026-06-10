@@ -138,6 +138,7 @@ export function CaseCostingClient({
       <PayorContractMarginCard />
 
       <CaseCostingTabs
+        facilityId={facilityId}
         cases={{
           data: (casesQuery.data ?? []) as unknown as CaseRow[],
           isLoading: casesQuery.isLoading,

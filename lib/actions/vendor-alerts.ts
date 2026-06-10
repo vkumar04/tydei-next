@@ -5,6 +5,7 @@ import { requireVendor } from "@/lib/actions/auth"
 import type { AlertFilters } from "@/lib/validators/alerts"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
+import { excludeVendorProposalAlerts } from "@/lib/alerts/vendor-proposal-filter"
 
 // ─── Vendor Alerts ──────────────────────────────────────────────
 
@@ -31,6 +32,10 @@ export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "
   const baseScope: Prisma.AlertWhereInput[] = [
     { vendorId: vendor.id },
     { portalType: "vendor" },
+    // Legacy masquerade proposal rows (pre-2026-06-09 createProposal
+    // persisted prospective proposals as alertType "compliance" rows)
+    // are NOT alerts — exclude them from the list AND the hero counts.
+    excludeVendorProposalAlerts(),
   ]
   const conditions: Prisma.AlertWhereInput[] = [...baseScope]
 

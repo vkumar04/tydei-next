@@ -178,6 +178,30 @@ describe("synthesizer: expiring_contract", () => {
     expect(toCreate).toEqual([])
   })
 
+  it("honors a wider expiringWindowDays from facility settings", () => {
+    // ~257 days out — far outside the default 90-day window.
+    const input = baseInput({
+      contracts: [contract({ expirationDate: new Date("2026-12-31") })],
+      expiringWindowDays: 365,
+    })
+    const { toCreate } = synthesizeAlertsForFacility(input)
+    expect(toCreate).toHaveLength(1)
+    expect(toCreate[0].alertType).toBe("expiring_contract")
+    // Far-out alerts stay low severity (>30 days).
+    expect(toCreate[0].severity).toBe("low")
+  })
+
+  it("honors a narrower expiringWindowDays from facility settings", () => {
+    // ~44 days out — inside the default 90-day window, outside a
+    // configured 30-day window.
+    const input = baseInput({
+      contracts: [contract()],
+      expiringWindowDays: 30,
+    })
+    const { toCreate } = synthesizeAlertsForFacility(input)
+    expect(toCreate).toEqual([])
+  })
+
   it("resolves when the contract is no longer expiring soon", () => {
     const input = baseInput({
       contracts: [],

@@ -60,6 +60,44 @@ interface PayorContractsManagerProps {
   facilityId: string
 }
 
+/**
+ * Parse manually-entered CPT rate lines. Exported for unit tests
+ * (repo convention: component logic is tested as pure functions —
+ * see components/contracts/specific-items-picker).
+ *
+ * Accepted line shapes:
+ *   `99213, Office Visit, 150.00`   (comma / pipe / tab separated)
+ *   `99213 $150.00`                 (code + rate, no description)
+ */
+export function parseCPTRatesFromText(
+  text: string,
+): { cptCode: string; description: string; rate: number }[] {
+  const rates: { cptCode: string; description: string; rate: number }[] = []
+  const lines = text.split("\n").filter((l) => l.trim())
+  for (const line of lines) {
+    // Match: 99213, Office Visit, 150.00 or 99213 | Office Visit | 150.00 or 99213  Office Visit  $150
+    const match = line.match(/(\d{5})\s*[,|\t]\s*(.+?)\s*[,|\t]\s*\$?([\d,]+\.?\d*)/)
+    if (match) {
+      rates.push({
+        cptCode: match[1],
+        description: match[2].trim(),
+        rate: parseFloat(match[3].replace(/,/g, "")),
+      })
+      continue
+    }
+    // Match: 99213 $150.00 (no description)
+    const simple = line.match(/(\d{5})\s+\$?([\d,]+\.?\d*)/)
+    if (simple) {
+      rates.push({
+        cptCode: simple[1],
+        description: "",
+        rate: parseFloat(simple[2].replace(/,/g, "")),
+      })
+    }
+  }
+  return rates
+}
+
 export function PayorContractsManager({ facilityId }: PayorContractsManagerProps) {
   const { data: contracts, isLoading } = usePayorContracts()
   const createMutation = useCreatePayorContract()
@@ -110,34 +148,6 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
     setRateText("")
     setSelectedContractId("")
   }, [])
-
-  // Parse CPT rates from text
-  function parseCPTRatesFromText(text: string): { cptCode: string; description: string; rate: number }[] {
-    const rates: { cptCode: string; description: string; rate: number }[] = []
-    const lines = text.split("\n").filter((l) => l.trim())
-    for (const line of lines) {
-      // Match: 99213, Office Visit, 150.00 or 99213 | Office Visit | 150.00 or 99213  Office Visit  $150
-      const match = line.match(/(\d{5})\s*[,|\t]\s*(.+?)\s*[,|\t]\s*\$?([\d,]+\.?\d*)/)
-      if (match) {
-        rates.push({
-          cptCode: match[1],
-          description: match[2].trim(),
-          rate: parseFloat(match[3].replace(/,/g, "")),
-        })
-        continue
-      }
-      // Match: 99213 $150.00 (no description)
-      const simple = line.match(/(\d{5})\s+\$?([\d,]+\.?\d*)/)
-      if (simple) {
-        rates.push({
-          cptCode: simple[1],
-          description: "",
-          rate: parseFloat(simple[2].replace(/,/g, "")),
-        })
-      }
-    }
-    return rates
-  }
 
   const [extractionStep, setExtractionStep] = useState("")
 

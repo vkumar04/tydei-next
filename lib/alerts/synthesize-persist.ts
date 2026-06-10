@@ -30,6 +30,7 @@ import {
   type SynthExistingAlert,
   type SynthTier,
 } from "@/lib/alerts/synthesizer"
+import { resolveExpiringWindowDays } from "@/lib/alerts/expiring-window"
 import { computeBundleStatus } from "@/lib/contracts/bundle-compute"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { deriveBundleShortfalls } from "@/lib/contracts/bundle-shortfalls"
@@ -60,6 +61,7 @@ export async function runAlertSynthesisForFacility(
     periodRows,
     existingRows,
     bundleRows,
+    alertSettingsRows,
   ] = await Promise.all([
     prisma.cOGRecord.findMany({
       where: { facilityId },
@@ -159,6 +161,23 @@ export async function runAlertSynthesisForFacility(
             contract: { select: { id: true, name: true } },
           },
         },
+      },
+    }),
+    // RenewalAlertSettings is user-scoped; synthesis is facility-scoped.
+    // Load every facility-org member's settings row and fold them into
+    // one effective expiring_contract window (see
+    // lib/alerts/expiring-window.ts for the union semantics).
+    prisma.renewalAlertSettings.findMany({
+      where: {
+        user: {
+          members: {
+            some: { organization: { facility: { id: facilityId } } },
+          },
+        },
+      },
+      select: {
+        expirationAlertDays: true,
+        renewalReminderDaysBefore: true,
       },
     }),
   ])
@@ -295,6 +314,7 @@ export async function runAlertSynthesisForFacility(
     paymentSchedules: [],
     bundles,
     existingAlerts,
+    expiringWindowDays: resolveExpiringWindowDays(alertSettingsRows),
   })
 
   const now = new Date()

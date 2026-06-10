@@ -6,14 +6,17 @@
  * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4 subsystems 2-5.
  *
  * Pure presentational; receives fully-resolved props from the orchestrator
- * and hands each tab its slice.
+ * and hands each tab its slice. (Exception: the Payor Contracts tab is
+ * self-fetching — PayorContractsManager owns its own TanStack Query
+ * state via usePayorContracts + the payor-contract mutation hooks.)
  */
-import { Stethoscope, User, TrendingUp, ShieldCheck } from "lucide-react"
+import { Stethoscope, User, TrendingUp, ShieldCheck, FileText } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CasesListTab } from "./cases-list-tab"
 import { SurgeonsTab } from "./surgeons-tab"
 import { FinancialTab } from "./financial-tab"
 import { ComplianceTab } from "./compliance-tab"
+import { PayorContractsManager } from "./payor-contracts-manager"
 import type { GetCasesForFacilityFilters } from "@/lib/actions/case-costing/cases-list"
 import type { Surgeon } from "@/lib/case-costing/surgeon-derivation"
 import type { FacilityAverages } from "@/lib/case-costing/facility-averages"
@@ -22,6 +25,8 @@ import type { FacilityCaseComplianceResult } from "@/lib/actions/case-costing/co
 import type { CaseRow } from "./case-costing-types"
 
 export interface CaseCostingTabsProps {
+  /** Needed by the Payor Contracts tab (create payload carries it). */
+  facilityId: string
   cases: {
     data: CaseRow[]
     isLoading: boolean
@@ -47,6 +52,7 @@ export interface CaseCostingTabsProps {
 }
 
 export function CaseCostingTabs({
+  facilityId,
   cases,
   surgeons,
   financial,
@@ -71,6 +77,10 @@ export function CaseCostingTabs({
           <ShieldCheck className="h-4 w-4" />
           Compliance
         </TabsTrigger>
+        <TabsTrigger value="payor-contracts" className="gap-2">
+          <FileText className="h-4 w-4" />
+          Payor Contracts
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="cases" className="mt-6 space-y-4">
@@ -84,6 +94,9 @@ export function CaseCostingTabs({
       </TabsContent>
       <TabsContent value="compliance" className="mt-6 space-y-4">
         <ComplianceTab {...compliance} />
+      </TabsContent>
+      <TabsContent value="payor-contracts" className="mt-6 space-y-4">
+        <PayorContractsManager facilityId={facilityId} />
       </TabsContent>
     </Tabs>
   )

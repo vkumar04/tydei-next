@@ -139,6 +139,13 @@ export interface SynthInput {
   bundles?: SynthBundle[]
   /** Currently-active (non-dismissed, non-resolved) alerts. */
   existingAlerts: SynthExistingAlert[]
+  /**
+   * Per-facility override for the expiring_contract window (days).
+   * Derived from the facility users' RenewalAlertSettings rows via
+   * `resolveExpiringWindowDays` (lib/alerts/expiring-window.ts).
+   * Falls back to EXPIRING_CONTRACT_WINDOW_DAYS when absent.
+   */
+  expiringWindowDays?: number
 }
 
 // ─── Output shapes ───────────────────────────────────────────────
@@ -358,10 +365,14 @@ function synthExpiringContract(input: SynthInput, now: Date): {
   const create: SynthAlert[] = []
   const keepKeys = new Set<string>()
 
+  // Configured per facility from RenewalAlertSettings; the constant is
+  // the fallback for facilities whose users never saved settings.
+  const windowDays = input.expiringWindowDays ?? EXPIRING_CONTRACT_WINDOW_DAYS
+
   for (const c of input.contracts) {
     if (c.status !== "active") continue
     const days = daysBetween(c.expirationDate, now)
-    if (days < 0 || days > EXPIRING_CONTRACT_WINDOW_DAYS) continue
+    if (days < 0 || days > windowDays) continue
 
     const dedupeKey = dedupeKeyFor("expiring_contract", c.id)
     keepKeys.add(dedupeKey)
