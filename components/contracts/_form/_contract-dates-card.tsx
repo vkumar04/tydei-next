@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/popover"
 import { CalendarIcon } from "lucide-react"
 import { format, parseISO } from "date-fns"
+import { useRef } from "react"
 import { cn } from "@/lib/utils"
 
 function parseDateString(dateStr: string | undefined): Date | undefined {
@@ -61,6 +62,11 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
   const expirationDateStr = watch("expirationDate")
   const effectiveDate = parseDateString(effectiveDateStr)
   const expirationDate = parseDateString(expirationDateStr)
+
+  // Performance period and rebate pay period should match by default
+  // (Charles 2026-06-10). Changing the performance period mirrors into the
+  // pay period until the user deliberately picks a different pay period.
+  const payPeriodTouched = useRef(false)
 
   return (
     <Card>
@@ -148,12 +154,18 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
           <Field label="Performance Period">
             <Select
               value={watch("performancePeriod") ?? "monthly"}
-              onValueChange={(v) =>
+              onValueChange={(v) => {
                 setValue(
                   "performancePeriod",
                   v as CreateContractInput["performancePeriod"]
                 )
-              }
+                if (!payPeriodTouched.current) {
+                  setValue(
+                    "rebatePayPeriod",
+                    v as CreateContractInput["rebatePayPeriod"]
+                  )
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -170,12 +182,13 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
           <Field label="Rebate Pay Period">
             <Select
               value={watch("rebatePayPeriod") ?? "quarterly"}
-              onValueChange={(v) =>
+              onValueChange={(v) => {
+                payPeriodTouched.current = true
                 setValue(
                   "rebatePayPeriod",
                   v as CreateContractInput["rebatePayPeriod"]
                 )
-              }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />

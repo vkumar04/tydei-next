@@ -72,9 +72,13 @@ interface CapitalLineItemsEditorProps {
 }
 
 export function CapitalLineItemsEditor({
-  items,
+  items: itemsProp,
   onChange,
 }: CapitalLineItemsEditorProps) {
+  // Defensive: a parent passing undefined (e.g. serialized draft without
+  // capitalLineItems) must not crash the whole entry form with
+  // "Cannot read properties of undefined (reading 'length')".
+  const items = itemsProp ?? []
   const [expandedIdx, setExpandedIdx] = useState<Set<number>>(
     () => new Set(items.length === 0 ? [] : [0]),
   )

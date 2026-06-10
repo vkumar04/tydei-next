@@ -91,6 +91,7 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
     <Card>
       <CardHeader>
         <CardTitle>On vs Off Contract Spend</CardTitle>
+        <p className="text-xs text-muted-foreground">All-time</p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4 text-sm">
@@ -100,7 +101,8 @@ export function OffContractSpendCard({ contractId }: { contractId: string }) {
               {formatCurrency(data.onContract)}
             </p>
             <p className="text-xs text-muted-foreground">
-              SKU in pricing file
+              SKU in pricing file ·{" "}
+              {formatCurrency(data.onContractLast12mo)} in last 12 mo
             </p>
           </div>
           <div>

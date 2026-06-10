@@ -44,6 +44,12 @@ export interface OffContractSpendResult {
   topPreMatch: OffContractSpendItem[]
   /** Top truly off-contract items (unknown_vendor). */
   topOffContract: OffContractSpendItem[]
+  /**
+   * On-contract spend in the trailing 12 months — sublabel context so the
+   * card still ties out against the header's "Current Spend (Last 12
+   * Months)". The headline buckets above are LIFETIME.
+   */
+  onContractLast12mo: number
 
   // --- Back-compat shims for legacy callers ---
   /** @deprecated alias for topOffContract. Kept for backward compatibility. */
@@ -76,22 +82,22 @@ export async function getOffContractSpend(
     { contractId: null, vendorId: { in: vendorIds } },
   ]
 
-  // 2026-06-09 (Charles "these numbers are still a big problem — very
-  // inconsistent compared to [the header]"): this card previously had NO date
-  // clamp, so it summed the group's ENTIRE lifetime catalog ($3.96M) while the
-  // header's "Current Spend (Last 12 Months)" is trailing-12mo ($118,999) —
-  // the two were never measuring the same window. Clamp to the SAME trailing
-  // 12 months the header uses (lib/actions/contracts.ts getContract) so the
-  // cards reconcile.
+  // 2026-06-10 (Charles "the on off contract should be showing all spend on
+  // this contract for all time not just the last 12 months"): the headline
+  // buckets are LIFETIME — no date clamp. The 2026-06-09 trailing-12mo clamp
+  // (added so the card reconciled with the header) now lives only in the
+  // `onContractLast12mo` sublabel, so both windows stay visible without the
+  // main number silently shrinking to the header's window.
   const windowEnd = new Date()
   const windowStart = new Date(windowEnd)
   windowStart.setFullYear(windowStart.getFullYear() - 1)
-  const dateWindow = {
+  const trailing12moWindow = {
     transactionDate: { gte: windowStart, lte: windowEnd },
   }
 
   const [
     onAgg,
+    on12moAgg,
     notPricedAgg,
     preMatchAgg,
     offAgg,
@@ -103,7 +109,6 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
-        ...dateWindow,
         OR: scopeOR,
         matchStatus: { in: ["on_contract", "price_variance"] },
       },
@@ -112,7 +117,15 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
-        ...dateWindow,
+        ...trailing12moWindow,
+        OR: scopeOR,
+        matchStatus: { in: ["on_contract", "price_variance"] },
+      },
+      _sum: { extendedPrice: true },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: {
+        facilityId: facility.id,
         OR: scopeOR,
         matchStatus: "off_contract_item",
       },
@@ -121,7 +134,6 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
-        ...dateWindow,
         OR: scopeOR,
         matchStatus: "out_of_scope",
       },
@@ -130,7 +142,6 @@ export async function getOffContractSpend(
     prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
-        ...dateWindow,
         OR: scopeOR,
         matchStatus: "unknown_vendor",
       },
@@ -140,7 +151,6 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
-        ...dateWindow,
         OR: scopeOR,
         matchStatus: { in: ["on_contract", "price_variance"] },
         vendorItemNo: { not: null },
@@ -153,7 +163,6 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
-        ...dateWindow,
         OR: scopeOR,
         matchStatus: "off_contract_item",
         vendorItemNo: { not: null },
@@ -166,7 +175,6 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
-        ...dateWindow,
         OR: scopeOR,
         matchStatus: "out_of_scope",
         vendorItemNo: { not: null },
@@ -179,7 +187,6 @@ export async function getOffContractSpend(
       by: ["vendorItemNo"],
       where: {
         facilityId: facility.id,
-        ...dateWindow,
         OR: scopeOR,
         matchStatus: "unknown_vendor",
         vendorItemNo: { not: null },
@@ -213,6 +220,7 @@ export async function getOffContractSpend(
 
   return serialize({
     onContract: Number(onAgg._sum?.extendedPrice ?? 0),
+    onContractLast12mo: Number(on12moAgg._sum?.extendedPrice ?? 0),
     notPriced: Number(notPricedAgg._sum?.extendedPrice ?? 0),
     preMatch: Number(preMatchAgg._sum?.extendedPrice ?? 0),
     offContract: Number(offAgg._sum?.extendedPrice ?? 0),

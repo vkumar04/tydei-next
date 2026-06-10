@@ -35,11 +35,18 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
     useVendorPendingContracts(vendorId)
   const pendingContracts = pendingData ?? []
 
-  // Map pending contracts to match the Contract table row shape
+  // Map pending contracts to match the Contract table row shape.
+  // Charles 2026-06-10 ("pending, active, rejected tabs not populating"):
+  // previously only `submitted` rows were mapped (status forced to
+  // "pending"), and the Rejected tab returned a hardcoded []. Map EVERY
+  // submission except `approved` (those already exist as real Contract
+  // rows) and keep the PendingContract status string so the badge and the
+  // tab filters below can tell submitted / rejected / revision_requested /
+  // withdrawn apart.
   const mappedPending = useMemo(
     () =>
       pendingContracts
-        .filter((pc) => pc.status === "submitted")
+        .filter((pc) => pc.status !== "approved")
         .map((pc) => ({
           id: pc.id,
           name: pc.contractName,
@@ -47,7 +54,9 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
           vendorId: pc.vendorId,
           facilityId: pc.facilityId ?? null,
           contractType: pc.contractType,
-          status: "pending" as ContractStatus,
+          // PendingContract statuses are rendered by StatusBadge, which
+          // tolerates non-ContractStatus strings via contractStatusConfig.
+          status: pc.status as unknown as ContractStatus,
           effectiveDate: pc.effectiveDate ? new Date(pc.effectiveDate) : new Date(),
           expirationDate: pc.expirationDate ? new Date(pc.expirationDate) : new Date(),
           totalValue: pc.totalValue ?? 0,
@@ -60,6 +69,7 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
             ? { id: pc.facility.id, name: pc.facility.name }
             : null,
           productCategory: null,
+          pendingStatus: pc.status,
         })),
     [pendingContracts],
   )
@@ -73,12 +83,29 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
 
   const rawContracts = data?.contracts ?? []
 
-  // Merge contracts with pending depending on the active status filter
+  // Merge contracts with pending depending on the active status filter.
+  // Contract-table statuses (active / draft / pending) are filtered
+  // server-side; PendingContract submissions are filtered here by their
+  // real status so every tab populates.
   const mergedContracts = useMemo(() => {
-    if (statusTab === "submitted") return mappedPending
-    if (statusTab === "rejected") return []
-    if (statusTab === "all") return [...rawContracts, ...mappedPending]
-    return rawContracts
+    const pendingWith = (...statuses: string[]) =>
+      mappedPending.filter((pc) => statuses.includes(pc.pendingStatus))
+    switch (statusTab) {
+      case "all":
+        return [...rawContracts, ...mappedPending]
+      case "draft":
+        return [...rawContracts, ...pendingWith("draft")]
+      case "submitted":
+        return pendingWith("submitted")
+      case "pending":
+        // Awaiting facility action: submitted + revision-requested
+        // submissions, plus any Contract rows in `pending` status.
+        return [...rawContracts, ...pendingWith("submitted", "revision_requested")]
+      case "rejected":
+        return pendingWith("rejected")
+      default:
+        return rawContracts
+    }
   }, [statusTab, rawContracts, mappedPending])
 
   // Apply facility + search filters on the client
@@ -117,7 +144,11 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
   // Derived from the full (unfiltered) data set + pending so the hero is
   // stable as the user narrows the table below.
   const activeCount = allContracts.filter((c) => c.status === "active").length
-  const pendingReviewCount = mappedPending.length
+  const pendingReviewCount = mappedPending.filter(
+    (pc) =>
+      pc.pendingStatus === "submitted" ||
+      pc.pendingStatus === "revision_requested",
+  ).length
   const totalValue = allContracts.reduce(
     (sum, c) => sum + Number(c.totalValue ?? 0),
     0,

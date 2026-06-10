@@ -345,7 +345,11 @@ export function VendorContractSubmission({
     // timing, so the AI captures it as per-term free-text. Fold any
     // variable pay-period detail into the description (which becomes the
     // PendingContract.notes on submit) so it isn't lost on the vendor path.
-    const variablePayPeriodNote = data.terms
+    // Defensive: degenerate extractions (partial stream snapshots, PDFs the
+    // model couldn't parse) can arrive without a terms array — guard so the
+    // whole entry form doesn't crash ("Cannot read properties of undefined").
+    const extractedTerms = data.terms ?? []
+    const variablePayPeriodNote = extractedTerms
       .filter((t) => t.hasVariablePayPeriods && t.payPeriodDetail)
       .map((t) => `[${t.termName}] Variable pay period: ${t.payPeriodDetail}`)
       .join(" | ")
@@ -384,9 +388,9 @@ export function VendorContractSubmission({
     // the AI extracted, with conservative fallbacks only when the
     // AI didn't return a value or returned something we don't
     // recognize.
-    if (data.terms.length > 0) {
+    if (extractedTerms.length > 0) {
       setContractTerms(
-        data.terms.map((t) => {
+        extractedTerms.map((t) => {
           const aiTermType = String(t.termType ?? "").trim()
           const termType: TermFormValues["termType"] = (
             [
@@ -497,7 +501,7 @@ export function VendorContractSubmission({
             scopedCategoryIds: t.scopedCategoryIds,
             scopedItemNumbers: t.scopedItemNumbers,
             cptCodes: t.cptCodes,
-            tiers: t.tiers.map((tier) => ({
+            tiers: (t.tiers ?? []).map((tier) => ({
               tierNumber: tier.tierNumber,
               tierName: tier.tierName ?? null,
               spendMin: tier.spendMin ?? 0,

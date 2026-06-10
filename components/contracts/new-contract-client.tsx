@@ -428,11 +428,14 @@ export function NewContractClient({
       return "spend_based"
     }
 
-    // Populate terms if extracted — preserve AI-detected types
-    setAiTermCount(data.terms.length)
-    if (data.terms.length > 0) {
+    // Populate terms if extracted — preserve AI-detected types.
+    // Defensive (vendor-crash class, 2026-06-10): degenerate extractions can
+    // arrive without terms/tiers arrays — guard so the page doesn't crash.
+    const extractedTerms = data.terms ?? []
+    setAiTermCount(extractedTerms.length)
+    if (extractedTerms.length > 0) {
       setTerms(
-        data.terms.map((t) => {
+        extractedTerms.map((t) => {
           const termType = mapTermType(t.termType)
           const baselineType = mapBaselineType(t.termType)
           // Normalize AI-extracted rebate values (Charles R5.25). AI
@@ -447,7 +450,7 @@ export function NewContractClient({
           // Charles 2026-04-28 — Spend Max column was empty in the form
           // after the c555730 "fix" because that fix only updated the
           // dead-code mapper.
-          const sortedTiers = [...t.tiers].sort(
+          const sortedTiers = [...(t.tiers ?? [])].sort(
             (a, b) => (a.tierNumber ?? 0) - (b.tierNumber ?? 0),
           )
           // Bug #6 / Bug #8: count- and threshold-based termTypes can't

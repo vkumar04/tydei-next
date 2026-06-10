@@ -721,6 +721,17 @@ export function ContractTermsEntry({
                           </SelectItem>
                         </SelectContent>
                       </Select>
+                      {/* Charles 2026-06-10: "volume counted by and product
+                          scope — if those are doing the same thing, remove
+                          one." They are distinct dimensions (volumeType = how
+                          units are tallied; appliesTo = which products
+                          count), so both stay — but spell that out so the
+                          form doesn't read as a duplicate. */}
+                      <p className="text-xs text-muted-foreground">
+                        How units are tallied — product units, CPT procedures,
+                        or PO count. Product Scope below picks which products
+                        count toward it.
+                      </p>
                     </Field>
                   )}
 
@@ -862,6 +873,10 @@ export function ContractTermsEntry({
                     <Field label="Product Scope">
                       <Select
                         value={term.appliesTo}
+                        disabled={
+                          term.termType === "volume_rebate" &&
+                          term.volumeType === "all_products"
+                        }
                         onValueChange={(v) =>
                           updateTerm(termIdx, {
                             appliesTo: v,
@@ -887,6 +902,13 @@ export function ContractTermsEntry({
                           <SelectItem value="specific_items">Specific Items</SelectItem>
                         </SelectContent>
                       </Select>
+                      {term.termType === "volume_rebate" &&
+                        term.volumeType === "all_products" && (
+                          <p className="text-xs text-muted-foreground">
+                            Locked to All Products by &quot;All products on
+                            contract&quot; above.
+                          </p>
+                        )}
                     </Field>
                   )}
 
