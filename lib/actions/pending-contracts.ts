@@ -709,8 +709,14 @@ export async function withdrawPendingContract(id: string) {
 export async function getFacilityPendingContracts(_facilityId?: string) {
   const { facility } = await requireFacility()
 
+  // 2026-06-09 (Charles "rejecting a vendor contract — it goes nowhere"):
+  // this previously filtered `status: "submitted"`, so the moment a
+  // submission was rejected / sent back for revision / approved it VANISHED
+  // from the facility's view with no trace — no rejected list, no review
+  // notes, nothing. Return every status; the tab groups "awaiting review"
+  // vs "reviewed" so decisions stay visible.
   const contracts = await prisma.pendingContract.findMany({
-    where: { facilityId: facility.id, status: "submitted" },
+    where: { facilityId: facility.id },
     include: { vendor: { select: { id: true, name: true, logoUrl: true } } },
     orderBy: { submittedAt: "desc" },
   })
@@ -1146,6 +1152,11 @@ export async function rejectPendingContract(id: string, _reviewedByIgnored: stri
     decision: "rejected",
     reviewNotes: notes,
   })
+
+  // 2026-06-09: bust the route caches like approve does — without this the
+  // facility's server-rendered views kept serving the pre-decision state.
+  revalidatePath("/dashboard/contracts")
+  revalidatePath("/vendor/contracts")
 }
 
 // ─── Facility: Request Revision ─────────────────────────────────
@@ -1176,4 +1187,8 @@ export async function requestRevision(id: string, _reviewedByIgnored: string, no
     decision: "revision_requested",
     reviewNotes: notes,
   })
+
+  // 2026-06-09: bust the route caches like approve does.
+  revalidatePath("/dashboard/contracts")
+  revalidatePath("/vendor/contracts")
 }

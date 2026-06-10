@@ -48,10 +48,37 @@ export function PendingContractsTab({ facilityId, userId }: PendingContractsTabP
     return <p className="py-8 text-center text-sm text-muted-foreground">No pending contract submissions.</p>
   }
 
+  // 2026-06-09 (Charles "rejecting a vendor contract — it goes nowhere"):
+  // the list previously showed ONLY submitted rows, so a rejected /
+  // revision-requested / approved submission vanished without a trace.
+  // Split into "awaiting review" (actionable) and "reviewed" (decision +
+  // notes stay visible).
+  const awaiting = pending.filter((pc) => pc.status === "submitted")
+  const reviewed = pending.filter((pc) => pc.status !== "submitted")
+  const statusBadge = (status: string) => {
+    switch (status) {
+      case "rejected":
+        return <Badge variant="destructive">Rejected</Badge>
+      case "revision_requested":
+        return <Badge variant="outline">Revision requested</Badge>
+      case "approved":
+        return <Badge variant="default">Approved</Badge>
+      case "withdrawn":
+        return <Badge variant="outline">Withdrawn</Badge>
+      default:
+        return <Badge variant="secondary">{status}</Badge>
+    }
+  }
+
   return (
     <>
       <div className="space-y-3">
-        {pending.map((pc) => (
+        {awaiting.length === 0 && (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            No submissions awaiting review.
+          </p>
+        )}
+        {awaiting.map((pc) => (
           <Card key={pc.id} className="transition-colors hover:bg-muted/50">
             <CardContent className="flex items-center gap-4 p-4">
               <div className="min-w-0 flex-1">
@@ -74,6 +101,38 @@ export function PendingContractsTab({ facilityId, userId }: PendingContractsTabP
             </CardContent>
           </Card>
         ))}
+
+        {reviewed.length > 0 && (
+          <>
+            <h4 className="pt-4 text-sm font-semibold text-muted-foreground">
+              Reviewed
+            </h4>
+            {reviewed.map((pc) => (
+              <Card key={pc.id}>
+                <CardContent className="flex items-center gap-4 p-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{pc.contractName}</span>
+                      {statusBadge(pc.status)}
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {pc.vendor.name} &middot; Submitted{" "}
+                      {formatDate(pc.submittedAt)}
+                      {pc.reviewedAt
+                        ? ` · Reviewed ${formatDate(pc.reviewedAt)}`
+                        : ""}
+                    </p>
+                    {pc.reviewNotes && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Notes: {pc.reviewNotes}
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
       </div>
 
       {reviewTarget && (
