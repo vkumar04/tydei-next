@@ -379,10 +379,19 @@ export function excelCellToString(value: any): string {
 
 export function parseMoney(raw: string | undefined): number {
   if (!raw) return 0
-  const cleaned = raw.replace(/[$,\s]/g, "").replace(/[()]/g, "")
+  let cleaned = raw.replace(/[$,\s]/g, "")
+  // Audit L22: accounting-style parenthesized amounts are NEGATIVE —
+  // "(100)" is a $100 credit/reversal, not +100.
+  let negative = false
+  if (/^\(.*\)$/.test(cleaned)) {
+    negative = true
+    cleaned = cleaned.slice(1, -1)
+  }
+  cleaned = cleaned.replace(/[()]/g, "")
   if (!cleaned || cleaned === "-") return 0
   const n = Number(cleaned)
-  return Number.isFinite(n) ? n : 0
+  if (!Number.isFinite(n)) return 0
+  return negative ? -n : n
 }
 
 /** Parse MM/DD/YYYY or YYYY-MM-DD or MM/DD/YYYY HH:MM → Date. */

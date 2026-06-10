@@ -35,8 +35,19 @@ export interface PayorContractMarginSummary {
   totalCases: number
   cptMatched: number
   estReimbursement: number
+  /** Spend across ALL the facility's cases (matched + unmatched). */
   totalSpend: number
+  /** Spend across CPT-matched cases only — the margin denominator. */
+  matchedSpend: number
+  /**
+   * Audit M12: margin over MATCHED cases only (matched reimbursement −
+   * matched spend). The old number subtracted ALL-case spend from
+   * matched-only reimbursement, which went arbitrarily negative as
+   * unmatched cases accumulated.
+   */
   totalMargin: number
+  unmatchedCases: number
+  unmatchedSpend: number
 }
 
 export async function getPayorContractsForFacility(): Promise<
@@ -101,8 +112,10 @@ export async function getPayorContractMarginSummary(
   let cptMatched = 0
   let estReimbursement = 0
   let totalSpend = 0
+  let matchedSpend = 0
   for (const c of cases) {
-    totalSpend += Number(c.totalSpend ?? 0)
+    const spend = Number(c.totalSpend ?? 0)
+    totalSpend += spend
     const lookup = lookupReimbursement(
       {
         primaryCptCode: c.primaryCptCode,
@@ -114,6 +127,7 @@ export async function getPayorContractMarginSummary(
     if (lookup.source !== "not_found" && lookup.reimbursement > 0) {
       cptMatched++
       estReimbursement += lookup.reimbursement
+      matchedSpend += spend
     }
   }
 
@@ -124,6 +138,10 @@ export async function getPayorContractMarginSummary(
     cptMatched,
     estReimbursement,
     totalSpend,
-    totalMargin: estReimbursement - totalSpend,
+    matchedSpend,
+    // Audit M12: margin over matched cases only — see interface note.
+    totalMargin: estReimbursement - matchedSpend,
+    unmatchedCases: cases.length - cptMatched,
+    unmatchedSpend: totalSpend - matchedSpend,
   }
 }

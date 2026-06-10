@@ -77,8 +77,19 @@ export async function importPayorContractRates(contractId: string, rates: { cptC
     where: { id: contractId, facilityId: session.facility.id },
   })
 
-  const existingRates = (contract.cptRates as { cptCode: string; rate: number }[]) ?? []
-  const mergedRates = [...existingRates, ...rates]
+  const existingRates =
+    (contract.cptRates as { cptCode: string; description?: string; rate: number }[]) ?? []
+
+  // Audit L20: dedupe on cptCode — re-importing a rate sheet must replace
+  // the prior rate for a CPT, not append a second entry (downstream rate
+  // maps would otherwise depend on iteration order). Newer rate wins.
+  const merged = new Map<
+    string,
+    { cptCode: string; description?: string; rate: number }
+  >()
+  for (const r of existingRates) merged.set(r.cptCode, r)
+  for (const r of rates) merged.set(r.cptCode, r)
+  const mergedRates = [...merged.values()]
 
   await prisma.payorContract.update({
     where: { id: contractId },

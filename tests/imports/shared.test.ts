@@ -94,7 +94,8 @@ describe("parseMoney", () => {
     ["$100.50", 100.5],
     ["$1,234.56", 1234.56],
     ["$ 1,234.56", 1234.56],
-    ["(100)", 100], // accounting style — bare number after stripping parens
+    ["(100)", -100], // accounting style — parenthesized = negative (audit L22)
+    ["($1,234.56)", -1234.56],
     ["not a number", 0],
     ["12abc", 0], // mixed strings return 0
   ])("parseMoney(%s) → %s", (input, expected) => {

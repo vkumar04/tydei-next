@@ -9,9 +9,11 @@
  * Thin wrapper around `computePayorMix` in `lib/case-costing/payor-mix.ts`.
  *
  * Schema note:
- *   - `Case` currently has no direct `payorType` column. Until the model grows
- *     one (or a `Payor` join), every case is surfaced under `casesWithoutPayor`
- *     and every `shares` entry stays at 0. The pure helper handles this safely.
+ *   - Payor data lives on `Case.payorClass` (audit M8 — an earlier note here
+ *     claimed no payor column existed, which went stale once the schema grew
+ *     `payorClass`). Raw classes are mapped to the canonical buckets via
+ *     `classifyPayorClass`; cases without a payorClass still surface under
+ *     `casesWithoutPayor`.
  */
 
 import { prisma } from "@/lib/db"
@@ -20,6 +22,7 @@ import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import {
   computePayorMix,
+  classifyPayorClass,
   type CaseWithPayor,
   type PayorMixSummary,
 } from "@/lib/case-costing/payor-mix"
@@ -30,13 +33,13 @@ export async function getFacilityPayorMix(): Promise<PayorMixSummary> {
   const cases = await prisma.case.findMany({
     where: { facilityId: facility.id },
     select: {
+      payorClass: true,
       totalReimbursement: true,
     },
   })
 
   const input: CaseWithPayor[] = cases.map((c) => ({
-    // Case.payorType does not exist on the current schema — see file header.
-    payorType: null,
+    payorType: classifyPayorClass(c.payorClass),
     totalReimbursement: Number(c.totalReimbursement),
   }))
 

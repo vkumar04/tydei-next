@@ -47,14 +47,35 @@ describe("calculateSurgeonScores", () => {
   })
 
   it("overallScore = mean of 5 dimensions (v0 5-dim formula)", () => {
-    // payorMix=70, bmi=80 (default), age=70 (default), spend=60, time=100 (avgCaseTime=0)
+    // payorMix=70, bmi=80 (default), age=70 (default), spend=60, time=100 (avgCaseTime=0 min)
     // mean = (70 + 80 + 70 + 60 + 100) / 5 = 76
     const r = calculateSurgeonScores({
       commercialOrPrivatePayors: 7,
       totalPayors: 10,
       avgSpendPerCase: 20_000,
+      avgCaseTimeMinutes: 0,
     })
     expect(r.overallScore).toBe(76)
+  })
+
+  it("timeScore = 0 when avgCaseTimeMinutes is missing (audit M9)", () => {
+    // Missing OR time must NOT score a perfect 100 — the doc'd behavior
+    // is 0. payorMix=70, bmi=80, age=70, spend=60, time=0 → mean = 56.
+    const r = calculateSurgeonScores({
+      commercialOrPrivatePayors: 7,
+      totalPayors: 10,
+      avgSpendPerCase: 20_000,
+    })
+    expect(r.timeScore).toBe(0)
+    expect(r.overallScore).toBe(56)
+
+    const rNull = calculateSurgeonScores({
+      commercialOrPrivatePayors: 7,
+      totalPayors: 10,
+      avgSpendPerCase: 20_000,
+      avgCaseTimeMinutes: null,
+    })
+    expect(rNull.timeScore).toBe(0)
   })
 
   it("color ≥75 → green", () => {
@@ -62,14 +83,15 @@ describe("calculateSurgeonScores", () => {
       commercialOrPrivatePayors: 9,
       totalPayors: 10,
       avgSpendPerCase: 10_000,
+      avgCaseTimeMinutes: 50,
     })
-    // payorMix=90, spend=80, overall=85 → green
+    // payorMix=90, bmi=80, age=70, spend=80, time=90 → overall=82 → green
     expect(r.color).toBe("green")
     expect(r.overallScore).toBeGreaterThanOrEqual(75)
   })
 
   it("color ≥50 and <75 → amber", () => {
-    // payorMix=60, spend=60, overall=60 → amber
+    // payorMix=60, bmi=80, age=70, spend=60, time=0 (missing) → overall=54 → amber
     const r = calculateSurgeonScores({
       commercialOrPrivatePayors: 6,
       totalPayors: 10,

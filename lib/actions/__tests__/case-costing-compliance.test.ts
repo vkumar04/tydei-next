@@ -38,6 +38,7 @@ vi.mock("@/lib/db", () => ({
             .filter((c) => c.facilityId === where.facilityId)
             .map((c) => ({
               id: c.id,
+              caseNumber: `CASE-${c.id}`,
               supplies: c.supplies,
             }))
         },
@@ -99,6 +100,8 @@ describe("getFacilityCaseCompliance", () => {
     expect(result.perCase).toHaveLength(1)
     const c = result.perCase[0]!
     expect(c.caseId).toBe("c-1")
+    // Audit L19: human-readable caseNumber rides along for the UI.
+    expect(c.caseNumber).toBe("CASE-c-1")
     expect(c.totalSupplySpend).toBe(1000)
     expect(c.onContractSpend).toBe(800)
     expect(c.offContractSpend).toBe(200)
@@ -172,6 +175,7 @@ describe("getFacilityCaseCompliance", () => {
     await getFacilityCaseCompliance()
     expect(lastSelect).toMatchObject({
       id: true,
+      caseNumber: true,
       supplies: expect.objectContaining({
         select: {
           vendorItemNo: true,

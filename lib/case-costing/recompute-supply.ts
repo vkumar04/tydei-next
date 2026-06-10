@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/lib/generated/prisma/client"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 
 /**
  * Recompute `CaseSupply.isOnContract` + `CaseSupply.contractId` for a
@@ -59,22 +60,27 @@ export async function recomputeCaseSupplyContractStatus(
     },
   })
 
-  // Build a lookup: vendorItemNo → array of {contractId, start, end}
-  // so we can pick the contract whose window contains the supply date.
+  // Build a lookup: normalizeSku(vendorItemNo) → array of
+  // {contractId, start, end} so we can pick the contract whose window
+  // contains the supply date. Audit H6: SKUs MUST be compared via
+  // normalizeSku, never raw === — case/whitespace drift between the
+  // pricing catalog and clinical supply rows silently zeroed the
+  // On-Contract % (same recurring class as the carve-out SKU bug).
   const byItem = new Map<
     string,
     Array<{ contractId: string; start: Date; end: Date }>
   >()
   for (const c of contracts) {
     for (const p of c.pricingItems) {
-      if (!p.vendorItemNo) continue
-      const arr = byItem.get(p.vendorItemNo) ?? []
+      const key = normalizeSku(p.vendorItemNo)
+      if (!key) continue
+      const arr = byItem.get(key) ?? []
       arr.push({
         contractId: c.id,
         start: c.effectiveDate,
         end: c.expirationDate,
       })
-      byItem.set(p.vendorItemNo, arr)
+      byItem.set(key, arr)
     }
   }
 
@@ -107,16 +113,17 @@ export async function recomputeCaseSupplyContractStatus(
   for (const c of cases) {
     for (const s of c.supplies) {
       scanned += 1
-      if (!s.vendorItemNo) {
-        // No vendorItemNo = can't match. Zero it out only if it was
-        // previously stamped on-contract (guards against churn).
+      const supplyKey = normalizeSku(s.vendorItemNo)
+      if (!supplyKey) {
+        // No (normalizable) vendorItemNo = can't match. Zero it out only
+        // if it was previously stamped on-contract (guards against churn).
         if (s.isOnContract) {
           updates.push({ id: s.id, isOnContract: false, contractId: null })
           flippedOff += 1
         }
         continue
       }
-      const candidates = byItem.get(s.vendorItemNo) ?? []
+      const candidates = byItem.get(supplyKey) ?? []
       const dateMs = c.dateOfSurgery.getTime()
       const match = candidates.find(
         (cand) =>

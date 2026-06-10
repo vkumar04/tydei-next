@@ -24,8 +24,13 @@ import {
   type FacilityComplianceSummary,
 } from "@/lib/case-costing/compliance"
 
+export interface CaseComplianceWithNumber extends CaseComplianceResult {
+  /** Human-readable case number (audit L19 — the table showed cuids). */
+  caseNumber: string
+}
+
 export interface FacilityCaseComplianceResult {
-  perCase: CaseComplianceResult[]
+  perCase: CaseComplianceWithNumber[]
   summary: FacilityComplianceSummary
 }
 
@@ -36,6 +41,7 @@ export async function getFacilityCaseCompliance(): Promise<FacilityCaseComplianc
     where: { facilityId: facility.id },
     select: {
       id: true,
+      caseNumber: true,
       supplies: {
         select: {
           vendorItemNo: true,
@@ -55,7 +61,13 @@ export async function getFacilityCaseCompliance(): Promise<FacilityCaseComplianc
     })),
   }))
 
-  const perCase = computeCaseCompliance(input)
+  const caseNumberById = new Map(cases.map((c) => [c.id, c.caseNumber]))
+  const perCase: CaseComplianceWithNumber[] = computeCaseCompliance(
+    input,
+  ).map((r) => ({
+    ...r,
+    caseNumber: caseNumberById.get(r.caseId) ?? r.caseId,
+  }))
   const summary = summarizeFacilityCompliance(perCase)
 
   await logAudit({

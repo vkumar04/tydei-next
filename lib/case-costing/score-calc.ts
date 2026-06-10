@@ -28,8 +28,11 @@ export interface ScoreInput {
    */
   ageUnder65Pct?: number | null
   /**
-   * Average case time in minutes. Optional; when omitted time score is
-   * 0 (v0 formula: `100 − avgCaseTime/5`).
+   * Average case time in minutes. Optional; when omitted/null the time
+   * score is 0 per spec (v0 formula for known times:
+   * `max(0, 100 − avgCaseTime/5)`). Audit M9: the code used to default
+   * the missing value to 0 *minutes*, which scored a perfect 100 —
+   * inflating overall scores for surgeons with no OR-time data.
    */
   avgCaseTimeMinutes?: number | null
 }
@@ -55,7 +58,9 @@ const clamp100 = (v: number): number => Math.max(0, Math.min(100, v))
  *   bmiScore      = clamp(bmiUnder40Pct ?? 80, 0, 100)
  *   ageScore      = clamp(ageUnder65Pct ?? 70, 0, 100)
  *   spendScore    = max(0, 100 − avgSpendPerCase / 500)
- *   timeScore     = max(0, 100 − (avgCaseTimeMinutes ?? 0) / 5)
+ *   timeScore     = avgCaseTimeMinutes == null
+ *                     ? 0
+ *                     : max(0, 100 − avgCaseTimeMinutes / 5)
  *   overallScore  = round(mean(payor, bmi, age, spend, time))
  *
  * Color:
@@ -73,10 +78,12 @@ export function calculateSurgeonScores(input: ScoreInput): SurgeonScoreResult {
   const bmiScore = clamp100(input.bmiUnder40Pct ?? 80)
   const ageScore = clamp100(input.ageUnder65Pct ?? 70)
   const spendScore = Math.max(0, 100 - input.avgSpendPerCase / 500)
-  const timeScore = Math.max(
-    0,
-    100 - (input.avgCaseTimeMinutes ?? 0) / 5,
-  )
+  // Audit M9: missing OR time scores 0 (doc'd behavior). Defaulting the
+  // `??` to 0 minutes silently awarded a perfect 100.
+  const timeScore =
+    input.avgCaseTimeMinutes == null
+      ? 0
+      : Math.max(0, 100 - input.avgCaseTimeMinutes / 5)
   const overallScore = Math.round(
     (payorMixScore + bmiScore + ageScore + spendScore + timeScore) / 5,
   )

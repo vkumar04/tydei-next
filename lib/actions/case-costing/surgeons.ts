@@ -15,9 +15,11 @@
  * the result so it can cross the server/client boundary.
  *
  * Schema notes:
- *   - `Case` currently has no direct `payorType` column. Until the model grows
- *     one (or a `Payor` join), we pass `payorType: null` to `deriveSurgeons`;
- *     the pure helper handles null safely (distinct-payor tallies stay at 0).
+ *   - Payor data lives on `Case.payorClass` (audit M8 — an earlier note
+ *     here claimed no payor column existed, which went stale once the
+ *     schema grew `payorClass`). Raw classes are mapped to the canonical
+ *     payor-mix buckets via `classifyPayorClass`, so `deriveSurgeons`'
+ *     payorMixScore computes from real data.
  *   - `Case.timeInOr` / `timeOutOr` are `String?` (time-of-day); computing a
  *     true duration requires date-qualifying them. We leave
  *     `timeInOrMinutes` as null here so `computeFacilityAverages` reports a
@@ -38,6 +40,11 @@ import {
   type CaseForAverages,
   type FacilityAverages,
 } from "@/lib/case-costing/facility-averages"
+import { classifyPayorClass } from "@/lib/case-costing/payor-mix"
+import {
+  buildCptRateMap,
+  resolveCaseReimbursement,
+} from "@/lib/case-costing/cpt-rate-map"
 
 // ─── Surgeon scorecards ──────────────────────────────────────────
 
@@ -53,6 +60,7 @@ export async function getSurgeonScorecardsForFacility(): Promise<Surgeon[]> {
     select: {
       surgeonName: true,
       primaryCptCode: true,
+      payorClass: true,
       totalSpend: true,
       totalReimbursement: true,
     },
@@ -67,8 +75,9 @@ export async function getSurgeonScorecardsForFacility(): Promise<Surgeon[]> {
       primaryCptCode: c.primaryCptCode,
       totalSpend: Number(c.totalSpend),
       totalReimbursement: Number(c.totalReimbursement),
-      // Case.payorType does not exist on the current schema — see file header.
-      payorType: null,
+      // Audit M8: map Case.payorClass → canonical payor-mix bucket so
+      // payorMixScore computes from real data instead of a hardcoded null.
+      payorType: classifyPayorClass(c.payorClass),
     }))
 
   const surgeons = deriveSurgeons({ cases: input })
@@ -118,40 +127,23 @@ export async function getFacilityAveragesForFacility(): Promise<FacilityAverages
     }),
   ])
 
-  const cptRateMap = new Map<string, number>()
-  for (const pc of payorContracts) {
-    const rates =
-      (pc.cptRates as
-        | Array<{ cpt?: string; cptCode?: string; rate: number }>
-        | null) ?? []
-    for (const r of rates) {
-      const code = r.cptCode ?? r.cpt
-      if (!code || typeof r.rate !== "number") continue
-      const existing = cptRateMap.get(code)
-      if (existing === undefined || r.rate > existing) {
-        cptRateMap.set(code, r.rate)
-      }
-    }
-  }
+  // Canonical CPT-rate map (audit H5) — shared with getCases, the
+  // payor-margin calculator, and the case-costing report.
+  const cptRateMap = buildCptRateMap(payorContracts)
 
-  const input: CaseForAverages[] = cases.map((c) => {
-    const stored = Number(c.totalReimbursement)
-    let computed = 0
-    if (c.primaryCptCode && cptRateMap.has(c.primaryCptCode)) {
-      computed = cptRateMap.get(c.primaryCptCode) ?? 0
-    }
-    for (const p of c.procedures) {
-      if (p.cptCode && cptRateMap.has(p.cptCode)) {
-        computed = Math.max(computed, cptRateMap.get(p.cptCode) ?? 0)
-      }
-    }
-    return {
-      totalSpend: Number(c.totalSpend),
-      totalReimbursement: stored > 0 ? stored : computed,
-      // Case.timeInOr is time-of-day (String?) — see file header.
-      timeInOrMinutes: null,
-    }
-  })
+  const input: CaseForAverages[] = cases.map((c) => ({
+    totalSpend: Number(c.totalSpend),
+    totalReimbursement: resolveCaseReimbursement(
+      {
+        storedReimbursement: Number(c.totalReimbursement),
+        primaryCptCode: c.primaryCptCode,
+        procedureCptCodes: c.procedures.map((p) => p.cptCode),
+      },
+      cptRateMap,
+    ),
+    // Case.timeInOr is time-of-day (String?) — see file header.
+    timeInOrMinutes: null,
+  }))
 
   const averages = computeFacilityAverages({ cases: input })
 

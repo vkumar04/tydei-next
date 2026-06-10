@@ -88,7 +88,7 @@ export function PayorContractMarginCard() {
               <Stat
                 label="CPT Matched"
                 value={String(summary.cptMatched)}
-                sub={`${summary.totalCases} cases total`}
+                sub={`${summary.cptMatched} of ${summary.totalCases} cases matched`}
               />
             </div>
             <Card>
@@ -102,8 +102,18 @@ export function PayorContractMarginCard() {
                   {formatCurrency(summary.totalMargin)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  vs {formatCurrency(summary.totalSpend)} in case spend
+                  vs {formatCurrency(summary.matchedSpend)} spend across{" "}
+                  {summary.cptMatched} matched case
+                  {summary.cptMatched === 1 ? "" : "s"}
                 </p>
+                {summary.unmatchedCases > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {summary.unmatchedCases} unmatched case
+                    {summary.unmatchedCases === 1 ? "" : "s"} (
+                    {formatCurrency(summary.unmatchedSpend)} spend) excluded
+                    from margin
+                  </p>
+                )}
               </CardContent>
             </Card>
           </>

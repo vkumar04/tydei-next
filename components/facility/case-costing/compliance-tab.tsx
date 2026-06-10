@@ -121,7 +121,9 @@ export function ComplianceTab({ data, isLoading }: ComplianceTabProps) {
             <TableBody>
               {perCase.map((c) => (
                 <TableRow key={c.caseId}>
-                  <TableCell className="font-mono text-xs">{c.caseId}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {c.caseNumber}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatCurrency(c.totalSupplySpend)}
                   </TableCell>

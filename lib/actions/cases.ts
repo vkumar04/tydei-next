@@ -5,6 +5,10 @@ import { requireFacility } from "@/lib/actions/auth"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
+import {
+  buildCptRateMap,
+  resolveCaseReimbursement,
+} from "@/lib/case-costing/cpt-rate-map"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -154,41 +158,21 @@ export async function getCases(input: {
     }),
   ])
 
-  const cptRateMap = new Map<string, number>()
-  for (const pc of payorContracts) {
-    // The seeded payor contract JSON uses `{cpt, rate, description}`,
-    // but a future migration to Prisma relations may use `{cptCode, rate}`.
-    // Accept both shapes so either seed format lights up reimbursement.
-    const rates =
-      (pc.cptRates as
-        | Array<{ cpt?: string; cptCode?: string; rate: number }>
-        | null) ?? []
-    for (const r of rates) {
-      const code = r.cptCode ?? r.cpt
-      if (!code || typeof r.rate !== "number") continue
-      const existing = cptRateMap.get(code)
-      if (existing === undefined || r.rate > existing) {
-        cptRateMap.set(code, r.rate)
-      }
-    }
-  }
+  // Canonical CPT-rate map (audit H5) — shared with the facility-averages
+  // hero, payor-margin calculator, and the case-costing report so every
+  // surface backfills reimbursement identically.
+  const cptRateMap = buildCptRateMap(payorContracts)
 
   return serialize({
     cases: records.map((c) => {
-      const stored = Number(c.totalReimbursement)
-      // Prefer the highest rate across (a) the case's primaryCptCode and
-      // (b) any CPT on its procedures — some cases import with
-      // procedure rows but no primary flag set.
-      let computed = 0
-      if (c.primaryCptCode && cptRateMap.has(c.primaryCptCode)) {
-        computed = cptRateMap.get(c.primaryCptCode) ?? 0
-      }
-      for (const p of c.procedures) {
-        if (p.cptCode && cptRateMap.has(p.cptCode)) {
-          computed = Math.max(computed, cptRateMap.get(p.cptCode) ?? 0)
-        }
-      }
-      const effectiveReimbursement = stored > 0 ? stored : computed
+      const effectiveReimbursement = resolveCaseReimbursement(
+        {
+          storedReimbursement: Number(c.totalReimbursement),
+          primaryCptCode: c.primaryCptCode,
+          procedureCptCodes: c.procedures.map((p) => p.cptCode),
+        },
+        cptRateMap,
+      )
       const effectiveMargin = effectiveReimbursement - Number(c.totalSpend)
 
       return {
@@ -283,7 +267,17 @@ function parseDateToUTC(raw: string): Date {
 export async function importCases(input: {
   facilityId?: string
   cases: CaseInput[]
-}): Promise<{ imported: number; errors: number }> {
+}): Promise<{
+  imported: number
+  errors: number
+  /**
+   * caseNumber → Case.id for every input case that now exists at this
+   * facility (newly created OR pre-existing skipDuplicates hits). The
+   * import dialog uses this to persist supplies/procedures per case
+   * after the case rows land (audit H4).
+   */
+  caseIds: Record<string, string>
+}> {
   const { facility, user } = await requireFacility()
 
   let imported = 0
@@ -332,6 +326,22 @@ export async function importCases(input: {
     }
   }
 
+  // Resolve caseNumber → id so the caller can attach supplies/procedures.
+  // Includes pre-existing cases (skipDuplicates) on purpose: a re-import
+  // should still be able to enrich cases that already exist.
+  const caseIds: Record<string, string> = {}
+  const caseNumbers = input.cases.map((c) => c.caseNumber)
+  for (let i = 0; i < caseNumbers.length; i += BATCH) {
+    const rows = await prisma.case.findMany({
+      where: {
+        facilityId: facility.id,
+        caseNumber: { in: caseNumbers.slice(i, i + BATCH) },
+      },
+      select: { id: true, caseNumber: true },
+    })
+    for (const r of rows) caseIds[r.caseNumber] = r.id
+  }
+
   await logAudit({
     userId: user.id,
     action: "cases.imported",
@@ -339,7 +349,7 @@ export async function importCases(input: {
     metadata: { imported, errors, totalCases: input.cases.length },
   })
 
-  return { imported, errors }
+  return { imported, errors, caseIds }
 }
 
 // ─── Delete All Cases (clear prior case-costing data) ──────────
@@ -378,8 +388,25 @@ export async function importCaseSupplies(input: {
   let imported = 0
   let matched = 0
 
+  // Re-import idempotency (audit M13): skip rows that exactly match a
+  // supply already on the case (vendorItemNo + extendedCost). Only
+  // PRE-EXISTING rows are deduped — two identical rows within the same
+  // payload stay legitimate (e.g. two identical implants, qty 1 each).
+  const existingSupplies = await prisma.caseSupply.findMany({
+    where: { caseId: input.caseId },
+    select: { vendorItemNo: true, extendedCost: true },
+  })
+  const existingKeys = new Set(
+    existingSupplies.map(
+      (s) => `${s.vendorItemNo ?? ""}|${Number(s.extendedCost)}`,
+    ),
+  )
+
   for (const supply of input.supplies) {
     const extCost = supply.usedCost * (supply.quantity ?? 1)
+    if (existingKeys.has(`${supply.vendorItemNo ?? ""}|${extCost}`)) {
+      continue
+    }
     await prisma.caseSupply.create({
       data: {
         caseId: input.caseId,
@@ -397,6 +424,68 @@ export async function importCaseSupplies(input: {
   }
 
   return { imported, matched }
+}
+
+// ─── Import Case Procedures ─────────────────────────────────────
+
+export interface CaseProcedureInput {
+  cptCode: string
+  description?: string
+}
+
+/**
+ * Batch-insert procedure rows for one case (audit H4 — the import
+ * dialog previously parsed procedure files and persisted nothing
+ * beyond `primaryCptCode`). Mirrors `importCaseSupplies`: facility
+ * scoping via `requireFacility` + case-ownership verification before
+ * any write. Re-import idempotent: rows whose (caseId, cptCode) pair
+ * already exists are skipped (audit M13).
+ */
+export async function importCaseProcedures(input: {
+  caseId: string
+  procedures: CaseProcedureInput[]
+}): Promise<{ imported: number; skipped: number }> {
+  const { facility } = await requireFacility()
+
+  // Verify case belongs to this facility
+  await prisma.case.findUniqueOrThrow({
+    where: { id: input.caseId, facilityId: facility.id },
+    select: { id: true },
+  })
+
+  const existing = await prisma.caseProcedure.findMany({
+    where: { caseId: input.caseId },
+    select: { cptCode: true },
+  })
+  const seen = new Set(existing.map((p) => p.cptCode))
+
+  let imported = 0
+  let skipped = 0
+  const data: Array<{
+    caseId: string
+    cptCode: string
+    procedureDescription: string | null
+  }> = []
+
+  for (const proc of input.procedures) {
+    if (!proc.cptCode || seen.has(proc.cptCode)) {
+      skipped++
+      continue
+    }
+    seen.add(proc.cptCode)
+    data.push({
+      caseId: input.caseId,
+      cptCode: proc.cptCode,
+      procedureDescription: proc.description || null,
+    })
+    imported++
+  }
+
+  if (data.length > 0) {
+    await prisma.caseProcedure.createMany({ data })
+  }
+
+  return { imported, skipped }
 }
 
 // ─── Surgeon Scorecards ─────────────────────────────────────────
@@ -728,15 +817,37 @@ export async function getCaseCostingReportData(input: {
       : {}),
   }
 
-  const cases = await prisma.case.findMany({
-    where,
-    orderBy: { dateOfSurgery: "asc" },
-  })
+  // Audit H5: the report previously summed the raw stored
+  // totalReimbursement (0 in most prod states) while the case tables
+  // beside it backfilled from live PayorContract CPT rates — producing a
+  // contradictory "Avg Margin". Use the same canonical rate-map fallback.
+  const [cases, payorContracts] = await Promise.all([
+    prisma.case.findMany({
+      where,
+      include: { procedures: { select: { cptCode: true } } },
+      orderBy: { dateOfSurgery: "asc" },
+    }),
+    prisma.payorContract.findMany({
+      where: { facilityId: facility.id, status: "active" },
+      select: { cptRates: true },
+    }),
+  ])
+
+  const cptRateMap = buildCptRateMap(payorContracts)
+  const reimbursementFor = (c: (typeof cases)[number]): number =>
+    resolveCaseReimbursement(
+      {
+        storedReimbursement: Number(c.totalReimbursement),
+        primaryCptCode: c.primaryCptCode,
+        procedureCptCodes: c.procedures.map((p) => p.cptCode),
+      },
+      cptRateMap,
+    )
 
   const totalCases = cases.length
   const totalSpend = cases.reduce((s, c) => s + Number(c.totalSpend), 0)
   const totalReimbursement = cases.reduce(
-    (s, c) => s + Number(c.totalReimbursement),
+    (s, c) => s + reimbursementFor(c),
     0
   )
   const compliant = cases.filter(
@@ -749,7 +860,7 @@ export async function getCaseCostingReportData(input: {
     const month = c.dateOfSurgery.toISOString().slice(0, 7)
     const entry = monthlyMap.get(month) ?? { spend: 0, reimbursement: 0 }
     entry.spend += Number(c.totalSpend)
-    entry.reimbursement += Number(c.totalReimbursement)
+    entry.reimbursement += reimbursementFor(c)
     monthlyMap.set(month, entry)
   }
 

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import { buildCptRateMap } from "@/lib/case-costing/cpt-rate-map"
 
 export interface FacilityPayorContract {
   id: string
@@ -97,17 +98,10 @@ export async function calculatePayorMargins(input: {
     prisma.case.findMany({ where: caseWhere, include: { procedures: true } }),
   ])
 
-  // Shape-tolerant CPT rate map: accept both {cpt, rate} (seed format)
-  // and {cptCode, rate}.
-  const cptRates =
-    (contract.cptRates as
-      | Array<{ cpt?: string; cptCode?: string; rate: number }>
-      | null) ?? []
-  const rateMap = new Map<string, number>()
-  for (const r of cptRates) {
-    const code = r.cptCode ?? r.cpt
-    if (code && typeof r.rate === "number") rateMap.set(code, r.rate)
-  }
+  // Canonical shape-tolerant CPT rate map (audit H5) — accepts both
+  // {cpt, rate} (seed format) and {cptCode, rate}; shared with getCases,
+  // the facility-averages hero, and the case-costing report.
+  const rateMap = buildCptRateMap([contract])
 
   let totalEstimatedReimbursement = 0
   let totalSpend = 0

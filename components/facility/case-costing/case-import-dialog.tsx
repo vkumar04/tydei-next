@@ -15,9 +15,7 @@ import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   Upload,
-  FileSpreadsheet,
   Stethoscope,
-  DollarSign,
   Building2,
   UserCog,
   CheckCircle2,
@@ -25,7 +23,10 @@ import {
   Loader2,
   X,
 } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/query-keys"
 import { useImportCases } from "@/hooks/use-case-costing"
+import { importCaseSupplies, importCaseProcedures } from "@/lib/actions/cases"
 import type { CaseInput } from "@/lib/validators/cases"
 
 // ── File type definitions matching v0 prototype ────────────────
@@ -36,46 +37,15 @@ interface FileType {
   description: string
   requiredFields: string[]
   icon: React.ComponentType<{ className?: string }>
-  color: "purple" | "indigo" | "blue" | "green" | "amber"
-  source: "purchasing" | "clinical"
+  color: "blue" | "green" | "amber"
+  source: "clinical"
   note?: string
 }
 
-const purchasingFileTypes: FileType[] = [
-  {
-    id: "po-history",
-    name: "PO History File",
-    description: "Purchase orders - POID, Vendor, Item No, Qty, Cost",
-    requiredFields: [
-      "POID",
-      "Vendor Name",
-      "Inventory Number",
-      "Vendor Item No",
-      "Order Date",
-      "Quantity",
-      "Unit Cost",
-    ],
-    icon: FileSpreadsheet,
-    color: "purple",
-    source: "purchasing",
-  },
-  {
-    id: "invoice-history",
-    name: "Invoice History File",
-    description: "Invoices - Invoice No, PO Reference, Item No, Price",
-    requiredFields: [
-      "Invoice Number",
-      "Invoice Date",
-      "Purchase Order",
-      "Vendor Item No",
-      "Invoice Price",
-      "Invoice Quantity",
-    ],
-    icon: DollarSign,
-    color: "indigo",
-    source: "purchasing",
-  },
-]
+// Audit H4: the PO History / Invoice History drop zones were removed —
+// they advertised "(affects rebates)" but parsed the file and discarded
+// every row. Purchasing data belongs to the Invoice import flow (see the
+// note rendered in the dialog body), which actually persists it.
 
 const clinicalFileTypes: FileType[] = [
   {
@@ -124,7 +94,10 @@ function splitCSVLine(line: string): string[] {
 
   for (let i = 0; i < line.length; i++) {
     const ch = line[i]
-    if (ch === '"' || ch === "'") {
+    // Audit M14(d): only double-quotes delimit CSV fields. Treating
+    // apostrophes as quote chars corrupted any value containing one
+    // (e.g. surgeon "O'Brien" swallowed the following comma).
+    if (ch === '"') {
       if (inQuotes && i + 1 < line.length && line[i + 1] === ch) {
         // Escaped quote
         current += ch
@@ -151,12 +124,12 @@ async function parseCSVFile(
   if (lines.length < 2) return []
 
   const headers = splitCSVLine(lines[0] ?? "").map((h) =>
-    h.trim().replace(/^["']|["']$/g, "").toLowerCase()
+    h.trim().replace(/^"|"$/g, "").toLowerCase()
   )
 
   return lines.slice(1).map((line) => {
     const vals = splitCSVLine(line).map((v) =>
-      v.trim().replace(/^["']|["']$/g, "").replace(/^\$\s*/, "")
+      v.trim().replace(/^"|"$/g, "").replace(/^\$\s*/, "")
     )
     const obj: Record<string, string> = {}
     headers.forEach((h, i) => {
@@ -237,8 +210,6 @@ export function CaseImportDialog({
   const [uploadedFiles, setUploadedFiles] = useState<
     Record<string, File | null>
   >({
-    "po-history": null,
-    "invoice-history": null,
     "case-procedures": null,
     "supply-field": null,
     "patient-fields": null,
@@ -248,6 +219,7 @@ export function CaseImportDialog({
   const [processingProgress, setProcessingProgress] = useState(0)
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const importMutation = useImportCases()
+  const queryClient = useQueryClient()
 
   const handleFileUpload = (fileType: string, file: File) => {
     setUploadedFiles((prev) => ({ ...prev, [fileType]: file }))
@@ -262,10 +234,11 @@ export function CaseImportDialog({
     setProcessingProgress(0)
 
     try {
-      // Data stores for linking
+      // Data stores for linking. Audit M14(b): procedures accumulate
+      // ALL rows per case (the old Map.set kept only the last row).
       const caseProcedures = new Map<
         string,
-        { cptCode: string; description: string }
+        Array<{ cptCode: string; description: string }>
       >()
       const patientFields = new Map<
         string,
@@ -281,39 +254,27 @@ export function CaseImportDialog({
       setProcessingProgress(5)
       await new Promise((resolve) => setTimeout(resolve, 200))
 
-      // Step 2: Parse PO History
-      if (uploadedFiles["po-history"]) {
-        setProcessingStep("Parsing PO History file...")
-        setProcessingProgress(15)
-        await parseCSVFile(uploadedFiles["po-history"])
-      }
-
-      // Step 3: Parse Invoice History
-      if (uploadedFiles["invoice-history"]) {
-        setProcessingStep("Parsing Invoice History file...")
-        setProcessingProgress(25)
-        await parseCSVFile(uploadedFiles["invoice-history"])
-      }
-
-      // Step 4: Parse Case Procedures
+      // Step 2: Parse Case Procedures
       if (uploadedFiles["case-procedures"]) {
         setProcessingStep("Parsing Case Procedures - detecting columns...")
-        setProcessingProgress(35)
+        setProcessingProgress(25)
         const records = await parseCSVFile(uploadedFiles["case-procedures"])
 
         records.forEach((r) => {
           const caseId = findCaseId(r)
           if (caseId) {
-            const cptCode =
-              findValue(r, [
-                "cpt code",
-                "cptcode",
-                "cpt",
-                "procedure code",
-                "procedurecode",
-                "proc code",
-                "code",
-              ]) || "27447"
+            // Audit M14(a): no hardcoded CPT default — rows without a
+            // detectable code are skipped rather than invented.
+            const cptCode = findValue(r, [
+              "cpt code",
+              "cptcode",
+              "cpt",
+              "procedure code",
+              "procedurecode",
+              "proc code",
+              "code",
+            ])
+            if (!cptCode) return
             const description = findValue(r, [
               "procedure",
               "description",
@@ -321,7 +282,9 @@ export function CaseImportDialog({
               "proc description",
               "procedure name",
             ])
-            caseProcedures.set(caseId, { cptCode, description })
+            const list = caseProcedures.get(caseId) ?? []
+            list.push({ cptCode, description })
+            caseProcedures.set(caseId, list)
           }
         })
 
@@ -331,7 +294,7 @@ export function CaseImportDialog({
         await new Promise((resolve) => setTimeout(resolve, 300))
       }
 
-      // Step 5: Parse Supply Field
+      // Step 3: Parse Supply Field
       if (uploadedFiles["supply-field"]) {
         setProcessingStep("Parsing Supply Field - detecting columns...")
         setProcessingProgress(45)
@@ -408,7 +371,7 @@ export function CaseImportDialog({
         await new Promise((resolve) => setTimeout(resolve, 300))
       }
 
-      // Step 6: Parse Patient Fields
+      // Step 4: Parse Patient Fields
       if (uploadedFiles["patient-fields"]) {
         setProcessingStep("Parsing Patient Fields - detecting columns...")
         setProcessingProgress(55)
@@ -471,9 +434,9 @@ export function CaseImportDialog({
         await new Promise((resolve) => setTimeout(resolve, 300))
       }
 
-      // Step 7: Build linked cases
+      // Step 5: Build linked cases
       setProcessingStep("Linking records by Case ID...")
-      setProcessingProgress(75)
+      setProcessingProgress(65)
       await new Promise((resolve) => setTimeout(resolve, 300))
 
       // Collect all unique case IDs
@@ -484,7 +447,7 @@ export function CaseImportDialog({
       ])
 
       const cases: CaseInput[] = Array.from(allCaseIds).map((caseId) => {
-        const proc = caseProcedures.get(caseId)
+        const procs = caseProcedures.get(caseId)
         const patient = patientFields.get(caseId)
         const supplies = supplyRecords.get(caseId) ?? []
 
@@ -493,7 +456,9 @@ export function CaseImportDialog({
           0
         )
 
-        const cptCode = proc?.cptCode ?? undefined
+        // First procedure row's CPT is the primary; all rows persist as
+        // CaseProcedure records below. No code → leave null (M14a).
+        const cptCode = procs?.[0]?.cptCode ?? undefined
 
         return {
           caseNumber: caseId,
@@ -512,11 +477,64 @@ export function CaseImportDialog({
         }
       })
 
-      // Step 8: Import via existing hook
+      // Step 6: Import via existing hook
       setProcessingStep(`Importing ${cases.length} cases...`)
-      setProcessingProgress(90)
+      setProcessingProgress(75)
 
-      await importMutation.mutateAsync({ facilityId, cases })
+      const importResult = await importMutation.mutateAsync({
+        facilityId,
+        cases,
+      })
+
+      // Step 7 (audit H4): persist supplies + procedures. The parsed
+      // rows previously only folded into totalSpend and were discarded —
+      // the case detail drawer showed zero supplies/procedures.
+      const casesToEnrich = Array.from(allCaseIds).filter(
+        (caseNumber) =>
+          importResult.caseIds[caseNumber] &&
+          ((supplyRecords.get(caseNumber)?.length ?? 0) > 0 ||
+            (caseProcedures.get(caseNumber)?.length ?? 0) > 0)
+      )
+      let enriched = 0
+      for (const caseNumber of casesToEnrich) {
+        const caseId = importResult.caseIds[caseNumber]!
+        enriched++
+        setProcessingStep(
+          `Saving supplies & procedures (${enriched}/${casesToEnrich.length})...`
+        )
+        setProcessingProgress(
+          75 + Math.round((enriched / casesToEnrich.length) * 20)
+        )
+
+        const supplies = supplyRecords.get(caseNumber)
+        if (supplies && supplies.length > 0) {
+          await importCaseSupplies({
+            caseId,
+            supplies: supplies.map((s) => ({
+              materialName: s.name || "Unknown material",
+              vendorItemNo: s.itemNo || undefined,
+              usedCost: s.cost,
+              quantity: s.qty,
+              isOnContract: false,
+            })),
+          })
+        }
+
+        const procs = caseProcedures.get(caseNumber)
+        if (procs && procs.length > 0) {
+          await importCaseProcedures({
+            caseId,
+            procedures: procs.map((p) => ({
+              cptCode: p.cptCode,
+              description: p.description || undefined,
+            })),
+          })
+        }
+      }
+
+      // Supplies/procedures landed after the import mutation's own
+      // invalidation — refresh again so counts are current.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.cases.all })
 
       setProcessingProgress(100)
       setProcessingStep("Done!")
@@ -524,8 +542,6 @@ export function CaseImportDialog({
 
       // Reset state
       setUploadedFiles({
-        "po-history": null,
-        "invoice-history": null,
         "case-procedures": null,
         "supply-field": null,
         "patient-fields": null,
@@ -545,28 +561,15 @@ export function CaseImportDialog({
 
   // ── Render helpers for file-type rows ──────────────────────
 
-  function renderFileRow(
-    fileType: FileType,
-    sectionColor: "purple" | "blue"
-  ) {
+  function renderFileRow(fileType: FileType) {
     const Icon = fileType.icon
     const isUploaded = uploadedFiles[fileType.id] !== null
-    const borderColor =
-      sectionColor === "purple"
-        ? isUploaded
-          ? "border-purple-500 bg-purple-50 dark:bg-purple-950/30"
-          : "hover:border-purple-300"
-        : isUploaded
-          ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
-          : "hover:border-blue-300"
-    const iconBg =
-      sectionColor === "purple"
-        ? "bg-purple-100 dark:bg-purple-900/30"
-        : "bg-blue-100 dark:bg-blue-900/30"
-    const iconText =
-      sectionColor === "purple" ? "text-purple-600" : "text-blue-600"
-    const badgeBg =
-      sectionColor === "purple" ? "" : "bg-blue-600"
+    const borderColor = isUploaded
+      ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+      : "hover:border-blue-300"
+    const iconBg = "bg-blue-100 dark:bg-blue-900/30"
+    const iconText = "text-blue-600"
+    const badgeBg = "bg-blue-600"
 
     return (
       <div
@@ -626,7 +629,11 @@ export function CaseImportDialog({
                       fileInputRefs.current[fileType.id] = el
                     }}
                     type="file"
-                    accept=".csv,.xlsx,.xls"
+                    // Audit M14(c): CSV only — this dialog parses via
+                    // file.text(), so binary .xlsx/.xls would parse as
+                    // garbage. Excel files go through the mass-upload
+                    // flow (exceljs path in lib/actions/imports/shared.ts).
+                    accept=".csv"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0]
@@ -659,10 +666,10 @@ export function CaseImportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Upload Purchasing and Clinical Data Files</DialogTitle>
+          <DialogTitle>Upload Clinical Case Costing Files</DialogTitle>
           <DialogDescription>
-            Upload data from your purchasing and clinical case costing systems.
-            Files are linked via Case ID and Vendor Item No.
+            Upload data from your clinical case costing system. Files are
+            linked via Case ID.
           </DialogDescription>
         </DialogHeader>
 
@@ -708,25 +715,6 @@ export function CaseImportDialog({
             </AlertDescription>
           </Alert>
 
-          {/* Purchasing Files Section */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Badge
-                variant="outline"
-                className="bg-purple-50 text-purple-700 border-purple-200"
-              >
-                Purchasing
-              </Badge>
-              <h3 className="font-medium">Purchasing Data</h3>
-              <span className="text-xs text-muted-foreground">
-                (affects rebates)
-              </span>
-            </div>
-            <div className="space-y-3">
-              {purchasingFileTypes.map((ft) => renderFileRow(ft, "purple"))}
-            </div>
-          </div>
-
           {/* Clinical Files Section */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -742,9 +730,22 @@ export function CaseImportDialog({
               </span>
             </div>
             <div className="space-y-3">
-              {clinicalFileTypes.map((ft) => renderFileRow(ft, "blue"))}
+              {clinicalFileTypes.map((ft) => renderFileRow(ft))}
             </div>
           </div>
+
+          {/* Purchasing data pointer (PO/Invoice drop zones removed — H4) */}
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle className="text-sm">
+              Importing PO or Invoice history?
+            </AlertTitle>
+            <AlertDescription className="text-xs">
+              Purchasing data (PO History, Invoice History) affects rebates
+              and is handled by the Invoice import flow — use the import
+              option on the Invoices page instead of this dialog.
+            </AlertDescription>
+          </Alert>
 
           {/* Data Linking Info */}
           <Alert>

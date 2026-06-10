@@ -201,7 +201,10 @@ export async function ingestCaseProceduresCSV(
   let created = 0
   let failed = 0
   let caseStubsCreated = 0
+  let skippedDuplicates = 0
   const errors: string[] = []
+  // caseId → set of CPT codes already on the case (lazy-loaded).
+  const existingProcedureCodes = new Map<string, Set<string>>()
 
   for (const row of rows) {
     const caseNumber = get(row, mapping, "caseNumber")
@@ -240,6 +243,26 @@ export async function ingestCaseProceduresCSV(
         caseStubsCreated++
       }
 
+      // Re-import idempotency (audit M13): skip when this (caseId,
+      // cptCode) pair already exists — re-running the same file must
+      // not double up procedure rows. The cache also folds duplicate
+      // rows within one file (same CPT twice on a case is a dupe, not
+      // a second procedure — distinct procedures carry distinct CPTs).
+      let procCodes = existingProcedureCodes.get(caseRow.id)
+      if (!procCodes) {
+        const rows = await prisma.caseProcedure.findMany({
+          where: { caseId: caseRow.id },
+          select: { cptCode: true },
+        })
+        procCodes = new Set(rows.map((r) => r.cptCode))
+        existingProcedureCodes.set(caseRow.id, procCodes)
+      }
+      if (procCodes.has(cptCode)) {
+        skippedDuplicates++
+        continue
+      }
+      procCodes.add(cptCode)
+
       await prisma.caseProcedure.create({
         data: {
           caseId: caseRow.id,
@@ -247,6 +270,8 @@ export async function ingestCaseProceduresCSV(
         },
       })
       if (isPrimary) {
+        // auth-scope-scanner-skip: caseRow.id comes from the
+        // facility-scoped lookup/create directly above.
         await prisma.case.update({
           where: { id: caseRow.id },
           data: { primaryCptCode: cptCode },
@@ -268,6 +293,7 @@ export async function ingestCaseProceduresCSV(
       created,
       failed,
       caseStubsCreated,
+      skippedDuplicates,
       rowCount: rows.length,
       fileName: fileName ?? null,
     },
@@ -321,8 +347,18 @@ export async function ingestCaseSuppliesCSV(
 
   let created = 0
   let failed = 0
+  let skippedDuplicates = 0
   const errors: string[] = []
   const caseIdsTouched = new Set<string>()
+  // caseId → keys of supplies already in the DB before this run
+  // (lazy-loaded). Audit M13: re-import idempotency — skip rows that
+  // exactly match a PRE-EXISTING supply (caseId + vendorItemNo +
+  // extendedCost). Chosen over delete-and-replace-per-case because a
+  // facility may legitimately ingest several partial supply files that
+  // touch the same case; replacing would silently destroy rows from an
+  // earlier file. Rows created within THIS run are not added to the set,
+  // so duplicate lines inside one file (two identical implants) survive.
+  const existingSupplyKeys = new Map<string, Set<string>>()
 
   for (const row of rows) {
     const caseNumber = get(row, mapping, "caseNumber")
@@ -333,14 +369,16 @@ export async function ingestCaseSuppliesCSV(
 
     const materialName = get(row, mapping, "materialName") || "Unknown material"
     const vendorItemNo = get(row, mapping, "vendorItemNo") || null
-    const usedCost =
-      parseMoney(get(row, mapping, "usedCost")) ||
-      parseMoney(get(row, mapping, "unitCost"))
+    // Audit H7: track provenance. The old `usedCost || unitCost`
+    // fallback collapsed unitCost×qty to a bare unitCost — when the
+    // file has no Used Cost column, the line total is unit × qty.
+    const usedRaw = parseMoney(get(row, mapping, "usedCost"))
     const unitCost = parseMoney(get(row, mapping, "unitCost"))
     const quantity = Math.max(
       1,
       parseInt(get(row, mapping, "quantity") || "1", 10) || 1,
     )
+    const extCost = usedRaw > 0 ? usedRaw : unitCost * quantity
 
     try {
       // 2026-06-09 audit BLOCKER: facility-scoped lookup — the global
@@ -355,6 +393,10 @@ export async function ingestCaseSuppliesCSV(
           data: {
             caseNumber,
             facilityId,
+            // Audit L16 (honest placeholder): supply files carry no
+            // surgery date, so a stub case created here gets "today".
+            // The real date arrives when the patient-fields file for
+            // this caseNumber is ingested (upsert overwrites it).
             dateOfSurgery: new Date(),
           },
           select: { id: true },
@@ -362,7 +404,24 @@ export async function ingestCaseSuppliesCSV(
       }
       caseIdsTouched.add(caseRow.id)
 
-      const extCost = usedCost || unitCost * quantity
+      let supplyKeys = existingSupplyKeys.get(caseRow.id)
+      if (!supplyKeys) {
+        const existing = await prisma.caseSupply.findMany({
+          where: { caseId: caseRow.id },
+          select: { vendorItemNo: true, extendedCost: true },
+        })
+        supplyKeys = new Set(
+          existing.map(
+            (s) => `${s.vendorItemNo ?? ""}|${Number(s.extendedCost)}`,
+          ),
+        )
+        existingSupplyKeys.set(caseRow.id, supplyKeys)
+      }
+      if (supplyKeys.has(`${vendorItemNo ?? ""}|${extCost || 0}`)) {
+        skippedDuplicates++
+        continue
+      }
+
       await prisma.caseSupply.create({
         data: {
           caseId: caseRow.id,
@@ -386,10 +445,22 @@ export async function ingestCaseSuppliesCSV(
       where: { caseId },
       _sum: { extendedCost: true },
     })
-    const total = agg._sum.extendedCost ?? 0
+    const total = Number(agg._sum.extendedCost ?? 0)
+    // Audit M10: recompute margin in the SAME update that writes the new
+    // totalSpend (the old `margin: { decrement: 0 }` no-op left margin
+    // frozen at its pre-import value).
+    // auth-scope-scanner-skip: caseId comes from the facility-scoped
+    // lookup/create in the loop above.
+    const caseRecord = await prisma.case.findUnique({
+      where: { id: caseId },
+      select: { totalReimbursement: true },
+    })
+    const reimbursement = Number(caseRecord?.totalReimbursement ?? 0)
+    // auth-scope-scanner-skip: caseId comes from the facility-scoped
+    // lookup/create in the loop above.
     await prisma.case.update({
       where: { id: caseId },
-      data: { totalSpend: total, margin: { decrement: 0 } },
+      data: { totalSpend: total, margin: reimbursement - total },
     })
   }
 
@@ -400,6 +471,7 @@ export async function ingestCaseSuppliesCSV(
     metadata: {
       created,
       failed,
+      skippedDuplicates,
       casesTouched: caseIdsTouched.size,
       rowCount: rows.length,
       fileName: fileName ?? null,

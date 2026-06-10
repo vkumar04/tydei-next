@@ -28,15 +28,27 @@ vi.mock("@/lib/db", () => ({
       // 2026-06-09 audit BLOCKER fix: lookups are now keyed on the
       // compound unique facilityId_caseNumber (per-facility case
       // numbers). The mock matches BOTH columns, mirroring Postgres.
+      // Also accepts a plain { id } where for the M10 margin-rollup
+      // re-read (post-authorized, scanner-skip-commented in source).
       findUnique: vi.fn(
         async ({
           where,
         }: {
           where: {
-            facilityId_caseNumber: { facilityId: string; caseNumber: string }
+            id?: string
+            facilityId_caseNumber?: {
+              facilityId: string
+              caseNumber: string
+            }
           }
         }) => {
-          const { facilityId, caseNumber } = where.facilityId_caseNumber
+          if (where.id) {
+            const row = caseRows.find((r) => r.id === where.id)
+            return row
+              ? { totalReimbursement: row.totalReimbursement ?? 0 }
+              : null
+          }
+          const { facilityId, caseNumber } = where.facilityId_caseNumber!
           const row = caseRows.find(
             (r) => r.caseNumber === caseNumber && r.facilityId === facilityId,
           )
@@ -93,12 +105,27 @@ vi.mock("@/lib/db", () => ({
         procedureCreates.push(data)
         return { id: `proc-${procedureCreates.length}` }
       }),
+      // M13 idempotency: ingest pre-loads existing CPT codes per case.
+      findMany: vi.fn(async ({ where }: { where: { caseId: string } }) =>
+        procedureCreates
+          .filter((p) => p.caseId === where.caseId)
+          .map((p) => ({ cptCode: p.cptCode })),
+      ),
     },
     caseSupply: {
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         supplyCreates.push(data)
         return { id: `sup-${supplyCreates.length}` }
       }),
+      // M13 idempotency: ingest pre-loads existing supply keys per case.
+      findMany: vi.fn(async ({ where }: { where: { caseId: string } }) =>
+        supplyCreates
+          .filter((s) => s.caseId === where.caseId)
+          .map((s) => ({
+            vendorItemNo: (s.vendorItemNo as string | null) ?? null,
+            extendedCost: s.extendedCost,
+          })),
+      ),
       aggregate: vi.fn(async ({ where }: { where: { caseId: string } }) => {
         const sum = supplyCreates
           .filter((s) => s.caseId === where.caseId)
@@ -309,6 +336,31 @@ describe("ingestCaseProceduresCSV", () => {
     )
     expect(primaryUpdate).toBeDefined()
   })
+
+  it("is idempotent on re-import: duplicate (caseId, cptCode) pairs are skipped (audit M13)", async () => {
+    caseRows.push({ id: "case-1", caseNumber: "CASE-100", facilityId: "fac-test" })
+    caseIdCounter = 1
+
+    const mapping = {
+      caseNumber: "Case ID",
+      cptCode: "CPT Code",
+      isPrimary: "CPT Is Primary YN",
+      surgeryDate: "Date of Surgery",
+    }
+    const csv =
+      "Case ID,CPT Code,CPT Is Primary YN,Date of Surgery\n" +
+      "CASE-100,29881,Y,03/15/2026\n" +
+      "CASE-100,29882,N,03/15/2026\n"
+
+    vi.mocked(mapColumnsWithAI).mockResolvedValueOnce(mapping)
+    const first = await ingestCaseProceduresCSV(csv)
+    expect(first.created).toBe(2)
+
+    vi.mocked(mapColumnsWithAI).mockResolvedValueOnce(mapping)
+    const second = await ingestCaseProceduresCSV(csv)
+    expect(second.created).toBe(0)
+    expect(procedureCreates).toHaveLength(2)
+  })
 })
 
 // ─── ingestCaseSuppliesCSV ───────────────────────────────────────
@@ -373,7 +425,7 @@ describe("ingestCaseSuppliesCSV", () => {
     expect(caseRows).toHaveLength(1)
   })
 
-  it("falls back to unitCost (as-is) when usedCost mapping is missing (legacy behavior)", async () => {
+  it("falls back to unitCost × quantity when usedCost mapping is missing (audit H7)", async () => {
     caseRows.push({ id: "case-1", caseNumber: "CASE-100", facilityId: "fac-test" })
     caseIdCounter = 1
 
@@ -390,15 +442,62 @@ describe("ingestCaseSuppliesCSV", () => {
       "CASE-100,Item,25.00,4\n"
 
     await ingestCaseSuppliesCSV(csv)
-    // Quirk of the existing ingest: when usedCost mapping is missing,
-    // `usedCost = parseMoney(unitCost)` (not unitCost × quantity). Then
-    // `extCost = usedCost || unitCost × quantity` — the first branch wins
-    // because usedCost is truthy. Result: extCost = 25, NOT 100.
-    //
-    // This looks like a latent bug — consumers of the Supply rollup may
-    // under-count when the source CSV lacks a Used Cost column. Left
-    // locked-in here so any accidental change is surfaced explicitly.
-    expect(Number(supplyCreates[0].extendedCost)).toBe(25)
+    // Audit H7 fix: the legacy `usedCost || unitCost` fallback collapsed
+    // unitCost×qty to a bare unitCost (extCost = 25). Provenance is now
+    // tracked: no Used Cost column → line total = unit × qty = 100.
+    expect(Number(supplyCreates[0].extendedCost)).toBe(100)
+  })
+
+  it("is idempotent on re-import: exact duplicate supplies are skipped (audit M13)", async () => {
+    caseRows.push({ id: "case-1", caseNumber: "CASE-100", facilityId: "fac-test" })
+    caseIdCounter = 1
+
+    const mapping = {
+      caseNumber: "Case ID",
+      materialName: "Material Name",
+      vendorItemNo: "Catalog number",
+      unitCost: "Unit Cost",
+      quantity: "Quantity Used",
+    }
+    const csv =
+      "Case ID,Material Name,Catalog number,Unit Cost,Quantity Used\n" +
+      "CASE-100,Implant,SKU-1,100,2\n"
+
+    vi.mocked(mapColumnsWithAI).mockResolvedValueOnce(mapping)
+    const first = await ingestCaseSuppliesCSV(csv)
+    expect(first.created).toBe(1)
+
+    vi.mocked(mapColumnsWithAI).mockResolvedValueOnce(mapping)
+    const second = await ingestCaseSuppliesCSV(csv)
+    expect(second.created).toBe(0)
+    expect(supplyCreates).toHaveLength(1)
+  })
+
+  it("recomputes Case.margin together with totalSpend (audit M10)", async () => {
+    caseRows.push({
+      id: "case-1",
+      caseNumber: "CASE-100",
+      facilityId: "fac-test",
+      totalReimbursement: 5000,
+    })
+    caseIdCounter = 1
+
+    vi.mocked(mapColumnsWithAI).mockResolvedValueOnce({
+      caseNumber: "Case ID",
+      materialName: "Material Name",
+      unitCost: "Unit Cost",
+      quantity: "Quantity Used",
+    })
+
+    const csv =
+      "Case ID,Material Name,Unit Cost,Quantity Used\n" +
+      "CASE-100,Implant,100,2\n"
+
+    await ingestCaseSuppliesCSV(csv)
+    const rollup = caseUpdates.find((u) => u.id === "case-1")
+    expect(Number(rollup?.data.totalSpend)).toBe(200)
+    // margin = totalReimbursement − newTotal (not a `decrement: 0` no-op)
+    expect(Number(rollup?.data.margin)).toBe(4800)
   })
 
   it("prefers usedCost over unitCost × quantity when present", async () => {

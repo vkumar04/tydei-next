@@ -4,15 +4,16 @@
  *
  * Mocks prisma + requireFacility + audit. Verifies that the action scopes
  * to the active facility, wraps the pure helper correctly, and emits an
- * audit log. Note: Case currently has no payorType column in the schema,
- * so every case is classified as casesWithoutPayor until the model grows
- * one; the tests encode that contract explicitly.
+ * audit log. Audit M8: Case.payorClass is now selected and mapped onto
+ * the canonical payor-mix buckets via classifyPayorClass; cases without a
+ * payorClass remain under casesWithoutPayor.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 interface CaseRow {
   id: string
   facilityId: string
+  payorClass?: string | null
   totalReimbursement: number
 }
 
@@ -34,6 +35,7 @@ vi.mock("@/lib/db", () => ({
           return caseRows
             .filter((c) => c.facilityId === where.facilityId)
             .map((c) => ({
+              payorClass: c.payorClass ?? null,
               totalReimbursement: c.totalReimbursement,
             }))
         },
@@ -92,7 +94,7 @@ describe("getFacilityPayorMix", () => {
     expect(result.totalReimbursement).toBe(4000)
   })
 
-  it("classifies every case as casesWithoutPayor (no payorType on Case yet)", async () => {
+  it("classifies cases without a payorClass as casesWithoutPayor", async () => {
     caseRows = [
       { id: "c-1", facilityId: "fac-1", totalReimbursement: 100 },
       { id: "c-2", facilityId: "fac-1", totalReimbursement: 200 },
@@ -102,6 +104,23 @@ describe("getFacilityPayorMix", () => {
     // All shares stay 0 because totalClassifiedCases = 0.
     expect(result.shares.commercial).toBe(0)
     expect(result.shares.medicare).toBe(0)
+  })
+
+  it("maps Case.payorClass onto the canonical buckets (audit M8)", async () => {
+    caseRows = [
+      // Commercial-ish carriers group under "commercial" (mirrors
+      // getSurgeonScorecards' COMMERCIAL_PAYORS set).
+      { id: "c-1", facilityId: "fac-1", payorClass: "blue_cross", totalReimbursement: 100 },
+      { id: "c-2", facilityId: "fac-1", payorClass: "aetna", totalReimbursement: 200 },
+      { id: "c-3", facilityId: "fac-1", payorClass: "medicare", totalReimbursement: 300 },
+      { id: "c-4", facilityId: "fac-1", payorClass: null, totalReimbursement: 50 },
+    ]
+    const result = await getFacilityPayorMix()
+    expect(result.casesWithoutPayor).toBe(1)
+    expect(result.shares.commercial).toBeCloseTo(2 / 3, 5)
+    expect(result.shares.medicare).toBeCloseTo(1 / 3, 5)
+    expect(result.reimbursementByPayor.commercial).toBe(300)
+    expect(result.reimbursementByPayor.medicare).toBe(300)
   })
 
   it("only includes cases for the active facility", async () => {
@@ -114,9 +133,9 @@ describe("getFacilityPayorMix", () => {
     expect(result.totalReimbursement).toBe(100)
   })
 
-  it("projects only totalReimbursement from Case (no overfetch)", async () => {
+  it("projects only payorClass + totalReimbursement from Case (no overfetch)", async () => {
     await getFacilityPayorMix()
-    expect(lastSelect).toEqual({ totalReimbursement: true })
+    expect(lastSelect).toEqual({ payorClass: true, totalReimbursement: true })
   })
 
   it("emits a case_costing.payor_mix_viewed audit log", async () => {

@@ -318,11 +318,11 @@ const BASELINE_HITS = new Set<string>([
   // universe + union clause above the currentSpend cascade) shifted them.
   "lib/actions/contracts.ts:1546",
   "lib/actions/contracts.ts:1566",
-  // imports/case-costing-import.ts: facility-scoped via upstream batch.
-  // Bumped 2026-06-09 after the facility_caseNumber compound-unique fix
-  // added comment lines above these updates.
-  "lib/actions/imports/case-costing-import.ts:250",
-  "lib/actions/imports/case-costing-import.ts:390",
+  // imports/case-costing-import.ts: REMOVED from baseline 2026-06-09
+  // (case-costing audit batch) — the remaining by-id ops (primaryCptCode
+  // update, margin-rollup re-read + update) now carry inline
+  // auth-scope-scanner-skip comments; caseIds come from facility-scoped
+  // lookups/creates upstream.
   // invoices/dispute.ts: post-fetch facility equality check
   "lib/actions/invoices/dispute.ts:43",
   "lib/actions/invoices/dispute.ts:104",

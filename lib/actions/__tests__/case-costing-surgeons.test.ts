@@ -13,6 +13,7 @@ interface CaseRow {
   facilityId: string
   surgeonName: string | null
   primaryCptCode: string | null
+  payorClass?: string | null
   totalSpend: number
   totalReimbursement: number
 }
@@ -41,6 +42,8 @@ vi.mock("@/lib/db", () => ({
             if ("surgeonName" in select) projection.surgeonName = r.surgeonName
             if ("primaryCptCode" in select)
               projection.primaryCptCode = r.primaryCptCode
+            if ("payorClass" in select)
+              projection.payorClass = r.payorClass ?? null
             if ("totalSpend" in select) projection.totalSpend = r.totalSpend
             if ("totalReimbursement" in select)
               projection.totalReimbursement = r.totalReimbursement
@@ -198,9 +201,39 @@ describe("getSurgeonScorecardsForFacility", () => {
     expect(lastSelect).toEqual({
       surgeonName: true,
       primaryCptCode: true,
+      payorClass: true,
       totalSpend: true,
       totalReimbursement: true,
     })
+  })
+
+  it("maps Case.payorClass into payorMixScore (audit M8)", async () => {
+    caseRows = [
+      {
+        id: "c-1",
+        facilityId: "fac-1",
+        surgeonName: "Dr. A",
+        primaryCptCode: "27447",
+        payorClass: "blue_cross", // → commercial bucket
+        totalSpend: 500,
+        totalReimbursement: 1200,
+      },
+      {
+        id: "c-2",
+        facilityId: "fac-1",
+        surgeonName: "Dr. A",
+        primaryCptCode: "27447",
+        payorClass: "medicare",
+        totalSpend: 500,
+        totalReimbursement: 1200,
+      },
+    ]
+    const result = await getSurgeonScorecardsForFacility()
+    expect(result).toHaveLength(1)
+    // 2 distinct payor buckets, 1 commercial-ish → 50.
+    expect(result[0]!.totalPayors).toBe(2)
+    expect(result[0]!.commercialOrPrivatePayors).toBe(1)
+    expect(result[0]!.payorMixScore).toBe(50)
   })
 
   it("emits a case_costing.surgeons_viewed audit log with counts", async () => {

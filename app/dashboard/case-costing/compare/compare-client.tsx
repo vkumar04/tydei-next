@@ -166,7 +166,9 @@ function CompareSurgeonsContent({ facilityId }: { facilityId: string }) {
     return comparisonData.filter((d) => selectedSurgeons.includes(d.surgeonId))
   }, [comparisonData, selectedSurgeons])
 
-  // Facility benchmark (median of all surgeons for this procedure)
+  // Facility benchmark (mean of all surgeons for this procedure, plus
+  // 25th/75th percentile spend markers). Audit L21: this computes a
+  // MEAN, not a median — the comment/label used to say "median".
   const benchmark = useMemo(() => {
     if (comparisonData.length === 0) return null
     const sorted = [...comparisonData]

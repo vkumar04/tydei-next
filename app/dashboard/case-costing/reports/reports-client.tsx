@@ -116,7 +116,13 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
       return d.toISOString().slice(0, 10)
     })()
 
-  const { data: report, isLoading } = useCaseCostingReport(facilityId)
+  // Audit H5: the report action now honors the date-range picker — it
+  // previously ignored dateFrom entirely, so "Last Month" still summed
+  // all-time totals into the header cards.
+  const { data: report, isLoading } = useCaseCostingReport(
+    facilityId,
+    dateFrom ? { dateFrom } : undefined
+  )
   const { data: casesData } = useCases(facilityId, {
     pageSize: 500,
     ...(dateFrom ? { dateFrom } : {}),
@@ -125,6 +131,21 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
     useTrueMarginReport(facilityId, trueMarginPeriodStart, todayIso)
 
   const cases = casesData?.cases ?? []
+
+  // Audit M11: the Surgeon / Procedure dropdowns previously did nothing —
+  // every stats memo consumed the unfiltered list. Filter once here; the
+  // dropdown OPTION lists below intentionally use the unfiltered array so
+  // a selection doesn't collapse the available choices.
+  const filteredCases = useMemo(
+    () =>
+      cases.filter(
+        (c) =>
+          (selectedSurgeon === "all" || c.surgeonName === selectedSurgeon) &&
+          (selectedProcedure === "all" ||
+            c.primaryCptCode === selectedProcedure)
+      ),
+    [cases, selectedSurgeon, selectedProcedure]
+  )
 
   // ─── Surgeon Performance Data ──────────────────────────────────
   const surgeonStats = useMemo(() => {
@@ -138,7 +159,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
         compliant: number
       }
     >()
-    for (const c of cases) {
+    for (const c of filteredCases) {
       const name = c.surgeonName ?? "Unknown"
       const entry = map.get(name) ?? {
         cases: 0,
@@ -164,7 +185,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
         totalReimbursement: d.totalReimbursement,
       }))
       .sort((a, b) => b.totalSpend - a.totalSpend)
-  }, [cases])
+  }, [filteredCases])
 
   // ─── CPT Procedure Analysis Data ───────────────────────────────
   const cptStats = useMemo(() => {
@@ -172,7 +193,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
       string,
       { count: number; costs: number[] }
     >()
-    for (const c of cases) {
+    for (const c of filteredCases) {
       const code = c.primaryCptCode ?? "N/A"
       const entry = map.get(code) ?? { count: 0, costs: [] }
       entry.count++
@@ -192,7 +213,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
         }
       })
       .sort((a, b) => b.count - a.count)
-  }, [cases])
+  }, [filteredCases])
 
   // ─── Monthly Summary Table Data ────────────────────────────────
   const monthlySummary = useMemo(() => {
@@ -200,7 +221,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
       string,
       { cases: number; spend: number; reimbursement: number }
     >()
-    for (const c of cases) {
+    for (const c of filteredCases) {
       const month = c.dateOfSurgery.slice(0, 7)
       const entry = map.get(month) ?? { cases: 0, spend: 0, reimbursement: 0 }
       entry.cases++
@@ -217,7 +238,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
         reimbursement: d.reimbursement,
         margin: d.reimbursement - d.spend,
       }))
-  }, [cases])
+  }, [filteredCases])
 
   // ─── Rebate Contribution Data ──────────────────────────────────
   const rebateStats = useMemo(() => {
@@ -225,7 +246,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
       string,
       { cases: number; spend: number; compliant: number }
     >()
-    for (const c of cases) {
+    for (const c of filteredCases) {
       const name = c.surgeonName ?? "Unknown"
       const entry = map.get(name) ?? { cases: 0, spend: 0, compliant: 0 }
       entry.cases++
@@ -242,7 +263,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
         complianceRate: d.cases > 0 ? (d.compliant / d.cases) * 100 : 0,
       }))
       .sort((a, b) => b.estRebate - a.estRebate)
-  }, [cases])
+  }, [filteredCases])
 
   // 2026-06-09 audit BLOCKER: these three useMemos previously sat BELOW
   // the isLoading/!report early returns — first render mounted N hooks,
@@ -428,7 +449,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
               {report.totalCases.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
-              {cases.length} in selected range
+              {filteredCases.length} in selected range
             </p>
           </CardContent>
         </Card>
@@ -473,7 +494,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
       </div>
 
       {/* Cost Distribution Chart */}
-      <CostDistributionChart cases={cases} />
+      <CostDistributionChart cases={filteredCases} />
 
       {/* Report Tabs */}
       <Tabs

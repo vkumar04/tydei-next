@@ -48,6 +48,35 @@ const PAYOR_TYPES: readonly PayorType[] = [
   "other",
 ] as const
 
+/**
+ * Map a raw `Case.payorClass` value onto the canonical payor-mix buckets
+ * (audit M8). Mirrors the COMMERCIAL_PAYORS grouping in
+ * `lib/actions/cases.ts` `getSurgeonScorecards`: the named commercial
+ * carriers (blue_cross / aetna / united) all count as "commercial".
+ * Unknown non-empty classes fall into "other" so they still classify
+ * (rather than distorting the casesWithoutPayor count); null/blank → null.
+ */
+const COMMERCIAL_PAYOR_CLASSES = new Set([
+  "commercial",
+  "blue_cross",
+  "aetna",
+  "united",
+])
+
+export function classifyPayorClass(
+  payorClass: string | null | undefined,
+): PayorType | null {
+  if (!payorClass) return null
+  const cls = payorClass.trim().toLowerCase()
+  if (!cls) return null
+  if (COMMERCIAL_PAYOR_CLASSES.has(cls)) return "commercial"
+  if (cls === "medicare") return "medicare"
+  if (cls === "medicaid") return "medicaid"
+  if (cls === "private") return "private"
+  if (cls === "workers_comp" || cls === "workers comp") return "workers_comp"
+  return "other"
+}
+
 function emptyPayorRecord(): Record<PayorType, number> {
   return {
     commercial: 0,
