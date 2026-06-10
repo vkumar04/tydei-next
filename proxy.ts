@@ -40,16 +40,20 @@ export function proxy(request: NextRequest) {
   return response
 }
 
-// The matcher excludes /api/auth/, /api/webhooks/, and /api/health via
-// negative lookahead so the proxy isn't invoked for unauthenticated routes —
-// saves a function call per better-auth round-trip and per webhook delivery.
+// The matcher excludes /api/auth/, /api/webhooks/, /api/health, and
+// /api/cron/ via negative lookahead so the proxy isn't invoked for
+// unauthenticated routes — saves a function call per better-auth
+// round-trip and per webhook delivery.
 // /api/health MUST stay public: it's the Railway healthcheck (railway.toml),
 // and a 401 there would make the healthcheck never pass → deploys would hang.
+// /api/cron/ routes carry their own Bearer CRON_SECRET auth (and 404 when
+// the secret is unset) — the session-cookie proxy 401'd every scheduler
+// call before the route's own guard could run (2026-06-09).
 export const config = {
   matcher: [
     "/dashboard/:path*",
     "/vendor/:path*",
     "/admin/:path*",
-    "/api/((?!auth/|webhooks/|health).*)",
+    "/api/((?!auth/|webhooks/|health|cron/).*)",
   ],
 }
