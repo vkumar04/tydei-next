@@ -6,7 +6,12 @@ import { serialize } from "@/lib/serialize"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
-import { loadConfirmedCategoryMap } from "@/lib/categories/resolve"
+import {
+  loadConfirmedCategoryMap,
+  normalizeCategoryKey,
+} from "@/lib/categories/resolve"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -112,15 +117,21 @@ export async function getVendorMarketShare(input: {
   // (CLAUDE.md invariants table). Scope: vendor's facilities (or the
   // requested one), window bounded at NOW so future-dated COG rows don't
   // inflate the totals.
+  // 2026-06-09 audit: the requested facilityId must be one the vendor
+  // actually does business with — pre-fix a vendor could pass ANY
+  // facility's id and read its full per-category spend totals (the share
+  // denominators). Intersecting with the vendor's own COG facilities
+  // closes that while keeping the filter feature.
+  const vendorFacilityIds = (
+    await prisma.cOGRecord.findMany({
+      where: { vendorId },
+      select: { facilityId: true },
+      distinct: ["facilityId"],
+    })
+  ).map((r) => r.facilityId)
   const scopeFacilityIds = facilityId
-    ? [facilityId]
-    : (
-        await prisma.cOGRecord.findMany({
-          where: { vendorId },
-          select: { facilityId: true },
-          distinct: ["facilityId"],
-        })
-      ).map((r) => r.facilityId)
+    ? vendorFacilityIds.filter((id) => id === facilityId)
+    : vendorFacilityIds
 
   const dateWindow =
     dateFrom && dateTo
@@ -337,42 +348,51 @@ export async function getVendorPerformanceCategoryBreakdown(
   const prior12MoStart = new Date(trailing12MoStart)
   prior12MoStart.setMonth(prior12MoStart.getMonth() - 12)
 
-  const [currentRows, priorRows] = await Promise.all([
-    prisma.cOGRecord.groupBy({
-      by: ["category"],
+  // 2026-06-09 audit: the raw `groupBy(category)` split buckets across
+  // name variants ("Joints-Ortho" vs "Ortho-Joints") — the exact class
+  // the canonical-category invariant exists for, and the same fix the
+  // /vendor/market-share page already got. Apply the confirmed
+  // CategoryMapping remap first, then bucket by canonicalizeCategoryName,
+  // keeping the first-seen display label.
+  const [cogRows, confirmedMap] = await Promise.all([
+    prisma.cOGRecord.findMany({
       where: {
         vendorId,
-        transactionDate: { gte: trailing12MoStart, lte: now },
+        transactionDate: { gte: prior12MoStart, lte: now },
       },
-      _sum: { extendedPrice: true },
+      select: { category: true, extendedPrice: true, transactionDate: true },
     }),
-    prisma.cOGRecord.groupBy({
-      by: ["category"],
-      where: {
-        vendorId,
-        transactionDate: { gte: prior12MoStart, lt: trailing12MoStart },
-      },
-      _sum: { extendedPrice: true },
-    }),
+    loadConfirmedCategoryMap(),
   ])
 
-  const priorMap = new Map(
-    priorRows.map((r) => [r.category, Number(r._sum.extendedPrice ?? 0)]),
-  )
+  const buckets = new Map<
+    string,
+    { label: string; spend: number; priorSpend: number }
+  >()
+  for (const r of cogRows) {
+    const raw = (r.category ?? "").trim() || "Uncategorized"
+    const mapped = confirmedMap.get(normalizeCategoryKey(raw)) ?? raw
+    const key = canonicalizeCategoryName(mapped) || "uncategorized"
+    const bucket = buckets.get(key) ?? { label: mapped, spend: 0, priorSpend: 0 }
+    const amount = Number(r.extendedPrice ?? 0)
+    if (r.transactionDate && r.transactionDate >= trailing12MoStart) {
+      bucket.spend += amount
+    } else {
+      bucket.priorSpend += amount
+    }
+    buckets.set(key, bucket)
+  }
 
-  const rows = currentRows
-    .map((r) => {
-      const spend = Number(r._sum.extendedPrice ?? 0)
-      const priorSpend = priorMap.get(r.category) ?? 0
-      const pctOfPrior =
-        priorSpend > 0 ? Math.round((spend / priorSpend) * 1000) / 10 : null
-      return {
-        category: r.category ?? "Uncategorized",
-        spend,
-        priorSpend,
-        pctOfPrior,
-      }
-    })
+  const rows = Array.from(buckets.values())
+    .map((b) => ({
+      category: b.label,
+      spend: b.spend,
+      priorSpend: b.priorSpend,
+      pctOfPrior:
+        b.priorSpend > 0
+          ? Math.round((b.spend / b.priorSpend) * 1000) / 10
+          : null,
+    }))
     .filter((r) => r.spend > 0 || r.priorSpend > 0)
     .sort((a, b) => b.spend - a.spend)
 
@@ -464,6 +484,8 @@ export async function getVendorPerformanceTiers(
       facility: { select: { name: true } },
       terms: {
         select: {
+          // termType needed by the hasSpendDollarTierLadder gate below.
+          termType: true,
           tiers: {
             orderBy: { tierNumber: "asc" },
             select: {
@@ -503,6 +525,13 @@ export async function getVendorPerformanceTiers(
   for (const c of contracts) {
     const current = spendMap.get(c.id) ?? 0
     for (const term of c.terms) {
+      // 2026-06-09 audit: only spend-DOLLAR ladders belong here —
+      // market_share/compliance tiers store a PERCENT (0-100) in
+      // spendMin, so comparing dollar spend against them marked every
+      // percent tier trivially "achieved"; carve_out/tie_in placeholder
+      // tiers (rebateValue 0) are display noise. Same gate as the
+      // contract-detail Tier Achievement panel (CLAUDE.md invariants).
+      if (!hasSpendDollarTierLadder(term)) continue
       for (const t of term.tiers) {
         const threshold = Number(t.spendMin ?? 0)
         out.push({
@@ -607,11 +636,20 @@ export async function getVendorPerformanceContracts(
       targetSpend > 0 ? Math.min((actualSpend / targetSpend) * 100, 120) : 0
     const status: "on-track" | "exceeding" | "at-risk" =
       compliance >= 100 ? "exceeding" : compliance >= 90 ? "on-track" : "at-risk"
-    const rebatePaid = sumEarnedRebatesLifetime(
-      rebatesByContract.get(c.id) ?? [],
+    const contractRebates = rebatesByContract.get(c.id) ?? []
+    const rebatePaid = sumEarnedRebatesLifetime(contractRebates, now)
+    // 2026-06-09 audit: rate must compare LIKE windows — lifetime rebate
+    // over trailing-12mo spend overstated the effective rate (same mixed-
+    // window class fixed in getVendorPerformance). Numerator windowed to
+    // the same trailing 12 months as actualSpend; rebatePaid stays
+    // lifetime (it's the "paid to date" column).
+    const rebate12Mo = sumEarnedRebatesLifetime(
+      contractRebates.filter(
+        (r) => r.payPeriodEnd && r.payPeriodEnd >= trailing12MoStart,
+      ),
       now,
     )
-    const rebateRate = actualSpend > 0 ? (rebatePaid / actualSpend) * 100 : 0
+    const rebateRate = actualSpend > 0 ? (rebate12Mo / actualSpend) * 100 : 0
     return {
       id: c.id,
       name: c.name,

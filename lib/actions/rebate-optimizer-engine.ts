@@ -20,6 +20,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { serialize } from "@/lib/serialize"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import {
@@ -149,23 +150,51 @@ export async function getRebateOpportunities(): Promise<RebateOptimizerActionRes
   })
 
   // ── Vendor spend aggregates (COG) keyed by vendorId ──────────────
-  const vendorIds = Array.from(
-    new Set(contracts.map((c) => c.vendorId).filter(Boolean)),
+  //
+  // 2026-06-09 audit (two HIGHs):
+  //  1. WINDOW: the previous query summed LIFETIME COG. Tier ladders
+  //     evaluate over a period (typically annual), so multi-year data
+  //     overstated tier position and understated "spend $X to unlock"
+  //     gaps. Trailing 12 months matches the contracts-list canonical
+  //     currentSpend window.
+  //  2. GROUP-VENDOR DRIFT: grouped contracts earn on the whole vendor
+  //     set (additionalVendorIds), not just the primary vendorId —
+  //     bare-vendorId aggregation undercounted their spend. Each
+  //     contract's primary vendorId entry now carries the SUM over its
+  //     full contractVendorIds() set. (Two grouped contracts sharing a
+  //     primary vendor but different member sets would collide here —
+  //     last write wins; acceptable until the engine keys by contract.)
+  const now = new Date()
+  const trailing12MoStart = new Date(now)
+  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+
+  const allVendorIds = Array.from(
+    new Set(contracts.flatMap((c) => contractVendorIds(c))),
   )
-  const vendorSpendEntries: Array<[string, number]> = []
-  if (vendorIds.length > 0) {
+  const spendByVendor = new Map<string, number>()
+  if (allVendorIds.length > 0) {
     const spendRows = await prisma.cOGRecord.groupBy({
       by: ["vendorId"],
       where: {
         facilityId: facility.id,
-        vendorId: { in: vendorIds },
+        vendorId: { in: allVendorIds },
+        transactionDate: { gte: trailing12MoStart, lte: now },
       },
       _sum: { extendedPrice: true },
     })
     for (const row of spendRows) {
       if (!row.vendorId) continue
-      vendorSpendEntries.push([row.vendorId, Number(row._sum.extendedPrice ?? 0)])
+      spendByVendor.set(row.vendorId, Number(row._sum.extendedPrice ?? 0))
     }
+  }
+  const vendorSpendEntries: Array<[string, number]> = []
+  for (const c of contracts) {
+    if (!c.vendorId) continue
+    const groupSpend = contractVendorIds(c).reduce(
+      (sum, vid) => sum + (spendByVendor.get(vid) ?? 0),
+      0,
+    )
+    vendorSpendEntries.push([c.vendorId, groupSpend])
   }
   const vendorSpendMap: VendorSpendMap = new Map(vendorSpendEntries)
 

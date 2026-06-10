@@ -73,6 +73,11 @@ vi.mock("@/lib/db", () => ({
     rebate: {
       findMany: vi.fn(async () => rebateFindMany),
     },
+    // 2026-06-09: categoryBreakdown now applies the confirmed
+    // CategoryMapping remap before canonical bucketing.
+    categoryMapping: {
+      findMany: vi.fn(async () => []),
+    },
   },
 }))
 
@@ -141,33 +146,45 @@ describe("getVendorPerformance — radar axes default to null, not stubs", () =>
 })
 
 describe("getVendorPerformanceCategoryBreakdown — sourced from cOGRecord", () => {
-  it("groups vendor-scoped COG by category for trailing 12 mo with prior period as baseline", async () => {
-    cogGroupByCategory = [
-      { category: "Implants", _sum: { extendedPrice: 1000 } },
-      { category: "Disposables", _sum: { extendedPrice: 500 } },
-    ]
-    cogGroupByCategoryPrior = [
-      { category: "Implants", _sum: { extendedPrice: 800 } },
-      { category: "Equipment", _sum: { extendedPrice: 200 } },
-    ]
+  it("buckets vendor-scoped COG canonically for trailing 12 mo with prior period as baseline", async () => {
+    // 2026-06-09: the action now fetches rows and buckets via the
+    // canonical category pipeline (confirmed remap + canonicalize) —
+    // raw groupBy split name variants into separate buckets. "implants"
+    // (lower case) must merge into "Implants".
+    const now = new Date()
+    const monthsAgo = (n: number) => {
+      const d = new Date(now)
+      d.setMonth(d.getMonth() - n)
+      return d
+    }
+    cogFindMany = [
+      { category: "Implants", transactionDate: monthsAgo(2), extendedPrice: 600 },
+      { category: "implants", transactionDate: monthsAgo(3), extendedPrice: 400 },
+      { category: "Disposables", transactionDate: monthsAgo(1), extendedPrice: 500 },
+      { category: "Implants", transactionDate: monthsAgo(18), extendedPrice: 800 },
+      { category: "Equipment", transactionDate: monthsAgo(20), extendedPrice: 200 },
+    ] as unknown as CogRow[]
     const { getVendorPerformanceCategoryBreakdown } = await import(
       "@/lib/actions/vendor-analytics"
     )
     const rows = await getVendorPerformanceCategoryBreakdown("v-stryker")
-    expect(rows).toHaveLength(2)
+    // Implants (merged variants), Disposables, Equipment (prior-only —
+    // the old groupBy implementation silently dropped prior-only
+    // categories; they now surface with spend 0).
+    expect(rows).toHaveLength(3)
     expect(rows[0]).toEqual({
       category: "Implants",
       spend: 1000,
       priorSpend: 800,
       pctOfPrior: 125,
     })
-    // Disposables: no prior comparator → pctOfPrior null
     expect(rows[1].pctOfPrior).toBeNull()
+    expect(rows[2]).toMatchObject({ category: "Equipment", spend: 0 })
     // Filter is vendorId-scoped (canonical per CLAUDE.md).
     const { prisma } = (await import("@/lib/db")) as unknown as {
-      prisma: { cOGRecord: { groupBy: ReturnType<typeof vi.fn> } }
+      prisma: { cOGRecord: { findMany: ReturnType<typeof vi.fn> } }
     }
-    const call = prisma.cOGRecord.groupBy.mock.calls[0][0] as {
+    const call = prisma.cOGRecord.findMany.mock.calls[0][0] as {
       where: { vendorId?: string }
     }
     expect(call.where.vendorId).toBe("v-stryker")
@@ -185,6 +202,7 @@ describe("getVendorPerformanceTiers — rebateValue scaled by 100 at the boundar
         facility: { name: "Lighthouse" },
         terms: [
           {
+            termType: "spend_rebate",
             tiers: [
               {
                 tierNumber: 1,
