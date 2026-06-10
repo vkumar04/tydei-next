@@ -29,6 +29,7 @@ type ValidationLineItem = {
   contractPrice: number | null
   variancePercent: number | null
   isFlagged: boolean
+  notes: string | null
   hasDiscrepancy: boolean
 }
 
@@ -323,7 +324,17 @@ export function InvoiceValidationDetail({
                       </TableCell>
                       <TableCell>
                         {li.isFlagged ? (
-                          <Badge variant="destructive">Flagged</Badge>
+                          <div className="space-y-1">
+                            <Badge variant="destructive">Flagged</Badge>
+                            {li.notes && (
+                              <p
+                                className="max-w-[200px] text-xs text-muted-foreground whitespace-pre-wrap"
+                                title={li.notes}
+                              >
+                                {li.notes}
+                              </p>
+                            )}
+                          </div>
                         ) : li.hasDiscrepancy ? (
                           <AlertTriangle className="size-4 text-amber-500" />
                         ) : (

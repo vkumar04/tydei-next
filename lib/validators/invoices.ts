@@ -15,6 +15,17 @@ export const importInvoiceSchema = z.object({
   invoiceNumber: z.string().min(1, "Invoice number is required"),
   invoiceDate: z.string().min(1, "Invoice date is required"),
   purchaseOrderId: z.string().optional(),
+  /**
+   * PO number to link — resolved server-side via facility-scoped lookup.
+   * Used by the manual-entry dialog (which collects a number, not an id).
+   */
+  poNumber: z.string().optional(),
+  // Header-level adjustments. totalInvoiceCost is computed server-side as
+  // lineSum + taxAmount + shippingAmount − discountAmount.
+  taxAmount: z.number().min(0).optional(),
+  shippingAmount: z.number().min(0).optional(),
+  discountAmount: z.number().min(0).optional(),
+  notes: z.string().max(2000).optional(),
   lineItems: z.array(invoiceLineItemSchema).min(1, "At least one line item is required"),
 })
 

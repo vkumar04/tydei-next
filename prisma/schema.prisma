@@ -1529,6 +1529,14 @@ model Invoice {
   purchaseOrderId  String?
   invoiceDate      DateTime @db.Date
   totalInvoiceCost Decimal? @db.Decimal(14, 2)
+  // 2026-06-10 invoices batch: header-level adjustments captured by the
+  // manual-entry dialog (and OCR/EDI extracts). totalInvoiceCost =
+  // sum(lineItems.totalLineCost) + taxAmount + shippingAmount − discountAmount.
+  taxAmount        Decimal  @default(0) @db.Decimal(12, 2)
+  shippingAmount   Decimal  @default(0) @db.Decimal(12, 2)
+  discountAmount   Decimal  @default(0) @db.Decimal(12, 2)
+  // Free-form notes / special instructions (manual entry + vendor submit).
+  notes            String?
   status           String   @default("pending")
   disputeStatus    InvoiceDisputeStatus @default(none)
   disputeNote      String?
@@ -1556,6 +1564,9 @@ model InvoiceLineItem {
   contractPrice        Decimal? @db.Decimal(12, 2)
   variancePercent      Decimal? @db.Decimal(5, 2)
   isFlagged            Boolean  @default(false)
+  // 2026-06-10 invoices batch: dispute notes from the line-item
+  // DisputeDialog — previously collected in the UI and dropped.
+  notes                String?
   createdAt            DateTime @default(now())
 
   invoice       Invoice               @relation(fields: [invoiceId], references: [id], onDelete: Cascade)

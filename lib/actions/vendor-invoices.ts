@@ -57,6 +57,8 @@ export async function submitVendorInvoice(input: SubmitVendorInvoiceInput) {
       vendorId: vendor.id,
       invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : new Date(),
       totalInvoiceCost: data.totalAmount,
+      // Previously validated by submitVendorInvoiceSchema then dropped.
+      notes: data.notes?.trim() || null,
       status: "submitted",
       // Vendor-submitted invoices start without line items; the facility
       // can request line-item detail during validation.

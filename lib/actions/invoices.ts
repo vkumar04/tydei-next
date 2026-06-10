@@ -239,9 +239,10 @@ export async function importInvoice(input: ImportInvoiceInput) {
   // by another facility OR attach a foreign PO id.
   const { facility, user } = await requireFacility()
   const data = importInvoiceSchema.parse(input)
-  if (data.purchaseOrderId) {
+  let purchaseOrderId = data.purchaseOrderId
+  if (purchaseOrderId) {
     const po = await prisma.purchaseOrder.findUnique({
-      where: { id: data.purchaseOrderId },
+      where: { id: purchaseOrderId },
       select: { facilityId: true, vendorId: true },
     })
     if (!po || po.facilityId !== facility.id) {
@@ -251,21 +252,52 @@ export async function importInvoice(input: ImportInvoiceInput) {
     if (data.vendorId && po.vendorId !== data.vendorId) {
       throw new Error("PO belongs to a different vendor")
     }
+  } else if (data.poNumber?.trim()) {
+    // Manual-entry dialog collects a PO *number*; resolve it to the
+    // facility's PurchaseOrder. (poNumber is unique per facility as of
+    // migration 20260610030000.) Same vendor guard as the by-id path —
+    // an honest error beats silently dropping the link.
+    const poNumber = data.poNumber.trim()
+    const po = await prisma.purchaseOrder.findFirst({
+      where: { facilityId: facility.id, poNumber },
+      select: { id: true, vendorId: true },
+    })
+    if (!po) {
+      throw new Error(
+        `Purchase order "${poNumber}" was not found for this facility. Clear the PO Number field to import without a PO link.`
+      )
+    }
+    if (data.vendorId && po.vendorId !== data.vendorId) {
+      throw new Error(`PO "${poNumber}" belongs to a different vendor`)
+    }
+    purchaseOrderId = po.id
   }
 
-  const totalCost = data.lineItems.reduce(
+  const lineSum = data.lineItems.reduce(
     (sum, item) => sum + item.invoicePrice * item.invoiceQuantity,
     0
   )
+  const taxAmount = data.taxAmount ?? 0
+  const shippingAmount = data.shippingAmount ?? 0
+  const discountAmount = data.discountAmount ?? 0
+  // Round to cents — float sums like 0.1 + 0.2 must not leak into a
+  // Decimal(14,2) column via Prisma's exact-decimal validation.
+  const totalCost =
+    Math.round((lineSum + taxAmount + shippingAmount - discountAmount) * 100) /
+    100
 
   const invoice = await prisma.invoice.create({
     data: {
       invoiceNumber: data.invoiceNumber,
       facilityId: facility.id,
       vendorId: data.vendorId,
-      purchaseOrderId: data.purchaseOrderId,
+      purchaseOrderId,
       invoiceDate: new Date(data.invoiceDate),
       totalInvoiceCost: totalCost,
+      taxAmount,
+      shippingAmount,
+      discountAmount,
+      notes: data.notes?.trim() || null,
       status: "pending",
       lineItems: {
         create: data.lineItems.map((item) => ({
@@ -273,7 +305,8 @@ export async function importInvoice(input: ImportInvoiceInput) {
           vendorItemNo: item.vendorItemNo,
           invoicePrice: item.invoicePrice,
           invoiceQuantity: item.invoiceQuantity,
-          totalLineCost: item.invoicePrice * item.invoiceQuantity,
+          totalLineCost:
+            Math.round(item.invoicePrice * item.invoiceQuantity * 100) / 100,
         })),
       },
     },
@@ -380,6 +413,7 @@ async function computeInvoiceValidation(id: string, facilityId: string) {
       contractPrice,
       variancePercent: variance !== null ? Math.round(variance * 100) / 100 : null,
       isFlagged: li.isFlagged,
+      notes: li.notes,
       hasDiscrepancy: variance !== null && Math.abs(variance) > 5,
     }
   })
@@ -483,10 +517,13 @@ export async function approveInvoice(invoiceId: string) {
 export async function flagInvoiceLineItem(lineItemId: string, notes?: string) {
   const { facility } = await requireFacility()
 
-  // Verify line item belongs to this facility's invoice
+  // Verify line item belongs to this facility's invoice.
+  // Notes from the DisputeDialog are persisted (previously dropped);
+  // an empty/whitespace note leaves any existing note untouched.
+  const trimmed = notes?.trim()
   await prisma.invoiceLineItem.update({
     where: { id: lineItemId, invoice: { facilityId: facility.id } },
-    data: { isFlagged: true },
+    data: { isFlagged: true, ...(trimmed ? { notes: trimmed } : {}) },
   })
 }
 

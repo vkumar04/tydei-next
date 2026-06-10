@@ -331,8 +331,10 @@ const BASELINE_HITS = new Set<string>([
   // (invoices.ts:325 removed 2026-06-09 — validateInvoice's render-time
   // line-item write moved into revalidateInvoice, which carries an
   // explicit auth-scope-scanner-skip on its facility-scoped update.)
-  "lib/actions/invoices.ts:243",
-  "lib/actions/invoices.ts:507",
+  // (lines bumped 2026-06-10 — importInvoice gained the poNumber→PO
+  // resolution path + header totals, shifting the file down.)
+  "lib/actions/invoices.ts:244",
+  "lib/actions/invoices.ts:544",
   // payor-contracts.ts: FIXED 2026-06-09 (audit BLOCKER) — the
   // calculatePayorMargins read is now facility-scoped (findFirstOrThrow
   // with facilityId).
