@@ -5,16 +5,16 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
-  Copy,
-  Download,
   Eye,
   FileText,
   MoreHorizontal,
   Package,
   Send,
   XCircle,
+  type LucideIcon,
 } from "lucide-react"
 import type { POStatus } from "@/lib/generated/prisma/client"
+import { PO_STATUS_FLOW, isPOStatus } from "@/lib/purchase-orders/status-flow"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -28,13 +28,23 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { poStatusConfig } from "@/lib/constants"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
+
+// H4 (2026-06-09 audit): the menu derives its transition options from the
+// canonical PO_STATUS_FLOW map — this is presentation metadata only.
+const STATUS_ACTION_META: Record<POStatus, { label: string; icon: LucideIcon }> = {
+  draft: { label: "Move to Draft", icon: FileText },
+  pending: { label: "Submit for Approval", icon: FileText },
+  approved: { label: "Approve", icon: CheckCircle2 },
+  sent: { label: "Send to Vendor", icon: Send },
+  completed: { label: "Mark Completed", icon: CheckCircle2 },
+  cancelled: { label: "Cancel PO", icon: XCircle },
+}
 
 export interface POTableRow {
   id: string
@@ -115,7 +125,8 @@ export function POTable({ orders, isLoading, onUpdateStatus }: POTableProps) {
             <TableCell>
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                {formatDate(po.orderDate)}
+                {/* M6: orderDate is a @db.Date — UTC-pinned formatter */}
+                {formatCalendarDate(po.orderDate)}
               </div>
             </TableCell>
             <TableCell>
@@ -144,59 +155,34 @@ export function POTable({ orders, isLoading, onUpdateStatus }: POTableProps) {
                     View Details
                   </DropdownMenuItem>
                   {po.status === "draft" && (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          router.push(`/dashboard/purchase-orders/${po.id}`)
-                        }
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        Edit Draft
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          onUpdateStatus(po.id, "sent" as POStatus)
-                        }
-                      >
-                        <Send className="mr-2 h-4 w-4" />
-                        Send to Vendor
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {(po.status === "sent" || po.status === "approved") && (
                     <DropdownMenuItem
                       onClick={() =>
-                        onUpdateStatus(po.id, "completed" as POStatus)
+                        router.push(`/dashboard/purchase-orders/${po.id}`)
                       }
                     >
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Mark Completed
+                      <FileText className="mr-2 h-4 w-4" />
+                      Edit Draft
                     </DropdownMenuItem>
                   )}
-                  {po.status !== "completed" && po.status !== "cancelled" && (
-                    <DropdownMenuItem
-                      onClick={() =>
-                        onUpdateStatus(po.id, "cancelled" as POStatus)
-                      }
-                      className="text-destructive"
-                    >
-                      <XCircle className="mr-2 h-4 w-4" />
-                      Cancel PO
-                    </DropdownMenuItem>
+                  {/* H4: transition options come from the canonical map */}
+                  {(isPOStatus(po.status) ? PO_STATUS_FLOW[po.status] : []).map(
+                    (next) => {
+                      const meta = STATUS_ACTION_META[next]
+                      const Icon = meta.icon
+                      return (
+                        <DropdownMenuItem
+                          key={next}
+                          onClick={() => onUpdateStatus(po.id, next)}
+                          className={
+                            next === "cancelled" ? "text-destructive" : undefined
+                          }
+                        >
+                          <Icon className="mr-2 h-4 w-4" />
+                          {meta.label}
+                        </DropdownMenuItem>
+                      )
+                    },
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() =>
-                      router.push(`/dashboard/purchase-orders/new?from=${po.id}`)
-                    }
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Duplicate
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download PDF
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </TableCell>

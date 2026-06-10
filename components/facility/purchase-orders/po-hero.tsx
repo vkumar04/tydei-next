@@ -34,8 +34,12 @@ export function POHero({
   totalValue,
   isLoading,
 }: POHeroProps) {
+  // H2 (2026-06-09 audit): compute the share from the same two server-stat
+  // inputs (on + off) rather than mixing a page-row reduce with the server
+  // total, which disagreed once the list was paginated.
+  const spendTotal = onContractSpend + offContractSpend
   const offContractShare =
-    totalValue > 0 ? Math.round((offContractSpend / totalValue) * 100) : 0
+    spendTotal > 0 ? Math.round((offContractSpend / spendTotal) * 100) : 0
 
   return (
     <section className="rounded-xl border bg-card p-6 shadow-sm sm:p-8">
@@ -88,7 +92,7 @@ export function POHero({
           label="Off-Contract Spend"
           value={isLoading ? null : formatCurrency(offContractSpend)}
           sublabel={
-            totalValue > 0
+            spendTotal > 0
               ? `${offContractShare}% of lifetime spend`
               : "No spend yet"
           }

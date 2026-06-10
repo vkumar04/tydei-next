@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { formatCurrency, formatDate } from "@/lib/formatting"
-import { MoreHorizontal, Eye, Download, Building2 } from "lucide-react"
+import { MoreHorizontal, Eye, Building2 } from "lucide-react"
 import { poStatusConfig } from "./types"
 import type { VendorPORow } from "./types"
 
@@ -66,7 +66,11 @@ export function POTable({ data, isLoading, onViewPO }: POTableProps) {
       },
       {
         accessorKey: "receivedDate",
-        header: "Received Date",
+        // L16: only populated when the PO is completed, and it's the
+        // completion timestamp (updatedAt), not a delivery receipt —
+        // labeled honestly. As a real timestamp it keeps the local-tz
+        // formatDate (formatCalendarDate is only for @db.Date columns).
+        header: "Completed",
         cell: ({ row }) =>
           row.original.receivedDate ? formatDate(row.original.receivedDate) : "—",
       },
@@ -88,10 +92,6 @@ export function POTable({ data, isLoading, onViewPO }: POTableProps) {
               >
                 <Eye className="mr-2 h-4 w-4" />
                 View Details
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Download className="mr-2 h-4 w-4" />
-                Download PDF
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

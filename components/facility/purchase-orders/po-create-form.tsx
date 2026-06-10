@@ -5,6 +5,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
 import { useCreatePurchaseOrder, useProductSearch } from "@/hooks/use-purchase-orders"
+import { searchProducts } from "@/lib/actions/purchase-orders"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import { toast } from "sonner"
 import type { POLineItemInput } from "@/lib/validators/purchase-orders"
 
@@ -172,7 +174,8 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
 
   const addSelectedProduct = useCallback(() => {
     if (!selectedResult) return
-    const price = selectedResult.contractPrice ?? 0
+    // M14: fall back to list price before defaulting to $0.
+    const price = selectedResult.contractPrice ?? selectedResult.listPrice ?? 0
     setLineItems((prev) => [
       ...prev,
       {
@@ -194,31 +197,53 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
     toast.success("Product added", { description: selectedResult.description })
   }, [selectedResult, addQuantity])
 
+  // M14 (2026-06-09 audit): real catalog lookup via searchProducts instead
+  // of a setTimeout stub that added a $0 line for any scanned string.
   const handleScanLookup = useCallback(async () => {
-    if (!skuScanInput.trim()) return
+    const scanned = skuScanInput.trim()
+    if (!scanned) return
     setIsLookingUp(true)
-    // Simulate lookup delay, then add item with the scanned SKU
-    await new Promise((r) => setTimeout(r, 400))
-
-    // Add to line items with the scanned value as vendorItemNo
-    setLineItems((prev) => [
-      ...prev,
-      {
-        _id: `scan-${Date.now()}`,
-        inventoryDescription: skuScanInput.trim(),
-        vendorItemNo: skuScanInput.trim(),
-        quantity: 1,
-        unitPrice: 0,
-        uom: "EA",
-        isOffContract: false,
-        lotNumber: "",
-        serialNumber: "",
-      },
-    ])
-    toast.success("Item added from scan", { description: "Enter price and Lot/Serial" })
-    setSkuScanInput("")
-    setIsLookingUp(false)
-  }, [skuScanInput])
+    try {
+      const results = await searchProducts({
+        facilityId,
+        query: scanned,
+        vendorId: vendorId || undefined,
+      })
+      // Prefer an exact (normalized) SKU match; otherwise take the top hit.
+      const scannedKey = normalizeSku(scanned)
+      const match =
+        results.find((r) => normalizeSku(r.vendorItemNo) === scannedKey) ??
+        results[0]
+      if (!match) {
+        toast.error("No product found", {
+          description: `No catalog match for "${scanned}"`,
+        })
+        return
+      }
+      setLineItems((prev) => [
+        ...prev,
+        {
+          _id: `scan-${Date.now()}`,
+          inventoryDescription: match.description,
+          vendorItemNo: match.vendorItemNo,
+          quantity: 1,
+          unitPrice: match.contractPrice ?? match.listPrice ?? 0,
+          uom: match.uom || "EA",
+          isOffContract: false,
+          lotNumber: "",
+          serialNumber: "",
+        },
+      ])
+      toast.success("Product added from scan", { description: match.description })
+      setSkuScanInput("")
+    } catch (err) {
+      toast.error("Scan lookup failed", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      })
+    } finally {
+      setIsLookingUp(false)
+    }
+  }, [skuScanInput, facilityId, vendorId])
 
   const handleSkuScanKeyPress = useCallback(
     (e: React.KeyboardEvent) => {
@@ -311,14 +336,19 @@ export function POCreateDialog({ facilityId, vendors, open, onOpenChange }: POCr
         toast.error("Please select a vendor")
         return
       }
+      // H5 (2026-06-09 audit): asDraft was silently ignored — every PO was
+      // created as a draft regardless of which button was clicked.
       await create.mutateAsync({
         facilityId,
         vendorId,
         orderDate,
+        submit: !asDraft,
         lineItems: lineItems.map(({ _id, lotNumber, serialNumber, ...rest }) => rest),
       })
       if (asDraft) {
         toast.success("PO saved as draft")
+      } else {
+        toast.success("PO submitted", { description: "Sent to vendor" })
       }
       resetForm()
       onOpenChange(false)

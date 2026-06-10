@@ -17,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { PO_STATUSES } from "@/lib/purchase-orders/status-flow"
+import { poStatusConfig } from "./types"
 
 /**
  * Horizontal control bar for the vendor PO list. Top-level status tabs
@@ -41,18 +43,17 @@ export interface VendorPOControlBarProps {
   onAddPO: () => void
 }
 
+// M10 (2026-06-09 audit): options are derived from the real POStatus enum
+// values (via the canonical status-flow module) — the old hand-rolled list
+// carried phantom statuses (pending_approval, acknowledged, processing,
+// shipped, fulfilled, rejected) that never exist in the DB and matched
+// nothing when selected.
 const STATUS_OPTIONS: { label: string; value: string }[] = [
   { label: "All Statuses", value: "all" },
-  { label: "Pending Approval", value: "pending_approval" },
-  { label: "Approved", value: "approved" },
-  { label: "Acknowledged", value: "acknowledged" },
-  { label: "Processing", value: "processing" },
-  { label: "Sent", value: "sent" },
-  { label: "Shipped", value: "shipped" },
-  { label: "Fulfilled", value: "fulfilled" },
-  { label: "Completed", value: "completed" },
-  { label: "Rejected", value: "rejected" },
-  { label: "Cancelled", value: "cancelled" },
+  ...PO_STATUSES.map((s) => ({
+    label: poStatusConfig[s]?.label ?? s,
+    value: s,
+  })),
 ]
 
 export function VendorPOControlBar({

@@ -14382,11 +14382,21 @@ export const PurchaseOrderOrderByWithRelationInputSchema: z.ZodType<Prisma.Purch
   invoices: z.lazy(() => InvoiceOrderByRelationAggregateInputSchema).optional(),
 });
 
-export const PurchaseOrderWhereUniqueInputSchema: z.ZodType<Prisma.PurchaseOrderWhereUniqueInput> = z.object({
-  id: z.cuid(),
-})
+export const PurchaseOrderWhereUniqueInputSchema: z.ZodType<Prisma.PurchaseOrderWhereUniqueInput> = z.union([
+  z.object({
+    id: z.cuid(),
+    facilityId_poNumber: z.lazy(() => PurchaseOrderFacilityIdPoNumberCompoundUniqueInputSchema),
+  }),
+  z.object({
+    id: z.cuid(),
+  }),
+  z.object({
+    facilityId_poNumber: z.lazy(() => PurchaseOrderFacilityIdPoNumberCompoundUniqueInputSchema),
+  }),
+])
 .and(z.strictObject({
   id: z.cuid().optional(),
+  facilityId_poNumber: z.lazy(() => PurchaseOrderFacilityIdPoNumberCompoundUniqueInputSchema).optional(),
   AND: z.union([ z.lazy(() => PurchaseOrderWhereInputSchema), z.lazy(() => PurchaseOrderWhereInputSchema).array() ]).optional(),
   OR: z.lazy(() => PurchaseOrderWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => PurchaseOrderWhereInputSchema), z.lazy(() => PurchaseOrderWhereInputSchema).array() ]).optional(),
@@ -27655,6 +27665,11 @@ export const POLineItemListRelationFilterSchema: z.ZodType<Prisma.POLineItemList
 
 export const POLineItemOrderByRelationAggregateInputSchema: z.ZodType<Prisma.POLineItemOrderByRelationAggregateInput> = z.strictObject({
   _count: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const PurchaseOrderFacilityIdPoNumberCompoundUniqueInputSchema: z.ZodType<Prisma.PurchaseOrderFacilityIdPoNumberCompoundUniqueInput> = z.strictObject({
+  facilityId: z.string(),
+  poNumber: z.string(),
 });
 
 export const PurchaseOrderCountOrderByAggregateInputSchema: z.ZodType<Prisma.PurchaseOrderCountOrderByAggregateInput> = z.strictObject({

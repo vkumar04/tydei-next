@@ -1,5 +1,6 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
@@ -9,6 +10,7 @@ import {
   type CreatePOInput,
   type POFilters,
 } from "@/lib/validators/purchase-orders"
+import { canTransitionPOStatus } from "@/lib/purchase-orders/status-flow"
 import type { POStatus, Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
@@ -53,27 +55,56 @@ export async function getPOStats(_facilityId?: string) {
 
   const facilityWhere: Prisma.PurchaseOrderWhereInput = { facilityId: facility.id }
 
-  const [totalCount, pendingCount, totalValueAgg, totalItemsAgg] =
-    await Promise.all([
-      prisma.purchaseOrder.count({ where: facilityWhere }),
-      prisma.purchaseOrder.count({
-        where: { ...facilityWhere, status: "pending" },
-      }),
-      prisma.purchaseOrder.aggregate({
-        where: facilityWhere,
-        _sum: { totalCost: true },
-      }),
-      prisma.pOLineItem.aggregate({
-        where: { purchaseOrder: facilityWhere },
-        _sum: { quantity: true },
-      }),
-    ])
+  // H2 (2026-06-09 audit): the list page used to reduce hero KPIs and tab
+  // counts over the fetched page rows, silently truncating once a facility
+  // had more than one page of POs. All aggregates are now server-side:
+  // on/off-contract spend + counts (on-contract = contractId != null) and
+  // per-status counts.
+  const [onAgg, offAgg, statusGroups, totalItemsAgg] = await Promise.all([
+    prisma.purchaseOrder.aggregate({
+      where: { ...facilityWhere, contractId: { not: null } },
+      _sum: { totalCost: true },
+      _count: { _all: true },
+    }),
+    prisma.purchaseOrder.aggregate({
+      where: { ...facilityWhere, contractId: null },
+      _sum: { totalCost: true },
+      _count: { _all: true },
+    }),
+    prisma.purchaseOrder.groupBy({
+      by: ["status"],
+      where: facilityWhere,
+      _count: { _all: true },
+    }),
+    prisma.pOLineItem.aggregate({
+      where: { purchaseOrder: facilityWhere },
+      _sum: { quantity: true },
+    }),
+  ])
+
+  const statusCounts: Record<POStatus, number> = {
+    draft: 0,
+    pending: 0,
+    approved: 0,
+    sent: 0,
+    completed: 0,
+    cancelled: 0,
+  }
+  for (const g of statusGroups) statusCounts[g.status] = g._count._all
+
+  const onContractSpend = Number(onAgg._sum.totalCost ?? 0)
+  const offContractSpend = Number(offAgg._sum.totalCost ?? 0)
 
   return serialize({
-    totalPOs: totalCount,
-    pendingApproval: pendingCount,
-    totalValue: Number(totalValueAgg._sum.totalCost ?? 0),
+    totalPOs: onAgg._count._all + offAgg._count._all,
+    pendingApproval: statusCounts.pending,
+    totalValue: onContractSpend + offContractSpend,
     totalItems: Number(totalItemsAgg._sum.quantity ?? 0),
+    onContractSpend,
+    offContractSpend,
+    onContractCount: onAgg._count._all,
+    offContractCount: offAgg._count._all,
+    statusCounts,
   })
 }
 
@@ -128,8 +159,14 @@ export async function createPurchaseOrder(input: CreatePOInput) {
     if (item.contractId) contractIds.add(item.contractId)
   }
   if (contractIds.size > 0) {
+    // M12 (2026-06-09 audit): use the canonical ownership helper so
+    // multi-facility contracts shared via the ContractFacility join are
+    // accepted, not just primary-facility contracts.
     const owned = await prisma.contract.count({
-      where: { id: { in: Array.from(contractIds) }, facilityId: facility.id },
+      where: {
+        id: { in: Array.from(contractIds) },
+        ...contractsOwnedByFacility(facility.id),
+      },
     })
     if (owned !== contractIds.size) {
       throw new Error(
@@ -170,37 +207,65 @@ export async function createPurchaseOrder(input: CreatePOInput) {
     0
   )
 
-  const count = await prisma.purchaseOrder.count({
-    where: { facilityId: facility.id },
-  })
-  const poNumber = `PO-${String(count + 1).padStart(5, "0")}`
-
-  const po = await prisma.purchaseOrder.create({
-    data: {
-      poNumber,
-      facilityId: facility.id,
-      vendorId: data.vendorId,
-      contractId: data.contractId,
-      orderDate: new Date(data.orderDate),
-      totalCost,
-      status: "draft",
-      lineItems: {
-        create: data.lineItems.map((item) => ({
-          sku: item.sku,
-          inventoryDescription: item.inventoryDescription,
-          vendorItemNo: item.vendorItemNo,
-          manufacturerNo: item.manufacturerNo,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          extendedPrice: item.quantity * item.unitPrice,
-          uom: item.uom,
-          isOffContract: item.isOffContract,
-          contractId: item.contractId,
-        })),
+  // M7 (2026-06-09 audit): poNumber is unique per facility
+  // (facilityId_poNumber). Numbering is count-based, so concurrent
+  // creates (or legacy per-vendor numbering gaps) can collide — catch
+  // P2002, recount with an attempt offset, retry up to 3 attempts.
+  const createOnce = async (attempt: number) => {
+    const count = await prisma.purchaseOrder.count({
+      where: { facilityId: facility.id },
+    })
+    const poNumber = `PO-${String(count + 1 + attempt).padStart(5, "0")}`
+    const po = await prisma.purchaseOrder.create({
+      data: {
+        poNumber,
+        facilityId: facility.id,
+        vendorId: data.vendorId,
+        contractId: data.contractId,
+        orderDate: new Date(data.orderDate),
+        totalCost,
+        // H5: the form's Submit button sends the PO directly to the
+        // vendor; Save as Draft keeps it editable.
+        status: data.submit ? "sent" : "draft",
+        // M9: ONE off-contract definition — a PO is off-contract iff it
+        // has no header contract. Mirrors the vendor create path and the
+        // facility list's `po.contract == null` classification.
+        isOffContract: !data.contractId,
+        lineItems: {
+          create: data.lineItems.map((item) => ({
+            sku: item.sku,
+            inventoryDescription: item.inventoryDescription,
+            vendorItemNo: item.vendorItemNo,
+            manufacturerNo: item.manufacturerNo,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            extendedPrice: item.quantity * item.unitPrice,
+            uom: item.uom,
+            isOffContract: item.isOffContract,
+            contractId: item.contractId,
+          })),
+        },
       },
-    },
-    include: { lineItems: true },
-  })
+      include: { lineItems: true },
+    })
+    return { po, poNumber }
+  }
+
+  let created: Awaited<ReturnType<typeof createOnce>> | undefined
+  for (let attempt = 0; attempt < 3 && !created; attempt++) {
+    try {
+      created = await createOnce(attempt)
+    } catch (err) {
+      const isUniqueCollision =
+        err !== null &&
+        typeof err === "object" &&
+        "code" in err &&
+        (err as { code?: unknown }).code === "P2002"
+      if (!isUniqueCollision || attempt >= 2) throw err
+    }
+  }
+  if (!created) throw new Error("Failed to allocate a PO number")
+  const { po, poNumber } = created
 
   await logAudit({
     userId: facility.id,
@@ -210,6 +275,8 @@ export async function createPurchaseOrder(input: CreatePOInput) {
     metadata: { poNumber, lineItemCount: data.lineItems.length, totalCost },
   })
 
+  revalidatePath("/dashboard/purchase-orders")
+
   return serialize(po)
 }
 
@@ -217,6 +284,19 @@ export async function createPurchaseOrder(input: CreatePOInput) {
 
 export async function updatePOStatus(id: string, status: POStatus) {
   const { facility } = await requireFacility()
+
+  // H4 (2026-06-09 audit): validate the transition server-side against the
+  // canonical PO_STATUS_FLOW map. Previously any status jump (including
+  // resurrecting completed/cancelled POs) was accepted.
+  const current = await prisma.purchaseOrder.findUniqueOrThrow({
+    where: { id, facilityId: facility.id },
+    select: { status: true },
+  })
+  if (!canTransitionPOStatus(current.status, status)) {
+    throw new Error(
+      `Invalid status transition: ${current.status} → ${status}`,
+    )
+  }
 
   await prisma.purchaseOrder.update({
     where: { id, facilityId: facility.id },
@@ -229,6 +309,9 @@ export async function updatePOStatus(id: string, status: POStatus) {
     entityType: "purchaseOrder",
     entityId: id,
   })
+
+  revalidatePath("/dashboard/purchase-orders")
+  revalidatePath(`/dashboard/purchase-orders/${id}`)
 }
 
 // ─── Search Products ────────────────────────────────────────────

@@ -54,8 +54,6 @@ export interface POCreateDialogProps {
   onPOTypeChange: (value: POType) => void
   poDate: string
   onPODateChange: (value: string) => void
-  notes: string
-  onNotesChange: (value: string) => void
 
   // Data
   facilities: VendorFacilityRow[]
@@ -121,8 +119,6 @@ export function POCreateDialog({
   onPOTypeChange,
   poDate,
   onPODateChange,
-  notes,
-  onNotesChange,
   facilities,
   selectedFacilityObj,
   facilityProducts,
@@ -687,17 +683,9 @@ export function POCreateDialog({
             </div>
           )}
 
-          {/* Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes (Optional)</Label>
-            <Textarea
-              id="notes"
-              placeholder="Add any special instructions or notes for this order..."
-              value={notes}
-              onChange={(e) => onNotesChange(e.target.value)}
-              rows={3}
-            />
-          </div>
+          {/* M8 (2026-06-09 audit): the Notes field was removed — it was
+              collected here but silently discarded by the server action
+              (PurchaseOrder has no notes column). */}
         </div>
 
         <DialogFooter>

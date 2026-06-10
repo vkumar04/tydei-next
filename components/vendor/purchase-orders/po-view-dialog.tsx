@@ -8,8 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { formatCurrency, formatDate } from "@/lib/formatting"
-import { CheckCircle2 } from "lucide-react"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { poStatusConfig } from "./types"
 import type { VendorPORow } from "./types"
 
@@ -55,21 +54,19 @@ export function POViewDialog({ open, onOpenChange, selectedPO }: POViewDialogPro
               </div>
               <div>
                 <p className="text-muted-foreground">Order Date</p>
-                <p className="font-medium">{formatDate(selectedPO.orderDate)}</p>
+                {/* M6: orderDate is a @db.Date — UTC-pinned formatter */}
+                <p className="font-medium">{formatCalendarDate(selectedPO.orderDate)}</p>
               </div>
             </div>
           </div>
         )}
+        {/* L18 (2026-06-09 audit): the "Acknowledge Order" button was a
+            no-op, and status transitions are facility-owned (updatePOStatus
+            is requireFacility-gated) — removed rather than wired. */}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          {selectedPO?.status === "sent" && (
-            <Button>
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Acknowledge Order
-            </Button>
-          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

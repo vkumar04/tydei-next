@@ -1473,6 +1473,9 @@ model PurchaseOrder {
   lineItems POLineItem[]
   invoices  Invoice[]
 
+  // M7 (2026-06-09 audit): poNumber is unique per facility. Both create
+  // paths number per-facility and retry on P2002 collisions.
+  @@unique([facilityId, poNumber])
   @@index([facilityId])
   @@index([vendorId])
   @@index([status])

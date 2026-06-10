@@ -8,6 +8,7 @@ import {
   getVendorFacilityProducts,
   searchVendorProducts,
 } from "@/lib/actions/vendor-purchase-orders"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import type { POLineItem, POType } from "./types"
 
 /**
@@ -20,7 +21,6 @@ export function useNewPOForm(vendorId: string) {
   const [newPOFacility, setNewPOFacility] = useState("")
   const [newPOType, setNewPOType] = useState<POType>("standard")
   const [newPODate, setNewPODate] = useState("")
-  const [newPONotes, setNewPONotes] = useState("")
   const [newPOLineItems, setNewPOLineItems] = useState<POLineItem[]>([])
   const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
   const [productSearch, setProductSearch] = useState("")
@@ -75,8 +75,13 @@ export function useNewPOForm(vendorId: string) {
 
   const filteredCatalogProducts = useMemo(() => {
     if (searchTerm.length < 2) return []
-    const facilityIds = new Set(facilityProducts.map((p) => p.vendorItemNo))
-    return searchResults.filter((p) => !facilityIds.has(p.vendorItemNo))
+    // L15: compare SKUs through normalizeSku, never raw equality.
+    const facilityIds = new Set(
+      facilityProducts.map((p) => normalizeSku(p.vendorItemNo)),
+    )
+    return searchResults.filter(
+      (p) => !facilityIds.has(normalizeSku(p.vendorItemNo)),
+    )
   }, [searchResults, facilityProducts, searchTerm])
 
   const displayedFacilityProducts = filteredFacilityProducts.slice(0, 50)
@@ -101,7 +106,9 @@ export function useNewPOForm(vendorId: string) {
 
     if (!product) return
 
-    if (newPOLineItems.some((item) => item.sku === product.vendorItemNo)) {
+    // L15: dedupe through normalizeSku, never raw === on SKUs.
+    const productKey = normalizeSku(product.vendorItemNo)
+    if (newPOLineItems.some((item) => normalizeSku(item.sku) === productKey)) {
       toast.error("Product already added", { description: "Update the quantity instead" })
       return
     }
@@ -136,22 +143,20 @@ export function useNewPOForm(vendorId: string) {
     if (!scanInput.trim()) return
 
     const term = scanInput.trim().toUpperCase()
+    // L15: exact scan matches go through normalizeSku (case/whitespace
+    // folding) — raw uppercase equality missed e.g. "AB 123" vs "AB123".
+    const termKey = normalizeSku(scanInput)
     const allProducts = newPOFacility ? facilityProducts : searchResults
 
-    let product = allProducts.find(
-      (p) =>
-        p.vendorItemNo.toUpperCase() === term ||
-        p.vendorItemNo.toUpperCase().includes(term) ||
-        p.description.toUpperCase().includes(term)
-    )
+    const matchesScan = (p: { vendorItemNo: string; description: string }) =>
+      normalizeSku(p.vendorItemNo) === termKey ||
+      p.vendorItemNo.toUpperCase().includes(term) ||
+      p.description.toUpperCase().includes(term)
+
+    let product = allProducts.find(matchesScan)
 
     if (!product && newPOFacility) {
-      product = searchResults.find(
-        (p) =>
-          p.vendorItemNo.toUpperCase() === term ||
-          p.vendorItemNo.toUpperCase().includes(term) ||
-          p.description.toUpperCase().includes(term)
-      )
+      product = searchResults.find(matchesScan)
       if (product) {
         toast.info("Product from catalog", {
           description: "This product is not in the facility price file - using list price",
@@ -177,8 +182,10 @@ export function useNewPOForm(vendorId: string) {
 
     const price = product.contractPrice ?? product.listPrice ?? 0
 
+    // L15: dedupe through normalizeSku.
+    const productKey = normalizeSku(product.vendorItemNo)
     const existingIdx = newPOLineItems.findIndex(
-      (item) => item.sku === product.vendorItemNo
+      (item) => normalizeSku(item.sku) === productKey
     )
     if (existingIdx !== -1) {
       const updated = [...newPOLineItems]
@@ -285,7 +292,6 @@ export function useNewPOForm(vendorId: string) {
     setNewPOFacility("")
     setNewPOType("standard")
     setNewPODate("")
-    setNewPONotes("")
     setNewPOLineItems([])
     setScanInput("")
     setProductSearch("")
@@ -303,8 +309,6 @@ export function useNewPOForm(vendorId: string) {
     setNewPOType,
     newPODate,
     setNewPODate,
-    newPONotes,
-    setNewPONotes,
     newPOLineItems,
     newPOTotal,
     selectedFacilityObj,

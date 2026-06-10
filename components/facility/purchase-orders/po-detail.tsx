@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { useRouter } from "next/navigation"
 import type { PurchaseOrder, POLineItem, Vendor, Contract } from "@/lib/generated/prisma/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,9 +11,11 @@ import {
 } from "@/components/ui/table"
 import { poStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
-import { formatCurrency, formatDate } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { useUpdatePOStatus } from "@/hooks/use-purchase-orders"
-import type { POStatus } from "@/lib/generated/prisma/client"
+// H4 (2026-06-09 audit): transitions come from the canonical shared map —
+// the same one updatePOStatus validates against server-side.
+import { PO_STATUS_FLOW } from "@/lib/purchase-orders/status-flow"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -20,13 +23,6 @@ type PODetail = PurchaseOrder & {
   vendor: Pick<Vendor, "id" | "name">
   contract: Pick<Contract, "id" | "name"> | null
   lineItems: POLineItem[]
-}
-
-const STATUS_FLOW: Record<string, POStatus[]> = {
-  draft: ["pending"],
-  pending: ["approved", "cancelled"],
-  approved: ["sent", "cancelled"],
-  sent: ["completed"],
 }
 
 // ─── Sub-components ─────────────────────────────────────────────
@@ -53,8 +49,9 @@ interface PODetailViewProps {
 // ─── Component ──────────────────────────────────────────────────
 
 export function PODetailView({ order }: PODetailViewProps) {
+  const router = useRouter()
   const updateStatus = useUpdatePOStatus()
-  const nextStatuses = STATUS_FLOW[order.status] ?? []
+  const nextStatuses = PO_STATUS_FLOW[order.status] ?? []
 
   const summary = useMemo(() => {
     let offCount = 0
@@ -87,7 +84,8 @@ export function PODetailView({ order }: PODetailViewProps) {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Vendor</span><span>{order.vendor.name}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Order Date</span><span>{formatDate(order.orderDate)}</span></div>
+          {/* M6: orderDate is a @db.Date — UTC-pinned formatter */}
+          <div className="flex justify-between"><span className="text-muted-foreground">Order Date</span><span>{formatCalendarDate(order.orderDate)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Total Cost</span><span className="font-medium">{formatCurrency(Number(order.totalCost ?? 0), true)}</span></div>
           {order.contract && (
             <div className="flex justify-between"><span className="text-muted-foreground">Contract</span><span>{order.contract.name}</span></div>
@@ -99,7 +97,14 @@ export function PODetailView({ order }: PODetailViewProps) {
                   key={s}
                   size="sm"
                   variant={s === "cancelled" ? "destructive" : "default"}
-                  onClick={() => updateStatus.mutate({ id: order.id, status: s })}
+                  onClick={() =>
+                    updateStatus.mutate(
+                      { id: order.id, status: s },
+                      // H4: this page is RSC-fed (order comes in as a prop),
+                      // so refresh the route to reflect the new status.
+                      { onSuccess: () => router.refresh() },
+                    )
+                  }
                   disabled={updateStatus.isPending}
                 >
                   {poStatusConfig[s]?.label ?? s}

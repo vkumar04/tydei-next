@@ -11,6 +11,9 @@ import {
 } from "@/lib/actions/vendor-purchase-orders"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
+import { formatExportDollars } from "@/lib/reports/export-formatters"
 
 import { POTable } from "./purchase-orders/po-table"
 import { POViewDialog } from "./purchase-orders/po-view-dialog"
@@ -21,19 +24,17 @@ import { useNewPOForm } from "./purchase-orders/use-new-po-form"
 import { poStatusConfig } from "./purchase-orders/types"
 
 // ─── Tab definitions ───────────────────────────────────────────────
+// M10 (2026-06-09 audit): only real POStatus values — the phantom
+// pending_approval / acknowledged / processing / shipped / fulfilled /
+// rejected statuses never exist in the DB, so they matched nothing.
 
 const TAB_KEYS = ["all", "pending", "approved", "in-progress", "fulfilled"] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
-const PENDING_STATUSES = new Set(["pending_approval", "pending", "draft"])
+const PENDING_STATUSES = new Set(["pending", "draft"])
 const APPROVED_STATUSES = new Set(["approved"])
-const IN_PROGRESS_STATUSES = new Set([
-  "acknowledged",
-  "processing",
-  "sent",
-  "shipped",
-])
-const FULFILLED_STATUSES = new Set(["fulfilled", "completed"])
+const IN_PROGRESS_STATUSES = new Set(["sent"])
+const FULFILLED_STATUSES = new Set(["completed"])
 
 function matchesTab(status: string, tab: TabKey): boolean {
   switch (tab) {
@@ -50,6 +51,8 @@ function matchesTab(status: string, tab: TabKey): boolean {
   }
 }
 
+const PAGE_SIZE = 50
+
 // ─── Component ─────────────────────────────────────────────────────
 
 interface VendorPurchaseOrdersClientProps {
@@ -62,6 +65,7 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [facilityFilter, setFacilityFilter] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [page, setPage] = useState(1)
   const [selectedPO, setSelectedPO] = useState<VendorPORow | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isAddPODialogOpen, setIsAddPODialogOpen] = useState(false)
@@ -69,10 +73,13 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
   const form = useNewPOForm(vendorId)
 
   // ─── Queries ───────────────────────────────────────────────────
+  // H3 (2026-06-09 audit): server-paginated list + server aggregates
+  // (count, totalValue sum, per-status counts) replace the old bare
+  // take:50 + client-side reduces over the truncated rows.
 
   const { data, isLoading } = useQuery({
-    queryKey: ["vendorPOs", vendorId],
-    queryFn: () => getVendorPurchaseOrders(vendorId),
+    queryKey: ["vendorPOs", vendorId, page],
+    queryFn: () => getVendorPurchaseOrders({ page, pageSize: PAGE_SIZE }),
   })
 
   const createMutation = useMutation({
@@ -94,48 +101,42 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
 
   // ─── Derived data ─────────────────────────────────────────────
 
-  const allOrders = data ?? []
+  const orders = data?.orders ?? []
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const statusCounts = data?.statusCounts
 
-  const heroStats = useMemo(
-    () => ({
-      totalPOs: allOrders.length,
-      totalValue: allOrders.reduce((sum, po) => sum + po.totalCost, 0),
-      pendingApproval: allOrders.filter((po) => PENDING_STATUSES.has(po.status))
-        .length,
-      fulfilled: allOrders.filter((po) => FULFILLED_STATUSES.has(po.status))
-        .length,
-      cancelled: allOrders.filter((po) =>
-        ["rejected", "cancelled"].includes(po.status)
-      ).length,
-    }),
-    [allOrders]
-  )
+  const heroStats = {
+    totalPOs: total,
+    totalValue: data?.totalValue ?? 0,
+    pendingApproval: (statusCounts?.pending ?? 0) + (statusCounts?.draft ?? 0),
+    fulfilled: statusCounts?.completed ?? 0,
+    // M10: "cancelled" counts status === "cancelled" (the phantom
+    // "rejected" status never existed).
+    cancelled: statusCounts?.cancelled ?? 0,
+  }
 
-  const tabCounts = useMemo(
-    () => ({
-      all: allOrders.length,
-      pending: allOrders.filter((po) => matchesTab(po.status, "pending")).length,
-      approved: allOrders.filter((po) => matchesTab(po.status, "approved")).length,
-      "in-progress": allOrders.filter((po) => matchesTab(po.status, "in-progress"))
-        .length,
-      fulfilled: allOrders.filter((po) => matchesTab(po.status, "fulfilled")).length,
-    }),
-    [allOrders]
-  )
+  const tabCounts = {
+    all: total,
+    pending: (statusCounts?.pending ?? 0) + (statusCounts?.draft ?? 0),
+    approved: statusCounts?.approved ?? 0,
+    "in-progress": statusCounts?.sent ?? 0,
+    fulfilled: statusCounts?.completed ?? 0,
+  }
 
   const uniqueFacilities = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>()
-    for (const po of allOrders) {
+    for (const po of orders) {
       if (po.facilityId && !map.has(po.facilityId)) {
         map.set(po.facilityId, { id: po.facilityId, name: po.facilityName })
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
-  }, [allOrders])
+  }, [orders])
 
   const filteredOrders = useMemo(() => {
     const search = searchQuery.trim().toLowerCase()
-    return allOrders.filter((po) => {
+    return orders.filter((po) => {
       if (!matchesTab(po.status, tab)) return false
       if (statusFilter !== "all" && po.status !== statusFilter) return false
       if (facilityFilter !== "all" && po.facilityId !== facilityFilter) return false
@@ -145,7 +146,7 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
       }
       return true
     })
-  }, [allOrders, tab, statusFilter, facilityFilter, searchQuery])
+  }, [orders, tab, statusFilter, facilityFilter, searchQuery])
 
   // ─── Submit ────────────────────────────────────────────────────
 
@@ -164,11 +165,9 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
     }
 
     createMutation.mutate({
-      vendorId,
       facilityId: form.newPOFacility,
       contractId: form.selectedFacilityObj?.contractId ?? undefined,
       orderDate: form.newPODate,
-      notes: form.newPONotes || undefined,
       lineItems: form.newPOLineItems.map((item) => ({
         sku: item.sku,
         inventoryDescription: item.productName,
@@ -182,26 +181,47 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
   }
 
   // ─── Export ────────────────────────────────────────────────────
+  // L17: use the canonical toCSV helper (RFC-4180 quoting) like the
+  // facility side, instead of a hand-rolled join(",").
 
   const handleExportCSV = () => {
-    const headers = ["PO Number", "Facility", "Status", "Amount", "Order Date"]
-    const rows = filteredOrders.map((po) => [
-      po.poNumber,
-      po.facilityName,
-      poStatusConfig[po.status]?.label ?? po.status,
-      po.totalCost.toString(),
-      po.orderDate,
-    ])
-    const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n")
-    const blob = new Blob([csvContent], { type: "text/csv" })
+    if (filteredOrders.length === 0) {
+      toast.info("No purchase orders to export.")
+      return
+    }
+    const csv = toCSV({
+      columns: [
+        { key: "poNumber", label: "PO Number" },
+        { key: "facilityName", label: "Facility" },
+        {
+          key: "status",
+          label: "Status",
+          format: (v) => poStatusConfig[String(v)]?.label ?? String(v),
+        },
+        {
+          key: "totalCost",
+          label: "Amount",
+          format: (v) => {
+            const n = typeof v === "number" ? v : Number(v ?? 0)
+            return Number.isFinite(n) ? formatExportDollars(n) : ""
+          },
+        },
+        { key: "orderDate", label: "Order Date" },
+      ],
+      rows: filteredOrders as unknown as Record<string, unknown>[],
+    })
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `purchase-orders-${new Date().toISOString().split("T")[0]}.csv`
+    a.download = buildReportFilename("Purchase Orders")
     a.click()
     URL.revokeObjectURL(url)
     toast.success("Export complete", {
-      description: `${filteredOrders.length} purchase orders exported to CSV`,
+      description:
+        total > orders.length
+          ? `${filteredOrders.length} purchase orders exported (current page of ${total} total)`
+          : `${filteredOrders.length} purchase orders exported to CSV`,
     })
   }
 
@@ -263,6 +283,32 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
 
       <POTable data={filteredOrders} isLoading={isLoading} onViewPO={handleViewPO} />
 
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Page {page} of {totalPages} · {total} orders
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || isLoading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages || isLoading}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
       <POViewDialog
         open={isViewDialogOpen}
         onOpenChange={setIsViewDialogOpen}
@@ -281,8 +327,6 @@ export function VendorPurchaseOrdersClient({ vendorId }: VendorPurchaseOrdersCli
         onPOTypeChange={form.setNewPOType}
         poDate={form.newPODate}
         onPODateChange={form.setNewPODate}
-        notes={form.newPONotes}
-        onNotesChange={form.setNewPONotes}
         facilities={form.facilities}
         selectedFacilityObj={form.selectedFacilityObj}
         facilityProducts={form.facilityProducts}

@@ -29,58 +29,51 @@ interface POListProps {
 
 type TabValue = "all" | "on-contract" | "off-contract" | "pending"
 
+const PAGE_SIZE = 50
+
 export function POList({ facilityId }: POListProps) {
   const [tab, setTab] = useState<TabValue>("all")
   const [status, setStatus] = useState<POStatus | "all">("all")
   const [vendorId, setVendorId] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [newPOOpen, setNewPOOpen] = useState(false)
+  const [page, setPage] = useState(1)
 
+  // H2 (2026-06-09 audit): the list is server-paginated; hero KPIs and tab
+  // counts come from server aggregates (getPOStats) instead of reducing
+  // over the fetched page rows, which silently truncated past page 1.
   const { data, isLoading } = usePurchaseOrders(facilityId, {
     status: status === "all" ? undefined : status,
     vendorId: vendorId === "all" ? undefined : vendorId,
+    page,
+    pageSize: PAGE_SIZE,
   })
-  // Unfiltered orders drive hero KPIs and tab counts so they don't flicker
-  // when the user narrows the Status / Vendor filters.
-  const { data: allData } = usePurchaseOrders(facilityId, {})
   const { data: stats, isLoading: statsLoading } = usePOStats(facilityId)
   const { data: vendors } = useFacilityVendors(facilityId)
   const updateStatus = useUpdatePOStatus()
 
   const orders = (data?.orders ?? []) as POTableRow[]
-  const allOrders = (allData?.orders ?? []) as POTableRow[]
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  // ─── Hero KPIs ─────────────────────────────────────────────────
-  const heroStats = useMemo(() => {
-    let onContractSpend = 0
-    let offContractSpend = 0
-    for (const po of allOrders) {
-      const amount = Number(po.totalCost ?? 0)
-      if (po.contract) onContractSpend += amount
-      else offContractSpend += amount
-    }
-    return { onContractSpend, offContractSpend }
-  }, [allOrders])
+  const handleStatusChange = (next: POStatus | "all") => {
+    setStatus(next)
+    setPage(1)
+  }
+  const handleVendorIdChange = (next: string) => {
+    setVendorId(next)
+    setPage(1)
+  }
 
-  const pendingApproval = useMemo(
-    () => allOrders.filter((po) => po.status === "pending").length,
-    [allOrders],
-  )
+  // ─── Tab counts (server aggregates — never shift with filters) ────
+  const tabCounts = {
+    all: stats?.totalPOs ?? 0,
+    onContract: stats?.onContractCount ?? 0,
+    offContract: stats?.offContractCount ?? 0,
+    pending: stats?.statusCounts?.pending ?? 0,
+  }
 
-  // ─── Tab counts (use allOrders so counts never shift with filters) ─
-  const tabCounts = useMemo(() => {
-    let onContract = 0
-    let offContract = 0
-    let pending = 0
-    for (const po of allOrders) {
-      if (po.contract) onContract++
-      else offContract++
-      if (po.status === "pending") pending++
-    }
-    return { onContract, offContract, pending }
-  }, [allOrders])
-
-  // ─── Filtering: tab + search ───────────────────────────────────
+  // ─── Filtering: tab + search (within the current page) ────────────
   const visibleOrders = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return orders.filter((po) => {
@@ -100,10 +93,9 @@ export function POList({ facilityId }: POListProps) {
   }, [orders, tab, searchQuery])
 
   const isEmpty =
-    !isLoading &&
-    allOrders.length === 0 &&
-    status === "all" &&
-    vendorId === "all"
+    !statsLoading &&
+    stats !== undefined &&
+    stats.totalPOs === 0
 
   const vendorList = (vendors ?? []).map(
     (v: { id: string; name: string }) => ({ id: v.id, name: v.name }),
@@ -161,15 +153,22 @@ export function POList({ facilityId }: POListProps) {
     a.download = buildReportFilename("Purchase Orders")
     a.click()
     URL.revokeObjectURL(url)
+    // H2: the export covers the currently fetched page — say so when
+    // there are more rows on other pages.
+    toast.success(
+      total > orders.length
+        ? `Exported ${exportRows.length} purchase orders (current page of ${total} total)`
+        : `Exported ${exportRows.length} purchase orders`,
+    )
   }
 
   return (
     <div className="space-y-6">
       <POHero
-        totalPOs={stats?.totalPOs ?? allOrders.length}
-        onContractSpend={heroStats.onContractSpend}
-        offContractSpend={heroStats.offContractSpend}
-        pendingApproval={stats?.pendingApproval ?? pendingApproval}
+        totalPOs={stats?.totalPOs ?? 0}
+        onContractSpend={stats?.onContractSpend ?? 0}
+        offContractSpend={stats?.offContractSpend ?? 0}
+        pendingApproval={stats?.pendingApproval ?? 0}
         totalValue={stats?.totalValue ?? 0}
         isLoading={statsLoading}
       />
@@ -197,9 +196,9 @@ export function POList({ facilityId }: POListProps) {
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
             status={status}
-            onStatusChange={setStatus}
+            onStatusChange={handleStatusChange}
             vendorId={vendorId}
-            onVendorIdChange={setVendorId}
+            onVendorIdChange={handleVendorIdChange}
             vendors={vendorList}
             onExport={handleExport}
             exportDisabled={isLoading || visibleOrders.length === 0}
@@ -209,7 +208,7 @@ export function POList({ facilityId }: POListProps) {
           <Tabs value={tab} onValueChange={(v) => setTab(v as TabValue)}>
             <TabsList>
               <TabsTrigger value="all">
-                All ({allOrders.length})
+                All ({tabCounts.all})
               </TabsTrigger>
               <TabsTrigger value="on-contract">
                 On Contract ({tabCounts.onContract})
@@ -232,6 +231,31 @@ export function POList({ facilityId }: POListProps) {
                   updateStatus.mutate({ id, status: next })
                 }
               />
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t pt-4 mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Page {page} of {totalPages} · {total} orders
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1 || isLoading}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages || isLoading}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>
