@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   resolveCategoryNamesBulk,
@@ -771,6 +771,24 @@ export async function getContractPricing(contractId: string) {
   const { facility } = await requireFacility()
   await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(contractId, facility.id),
+    select: { id: true },
+  })
+  const records = await prisma.contractPricing.findMany({
+    where: { contractId },
+    orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
+  })
+  return serialize(records)
+}
+
+/**
+ * Vendor-scoped READ of a contract's pricing list — 2026-06-09
+ * facility→vendor UI parity ("the UI on vendor side needs to function more
+ * like the facility side"). Read-only: pricing mutations stay facility-gated.
+ */
+export async function getVendorContractPricing(contractId: string) {
+  const { vendor } = await requireVendor()
+  await prisma.contract.findFirstOrThrow({
+    where: { id: contractId, vendorId: vendor.id },
     select: { id: true },
   })
   const records = await prisma.contractPricing.findMany({

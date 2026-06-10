@@ -1,6 +1,6 @@
 "use server"
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import {
@@ -18,13 +18,41 @@ export async function getContractPerformanceHistory(contractId: string): Promise
   const { facility } = await requireFacility()
   const contract = await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(contractId, facility.id),
-    select: { id: true, vendorId: true, effectiveDate: true },
+    select: { id: true, vendorId: true, effectiveDate: true, facilityId: true },
   })
+  return _buildPerformanceHistory(contract, facility.id)
+}
 
+/**
+ * Vendor-scoped performance history — 2026-06-09 facility→vendor UI parity
+ * ("the UI on vendor side needs to function more like the facility side").
+ * Same charts, auth pivots on Contract.vendorId like the other getVendor*
+ * reads.
+ */
+export async function getVendorContractPerformanceHistory(
+  contractId: string,
+): Promise<{ monthly: MonthlyPoint[]; quarterly: QuarterlyPoint[] }> {
+  const { vendor } = await requireVendor()
+  const contract = await prisma.contract.findFirstOrThrow({
+    where: { id: contractId, vendorId: vendor.id },
+    select: { id: true, vendorId: true, effectiveDate: true, facilityId: true },
+  })
+  if (!contract.facilityId) return serialize({ monthly: [], quarterly: [] })
+  return _buildPerformanceHistory(contract, contract.facilityId)
+}
+
+async function _buildPerformanceHistory(
+  contract: {
+    id: string
+    vendorId: string | null
+    effectiveDate: Date
+  },
+  facilityId: string,
+): Promise<{ monthly: MonthlyPoint[]; quarterly: QuarterlyPoint[] }> {
   const since = new Date(contract.effectiveDate)
   const cog = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: facility.id,
+      facilityId,
       OR: [
         { contractId: contract.id },
         { contractId: null, vendorId: contract.vendorId },

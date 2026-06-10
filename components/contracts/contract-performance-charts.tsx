@@ -22,10 +22,18 @@ const formatTooltipCurrency = (n: number) =>
     maximumFractionDigits: 0,
   })
 
-export function ContractPerformanceCharts({ contractId }: { contractId: string }) {
+export function ContractPerformanceCharts({
+  contractId,
+  fetcher = getContractPerformanceHistory,
+}: {
+  contractId: string
+  /** 2026-06-09 vendor UI parity: vendor portal passes
+   * getVendorContractPerformanceHistory (same shape, vendor auth). */
+  fetcher?: typeof getContractPerformanceHistory
+}) {
   const { data, isLoading } = useQuery({
     queryKey: ["contracts", "perf-history", contractId] as const,
-    queryFn: () => getContractPerformanceHistory(contractId),
+    queryFn: () => fetcher(contractId),
   })
   if (isLoading || !data) return <div className="h-72 animate-pulse rounded-md bg-muted" />
   // Charles W1.W-C2: expose the peak month so the chart tooltip can

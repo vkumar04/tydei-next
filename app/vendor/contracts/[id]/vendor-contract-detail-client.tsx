@@ -16,6 +16,12 @@ import { ContractAmortizationCard } from "@/components/contracts/contract-amorti
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
 import { getVendorAccrualTimeline } from "@/lib/actions/contracts/accrual"
+import { useQuery } from "@tanstack/react-query"
+import { getVendorContractPeriods } from "@/lib/actions/contract-periods"
+import { getVendorContractPerformanceHistory } from "@/lib/actions/contracts/performance-history"
+import { PerformanceSummary } from "@/components/contracts/tabs/_performance-summary"
+import { VendorPricingTable } from "@/components/vendor/contracts/vendor-pricing-table"
+import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 // Performance-tab analytics cards are lazy-loaded (recharts is the
 // heaviest single dep on this page). Same pattern as the facility
 // detail client.
@@ -38,6 +44,13 @@ const ServiceSlaCard = dynamic(
   () =>
     import("@/components/contracts/analytics/service-sla-card").then(
       (m) => m.ServiceSlaCard,
+    ),
+  { ssr: false },
+)
+const ContractPerformanceCharts = dynamic(
+  () =>
+    import("@/components/contracts/contract-performance-charts").then(
+      (m) => m.ContractPerformanceCharts,
     ),
   { ssr: false },
 )
@@ -79,6 +92,24 @@ export function VendorContractDetailClient({
   const isCapitalLike =
     contract.contractType === "tie_in" || contract.contractType === "capital"
 
+  // 2026-06-09 facility→vendor UI parity: Spend by Period + Tier
+  // Achievement, same data the facility Performance tab shows, scoped
+  // through getVendorContractPeriods (vendor auth, same builder).
+  const { data: periods } = useQuery({
+    queryKey: ["vendor-contract-periods", contract.id],
+    queryFn: () => getVendorContractPeriods(contract.id),
+  })
+
+  // Mirror the facility client's tier-term selection (Charles "carve out
+  // has NOT tiers but it has tiers 4,3,7"): the Tier Achievement panel
+  // reads tiers ONLY from a term with a real spend-dollar ladder —
+  // hasSpendDollarTierLadder excludes market_share/compliance (percent
+  // thresholds), volume (count), and carve_out/tie_in placeholder tiers.
+  const tierTerm = contract.terms?.find((t) => hasSpendDollarTierLadder(t))
+  const carveOutNotice =
+    !tierTerm &&
+    (contract.terms?.some((t) => t.termType === "carve_out") ?? false)
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -112,6 +143,10 @@ export function VendorContractDetailClient({
             <TabsTrigger value="amortization">Amortization</TabsTrigger>
           )}
           <TabsTrigger value="performance">Performance</TabsTrigger>
+          {/* 2026-06-09 facility→vendor UI parity: vendors can now see
+              the price list governing their own contract (read-only —
+              pricing mutations stay facility-gated). */}
+          <TabsTrigger value="pricing">Pricing</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
@@ -173,6 +208,35 @@ export function VendorContractDetailClient({
             contractId={contract.id}
             initialData={initialPerformanceBundle?.forecast}
           />
+          {/* 2026-06-09 facility→vendor UI parity: Monthly Spend +
+              Rebate by Quarter charts, vendor-scoped fetcher. */}
+          <ContractPerformanceCharts
+            contractId={contract.id}
+            fetcher={getVendorContractPerformanceHistory}
+          />
+          <PerformanceSummary
+            periods={periods ?? []}
+            totalValue={Number(contract.totalValue ?? 0)}
+            carveOutNotice={carveOutNotice}
+            evaluationPeriod={
+              (tierTerm?.evaluationPeriod ?? null) as
+                | "monthly"
+                | "quarterly"
+                | "semi_annual"
+                | "annual"
+                | null
+            }
+            contractTiers={
+              tierTerm?.tiers.map((t) => ({
+                tierNumber: t.tierNumber,
+                spendMin: Number(t.spendMin),
+              })) ?? []
+            }
+          />
+        </TabsContent>
+
+        <TabsContent value="pricing" className="mt-6">
+          <VendorPricingTable contractId={contract.id} />
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">

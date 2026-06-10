@@ -286,9 +286,11 @@ const BASELINE_HITS = new Set<string>([
   // bumped 2026-06-09 after the COG category-universe fetch (drifted-
   // category canonical match) added lines above these re-reads; bumped
   // again same day after the group-aware vendor set (contractVendorIds)
-  // import + select shifted them.
-  "lib/actions/contract-periods.ts:428",
-  "lib/actions/contract-periods.ts:657",
+  // import + select shifted them; bumped again 2026-06-09 after the
+  // vendor UI parity split (PERIODS_CONTRACT_SELECT + getVendorContractPeriods)
+  // shifted the delete.
+  "lib/actions/contract-periods.ts:455",
+  "lib/actions/contract-periods.ts:684",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:94",

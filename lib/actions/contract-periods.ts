@@ -3,7 +3,7 @@
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
-import { requireFacility } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
@@ -57,6 +57,33 @@ async function revalidateCapitalRoutes(contractId: string): Promise<void> {
  * contract with real COG activity renders a blank Performance tab even
  * though the spend and rebate data are sitting in adjacent tables.
  */
+const PERIODS_CONTRACT_SELECT = {
+  id: true,
+  vendorId: true,
+  additionalVendorIds: true,
+  facilityId: true,
+  effectiveDate: true,
+  expirationDate: true,
+  // Bug 12 (2026-04-23) — the synthetic-period fallback was
+  // vendor-wide, so two contracts with the same vendor + overlapping
+  // windows rendered identical period sets. Pulling every term's
+  // scope here lets us narrow the COG query to only categories the
+  // contract's terms actually cover.
+  terms: {
+    select: {
+      evaluationPeriod: true,
+      appliesTo: true,
+      categories: true,
+      tiers: { orderBy: { tierNumber: "asc" as const } },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
+} as const
+
+type _PeriodsContract = Prisma.ContractGetPayload<{
+  select: typeof PERIODS_CONTRACT_SELECT
+}>
+
 export async function getContractPeriods(contractId: string) {
   const { facility } = await requireFacility()
 
@@ -70,32 +97,32 @@ export async function getContractPeriods(contractId: string) {
         { contractFacilities: { some: { facilityId: facility.id } } },
       ],
     },
-    select: {
-      id: true,
-      vendorId: true,
-      additionalVendorIds: true,
-      facilityId: true,
-      effectiveDate: true,
-      expirationDate: true,
-      // Bug 12 (2026-04-23) — the synthetic-period fallback was
-      // vendor-wide, so two contracts with the same vendor + overlapping
-      // windows rendered identical period sets. Pulling every term's
-      // scope here lets us narrow the COG query to only categories the
-      // contract's terms actually cover.
-      terms: {
-        select: {
-          evaluationPeriod: true,
-          appliesTo: true,
-          categories: true,
-          tiers: { orderBy: { tierNumber: "asc" } },
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    select: PERIODS_CONTRACT_SELECT,
   })
+  return _buildContractPeriods(contract, facility.id)
+}
 
+/**
+ * Vendor-scoped periods read — 2026-06-09 facility→vendor UI parity ("the
+ * UI on vendor side needs to function more like the facility side"). Feeds
+ * the vendor Performance tab's Spend by Period / Tier Achievement summary.
+ */
+export async function getVendorContractPeriods(contractId: string) {
+  const { vendor } = await requireVendor()
+  const contract = await prisma.contract.findFirstOrThrow({
+    where: { id: contractId, vendorId: vendor.id },
+    select: PERIODS_CONTRACT_SELECT,
+  })
+  if (!contract.facilityId) return serialize([])
+  return _buildContractPeriods(contract, contract.facilityId)
+}
+
+async function _buildContractPeriods(
+  contract: _PeriodsContract,
+  facilityId: string,
+) {
   const persisted = await prisma.contractPeriod.findMany({
-    where: { contractId },
+    where: { contractId: contract.id },
     orderBy: { periodStart: "desc" },
   })
   if (persisted.length > 0) return serialize(persisted)
@@ -118,14 +145,14 @@ export async function getContractPeriods(contractId: string) {
     categories: t.categories,
   }))
   // 2026-06-08: expand to drifted COG category variants (see cog-category-filter).
-  const cogUniverse = await facilityCogCategoryUniverse(facility.id)
+  const cogUniverse = await facilityCogCategoryUniverse(facilityId)
   const unionCategoryWhere = buildUnionCategoryWhereClause(
     termScopes,
     cogUniverse,
   )
   const cogRows = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: facility.id,
+      facilityId,
       // 2026-06-09 audit: group-aware vendor set (recurring drift class).
       vendorId: { in: contractVendorIds(contract) },
       transactionDate: {
@@ -228,7 +255,7 @@ export async function getContractPeriods(contractId: string) {
     return {
       id: `synthetic-${contract.id}-${key}`,
       contractId: contract.id,
-      facilityId: contract.facilityId ?? facility.id,
+      facilityId: contract.facilityId ?? facilityId,
       periodStart: bucket.start,
       periodEnd: bucket.end,
       totalSpend: bucket.spend,
