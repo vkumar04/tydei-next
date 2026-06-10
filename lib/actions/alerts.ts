@@ -8,6 +8,7 @@ import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
 import { excludeSpendTargetAlerts } from "@/lib/alerts/spend-target-filter"
+import { excludeVendorProposalAlerts } from "@/lib/alerts/vendor-proposal-filter"
 import {
   planBulkAction,
   type BulkAlertAction,
@@ -159,11 +160,17 @@ export async function getUnreadAlertCount(input: {
   // to enumerate their unread-alert count. Counts only — info
   // disclosure, not data corruption — but the same pattern was the
   // class for several earlier BLOCKERs.
+  // 2026-06-10 vendor-prospective audit #4: the vendor LIST excludes
+  // legacy proposal-masquerade rows but this badge count didn't — prod
+  // showed a phantom unread count the list never displays (and those
+  // rows can't be marked read by a vendor). Both exclusion helpers
+  // return OR-fragments, so they MUST be AND-composed — spreading both
+  // would silently clobber one (the OR-spread collision class).
   const where: Prisma.AlertWhereInput = {
     portalType: input.portalType,
     status: "new_alert",
     // Audit H5: spend targets are not alerts — keep the badge honest.
-    ...excludeSpendTargetAlerts(),
+    AND: [excludeSpendTargetAlerts(), excludeVendorProposalAlerts()],
   }
   if (input.portalType === "facility") {
     const { facility } = await requireFacility()
