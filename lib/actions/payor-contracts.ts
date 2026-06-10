@@ -88,8 +88,11 @@ export async function calculatePayorMargins(input: {
   }
 
   const [contract, cases] = await Promise.all([
-    prisma.payorContract.findUniqueOrThrow({
-      where: { id: input.payorContractId },
+    // 2026-06-09 audit BLOCKER: facility scope — the bare findUnique let
+    // any facility read another facility's confidential CPT reimbursement
+    // rates by id. Every sibling read in this file already scopes.
+    prisma.payorContract.findFirstOrThrow({
+      where: { id: input.payorContractId, facilityId: facility.id },
     }),
     prisma.case.findMany({ where: caseWhere, include: { procedures: true } }),
   ])

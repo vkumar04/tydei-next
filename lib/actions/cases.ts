@@ -294,6 +294,11 @@ export async function importCases(input: {
     const batch = input.cases.slice(i, i + BATCH)
     try {
       const result = await prisma.case.createMany({
+        // 2026-06-09 audit: with the per-facility unique
+        // (facilityId_caseNumber), a duplicate row no longer fails the
+        // whole 500-row batch as opaque "errors" — re-imports skip
+        // already-imported cases instead.
+        skipDuplicates: true,
         data: batch.map((caseData) => {
           const spend = caseData.totalSpend
 

@@ -41,17 +41,60 @@ function endOfMonth(d: Date): Date {
   )
 }
 
-export async function getAICredits(input: {
+// 2026-06-09 audit BLOCKER: every action in this file previously took
+// tenant ids / creditIds from CLIENT input with only requireAuth — any
+// authenticated user could read, lazily CREATE, and burn another
+// tenant's AI credits. Tenant scope now derives from the session member
+// (same pattern as getUnreadAlertCount round-10); creditId-based reads
+// verify the row belongs to the session tenant.
+async function sessionTenant(): Promise<{
+  userId: string
+  userName: string
+  facilityId: string | null
+  vendorId: string | null
+}> {
+  const session = await requireAuth()
+  const member = await prisma.member.findFirst({
+    where: { userId: session.user.id },
+    include: { organization: { include: { facility: true, vendor: true } } },
+  })
+  return {
+    userId: session.user.id,
+    userName: session.user.name ?? session.user.email ?? "Unknown",
+    facilityId: member?.organization?.facility?.id ?? null,
+    vendorId: member?.organization?.vendor?.id ?? null,
+  }
+}
+
+/** Throws unless the credit row belongs to the session's tenant. */
+async function requireOwnedCredit(creditId: string) {
+  const tenant = await sessionTenant()
+  // auth-scope-scanner-skip: post-fetch equality check — the row is
+  // fetched by id, then verified against the session tenant below.
+  const credit = await prisma.aICredit.findUniqueOrThrow({
+    where: { id: creditId },
+  })
+  const owned =
+    (credit.facilityId !== null && credit.facilityId === tenant.facilityId) ||
+    (credit.vendorId !== null && credit.vendorId === tenant.vendorId)
+  if (!owned) {
+    throw new Error("Credit account not found for this organization")
+  }
+  return { credit, tenant }
+}
+
+export async function getAICredits(_input?: {
+  /** @deprecated 2026-06-09 audit: ignored — derived from session. */
   facilityId?: string
+  /** @deprecated 2026-06-09 audit: ignored — derived from session. */
   vendorId?: string
 }): Promise<AICredit | null> {
-  await requireAuth()
+  const tenant = await sessionTenant()
+  if (!tenant.facilityId && !tenant.vendorId) return null
 
-  if (!input.facilityId && !input.vendorId) return null
-
-  const where = input.facilityId
-    ? { facilityId: input.facilityId }
-    : { vendorId: input.vendorId as string }
+  const where = tenant.facilityId
+    ? { facilityId: tenant.facilityId }
+    : { vendorId: tenant.vendorId as string }
 
   let credit = await prisma.aICredit.findFirst({
     where,
@@ -66,8 +109,8 @@ export async function getAICredits(input: {
     const now = new Date()
     credit = await prisma.aICredit.create({
       data: {
-        facilityId: input.facilityId ?? null,
-        vendorId: input.vendorId ?? null,
+        facilityId: tenant.facilityId,
+        vendorId: tenant.facilityId ? null : tenant.vendorId,
         tierId: "enterprise",
         monthlyCredits: DEFAULT_MONTHLY_CREDITS,
         usedCredits: 0,
@@ -99,15 +142,15 @@ export async function useAICredits(input: {
   creditId: string
   action: string
   creditsUsed: number
-  userId: string
-  userName: string
+  /** @deprecated 2026-06-09 audit: ignored — identity comes from session. */
+  userId?: string
+  /** @deprecated 2026-06-09 audit: ignored — identity comes from session. */
+  userName?: string
   description: string
 }): Promise<{ success: boolean; remaining: number }> {
-  await requireAuth()
-
-  const credit = await prisma.aICredit.findUniqueOrThrow({
-    where: { id: input.creditId },
-  })
+  // Ownership + session identity — pre-fix anyone could burn another
+  // tenant's credits and attribute usage to an arbitrary userId/userName.
+  const { credit, tenant } = await requireOwnedCredit(input.creditId)
 
   const available =
     credit.monthlyCredits + credit.rolloverCredits - credit.usedCredits
@@ -117,6 +160,8 @@ export async function useAICredits(input: {
   }
 
   await prisma.$transaction([
+    // auth-scope-scanner-skip: pre-authorized — requireOwnedCredit above
+    // verified this creditId belongs to the session tenant.
     prisma.aICredit.update({
       where: { id: input.creditId },
       data: { usedCredits: { increment: input.creditsUsed } },
@@ -126,8 +171,8 @@ export async function useAICredits(input: {
         creditId: input.creditId,
         action: input.action,
         creditsUsed: input.creditsUsed,
-        userId: input.userId,
-        userName: input.userName,
+        userId: tenant.userId,
+        userName: tenant.userName,
         description: input.description,
       },
     }),
@@ -144,7 +189,7 @@ export async function useAICredits(input: {
 export async function getAIUsageHistory(
   creditId: string
 ): Promise<AIUsageRecord[]> {
-  await requireAuth()
+  await requireOwnedCredit(creditId)
 
   const records = await prisma.aIUsageRecord.findMany({
     where: { creditId },
@@ -180,7 +225,7 @@ export interface AIUsageBreakdown {
 export async function getAIUsageBreakdown(
   creditId: string,
 ): Promise<AIUsageBreakdown[]> {
-  await requireAuth()
+  await requireOwnedCredit(creditId)
 
   const grouped = await prisma.aIUsageRecord.groupBy({
     by: ["action"],
@@ -205,18 +250,16 @@ export async function getAIUsageBreakdown(
 // ─── Check Credits ──────────────────────────────────────────────
 
 export async function checkAICredits(input: {
+  /** @deprecated 2026-06-09 audit: ignored — derived from session. */
   facilityId?: string
+  /** @deprecated 2026-06-09 audit: ignored — derived from session. */
   vendorId?: string
   action: AIAction
   quantity?: number
 }): Promise<{ available: boolean; cost: number; remaining: number }> {
-  await requireAuth()
-
   const cost = AI_CREDIT_COSTS[input.action] * (input.quantity ?? 1)
-  const credit = await getAICredits({
-    facilityId: input.facilityId,
-    vendorId: input.vendorId,
-  })
+  // Session-scoped — getAICredits ignores client ids now.
+  const credit = await getAICredits()
 
   if (!credit) {
     return { available: false, cost, remaining: 0 }

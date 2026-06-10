@@ -9,14 +9,26 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-const { findManyMock } = vi.hoisted(() => ({
+const { findManyMock, contractFindFirstMock } = vi.hoisted(() => ({
   findManyMock: vi.fn(),
+  contractFindFirstMock: vi.fn(),
 }))
 
 vi.mock("@/lib/db", () => ({
   prisma: {
     contractPeriod: {
       findMany: findManyMock,
+    },
+    // 2026-06-09 audit BLOCKER fix: the action now derives tenant scope
+    // from the session member and verifies contract ownership before
+    // reading periods.
+    member: {
+      findFirst: vi.fn().mockResolvedValue({
+        organization: { facility: { id: "fac-1" }, vendor: null },
+      }),
+    },
+    contract: {
+      findFirst: contractFindFirstMock,
     },
   },
 }))
@@ -34,6 +46,16 @@ import { getContractPerformanceHistory } from "@/lib/actions/renewals"
 describe("getContractPerformanceHistory", () => {
   beforeEach(() => {
     findManyMock.mockReset()
+    contractFindFirstMock.mockReset()
+    // Default: the contract IS owned by the session facility.
+    contractFindFirstMock.mockResolvedValue({ id: "c-owned" })
+  })
+
+  it("returns [] when the contract is not owned by the session tenant", async () => {
+    contractFindFirstMock.mockResolvedValue(null)
+    const rows = await getContractPerformanceHistory("c-foreign")
+    expect(rows).toEqual([])
+    expect(findManyMock).not.toHaveBeenCalled()
   })
 
   it("returns [] when the contract has no ContractPeriod rows", async () => {

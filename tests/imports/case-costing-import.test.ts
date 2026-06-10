@@ -25,10 +25,24 @@ let caseIdCounter = 0
 vi.mock("@/lib/db", () => ({
   prisma: {
     case: {
-      findUnique: vi.fn(async ({ where }: { where: { caseNumber: string } }) => {
-        const row = caseRows.find((r) => r.caseNumber === where.caseNumber)
-        return row ? { id: row.id } : null
-      }),
+      // 2026-06-09 audit BLOCKER fix: lookups are now keyed on the
+      // compound unique facilityId_caseNumber (per-facility case
+      // numbers). The mock matches BOTH columns, mirroring Postgres.
+      findUnique: vi.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            facilityId_caseNumber: { facilityId: string; caseNumber: string }
+          }
+        }) => {
+          const { facilityId, caseNumber } = where.facilityId_caseNumber
+          const row = caseRows.find(
+            (r) => r.caseNumber === caseNumber && r.facilityId === facilityId,
+          )
+          return row ? { id: row.id } : null
+        },
+      ),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         const id = `case-${++caseIdCounter}`
         caseRows.push({ id, caseNumber: String(data.caseNumber), ...data })
@@ -40,17 +54,22 @@ vi.mock("@/lib/db", () => ({
           create,
           update,
         }: {
-          where: { caseNumber: string }
+          where: {
+            facilityId_caseNumber: { facilityId: string; caseNumber: string }
+          }
           create: Record<string, unknown>
           update: Record<string, unknown>
         }) => {
-          const existing = caseRows.find((r) => r.caseNumber === where.caseNumber)
+          const { facilityId, caseNumber } = where.facilityId_caseNumber
+          const existing = caseRows.find(
+            (r) => r.caseNumber === caseNumber && r.facilityId === facilityId,
+          )
           if (existing) {
             Object.assign(existing, update)
             return { id: existing.id }
           }
           const id = `case-${++caseIdCounter}`
-          caseRows.push({ id, caseNumber: where.caseNumber, ...create })
+          caseRows.push({ id, caseNumber, ...create })
           return { id }
         },
       ),
@@ -154,7 +173,7 @@ describe("ingestCaseDataCSV", () => {
 
   it("updates existing cases on re-import (idempotent)", async () => {
     // Pre-populate with an existing case
-    caseRows.push({ id: "case-existing", caseNumber: "CASE-100" })
+    caseRows.push({ id: "case-existing", caseNumber: "CASE-100", facilityId: "fac-test" })
     caseIdCounter = 1
 
     vi.mocked(mapColumnsWithAI).mockResolvedValueOnce({
@@ -216,9 +235,9 @@ describe("ingestCaseProceduresCSV", () => {
   it("creates procedures for existing cases", async () => {
     // Pre-populate parent cases
     caseRows.push(
-      { id: "case-1", caseNumber: "CASE-100" },
-      { id: "case-2", caseNumber: "CASE-101" },
-      { id: "case-3", caseNumber: "CASE-102" },
+      { id: "case-1", caseNumber: "CASE-100", facilityId: "fac-test" },
+      { id: "case-2", caseNumber: "CASE-101", facilityId: "fac-test" },
+      { id: "case-3", caseNumber: "CASE-102", facilityId: "fac-test" },
     )
     caseIdCounter = 3
 
@@ -270,7 +289,7 @@ describe("ingestCaseProceduresCSV", () => {
   })
 
   it("sets Case.primaryCptCode when CPT Is Primary = Y", async () => {
-    caseRows.push({ id: "case-1", caseNumber: "CASE-100" })
+    caseRows.push({ id: "case-1", caseNumber: "CASE-100", facilityId: "fac-test" })
     caseIdCounter = 1
 
     vi.mocked(mapColumnsWithAI).mockResolvedValueOnce({
@@ -298,9 +317,9 @@ describe("ingestCaseSuppliesCSV", () => {
   it("creates supplies + rolls up totalSpend on each touched case", async () => {
     // Pre-populate parent cases
     caseRows.push(
-      { id: "case-1", caseNumber: "CASE-100" },
-      { id: "case-2", caseNumber: "CASE-101" },
-      { id: "case-3", caseNumber: "CASE-102" },
+      { id: "case-1", caseNumber: "CASE-100", facilityId: "fac-test" },
+      { id: "case-2", caseNumber: "CASE-101", facilityId: "fac-test" },
+      { id: "case-3", caseNumber: "CASE-102", facilityId: "fac-test" },
     )
     caseIdCounter = 3
 
@@ -355,7 +374,7 @@ describe("ingestCaseSuppliesCSV", () => {
   })
 
   it("falls back to unitCost (as-is) when usedCost mapping is missing (legacy behavior)", async () => {
-    caseRows.push({ id: "case-1", caseNumber: "CASE-100" })
+    caseRows.push({ id: "case-1", caseNumber: "CASE-100", facilityId: "fac-test" })
     caseIdCounter = 1
 
     vi.mocked(mapColumnsWithAI).mockResolvedValueOnce({
@@ -383,7 +402,7 @@ describe("ingestCaseSuppliesCSV", () => {
   })
 
   it("prefers usedCost over unitCost × quantity when present", async () => {
-    caseRows.push({ id: "case-1", caseNumber: "CASE-100" })
+    caseRows.push({ id: "case-1", caseNumber: "CASE-100", facilityId: "fac-test" })
     caseIdCounter = 1
 
     vi.mocked(mapColumnsWithAI).mockResolvedValueOnce({

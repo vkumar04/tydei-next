@@ -104,14 +104,18 @@ export async function ingestCaseDataCSV(
     const timeOut = get(row, mapping, "timeOut") || null
 
     try {
+      // 2026-06-09 audit BLOCKER: lookups + upsert key MUST be
+      // facility-scoped (compound unique facilityId_caseNumber). The
+      // prior global-caseNumber upsert let facility B's import TRANSFER
+      // facility A's case (the update branch even rewrote facilityId).
+      // facilityId is deliberately absent from the update payload.
       const existing = await prisma.case.findUnique({
-        where: { caseNumber },
+        where: { facilityId_caseNumber: { facilityId, caseNumber } },
         select: { id: true },
       })
       await prisma.case.upsert({
-        where: { caseNumber },
+        where: { facilityId_caseNumber: { facilityId, caseNumber } },
         update: {
-          facilityId,
           surgeonName,
           patientDob,
           dateOfSurgery: surgeryDate,
@@ -212,8 +216,11 @@ export async function ingestCaseProceduresCSV(
     const surgeryDate = parseDate(get(row, mapping, "surgeryDate"))
 
     try {
+      // 2026-06-09 audit BLOCKER: facility-scoped lookup — the global
+      // findUnique attached this facility's procedure rows onto another
+      // facility's case on caseNumber collision.
       let caseRow = await prisma.case.findUnique({
-        where: { caseNumber },
+        where: { facilityId_caseNumber: { facilityId, caseNumber } },
         select: { id: true },
       })
       if (!caseRow) {
@@ -336,8 +343,11 @@ export async function ingestCaseSuppliesCSV(
     )
 
     try {
+      // 2026-06-09 audit BLOCKER: facility-scoped lookup — the global
+      // findUnique attached this facility's supply rows (and spend) onto
+      // another facility's case on caseNumber collision.
       let caseRow = await prisma.case.findUnique({
-        where: { caseNumber },
+        where: { facilityId_caseNumber: { facilityId, caseNumber } },
         select: { id: true },
       })
       if (!caseRow) {

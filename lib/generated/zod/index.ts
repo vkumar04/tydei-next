@@ -15524,21 +15524,22 @@ export const CaseOrderByWithRelationInputSchema: z.ZodType<Prisma.CaseOrderByWit
 export const CaseWhereUniqueInputSchema: z.ZodType<Prisma.CaseWhereUniqueInput> = z.union([
   z.object({
     id: z.cuid(),
-    caseNumber: z.string(),
+    facilityId_caseNumber: z.lazy(() => CaseFacilityIdCaseNumberCompoundUniqueInputSchema),
   }),
   z.object({
     id: z.cuid(),
   }),
   z.object({
-    caseNumber: z.string(),
+    facilityId_caseNumber: z.lazy(() => CaseFacilityIdCaseNumberCompoundUniqueInputSchema),
   }),
 ])
 .and(z.strictObject({
   id: z.cuid().optional(),
-  caseNumber: z.string().optional(),
+  facilityId_caseNumber: z.lazy(() => CaseFacilityIdCaseNumberCompoundUniqueInputSchema).optional(),
   AND: z.union([ z.lazy(() => CaseWhereInputSchema), z.lazy(() => CaseWhereInputSchema).array() ]).optional(),
   OR: z.lazy(() => CaseWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => CaseWhereInputSchema), z.lazy(() => CaseWhereInputSchema).array() ]).optional(),
+  caseNumber: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
   facilityId: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
   surgeonName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   surgeonId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
@@ -28441,6 +28442,11 @@ export const CaseProcedureOrderByRelationAggregateInputSchema: z.ZodType<Prisma.
 
 export const CaseSupplyOrderByRelationAggregateInputSchema: z.ZodType<Prisma.CaseSupplyOrderByRelationAggregateInput> = z.strictObject({
   _count: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const CaseFacilityIdCaseNumberCompoundUniqueInputSchema: z.ZodType<Prisma.CaseFacilityIdCaseNumberCompoundUniqueInput> = z.strictObject({
+  facilityId: z.string(),
+  caseNumber: z.string(),
 });
 
 export const CaseCountOrderByAggregateInputSchema: z.ZodType<Prisma.CaseCountOrderByAggregateInput> = z.strictObject({

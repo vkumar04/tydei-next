@@ -244,22 +244,12 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
       .sort((a, b) => b.estRebate - a.estRebate)
   }, [cases])
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 sm:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-[100px] rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-[300px] rounded-xl" />
-      </div>
-    )
-  }
-
-  if (!report) return null
-
+  // 2026-06-09 audit BLOCKER: these three useMemos previously sat BELOW
+  // the isLoading/!report early returns — first render mounted N hooks,
+  // data arriving mounted N+3, and React threw "Rendered more hooks than
+  // during the previous render" (minified #310), hard-crashing the page
+  // the moment data loaded. Hooks must run unconditionally, before any
+  // early return. Same prod-crash class as the Analysis fix (#54).
   const surgeonOptions = useMemo(() => {
     const set = new Set<string>()
     for (const c of cases) if (c.surgeonName) set.add(c.surgeonName)
@@ -276,6 +266,22 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
     () => rebateStats.reduce((s, r) => s + r.estRebate, 0),
     [rebateStats]
   )
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-[100px] rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-[300px] rounded-xl" />
+      </div>
+    )
+  }
+
+  if (!report) return null
 
   return (
     <div className="space-y-6">

@@ -255,9 +255,9 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/ai/document-index.ts:53",
   "lib/actions/ai/document-index.ts:78",
   "lib/actions/ai/document-index.ts:99",
-  // ai-credits.ts: gated by requireFacility/Vendor at top of action
-  "lib/actions/ai-credits.ts:108",
-  "lib/actions/ai-credits.ts:120",
+  // ai-credits.ts: FIXED 2026-06-09 (audit BLOCKER) — all actions now
+  // session-tenant-scoped via sessionTenant()/requireOwnedCredit; the
+  // remaining by-id ops carry auth-scope-scanner-skip comments.
   // alerts.ts: post-fetch ownership equality check
   "lib/actions/alerts.ts:466",
   // benchmarks.ts: read-only public benchmarks
@@ -318,9 +318,11 @@ const BASELINE_HITS = new Set<string>([
   // universe + union clause above the currentSpend cascade) shifted them.
   "lib/actions/contracts.ts:1546",
   "lib/actions/contracts.ts:1566",
-  // imports/case-costing-import.ts: facility-scoped via upstream batch
-  "lib/actions/imports/case-costing-import.ts:243",
-  "lib/actions/imports/case-costing-import.ts:380",
+  // imports/case-costing-import.ts: facility-scoped via upstream batch.
+  // Bumped 2026-06-09 after the facility_caseNumber compound-unique fix
+  // added comment lines above these updates.
+  "lib/actions/imports/case-costing-import.ts:250",
+  "lib/actions/imports/case-costing-import.ts:390",
   // invoices/dispute.ts: post-fetch facility equality check
   "lib/actions/invoices/dispute.ts:36",
   "lib/actions/invoices/dispute.ts:97",
@@ -328,8 +330,9 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/invoices.ts:215",
   "lib/actions/invoices.ts:325",
   "lib/actions/invoices.ts:375",
-  // payor-contracts.ts: admin-managed shared resource
-  "lib/actions/payor-contracts.ts:91",
+  // payor-contracts.ts: FIXED 2026-06-09 (audit BLOCKER) — the
+  // calculatePayorMargins read is now facility-scoped (findFirstOrThrow
+  // with facilityId).
   // renewals: post-fetch facility ownership equality check
   "lib/actions/renewals/notes.ts:175",
   "lib/actions/renewals/proposals.ts:212",

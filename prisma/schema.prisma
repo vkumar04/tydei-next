@@ -1723,7 +1723,11 @@ model ProductBenchmark {
 
 model Case {
   id                 String    @id @default(cuid())
-  caseNumber         String    @unique
+  // 2026-06-09 audit BLOCKER: was globally `@unique` — case numbers are
+  // EHR-local ("CASE-0001"), so facility B importing a colliding number
+  // hijacked/merged facility A's case. Uniqueness is per-facility (see
+  // @@unique below).
+  caseNumber         String
   facilityId         String
   surgeonName        String?
   surgeonId          String?
@@ -1750,6 +1754,7 @@ model Case {
   procedures CaseProcedure[]
   supplies   CaseSupply[]
 
+  @@unique([facilityId, caseNumber])
   @@index([facilityId])
   @@index([surgeonName])
   @@index([dateOfSurgery])

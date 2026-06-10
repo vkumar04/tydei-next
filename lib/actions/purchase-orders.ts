@@ -138,6 +138,33 @@ export async function createPurchaseOrder(input: CreatePOInput) {
     }
   }
 
+  // 2026-06-09 audit BLOCKER: validate the client-supplied vendorId. The
+  // symmetric vendor-side hole was fixed in V1-M2 (vendor-purchase-orders
+  // verifies the facility relationship) but this side never got the
+  // guard — a facility could create POs against an arbitrary vendorId,
+  // injecting rows into that vendor's PO list, hero totals, and
+  // fulfillment rate. Require an actual relationship: a contract with
+  // the vendor (incl. grouped membership) or prior COG history.
+  const [vendorContractCount, vendorCogCount] = await Promise.all([
+    prisma.contract.count({
+      where: {
+        ...contractsOwnedByFacility(facility.id),
+        OR: [
+          { vendorId: data.vendorId },
+          { additionalVendorIds: { has: data.vendorId } },
+        ],
+      },
+    }),
+    prisma.cOGRecord.count({
+      where: { facilityId: facility.id, vendorId: data.vendorId },
+    }),
+  ])
+  if (vendorContractCount === 0 && vendorCogCount === 0) {
+    throw new Error(
+      "Vendor is not associated with this facility — no contract or purchase history found",
+    )
+  }
+
   const totalCost = data.lineItems.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
     0

@@ -2,8 +2,13 @@
 
 import { prisma } from "@/lib/db"
 import { requireAuth, requireFacility } from "@/lib/actions/auth"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import {
+  contractOwnershipWhere,
+  contractsOwnedByFacility,
+} from "@/lib/actions/contracts-auth"
+import { EVERGREEN_DATE } from "@/lib/contracts/evergreen"
 import { addDays } from "date-fns"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import {
   buildRealPerformanceHistory,
@@ -58,21 +63,59 @@ export interface RenewalSummary {
 // ─── Get Expiring Contracts ──────────────────────────────────────
 
 export async function getExpiringContracts(input: {
+  /** @deprecated 2026-06-09 audit BLOCKER: ignored — derived from session. */
   facilityId?: string
+  /** @deprecated 2026-06-09 audit BLOCKER: ignored — derived from session. */
   vendorId?: string
   windowDays: number
 }): Promise<ExpiringContract[]> {
-  await requireAuth()
-  const { facilityId, vendorId, windowDays } = input
+  // 2026-06-09 audit BLOCKER: tenant scope MUST come from the session,
+  // never from client input — the prior signature let any authenticated
+  // user pass another tenant's facilityId/vendorId (or neither, dumping
+  // every tenant's contracts). Same class as the getUnreadAlertCount
+  // round-10 fix.
+  const session = await requireAuth()
+  const member = await prisma.member.findFirst({
+    where: { userId: session.user.id },
+    include: { organization: { include: { facility: true, vendor: true } } },
+  })
+  const facilityId = member?.organization?.facility?.id ?? null
+  const vendorId = member?.organization?.vendor?.id ?? null
+  if (!facilityId && !vendorId) {
+    throw new Error("No facility or vendor associated with this account")
+  }
+  const { windowDays } = input
 
   const now = new Date()
   const windowEnd = addDays(now, windowDays)
 
+  // Facility scope includes ContractFacility join-shared contracts
+  // (CLAUDE.md hard rule); vendor scope includes grouped contracts where
+  // this vendor sits in additionalVendorIds (group-vendor drift class).
+  const tenantWhere: Prisma.ContractWhereInput = facilityId
+    ? contractsOwnedByFacility(facilityId)
+    : {
+        OR: [
+          { vendorId: vendorId as string },
+          { additionalVendorIds: { has: vendorId as string } },
+        ],
+      }
+
   const contracts = await prisma.contract.findMany({
     where: {
-      ...(facilityId ? { facilityId } : {}),
-      ...(vendorId ? { vendorId } : {}),
-      status: { in: ["active", "expiring", "expired", "draft"] },
+      AND: [
+        tenantWhere,
+        {
+          // 2026-06-09 audit HIGH: windowDays was computed and never
+          // applied — every contract (incl. drafts) returned regardless
+          // of window, and evergreen contracts would surface as
+          // year-9999 ICS events. Expired contracts stay visible (they
+          // render as critical/overdue); drafts are excluded — nothing
+          // to renew.
+          status: { in: ["active", "expiring", "expired"] },
+          expirationDate: { lte: windowEnd, not: EVERGREEN_DATE },
+        },
+      ],
     },
     include: {
       vendor: { select: { id: true, name: true } },
@@ -209,7 +252,32 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
 export async function getContractPerformanceHistory(
   contractId: string,
 ): Promise<PerformanceHistoryRow[]> {
-  await requireAuth()
+  // 2026-06-09 audit BLOCKER: ownership check — the prior version read
+  // any contract's per-year spend/rebate history from a caller-supplied
+  // id. Both portals use this (renewals detail modal), so branch on the
+  // session member like getExpiringContracts.
+  const session = await requireAuth()
+  const member = await prisma.member.findFirst({
+    where: { userId: session.user.id },
+    include: { organization: { include: { facility: true, vendor: true } } },
+  })
+  const facilityId = member?.organization?.facility?.id ?? null
+  const vendorId = member?.organization?.vendor?.id ?? null
+  if (!facilityId && !vendorId) return []
+
+  const tenantWhere: Prisma.ContractWhereInput = facilityId
+    ? contractsOwnedByFacility(facilityId)
+    : {
+        OR: [
+          { vendorId: vendorId as string },
+          { additionalVendorIds: { has: vendorId as string } },
+        ],
+      }
+  const owned = await prisma.contract.findFirst({
+    where: { AND: [{ id: contractId }, tenantWhere] },
+    select: { id: true },
+  })
+  if (!owned) return []
 
   const periods = await prisma.contractPeriod.findMany({
     where: { contractId },
