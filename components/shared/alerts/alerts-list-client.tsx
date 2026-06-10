@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -39,35 +40,42 @@ const TAB_TO_FILTER: Record<
   rebates: { alertType: "rebate_due" },
 }
 
-function computeSummary(alerts: AlertRowItem[]) {
-  let offContract = 0
-  let expiring = 0
-  let rebates = 0
-  let unread = 0
-  for (const a of alerts) {
-    if (a.alertType === "off_contract") offContract += 1
-    if (a.alertType === "expiring_contract") expiring += 1
-    if (a.alertType === "rebate_due") rebates += 1
-    if (a.status === "new_alert") unread += 1
-  }
-  return { offContract, expiring, rebates, unread, total: alerts.length }
-}
+const PAGE_SIZE = 20
 
 export function AlertsListClient({ facilityId }: AlertsListClientProps) {
   const router = useRouter()
   const [tab, setTab] = useState<AlertsTabValue>("all")
+  const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  const { data, isLoading } = useAlerts(facilityId, TAB_TO_FILTER[tab])
-  const { data: allData } = useAlerts(facilityId, {})
+  const { data, isLoading } = useAlerts(facilityId, {
+    ...TAB_TO_FILTER[tab],
+    page,
+    pageSize: PAGE_SIZE,
+  })
 
   const resolve = useResolveAlert()
   const bulkUpdate = useBulkUpdateAlerts()
   const markAllRead = useMarkAllAlertsRead()
 
   const alerts = (data?.alerts ?? []) as AlertRowItem[]
-  const allAlerts = (allData?.alerts ?? []) as AlertRowItem[]
-  const summary = useMemo(() => computeSummary(allAlerts), [allAlerts])
+  const total = data?.total ?? 0
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  // Audit M10: hero numbers come from the server-side groupBy aggregate
+  // (`counts`), NOT from reducing the currently-loaded page — the old
+  // client-side reducer silently capped every hero stat at the first 20
+  // rows.
+  const summary = useMemo(() => {
+    const counts = data?.counts
+    return {
+      offContract: counts?.byType?.off_contract ?? 0,
+      expiring: counts?.byType?.expiring_contract ?? 0,
+      rebates: counts?.byType?.rebate_due ?? 0,
+      unread: counts?.unread ?? 0,
+      total: counts?.activeTotal ?? 0,
+    }
+  }, [data?.counts])
 
   const handleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -100,6 +108,7 @@ export function AlertsListClient({ facilityId }: AlertsListClientProps) {
 
   const handleTabChange = useCallback((value: string) => {
     setTab(value as AlertsTabValue)
+    setPage(1)
     setSelectedIds(new Set())
   }, [])
 
@@ -168,6 +177,35 @@ export function AlertsListClient({ facilityId }: AlertsListClientProps) {
                     />
                   ))}
                 </ScrollArea>
+                {/* Audit M10: rows past the first 20 used to be unreachable. */}
+                {pageCount > 1 ? (
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      Page {page} of {pageCount} · {total} alert
+                      {total === 1 ? "" : "s"}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={page >= pageCount}
+                        onClick={() =>
+                          setPage((p) => Math.min(pageCount, p + 1))
+                        }
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
           </CardContent>

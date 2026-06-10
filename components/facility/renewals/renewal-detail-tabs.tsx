@@ -63,9 +63,14 @@ export interface RenewalDetail {
    * percentage (unrounded) — `null` when commitment data is missing.
    */
   commitmentProgressPercent: number | null
-  currentTier: number
-  maxTier: number
-  tier: { current: number; total: number }
+  /**
+   * Audit M13: null when the contract has no recorded tier — the UI
+   * renders "—" instead of the old fabricated "Tier 1/3". `total` is
+   * null when only the achieved tier is known (no ladder size).
+   */
+  currentTier: number | null
+  maxTier: number | null
+  tier: { current: number; total: number | null } | null
   currentMarketShare: number | null
   marketShareCommitment: number | null
   performanceHistory: PerformanceHistoryRow[]
@@ -112,8 +117,10 @@ export function RenewalDetailTabs({
         commitmentMet: detail.commitmentMet ?? 0,
         currentMarketShare: detail.currentMarketShare,
         marketShareCommitment: detail.marketShareCommitment,
-        currentTier: detail.currentTier,
-        maxTier: detail.maxTier,
+        // M13: 0/0 when tier data is missing — `currentTier < maxTier`
+        // is false, so no tier-advancement point is fabricated.
+        currentTier: detail.currentTier ?? 0,
+        maxTier: detail.maxTier ?? 0,
       }),
     [
       detail.commitmentMet,
@@ -180,7 +187,11 @@ export function RenewalDetailTabs({
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Tier</p>
               <p className="mt-1 text-xl font-semibold tabular-nums">
-                {detail.tier.current}/{detail.tier.total}
+                {detail.tier === null
+                  ? "—"
+                  : detail.tier.total === null
+                    ? detail.tier.current
+                    : `${detail.tier.current}/${detail.tier.total}`}
               </p>
             </CardContent>
           </Card>
@@ -258,9 +269,12 @@ export function RenewalDetailTabs({
           <Badge variant="secondary">
             Commitment: {commitmentText}
           </Badge>
-          <Badge variant="secondary">
-            Tier {detail.currentTier}/{detail.maxTier}
-          </Badge>
+          {detail.currentTier !== null ? (
+            <Badge variant="secondary">
+              Tier {detail.currentTier}
+              {detail.maxTier !== null ? `/${detail.maxTier}` : ""}
+            </Badge>
+          ) : null}
           {detail.currentMarketShare !== null ? (
             <Badge variant="secondary">
               Market share: {Math.round(detail.currentMarketShare)}%

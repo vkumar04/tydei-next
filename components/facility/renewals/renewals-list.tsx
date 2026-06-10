@@ -107,11 +107,10 @@ export function RenewalsList({ rows, selectedId, onSelect }: RenewalsListProps) 
                     <TooltipContent className="max-w-xs">
                       <p className="text-xs">
                         How close the contract is to its promised pace, as a
-                        percent. Uses (current market share ÷ market-share
-                        commitment) × 100 when the contract tracks market
-                        share; otherwise (rebates earned ÷ total contract
-                        value) × 100. ≥ 100 means the contract is on or
-                        ahead of pace.
+                        percent: (current market share ÷ market-share
+                        commitment) × 100. ≥ 100 means the contract is on or
+                        ahead of pace. Shows “—” when the contract has no
+                        commitment data.
                       </p>
                     </TooltipContent>
                   </Tooltip>

@@ -258,8 +258,9 @@ const BASELINE_HITS = new Set<string>([
   // ai-credits.ts: FIXED 2026-06-09 (audit BLOCKER) — all actions now
   // session-tenant-scoped via sessionTenant()/requireOwnedCredit; the
   // remaining by-id ops carry auth-scope-scanner-skip comments.
-  // alerts.ts: post-fetch ownership equality check
-  "lib/actions/alerts.ts:466",
+  // alerts.ts: the synthesize-pipeline resolve-by-id transaction moved
+  // to lib/alerts/synthesize-persist.ts (2026-06-09 audit H4 — system
+  // contexts need it without a session); no by-id ops remain here.
   // benchmarks.ts: read-only public benchmarks
   "lib/actions/benchmarks.ts:66",
   "lib/actions/benchmarks.ts:86",
@@ -336,8 +337,10 @@ const BASELINE_HITS = new Set<string>([
   // calculatePayorMargins read is now facility-scoped (findFirstOrThrow
   // with facilityId).
   // renewals: post-fetch facility ownership equality check
-  "lib/actions/renewals/notes.ts:175",
-  "lib/actions/renewals/proposals.ts:212",
+  // (bumped 2026-06-09 after the M9 group-vendor OR clauses in
+  // listRenewalNotesForVendor / submitRenewalProposal shifted lines)
+  "lib/actions/renewals/notes.ts:184",
+  "lib/actions/renewals/proposals.ts:220",
   // report-scheduling.ts: org-scoped via session lookup
   "lib/actions/report-scheduling.ts:43",
   "lib/actions/report-scheduling.ts:52",

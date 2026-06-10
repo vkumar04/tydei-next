@@ -17,13 +17,21 @@ import {
 
 type StatusTab = "all" | "active" | "resolved"
 
+const PAGE_SIZE = 20
+
 export function VendorAlertsClient() {
   const [tab, setTab] = useState<StatusTab>("active")
+  const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  const { data: activeData, isLoading: activeLoading } = useVendorAlerts("", {})
+  const { data: activeData, isLoading: activeLoading } = useVendorAlerts("", {
+    page,
+    pageSize: PAGE_SIZE,
+  })
   const { data: resolvedData, isLoading: resolvedLoading } = useVendorAlerts("", {
     status: "resolved",
+    page,
+    pageSize: PAGE_SIZE,
   })
 
   const resolve = useResolveVendorAlert()
@@ -34,10 +42,29 @@ export function VendorAlertsClient() {
   const activeAlerts = activeData?.alerts ?? []
   const resolvedAlerts = resolvedData?.alerts ?? []
 
-  const highCount = activeAlerts.filter((a) => a.severity === "high").length
-  const mediumCount = activeAlerts.filter((a) => a.severity === "medium").length
-  const unresolvedCount = activeAlerts.length
-  const resolvedCount = resolvedAlerts.length
+  // Audit M10: hero numbers come from the server-side groupBy aggregate
+  // (`counts`) so they cover the full vendor population — the previous
+  // client-side reducers capped every stat at the first 20 rows.
+  const counts = activeData?.counts
+  const highCount = counts?.bySeverity?.high ?? 0
+  const mediumCount = counts?.bySeverity?.medium ?? 0
+  const unresolvedCount = counts?.activeTotal ?? 0
+  const resolvedCount = counts?.byStatus?.resolved ?? 0
+
+  const activePageCount = Math.max(
+    1,
+    Math.ceil((activeData?.total ?? 0) / PAGE_SIZE),
+  )
+  const resolvedPageCount = Math.max(
+    1,
+    Math.ceil((resolvedData?.total ?? 0) / PAGE_SIZE),
+  )
+  const pageCount =
+    tab === "resolved"
+      ? resolvedPageCount
+      : tab === "active"
+        ? activePageCount
+        : Math.max(activePageCount, resolvedPageCount)
 
   const visibleAlerts =
     tab === "resolved"
@@ -167,6 +194,7 @@ export function VendorAlertsClient() {
         value={tab}
         onValueChange={(v) => {
           setTab(v as StatusTab)
+          setPage(1)
           setSelectedIds(new Set())
         }}
       >
@@ -174,19 +202,19 @@ export function VendorAlertsClient() {
           <TabsTrigger value="all">
             All
             <Badge variant="secondary" className="ml-2">
-              {activeAlerts.length + resolvedAlerts.length}
+              {unresolvedCount + resolvedCount}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="active">
             Active
             <Badge variant="secondary" className="ml-2">
-              {activeAlerts.length}
+              {unresolvedCount}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="resolved">
             Resolved
             <Badge variant="secondary" className="ml-2">
-              {resolvedAlerts.length}
+              {resolvedCount}
             </Badge>
           </TabsTrigger>
         </TabsList>
@@ -205,6 +233,33 @@ export function VendorAlertsClient() {
           emptyMessage={tab === "resolved" ? "Resolved alerts will appear here" : undefined}
         />
       </div>
+
+      {/* Audit M10: rows past the first 20 used to be unreachable. */}
+      {pageCount > 1 ? (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">
+            Page {page} of {pageCount}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= pageCount}
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

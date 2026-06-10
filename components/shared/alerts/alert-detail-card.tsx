@@ -47,6 +47,21 @@ function fmtCurrency(amount: number) {
   }).format(amount)
 }
 
+/**
+ * Audit M8: `tier_rebate` is DISPLAY-scaled by the synthesizer —
+ * display-percent (3 = 3%) for percent_of_spend, dollars otherwise.
+ * Older alerts lack `tier_rebate_type`; they were all percent.
+ */
+function fmtTierRebate(alert: AlertDetail): string {
+  const value = meta(alert, "tier_rebate")
+  if (value == null) return "—"
+  const rebateType = meta(alert, "tier_rebate_type")
+  if (rebateType == null || rebateType === "percent_of_spend") {
+    return `${value}%`
+  }
+  return fmtCurrency(Number(value))
+}
+
 export function AlertDetailCard({ alert, onResolve, onDismiss }: AlertDetailCardProps) {
   const typeConfig = alertTypeIconConfig[alert.alertType]
 
@@ -207,7 +222,7 @@ export function AlertDetailCard({ alert, onResolve, onDismiss }: AlertDetailCard
                       </span>{" "}
                       more to reach Tier {meta(alert, "target_tier")} and earn{" "}
                       <span className="font-medium text-foreground">
-                        {meta(alert, "tier_rebate") as string}
+                        {fmtTierRebate(alert)}
                       </span>{" "}
                       rebate.
                     </p>

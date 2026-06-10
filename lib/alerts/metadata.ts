@@ -36,7 +36,13 @@ export interface TierThresholdMeta {
   tier_threshold: number
   amount_needed: number
   target_tier: number
+  /**
+   * DISPLAY-scaled: display-percent (3 = 3%) when `tier_rebate_type`
+   * is "percent_of_spend", dollars otherwise.
+   */
   tier_rebate: number
+  /** Prisma RebateType string — drives % vs $ rendering (audit M8). */
+  tier_rebate_type: string
 }
 
 export interface RebateDueMeta {

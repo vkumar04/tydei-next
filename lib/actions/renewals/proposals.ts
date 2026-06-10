@@ -85,9 +85,17 @@ export async function submitRenewalProposal(input: {
     input.proposedTerms,
   )
 
-  // Ownership: vendor can only propose against a contract they own.
+  // Ownership: vendor can only propose against a contract they own —
+  // primary `vendorId` OR grouped membership via `additionalVendorIds`
+  // (2026-06-09 audit M9, group-vendor drift class).
   const contract = await prisma.contract.findFirst({
-    where: { id: input.contractId, vendorId: vendor.id },
+    where: {
+      id: input.contractId,
+      OR: [
+        { vendorId: vendor.id },
+        { additionalVendorIds: { has: vendor.id } },
+      ],
+    },
     select: {
       id: true,
       facilityId: true,

@@ -18,6 +18,21 @@ function readNumber(
   return typeof v === "number" && Number.isFinite(v) ? v : null
 }
 
+/**
+ * Render the tier's rebate value (audit M8). `tier_rebate` is
+ * DISPLAY-scaled by the synthesizer: display-percent (3 = 3%) for
+ * percent_of_spend, dollars for fixed/per-unit/per-procedure types.
+ * Pre-M8 this always went through formatCurrency, so a 3% tier showed
+ * as "$3.00". Older alerts lack `tier_rebate_type` — they were all
+ * percent-denominated, so percent is the default.
+ */
+function formatTierRebate(value: number, rebateType: string | null): string {
+  if (rebateType === null || rebateType === "percent_of_spend") {
+    return `${value}%`
+  }
+  return formatCurrency(value)
+}
+
 export function AlertDetailTierProgress({
   metadata,
 }: AlertDetailTierProgressProps) {
@@ -26,6 +41,10 @@ export function AlertDetailTierProgress({
   const amountNeeded = readNumber(metadata, "amount_needed")
   const targetTier = readNumber(metadata, "target_tier")
   const tierRebate = readNumber(metadata, "tier_rebate")
+  const tierRebateType =
+    typeof metadata["tier_rebate_type"] === "string"
+      ? (metadata["tier_rebate_type"] as string)
+      : null
 
   if (currentSpend === null || tierThreshold === null || tierThreshold <= 0) {
     return null
@@ -66,7 +85,7 @@ export function AlertDetailTierProgress({
                 {" "}
                 and earn a{" "}
                 <span className="font-medium text-foreground">
-                  {formatCurrency(tierRebate)}
+                  {formatTierRebate(tierRebate, tierRebateType)}
                 </span>{" "}
                 rebate
               </>

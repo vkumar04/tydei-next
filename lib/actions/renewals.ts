@@ -60,6 +60,68 @@ export interface RenewalSummary {
   renewalRecommendation: string
 }
 
+// ─── Trailing-12mo spend (audit M12) ─────────────────────────────
+
+/**
+ * Canonical renewals spend figure — mirrors the contracts-list
+ * trailing-12-month cascade (lib/actions/contracts.ts, Charles R5.28):
+ *
+ *   1. ContractPeriod.totalSpend WHERE periodEnd in [today-12mo, today]
+ *   2. else COGRecord.extendedPrice WHERE contractId AND
+ *      transactionDate in [today-12mo, today]
+ *
+ * Pre-M12, getExpiringContracts summed the last 4 ContractPeriod rows
+ * and getRenewalSummary summed ALL periods — neither matched the
+ * "Current Spend" column on the contracts list, so the same contract
+ * showed different spend on the two pages. One helper, both callers.
+ */
+async function trailing12moSpendByContract(
+  contractIds: string[],
+): Promise<Map<string, number>> {
+  const spend = new Map<string, number>()
+  if (contractIds.length === 0) return spend
+
+  const windowEnd = new Date()
+  const windowStart = new Date(windowEnd)
+  windowStart.setFullYear(windowStart.getFullYear() - 1)
+
+  const [periodGroups, cogGroups] = await Promise.all([
+    prisma.contractPeriod.groupBy({
+      by: ["contractId"],
+      where: {
+        contractId: { in: contractIds },
+        // Same predicate as the contracts list/detail: the period ENDS
+        // inside the window (straddling periods count).
+        periodEnd: { gte: windowStart, lte: windowEnd },
+      },
+      _sum: { totalSpend: true },
+    }),
+    prisma.cOGRecord.groupBy({
+      by: ["contractId"],
+      where: {
+        contractId: { in: contractIds },
+        transactionDate: { gte: windowStart, lte: windowEnd },
+      },
+      _sum: { extendedPrice: true },
+    }),
+  ])
+
+  const cogByContract = new Map<string, number>()
+  for (const g of cogGroups) {
+    if (g.contractId) {
+      cogByContract.set(g.contractId, Number(g._sum.extendedPrice ?? 0))
+    }
+  }
+  for (const id of contractIds) {
+    spend.set(id, cogByContract.get(id) ?? 0)
+  }
+  for (const g of periodGroups) {
+    const periodSpend = Number(g._sum.totalSpend ?? 0)
+    if (periodSpend > 0) spend.set(g.contractId, periodSpend)
+  }
+  return spend
+}
+
 // ─── Get Expiring Contracts ──────────────────────────────────────
 
 export async function getExpiringContracts(input: {
@@ -120,10 +182,12 @@ export async function getExpiringContracts(input: {
     include: {
       vendor: { select: { id: true, name: true } },
       facility: { select: { id: true, name: true } },
+      // Latest period only — for tierAchieved. Spend comes from the
+      // canonical trailing-12mo cascade below (audit M12).
       periods: {
-        select: { totalSpend: true, tierAchieved: true },
+        select: { tierAchieved: true },
         orderBy: { periodEnd: "desc" },
-        take: 4,
+        take: 1,
       },
       // Charles 2026-05-04 DRIFT-4: route totalRebate through canonical
       // helper (CLAUDE.md "Rebates Earned (lifetime)" invariant) instead
@@ -133,8 +197,14 @@ export async function getExpiringContracts(input: {
     orderBy: { expirationDate: "asc" },
   })
 
+  // Audit M12: spend through the canonical trailing-12mo cascade so the
+  // renewals page agrees with the contracts list.
+  const spendByContract = await trailing12moSpendByContract(
+    contracts.map((c) => c.id),
+  )
+
   return serialize(contracts.map((c) => {
-    const totalSpend = c.periods.reduce((sum, p) => sum + Number(p.totalSpend), 0)
+    const totalSpend = spendByContract.get(c.id) ?? 0
     const totalRebate = sumEarnedRebatesLifetime(c.rebates)
     const latestTier = c.periods[0]?.tierAchieved ?? null
     const daysUntilExpiry = Math.ceil(
@@ -188,9 +258,13 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
     where: contractOwnershipWhere(contractId, facility.id),
     include: {
       vendor: { select: { name: true } },
+      // Latest period only — for tierAchieved. Spend comes from the
+      // canonical trailing-12mo cascade below (audit M12; this used to
+      // sum EVERY period — a lifetime figure mislabeled as spend).
       periods: {
-        select: { totalSpend: true, tierAchieved: true },
+        select: { tierAchieved: true },
         orderBy: { periodEnd: "desc" },
+        take: 1,
       },
       // Charles 2026-05-04 DRIFT-4: route totalRebate through canonical
       // helper (CLAUDE.md "Rebates Earned (lifetime)" invariant) instead
@@ -203,7 +277,8 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
   const daysUntilExpiry = Math.ceil(
     (contract.expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
   )
-  const totalSpend = contract.periods.reduce((s, p) => s + Number(p.totalSpend), 0)
+  const spendByContract = await trailing12moSpendByContract([contract.id])
+  const totalSpend = spendByContract.get(contract.id) ?? 0
   const totalRebate = sumEarnedRebatesLifetime(contract.rebates)
   const tierAchieved = contract.periods[0]?.tierAchieved ?? null
 

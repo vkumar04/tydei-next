@@ -80,17 +80,26 @@ export async function listRenewalNotes(
 // returning notes. Mirrors the facility version's shape (newest-first,
 // author name included) so the same UI can render both.
 //
-// Ownership is enforced by matching `contract.vendorId === vendor.id`
-// (no multi-vendor contract model exists yet). If the relationship is
-// missing, we return `[]` rather than throwing — matching the facility
-// path's "no notes" convention.
+// Ownership is enforced by matching the caller against the contract's
+// FULL vendor set — primary `vendorId` OR `additionalVendorIds` (2026-
+// 06-09 audit M9, group-vendor drift class: grouped contracts list
+// participating vendors in `additionalVendorIds`, so the bare vendorId
+// check hid notes from legitimate group members). If the relationship
+// is missing, we return `[]` rather than throwing — matching the
+// facility path's "no notes" convention.
 export async function listRenewalNotesForVendor(
   contractId: string,
 ): Promise<RenewalNote[]> {
   const { vendor } = await requireVendor()
 
-  const contract = await prisma.contract.findUnique({
-    where: { id: contractId, vendorId: vendor.id },
+  const contract = await prisma.contract.findFirst({
+    where: {
+      id: contractId,
+      OR: [
+        { vendorId: vendor.id },
+        { additionalVendorIds: { has: vendor.id } },
+      ],
+    },
     select: { id: true },
   })
   if (!contract) return []

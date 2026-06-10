@@ -84,8 +84,9 @@ export function VendorRenewalsControlBar({
             <SelectItem value="in_progress">
               In Progress ({counts.in_progress})
             </SelectItem>
+            {/* Audit L20: >180-days-out is "Healthy", not "Renewed". */}
             <SelectItem value="renewed">
-              Renewed ({counts.renewed})
+              Healthy ({counts.renewed})
             </SelectItem>
             <SelectItem value="expired">
               Expired ({counts.expired})

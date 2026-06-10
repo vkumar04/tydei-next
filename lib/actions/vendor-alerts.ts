@@ -8,14 +8,31 @@ import { serialize } from "@/lib/serialize"
 
 // ─── Vendor Alerts ──────────────────────────────────────────────
 
+/**
+ * Aggregate counts shipped alongside the page of alerts (audit M10) so
+ * the vendor hero tiles reflect the FULL vendor-scoped population, not
+ * just the rows the current page shows. Mirrors `AlertCounts` in
+ * lib/actions/alerts.ts.
+ */
+export interface VendorAlertCounts {
+  byStatus: Record<string, number>
+  bySeverity: Record<string, number>
+  byType: Record<string, number>
+  activeTotal: number
+  unread: number
+}
+
+const ACTIVE_STATUSES = new Set(["new_alert", "read"])
+
 export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "portalType"> & { vendorId?: string }) {
   const { vendor } = await requireVendor()
   const { alertType, severity, status, page = 1, pageSize = 20 } = input
 
-  const conditions: Prisma.AlertWhereInput[] = [
+  const baseScope: Prisma.AlertWhereInput[] = [
     { vendorId: vendor.id },
     { portalType: "vendor" },
   ]
+  const conditions: Prisma.AlertWhereInput[] = [...baseScope]
 
   if (alertType) conditions.push({ alertType })
   if (severity) conditions.push({ severity })
@@ -27,7 +44,7 @@ export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "
 
   const where: Prisma.AlertWhereInput = { AND: conditions }
 
-  const [alerts, total] = await Promise.all([
+  const [alerts, total, grouped] = await Promise.all([
     prisma.alert.findMany({
       where,
       include: {
@@ -39,9 +56,32 @@ export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "
       take: pageSize,
     }),
     prisma.alert.count({ where }),
+    prisma.alert.groupBy({
+      by: ["status", "severity", "alertType"],
+      where: { AND: baseScope },
+      _count: { _all: true },
+    }),
   ])
 
-  return serialize({ alerts, total })
+  const counts: VendorAlertCounts = {
+    byStatus: {},
+    bySeverity: {},
+    byType: {},
+    activeTotal: 0,
+    unread: 0,
+  }
+  for (const g of grouped) {
+    const n = g._count._all
+    counts.byStatus[g.status] = (counts.byStatus[g.status] ?? 0) + n
+    if (ACTIVE_STATUSES.has(g.status)) {
+      counts.activeTotal += n
+      counts.bySeverity[g.severity] = (counts.bySeverity[g.severity] ?? 0) + n
+      counts.byType[g.alertType] = (counts.byType[g.alertType] ?? 0) + n
+    }
+    if (g.status === "new_alert") counts.unread += n
+  }
+
+  return serialize({ alerts, total, page, pageSize, counts })
 }
 
 // ─── Vendor Alert Actions ───────────────────────────────────────

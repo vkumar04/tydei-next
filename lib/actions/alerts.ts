@@ -4,27 +4,10 @@ import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { alertFiltersSchema, type AlertFilters } from "@/lib/validators/alerts"
 import type { Prisma } from "@/lib/generated/prisma/client"
-import {
-  generateExpiringContractAlerts,
-  generateTierThresholdAlerts,
-  generateOffContractAlerts,
-  generateRebateDueAlerts,
-} from "@/lib/alerts/generate-alerts"
-import { sendAlertNotification } from "@/lib/actions/notifications"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
-import {
-  synthesizeAlertsForFacility,
-  type SynthBundle,
-  type SynthCogRecord,
-  type SynthContract,
-  type SynthContractPeriod,
-  type SynthExistingAlert,
-  type SynthTier,
-} from "@/lib/alerts/synthesizer"
-import { computeBundleStatus } from "@/lib/contracts/bundle-compute"
-import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
-import { deriveBundleShortfalls } from "@/lib/contracts/bundle-shortfalls"
+import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
+import { excludeSpendTargetAlerts } from "@/lib/alerts/spend-target-filter"
 import {
   planBulkAction,
   type BulkAlertAction,
@@ -43,14 +26,72 @@ import {
 
 // ─── List Alerts ─────────────────────────────────────────────────
 
+/**
+ * Aggregate counts shipped alongside the page of alerts (audit M10) so
+ * hero tiles reflect the FULL facility-scoped population, not just the
+ * first 20 rows the page happens to show.
+ *
+ * All maps are computed over the base scope (facility + portal, spend
+ * targets excluded):
+ *   - byStatus       — every status, for "Resolved" style tiles
+ *   - bySeverity     — ACTIVE (new_alert|read) rows only
+ *   - byType         — ACTIVE rows only
+ *   - activeTotal    — ACTIVE row count
+ *   - unread         — new_alert row count
+ */
+export interface AlertCounts {
+  byStatus: Record<string, number>
+  bySeverity: Record<string, number>
+  byType: Record<string, number>
+  activeTotal: number
+  unread: number
+}
+
+const ACTIVE_STATUSES = new Set(["new_alert", "read"])
+
+async function aggregateAlertCounts(
+  baseScope: Prisma.AlertWhereInput[],
+): Promise<AlertCounts> {
+  const grouped = await prisma.alert.groupBy({
+    by: ["status", "severity", "alertType"],
+    where: { AND: baseScope },
+    _count: { _all: true },
+  })
+
+  const counts: AlertCounts = {
+    byStatus: {},
+    bySeverity: {},
+    byType: {},
+    activeTotal: 0,
+    unread: 0,
+  }
+  for (const g of grouped) {
+    const n = g._count._all
+    counts.byStatus[g.status] = (counts.byStatus[g.status] ?? 0) + n
+    if (ACTIVE_STATUSES.has(g.status)) {
+      counts.activeTotal += n
+      counts.bySeverity[g.severity] = (counts.bySeverity[g.severity] ?? 0) + n
+      counts.byType[g.alertType] = (counts.byType[g.alertType] ?? 0) + n
+    }
+    if (g.status === "new_alert") counts.unread += n
+  }
+  return counts
+}
+
 export async function getAlerts(input: AlertFilters) {
   const { facility } = await requireFacility()
   const filters = alertFiltersSchema.parse(input)
 
-  const conditions: Prisma.AlertWhereInput[] = [
+  // Audit H5: rebate-optimizer spend targets are persisted as Alert
+  // rows; they must never surface in (or be counted by) alert UIs,
+  // where resolve/dismiss/mark-read would destroy them.
+  const baseScope: Prisma.AlertWhereInput[] = [
     { facilityId: facility.id },
     { portalType: filters.portalType },
+    excludeSpendTargetAlerts(),
   ]
+
+  const conditions: Prisma.AlertWhereInput[] = [...baseScope]
 
   if (filters.alertType) conditions.push({ alertType: filters.alertType })
   if (filters.severity) conditions.push({ severity: filters.severity })
@@ -64,7 +105,7 @@ export async function getAlerts(input: AlertFilters) {
   const page = filters.page ?? 1
   const pageSize = filters.pageSize ?? 20
 
-  const [alerts, total] = await Promise.all([
+  const [alerts, total, counts] = await Promise.all([
     prisma.alert.findMany({
       where,
       include: {
@@ -76,9 +117,10 @@ export async function getAlerts(input: AlertFilters) {
       take: pageSize,
     }),
     prisma.alert.count({ where }),
+    aggregateAlertCounts(baseScope),
   ])
 
-  return serialize({ alerts, total })
+  return serialize({ alerts, total, page, pageSize, counts })
 }
 
 // ─── Single Alert ────────────────────────────────────────────────
@@ -120,6 +162,8 @@ export async function getUnreadAlertCount(input: {
   const where: Prisma.AlertWhereInput = {
     portalType: input.portalType,
     status: "new_alert",
+    // Audit H5: spend targets are not alerts — keep the badge honest.
+    ...excludeSpendTargetAlerts(),
   }
   if (input.portalType === "facility") {
     const { facility } = await requireFacility()
@@ -203,288 +247,19 @@ export async function bulkDismissAlerts(ids: string[]) {
  * Synthesize fresh alerts from live contract + COG + accrual state,
  * persist new alerts, and resolve any alerts whose underlying
  * condition has cleared.
+ *
+ * Session-scoped wrapper around the core in
+ * `lib/alerts/synthesize-persist.ts` (audit H4) — the same core is
+ * fired by the COG import pipeline and the cron sweep.
  */
 export async function synthesizeAndPersistAlerts(): Promise<{
   created: number
   resolved: number
 }> {
   const session = await requireFacility()
-  const facilityId = session.facility.id
-
-  // Load the minimal columns each input shape needs.
-  const [
-    cogRows,
-    contractRows,
-    periodRows,
-    existingRows,
-    bundleRows,
-  ] = await Promise.all([
-    prisma.cOGRecord.findMany({
-      where: { facilityId },
-      select: {
-        id: true,
-        poNumber: true,
-        vendorId: true,
-        vendorName: true,
-        inventoryNumber: true,
-        inventoryDescription: true,
-        unitCost: true,
-        quantity: true,
-        extendedPrice: true,
-        contractPrice: true,
-        matchStatus: true,
-        transactionDate: true,
-      },
-    }),
-    prisma.contract.findMany({
-      where: { facilityId },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        expirationDate: true,
-        annualValue: true,
-        vendorId: true,
-        vendor: { select: { name: true } },
-        terms: {
-          select: {
-            tiers: {
-              select: {
-                tierNumber: true,
-                spendMin: true,
-                spendMax: true,
-                rebateValue: true,
-                rebateType: true,
-              },
-            },
-          },
-        },
-        periods: {
-          orderBy: { periodEnd: "desc" },
-          take: 1,
-          select: { totalSpend: true },
-        },
-      },
-    }),
-    prisma.contractPeriod.findMany({
-      where: { facilityId },
-      select: {
-        id: true,
-        contractId: true,
-        periodStart: true,
-        periodEnd: true,
-        rebateEarned: true,
-        rebateCollected: true,
-        contract: {
-          select: {
-            name: true,
-            vendorId: true,
-            vendor: { select: { name: true } },
-          },
-        },
-      },
-    }),
-    prisma.alert.findMany({
-      where: {
-        facilityId,
-        status: { in: ["new_alert", "read"] },
-      },
-      select: {
-        id: true,
-        alertType: true,
-        contractId: true,
-        vendorId: true,
-        metadata: true,
-        status: true,
-      },
-    }),
-    prisma.tieInBundle.findMany({
-      where: {
-        primaryContract: {
-          OR: [
-            { facilityId },
-            { contractFacilities: { some: { facilityId } } },
-          ],
-        },
-      },
-      include: {
-        primaryContract: {
-          select: { id: true, name: true },
-        },
-        members: {
-          include: {
-            contract: { select: { id: true, name: true } },
-          },
-        },
-      },
-    }),
-  ])
-
-  const cogRecords: SynthCogRecord[] = cogRows.map((r) => ({
-    id: r.id,
-    poNumber: r.poNumber,
-    vendorId: r.vendorId,
-    vendorName: r.vendorName,
-    inventoryNumber: r.inventoryNumber,
-    inventoryDescription: r.inventoryDescription,
-    unitCost: Number(r.unitCost),
-    quantity: r.quantity,
-    extendedPrice: r.extendedPrice === null ? null : Number(r.extendedPrice),
-    contractPrice: r.contractPrice === null ? null : Number(r.contractPrice),
-    matchStatus: r.matchStatus,
-    transactionDate: r.transactionDate,
-  }))
-
-  const contracts: SynthContract[] = contractRows.map((c) => {
-    const tiers: SynthTier[] = c.terms.flatMap((t) =>
-      t.tiers.map((tier) => ({
-        tierNumber: tier.tierNumber,
-        spendMin: Number(tier.spendMin),
-        spendMax: tier.spendMax === null ? null : Number(tier.spendMax),
-        // Charles 2026-04-25: scale at the boundary so alert payloads
-        // carry display-percent (3 = 3%), not raw fraction (0.03). The
-        // synthesizer ships `tier_rebate` in alert metadata that's
-        // rendered directly as "X%" in the UI.
-        rebateValue: toDisplayRebateValue(
-          String(tier.rebateType ?? "percent_of_spend"),
-          Number(tier.rebateValue),
-        ),
-      })),
-    )
-    const currentSpend =
-      c.periods.length > 0 ? Number(c.periods[0].totalSpend) : 0
-    return {
-      id: c.id,
-      name: c.name,
-      status: c.status,
-      expirationDate: c.expirationDate,
-      annualValue: Number(c.annualValue),
-      vendorId: c.vendorId,
-      vendorName: c.vendor?.name ?? "Unknown vendor",
-      currentSpend,
-      tiers,
-    }
+  return runAlertSynthesisForFacility(session.facility.id, {
+    auditUserId: session.user.id,
   })
-
-  const contractPeriods: SynthContractPeriod[] = periodRows.map((p) => ({
-    id: p.id,
-    contractId: p.contractId,
-    contractName: p.contract?.name ?? "Unknown contract",
-    vendorId: p.contract?.vendorId ?? "",
-    vendorName: p.contract?.vendor?.name ?? "Unknown vendor",
-    periodStart: p.periodStart,
-    periodEnd: p.periodEnd,
-    rebateEarned: Number(p.rebateEarned),
-    rebateCollected: Number(p.rebateCollected),
-  }))
-
-  const existingAlerts: SynthExistingAlert[] = existingRows.map((a) => ({
-    id: a.id,
-    alertType: a.alertType,
-    contractId: a.contractId,
-    vendorId: a.vendorId,
-    metadata: (a.metadata ?? {}) as Record<string, unknown>,
-    status: a.status,
-  }))
-
-  // Resolve each bundle's shortfall summary via the canonical reducer
-  // — same code path the dashboard shortfall card uses, so
-  // tie_in_at_risk alerts and the card can never disagree on who's
-  // below minimum.
-  //
-  // Short-circuit: skip the compute call for bundles whose members
-  // have no minimum spend configured. The at-risk rule requires a
-  // non-zero minimum to fire, so computing their status would be
-  // wasted work — this scales linearly with bundle count and used to
-  // be the slowest part of alert generation on facilities with 50+
-  // bundles.
-  const bundles: SynthBundle[] = []
-  for (const b of bundleRows) {
-    const anyMinimum = b.members.some(
-      (m) => m.minimumSpend != null && Number(m.minimumSpend) > 0,
-    )
-    if (!anyMinimum) continue
-    const status = await computeBundleStatus(prisma, b.id, facilityId)
-    if (!status) continue
-    const result = deriveBundleShortfalls({
-      bundleId: b.id,
-      bundleLabel: b.primaryContract.name,
-      members: b.members.map((m) => ({
-        contractId: m.contractId,
-        vendorId: m.vendorId,
-        minimumSpend: m.minimumSpend == null ? null : Number(m.minimumSpend),
-        contractName: m.contract?.name ?? null,
-        vendorName: null,
-      })),
-      status,
-    })
-    bundles.push({
-      bundleId: b.id,
-      bundleLabel: b.primaryContract.name,
-      primaryContractId: b.primaryContractId,
-      complianceMode: b.complianceMode,
-      members: result.members.map((m) => ({
-        entityId: m.entityId,
-        entityName: m.entityName,
-        currentSpend: m.currentSpend,
-        minimumSpend: m.minimumSpend,
-      })),
-    })
-  }
-
-  const result = synthesizeAlertsForFacility({
-    facilityId,
-    cogRecords,
-    contracts,
-    contractPeriods,
-    paymentSchedules: [],
-    bundles,
-    existingAlerts,
-  })
-
-  const now = new Date()
-
-  if (result.toCreate.length > 0 || result.toResolve.length > 0) {
-    await prisma.$transaction([
-      ...result.toCreate.map((a) =>
-        prisma.alert.create({
-          data: {
-            portalType: a.portalType,
-            alertType: a.alertType,
-            title: a.title,
-            description: a.description,
-            severity: a.severity,
-            facilityId: a.facilityId,
-            contractId: a.contractId ?? null,
-            vendorId: a.vendorId ?? null,
-            actionLink: a.actionLink ?? null,
-            metadata: a.metadata as Prisma.InputJsonValue,
-          },
-        }),
-      ),
-      ...result.toResolve.map((id) =>
-        prisma.alert.update({
-          where: { id },
-          data: { status: "resolved", resolvedAt: now },
-        }),
-      ),
-    ])
-  }
-
-  await logAudit({
-    userId: session.user.id,
-    action: "alerts.synthesized",
-    entityType: "alert",
-    metadata: {
-      created: result.toCreate.length,
-      resolved: result.toResolve.length,
-    },
-  })
-
-  return {
-    created: result.toCreate.length,
-    resolved: result.toResolve.length,
-  }
 }
 
 // ─── Bulk Update Alerts (plan + apply) ───────────────────────────
@@ -573,7 +348,13 @@ export async function markAllAlertsRead(): Promise<{ updated: number }> {
   const facilityId = session.facility.id
 
   const rows = await prisma.alert.findMany({
-    where: { facilityId, status: "new_alert" },
+    where: {
+      facilityId,
+      status: "new_alert",
+      // Audit H5: never flip a spend target to "read" — that used to
+      // be invisible data destruction for the rebate optimizer.
+      ...excludeSpendTargetAlerts(),
+    },
     select: { id: true, status: true },
   })
 
@@ -658,6 +439,8 @@ export async function getRankedAlerts(options?: {
   const where: Prisma.AlertWhereInput = {
     facilityId: facility.id,
     portalType: "facility",
+    // Audit H5: spend targets must never enter the priority ranking.
+    ...excludeSpendTargetAlerts(),
   }
   if (options?.statusFilter) {
     where.status = options.statusFilter
@@ -691,41 +474,13 @@ export async function getRankedAlerts(options?: {
   return ranked.slice(0, limit)
 }
 
-// ─── Generate Alerts ─────────────────────────────────────────────
-
-export async function generateAlerts(_facilityId?: string) {
-  const { facility } = await requireFacility()
-
-  const [expiring, tier, offContract, rebate] = await Promise.all([
-    generateExpiringContractAlerts(facility.id),
-    generateTierThresholdAlerts(facility.id),
-    generateOffContractAlerts(facility.id),
-    generateRebateDueAlerts(facility.id),
-  ])
-
-  const allAlerts = [...expiring, ...tier, ...offContract, ...rebate]
-
-  if (allAlerts.length > 0) {
-    // createMany doesn't return IDs in Prisma, so we create individually to get IDs for notifications
-    const created = await prisma.$transaction(
-      allAlerts.map((a) =>
-        prisma.alert.create({
-          data: {
-            ...a,
-            metadata: (a.metadata ?? {}) as Record<string, string | number | boolean>,
-          },
-          select: { id: true },
-        })
-      )
-    )
-
-    // Send email notifications in the background (fire-and-forget)
-    Promise.allSettled(
-      created.map((alert) => sendAlertNotification(alert.id))
-    ).catch(() => {
-      // Swallow errors — email delivery is best-effort
-    })
-  }
-
-  return { created: allAlerts.length }
-}
+// ─── Generate Alerts — REMOVED ───────────────────────────────────
+//
+// The legacy `generateAlerts` action and `lib/alerts/generate-alerts.ts`
+// were deleted in the 2026-06-09 renewals+alerts audit (H6). They had a
+// parallel, non-deduped rule set (no dedupeKey, per-severity duplicate
+// rows, camelCase metadata the detail UI can't read) and re-spammed the
+// inbox on every invocation. The canonical path is the synthesizer:
+// `synthesizeAndPersistAlerts()` above / `runAlertSynthesisForFacility`
+// in lib/alerts/synthesize-persist.ts (deduped via metadata.dedupeKey,
+// auto-resolves cleared conditions).

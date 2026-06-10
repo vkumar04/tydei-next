@@ -5,7 +5,7 @@
  * mirrors the facility Renewals page). The hero reports 30d/60d/90d/
  * At-Risk, the ControlBar carries the Facility + Status select + search,
  * and the Tabs partition the pipeline into Upcoming / In Progress /
- * Renewed / Expired stages.
+ * Healthy / Expired stages.
  */
 
 import { useMemo, useState } from "react"
@@ -38,7 +38,11 @@ const CRITICAL_UNSTARTED_DAYS = 14
 const STAGE_TABS: { value: VendorRenewalStage; label: string }[] = [
   { value: "upcoming", label: "Upcoming" },
   { value: "in_progress", label: "In Progress" },
-  { value: "renewed", label: "Renewed" },
+  // 2026-06-09 audit L20: ">180 days out" is NOT "Renewed" — no renewal
+  // event ever happened. The stage value stays "renewed" (persisted
+  // nowhere, but keeps the diff minimal); only the user-facing label
+  // tells the truth.
+  { value: "renewed", label: "Healthy" },
   { value: "expired", label: "Expired" },
 ]
 
@@ -60,15 +64,18 @@ function exportRenewalsCalendar() {
  *
  * Vendor-side pipeline has no explicit "renewal workflow" state beyond
  * submitRenewalProposal side-effects, so stage is derived from
- * `daysUntilExpiry` + the backing contract status:
+ * `daysUntilExpiry` + the backing contract status (audit L20: d < 0 is
+ * overdue/expired; day 0–30 belongs to the 30-day bucket — aligned with
+ * the facility side):
  *
- * - expired:    daysUntilExpiry <= 0 OR status === "expired"
- * - in_progress: 0 < daysUntilExpiry <= 90 (active negotiation window)
+ * - expired:    daysUntilExpiry < 0 OR status === "expired"
+ * - in_progress: 0 <= daysUntilExpiry <= 90 (active negotiation window)
  * - upcoming:   90 < daysUntilExpiry <= 180
- * - renewed:    daysUntilExpiry > 180 (far from expiration = healthy)
+ * - renewed:    daysUntilExpiry > 180 (far from expiration = healthy;
+ *               labeled "Healthy" in the UI)
  */
 function getStage(c: ExpiringContract): Exclude<VendorRenewalStage, "all"> {
-  if (c.daysUntilExpiry <= 0 || c.status === "expired") return "expired"
+  if (c.daysUntilExpiry < 0 || c.status === "expired") return "expired"
   if (c.daysUntilExpiry <= 90) return "in_progress"
   if (c.daysUntilExpiry <= 180) return "upcoming"
   return "renewed"
@@ -115,9 +122,12 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
     let e90 = 0
     let atRisk = 0
     let criticalUnstarted = 0
+    // Audit L20: d < 0 = overdue/expired (excluded — it lives in the
+    // Expired stage), 0–30 = the 30-day bucket. Aligned with the
+    // facility hero's bucket definitions.
     for (const c of contracts) {
       const d = c.daysUntilExpiry
-      if (d > 0 && d <= 30) {
+      if (d >= 0 && d <= 30) {
         e30 += 1
         if (d <= CRITICAL_UNSTARTED_DAYS) criticalUnstarted += 1
       } else if (d > 30 && d <= 60) {
@@ -125,7 +135,7 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
       } else if (d > 60 && d <= 90) {
         e90 += 1
       }
-      if (d > 0 && d <= 90) atRisk += 1
+      if (d >= 0 && d <= 90) atRisk += 1
     }
     return {
       expiring30: e30,

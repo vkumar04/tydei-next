@@ -93,13 +93,19 @@ export function RenewalsClient({
   )
 
   const heroStats = useMemo<RenewalsHeroStats>(() => {
+    let overdue = 0
     let e30 = 0
     let e60 = 0
     let e90 = 0
     let criticalUnstarted = 0
+    // Audit L20: d < 0 = overdue/expired (its own bucket), 0–30 = the
+    // 30-day bucket — aligned with the vendor hero's definitions.
     for (const r of rows) {
       const d = r.daysUntilExpiry
-      if (d <= 30) {
+      if (d < 0) {
+        overdue += 1
+        criticalUnstarted += 1
+      } else if (d <= 30) {
         e30 += 1
         if (d <= CRITICAL_UNSTARTED_DAYS) criticalUnstarted += 1
       } else if (d <= 60) {
@@ -109,6 +115,7 @@ export function RenewalsClient({
       }
     }
     return {
+      overdue,
       expiring30: e30,
       expiring60: e60,
       expiring90: e90,

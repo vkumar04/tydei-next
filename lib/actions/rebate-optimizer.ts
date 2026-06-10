@@ -5,6 +5,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
+import { onlySpendTargetAlerts } from "@/lib/alerts/spend-target-filter"
 
 export interface RebateOpportunity {
   contractId: string
@@ -264,11 +265,18 @@ export async function setSpendTarget(input: {
 export async function getSpendTargets(_facilityId?: string): Promise<SpendTarget[]> {
   const { facility } = await requireFacility()
 
+  // 2026-06-09 audit H5: match on the metadata discriminator in SQL and
+  // WITHOUT a status constraint. Spend targets live in the Alert table
+  // (schema-migration dodge, see setSpendTarget above); the previous
+  // `status: "new_alert"` filter meant any alert-surface mark-read /
+  // resolve / dismiss silently DELETED the target from this page. Alert
+  // reads now exclude `metadata.type === "spend_target"` rows entirely
+  // (lib/alerts/spend-target-filter.ts), and this reader is the inverse.
   const alerts = await prisma.alert.findMany({
     where: {
       facilityId: facility.id,
       alertType: "tier_threshold",
-      status: "new_alert",
+      ...onlySpendTargetAlerts(),
     },
     include: {
       contract: {

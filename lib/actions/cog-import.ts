@@ -513,6 +513,29 @@ async function runBulkImport(
           })
         }
       }
+
+      // 2026-06-09 renewals+alerts audit H4: alert synthesis had NO
+      // automatic callers — prod facilities had zero real alerts.
+      // Piggyback on the import pipeline the same way
+      // refreshContractMetricsForVendor does: the COG + match + accrual
+      // state just changed, so off_contract / tier_threshold /
+      // compliance_drop conditions may have too. Fire-and-forget — a
+      // synthesis failure must never break the import.
+      const facilityIdForAlerts = session.facility.id
+      const userIdForAlerts = session.user.id
+      void import("@/lib/alerts/synthesize-persist")
+        .then(({ runAlertSynthesisForFacility }) =>
+          runAlertSynthesisForFacility(facilityIdForAlerts, {
+            auditUserId: userIdForAlerts,
+          }),
+        )
+        .catch((err) => {
+          console.error(
+            "[bulkImportCOGRecords] runAlertSynthesisForFacility failed",
+            err,
+            { facilityId: facilityIdForAlerts },
+          )
+        })
     }
   }
 

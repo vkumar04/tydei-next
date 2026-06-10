@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 interface ContractRow {
   id: string
   vendorId: string
+  additionalVendorIds?: string[]
 }
 interface NoteRow {
   id: string
@@ -27,20 +28,33 @@ interface NoteRow {
 let contractRows: ContractRow[] = []
 let noteRows: NoteRow[] = []
 
+// Ownership where shape (2026-06-09 audit M9): findFirst with
+// `{ id, OR: [{ vendorId }, { additionalVendorIds: { has } }] }` —
+// group-vendor aware.
+type VendorOrClause =
+  | { vendorId: string }
+  | { additionalVendorIds: { has: string } }
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     contract: {
-      findUnique: vi.fn(
+      findFirst: vi.fn(
         async ({
           where,
         }: {
-          where: { id: string; vendorId?: string }
+          where: { id: string; OR?: VendorOrClause[] }
         }) =>
-          contractRows.find(
-            (c) =>
-              c.id === where.id &&
-              (where.vendorId === undefined || c.vendorId === where.vendorId),
-          ) ?? null,
+          contractRows.find((c) => {
+            if (c.id !== where.id) return false
+            if (!where.OR) return true
+            return where.OR.some((clause) =>
+              "vendorId" in clause
+                ? c.vendorId === clause.vendorId
+                : (c.additionalVendorIds ?? []).includes(
+                    clause.additionalVendorIds.has,
+                  ),
+            )
+          }) ?? null,
       ),
     },
     renewalNote: {
@@ -154,5 +168,31 @@ describe("listRenewalNotesForVendor", () => {
     const result = await listRenewalNotesForVendor("c-1")
     expect(result).toHaveLength(1)
     expect(result[0].authorName).toBeNull()
+  })
+
+  // 2026-06-09 audit M9 (group-vendor drift class): a vendor listed in
+  // additionalVendorIds participates in the grouped contract and must
+  // see its renewal notes.
+  it("grants access via additionalVendorIds (grouped contracts)", async () => {
+    contractRows = [
+      {
+        id: "c-1",
+        vendorId: "ven-PRIMARY",
+        additionalVendorIds: ["ven-1", "ven-x"],
+      },
+    ]
+    noteRows = [
+      {
+        id: "n-1",
+        contractId: "c-1",
+        note: "visible to group member",
+        authorId: "u-1",
+        createdAt: new Date("2026-04-01"),
+        author: { name: "Alice" },
+      },
+    ]
+    const result = await listRenewalNotesForVendor("c-1")
+    expect(result).toHaveLength(1)
+    expect(result[0].note).toBe("visible to group member")
   })
 })

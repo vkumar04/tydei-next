@@ -26,9 +26,28 @@ describe("computeRenewalSummary", () => {
       okCount: 0,
       atRisk: 0,
       strongPerformers: 0,
+      noCommitmentData: 0,
       totalAtRiskSpend: 0,
       totalAtRiskRebates: 0,
     })
+  })
+
+  // 2026-06-09 audit M11: null commitment = "no data", excluded from
+  // BOTH performance buckets (the old `?? 0` coercion marked every
+  // commitment-less contract "at risk").
+  it("excludes commitmentMet === null from atRisk and strongPerformers", () => {
+    const s = computeRenewalSummary([
+      mk({ id: "a", commitmentMet: null, totalSpend: 5000, rebatesEarned: 50 }),
+      mk({ id: "b", commitmentMet: 50, totalSpend: 100, rebatesEarned: 10 }),
+      mk({ id: "c", commitmentMet: 110 }),
+    ])
+    expect(s.atRisk).toBe(1)
+    expect(s.strongPerformers).toBe(1)
+    expect(s.noCommitmentData).toBe(1)
+    // Null rows contribute nothing to the at-risk dollar totals.
+    expect(s.totalAtRiskSpend).toBe(100)
+    expect(s.totalAtRiskRebates).toBe(10)
+    expect(s.totalContracts).toBe(3)
   })
 
   it("buckets ≤30 days (inclusive) as critical", () => {

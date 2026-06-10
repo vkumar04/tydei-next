@@ -1,10 +1,13 @@
 import {
   Clock,
   TrendingUp,
+  TrendingDown,
   DollarSign,
   AlertCircle,
   ShieldAlert,
   FileX,
+  Link2,
+  PauseCircle,
   type LucideIcon,
 } from "lucide-react"
 import type { StatusConfig } from "@/lib/types"
@@ -17,6 +20,11 @@ export const alertTypeIconConfig: Record<string, { icon: LucideIcon; color: stri
   payment_due: { icon: DollarSign, color: "text-orange-500", label: "Payment Due" },
   pricing_error: { icon: AlertCircle, color: "text-red-500", label: "Pricing Error" },
   compliance: { icon: ShieldAlert, color: "text-amber-500", label: "Compliance" },
+  // 2026-06-09 audit L17: the synthesizer emits these three types but
+  // the UI config lacked entries — rows rendered with no icon/label.
+  compliance_drop: { icon: TrendingDown, color: "text-red-500", label: "Compliance Drop" },
+  vendor_inactive: { icon: PauseCircle, color: "text-slate-500", label: "Vendor Inactive" },
+  tie_in_at_risk: { icon: Link2, color: "text-purple-500", label: "Tie-In At Risk" },
 }
 
 export const alertSeverityBadgeConfig: Record<string, StatusConfig & { className: string }> = {
@@ -33,6 +41,9 @@ export const alertColorBg: Record<string, string> = {
   payment_due: "text-orange-500 bg-orange-50 dark:bg-orange-950",
   pricing_error: "text-red-500 bg-red-50 dark:bg-red-950",
   compliance: "text-amber-500 bg-amber-50 dark:bg-amber-950",
+  compliance_drop: "text-red-500 bg-red-50 dark:bg-red-950",
+  vendor_inactive: "text-slate-500 bg-slate-50 dark:bg-slate-900",
+  tie_in_at_risk: "text-purple-500 bg-purple-50 dark:bg-purple-950",
 }
 
 export const statusColors: Record<string, string> = {

@@ -19,8 +19,14 @@ export interface RenewalContractInput {
   daysUntilExpiration: number
   totalSpend: number
   rebatesEarned: number
-  /** Commitment met as a percentage (0-100+, where 100 means fully met). */
-  commitmentMet: number
+  /**
+   * Commitment met as a percentage (0-100+, where 100 means fully met).
+   * `null` = no commitment data (2026-06-09 audit M11) — excluded from
+   * BOTH the atRisk and strongPerformers buckets and counted in
+   * `noCommitmentData` instead. Pre-M11 callers coerced null → 0, which
+   * marked every commitment-less contract "at risk".
+   */
+  commitmentMet: number | null
   /** "active" | "expiring" | "expired" | "pending_review" */
   status: string
 }
@@ -35,10 +41,12 @@ export interface RenewalSummary {
   upcomingCount: number
   /** > 180 days. */
   okCount: number
-  /** commitmentMet < 80 */
+  /** commitmentMet < 80 (rows with commitment data only). */
   atRisk: number
-  /** commitmentMet >= 100 */
+  /** commitmentMet >= 100 (rows with commitment data only). */
   strongPerformers: number
+  /** Rows with `commitmentMet === null` — no commitment data (M11). */
+  noCommitmentData: number
   /** Sum of `totalSpend` across at-risk contracts. */
   totalAtRiskSpend: number
   /** Sum of `rebatesEarned` across at-risk contracts. */
@@ -61,6 +69,7 @@ export function computeRenewalSummary(
     okCount: 0,
     atRisk: 0,
     strongPerformers: 0,
+    noCommitmentData: 0,
     totalAtRiskSpend: 0,
     totalAtRiskRebates: 0,
   }
@@ -84,14 +93,20 @@ export function computeRenewalSummary(
       summary.okCount += 1
     }
 
-    // Performance buckets.
-    if (c.commitmentMet < 80) {
-      summary.atRisk += 1
-      summary.totalAtRiskSpend += c.totalSpend
-      summary.totalAtRiskRebates += c.rebatesEarned
-    }
-    if (c.commitmentMet >= 100) {
-      summary.strongPerformers += 1
+    // Performance buckets. Audit M11: null = no commitment data — it is
+    // neither at-risk nor strong; counting it as 0% used to flag every
+    // commitment-less contract "at risk".
+    if (c.commitmentMet === null) {
+      summary.noCommitmentData += 1
+    } else {
+      if (c.commitmentMet < 80) {
+        summary.atRisk += 1
+        summary.totalAtRiskSpend += c.totalSpend
+        summary.totalAtRiskRebates += c.rebatesEarned
+      }
+      if (c.commitmentMet >= 100) {
+        summary.strongPerformers += 1
+      }
     }
   }
 

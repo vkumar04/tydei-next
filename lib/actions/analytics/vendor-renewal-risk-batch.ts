@@ -41,7 +41,18 @@ async function _getVendorRenewalRiskBatchImpl(
   const { vendor } = await requireVendor()
 
   const contracts = await prisma.contract.findMany({
-    where: { id: { in: contractIds }, vendorId: vendor.id },
+    // 2026-06-09 audit M9 (group-vendor drift class): grouped contracts
+    // list the caller in `additionalVendorIds`, not `vendorId` — the
+    // bare vendorId filter made every grouped row throw the "not
+    // accessible" rejection below for a vendor who legitimately
+    // participates in the contract.
+    where: {
+      id: { in: contractIds },
+      OR: [
+        { vendorId: vendor.id },
+        { additionalVendorIds: { has: vendor.id } },
+      ],
+    },
     select: {
       id: true,
       facilityId: true,

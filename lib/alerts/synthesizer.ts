@@ -47,7 +47,21 @@ export interface SynthTier {
   tierNumber: number
   spendMin: number
   spendMax: number | null
+  /**
+   * DISPLAY-scaled rebate value: display-percent (3 = 3%) for
+   * percent_of_spend, dollars for fixed/per-unit/per-procedure types.
+   * Callers scale at the Prisma boundary via `toDisplayRebateValue`.
+   */
   rebateValue: number
+  /**
+   * Prisma `RebateType` string (e.g. "percent_of_spend",
+   * "fixed_rebate"). Optional for back-compat with older callers/tests;
+   * the metadata payload defaults to "percent_of_spend" when absent
+   * (matches the historical display convention). Audit M8: the alert
+   * detail UI needs this to know whether `tier_rebate` renders as "X%"
+   * or as currency.
+   */
+  rebateType?: string
 }
 
 export interface SynthContract {
@@ -417,6 +431,10 @@ function synthTierThreshold(input: SynthInput): {
       amount_needed: gap,
       target_tier: nextTier.tierNumber,
       tier_rebate: nextTier.rebateValue,
+      // Audit M8: lets the detail UI render "3%" for percent types vs
+      // formatCurrency for dollar types. Default mirrors the historical
+      // assumption (tier_rebate was always display-percent).
+      tier_rebate_type: nextTier.rebateType ?? "percent_of_spend",
       dedupeKey,
     }
 

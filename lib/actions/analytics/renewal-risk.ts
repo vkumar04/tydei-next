@@ -20,6 +20,8 @@ import { v0RenewalRisk } from "@/lib/v0-spec/contract-performance"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
+import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 
 export async function getRenewalRisk(contractId: string) {
   return withTelemetry("getRenewalRisk", { contractId }, async () => {
@@ -42,6 +44,7 @@ async function _getRenewalRiskImpl(contractId: string) {
       expirationDate: true,
       complianceRate: true,
       vendorId: true,
+      additionalVendorIds: true,
       facilityId: true,
       annualValue: true,
       rebates: {
@@ -52,10 +55,10 @@ async function _getRenewalRiskImpl(contractId: string) {
       },
       terms: {
         select: {
+          termType: true,
           tiers: {
             select: { rebateValue: true },
             orderBy: { tierNumber: "desc" },
-            take: 1,
           },
         },
       },
@@ -72,14 +75,29 @@ async function _getRenewalRiskImpl(contractId: string) {
   })
 
   // Avg price variance: pull from invoice line variances if any.
-  const variances = await prisma.invoiceLineItem.findMany({
-    where: {
-      invoice: { facilityId: { in: scope.cogScopeFacilityIds } },
-      variancePercent: { not: null },
-    },
-    select: { variancePercent: true },
-    take: 50,
-  })
+  //
+  // 2026-06-09 audit M15: scope to THIS contract's vendor set (group-
+  // aware via contractVendorIds) — the previous facility-wide pull let
+  // an unrelated vendor's pricing chaos inflate this contract's risk
+  // score. Order deterministically (newest first) so the `take: 50`
+  // sample is stable and recency-weighted rather than insertion-order
+  // arbitrary.
+  const riskVendorIds = contractVendorIds(contract)
+  const variances =
+    riskVendorIds.length > 0
+      ? await prisma.invoiceLineItem.findMany({
+          where: {
+            invoice: {
+              facilityId: { in: scope.cogScopeFacilityIds },
+              vendorId: { in: riskVendorIds },
+            },
+            variancePercent: { not: null },
+          },
+          select: { variancePercent: true },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        })
+      : []
   const avgPriceVariance =
     variances.length > 0
       ? variances.reduce((acc, v) => acc + Math.abs(Number(v.variancePercent ?? 0)), 0) /
@@ -87,8 +105,16 @@ async function _getRenewalRiskImpl(contractId: string) {
       : 0
 
   // Rebate utilization: lifetime earned / max-tier-rebate-projected.
+  //
+  // 2026-06-09 audit M15: pick the top rate from a SPEND-DOLLAR tier
+  // ladder only (canonical hasSpendDollarTierLadder gate). terms[0]
+  // could be a market_share / carve_out / volume term whose rebateValue
+  // units don't multiply against dollar spend — carve-out placeholder
+  // tiers (rebateValue 0) also zeroed the ceiling, forcing the "unknown
+  // → mid" branch with a misleadingly confident input.
   const projectedAnnualSpend = Number(contract.annualValue ?? 0)
-  const topRebateRaw = contract.terms[0]?.tiers[0]?.rebateValue
+  const ladderTerm = contract.terms.find((t) => hasSpendDollarTierLadder(t))
+  const topRebateRaw = ladderTerm?.tiers[0]?.rebateValue
   const topRebatePct = topRebateRaw != null ? Number(topRebateRaw) : 0
   const maxPossibleRebate = projectedAnnualSpend * topRebatePct
   const earned = sumEarnedRebatesLifetime(contract.rebates)

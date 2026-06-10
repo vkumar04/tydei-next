@@ -14,7 +14,13 @@ import { toast } from "sonner"
 
 export function useVendorAlerts(
   vendorId: string,
-  filters?: { alertType?: AlertType; severity?: AlertSeverity; status?: AlertStatus }
+  filters?: {
+    alertType?: AlertType
+    severity?: AlertSeverity
+    status?: AlertStatus
+    page?: number
+    pageSize?: number
+  }
 ) {
   return useQuery({
     queryKey: queryKeys.alerts.list("vendor", vendorId, filters),

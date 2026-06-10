@@ -43,4 +43,46 @@ describe("mapDetail", () => {
     } as unknown as ExpiringContract)
     expect(detail.commitmentProgressPercent).toBeNull()
   })
+
+  // 2026-06-09 audit M13: no recorded tier → tier is null (UI renders
+  // "—"); the old fallback fabricated {current: 1, total: 3}.
+  it("does not fabricate a tier when tierAchieved is null", () => {
+    const detail = mapDetail({
+      id: "c3",
+      name: "x",
+      vendorName: "y",
+      expirationDate: new Date(),
+      daysUntilExpiry: 30,
+      totalSpend: 100,
+      totalRebate: 0,
+      marketShareCommitment: null,
+      currentMarketShare: null,
+      tierAchieved: null,
+      status: "active",
+    } as unknown as ExpiringContract)
+    expect(detail.tier).toBeNull()
+    expect(detail.currentTier).toBeNull()
+    expect(detail.maxTier).toBeNull()
+    // Audit M11: with no commitment data, the ×1.1 spend proxy is gone.
+    expect(detail.commitmentMet).toBeNull()
+  })
+
+  it("surfaces a known achieved tier without inventing a ladder size", () => {
+    const detail = mapDetail({
+      id: "c4",
+      name: "x",
+      vendorName: "y",
+      expirationDate: new Date(),
+      daysUntilExpiry: 30,
+      totalSpend: 100,
+      totalRebate: 0,
+      marketShareCommitment: null,
+      currentMarketShare: null,
+      tierAchieved: 2,
+      status: "active",
+    } as unknown as ExpiringContract)
+    expect(detail.tier).toEqual({ current: 2, total: null })
+    expect(detail.currentTier).toBe(2)
+    expect(detail.maxTier).toBeNull()
+  })
 })

@@ -153,19 +153,10 @@ vi.mock("@/lib/audit", () => ({
   logAudit: (args: Record<string, unknown>) => logAuditMock(args),
 }))
 
-// generate-alerts helpers reach into a lot of the schema; stub them
-// because the new actions don't need them but they're imported at the
-// top of lib/actions/alerts.ts.
-vi.mock("@/lib/alerts/generate-alerts", () => ({
-  generateExpiringContractAlerts: vi.fn(async () => []),
-  generateTierThresholdAlerts: vi.fn(async () => []),
-  generateOffContractAlerts: vi.fn(async () => []),
-  generateRebateDueAlerts: vi.fn(async () => []),
-}))
-
-vi.mock("@/lib/actions/notifications", () => ({
-  sendAlertNotification: vi.fn(async () => undefined),
-}))
+// NOTE: the legacy lib/alerts/generate-alerts.ts module (and its
+// `generateAlerts` wrapper action) were deleted in the 2026-06-09
+// renewals+alerts audit (H6) — the synthesizer pipeline below is the
+// only generation path, so no stubs are needed anymore.
 
 // ─── Imports under test ──────────────────────────────────────────
 

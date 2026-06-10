@@ -16,6 +16,16 @@
  * the future (we don't audit on the initial default-creation because it
  * isn't a user-initiated action — the UI implicitly reads settings on
  * mount).
+ *
+ * TODO(2026-06-09 renewals+alerts audit M14, deliberately deferred):
+ * these settings are WRITE-ONLY today — nothing reads
+ * `renewalReminderDaysBefore` / `expirationAlertDays` /
+ * `notifyChannels` when alerts are synthesized. The synthesizer uses
+ * the fixed EXPIRING_CONTRACT_WINDOW_DAYS=90 (lib/alerts/synthesizer.ts)
+ * for every facility user. Wiring per-user windows into the per-
+ * facility synthesis pipeline is a product/design question (alerts are
+ * facility-scoped, settings are user-scoped) — punted by explicit
+ * product call in the audit batch.
  */
 
 import { prisma } from "@/lib/db"

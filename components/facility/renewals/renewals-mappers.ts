@@ -7,10 +7,11 @@
  * unit-testable in isolation.
  *
  * Commitment is derived from `currentMarketShare / marketShareCommitment`
- * when both are present (plan 2026-04-18 Task 4); otherwise we fall back
- * to the legacy `spend / (spend × 1.1)` proxy to keep the list cards
- * filled until the real metric wires through everywhere. Returning `null`
- * keeps downstream UI from rendering a spurious 0%.
+ * when both are present (plan 2026-04-18 Task 4); otherwise `null`.
+ * 2026-06-09 audit M11: the legacy `spend / (spend × 1.1)` proxy is GONE
+ * — it always evaluated to 91% for any contract with spend, which fed
+ * fake "at risk" rows into the summary buckets. `null` means "no
+ * commitment data" and downstream UI renders "—".
  */
 
 import { classifyRenewalStatus } from "@/lib/renewals/engine"
@@ -26,10 +27,9 @@ export function deriveCommitmentMet(c: ExpiringContract): number | null {
   if (commit !== null && commit > 0 && current !== null) {
     return Math.round((current / commit) * 100)
   }
-  const spend = c.currentSpend ?? c.totalSpend
-  if (spend <= 0) return null
-  const target = spend * 1.1
-  return Math.min(100, Math.round((spend / target) * 100))
+  // Audit M11: no real commitment data → null (UI shows "—"). The old
+  // ×1.1 proxy fabricated a constant 91% for every spend-bearing row.
+  return null
 }
 
 export function toRow(c: ExpiringContract): RenewalRow {
@@ -64,12 +64,15 @@ export function mapDetail(
       ? (current / commit) * 100
       : null
 
+  // Audit M13: stop fabricating "Tier 1/3" when the contract has no
+  // recorded tier. `tierAchieved` comes from real ContractPeriod rows;
+  // when it's null the UI renders "—". When only the achieved tier is
+  // known we surface it WITHOUT inventing a ladder size (total: null).
   const tier =
     row.tier ??
-    {
-      current: row.tierAchieved ?? 1,
-      total: Math.max((row.tierAchieved ?? 1) + 1, 3),
-    }
+    (row.tierAchieved != null
+      ? { current: row.tierAchieved, total: null }
+      : null)
 
   const totalSpend = Number(row.currentSpend ?? row.totalSpend ?? 0)
   const rebatesEarned = Number(row.rebatesEarned ?? row.totalRebate ?? 0)
@@ -88,8 +91,8 @@ export function mapDetail(
       commitmentProgressPercent === null
         ? deriveCommitmentMet(row)
         : Math.round(commitmentProgressPercent),
-    currentTier: tier.current,
-    maxTier: tier.total,
+    currentTier: tier?.current ?? null,
+    maxTier: tier?.total ?? null,
     tier,
     currentMarketShare: current,
     marketShareCommitment: commit,
@@ -115,7 +118,10 @@ export function toSummaryInput(c: ExpiringContract): RenewalContractInput {
     daysUntilExpiration: c.daysUntilExpiry,
     totalSpend: c.currentSpend ?? c.totalSpend,
     rebatesEarned: c.rebatesEarned ?? c.totalRebate,
-    commitmentMet: deriveCommitmentMet(c) ?? 0,
+    // Audit M11: pass null through — the summary excludes no-data rows
+    // from atRisk/strongPerformers instead of treating them as 0% (which
+    // marked every commitment-less contract "at risk").
+    commitmentMet: deriveCommitmentMet(c),
     status: c.status,
   }
 }

@@ -40,6 +40,13 @@ let proposalRows: ProposalRow[] = []
 let lastCreate: Record<string, unknown> | null = null
 let lastUpdate: { where: unknown; data: Record<string, unknown> } | null = null
 
+// Ownership where shape (2026-06-09 audit M9): findFirst with
+// `{ id, OR: [{ vendorId }, { additionalVendorIds: { has } }] }` —
+// group-vendor aware.
+type VendorOrClause =
+  | { vendorId: string }
+  | { additionalVendorIds: { has: string } }
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     contract: {
@@ -47,13 +54,18 @@ vi.mock("@/lib/db", () => ({
         async ({
           where,
         }: {
-          where: { id: string; vendorId?: string }
+          where: { id: string; vendorId?: string; OR?: VendorOrClause[] }
         }) => {
-          const row = contractRows.find(
-            (c) =>
-              c.id === where.id &&
-              (!where.vendorId || c.vendorId === where.vendorId),
-          )
+          const row = contractRows.find((c) => {
+            if (c.id !== where.id) return false
+            if (where.vendorId && c.vendorId !== where.vendorId) return false
+            if (!where.OR) return true
+            return where.OR.some((clause) =>
+              "vendorId" in clause
+                ? c.vendorId === clause.vendorId
+                : false, // ContractRow fixture has no additionalVendorIds
+            )
+          })
           return row ?? null
         },
       ),

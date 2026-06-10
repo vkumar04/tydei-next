@@ -21,7 +21,13 @@ import { CalendarRange } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 export interface RenewalsHeroStats {
-  /** Contracts expiring in the next 30 days (includes already-expired). */
+  /**
+   * Already-expired contracts (daysUntilExpiry < 0). Audit L20: split
+   * out of the 30-day bucket so the facility and vendor heroes share
+   * one bucket definition (0–30 = the 30-day window).
+   */
+  overdue: number
+  /** Contracts expiring in 0..30 days. */
   expiring30: number
   /** Contracts expiring in 31..60 days. */
   expiring60: number
@@ -41,6 +47,7 @@ export interface RenewalsHeroProps {
 
 export function RenewalsHero({ stats }: RenewalsHeroProps) {
   const {
+    overdue,
     expiring30,
     expiring60,
     expiring90,
@@ -100,9 +107,13 @@ export function RenewalsHero({ stats }: RenewalsHeroProps) {
           label="Expiring in 30 Days"
           value={expiring30.toString()}
           sublabel={
-            expiring30 > 0 ? "immediate attention" : "none in window"
+            overdue > 0
+              ? `+${overdue} already expired`
+              : expiring30 > 0
+                ? "immediate attention"
+                : "none in window"
           }
-          tone={expiring30 > 0 ? "negative" : "muted"}
+          tone={expiring30 > 0 || overdue > 0 ? "negative" : "muted"}
         />
         <HeroStat
           label="Expiring in 60 Days"
