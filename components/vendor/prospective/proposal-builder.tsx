@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useCallback } from "react"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { useCreateProposal } from "@/hooks/use-prospective"
@@ -11,21 +11,21 @@ import type { DealScore } from "@/lib/actions/prospective"
 import { ProposalHeader } from "./builder/proposal-header"
 import { FacilitySelector } from "./builder/facility-selector"
 import { ContractParameters } from "./builder/contract-parameters"
-import { AiDealNotes } from "./builder/ai-deal-notes"
+import { DealNotes } from "./builder/deal-notes"
 import { ProductsSection } from "./builder/products-section"
 import { ContractTerms } from "./builder/contract-terms"
 import { ProposalActions } from "./builder/proposal-actions"
 import {
   handlePricingFileUpload as doPricingUpload,
   handleUsageFileUpload as doUsageUpload,
-  generateProductsFromAI as doGenerateAI,
+  parseProductsFromDescription as doParseProducts,
   generateTermsFromNotes,
 } from "./builder/file-handlers"
 import type {
   NewProposalState,
   ProspectiveFacility,
   ProspectiveTerm,
-  AiSuggestionsState,
+  TermSuggestionsState,
   FileUploadProgressState,
 } from "./builder/types"
 import { PRODUCT_CATEGORIES } from "./builder/types"
@@ -55,14 +55,11 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     isLoading: false, type: null, progress: 0, message: "",
   })
 
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
-  const [aiProductDescription, setAiProductDescription] = useState("")
+  const [productDescription, setProductDescription] = useState("")
 
-  const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionsState>({
-    isLoading: false, data: null,
+  const [termSuggestions, setTermSuggestions] = useState<TermSuggestionsState>({
+    data: null,
   })
-
-  const lastAnalyzedRef = useRef<string>("")
 
   const [newProposal, setNewProposal] = useState<NewProposalState>({
     facilityId: "",
@@ -128,23 +125,19 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     doUsageUpload(e, setFileUploadProgress, setNewProposal)
   }
 
-  const generateProductsFromAI = useCallback(async () => {
-    await doGenerateAI(
-      aiProductDescription,
+  const parseProductsFromDescription = useCallback(() => {
+    doParseProducts(
+      productDescription,
       newProposal.productCategory,
-      setIsGeneratingAI,
       setNewProposal,
-      setAiProductDescription,
+      setProductDescription,
     )
-  }, [aiProductDescription, newProposal.productCategory])
+  }, [productDescription, newProposal.productCategory])
 
   const handleGenerateTermsFromNotes = useCallback(() => {
-    setAiSuggestions({ isLoading: true, data: null })
-    // Small delay to show loading state, then generate
-    setTimeout(() => {
-      const suggestions = generateTermsFromNotes(newProposal, setNewProposal)
-      setAiSuggestions({ isLoading: false, data: suggestions })
-    }, 600)
+    // Synchronous keyword heuristics — no artificial "analyzing" delay.
+    const suggestions = generateTermsFromNotes(newProposal, setNewProposal)
+    setTermSuggestions({ data: suggestions })
   }, [newProposal])
 
   const calculateEstimatedRebate = () => {
@@ -179,7 +172,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
       gpoFee: 3,
       aiNotes: "",
     })
-    setAiProductDescription("")
+    setProductDescription("")
     onClose?.()
   }
 
@@ -256,10 +249,6 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     }
   }
 
-  const analyzeTheDeal = useCallback(async () => {
-    toast.error("AI features require Vercel billing setup. Add a credit card to enable AI analysis.")
-  }, [])
-
   return (
     <div className="space-y-6">
       <ProposalHeader editingProposalId={editingProposalId} />
@@ -289,12 +278,10 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
 
         <Separator />
 
-        <AiDealNotes
+        <DealNotes
           newProposal={newProposal}
           setNewProposal={setNewProposal}
-          aiSuggestions={aiSuggestions}
-          lastAnalyzedRef={lastAnalyzedRef}
-          analyzeTheDeal={analyzeTheDeal}
+          termSuggestions={termSuggestions}
           onGenerateTermsFromNotes={handleGenerateTermsFromNotes}
         />
 
@@ -303,12 +290,11 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
         <ProductsSection
           newProposal={newProposal}
           fileUploadProgress={fileUploadProgress}
-          aiProductDescription={aiProductDescription}
-          setAiProductDescription={setAiProductDescription}
-          isGeneratingAI={isGeneratingAI}
+          productDescription={productDescription}
+          setProductDescription={setProductDescription}
           handleUsageFileUpload={handleUsageFileUpload}
           handlePricingFileUpload={handlePricingFileUpload}
-          generateProductsFromAI={generateProductsFromAI}
+          parseProductsFromDescription={parseProductsFromDescription}
           removeProductFromProposal={removeProductFromProposal}
         />
 

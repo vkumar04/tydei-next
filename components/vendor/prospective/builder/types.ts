@@ -53,8 +53,12 @@ export interface NewProposalState {
   aiNotes: string
 }
 
-export interface AiSuggestionsState {
-  isLoading: boolean
+/**
+ * Output of the rule-based (keyword heuristic) term suggester in
+ * file-handlers.ts — NOT AI-generated. Renamed from AiSuggestionsState
+ * in the vendor-prospective honesty audit (H1.c).
+ */
+export interface TermSuggestionsState {
   data: {
     negotiationAdvice?: string[]
     suggestedTerms?: { type: string; description: string; rationale: string }[]

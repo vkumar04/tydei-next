@@ -7,7 +7,7 @@ import {
   Upload,
   History,
   Package,
-  Sparkles,
+  ListPlus,
   Loader2,
   CheckCircle2,
   Trash2,
@@ -18,24 +18,22 @@ import { formatCurrencyShort } from "./types"
 export interface ProductsSectionProps {
   newProposal: NewProposalState
   fileUploadProgress: FileUploadProgressState
-  aiProductDescription: string
-  setAiProductDescription: (v: string) => void
-  isGeneratingAI: boolean
+  productDescription: string
+  setProductDescription: (v: string) => void
   handleUsageFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
   handlePricingFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
-  generateProductsFromAI: () => void
+  parseProductsFromDescription: () => void
   removeProductFromProposal: (benchmarkId: string) => void
 }
 
 export function ProductsSection({
   newProposal,
   fileUploadProgress,
-  aiProductDescription,
-  setAiProductDescription,
-  isGeneratingAI,
+  productDescription,
+  setProductDescription,
   handleUsageFileUpload,
   handlePricingFileUpload,
-  generateProductsFromAI,
+  parseProductsFromDescription,
   removeProductFromProposal,
 }: ProductsSectionProps) {
   return (
@@ -74,7 +72,7 @@ export function ProductsSection({
           <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
             <li>Load <strong>Usage History</strong> (12-month PO data with pricing, volume, ref numbers)</li>
             <li>Load <strong>Proposed Pricing</strong> (your new prices for this deal)</li>
-            <li>Add <strong>AI Notes</strong> describing the deal situation</li>
+            <li>Add <strong>Deal Notes</strong> describing the deal situation</li>
           </ol>
         </div>
       )}
@@ -156,40 +154,31 @@ export function ProductsSection({
           )}
         </div>
 
-        {/* AI Generation */}
+        {/* Parse from description (simple text rules, not AI) */}
         <div className="p-4 border rounded-lg border-dashed">
           <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="font-medium text-sm">Generate with AI</span>
+            <ListPlus className="h-4 w-4 text-primary" />
+            <span className="font-medium text-sm">Parse from description</span>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            Describe products in natural language, one per line
+            List products one per line with a name, price, and optional unit count. Parsed with simple text rules — lines without a price are skipped.
           </p>
           <div className="space-y-2">
             <Textarea
               placeholder={"Primary Hip System $8,500 50 units\nRevision Hip System $12,000 30 units\nSpinal Fusion Kit $15,000"}
-              value={aiProductDescription}
-              onChange={(e) => setAiProductDescription(e.target.value)}
+              value={productDescription}
+              onChange={(e) => setProductDescription(e.target.value)}
               className="text-sm h-20 resize-none"
             />
             <Button
               size="sm"
               variant="outline"
               className="w-full"
-              onClick={generateProductsFromAI}
-              disabled={isGeneratingAI || !aiProductDescription.trim()}
+              onClick={parseProductsFromDescription}
+              disabled={!productDescription.trim()}
             >
-              {isGeneratingAI ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Products
-                </>
-              )}
+              <ListPlus className="mr-2 h-4 w-4" />
+              Parse products
             </Button>
           </div>
         </div>
@@ -200,7 +189,7 @@ export function ProductsSection({
         <div className="text-center py-6 text-muted-foreground border rounded-lg">
           <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
           <p>No products added yet</p>
-          <p className="text-sm">Upload a pricing file or use AI to add products</p>
+          <p className="text-sm">Upload a pricing file or parse products from a description</p>
         </div>
       ) : (() => {
         const pricingProducts = newProposal.products.filter(p => p.proposedPrice > 0)

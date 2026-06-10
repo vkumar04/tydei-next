@@ -1,5 +1,5 @@
 import { toast } from "sonner"
-import type { NewProposalState, ProposalProduct, FileUploadProgressState, AiSuggestionsState } from "./types"
+import type { NewProposalState, ProposalProduct, FileUploadProgressState, TermSuggestionsState } from "./types"
 
 function parseCSVLine(line: string): string[] {
   const result: string[] = []
@@ -507,27 +507,34 @@ export function handleUsageFileUpload(
   e.target.value = ""
 }
 
-export async function generateProductsFromAI(
-  aiProductDescription: string,
+/**
+ * Parses products from a plain-text description using simple
+ * line-by-line regex rules — NOT AI. One product per line, expecting a
+ * name, a price, and an optional unit count (e.g. "Primary Hip System
+ * $8,500 50 units").
+ *
+ * Honesty rules (vendor-prospective audit H1.b): never fabricate
+ * values. Lines without a recognizable price are skipped and reported;
+ * missing volume stays 0 rather than defaulting to an invented number.
+ */
+export function parseProductsFromDescription(
+  productDescription: string,
   currentProductCategory: string,
-  setIsGeneratingAI: (v: boolean) => void,
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>,
-  setAiProductDescription: (v: string) => void,
+  setProductDescription: (v: string) => void,
 ) {
-  if (!aiProductDescription.trim()) {
+  if (!productDescription.trim()) {
     toast.error("Enter a product description first")
     return
   }
 
-  setIsGeneratingAI(true)
-  await new Promise(resolve => setTimeout(resolve, 1500))
-
-  const descriptionLines = aiProductDescription.split("\n").filter(l => l.trim())
+  const descriptionLines = productDescription.split("\n").filter(l => l.trim())
   const products: ProposalProduct[] = []
+  let skippedLines = 0
   let totalSpend = 0
   let totalVolume = 0
 
-  const fullText = aiProductDescription.toLowerCase()
+  const fullText = productDescription.toLowerCase()
   const categoryKeywords: Record<string, string[]> = {
     "Ortho-Spine": ["hip", "knee", "spine", "spinal", "orthopedic", "joint", "arthroplasty", "fusion", "implant"],
     "Cardiovascular": ["stent", "pacemaker", "cardiac", "heart", "vascular", "catheter", "angioplasty"],
@@ -546,39 +553,43 @@ export async function generateProductsFromAI(
   }
 
   for (const line of descriptionLines) {
-    const priceMatch = line.match(/\$?([\d,]+(?:\.\d{2})?)/g)
-    const volumeMatch = line.match(/(\d+)\s*(?:units?|qty|quantity|pcs?|pieces?)/i)
+    const volumeMatch = line.match(/([\d,]+)\s*(?:units?|qty|quantity|pcs?|pieces?)/i)
+    // Strip the volume expression first so its number can't be
+    // mistaken for a price (e.g. "Widget 50 units" must NOT parse as
+    // a $50 product).
+    const lineWithoutVolume = volumeMatch ? line.replace(volumeMatch[0], "") : line
+    const priceMatch = lineWithoutVolume.match(/\$?([\d,]+(?:\.\d{1,2})?)/)
 
-    let productName = line
-      .replace(/\$?[\d,]+(?:\.\d{2})?/g, "")
+    const productName = line
+      .replace(/\$?[\d,]+(?:\.\d{1,2})?/g, "")
       .replace(/\d+\s*(?:units?|qty|quantity|pcs?|pieces?)/gi, "")
       .replace(/[-@:]/g, "")
       .trim()
 
-    if (productName.length > 3) {
-      const price = priceMatch ? parseFloat(priceMatch[0].replace(/[$,]/g, "")) || 5000 : 5000
-      const volume = volumeMatch ? parseInt(volumeMatch[1]) : 50
+    const price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, "")) : 0
+    const volume = volumeMatch ? parseInt(volumeMatch[1].replace(/,/g, "")) || 0 : 0
 
+    // A line only counts as parsed if it has a usable name AND an
+    // explicit price. We never invent a price or a volume.
+    if (productName.length > 3 && price > 0) {
       products.push({
-        benchmarkId: `ai-${Date.now()}-${products.length}`,
+        benchmarkId: `parsed-${Date.now()}-${products.length}`,
         productName: productName.substring(0, 50),
         proposedPrice: price,
         projectedVolume: volume,
       })
       totalSpend += price * volume
       totalVolume += volume
+    } else {
+      skippedLines++
     }
   }
 
   if (products.length === 0) {
-    products.push({
-      benchmarkId: `ai-${Date.now()}`,
-      productName: aiProductDescription.substring(0, 50),
-      proposedPrice: 5000,
-      projectedVolume: 50,
-    })
-    totalSpend = 250000
-    totalVolume = 50
+    toast.error(
+      'No products could be parsed from the description. Use one line per product with a name and a price, e.g. "Primary Hip System $8,500 50 units".',
+    )
+    return
   }
 
   setNewProposal(prev => ({
@@ -589,16 +600,20 @@ export async function generateProductsFromAI(
     productCategory: prev.productCategory || detectedCategory || prev.productCategory,
   }))
 
-  setIsGeneratingAI(false)
-  setAiProductDescription("")
+  setProductDescription("")
   const categoryMsg = detectedCategory && !currentProductCategory ? ` (Category: ${detectedCategory})` : ""
-  toast.success(`Generated ${products.length} product${products.length > 1 ? "s" : ""} from description${categoryMsg}`)
+  toast.success(`Parsed ${products.length} product${products.length > 1 ? "s" : ""} from description${categoryMsg}`)
+  if (skippedLines > 0) {
+    toast.warning(
+      `${skippedLines} line${skippedLines > 1 ? "s" : ""} could not be parsed (no price found) and ${skippedLines > 1 ? "were" : "was"} skipped`,
+    )
+  }
 }
 
 export function generateTermsFromNotes(
   newProposal: NewProposalState,
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>,
-): AiSuggestionsState["data"] {
+): TermSuggestionsState["data"] {
   const notes = newProposal.aiNotes.toLowerCase()
   const generatedTerms: NewProposalState["terms"] = []
   const suggestedTerms: { type: string; description: string; rationale: string }[] = []
@@ -634,7 +649,7 @@ export function generateTermsFromNotes(
     }
     const rebatePct = targetValue >= 1000000 ? 3.5 : targetValue >= 500000 ? 3 : 2.5
     generatedTerms.push({
-      id: `ai-spend-${Date.now()}`,
+      id: `suggested-spend-${Date.now()}`,
       termType: "spend_rebate",
       name: "Annual Spend Rebate",
       targetType: "spend",
@@ -655,7 +670,7 @@ export function generateTermsFromNotes(
   // ── Market share commitment ───────────────────────────────────
   if (shareMatch || hasExclusivity || notes.includes("market share") || notes.includes("partnership")) {
     generatedTerms.push({
-      id: `ai-share-${Date.now()}`,
+      id: `suggested-share-${Date.now()}`,
       termType: "market_share_rebate",
       name: "Market Share Commitment",
       targetType: "market_share",
@@ -709,7 +724,7 @@ export function generateTermsFromNotes(
   // ── Growth incentive ──────────────────────────────────────────
   if (hasGrowth) {
     generatedTerms.push({
-      id: `ai-growth-${Date.now()}`,
+      id: `suggested-growth-${Date.now()}`,
       termType: "volume_rebate",
       name: "Growth Incentive Rebate",
       targetType: "volume",
@@ -730,7 +745,7 @@ export function generateTermsFromNotes(
   // ── Tiered volume rebate ──────────────────────────────────────
   if (hasTiered) {
     generatedTerms.push({
-      id: `ai-tiered-${Date.now()}`,
+      id: `suggested-tiered-${Date.now()}`,
       termType: "volume_rebate",
       name: "Tiered Volume Rebate",
       targetType: "volume",
@@ -810,12 +825,12 @@ export function generateTermsFromNotes(
         terms: [...prev.terms, ...newTerms],
       }
     })
-    toast.success(`AI generated ${generatedTerms.length} deal term(s) with reasoning and negotiation advice. Review below.`)
+    toast.success(`Suggested ${generatedTerms.length} deal term(s) from your notes (rule-based keyword matching). Review below.`)
   } else {
     setNewProposal(prev => ({
       ...prev,
       terms: [...prev.terms, {
-        id: `ai-default-${Date.now()}`,
+        id: `suggested-default-${Date.now()}`,
         termType: "spend_rebate" as const,
         name: "Standard Spend Rebate",
         targetType: "spend" as const,
@@ -829,7 +844,7 @@ export function generateTermsFromNotes(
       description: "2.5% rebate on projected annual spend",
       rationale: "A standard spend rebate is a safe starting point. Add more detail to your notes (spend targets, market share goals, contract length) for more specific recommendations.",
     })
-    toast.info("Generated a standard spend rebate term. Add more details to your notes for specific terms.")
+    toast.info("Added a standard spend rebate term. Add more details to your notes for specific suggestions.")
   }
 
   // ── Always add general advice if none was generated ───────────

@@ -3,43 +3,38 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  Sparkles,
-  Loader2,
+  NotebookPen,
   Target,
   FileText,
   Clock,
   Users,
   AlertTriangle,
 } from "lucide-react"
-import type { NewProposalState, AiSuggestionsState } from "./types"
+import type { NewProposalState, TermSuggestionsState } from "./types"
 
-export interface AiDealNotesProps {
+export interface DealNotesProps {
   newProposal: NewProposalState
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>
-  aiSuggestions: AiSuggestionsState
-  lastAnalyzedRef: React.MutableRefObject<string>
-  analyzeTheDeal: () => void
+  termSuggestions: TermSuggestionsState
   onGenerateTermsFromNotes: () => void
 }
 
-export function AiDealNotes({
+export function DealNotes({
   newProposal,
   setNewProposal,
-  aiSuggestions,
-  lastAnalyzedRef,
-  analyzeTheDeal,
+  termSuggestions,
   onGenerateTermsFromNotes,
-}: AiDealNotesProps) {
+}: DealNotesProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-primary" />
-        <Label className="text-base font-semibold">AI Deal Notes</Label>
+        <NotebookPen className="h-4 w-4 text-primary" />
+        <Label className="text-base font-semibold">Deal Notes</Label>
         <Badge variant="outline" className="text-xs">Optional</Badge>
       </div>
       <p className="text-sm text-muted-foreground">
         Add context about this deal - competitor info, customer priorities, urgency, relationship history.
-        AI will analyze these notes to generate deal terms and scoring insights.
+        Rule-based keyword matching scans these notes to suggest deal terms.
       </p>
       <Textarea
         placeholder="Example: Customer is evaluating a competing offer from MedTech Corp at 15% lower pricing. They're interested in a 3-year exclusive partnership if we can match the price. Decision needed by end of month. Strong relationship with their orthopedic department - they've been a customer for 5 years."
@@ -49,18 +44,18 @@ export function AiDealNotes({
       />
 
       <p className="text-xs text-muted-foreground">
-        Enter deal context then click the button below to generate terms automatically.
+        Enter deal context then click the button below to get rule-based term suggestions.
       </p>
 
-      {/* Generate AI Terms Button */}
+      {/* Suggest Terms Button */}
       {newProposal.aiNotes.trim() ? (
         <Button
           variant="default"
           className="mt-3 gap-2 w-full"
           onClick={onGenerateTermsFromNotes}
         >
-          <Sparkles className="h-4 w-4" />
-          Generate Deal Terms from Notes
+          <NotebookPen className="h-4 w-4" />
+          Suggest Terms from Notes (rule-based)
         </Button>
       ) : (
         <Button
@@ -68,72 +63,52 @@ export function AiDealNotes({
           className="mt-3 gap-2 w-full"
           disabled
         >
-          <Sparkles className="h-4 w-4" />
-          Enter notes above to generate terms
+          <NotebookPen className="h-4 w-4" />
+          Enter notes above to get suggested terms
         </Button>
       )}
 
-      {/* Auto-analysis hint */}
-      {newProposal.products.filter(p => p.proposedPrice > 0).length === 0 && (
-        <p className="text-xs text-muted-foreground mt-2">
-          Upload pricing and usage files to get AI-powered deal analysis and negotiation suggestions.
-        </p>
-      )}
-
-      {/* AI Analysis Loading State */}
-      {aiSuggestions.isLoading && (
-        <div className="mt-3 p-4 rounded-lg bg-muted/50 border border-dashed">
-          <div className="flex items-center gap-3">
-            <Loader2 className="h-5 w-5 text-primary animate-spin" />
-            <div>
-              <p className="text-sm font-medium">Analyzing your deal...</p>
-              <p className="text-xs text-muted-foreground">Generating negotiation strategies and term suggestions</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* AI Suggestions Display */}
-      {aiSuggestions.data && !aiSuggestions.isLoading && (
+      {/* Term Suggestions Display */}
+      {termSuggestions.data && (
         <div className="mt-3 space-y-3">
           {/* Deal Strength Header */}
           <div className={`p-3 rounded-lg border ${
-            aiSuggestions.data.dealStrength === "strong"
+            termSuggestions.data.dealStrength === "strong"
               ? "bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-700"
-              : aiSuggestions.data.dealStrength === "weak"
+              : termSuggestions.data.dealStrength === "weak"
               ? "bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-700"
               : "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700"
           }`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className={`h-4 w-4 ${
-                  aiSuggestions.data.dealStrength === "strong"
+                <Target className={`h-4 w-4 ${
+                  termSuggestions.data.dealStrength === "strong"
                     ? "text-green-600 dark:text-green-400"
-                    : aiSuggestions.data.dealStrength === "weak"
+                    : termSuggestions.data.dealStrength === "weak"
                     ? "text-red-600 dark:text-red-400"
                     : "text-amber-600 dark:text-amber-400"
                 }`} />
                 <span className="text-sm font-semibold">
-                  Deal Strength: {(aiSuggestions.data.dealStrength || "moderate").charAt(0).toUpperCase() + (aiSuggestions.data.dealStrength || "moderate").slice(1)}
+                  Deal Strength: {(termSuggestions.data.dealStrength || "moderate").charAt(0).toUpperCase() + (termSuggestions.data.dealStrength || "moderate").slice(1)}
                 </span>
               </div>
-              {aiSuggestions.data.recommendedDiscount && (
+              {termSuggestions.data.recommendedDiscount && (
                 <Badge variant="outline" className="text-xs">
-                  Suggested Discount: {aiSuggestions.data.recommendedDiscount}
+                  Suggested Discount: {termSuggestions.data.recommendedDiscount}
                 </Badge>
               )}
             </div>
           </div>
 
           {/* Negotiation Advice */}
-          {aiSuggestions.data.negotiationAdvice && aiSuggestions.data.negotiationAdvice.length > 0 && (
+          {termSuggestions.data.negotiationAdvice && termSuggestions.data.negotiationAdvice.length > 0 && (
             <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
               <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-2 flex items-center gap-1">
                 <Target className="h-3 w-3" />
                 Negotiation Tactics
               </p>
               <ul className="text-xs text-blue-600 dark:text-blue-300 space-y-1">
-                {aiSuggestions.data.negotiationAdvice.map((advice: string, i: number) => (
+                {termSuggestions.data.negotiationAdvice.map((advice: string, i: number) => (
                   <li key={i} className="flex items-start gap-2">
                     <span className="text-blue-400">&bull;</span>
                     <span>{advice}</span>
@@ -144,14 +119,14 @@ export function AiDealNotes({
           )}
 
           {/* Suggested Terms */}
-          {aiSuggestions.data.suggestedTerms && aiSuggestions.data.suggestedTerms.length > 0 && (
+          {termSuggestions.data.suggestedTerms && termSuggestions.data.suggestedTerms.length > 0 && (
             <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
               <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-2 flex items-center gap-1">
                 <FileText className="h-3 w-3" />
-                Suggested Terms
+                Suggested Terms (rule-based)
               </p>
               <div className="space-y-2">
-                {aiSuggestions.data.suggestedTerms.map((term, i) => (
+                {termSuggestions.data.suggestedTerms.map((term, i) => (
                   <div key={i} className="text-xs">
                     <p className="font-medium text-green-700 dark:text-green-300">{term.type}</p>
                     <p className="text-green-600 dark:text-green-400">{term.description}</p>
@@ -163,54 +138,42 @@ export function AiDealNotes({
           )}
 
           {/* Urgency & Timeline */}
-          {aiSuggestions.data.urgencyAssessment && (
+          {termSuggestions.data.urgencyAssessment && (
             <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
               <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 Timeline Assessment
               </p>
-              <p className="text-xs text-amber-600 dark:text-amber-300">{aiSuggestions.data.urgencyAssessment}</p>
+              <p className="text-xs text-amber-600 dark:text-amber-300">{termSuggestions.data.urgencyAssessment}</p>
             </div>
           )}
 
           {/* Competitive Strategy */}
-          {aiSuggestions.data.competitiveStrategy && (
+          {termSuggestions.data.competitiveStrategy && (
             <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
               <p className="text-xs font-semibold text-purple-700 dark:text-purple-400 mb-1 flex items-center gap-1">
                 <Users className="h-3 w-3" />
                 Competitive Strategy
               </p>
-              <p className="text-xs text-purple-600 dark:text-purple-300">{aiSuggestions.data.competitiveStrategy}</p>
+              <p className="text-xs text-purple-600 dark:text-purple-300">{termSuggestions.data.competitiveStrategy}</p>
             </div>
           )}
 
           {/* Risk Factors */}
-          {aiSuggestions.data.riskFactors && aiSuggestions.data.riskFactors.length > 0 && (
+          {termSuggestions.data.riskFactors && termSuggestions.data.riskFactors.length > 0 && (
             <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
               <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1 flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3" />
                 Risk Factors
               </p>
               <ul className="text-xs text-red-600 dark:text-red-300 space-y-1">
-                {aiSuggestions.data.riskFactors.map((risk: string, i: number) => (
+                {termSuggestions.data.riskFactors.map((risk: string, i: number) => (
                   <li key={i}>&bull; {risk}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* Re-analyze button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-xs"
-            onClick={() => {
-              lastAnalyzedRef.current = ""
-              analyzeTheDeal()
-            }}
-          >
-            Re-analyze with updated notes
-          </Button>
         </div>
       )}
     </div>
