@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable"
 import { prisma } from "@/lib/db"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { deriveContractCadence } from "@/lib/contracts/contract-cadence"
 import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
 
 // ─── jspdf-autotable extends the doc with lastAutoTable ──────────
@@ -144,8 +145,16 @@ export async function generateContractReport(contractId: string): Promise<Uint8A
     ["Annual Value", fmtCurrency(Number(contract.annualValue))],
     ["Auto Renewal", contract.autoRenewal ? "Yes" : "No"],
     ["Termination Notice", `${contract.terminationNoticeDays} days`],
-    ["Performance Period", contract.performancePeriod],
-    ["Rebate Pay Period", contract.rebatePayPeriod],
+    // 2026-06-09: derive from terms (canonical helper) so the PDF matches
+    // the contract-detail panels instead of the stale stored defaults.
+    [
+      "Performance Period",
+      deriveContractCadence(contract.terms, contract).performancePeriod,
+    ],
+    [
+      "Rebate Pay Period",
+      deriveContractCadence(contract.terms, contract).rebatePayPeriod,
+    ],
   ]
 
   autoTable(doc, {

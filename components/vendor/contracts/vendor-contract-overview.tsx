@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { formatCurrency, formatDate, formatCalendarDate, formatDateRange } from "@/lib/formatting"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import { deriveContractCadence } from "@/lib/contracts/contract-cadence"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -230,8 +231,11 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
 
               <InfoRow icon={DollarSign} label="Total Value" value={formatCurrency(Number(contract.totalValue))} />
               <InfoRow icon={DollarSign} label="Annual Value" value={formatCurrency(Number(contract.annualValue))} />
-              <InfoRow label="Performance Period" value={<span className="capitalize">{contract.performancePeriod.replace("_", " ")}</span>} />
-              <InfoRow label="Rebate Pay Period" value={<span className="capitalize">{contract.rebatePayPeriod.replace("_", " ")}</span>} />
+              {/* 2026-06-09 ("performance period, rebate period should
+                  match"): derive from the terms via the canonical helper —
+                  see lib/contracts/contract-cadence.ts. */}
+              <InfoRow label="Performance Period" value={<span className="capitalize">{deriveContractCadence(contract.terms, contract).performancePeriod.replace("_", " ")}</span>} />
+              <InfoRow label="Rebate Pay Period" value={<span className="capitalize">{deriveContractCadence(contract.terms, contract).rebatePayPeriod.replace("_", " ")}</span>} />
 
               {contract.gpoAffiliation && (
                 <>

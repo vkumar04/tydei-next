@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/shared/badges/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
+import { deriveContractCadence } from "@/lib/contracts/contract-cadence"
 import {
   Tooltip,
   TooltipContent,
@@ -31,6 +32,7 @@ function InfoRow({ label, value }: { label: React.ReactNode; value: React.ReactN
 export function ContractDetailOverview({
   contract,
 }: ContractDetailOverviewProps) {
+  const derivedCadence = deriveContractCadence(contract.terms, contract)
   return (
     <Card>
       <CardHeader>
@@ -122,13 +124,27 @@ export function ContractDetailOverview({
           }
           value={formatCurrency(Number(contract.annualValue))}
         />
+        {/* 2026-06-09 (Charles "performance period, rebate period should
+            match"): derive both cadences from the contract's TERMS — the
+            engine's source of truth — via the canonical helper. The stored
+            columns are set-once defaults (monthly/quarterly) that drift
+            from the real cadence (prod Mako: terms evaluate semi-annually
+            while the panel said monthly/quarterly). */}
         <InfoRow
           label={
             <DefinitionTooltip term="performance_period">Performance Period</DefinitionTooltip>
           }
           value={
             <span className="capitalize">
-              {contract.performancePeriod.replace("_", " ")}
+              {derivedCadence.performancePeriod.replace("_", " ")}
+            </span>
+          }
+        />
+        <InfoRow
+          label="Rebate Pay Period"
+          value={
+            <span className="capitalize">
+              {derivedCadence.rebatePayPeriod.replace("_", " ")}
             </span>
           }
         />

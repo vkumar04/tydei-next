@@ -78,6 +78,30 @@ export async function ingestExtractedContracts(
           .map((t) => `[${t.termName}] ${t.payPeriodDetail}`)
           .join(" | ") || null
 
+      // 2026-06-09 ("performance period, rebate period should match"):
+      // persist performancePeriod from the extracted terms' modal evaluation
+      // cadence — it was never set, so every AI-imported contract stored the
+      // schema default `monthly` while its terms evaluated semi-annually
+      // (the prod Mako shape). Displays now derive from terms
+      // (lib/contracts/contract-cadence.ts); storing a consistent value
+      // keeps proposal/amendment surfaces (which read the stored column)
+      // honest too.
+      const perfPeriodCounts = new Map<string, number>()
+      for (const t of extracted.terms ?? []) {
+        const p = toPerfPeriod(t.performancePeriod)
+        if (p) perfPeriodCounts.set(p, (perfPeriodCounts.get(p) ?? 0) + 1)
+      }
+      let modalPerformancePeriod: ReturnType<typeof toPerfPeriod> = null
+      let modalPerfN = 0
+      for (const [v, n] of perfPeriodCounts) {
+        if (n > modalPerfN) {
+          modalPerformancePeriod = v as NonNullable<
+            ReturnType<typeof toPerfPeriod>
+          >
+          modalPerfN = n
+        }
+      }
+
       const contract = await prisma.contract.create({
         data: {
           name: displayName,
@@ -94,6 +118,7 @@ export async function ingestExtractedContracts(
               ? extracted.specialConditions.join(" · ")
               : null,
           notes: variablePayPeriodNote,
+          performancePeriod: modalPerformancePeriod ?? "monthly",
           rebatePayPeriod: toPerfPeriod(extracted.rebatePayPeriod) ?? "quarterly",
           isGrouped: extracted.isGroupedContract ?? false,
           isMultiFacility:

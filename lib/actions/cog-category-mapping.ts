@@ -77,7 +77,15 @@ export async function getCOGCategoryMappings(): Promise<CogCategoryMapping[]> {
   for (const m of confirmed) {
     if (m.contractCategory) byName.set(normalize(m.cogCategory), m.contractCategory)
   }
-  const canonicalNames = productCategories.map((p) => p.name)
+  // 2026-06-09: never auto-suggest a name that is itself the SOURCE of a
+  // confirmed mapping — a dead/superseded name proposed as a target would
+  // re-fragment the data the mapping just merged.
+  const confirmedSourceKeys = new Set(
+    confirmed.map((m) => normalize(m.cogCategory)),
+  )
+  const canonicalNames = productCategories
+    .map((p) => p.name)
+    .filter((n) => !confirmedSourceKeys.has(normalize(n)))
 
   // Merge COG + price-file categories keyed by normalized name; keep the
   // first-seen display label and sum record counts. Price-file rows carry
@@ -205,13 +213,41 @@ export async function remapCOGCategory(input: {
   if (!from) throw new Error("cogCategory required")
   const to = input.contractCategory?.trim() || null
 
+  // 2026-06-09 (Charles "it shows the old ones with no spend"): the dialog
+  // MERGES rows by normalize() (trim + collapse internal whitespace), but the
+  // retag matched a single `equals` — so a whitespace variant ("JOINT  HIP")
+  // merged into the displayed bucket survived the updateMany and reappeared
+  // with $0. Compute every stored variant sharing the normalized key and
+  // retag them all.
+  const [cogCatRows, pricingCatRows] = await Promise.all([
+    prisma.cOGRecord.findMany({
+      where: { facilityId: facility.id },
+      distinct: ["category"],
+      select: { category: true },
+    }),
+    prisma.contractPricing.findMany({
+      where: { contract: { facilityId: facility.id } },
+      distinct: ["category"],
+      select: { category: true },
+    }),
+  ])
+  const fromKey = normalize(from)
+  const variants = Array.from(
+    new Set([
+      from,
+      ...[...cogCatRows, ...pricingCatRows]
+        .map((r) => r.category)
+        .filter((c): c is string => !!c && normalize(c) === fromKey),
+    ]),
+  )
+
   // Capture the vendors whose COG sits in this category so we can recompute
   // their match statuses after the retag (category scope can change which
   // rows are on-contract).
   const affected = await prisma.cOGRecord.findMany({
     where: {
       facilityId: facility.id,
-      category: { equals: from, mode: "insensitive" },
+      category: { in: variants, mode: "insensitive" },
     },
     select: { vendorId: true },
     distinct: ["vendorId"],
@@ -225,7 +261,7 @@ export async function remapCOGCategory(input: {
     const updated = await prisma.cOGRecord.updateMany({
       where: {
         facilityId: facility.id,
-        category: { equals: from, mode: "insensitive" },
+        category: { in: variants, mode: "insensitive" },
       },
       data: { category: to },
     })
@@ -236,11 +272,41 @@ export async function remapCOGCategory(input: {
     // next import). Scoped to this facility via the contract relation.
     await prisma.contractPricing.updateMany({
       where: {
-        category: { equals: from, mode: "insensitive" },
+        category: { in: variants, mode: "insensitive" },
         contract: { facilityId: facility.id },
       },
       data: { category: to },
     })
+
+    // 2026-06-09: parity retags the original fix missed — the vendor-level
+    // price files and any term scoped to the old name (a term scoped to
+    // ["JOINT"] stops matching COG retagged to "Ortho-Joints"; canonical
+    // variant expansion bridges case/word-order drift, not arbitrary
+    // renames).
+    await prisma.pricingFile.updateMany({
+      where: {
+        facilityId: facility.id,
+        category: { in: variants, mode: "insensitive" },
+      },
+      data: { category: to },
+    })
+    const scopedTerms = await prisma.contractTerm.findMany({
+      where: {
+        categories: { hasSome: variants },
+        contract: { facilityId: facility.id },
+      },
+      select: { id: true, categories: true },
+    })
+    for (const t of scopedTerms) {
+      const next = Array.from(
+        new Set(t.categories.map((c) => (normalize(c) === fromKey ? to : c))),
+      )
+      // auth-scope-scanner-skip: term ids come from the facility-scoped findMany above.
+      await prisma.contractTerm.update({
+        where: { id: t.id },
+        data: { categories: next },
+      })
+    }
 
     // Persist the confirmed rule (upsert on cogCategory).
     // auth-scope-scanner-skip: CategoryMapping is global taxonomy (no
@@ -267,6 +333,84 @@ export async function remapCOGCategory(input: {
     // (to→from). Leaving both creates a swap cycle that flips the two
     // names between buckets instead of merging them.
     await removeInverseCategoryMapping(from, to)
+
+    // 2026-06-09 (Charles "it shows the old ones with no spend, they can be
+    // removed"): the remap retagged the DATA but left the old name's
+    // ProductCategory row in the global taxonomy — so it lingered in every
+    // category picker, could be auto-suggested as a mapping target, and
+    // showed as a dead $0 row. Retarget its taxonomy references to the new
+    // category, then delete it once NOTHING anywhere (any facility — the
+    // taxonomy is tenant-shared) still references the old name.
+    const oldCat = await prisma.productCategory.findFirst({
+      where: { name: { equals: from, mode: "insensitive" } },
+    })
+    // auth-scope-scanner-skip: lookup by NAME on global taxonomy (no facilityId column).
+    const newCat = await prisma.productCategory.findFirst({
+      where: { name: { equals: to, mode: "insensitive" } },
+    })
+    if (oldCat && newCat && oldCat.id !== newCat.id) {
+      // Primary-category pointers move to the new category.
+      await prisma.contract.updateMany({
+        where: { productCategoryId: oldCat.id },
+        data: { productCategoryId: newCat.id },
+      })
+      // Join rows: drop would-be duplicates first (@@unique on
+      // [contractId, productCategoryId]), then retarget the rest.
+      const haveNew = await prisma.contractProductCategory.findMany({
+        where: { productCategoryId: newCat.id },
+        select: { contractId: true },
+      })
+      await prisma.contractProductCategory.deleteMany({
+        where: {
+          productCategoryId: oldCat.id,
+          contractId: { in: haveNew.map((h) => h.contractId) },
+        },
+      })
+      await prisma.contractProductCategory.updateMany({
+        where: { productCategoryId: oldCat.id },
+        data: { productCategoryId: newCat.id },
+      })
+      // Reparent children (guard the degenerate cycle where the new
+      // category is itself a child of the old one).
+      if (newCat.parentId === oldCat.id) {
+        // auth-scope-scanner-skip: ProductCategory is global taxonomy (no
+        // facilityId column); row was resolved by name above.
+        await prisma.productCategory.update({
+          where: { id: newCat.id },
+          data: { parentId: oldCat.parentId ?? null },
+        })
+      }
+      await prisma.productCategory.updateMany({
+        where: { parentId: oldCat.id },
+        data: { parentId: newCat.id },
+      })
+      // Global zero-reference check before deleting the taxonomy row.
+      const [cogN, cpN, pfN, pbN, termN] = await Promise.all([
+        prisma.cOGRecord.count({
+          where: { category: { equals: oldCat.name, mode: "insensitive" } },
+        }),
+        prisma.contractPricing.count({
+          where: { category: { equals: oldCat.name, mode: "insensitive" } },
+        }),
+        prisma.pricingFile.count({
+          where: { category: { equals: oldCat.name, mode: "insensitive" } },
+        }),
+        prisma.productBenchmark.count({
+          where: { category: { equals: oldCat.name, mode: "insensitive" } },
+        }),
+        prisma.contractTerm.count({
+          where: { categories: { has: oldCat.name } },
+        }),
+      ])
+      if (cogN + cpN + pfN + pbN + termN === 0) {
+        // auth-scope-scanner-skip: global taxonomy row, resolved by name
+        // above and verified unreferenced everywhere.
+        await prisma.productCategory.delete({ where: { id: oldCat.id } })
+        console.info(
+          `[remapCOGCategory] deleted unreferenced taxonomy row "${oldCat.name}" after remap → "${to}"`,
+        )
+      }
+    }
   } else {
     // Unmap — drop any rule for this category.
     await prisma.categoryMapping.deleteMany({
@@ -280,5 +424,8 @@ export async function remapCOGCategory(input: {
 
   revalidatePath("/dashboard/cog-data")
   revalidatePath("/dashboard/contracts")
+  // 2026-06-09: the Settings → Categories tab + pickers read the taxonomy
+  // the remap may have just pruned.
+  revalidatePath("/dashboard/settings")
   return { recordsUpdated }
 }
