@@ -15,8 +15,11 @@ import {
   useContractStats,
   useDeleteContract,
 } from "@/hooks/use-contracts"
+import { useFacilityPendingContracts } from "@/hooks/use-pending-contracts"
+import { filterAwaitingReview } from "@/lib/contracts/pending-awaiting-review"
 import { getContractColumns } from "@/components/contracts/contract-columns"
 import { DataTable } from "@/components/shared/tables/data-table"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -114,6 +117,13 @@ export function ContractsListClient({
   const { data, isLoading } = useContracts(facilityId, filters)
   const { data: stats } = useContractStats(facilityId, facilityScope)
   const deleteMutation = useDeleteContract()
+
+  // B3 (2026-06-11): attention badge on the Pending Approval tab. Same query
+  // key as PendingContractsTab, so TanStack Query serves both from one cache
+  // entry — and the same canonical filter the tab uses for its "awaiting
+  // review" rows, so the badge count cannot drift from what the tab shows.
+  const { data: pendingSubmissions } = useFacilityPendingContracts(facilityId)
+  const awaitingReviewCount = filterAwaitingReview(pendingSubmissions).length
 
   const allContracts = data?.contracts ?? []
 
@@ -267,6 +277,14 @@ export function ContractsListClient({
           <TabsTrigger value="pending" className="flex items-center gap-2">
             <Inbox className="h-4 w-4" />
             Pending Approval
+            {awaitingReviewCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+              >
+                {awaitingReviewCount}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="compare" className="flex items-center gap-2">
             <ArrowLeftRight className="h-4 w-4" />

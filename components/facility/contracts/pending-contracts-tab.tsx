@@ -12,6 +12,10 @@ import {
   useRejectPendingContract,
   useRequestRevision,
 } from "@/hooks/use-pending-contracts"
+import {
+  filterAwaitingReview,
+  isAwaitingReview,
+} from "@/lib/contracts/pending-awaiting-review"
 import { formatDate, formatCurrency } from "@/lib/formatting"
 import { Eye } from "lucide-react"
 import type { PendingContract, Vendor } from "@/lib/generated/prisma/client"
@@ -53,8 +57,8 @@ export function PendingContractsTab({ facilityId, userId }: PendingContractsTabP
   // revision-requested / approved submission vanished without a trace.
   // Split into "awaiting review" (actionable) and "reviewed" (decision +
   // notes stay visible).
-  const awaiting = pending.filter((pc) => pc.status === "submitted")
-  const reviewed = pending.filter((pc) => pc.status !== "submitted")
+  const awaiting = filterAwaitingReview(pending)
+  const reviewed = pending.filter((pc) => !isAwaitingReview(pc))
   const statusBadge = (status: string) => {
     switch (status) {
       case "rejected":
