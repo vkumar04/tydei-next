@@ -19,68 +19,81 @@ function findHeader(normHeaders: string[], rawHeaders: string[], ...aliases: str
   )
 }
 
+// ─── Canonical header-alias lists ────────────────────────────────
+// THE one place SKU / description / price header aliases live. Every
+// pricing-file surface (contract import, AI-extract review, prospective
+// proposal + pricing tabs via pricing-file-reader.ts) must detect columns
+// from these lists — a parallel hand-rolled list WILL drift (2026-06-10:
+// the proposal analyzer's 7-alias copy missed "ReferenceNumber" and
+// rejected the Arthrex price file with "No items found").
+export const ITEM_NUMBER_ALIASES = [
+  "vendor_item_no", "vendoritemno", "vendoritem",
+  "item_no", "itemno", "sku",
+  "part_no", "partnumber", "partno", "catalog_no",
+  "itemnumber", "item", "itemid", "itemcode",
+  "stockno", "stocknumber", "materialid", "materialnumber",
+  "productid", "productcode", "vendorpart", "vendorcatalog",
+  "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
+  "referencenumber", "reference",
+  // "Catalog Item" — Stryker joint price/COG files label the SKU column
+  // this way; without it the auto-detector misses the SKU → manual mapping
+  // or off-catalog. Charles 2026-06-07.
+  "catalogitem", "catalogitemno", "catalog",
+  // Bug B 2026-05-25 (Charles Bugs.rtfd "Carve out xls price file
+  // not working"): the SYK Carve out workbook ships with the header
+  // typo "Reference numer" (missing 'b'). Add the typo variant so
+  // the auto-detector matches it instead of falling through to the
+  // "Could not auto-detect columns" error.
+  "referencenumer", "reference_numer",
+  "vendor_item_number", "vendoritemnumber", "item_number",
+  "productno", "productnumber", "productref", "productrefnumber",
+  // Vick 2026-05-30: DePuy real-world export uses "PROD CD"
+  // (short for product code). Without "prodcd" the auto-detector
+  // misses the SKU column and the whole file fails.
+  "prodcd", "prod_cd", "prodno", "prod_no", "prodid", "prod_id",
+  "itemcd", "item_cd",
+]
+
+export const DESCRIPTION_ALIASES = [
+  "description", "desc", "product_description", "productdescription", "item_description",
+  "productdesc", "itemname", "materialname", "materialdesc",
+  "fulldescription",
+  // Vick 2026-05-30: DePuy "PROD DESCRIPTION" normalizes to
+  // "proddescription" (no space-strip can save it). ZB "ITEM
+  // DESCRIPTION" normalizes to "itemdescription" — already
+  // matches via item_description. Add the prod_description
+  // family explicitly.
+  "prod_description", "proddescription", "prod_desc",
+  "itemdescription",
+]
+
+export const UNIT_PRICE_ALIASES = [
+  "contract_price", "contractprice", "unit_price", "unitprice", "price", "cost",
+  "netprice", "yourprice", "discountprice", "discountedprice",
+  "negotiatedprice", "agreementprice", "contractcost", "netcost",
+  "sellprice", "sellingprice", "customerprice",
+  // Vick 2026-05-30: DePuy export ships four price columns
+  // (DIRECT BX PRICE, INDIRECT BX PRICE, DIRECT DZ PRICE,
+  // INDIRECT DZ PRICE). Most rows only populate one of them.
+  // Match the BX price first (per-unit) since the import treats
+  // each row as a single unit; DZ is dozen-priced and would
+  // need a per-row divide. List in priority order so the first
+  // present column wins.
+  "directbxprice", "direct_bx_price",
+  "indirectbxprice", "indirect_bx_price",
+  "bxprice", "bx_price",
+  "directdzprice", "direct_dz_price",
+  "indirectdzprice", "indirect_dz_price",
+  "dzprice", "dz_price",
+]
+
 // ─── Auto-detect column mapping from raw headers ─────────────────
 export function detectPricingColumnMapping(rawHeaders: string[]): Record<string, string> {
   const normHeaders = rawHeaders.map(norm)
 
-  const idxItem = findHeader(normHeaders, rawHeaders,
-    "vendor_item_no", "vendoritemno", "vendoritem",
-    "item_no", "itemno", "sku",
-    "part_no", "partnumber", "partno", "catalog_no",
-    "itemnumber", "item", "itemid", "itemcode",
-    "stockno", "stocknumber", "materialid", "materialnumber",
-    "productid", "productcode", "vendorpart", "vendorcatalog",
-    "catalogno", "catalognumber", "referenceno", "refno", "refnumber",
-    "referencenumber", "reference",
-    // "Catalog Item" — Stryker joint price/COG files label the SKU column
-    // this way; without it the auto-detector misses the SKU → manual mapping
-    // or off-catalog. Charles 2026-06-07.
-    "catalogitem", "catalogitemno", "catalog",
-    // Bug B 2026-05-25 (Charles Bugs.rtfd "Carve out xls price file
-    // not working"): the SYK Carve out workbook ships with the header
-    // typo "Reference numer" (missing 'b'). Add the typo variant so
-    // the auto-detector matches it instead of falling through to the
-    // "Could not auto-detect columns" error.
-    "referencenumer", "reference_numer",
-    "vendor_item_number", "vendoritemnumber", "item_number",
-    "productno", "productnumber", "productref", "productrefnumber",
-    // Vick 2026-05-30: DePuy real-world export uses "PROD CD"
-    // (short for product code). Without "prodcd" the auto-detector
-    // misses the SKU column and the whole file fails.
-    "prodcd", "prod_cd", "prodno", "prod_no", "prodid", "prod_id",
-    "itemcd", "item_cd",
-  )
-  const idxDesc = findHeader(normHeaders, rawHeaders,
-    "description", "desc", "product_description", "productdescription", "item_description",
-    "productdesc", "itemname", "materialname", "materialdesc",
-    "fulldescription",
-    // Vick 2026-05-30: DePuy "PROD DESCRIPTION" normalizes to
-    // "proddescription" (no space-strip can save it). ZB "ITEM
-    // DESCRIPTION" normalizes to "itemdescription" — already
-    // matches via item_description. Add the prod_description
-    // family explicitly.
-    "prod_description", "proddescription", "prod_desc",
-    "itemdescription",
-  )
-  const idxPrice = findHeader(normHeaders, rawHeaders,
-    "contract_price", "contractprice", "unit_price", "unitprice", "price", "cost",
-    "netprice", "yourprice", "discountprice", "discountedprice",
-    "negotiatedprice", "agreementprice", "contractcost", "netcost",
-    "sellprice", "sellingprice", "customerprice",
-    // Vick 2026-05-30: DePuy export ships four price columns
-    // (DIRECT BX PRICE, INDIRECT BX PRICE, DIRECT DZ PRICE,
-    // INDIRECT DZ PRICE). Most rows only populate one of them.
-    // Match the BX price first (per-unit) since the import treats
-    // each row as a single unit; DZ is dozen-priced and would
-    // need a per-row divide. List in priority order so the first
-    // present column wins.
-    "directbxprice", "direct_bx_price",
-    "indirectbxprice", "indirect_bx_price",
-    "bxprice", "bx_price",
-    "directdzprice", "direct_dz_price",
-    "indirectdzprice", "indirect_dz_price",
-    "dzprice", "dz_price",
-  )
+  const idxItem = findHeader(normHeaders, rawHeaders, ...ITEM_NUMBER_ALIASES)
+  const idxDesc = findHeader(normHeaders, rawHeaders, ...DESCRIPTION_ALIASES)
+  const idxPrice = findHeader(normHeaders, rawHeaders, ...UNIT_PRICE_ALIASES)
   const idxList = findHeader(normHeaders, rawHeaders,
     "list_price", "listprice", "msrp", "retail_price",
     "catalogprice", "regularprice", "standardprice",

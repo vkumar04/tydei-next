@@ -5,18 +5,30 @@
  */
 
 import type { PricingFileItem } from "@/lib/prospective-analysis/pricing-file-analysis"
+import {
+  ITEM_NUMBER_ALIASES,
+  DESCRIPTION_ALIASES,
+  UNIT_PRICE_ALIASES,
+} from "@/lib/utils/parse-pricing-file"
 
 function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
-function findIndex(normHeaders: string[], ...aliases: string[]): number {
-  return aliases
-    .map(norm)
-    .reduce<number>(
-      (found, alias) => (found >= 0 ? found : normHeaders.indexOf(alias)),
-      -1,
-    )
+// `exclude` lets the proposed-price lookup skip the column already
+// claimed as current price (the canonical price aliases include "cost",
+// which on a proposal file means what the facility pays TODAY).
+function findIndex(
+  normHeaders: string[],
+  aliases: string[],
+  exclude = -1,
+): number {
+  for (const alias of aliases) {
+    const a = norm(alias)
+    const idx = normHeaders.findIndex((h, i) => h === a && i !== exclude)
+    if (idx >= 0) return idx
+  }
+  return -1
 }
 
 function parseCsvRow(line: string): string[] {
@@ -95,46 +107,43 @@ export function pricingRowsToItems(
   rows: Record<string, string>[],
 ): PricingFileItem[] {
   const normHeaders = headers.map(norm)
-  const idxItem = findIndex(
-    normHeaders,
-    "item_no",
-    "itemno",
-    "vendor_item_no",
-    "vendoritemno",
-    "sku",
-    "item_number",
-    "itemnumber",
-  )
-  const idxDesc = findIndex(
-    normHeaders,
-    "description",
-    "desc",
-    "item_description",
+  // Canonical alias lists from lib/utils/parse-pricing-file.ts — do NOT
+  // inline a local list here. Bug 2026-06-10 ("Analysis for price not
+  // working"): a hand-rolled 7-alias copy missed "ReferenceNumber"
+  // (the Arthrex demo file's SKU header) and every row was dropped.
+  const idxItem = findIndex(normHeaders, ITEM_NUMBER_ALIASES)
+  const idxDesc = findIndex(normHeaders, [
+    ...DESCRIPTION_ALIASES,
     "product_name",
-  )
-  const idxProposed = findIndex(
-    normHeaders,
-    "proposed_price",
-    "proposedprice",
-    "price",
-    "unit_price",
-    "new_price",
-  )
-  const idxCurrent = findIndex(
-    normHeaders,
+  ])
+  // Current price resolves FIRST so its aliases ("cost", "unit_cost")
+  // can't be claimed by the broader canonical price list below.
+  const idxCurrent = findIndex(normHeaders, [
     "current_price",
     "currentprice",
     "unit_cost",
     "cost",
-  )
-  const idxQty = findIndex(
+  ])
+  const idxProposed = findIndex(
     normHeaders,
+    [
+      "proposed_price",
+      "proposedprice",
+      "new_price",
+      "newprice",
+      "quoted_price",
+      "quotedprice",
+      ...UNIT_PRICE_ALIASES,
+    ],
+    idxCurrent,
+  )
+  const idxQty = findIndex(normHeaders, [
     "quantity",
     "qty",
     "quantity_ordered",
     "estimated_qty",
     "annual_qty",
-  )
+  ])
 
   const parseNum = (v: string): number =>
     parseFloat(v.replace(/[^0-9.-]/g, "") || "0")
