@@ -20,6 +20,7 @@ import {
   notifyVendorOfPendingDecision,
 } from "@/lib/actions/notifications"
 import { excludeProspectiveProposalRows } from "@/lib/prospective/proposal-rows"
+import { logAudit } from "@/lib/audit"
 import { revalidatePath } from "next/cache"
 
 /**
@@ -707,6 +708,58 @@ export async function withdrawPendingContract(id: string) {
     where: { id, vendorId: vendor.id },
     data: { status: "withdrawn" },
   })
+}
+
+// ─── Vendor: Delete ─────────────────────────────────────────────
+
+/**
+ * Bug-bash 2026-06-11 B2: vendors had no way to remove a submitted /
+ * rejected / revision-requested submission from "My Contracts" — the
+ * row sat in the list forever. Hard-deletes the PendingContract row.
+ *
+ * Deletable = every PendingContractStatus EXCEPT `approved` (draft,
+ * submitted, rejected, revision_requested, withdrawn). An `approved`
+ * submission is the provenance record behind a real — possibly active —
+ * Contract row, so it is never deletable; active Contract rows live in
+ * a different table and can't reach this action at all.
+ *
+ * Same throw-on-failure convention as withdrawPendingContract /
+ * resubmitPendingContract above.
+ */
+export async function deletePendingContract(id: string) {
+  const session = await requireVendor()
+
+  // Scoped lookup: id + the session vendor's id, so one vendor can never
+  // delete another vendor's submission.
+  const existing = await prisma.pendingContract.findFirst({
+    where: { id, vendorId: session.vendor.id },
+    select: { status: true, contractName: true },
+  })
+  if (!existing) {
+    throw new Error("Submission not found.")
+  }
+  if (existing.status === "approved") {
+    throw new Error(
+      "Approved submissions cannot be deleted — they back a live contract.",
+    )
+  }
+
+  await prisma.pendingContract.delete({
+    where: { id, vendorId: session.vendor.id },
+  })
+
+  await logAudit({
+    userId: session.user.id,
+    action: "pending_contract.deleted",
+    entityType: "pendingContract",
+    entityId: id,
+    metadata: {
+      status: existing.status,
+      contractName: existing.contractName,
+    },
+  })
+
+  revalidatePath("/vendor/contracts")
 }
 
 // ─── Vendor: Resubmit ───────────────────────────────────────────

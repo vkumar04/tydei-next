@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Contract, Facility, ProductCategory } from "@/lib/generated/prisma/client"
-import { Eye, MoreHorizontal, FileText, Building2 } from "lucide-react"
+import { Eye, MoreHorizontal, FileText, Building2, Trash2 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
@@ -19,10 +19,19 @@ import {
 type ContractWithFacility = Contract & {
   facility: Pick<Facility, "id" | "name"> | null
   productCategory: Pick<ProductCategory, "id" | "name"> | null
+  /**
+   * Present ONLY on rows mapped from PendingContract submissions
+   * (vendor-contract-list.tsx mappedPending). Real Contract rows —
+   * including active ones — never carry it, which is what gates the
+   * Delete action below (bug-bash 2026-06-11 B2: active contracts are
+   * NEVER deletable).
+   */
+  pendingStatus?: string
 }
 
 export function getVendorContractColumns(
-  onView: (id: string) => void
+  onView: (id: string) => void,
+  onDelete: (row: { id: string; name: string }) => void
 ): ColumnDef<ContractWithFacility>[] {
   return [
     {
@@ -75,29 +84,64 @@ export function getVendorContractColumns(
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      cell: ({ row }) => (
-        <div className="text-right">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onView(row.original.id)}>
-                <Eye className="h-4 w-4 mr-2" />
-                View Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onView(row.original.id)}>
-                <FileText className="h-4 w-4 mr-2" />
-                Download PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ),
+      cell: ({ row }) => {
+        // Bug-bash 2026-06-11 B2: only PendingContract submissions are
+        // deletable, and never an approved one (those back a live
+        // Contract). Real Contract rows have no pendingStatus at all.
+        const deletable =
+          row.original.pendingStatus !== undefined &&
+          row.original.pendingStatus !== "approved"
+        return (
+          <div className="text-right">
+            <DropdownMenu>
+              {/* stopPropagation: the row itself navigates on click
+                  (B2 click-through); menu interactions must not. */}
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="sm">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onView(row.original.id)
+                  }}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  View Details
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onView(row.original.id)
+                  }}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Download PDF
+                </DropdownMenuItem>
+                {deletable && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDelete({ id: row.original.id, name: row.original.name })
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )
+      },
     },
   ]
 }

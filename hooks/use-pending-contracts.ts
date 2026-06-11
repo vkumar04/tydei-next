@@ -6,6 +6,7 @@ import {
   getVendorPendingContracts,
   createPendingContract,
   withdrawPendingContract,
+  deletePendingContract,
   getFacilityPendingContracts,
   approvePendingContract,
   rejectPendingContract,
@@ -47,6 +48,24 @@ export function useWithdrawPendingContract() {
       toast.success("Contract withdrawn")
     },
     onError: (e) => toast.error(e.message || "Failed to withdraw"),
+  })
+}
+
+/**
+ * Bug-bash 2026-06-11 B2: vendors can remove a non-approved submission
+ * (submitted / rejected / revision_requested / draft / withdrawn) from
+ * "My Contracts". Active contracts are never deletable — the server
+ * action guards `approved`, and real Contract rows never reach it.
+ */
+export function useDeletePendingContract() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: deletePendingContract,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pendingContracts"] })
+      toast.success("Submission deleted")
+    },
+    onError: (e) => toast.error(e.message || "Failed to delete"),
   })
 }
 

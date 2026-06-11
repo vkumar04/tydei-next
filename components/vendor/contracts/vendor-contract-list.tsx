@@ -11,7 +11,20 @@ import {
   type VendorStatusTab,
 } from "./vendor-contracts-control-bar"
 import { useVendorContracts } from "@/hooks/use-vendor-contracts"
-import { useVendorPendingContracts } from "@/hooks/use-pending-contracts"
+import {
+  useVendorPendingContracts,
+  useDeletePendingContract,
+} from "@/hooks/use-pending-contracts"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import type { ContractStatus } from "@/lib/generated/prisma/client"
 
 interface VendorContractListProps {
@@ -25,6 +38,14 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
   const [statusTab, setStatusTab] = useState<VendorStatusTab>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [facilityFilter, setFacilityFilter] = useState<string>("all")
+  // Bug-bash 2026-06-11 B2: confirm-before-delete target. Only pending
+  // submissions can land here (the Delete action is gated in the
+  // columns); active Contract rows never offer Delete.
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const deleteMutation = useDeletePendingContract()
 
   // Always fetch the full set for hero stats + facility options
   const { data: allData } = useVendorContracts(vendorId, { status: undefined })
@@ -131,7 +152,9 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
 
   const isLoading = contractsLoading || pendingLoading
 
-  const columns = getVendorContractColumns((id) => {
+  // Shared by the "View Details" menu action AND the whole-row click
+  // (bug-bash 2026-06-11 B2: rows weren't clickable into detail).
+  const handleView = (id: string) => {
     const isPending = mappedPending.some((pc) => pc.id === id)
     if (isPending) {
       // Review F1 (2026-06-10): /vendor/contracts/pending/[id] has no detail
@@ -142,7 +165,11 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
     } else {
       router.push(`/vendor/contracts/${id}`)
     }
-  })
+  }
+
+  const columns = getVendorContractColumns(handleView, (row) =>
+    setDeleteTarget(row),
+  )
 
   // --- Hero stats ---------------------------------------------------------
   // Derived from the full (unfiltered) data set + pending so the hero is
@@ -236,9 +263,51 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
             columns={columns as any}
             data={contracts as any}
             isLoading={isLoading}
+            // Bug-bash 2026-06-11 B2: whole row clicks through to the
+            // contract detail (active) or submission edit page (pending).
+            // Menu buttons inside the row stopPropagation in the columns.
+            onRowClick={(row: { id: string }) => handleView(row.id)}
           />
         </CardContent>
       </Card>
+
+      {/* Bug-bash 2026-06-11 B2: destructive confirm before deleting a
+          submission. Mirrors bundle-delete-button.tsx. */}
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this submission?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{deleteTarget?.name}&rdquo; will be permanently removed.
+              This cannot be undone. Active contracts are never affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault()
+                if (!deleteTarget) return
+                deleteMutation.mutate(deleteTarget.id, {
+                  onSuccess: () => setDeleteTarget(null),
+                  onError: () => setDeleteTarget(null),
+                })
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
