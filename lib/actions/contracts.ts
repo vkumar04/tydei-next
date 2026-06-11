@@ -984,9 +984,19 @@ async function _createContractImpl(
     ? input.terms.map((t) => termFormSchemaWithTierCheck.parse(t))
     : []
 
+  // bugs.rtfd 2026-06-11 B1 — dedupe window for create-contract. Both
+  // dedupe layers (in-memory idempotency TTL below + the DB soft-dedupe
+  // lookback) were 30s, but the post-create pricing-file import runs
+  // under a 120s transaction timeout (lib/actions/pricing-files.ts), so
+  // a second click mid-import landed OUTSIDE both windows and wrote a
+  // duplicate contract. 180s = 120s import ceiling + margin. Local
+  // (non-exported) const — "use server" files may only export async fns.
+  const CREATE_DEDUPE_WINDOW_MS = 180_000
+
   // Charles W1.W-E1 — idempotency. When the client supplies a key we
-  // hold a 30s cache of (key → created contract). A second call within
-  // the window (double-click, network retry, HMR race) returns the
+  // hold a CREATE_DEDUPE_WINDOW_MS cache of (key → created contract).
+  // A second call within the window (double-click, network retry, HMR
+  // race, re-click during the post-create pricing import) returns the
   // original contract instead of writing a duplicate row. Scope the
   // cache by user+facility so two users can't collide.
   type CachedContract = Awaited<ReturnType<typeof prisma.contract.create>>
@@ -1005,23 +1015,29 @@ async function _createContractImpl(
   // thread an idempotency key through, and (c) multi-instance deploys
   // where the cache is process-local. Before writing, look for a
   // contract with the same business key `(facility, vendor, name,
-  // effectiveDate)` created in the last 30s; if one exists, return it
-  // instead of writing a duplicate row. The 30s window is short enough
-  // that a user genuinely creating two near-identical contracts a
-  // minute apart still succeeds.
+  // effectiveDate)` created within CREATE_DEDUPE_WINDOW_MS; if one
+  // exists, return it instead of writing a duplicate row. The business
+  // key is specific enough (same vendor + exact name + exact effective
+  // date) that a user genuinely creating two near-identical contracts
+  // inside the window still succeeds by varying the name.
   const recentDup = await prisma.contract.findFirst({
     where: {
       facilityId: session.facility.id,
       vendorId: data.vendorId,
       name: data.name,
       effectiveDate: new Date(data.effectiveDate),
-      createdAt: { gte: new Date(Date.now() - 30_000) },
+      createdAt: { gte: new Date(Date.now() - CREATE_DEDUPE_WINDOW_MS) },
     },
   })
   if (recentDup) {
     const replay = serialize(recentDup)
     if (data.idempotencyKey) {
-      idempotencyPut(idempotencyScope, data.idempotencyKey, replay)
+      idempotencyPut(
+        idempotencyScope,
+        data.idempotencyKey,
+        replay,
+        CREATE_DEDUPE_WINDOW_MS,
+      )
     }
     return replay
   }
@@ -1318,9 +1334,15 @@ async function _createContractImpl(
 
   // Charles W1.W-E1 — cache the serialized result under the client's
   // idempotency key so a concurrent double-submit returns this contract
-  // rather than writing another row.
+  // rather than writing another row. TTL extended to the B1 dedupe
+  // window so the cache outlives the post-create pricing import.
   if (data.idempotencyKey) {
-    idempotencyPut(idempotencyScope, data.idempotencyKey, result)
+    idempotencyPut(
+      idempotencyScope,
+      data.idempotencyKey,
+      result,
+      CREATE_DEDUPE_WINDOW_MS,
+    )
   }
 
   return result

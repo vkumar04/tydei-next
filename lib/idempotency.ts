@@ -14,7 +14,9 @@
  *
  * Default TTL: 30s — long enough to absorb a double-click, short enough
  * that a user genuinely re-submitting the same form a minute later
- * still goes through.
+ * still goes through. Callers whose post-create work outlives 30s pass
+ * an explicit `ttlMs` (e.g. create-contract uses 180s so the window
+ * covers its 120s pricing-file import — bugs.rtfd 2026-06-11 B1).
  */
 
 interface Entry<T> {

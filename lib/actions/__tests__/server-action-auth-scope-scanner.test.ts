@@ -317,8 +317,10 @@ const BASELINE_HITS = new Set<string>([
   // (drifted-category canonical match) shifted them.
   // bumped again 2026-06-09 after the audit #2/#4 fixes (hoisted category
   // universe + union clause above the currentSpend cascade) shifted them.
-  "lib/actions/contracts.ts:1612",
-  "lib/actions/contracts.ts:1632",
+  // bumped again 2026-06-11 after the B1 dedupe-window extension
+  // (CREATE_DEDUPE_WINDOW_MS + widened idempotencyPut calls) shifted them.
+  "lib/actions/contracts.ts:1634",
+  "lib/actions/contracts.ts:1654",
   // imports/case-costing-import.ts: REMOVED from baseline 2026-06-09
   // (case-costing audit batch) — the remaining by-id ops (primaryCptCode
   // update, margin-rollup re-read + update) now carry inline

@@ -143,7 +143,8 @@ describe("contract-create DB soft-dedupe fallback (Charles W1.Y-B)", () => {
     // No idempotency key — simulates the TTL-expired replay or a second
     // submit path that forgot to thread the key through. The server
     // MUST still dedupe based on `(facilityId, vendorId, name,
-    // effectiveDate)` created in the last 30s.
+    // effectiveDate)` created within the dedupe window (180s as of
+    // bugs.rtfd 2026-06-11 B1).
     const input = buildValidCreateInput()
 
     // First call: no recent dup, write goes through.
@@ -151,7 +152,7 @@ describe("contract-create DB soft-dedupe fallback (Charles W1.Y-B)", () => {
     const first = await createContract(input)
 
     // Second call: the freshly-written row is now "recent" per the
-    // 30s window.
+    // dedupe window.
     findFirstMock.mockResolvedValueOnce({
       id: first.id,
       facilityId: "fac-1",
@@ -166,7 +167,7 @@ describe("contract-create DB soft-dedupe fallback (Charles W1.Y-B)", () => {
     expect(createMock).toHaveBeenCalledTimes(1)
   })
 
-  it("does NOT dedupe when the earlier contract is older than 30s", async () => {
+  it("does NOT dedupe when the earlier contract is older than the dedupe window", async () => {
     const input = buildValidCreateInput()
 
     // First call — no recent dup.
@@ -174,7 +175,7 @@ describe("contract-create DB soft-dedupe fallback (Charles W1.Y-B)", () => {
     const first = await createContract(input)
 
     // Second call — DB lookup returns nothing because the row is
-    // outside the 30s window (the server's `gte` clause filters it
+    // outside the dedupe window (the server's `gte` clause filters it
     // out on the real path; here we just confirm that when the lookup
     // is empty, we fall through to the create).
     findFirstMock.mockResolvedValueOnce(null)
@@ -184,7 +185,11 @@ describe("contract-create DB soft-dedupe fallback (Charles W1.Y-B)", () => {
     expect(createMock).toHaveBeenCalledTimes(2)
   })
 
-  it("scopes the lookup to (facility, vendor, name, effectiveDate) and a 30s createdAt window", async () => {
+  // bugs.rtfd 2026-06-11 B1: window widened 30s → 180s so it outlasts
+  // the post-create pricing-file import (120s transaction timeout in
+  // lib/actions/pricing-files.ts) plus margin — a second click mid-import
+  // previously fell outside both dedupe layers and wrote a duplicate.
+  it("scopes the lookup to (facility, vendor, name, effectiveDate) and a 180s createdAt window", async () => {
     const input = buildValidCreateInput()
 
     findFirstMock.mockResolvedValueOnce(null)
@@ -201,9 +206,10 @@ describe("contract-create DB soft-dedupe fallback (Charles W1.Y-B)", () => {
 
     const gte = args.where.createdAt.gte as Date
     expect(gte).toBeInstanceOf(Date)
-    // gte should be ~30s before now. Allow for a little slop.
+    // gte should be ~180s (CREATE_DEDUPE_WINDOW_MS) before now. Allow
+    // for a little slop.
     const delta = before - gte.getTime()
-    expect(delta).toBeGreaterThanOrEqual(29_000)
-    expect(delta).toBeLessThanOrEqual(31_000 + (after - before))
+    expect(delta).toBeGreaterThanOrEqual(179_000)
+    expect(delta).toBeLessThanOrEqual(181_000 + (after - before))
   })
 })

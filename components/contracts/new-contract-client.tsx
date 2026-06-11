@@ -110,6 +110,14 @@ export function NewContractClient({
     setTerms,
   } = useContractForm()
   const createMutation = useCreateContract()
+  // bugs.rtfd 2026-06-11 B1 — `createMutation.isPending` only covers the
+  // createContract call itself. The post-create side effects
+  // (runPostCreateSideEffects: capital line items → pricing import →
+  // documents) run AFTER mutateAsync resolves, so on a 15k-item pricing
+  // file the button re-enabled for 50s+ mid-import and a second click
+  // created a duplicate contract. `finalizing` keeps the action bar
+  // disabled through that window.
+  const [finalizing, setFinalizing] = useState(false)
   // Bug 7 guardrail: remember how many terms AI populated so submit can
   // warn if the user ended up with fewer than that (accidental delete,
   // or reviewed-but-dropped). Null = no AI populate happened.
@@ -539,10 +547,11 @@ export function NewContractClient({
 
   async function handleSubmit() {
     // Charles W1.W-E1 — client-side double-submit guard. The button is
-    // already `disabled={createMutation.isPending}` but we also no-op
-    // here so a programmatic double-invocation (e.g. Enter-key + click)
-    // can't race through.
-    if (createMutation.isPending) return
+    // already `disabled={createMutation.isPending || finalizing}` but we
+    // also no-op here so a programmatic double-invocation (e.g.
+    // Enter-key + click) can't race through. `finalizing` covers the
+    // post-create side-effect window (bugs.rtfd 2026-06-11 B1).
+    if (createMutation.isPending || finalizing) return
 
     const isValid = await form.trigger()
     if (!isValid) {
@@ -612,7 +621,14 @@ export function NewContractClient({
     // contract itself failed. The contract IS saved at this point — surface
     // the real failure reason without hiding the successful create, and
     // always navigate so the user lands on their new contract.
-    await runPostCreateSideEffects(contract.id)
+    // bugs.rtfd 2026-06-11 B1: keep the action bar disabled while the
+    // pricing import (up to 120s) runs — navigation order is unchanged.
+    setFinalizing(true)
+    try {
+      await runPostCreateSideEffects(contract.id)
+    } finally {
+      setFinalizing(false)
+    }
 
     router.push(`/dashboard/contracts/${contract.id}`)
   }
@@ -680,8 +696,9 @@ export function NewContractClient({
   }
 
   async function handleSaveAsDraft() {
-    // Charles W1.W-E1 — same guard as handleSubmit.
-    if (createMutation.isPending) return
+    // Charles W1.W-E1 — same guard as handleSubmit (incl. the B1
+    // finalizing window, bugs.rtfd 2026-06-11).
+    if (createMutation.isPending || finalizing) return
 
     // Set status to draft regardless of validation
     form.setValue("status", "draft")
@@ -699,7 +716,13 @@ export function NewContractClient({
       terms,
     })
 
-    await runPostCreateSideEffects(contract.id)
+    // bugs.rtfd 2026-06-11 B1 — same finalizing gate as handleSubmit.
+    setFinalizing(true)
+    try {
+      await runPostCreateSideEffects(contract.id)
+    } finally {
+      setFinalizing(false)
+    }
 
     router.push(`/dashboard/contracts/${contract.id}`)
   }
@@ -881,31 +904,37 @@ export function NewContractClient({
           <Button
             variant="outline"
             onClick={handleSaveAsDraft}
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || finalizing}
           >
             Save as Draft
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || finalizing}
             className="relative min-w-40"
           >
             {/* Both labels are ALWAYS in the DOM at the same position;
                 only one is visible via `invisible`. This prevents any
                 reconciliation/transition window from painting both
                 labels at once (the earlier bug where "Creating..." and
-                "Create Contract" overlapped). */}
+                "Create Contract" overlapped). The busy state also covers
+                `finalizing` — the post-create side-effect window
+                (bugs.rtfd 2026-06-11 B1). */}
             <span
-              className={createMutation.isPending ? "invisible" : "inline-flex items-center gap-2"}
-              aria-hidden={createMutation.isPending || undefined}
+              className={
+                createMutation.isPending || finalizing
+                  ? "invisible"
+                  : "inline-flex items-center gap-2"
+              }
+              aria-hidden={createMutation.isPending || finalizing || undefined}
             >
               <Save className="h-4 w-4" />
               Create Contract
             </span>
-            {createMutation.isPending ? (
+            {createMutation.isPending || finalizing ? (
               <span className="absolute inset-0 inline-flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
+                {finalizing ? "Importing pricing…" : "Creating..."}
               </span>
             ) : null}
           </Button>
