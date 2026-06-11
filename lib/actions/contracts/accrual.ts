@@ -239,40 +239,194 @@ async function _buildAccrualTimelineForContract(
         select: { rebateEarned: true, payPeriodEnd: true, notes: true },
       })
     : []
+  // Timeline horizon — shared by the overlay-only path below AND the
+  // normal tier-walk path: clamp at today or contract expiry.
+  const end = new Date(
+    Math.min(new Date().getTime(), contract.expirationDate.getTime()),
+  )
+
   if (termsWithTiers.length === 0) {
     // No spend-dollar tier terms — but overlay rows (carve-out /
-    // market-share / compliance accrual) may still exist. Render them as a
-    // minimal monthly timeline instead of a blank card.
-    if (overlayRebateRows.length > 0) {
-      const byMonth = new Map<string, number>()
-      for (const r of overlayRebateRows) {
-        if (!r.payPeriodEnd) continue
-        const key = `${r.payPeriodEnd.getUTCFullYear()}-${String(
-          r.payPeriodEnd.getUTCMonth() + 1,
-        ).padStart(2, "0")}`
-        byMonth.set(key, (byMonth.get(key) ?? 0) + Number(r.rebateEarned ?? 0))
+    // market-share / compliance / dispatcher accrual) may still exist.
+    //
+    // bugs.rtfd 2026-06-11 A4 ("STILL not showing"): pre-fix this path
+    // rendered ONLY the months that happened to carry ledger rows, with
+    // hardcoded spend 0 / cumulativeSpend 0 / tier 0 / rate 0 / empty
+    // termLabels / "monthly" reset — so a contract whose ONLY term is
+    // market_share showed 2 bare annual rows with $0 spend everywhere
+    // while its hero market-share was correct. Three prior fixes
+    // (3e24e201, 02081997, 59333750) all repaired the NORMAL walk path;
+    // this early return was never updated.
+    //
+    // The threshold family (market_share / compliance_rebate) accrues on
+    // category-scoped COG spend, so this path now runs the SAME scoped
+    // monthly bucketing the normal walk uses and merges the overlay
+    // accrual into those months. Carve-out (per-SKU basis) and po /
+    // payment (count basis) terms keep overlay-only rows — their spend
+    // basis is not category-scoped COG (A1 behavior, pinned by the A1
+    // tests in accrual-timeline-display.test.ts).
+    const overlayTerms = contract.terms.filter((t) =>
+      OVERLAY_TERM_TYPES.has(t.termType),
+    )
+    const thresholdSpendTerms = overlayTerms.filter(
+      (t) =>
+        t.termType === "market_share" || t.termType === "compliance_rebate",
+    )
+
+    type EarlyTimelineRow = {
+      month: string
+      spend: number
+      cumulativeSpend: number
+      accruedAmount: number
+      tierAchieved: number
+      rebatePercent: number
+      termContributions: Array<{
+        termIndex: number
+        accruedAmount: number
+        tierAchieved: number
+        rebatePercent: number
+      }>
+      volume: number
+      achievedRebateType: string | null
+      achievedRebateValue: number
+    }
+    const emptyRow = (month: string): EarlyTimelineRow => ({
+      month,
+      spend: 0,
+      cumulativeSpend: 0,
+      accruedAmount: 0,
+      tierAchieved: 0,
+      rebatePercent: 0,
+      termContributions: [],
+      volume: 0,
+      achievedRebateType: null,
+      achievedRebateValue: 0,
+    })
+    const rowByMonth = new Map<string, EarlyTimelineRow>()
+
+    if (thresholdSpendTerms.length > 0) {
+      // Same canonical scoping as the normal walk (A4): union-of-categories
+      // pre-filter expanded to drifted COG variants + group-aware vendor
+      // set — never raw category `in` or bare vendorId.
+      const cogCategoryUniverse = await facilityCogCategoryUniverse(facilityId)
+      const unionCategoryWhere = buildUnionCategoryWhereClause(
+        thresholdSpendTerms.map((t) => ({
+          appliesTo: t.appliesTo,
+          categories: t.categories,
+        })),
+        cogCategoryUniverse,
+      )
+      const cogRows = await prisma.cOGRecord.findMany({
+        where: {
+          facilityId,
+          vendorId: { in: contractVendorIds(contract) },
+          transactionDate: { gte: contract.effectiveDate, lte: end },
+          ...unionCategoryWhere,
+        },
+        select: { transactionDate: true, extendedPrice: true, category: true },
+      })
+      const series = buildMonthlySpendSeriesFromCogRows(
+        cogRows,
+        unionCategoryWhere,
+        contract.effectiveDate,
+        end,
+      )
+      // Don't render a wall of all-$0 months on a contract with neither
+      // in-scope spend nor persisted accrual — keep the blank state.
+      const hasAnySpend = series.some((s) => s.spend > 0)
+      if (hasAnySpend || overlayRebateRows.length > 0) {
+        for (const s of series) {
+          const row = emptyRow(s.month)
+          row.spend = s.spend
+          rowByMonth.set(s.month, row)
+        }
       }
-      const rows = Array.from(byMonth.entries())
-        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-        .map(([month, accruedAmount]) => ({
-          month,
-          spend: 0,
-          cumulativeSpend: 0,
-          accruedAmount,
-          tierAchieved: 0,
-          rebatePercent: 0,
-          termContributions: [] as Array<{
-            termIndex: number
-            accruedAmount: number
-            tierAchieved: number
-            rebatePercent: number
-          }>,
-          volume: 0,
-          achievedRebateType: null as string | null,
-          achievedRebateValue: 0,
-        }))
+    }
+
+    // Term attribution mirrors the normal path's overlay labels: every
+    // overlay term gets a stable index (contract order) so contributions
+    // and labels line up in the per-term breakout.
+    const overlayIndexByTermId = new Map(
+      overlayTerms.map((t, i) => [t.id, i] as const),
+    )
+    const earlyTermLabels = overlayTerms.map((t, i) => ({
+      termIndex: i,
+      termName: t.termName ?? "Rebate term",
+      evaluationPeriod: t.evaluationPeriod ?? "annual",
+    }))
+
+    for (const cr of overlayRebateRows) {
+      if (!cr.payPeriodEnd) continue
+      const monthKey = `${cr.payPeriodEnd.getUTCFullYear()}-${String(
+        cr.payPeriodEnd.getUTCMonth() + 1,
+      ).padStart(2, "0")}`
+      const earned = Number(cr.rebateEarned ?? 0)
+      const termId = cr.notes?.match(/term:(\S+)/)?.[1] ?? null
+      const tierAchieved = Number(cr.notes?.match(/tier (\d+)/)?.[1] ?? 0)
+      const overlayTerm = termId
+        ? contract.terms.find((t) => t.id === termId)
+        : undefined
+      // A2 helper: percent tiers scale fraction→percent; dollar tier types
+      // stay 0 (never render $ as %).
+      const overlayRate = resolveOverlayTierRate(overlayTerm, tierAchieved)
+      const termIndex = termId
+        ? (overlayIndexByTermId.get(termId) ?? null)
+        : null
+
+      // Keep accrual months with no spend: append a row outside the COG
+      // series range instead of dropping the dollars.
+      let target = rowByMonth.get(monthKey)
+      if (!target) {
+        target = emptyRow(monthKey)
+        rowByMonth.set(monthKey, target)
+      }
+      target.accruedAmount += earned
+      if (termIndex !== null && earned > 0) {
+        const existing = target.termContributions.find(
+          (c) => c.termIndex === termIndex,
+        )
+        if (existing) {
+          existing.accruedAmount += earned
+          if (tierAchieved > existing.tierAchieved) {
+            existing.tierAchieved = tierAchieved
+            existing.rebatePercent = overlayRate
+          }
+        } else {
+          target.termContributions.push({
+            termIndex,
+            accruedAmount: earned,
+            tierAchieved,
+            rebatePercent: overlayRate,
+          })
+        }
+      }
+      // Row headline: best achieved tier wins (same tiebreak the walk
+      // uses — higher tier, then higher rate). Carve-out / po / payment
+      // notes carry no `tier N`, so their rows keep tier 0 / rate 0 (A1).
+      if (
+        tierAchieved > target.tierAchieved ||
+        (tierAchieved === target.tierAchieved &&
+          overlayRate > target.rebatePercent)
+      ) {
+        const achievedTier = overlayTerm?.tiers.find(
+          (t) => t.tierNumber === tierAchieved,
+        )
+        target.tierAchieved = tierAchieved
+        target.rebatePercent = overlayRate
+        target.achievedRebateType = achievedTier?.rebateType ?? null
+        target.achievedRebateValue = achievedTier
+          ? Number(achievedTier.rebateValue)
+          : 0
+      }
+    }
+
+    const earlyRows = Array.from(rowByMonth.values()).sort((a, b) =>
+      a.month < b.month ? -1 : 1,
+    )
+    if (earlyRows.length === 0) {
+      // Nothing to show — keep the exact pre-A4 blank shape.
       return serialize({
-        rows,
+        rows: [],
         method: "cumulative" as RebateMethodName,
         termLabels: [] as Array<{
           termIndex: number
@@ -283,15 +437,37 @@ async function _buildAccrualTimelineForContract(
         isVolumeRebate,
       })
     }
+
+    // Cadence: copy the normal path's mapping exactly — a single term
+    // keeps its evaluation period (monthly / quarterly / semi_annual pass
+    // through; anything else is annual); multi-term falls back to
+    // lifetime. Do NOT drop semi_annual (recurring regression class).
+    const earlyEval: "monthly" | "quarterly" | "semi_annual" | "annual" | "lifetime" =
+      overlayTerms.length === 1
+        ? overlayTerms[0].evaluationPeriod === "monthly" ||
+          overlayTerms[0].evaluationPeriod === "quarterly" ||
+          overlayTerms[0].evaluationPeriod === "semi_annual"
+          ? overlayTerms[0].evaluationPeriod
+          : "annual"
+        : "lifetime"
+    let earlyRunningCumulative = 0
+    let earlyPeriodKey: string | null = null
+    for (const r of earlyRows) {
+      const pKey = periodKeyForEval(r.month, earlyEval)
+      if (pKey !== earlyPeriodKey) {
+        earlyPeriodKey = pKey
+        earlyRunningCumulative = 0
+      }
+      earlyRunningCumulative += r.spend
+      r.cumulativeSpend = earlyRunningCumulative
+    }
+
     return serialize({
-      rows: [],
-      method: "cumulative" as RebateMethodName,
-      termLabels: [] as Array<{
-        termIndex: number
-        termName: string
-        evaluationPeriod: string
-      }>,
-      cumulativeReset: "monthly" as const,
+      rows: earlyRows,
+      method: (overlayTerms[0]?.rebateMethod ??
+        "cumulative") as RebateMethodName,
+      termLabels: earlyTermLabels,
+      cumulativeReset: earlyEval,
       isVolumeRebate,
     })
   }
@@ -382,10 +558,6 @@ async function _buildAccrualTimelineForContract(
   const method: RebateMethodName =
     (termsWithTiers[0].rebateMethod ?? "cumulative") as RebateMethodName
 
-  const end = new Date(
-    Math.min(new Date().getTime(), contract.expirationDate.getTime()),
-  )
-
   // Charles W1.U-A — fetch COG once with a union-of-categories pre-filter
   // so the in-memory partition below receives only rows we might want.
   // When any term is all-products the union is {} and we fall back to
@@ -429,54 +601,23 @@ async function _buildAccrualTimelineForContract(
     },
   })
 
-  // Helper: build a YYYY-MM monthly spend series from the fetched rows
-  // filtered by an optional category set. Each term calls this with its
-  // own filter so its tier math sees only the slice it is scoped to.
-  const buildSeries = (
-    rows: typeof cogRecords,
-    categoryFilter: ReturnType<typeof buildCategoryWhereClause>,
-  ): MonthlySpend[] => {
-    const categoryIn = categoryFilter.category?.in ?? null
-    const categorySet = categoryIn ? new Set(categoryIn) : null
-
-    const byMonth = new Map<string, number>()
-    for (const r of rows) {
-      const d = r.transactionDate
-      if (!d) continue
-      if (categorySet && !categorySet.has(r.category ?? "")) continue
-      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
-      byMonth.set(key, (byMonth.get(key) ?? 0) + Number(r.extendedPrice))
-    }
-
-    const series: MonthlySpend[] = []
-    const cursor = new Date(
-      Date.UTC(
-        contract.effectiveDate.getUTCFullYear(),
-        contract.effectiveDate.getUTCMonth(),
-        1,
-      ),
-    )
-    const lastMonth = new Date(
-      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1),
-    )
-    while (cursor <= lastMonth) {
-      const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`
-      series.push({ month: key, spend: byMonth.get(key) ?? 0 })
-      cursor.setUTCMonth(cursor.getUTCMonth() + 1)
-    }
-    return series
-  }
-
   // Per-term accrual series — each term sees ONLY the categories it is
   // scoped to (W1.U-A). Mirrors `recomputeAccrualForContract` so the
-  // on-the-fly timeline and the persisted Rebate ledger agree.
+  // on-the-fly timeline and the persisted Rebate ledger agree. The
+  // month-bucketing itself lives in `buildMonthlySpendSeriesFromCogRows`
+  // (module-level), shared with the overlay-only early path (A4).
   const perTermResults = termsWithTiers.map((term, idx) => {
     const termScope = { appliesTo: term.appliesTo, categories: term.categories }
     const termCategoryWhere = buildCategoryWhereClause(
       termScope,
       cogCategoryUniverse,
     )
-    const series = buildSeries(cogRecords, termCategoryWhere)
+    const series = buildMonthlySpendSeriesFromCogRows(
+      cogRecords,
+      termCategoryWhere,
+      contract.effectiveDate,
+      end,
+    )
     const rows = buildMonthlyAccruals(
       series,
       termConfigs[idx].tiers,
@@ -719,18 +860,9 @@ async function _buildAccrualTimelineForContract(
       ? termConfigs[0].evaluationPeriod
       : ("lifetime" as const)
   function periodKeyFor(month: string): string {
-    const [y, m] = month.split("-").map((n) => Number(n))
-    if (primaryEval === "monthly") return month
-    if (primaryEval === "quarterly") {
-      const q = Math.floor((m - 1) / 3) + 1
-      return `${y}-Q${q}`
-    }
-    if (primaryEval === "semi_annual") {
-      const h = m <= 6 ? 1 : 2
-      return `${y}-H${h}`
-    }
-    if (primaryEval === "annual") return `${y}`
-    return "lifetime"
+    // Shared with the overlay-only early path (A4) — see
+    // `periodKeyForEval` at module level.
+    return periodKeyForEval(month, primaryEval)
   }
   let runningCumulative = 0
   let currentPeriodKey: string | null = null
@@ -1058,6 +1190,78 @@ async function _buildAccrualTimelineForContract(
     cumulativeReset,
     isVolumeRebate,
   })
+}
+
+/**
+ * Shared YYYY-MM monthly spend bucketing (normal tier-walk path + the
+ * `termsWithTiers.length === 0` overlay path — bugs.rtfd 2026-06-11 A4).
+ * Buckets the fetched COG rows by transaction month, applies an optional
+ * category IN filter (already canonical-expanded by the caller via
+ * `buildCategoryWhereClause` / `buildUnionCategoryWhereClause` +
+ * `facilityCogCategoryUniverse`), and emits a contiguous series from
+ * rangeStart's month through rangeEnd's month so zero-spend months still
+ * render.
+ */
+function buildMonthlySpendSeriesFromCogRows(
+  rows: ReadonlyArray<{
+    transactionDate: Date | null
+    extendedPrice: Prisma.Decimal | number | null
+    category?: string | null
+  }>,
+  categoryFilter: ReturnType<typeof buildCategoryWhereClause>,
+  rangeStart: Date,
+  rangeEnd: Date,
+): MonthlySpend[] {
+  const categoryIn = categoryFilter.category?.in ?? null
+  const categorySet = categoryIn ? new Set(categoryIn) : null
+
+  const byMonth = new Map<string, number>()
+  for (const r of rows) {
+    const d = r.transactionDate
+    if (!d) continue
+    if (categorySet && !categorySet.has(r.category ?? "")) continue
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+    byMonth.set(key, (byMonth.get(key) ?? 0) + Number(r.extendedPrice))
+  }
+
+  const series: MonthlySpend[] = []
+  const cursor = new Date(
+    Date.UTC(rangeStart.getUTCFullYear(), rangeStart.getUTCMonth(), 1),
+  )
+  const lastMonth = new Date(
+    Date.UTC(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth(), 1),
+  )
+  while (cursor <= lastMonth) {
+    const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`
+    series.push({ month: key, spend: byMonth.get(key) ?? 0 })
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+  }
+  return series
+}
+
+/**
+ * Evaluation-period bucket key for a YYYY-MM month — drives the
+ * Cumulative column's reset boundaries AND the period-subtotal rows.
+ * Shared by the normal walk path and the overlay-only early path (A4).
+ * Cadences: monthly / quarterly / semi_annual / annual / lifetime —
+ * never drop semi_annual (recurring regression class).
+ */
+function periodKeyForEval(
+  month: string,
+  evalPeriod: "monthly" | "quarterly" | "semi_annual" | "annual" | "lifetime",
+): string {
+  const [y, m] = month.split("-").map((n) => Number(n))
+  if (evalPeriod === "monthly") return month
+  if (evalPeriod === "quarterly") {
+    const q = Math.floor((m - 1) / 3) + 1
+    return `${y}-Q${q}`
+  }
+  if (evalPeriod === "semi_annual") {
+    const h = m <= 6 ? 1 : 2
+    return `${y}-H${h}`
+  }
+  if (evalPeriod === "annual") return `${y}`
+  return "lifetime"
 }
 
 // Local month-key helpers duplicated from `lib/contracts/accrual.ts` —

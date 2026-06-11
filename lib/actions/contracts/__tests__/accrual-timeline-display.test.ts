@@ -549,3 +549,213 @@ describe("getAccrualTimeline — overlay term rate attribution (bugs.rtfd 2026-0
   })
 })
 
+describe("getAccrualTimeline — market-share-only contracts (bugs.rtfd 2026-06-11 A4)", () => {
+  /** Bug A4: a contract whose ONLY term is market_share showed a broken
+   * Accrual Timeline — only the 2 months that happened to carry ledger
+   * accrual rows, Spend $0 on every row, Tier "—", Rate "—", "Latest
+   * cumulative spend: $0" — while the accrued dollars and hero
+   * market-share (91.7%) were correct. Three prior fixes all repaired the
+   * NORMAL tier-walk path; the `termsWithTiers.length === 0` early-return
+   * path never ran the COG fetch and hardcoded spend 0 / tier 0 / rate 0 /
+   * empty termLabels / "monthly" reset. */
+  const marketShareOnlyTerm = {
+    id: "term-ms",
+    termType: "market_share",
+    termName: "Qualified Annual Spend Rebate",
+    rebateMethod: "cumulative" as const,
+    evaluationPeriod: "annual",
+    appliesTo: "specific_category",
+    categories: ["Joint Replacement"],
+    effectiveStart: null,
+    effectiveEnd: null,
+    createdAt: new Date("2025-01-01T00:00:00Z"),
+    // Market-share tiers: spendMin holds PERCENT thresholds (0-100);
+    // rebateValue holds the payout as a FRACTION of in-scope spend.
+    tiers: [
+      {
+        tierNumber: 1,
+        tierName: null,
+        spendMin: 0,
+        spendMax: 60,
+        rebateValue: 0.05,
+        rebateType: "percent_of_spend",
+      },
+      {
+        tierNumber: 2,
+        tierName: null,
+        spendMin: 60,
+        spendMax: 80,
+        rebateValue: 0.09,
+        rebateType: "percent_of_spend",
+      },
+      {
+        tierNumber: 3,
+        tierName: null,
+        spendMin: 80,
+        spendMax: null,
+        rebateValue: 0.11,
+        rebateType: "percent_of_spend",
+      },
+    ],
+  }
+
+  /** 6 months of in-scope COG spend (Jan–Jun 2025; contract runs
+   * 2025-01-01 → 2025-06-30). */
+  const sixMonthsSpend = [10_000, 20_000, 30_000, 40_000, 50_000, 60_000].map(
+    (extendedPrice, i) => ({
+      transactionDate: new Date(
+        `2025-0${i + 1}-15T00:00:00Z`,
+      ),
+      extendedPrice,
+      category: "Joint Replacement",
+    }),
+  )
+
+  it("renders every COG month with real bucketed spend, tier 2 / 9% on accrual months, term label, and annual cadence", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [marketShareOnlyTerm],
+    })
+    cogFindManyMock.mockResolvedValue(sixMonthsSpend)
+    // Two threshold-writer rows — pre-fix these were the ONLY two rows the
+    // timeline rendered.
+    rebateFindManyMock.mockResolvedValue([
+      {
+        rebateEarned: 2700,
+        payPeriodEnd: new Date("2025-03-31T00:00:00Z"),
+        notes:
+          "[auto-threshold-accrual] term:term-ms · currentMarketShare=70.5% (period) · tier 2 · spend=$30000.00 → $2700.00",
+      },
+      {
+        rebateEarned: 8100,
+        payPeriodEnd: new Date("2025-06-30T00:00:00Z"),
+        notes:
+          "[auto-threshold-accrual] term:term-ms · currentMarketShare=72.0% (period) · tier 2 · spend=$90000.00 → $8100.00",
+      },
+    ])
+
+    const result = await getAccrualTimeline("c-1")
+
+    // Rows cover the COG months (Jan–Jun), not just the 2 accrual months.
+    expect(result.rows.map((r) => r.month)).toEqual([
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-04",
+      "2025-05",
+      "2025-06",
+    ])
+    // Per-row spend matches the bucketed COG.
+    expect(result.rows.map((r) => r.spend)).toEqual([
+      10_000, 20_000, 30_000, 40_000, 50_000, 60_000,
+    ])
+    // Cumulative resets at the term's ANNUAL cadence — all of 2025 runs up.
+    expect(result.rows[5].cumulativeSpend).toBe(210_000)
+    expect(result.cumulativeReset).toBe("annual")
+
+    // Accrual months carry the achieved tier and its scaled rate
+    // (tier 2 → rebateValue 0.09 fraction → 9 display percent, via
+    // resolveOverlayTierRate semantics).
+    const mar = result.rows.find((r) => r.month === "2025-03")
+    expect(mar?.accruedAmount).toBeCloseTo(2700, 2)
+    expect(mar?.tierAchieved).toBe(2)
+    expect(mar?.rebatePercent).toBeCloseTo(9, 5)
+    expect(mar?.achievedRebateType).toBe("percent_of_spend")
+    expect(mar?.achievedRebateValue).toBeCloseTo(0.09, 8)
+    const jun = result.rows.find((r) => r.month === "2025-06")
+    expect(jun?.accruedAmount).toBeCloseTo(8100, 2)
+    expect(jun?.tierAchieved).toBe(2)
+    expect(jun?.rebatePercent).toBeCloseTo(9, 5)
+
+    // The per-term breakout attributes the accrual to the market-share term.
+    const marContribution = mar?.termContributions.find(
+      (c) => c.termIndex === 0,
+    )
+    expect(marContribution).toBeDefined()
+    expect(marContribution?.accruedAmount).toBeCloseTo(2700, 2)
+    expect(marContribution?.tierAchieved).toBe(2)
+    expect(marContribution?.rebatePercent).toBeCloseTo(9, 5)
+
+    // termLabels names the market-share term with its cadence.
+    expect(result.termLabels).toEqual([
+      {
+        termIndex: 0,
+        termName: "Qualified Annual Spend Rebate",
+        evaluationPeriod: "annual",
+      },
+    ])
+
+    // Spend months with no accrual stay visible with $0 accrued and no tier.
+    const jan = result.rows.find((r) => r.month === "2025-01")
+    expect(jan?.accruedAmount).toBe(0)
+    expect(jan?.tierAchieved).toBe(0)
+  })
+
+  it("scopes the COG fetch through the canonical helpers — group-aware vendor set + category IN filter", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [marketShareOnlyTerm],
+    })
+    cogFindManyMock.mockResolvedValue(sixMonthsSpend)
+    rebateFindManyMock.mockResolvedValue([
+      {
+        rebateEarned: 2700,
+        payPeriodEnd: new Date("2025-03-31T00:00:00Z"),
+        notes: "[auto-threshold-accrual] term:term-ms · tier 2 · $2700.00",
+      },
+    ])
+
+    await getAccrualTimeline("c-1")
+
+    expect(cogFindManyMock).toHaveBeenCalledTimes(1)
+    const where = cogFindManyMock.mock.calls[0][0]?.where
+    // Group-aware vendor set (never bare vendorId — recurring drift class).
+    expect(where?.vendorId).toEqual({ in: ["v-1"] })
+    // Category scope flows through buildUnionCategoryWhereClause.
+    expect(where?.category).toEqual({ in: ["Joint Replacement"] })
+    expect(where?.facilityId).toBe("fac-1")
+  })
+
+  it("keeps accrual months that fall outside the COG spend window and preserves semi_annual cadence", async () => {
+    // semi_annual is the recurring drop-from-cadence-allow-list regression
+    // class — pin that the early path's cadence mapping carries it.
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      expirationDate: new Date("2025-12-31T00:00:00Z"),
+      terms: [
+        { ...marketShareOnlyTerm, evaluationPeriod: "semi_annual" },
+      ],
+    })
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date("2025-06-15T00:00:00Z"),
+        extendedPrice: 50_000,
+        category: "Joint Replacement",
+      },
+      {
+        transactionDate: new Date("2025-07-15T00:00:00Z"),
+        extendedPrice: 70_000,
+        category: "Joint Replacement",
+      },
+    ])
+    rebateFindManyMock.mockResolvedValue([
+      {
+        rebateEarned: 4500,
+        payPeriodEnd: new Date("2025-06-30T00:00:00Z"),
+        notes: "[auto-threshold-accrual] term:term-ms · tier 2 · $4500.00",
+      },
+    ])
+
+    const result = await getAccrualTimeline("c-1")
+
+    expect(result.cumulativeReset).toBe("semi_annual")
+    // Cumulative resets at the H1/H2 boundary: June ends H1 at 50k, July
+    // restarts H2 at 70k.
+    const jun = result.rows.find((r) => r.month === "2025-06")
+    const jul = result.rows.find((r) => r.month === "2025-07")
+    expect(jun?.cumulativeSpend).toBe(50_000)
+    expect(jul?.cumulativeSpend).toBe(70_000)
+    expect(jun?.accruedAmount).toBeCloseTo(4500, 2)
+  })
+})
+
