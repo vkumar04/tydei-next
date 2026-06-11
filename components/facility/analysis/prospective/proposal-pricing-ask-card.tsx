@@ -1,14 +1,13 @@
 "use client"
 
 /**
- * Post-score price-file ask (Charles 2026-06-10: "When entering a PDF hard
- * to know what the pricing would be. It should want the price file as
- * well"). Rendered after a proposal PDF is scored — prompts for the
- * proposal's pricing file and runs the same COG-joined per-line variance
- * the Pricing tab uses, inline.
+ * Price-file panel of the proposal analyzer (Charles 2026-06-10: "it should
+ * want the price file as well"). CONTROLLED — the parent (upload-proposal-
+ * tab) owns parsing + the COG join so the verdict synthesizer can read the
+ * same analysis. This component only renders the dropzone / results.
  */
 
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import {
   Card,
   CardContent,
@@ -25,98 +24,30 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { FileSpreadsheet, Loader2, Upload } from "lucide-react"
-import { toast } from "sonner"
-import {
-  analyzePricingFile,
-  type PricingFileAnalysis,
-  type PricingFileItem,
-} from "@/lib/prospective-analysis/pricing-file-analysis"
-import { getCogPricingBenchmarks } from "@/lib/actions/prospective"
-import { normalizeSku } from "@/lib/contracts/normalize-sku"
-import { readPricingRows, pricingRowsToItems } from "./pricing-file-reader"
-
-function fmt(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value)
-}
+import type { PricingFileAnalysis } from "@/lib/prospective-analysis/pricing-file-analysis"
+import { formatCurrency } from "@/lib/formatting"
 
 export function ProposalPricingAskCard({
-  vendorId,
+  analysis,
+  fileName,
+  isAnalyzing,
+  onFile,
 }: {
-  /** Resolved vendor for the COG benchmark join (null = facility-wide). */
-  vendorId: string | null
+  analysis: PricingFileAnalysis | null
+  fileName: string | null
+  isAnalyzing: boolean
+  onFile: (file: File) => void
 }) {
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [fileName, setFileName] = useState<string | null>(null)
-  const [analysis, setAnalysis] = useState<PricingFileAnalysis | null>(null)
-
-  const handleFile = useCallback(
-    async (file: File) => {
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-      if (!["csv", "xls", "xlsx"].includes(ext)) {
-        toast.error("Upload a CSV or Excel pricing file.")
-        return
-      }
-      setIsAnalyzing(true)
-      try {
-        const { headers, rows } = await readPricingRows(file)
-        const items = pricingRowsToItems(headers, rows)
-        if (items.length === 0) {
-          toast.error(
-            "No items found. Check that the file has an item-number column.",
-          )
-          return
-        }
-        const benchmarks = await getCogPricingBenchmarks({
-          itemNumbers: items.map((i) => i.itemNumber),
-          vendorId,
-        }).catch((err) => {
-          // Review R5: a failed join must be distinguishable from
-          // genuinely-unmatched SKUs (sibling Pricing tab warns the same way).
-          console.error("[proposal-pricing-ask] COG benchmark join failed:", err)
-          toast.warning(
-            "Couldn't load COG benchmarks — variance will only use the file's own current-price column.",
-          )
-          return []
-        })
-        const bySku = new Map(benchmarks.map((b) => [b.skuKey, b]))
-        const joined: PricingFileItem[] = items.map((i) => {
-          const b = bySku.get(normalizeSku(i.itemNumber))
-          if (!b) return i
-          return {
-            ...i,
-            currentPrice: b.currentPrice,
-            estimatedAnnualQty: i.estimatedAnnualQty ?? b.annualQty,
-          }
-        })
-        const result = analyzePricingFile(joined)
-        setAnalysis(result)
-        setFileName(file.name)
-        toast.success(
-          `Price file analyzed — ${result.summary.itemsWithCOGMatch} of ${result.summary.totalItems} lines matched to COG`,
-        )
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Parse failed")
-      } finally {
-        setIsAnalyzing(false)
-      }
-    },
-    [vendorId],
-  )
-
   const onBrowse = useCallback(() => {
     const input = document.createElement("input")
     input.type = "file"
     input.accept = ".csv,.xlsx,.xls"
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) void handleFile(file)
+      if (file) onFile(file)
     }
     input.click()
-  }, [handleFile])
+  }, [onFile])
 
   const topLines = analysis
     ? [...analysis.lines]
@@ -133,12 +64,12 @@ export function ProposalPricingAskCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <FileSpreadsheet className="h-4 w-4" />
-          Add the proposal&rsquo;s price file
+          Pricing vs your current cost
         </CardTitle>
         <CardDescription>
-          The PDF alone can&rsquo;t tell you what the pricing would do — drop
-          the proposal&rsquo;s price file to compare every line against your
-          current COG cost.
+          {analysis
+            ? `${fileName} — every line compared against your COG history.`
+            : "The PDF alone can't tell you what the pricing would do — drop the proposal's price file to compare every line against your current cost."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -150,7 +81,7 @@ export function ProposalPricingAskCard({
             onDrop={(e) => {
               e.preventDefault()
               const file = e.dataTransfer.files[0]
-              if (file) void handleFile(file)
+              if (file) onFile(file)
             }}
             disabled={isAnalyzing}
             className="w-full rounded-lg border-2 border-dashed border-muted-foreground/25 p-6 text-center transition-colors hover:border-primary/50 disabled:cursor-wait disabled:opacity-60"
@@ -185,7 +116,7 @@ export function ProposalPricingAskCard({
               <div>
                 <p className="text-muted-foreground">Potential savings</p>
                 <p className="text-lg font-bold tabular-nums text-emerald-600">
-                  {fmt(analysis.summary.potentialSavings)}
+                  {formatCurrency(analysis.summary.potentialSavings)}
                 </p>
               </div>
               <div>
@@ -220,10 +151,12 @@ export function ProposalPricingAskCard({
                         {l.itemNumber}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {fmt(l.proposedPrice)}
+                        {formatCurrency(l.proposedPrice)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {l.currentPrice !== null ? fmt(l.currentPrice) : "—"}
+                        {l.currentPrice !== null
+                          ? formatCurrency(l.currentPrice)
+                          : "—"}
                       </TableCell>
                       <TableCell
                         className={`text-right tabular-nums ${
@@ -241,9 +174,13 @@ export function ProposalPricingAskCard({
                 </TableBody>
               </Table>
             ) : null}
-            <p className="text-xs text-muted-foreground">
-              {fileName} — full per-line table on the Pricing tab.
-            </p>
+            <button
+              type="button"
+              onClick={onBrowse}
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              Replace price file
+            </button>
           </>
         )}
       </CardContent>
