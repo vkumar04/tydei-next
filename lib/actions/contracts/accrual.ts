@@ -36,6 +36,7 @@ import {
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
+import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 
 export async function getAccrualTimeline(contractId: string) {
   const { facility } = await requireFacility()
@@ -138,11 +139,48 @@ async function _buildAccrualTimelineForContract(
   // always "achieves" the top tier). Exclude them from the tier walk;
   // their real accrual is persisted by the threshold writer as
   // `[auto-threshold-accrual]` Rebate rows and overlaid below.
+  //
+  // bugs.rtfd 2026-06-11 A1: the hand-rolled exclusion above missed
+  // `carve_out` / `tie_in`, whose auto-created PLACEHOLDER tier
+  // (spendMin 0, rebateValue 0) entered the walk and made the timeline's
+  // Tier column escalate 1→2→3 with cumulative spend on contracts that
+  // have no real ladder. Use the canonical guard
+  // `hasSpendDollarTierLadder` (CLAUDE.md invariants table, "Spend-tier
+  // display eligibility") — it encodes the full rule: spend-dollar
+  // thresholds only, no carve_out / tie_in, tiers present, and at least
+  // one non-zero rebateValue (excludes all-zero placeholder ladders).
+  // Carve-out accrual stays on its overlay path below.
+  //
+  // EXCEPTION: the volume-dispatcher family — `volume_rebate`,
+  // `rebate_per_use`, `capitated_pricing_rebate` (the term types
+  // `recompute-accrual.ts` routes through `recomputeVolumeAccrualForTerm`;
+  // all persist `[auto-volume-accrual]` rows) — stays in the walk even
+  // though the canonical guard classifies them as count-threshold. The
+  // 2026-06-10 volume fix relies on the walk for their Tier / Rate /
+  // Volume display columns and term attribution (walk index), while their
+  // ACCRUAL contribution is zeroed at the contribution site below and
+  // earned comes from the `[auto-volume-accrual]` overlay — so no double
+  // count. CAVEAT: the walk still feeds DOLLAR spend against the COUNT
+  // thresholds these terms store in `spendMin` (pre-existing 2026-06-10
+  // design), so the Tier/Rate columns are best-effort display for the
+  // volume family, not a clean ladder. Pinned by
+  // `lib/actions/contracts/__tests__/accrual-volume.test.ts`.
+  //
+  // The two remaining dispatcher types — `po_rebate`
+  // (`[auto-po-accrual]`) and `payment_rebate` (`[auto-invoice-accrual]`)
+  // — are NOT walked (no spend-dollar ladder, no display dependency on
+  // the walk); their persisted writer rows are overlaid below so a
+  // contract whose ONLY term is one of these still renders a timeline
+  // instead of a blank card (2026-06-11 A1 review).
+  const VOLUME_WALK_TERM_TYPES = new Set([
+    "volume_rebate",
+    "rebate_per_use",
+    "capitated_pricing_rebate",
+  ])
   const termsWithTiers = contract.terms.filter(
     (t) =>
-      t.tiers.length > 0 &&
-      t.termType !== "market_share" &&
-      t.termType !== "compliance_rebate",
+      hasSpendDollarTierLadder(t) ||
+      (VOLUME_WALK_TERM_TYPES.has(t.termType) && t.tiers.length > 0),
   )
   // 2026-06-09 (Charles "contracts on the vendor side is broken"): a
   // carve-out contract's tiers are PHANTOM (rebateValue 0 scaffolds), so the
@@ -159,12 +197,27 @@ async function _buildAccrualTimelineForContract(
   // forever. Volume rows now overlay; the walk's accrual contribution for
   // volume terms is zeroed below so percent-tier volume terms can't double
   // count.
-  const hasOverlayTerm = contract.terms.some(
-    (t) =>
-      t.termType === "carve_out" ||
-      t.termType === "market_share" ||
-      t.termType === "compliance_rebate" ||
-      t.termType === "volume_rebate",
+  //
+  // 2026-06-11 (A1 review): cover EVERY dispatcher-written prefix. The
+  // volume family (`rebate_per_use`, `capitated_pricing_rebate`) shares
+  // `[auto-volume-accrual]` with `volume_rebate`; `po_rebate` persists
+  // `[auto-po-accrual]` and `payment_rebate` persists
+  // `[auto-invoice-accrual]` (see `lib/contracts/recompute/po.ts` /
+  // `invoice.ts`). Pre-fix, a contract whose only term was one of these
+  // rendered a fully blank timeline despite persisted accrual rows.
+  const OVERLAY_TERM_TYPES = new Set([
+    "carve_out",
+    "market_share",
+    "compliance_rebate",
+    // volume-dispatcher family → [auto-volume-accrual]
+    "volume_rebate",
+    "rebate_per_use",
+    "capitated_pricing_rebate",
+    "po_rebate", // → [auto-po-accrual]
+    "payment_rebate", // → [auto-invoice-accrual]
+  ])
+  const hasOverlayTerm = contract.terms.some((t) =>
+    OVERLAY_TERM_TYPES.has(t.termType),
   )
   const overlayRebateRows = hasOverlayTerm
     ? await prisma.rebate.findMany({
@@ -174,6 +227,8 @@ async function _buildAccrualTimelineForContract(
             { notes: { startsWith: "[auto-carve-out-accrual]" } },
             { notes: { startsWith: "[auto-threshold-accrual]" } },
             { notes: { startsWith: "[auto-volume-accrual]" } },
+            { notes: { startsWith: "[auto-po-accrual]" } },
+            { notes: { startsWith: "[auto-invoice-accrual]" } },
           ],
         },
         // notes carry `term:<id>` + `tier N` — parsed below so the timeline
@@ -730,12 +785,14 @@ async function _buildAccrualTimelineForContract(
       // the UI uses to break down "who paid what this month") skips
       // zero rows so we don't visually clutter the breakdown.
       //
-      // 2026-06-10: volume terms' accrual comes from the persisted
+      // 2026-06-10: volume-family terms' (volume_rebate / rebate_per_use /
+      // capitated_pricing_rebate) accrual comes from the persisted
       // `[auto-volume-accrual]` overlay rows (the canonical earned source);
       // the walk keeps providing their tier/rate/volume display but must
       // not contribute accrual or it would double-count with the overlay.
-      const walkAccrual =
-        sourceTerm.termType === "volume_rebate" ? 0 : row.accruedAmount
+      const walkAccrual = VOLUME_WALK_TERM_TYPES.has(sourceTerm.termType)
+        ? 0
+        : row.accruedAmount
       totalAccrued += walkAccrual
       if (walkAccrual > 0) {
         contributions.push({
