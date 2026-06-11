@@ -851,7 +851,7 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
       // 2026-06-09 audit: derive status from the expiration date instead of
       // hardcoding "active" — two prod rows (exp 2024-12-31) were approved
       // as "active" though already expired, violating the
-      // status/expirationDate invariant (scripts/oracles/schema-invariants).
+      // status/expirationDate invariant.
       status:
         pending.expirationDate && pending.expirationDate < new Date()
           ? "expired"

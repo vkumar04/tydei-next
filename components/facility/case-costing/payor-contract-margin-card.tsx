@@ -5,8 +5,6 @@
  *
  * Renders a payor-contract picker and three stat tiles (Est.
  * Reimbursement / CPT Matched / Total Margin) with a summary card below.
- * The E2E `tests/workflows/facility-payor-contract-margin.spec.ts`
- * locks the card title + tile labels, so the copy here is canonical.
  */
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"

@@ -2202,7 +2202,8 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
   }
 
   // ─── Tydei vs v0 — invoice priority ──────────────────────────────
-  const { classifyInvoicePriority } = await import("@/lib/invoices/priority")
+  // (same helper already destructured above — redeclaring it in this
+  // function scope is a syntax error oxlint flags)
   if (classifyInvoicePriority({ variancePct: 6 }) !== "high") {
     failures.push({ where: "tydei classifyInvoicePriority >5%", detail: "≠ high" })
   }

@@ -7,7 +7,7 @@
  * windowed `monthlySpend` Map and `terms` array here for projection.
  *
  * No `"use server"` — this is a leaf module callable from anywhere
- * (including Vitest unit tests and `scripts/oracles/`).
+ * (including Vitest unit tests).
  */
 import {
   linearRegression,

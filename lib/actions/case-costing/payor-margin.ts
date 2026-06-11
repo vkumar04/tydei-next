@@ -14,8 +14,6 @@
  * Uses the existing pure reimbursement lookup in
  * `lib/case-costing/reimbursement-lookup.ts` so the math is shared with
  * the Cases list + Financial tabs (no drift).
- *
- * Regression guard: `tests/workflows/facility-payor-contract-margin.spec.ts`.
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
