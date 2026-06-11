@@ -357,3 +357,195 @@ describe("getAccrualTimeline — dispatcher-only term types overlay instead of b
     expect(result.rows[0].accruedAmount).toBeCloseTo(99.5, 2)
   })
 })
+
+describe("getAccrualTimeline — overlay term rate attribution (bugs.rtfd 2026-06-11 A2)", () => {
+  /** Bug A2: a market_share + spend two-term contract's per-term breakout
+   * showed "Distal Extremities Rebate: 2.00% → $130,818" but "Qualified
+   * Annual Spend Rebate → $84,557" with NO rate. Root cause: the overlay
+   * merge hardcoded `rebatePercent: 0` — the contributing term's tiers
+   * (already loaded on `contract.terms`) were never consulted for the
+   * achieved tier's rate. */
+  const spendTerm = {
+    id: "term-spend",
+    termType: "spend_rebate",
+    termName: "Distal Extremities Rebate",
+    rebateMethod: "cumulative" as const,
+    evaluationPeriod: "monthly",
+    effectiveStart: null,
+    effectiveEnd: null,
+    createdAt: new Date("2025-01-01T00:00:00Z"),
+    tiers: [
+      {
+        tierNumber: 1,
+        tierName: null,
+        spendMin: 0,
+        spendMax: null,
+        rebateValue: 0.02, // fraction → displays as 2.00%
+        rebateType: "percent_of_spend",
+      },
+    ],
+  }
+  /** Market-share tiers: `spendMin` is a PERCENT threshold (0–100), and
+   * the Bug #21 percent-of-spend shape stores the payout as a FRACTION
+   * (0.09 = 9% of in-scope spend) — see `threshold.ts`
+   * `isMarketSharePercentOfSpend`. */
+  const marketShareTerm = {
+    id: "term-ms",
+    termType: "market_share",
+    termName: "Qualified Annual Spend Rebate",
+    rebateMethod: "cumulative" as const,
+    evaluationPeriod: "annual",
+    effectiveStart: null,
+    effectiveEnd: null,
+    createdAt: new Date("2025-01-02T00:00:00Z"),
+    tiers: [
+      {
+        tierNumber: 1,
+        tierName: null,
+        spendMin: 0,
+        spendMax: 60,
+        rebateValue: 0.05,
+        rebateType: "percent_of_spend",
+      },
+      {
+        tierNumber: 2,
+        tierName: null,
+        spendMin: 60,
+        spendMax: 80,
+        rebateValue: 0.09,
+        rebateType: "percent_of_spend",
+      },
+      {
+        tierNumber: 3,
+        tierName: null,
+        spendMin: 80,
+        spendMax: null,
+        rebateValue: 0.11,
+        rebateType: "percent_of_spend",
+      },
+    ],
+  }
+
+  it("market-share overlay contribution carries the achieved tier's scaled rate; the spend term keeps its own", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [spendTerm, marketShareTerm],
+    })
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date("2025-01-15T00:00:00Z"),
+        extendedPrice: 100_000,
+        category: null,
+      },
+    ])
+    // Threshold-writer note shape (threshold.ts:479-482): prefix ·
+    // metric=share% (period) · tier N · spend → payout.
+    rebateFindManyMock.mockResolvedValue([
+      {
+        rebateEarned: 84557,
+        payPeriodEnd: new Date("2025-01-31T00:00:00Z"),
+        notes:
+          "[auto-threshold-accrual] term:term-ms · currentMarketShare=70.5% (period) · tier 2 · spend=$939522.22 → $84557.00",
+      },
+    ])
+
+    const result = await getAccrualTimeline("c-1")
+    const row = result.rows.find((r) => r.month === "2025-01")
+    expect(row).toBeDefined()
+
+    // The market-share term joins as overlay index 1 (after the single
+    // walked spend term at index 0).
+    const ms = row?.termContributions.find((c) => c.termIndex === 1)
+    expect(ms).toBeDefined()
+    expect(ms?.accruedAmount).toBeCloseTo(84557, 2)
+    expect(ms?.tierAchieved).toBe(2)
+    // Tier 2 rebateValue 0.09 (fraction) → scaled display percent 9.
+    expect(ms?.rebatePercent).toBeCloseTo(9, 5)
+
+    // No cross-contamination: the walked spend term's contribution keeps
+    // its own walk-derived rate and tier.
+    const spend = row?.termContributions.find((c) => c.termIndex === 0)
+    expect(spend).toBeDefined()
+    expect(spend?.rebatePercent).toBeCloseTo(2, 5)
+    expect(spend?.tierAchieved).toBe(1)
+    expect(spend?.accruedAmount).toBeCloseTo(100_000 * 0.02, 2)
+  })
+
+  it("merge branch: when a higher-tier overlay row joins an existing contribution, the rate updates with it", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [spendTerm, marketShareTerm],
+    })
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date("2025-01-15T00:00:00Z"),
+        extendedPrice: 100_000,
+        category: null,
+      },
+    ])
+    // Two writer rows landing in the SAME month: tier 1 first, then a
+    // tier-2 row. The merge must keep the higher tier AND its rate.
+    rebateFindManyMock.mockResolvedValue([
+      {
+        rebateEarned: 1000,
+        payPeriodEnd: new Date("2025-01-15T00:00:00Z"),
+        notes:
+          "[auto-threshold-accrual] term:term-ms · currentMarketShare=55.0% (period) · tier 1 · spend=$20000.00 → $1000.00",
+      },
+      {
+        rebateEarned: 84557,
+        payPeriodEnd: new Date("2025-01-31T00:00:00Z"),
+        notes:
+          "[auto-threshold-accrual] term:term-ms · currentMarketShare=70.5% (period) · tier 2 · spend=$939522.22 → $84557.00",
+      },
+    ])
+
+    const result = await getAccrualTimeline("c-1")
+    const row = result.rows.find((r) => r.month === "2025-01")
+    const ms = row?.termContributions.find((c) => c.termIndex === 1)
+    expect(ms?.accruedAmount).toBeCloseTo(85557, 2)
+    expect(ms?.tierAchieved).toBe(2)
+    expect(ms?.rebatePercent).toBeCloseTo(9, 5)
+  })
+
+  it("non-percent (flat-dollar) overlay tiers keep rebatePercent 0 — a dollar payout must not render as %", async () => {
+    // createEmptyTier defaults threshold-term tiers to fixed_rebate: the
+    // rebateValue is a flat DOLLAR payout per period, not a rate.
+    const flatDollarMarketShareTerm = {
+      ...marketShareTerm,
+      tiers: marketShareTerm.tiers.map((t) => ({
+        ...t,
+        rebateValue: 5000, // $5,000 flat per period
+        rebateType: "fixed_rebate",
+      })),
+    }
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [spendTerm, flatDollarMarketShareTerm],
+    })
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date("2025-01-15T00:00:00Z"),
+        extendedPrice: 100_000,
+        category: null,
+      },
+    ])
+    rebateFindManyMock.mockResolvedValue([
+      {
+        rebateEarned: 5000,
+        payPeriodEnd: new Date("2025-01-31T00:00:00Z"),
+        notes:
+          "[auto-threshold-accrual] term:term-ms · currentMarketShare=70.5% · tier 2 · $5000.00",
+      },
+    ])
+
+    const result = await getAccrualTimeline("c-1")
+    const row = result.rows.find((r) => r.month === "2025-01")
+    const ms = row?.termContributions.find((c) => c.termIndex === 1)
+    expect(ms?.accruedAmount).toBeCloseTo(5000, 2)
+    expect(ms?.tierAchieved).toBe(2)
+    // 5000 must NOT be scaled/rendered as a percent.
+    expect(ms?.rebatePercent).toBe(0)
+  })
+})
+

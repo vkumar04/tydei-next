@@ -37,6 +37,7 @@ import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-univer
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
+import { resolveOverlayTierRate } from "@/lib/contracts/tier-rebate-label"
 
 export async function getAccrualTimeline(contractId: string) {
   const { facility } = await requireFacility()
@@ -905,6 +906,17 @@ async function _buildAccrualTimelineForContract(
       const termId = cr.notes?.match(/term:(\S+)/)?.[1] ?? null
       const tierAchieved = Number(cr.notes?.match(/tier (\d+)/)?.[1] ?? 0)
       const termIndex = overlayIndexFor(termId)
+      // bugs.rtfd 2026-06-11 A2: the writer note carries only `tier N` —
+      // resolve the achieved tier's RATE from the contributing term's
+      // tiers (already loaded on contract.terms). Pre-fix this was
+      // hardcoded 0, so a market-share term at "Tier 2 · 9.0%" showed its
+      // dollar contribution with no rate in the per-term breakout.
+      // Percent tiers scale fraction→percent inside the helper; dollar
+      // tier types stay 0 (never render $ as %).
+      const overlayTerm = termId
+        ? contract.terms.find((t) => t.id === termId)
+        : undefined
+      const overlayRate = resolveOverlayTierRate(overlayTerm, tierAchieved)
 
       let target = byKey.get(monthKey)
       if (!target) {
@@ -932,13 +944,15 @@ async function _buildAccrualTimelineForContract(
           existing.accruedAmount += earned
           if (tierAchieved > existing.tierAchieved) {
             existing.tierAchieved = tierAchieved
+            // A2: the higher tier wins the merge — carry its rate too.
+            existing.rebatePercent = overlayRate
           }
         } else {
           target.termContributions.push({
             termIndex,
             accruedAmount: earned,
             tierAchieved,
-            rebatePercent: 0,
+            rebatePercent: overlayRate,
           })
         }
       }

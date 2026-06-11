@@ -52,6 +52,44 @@ export function formatTierRebateUnitSuffix(rebateType: RebateType): string {
 }
 
 /**
+ * Display rate for an OVERLAY term contribution on the Accrual Timeline
+ * (bugs.rtfd 2026-06-11 A2).
+ *
+ * Overlay Rebate rows (`[auto-threshold-accrual]`, `[auto-carve-out-accrual]`,
+ * `[auto-volume-accrual]`, …) carry only `tier N` in their writer notes — the
+ * achieved tier's rate must be resolved from the term's already-loaded tiers.
+ * Pre-fix, `getAccrualTimeline` hardcoded `rebatePercent: 0` when merging
+ * overlay rows into `termContributions`, so a market-share term sitting at
+ * "Tier 2 · 9.0%" rendered its $84,557 contribution with NO rate while the
+ * spend term beside it showed "2.00%".
+ *
+ * Unit convention (CLAUDE.md "Rebate engine units"): `percent_of_spend`
+ * tiers store a FRACTION (0.09 = 9%); the timeline displays scaled percent,
+ * so scale ×100 here — same boundary convention as
+ * `scaleRebateValueForEngine` / `formatTierRebateLabel` above. Non-percent
+ * tiers (`fixed_rebate` flat-dollar payouts, per-unit / per-procedure $)
+ * return 0: a dollar amount must never render as a percent.
+ */
+export function resolveOverlayTierRate(
+  term:
+    | {
+        tiers: Array<{
+          tierNumber: number
+          rebateValue: unknown
+          rebateType?: string | null
+        }>
+      }
+    | null
+    | undefined,
+  tierAchieved: number,
+): number {
+  if (!term || tierAchieved <= 0) return 0
+  const achieved = term.tiers.find((t) => t.tierNumber === tierAchieved)
+  if (!achieved || achieved.rebateType !== "percent_of_spend") return 0
+  return Number(achieved.rebateValue) * 100
+}
+
+/**
  * Dollar-earned annotation for a tier on the contract Terms & Tiers tab.
  *
  * Charles W1.I: each tier row should show a dollar-amount context
