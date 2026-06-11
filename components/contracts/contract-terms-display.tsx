@@ -425,32 +425,35 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend, cur
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-3 pt-2">
-                  {/* Charles 2026-04-26 #75/#76: volume-family terms
-                      compute earnings off CPT-occurrence counts on
-                      Cases.procedures. If no CPT codes are configured
-                      on the term, the engine silently skips it and
-                      no rebates are written — even though the tier
-                      progress card above still renders against spend
-                      and projects a number. Surface that gap up front
-                      so the user knows why "$0 earned" with a $470K
-                      projection is not a math bug. */}
+                  {/* Charles 2026-04-26 #75/#76, reworded for bugs.rtfd
+                      2026-06-11 A5: the original banner claimed volume
+                      terms NEED CPT codes ("the engine has nothing to
+                      count") — stale since the COG-quantity fallback
+                      shipped (bug #17 + 2026-06-10 commit 59333750):
+                      with no CPT codes the engine sums line-item
+                      quantity from the contract vendors' COG records and
+                      still accrues. Keep the banner informational (CPT
+                      codes switch the basis to Case Costing procedure
+                      counts), and skip it for purchase_order-basis
+                      terms, which count POs and never use CPT codes. */}
                   {(term.termType === "volume_rebate" ||
                     term.termType === "rebate_per_use" ||
                     term.termType === "capitated_pricing_rebate") &&
-                    (!term.cptCodes || term.cptCodes.length === 0) && (
+                    (!term.cptCodes || term.cptCodes.length === 0) &&
+                    term.volumeType !== "purchase_order" && (
                       <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
                         <p className="font-semibold">
-                          No CPT codes configured on this term.
+                          No CPT codes configured — volume is counted from
+                          COG line-item quantity instead.
                         </p>
                         <p className="mt-1">
-                          {term.termType.replace(/_/g, " ")} terms count
-                          procedure occurrences from Case Costing — the
-                          engine has nothing to count without at least one
-                          CPT code. Edit the contract and add CPT codes
-                          to this term, then click <em>Recompute Earned
-                          Rebates</em> on the Transactions tab. Tier
-                          progress above is rendered against dollar
-                          spend and is not what the engine evaluates.
+                          Without CPT codes, {term.termType.replace(/_/g, " ")}{" "}
+                          terms sum the quantity on this contract&apos;s
+                          vendor COG records within the term&apos;s scope.
+                          To count procedure occurrences from Case Costing
+                          instead, edit the contract and add CPT codes to
+                          this term, then click <em>Recompute Earned
+                          Rebates</em> on the Transactions tab.
                         </p>
                       </div>
                     )}

@@ -17,6 +17,11 @@ type CogRow = {
   transactionDate: Date
   quantity: number
   extendedPrice: number | null
+  /** bugs.rtfd 2026-06-11 A5: vendor the COG row belongs to. Optional —
+   * rows without it default to the primary test VENDOR so the pre-A5
+   * tests keep their shape. The mock honors the query's `vendorId`
+   * filter so vendor-scope regressions are actually exercised. */
+  vendorId?: string
 }
 
 let caseRows: CaseRow[] = []
@@ -31,18 +36,38 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(async () => caseRows),
     },
     cOGRecord: {
-      findMany: vi.fn(async ({ select }: { select: Record<string, boolean> }) => {
-        // Honor the two selects we issue: { transactionDate, extendedPrice }
-        // for the CPT-path percent_of_spend fetch, and
-        // { transactionDate, quantity, extendedPrice } for the COG fallback.
-        return cogRows.map((r) => {
-          const out: Record<string, unknown> = {}
-          if (select.transactionDate) out.transactionDate = r.transactionDate
-          if (select.quantity) out.quantity = r.quantity
-          if (select.extendedPrice) out.extendedPrice = r.extendedPrice
-          return out
-        })
-      }),
+      findMany: vi.fn(
+        async ({
+          where,
+          select,
+        }: {
+          where: { vendorId?: string | { in: string[] } }
+          select: Record<string, boolean>
+        }) => {
+          // bugs.rtfd 2026-06-11 A5: apply the vendor filter the writer
+          // sends — `{ in: [...] }` (canonical group-aware shape) or a
+          // bare string (legacy) — so the vendor-scope tests below fail
+          // when the writer's scoping regresses.
+          const vendorOk = (rowVendor: string): boolean => {
+            const v = where.vendorId
+            if (v === undefined) return true
+            if (typeof v === "string") return v === rowVendor
+            return v.in.includes(rowVendor)
+          }
+          // Honor the two selects we issue: { transactionDate, extendedPrice }
+          // for the CPT-path percent_of_spend fetch, and
+          // { transactionDate, quantity, extendedPrice } for the COG fallback.
+          return cogRows
+            .filter((r) => vendorOk(r.vendorId ?? VENDOR))
+            .map((r) => {
+              const out: Record<string, unknown> = {}
+              if (select.transactionDate) out.transactionDate = r.transactionDate
+              if (select.quantity) out.quantity = r.quantity
+              if (select.extendedPrice) out.extendedPrice = r.extendedPrice
+              return out
+            })
+        },
+      ),
     },
     rebate: {
       deleteMany: vi.fn(async () => ({ count: 0 })),
@@ -67,6 +92,10 @@ const END = new Date(Date.UTC(2024, 11, 31)) // 2024-12-31
 
 function baseTerm(overrides: Partial<{
   cptCodes: string[]
+  /** bugs.rtfd 2026-06-11 A5: explicit null exercises the vendor-less
+   * term shape (`VolumeRebateTermLike.vendorId` is optional/nullable). */
+  vendorId: string | null
+  vendorIds: string[] | null
   evaluationPeriod: string | null
   rebateMethod: string | null
   appliesTo: string | null
@@ -85,7 +114,8 @@ function baseTerm(overrides: Partial<{
   return {
     id: "term_test",
     cptCodes: overrides.cptCodes ?? [],
-    vendorId: VENDOR,
+    vendorId: "vendorId" in overrides ? overrides.vendorId : VENDOR,
+    vendorIds: overrides.vendorIds ?? null,
     categories: overrides.categories ?? [],
     appliesTo: overrides.appliesTo ?? "all_products",
     rebateMethod: overrides.rebateMethod ?? "cumulative",
@@ -369,5 +399,215 @@ describe("recomputeVolumeAccrualForTerm — COG fallback + all-products", () => 
     expect(createManyCalls.length).toBe(1)
     const rows = createManyCalls[0].data
     expect(rows[0].rebateEarned).toBeCloseTo(100, 6)
+  })
+})
+
+describe("volume COG fallback — vendor scope (bugs.rtfd 2026-06-11 A5)", () => {
+  const ADDITIONAL_VENDOR = "vd_additional"
+  // Charles's repro ladder: $5 / $9 / $11 per unit, thresholds in
+  // volumeMin (the Int columns volume tiers actually use).
+  const perUnitLadder = [
+    {
+      tierNumber: 1,
+      tierName: null,
+      spendMin: 0,
+      spendMax: null,
+      volumeMin: 0,
+      volumeMax: 1000,
+      rebateValue: 5,
+      rebateType: "fixed_rebate_per_unit",
+    },
+    {
+      tierNumber: 2,
+      tierName: null,
+      spendMin: 0,
+      spendMax: null,
+      volumeMin: 1000,
+      volumeMax: 2000,
+      rebateValue: 9,
+      rebateType: "fixed_rebate_per_unit",
+    },
+    {
+      tierNumber: 3,
+      tierName: null,
+      spendMin: 0,
+      spendMax: null,
+      volumeMin: 2000,
+      volumeMax: null,
+      rebateValue: 11,
+      rebateType: "fixed_rebate_per_unit",
+    },
+  ]
+
+  it("control: single-vendor contract accrues units × per-unit rate", async () => {
+    const day = new Date(Date.UTC(2024, 5, 15))
+    cogRows = [
+      { transactionDate: day, quantity: 12, extendedPrice: 0, vendorId: VENDOR },
+      { transactionDate: day, quantity: 8, extendedPrice: 0, vendorId: VENDOR },
+    ]
+    const term = baseTerm({ cptCodes: [], tiers: perUnitLadder })
+    await recomputeVolumeAccrualForTerm({
+      contractId: CONTRACT,
+      facilityId: FACILITY,
+      contractEffectiveDate: START,
+      contractExpirationDate: END,
+      term,
+    })
+    expect(createManyCalls.length).toBe(1)
+    // 20 units → tier 1 (< 1000) @ $5/unit = $100.
+    expect(createManyCalls[0].data[0].rebateEarned).toBeCloseTo(100, 6)
+  })
+
+  it("grouped contract (dispatcher shape): COG rows under an additionalVendorId accrue", async () => {
+    const day = new Date(Date.UTC(2024, 5, 15))
+    cogRows = [
+      {
+        transactionDate: day,
+        quantity: 20,
+        extendedPrice: 0,
+        vendorId: ADDITIONAL_VENDOR,
+      },
+    ]
+    // recompute-accrual.ts passes vendorId = contract.vendorId AND
+    // vendorIds = contractVendorIds(contract) — group set includes the
+    // additional vendor.
+    const term = baseTerm({
+      cptCodes: [],
+      vendorId: VENDOR,
+      vendorIds: [VENDOR, ADDITIONAL_VENDOR],
+      tiers: perUnitLadder,
+    })
+    await recomputeVolumeAccrualForTerm({
+      contractId: CONTRACT,
+      facilityId: FACILITY,
+      contractEffectiveDate: START,
+      contractExpirationDate: END,
+      term,
+    })
+    expect(createManyCalls.length).toBe(1)
+    expect(createManyCalls[0].data[0].rebateEarned).toBeCloseTo(100, 6)
+  })
+
+  it("vendor set ONLY from vendorIds (no primary vendorId) still accrues", async () => {
+    // bugs.rtfd 2026-06-11 A5 repro: the COG fallback used to early-return
+    // on `!term.vendorId` even when the group vendor set was non-empty —
+    // 0 COG rows → no [auto-volume-accrual] rows → timeline overlay $0.
+    const day = new Date(Date.UTC(2024, 5, 15))
+    cogRows = [
+      {
+        transactionDate: day,
+        quantity: 20,
+        extendedPrice: 0,
+        vendorId: ADDITIONAL_VENDOR,
+      },
+    ]
+    const term = baseTerm({
+      cptCodes: [],
+      vendorId: null,
+      vendorIds: [ADDITIONAL_VENDOR],
+      tiers: perUnitLadder,
+    })
+    await recomputeVolumeAccrualForTerm({
+      contractId: CONTRACT,
+      facilityId: FACILITY,
+      contractEffectiveDate: START,
+      contractExpirationDate: END,
+      term,
+    })
+    expect(createManyCalls.length).toBe(1)
+    expect(createManyCalls[0].data[0].rebateEarned).toBeCloseTo(100, 6)
+  })
+
+  it("truly vendor-less term (no vendorId, no vendorIds) stays a noop", async () => {
+    const day = new Date(Date.UTC(2024, 5, 15))
+    cogRows = [{ transactionDate: day, quantity: 20, extendedPrice: 0 }]
+    const term = baseTerm({
+      cptCodes: [],
+      vendorId: null,
+      vendorIds: null,
+      tiers: perUnitLadder,
+    })
+    const r = await recomputeVolumeAccrualForTerm({
+      contractId: CONTRACT,
+      facilityId: FACILITY,
+      contractEffectiveDate: START,
+      contractExpirationDate: END,
+      term,
+    })
+    expect(r).toEqual({ inserted: 0, sumEarned: 0 })
+    expect(createManyCalls.length).toBe(0)
+  })
+
+  it("tier selected by cumulative units: 802 units → tier 1 @ $5.00 → $4,010", async () => {
+    // Charles's exact month-1 number from bugs.rtfd 2026-06-11 A5.
+    const day = new Date(Date.UTC(2024, 5, 15))
+    cogRows = [
+      { transactionDate: day, quantity: 802, extendedPrice: 0, vendorId: VENDOR },
+    ]
+    const term = baseTerm({
+      cptCodes: [],
+      evaluationPeriod: "monthly",
+      tiers: perUnitLadder,
+    })
+    await recomputeVolumeAccrualForTerm({
+      contractId: CONTRACT,
+      facilityId: FACILITY,
+      contractEffectiveDate: START,
+      contractExpirationDate: END,
+      term,
+    })
+    expect(createManyCalls.length).toBe(1)
+    const june = createManyCalls[0].data.find((r) =>
+      r.payPeriodStart.toISOString().startsWith("2024-06"),
+    )
+    expect(june).toBeDefined()
+    // 802 units sit in tier 1 (0–1000) → 802 × $5.00 = $4,010 — NOT the
+    // top tier's $11/unit the timeline's display walk shows.
+    expect(june!.rebateEarned).toBeCloseTo(4_010, 6)
+    expect(june!.notes).toContain("802 units")
+  })
+
+  it("PINS DESIGN (W1.W-B1): an in-progress annual period writes NO rows yet", async () => {
+    // Trace artifact for the A5 report: with an annual evaluation period
+    // whose first window has not closed (term started < 12 months ago),
+    // the writer emits zero rows BY DESIGN — incomplete windows are
+    // dropped so the "earned ≤ today" ledger filter stays honest (same
+    // rule as the spend writer, recompute-accrual.ts W1.W-B1). The
+    // timeline then shows per-month units with Accrued $0 until the
+    // period closes, because volume accrual comes from the persisted
+    // overlay rows only.
+    const now = new Date()
+    const start = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 8, 1),
+    )
+    const end = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 16, 1),
+    )
+    const purchaseDay = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 15),
+    )
+    cogRows = [
+      {
+        transactionDate: purchaseDay,
+        quantity: 802,
+        extendedPrice: 0,
+        vendorId: VENDOR,
+      },
+    ]
+    const term = {
+      ...baseTerm({ cptCodes: [], tiers: perUnitLadder }),
+      effectiveStart: start,
+      effectiveEnd: end,
+      evaluationPeriod: "annual",
+    }
+    const r = await recomputeVolumeAccrualForTerm({
+      contractId: CONTRACT,
+      facilityId: FACILITY,
+      contractEffectiveDate: start,
+      contractExpirationDate: end,
+      term,
+    })
+    expect(r).toEqual({ inserted: 0, sumEarned: 0 })
+    expect(createManyCalls.length).toBe(0)
   })
 })

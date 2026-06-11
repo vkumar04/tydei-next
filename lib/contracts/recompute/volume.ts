@@ -60,8 +60,10 @@ interface VolumeRebateTermLike {
    * summing line-item quantity from COG records — those need to be
    * filtered by the contract's vendor and the term's category scope.
    * Optional + nullable to keep the type tolerant of legacy callers
-   * that haven't been upgraded; the COG-fallback path treats
-   * missing values as "no in-scope spend" and returns 0.
+   * that haven't been upgraded. bugs.rtfd 2026-06-11 A5: the fallback
+   * writers gate on the EFFECTIVE vendor set (`termVendorIds` —
+   * `vendorIds ?? [vendorId]`), so a missing primary vendorId only
+   * means "no in-scope spend" when `vendorIds` is also empty.
    */
   vendorId?: string | null
   /**
@@ -338,7 +340,10 @@ export async function recomputeVolumeAccrualForTerm(input: {
   )
   const spendByDate: Array<{ transactionDate: Date; extendedPrice: number }> =
     []
-  if (hasPercentOfSpendTier && term.vendorId) {
+  // bugs.rtfd 2026-06-11 A5: gate on the EFFECTIVE vendor set, not the
+  // bare primary vendorId — a term whose vendor scope comes only from
+  // the group set (`vendorIds`) must still fetch its COG spend basis.
+  if (hasPercentOfSpendTier && termVendorIds(term).length > 0) {
     const isSpecificCategory =
       term.appliesTo === "specific_category" &&
       Array.isArray(term.categories) &&
@@ -637,7 +642,13 @@ async function recomputeVolumeFromCogRecords(input: {
   term: VolumeRebateTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
   const { contractId, facilityId, contractEffectiveDate, term, isTieIn } = input
-  if (!term.vendorId) {
+  // bugs.rtfd 2026-06-11 A5: early-return only when the EFFECTIVE vendor
+  // set is empty. The old `!term.vendorId` gate returned $0 for any term
+  // whose vendor scope comes solely from the group set (`vendorIds`) —
+  // the group-vendor drift class: scope via the contractVendorIds()-shaped
+  // set, never the bare primary vendorId.
+  const vendorIds = termVendorIds(term)
+  if (vendorIds.length === 0) {
     return { inserted: 0, sumEarned: 0 }
   }
 
@@ -692,7 +703,7 @@ async function recomputeVolumeFromCogRecords(input: {
   const cogRecords = await prisma.cOGRecord.findMany({
     where: {
       facilityId,
-      vendorId: { in: termVendorIds(term) },
+      vendorId: { in: vendorIds },
       transactionDate: { gte: start, lte: end },
       ...categoryFilter,
     },
@@ -891,7 +902,10 @@ async function recomputeVolumeFromPurchaseOrders(input: {
   term: VolumeRebateTermLike
 }): Promise<{ inserted: number; sumEarned: number }> {
   const { contractId, facilityId, contractEffectiveDate, term, isTieIn } = input
-  if (!term.vendorId) {
+  // bugs.rtfd 2026-06-11 A5: same group-vendor-drift gate fix as the COG
+  // fallback — bail only when the effective vendor set is empty.
+  const vendorIds = termVendorIds(term)
+  if (vendorIds.length === 0) {
     return { inserted: 0, sumEarned: 0 }
   }
 
@@ -928,7 +942,7 @@ async function recomputeVolumeFromPurchaseOrders(input: {
   const pos = await prisma.purchaseOrder.findMany({
     where: {
       facilityId,
-      vendorId: { in: termVendorIds(term) },
+      vendorId: { in: vendorIds },
       orderDate: { gte: start, lte: end },
     },
     select: {
