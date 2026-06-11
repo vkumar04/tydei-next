@@ -47,6 +47,9 @@ interface ProspectiveTabsProps {
   latestScored: ScoredProposal | null
   onProposalScored: (p: ScoredProposal) => void
   onRemoveProposal: (id: string) => void
+  /** Start-over reset for the Upload tab (bug-bash C1) — clears the
+   *  parent-held upload proposals so no stale verdict survives. */
+  onUploadReset: () => void
 
   pricingAnalyses: PricingFileAnalysisRecord[]
   onPricingAnalysisComplete: (record: PricingFileAnalysisRecord) => void
@@ -71,6 +74,7 @@ export function ProspectiveTabs(props: ProspectiveTabsProps) {
     latestScored,
     onProposalScored,
     onRemoveProposal,
+    onUploadReset,
     pricingAnalyses,
     onPricingAnalysisComplete,
     comparisonSelection,
@@ -129,6 +133,7 @@ export function ProspectiveTabs(props: ProspectiveTabsProps) {
           }
           phase={phase}
           onPhaseChange={onPhaseChange}
+          onReset={onUploadReset}
         />
       </TabsContent>
 

@@ -94,6 +94,20 @@ export function ProspectiveClient({
     setComparisonSelection((prev) => prev.filter((x) => x !== id))
   }, [])
 
+  // Start-over for the Upload tab (bug-bash C1: "clear the data and start
+  // over"). Drops every upload-sourced proposal — removing only the newest
+  // would promote an OLDER upload to `latestScored` and resurrect a stale
+  // verdict, the exact failure mode the reset exists to avoid. Manual-tab
+  // proposals are untouched.
+  const handleUploadReset = useCallback(() => {
+    const removedIds = new Set(
+      scoredProposals.filter((p) => p.source === "upload").map((p) => p.id),
+    )
+    setScoredProposals((prev) => prev.filter((p) => p.source !== "upload"))
+    setComparisonSelection((prev) => prev.filter((id) => !removedIds.has(id)))
+    setPhase("idle")
+  }, [scoredProposals])
+
   const handlePricingAnalysisComplete = useCallback(
     (record: PricingFileAnalysisRecord) => {
       setPricingAnalyses((prev) => [record, ...prev])
@@ -140,6 +154,7 @@ export function ProspectiveClient({
         latestScored={latestScored}
         onProposalScored={handleProposalScored}
         onRemoveProposal={handleRemoveProposal}
+        onUploadReset={handleUploadReset}
         pricingAnalyses={pricingAnalyses}
         onPricingAnalysisComplete={handlePricingAnalysisComplete}
         comparisonSelection={comparisonSelection}

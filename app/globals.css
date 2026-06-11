@@ -191,3 +191,25 @@
     @apply bg-background text-foreground;
   }
 }
+
+/*
+ * Print-only proposal report (bug-bash C1, 2026-06-11).
+ *
+ * When a `.proposal-report-print` element is mounted (Upload tab of
+ * Evaluate Vendor Proposals), printing shows ONLY the report: everything
+ * else — portal shell, sidebar, tabs — is hidden via `visibility`, which
+ * the report (a descendant) re-enables on itself. Scoped with :has() so
+ * pages without the report keep printing normally.
+ */
+@media print {
+  body:has(.proposal-report-print) {
+    visibility: hidden;
+  }
+  body:has(.proposal-report-print) .proposal-report-print {
+    visibility: visible;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}

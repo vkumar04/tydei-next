@@ -16,7 +16,7 @@
  * auto-derived from the extracted contract.
  */
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import {
   Card,
   CardContent,
@@ -34,7 +34,24 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { FileSpreadsheet, FileText, Loader2, Upload } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  Printer,
+  RotateCcw,
+} from "lucide-react"
 import { toast } from "sonner"
 import type {
   AnalysisPhase,
@@ -54,6 +71,7 @@ import { CanonicalClauseAnalyzerPanel } from "./canonical-clause-analyzer-panel"
 import { ProposalLookbackCard } from "./proposal-lookback-card"
 import { ProposalPricingAskCard } from "./proposal-pricing-ask-card"
 import { ProposalVerdictCard } from "./proposal-verdict-card"
+import { ProposalReportPrint } from "./proposal-report-print"
 import {
   getVendorLookbackComparison,
   type AnalyzeProposalInput,
@@ -98,6 +116,13 @@ interface UploadProposalTabProps {
   lastScored: ScoredProposal | null
   phase: AnalysisPhase
   onPhaseChange: (phase: AnalysisPhase) => void
+  /**
+   * Start-over hook (bug-bash C1): the parent owns `lastScored` (via the
+   * scored-proposals list), so a full reset must clear it there too —
+   * otherwise a stale verdict re-renders from props after the local state
+   * clears.
+   */
+  onReset?: () => void
 }
 
 interface ExtractedContract {
@@ -208,6 +233,7 @@ export function UploadProposalTab({
   lastScored,
   phase,
   onPhaseChange,
+  onReset,
 }: UploadProposalTabProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [clauseAnalysis, setClauseAnalysis] = useState<ClauseAnalysis | null>(
@@ -239,6 +265,12 @@ export function UploadProposalTab({
   const clauseMutation = useAnalyzePDFClauses()
   const canonicalMutation = useExtractAndAnalyzeCanonical()
 
+  // Bumped by Start over (bug-bash C1) so an in-flight analysis promise
+  // that resolves AFTER the reset can't repopulate the cleared state —
+  // each async path captures the generation at launch and bails if it
+  // changed.
+  const resetGenRef = useRef(0)
+
   // ── Price file: parse → COG join → variance analysis ────────────────
   const handlePricingFile = useCallback(
     async (file: File) => {
@@ -247,6 +279,7 @@ export function UploadProposalTab({
         toast.error("Price file must be CSV or Excel.")
         return
       }
+      const gen = resetGenRef.current
       setPricingAnalyzing(true)
       try {
         const { headers, rows } = await readPricingRows(file)
@@ -278,12 +311,14 @@ export function UploadProposalTab({
           }
         })
         const result = analyzePricingFile(joined)
+        if (resetGenRef.current !== gen) return // Start over won the race
         setPricingAnalysis(result)
         setPricingFileName(file.name)
         toast.success(
           `Price file analyzed — ${result.summary.itemsWithCOGMatch} of ${result.summary.totalItems} lines matched to COG`,
         )
       } catch (err) {
+        if (resetGenRef.current !== gen) return
         toast.error(err instanceof Error ? err.message : "Price file parse failed")
       } finally {
         setPricingAnalyzing(false)
@@ -299,6 +334,7 @@ export function UploadProposalTab({
       toast.error("Paste contract text first.")
       return
     }
+    const gen = resetGenRef.current
     const variant =
       variantOverride === "auto" ? "USAGE_SPEND" : variantOverride
     const legacy = clauseMutation
@@ -307,7 +343,7 @@ export function UploadProposalTab({
         fileName: uploadedFileName ?? undefined,
       })
       .then((result) => {
-        setClauseAnalysis(result)
+        if (resetGenRef.current === gen) setClauseAnalysis(result)
       })
       .catch(() => {
         // mutation toast handles user-facing error
@@ -321,14 +357,14 @@ export function UploadProposalTab({
         contractName: uploadedFileName ?? "Pasted contract text",
       })
       .then((result) => {
-        setCanonicalResult(result)
+        if (resetGenRef.current === gen) setCanonicalResult(result)
       })
       .catch(() => {
         // mutation toast handles user-facing error
       })
 
     await Promise.all([legacy, canonical])
-    toast.success("Clause analysis complete")
+    if (resetGenRef.current === gen) toast.success("Clause analysis complete")
   }, [
     canonicalMutation,
     clauseMutation,
@@ -347,6 +383,7 @@ export function UploadProposalTab({
         return
       }
 
+      const gen = resetGenRef.current
       onPhaseChange("analyzing")
       setUploadedFileName(file.name)
       setCanonicalResult(null)
@@ -379,6 +416,7 @@ export function UploadProposalTab({
         const input = buildScoringInput(extracted, currentSpend)
 
         const result = await analyzeMutation.mutateAsync(input)
+        if (resetGenRef.current !== gen) return // Start over won the race
 
         const scored: ScoredProposal = {
           id: `upl-${Date.now().toString(36)}`,
@@ -421,8 +459,11 @@ export function UploadProposalTab({
             })),
           ),
         })
-          .then((result) => setLookback(result))
+          .then((result) => {
+            if (resetGenRef.current === gen) setLookback(result)
+          })
           .catch((err) => {
+            if (resetGenRef.current !== gen) return
             toast.error(
               err instanceof Error ? err.message : "12-month lookback failed",
             )
@@ -448,6 +489,7 @@ export function UploadProposalTab({
               contractVariant: variant,
               contractName,
             })
+            if (resetGenRef.current !== gen) return
             setCanonicalResult(canonical)
             toast.success(
               `Legal scan: ${canonical.extractedClauseCount} clause${
@@ -463,6 +505,7 @@ export function UploadProposalTab({
           )
         }
       } catch (err) {
+        if (resetGenRef.current !== gen) return // post-reset phase stays idle
         const msg = err instanceof Error ? err.message : "Analysis failed"
         toast.error(msg)
         onPhaseChange("error")
@@ -545,8 +588,35 @@ export function UploadProposalTab({
     })
   }, [lastScored, lookback, canonicalResult, pricingAnalysis])
 
+  // Any analysis output on screen → show Export / Start over (bug-bash C1).
+  const hasAnalysis = Boolean(
+    lastScored || pricingAnalysis || canonicalResult || clauseAnalysis || lookback,
+  )
+
+  // ── Start over: clear EVERY piece of analysis state, local AND parent
+  // (`lastScored` lives in the orchestrator's scored-proposals list — a
+  // partial clear leaves a stale verdict re-rendering from props).
+  const handleStartOver = useCallback(() => {
+    resetGenRef.current += 1
+    setClauseAnalysis(null)
+    setUploadedFileName(null)
+    setClauseText("")
+    setSide("FACILITY")
+    setVariantOverride("auto")
+    setCanonicalResult(null)
+    setLookback(null)
+    setLookbackLoading(false)
+    setPricingAnalysis(null)
+    setPricingFileName(null)
+    setPricingAnalyzing(false)
+    onReset?.()
+    onPhaseChange("idle")
+    toast.success("Analysis cleared — drop a new contract PDF to start over")
+  }, [onReset, onPhaseChange])
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
       <div className="lg:col-span-2 space-y-6">
         {/* ── Inputs: PDF + price file, one card ─────────────────────── */}
         <Card>
@@ -742,6 +812,48 @@ export function UploadProposalTab({
           </CardContent>
         </Card>
 
+        {/* ── Export / Start over (bug-bash C1: "Need a way to export/save
+             the report and to clear the data and start over.") ─────────── */}
+        {hasAnalysis ? (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+            >
+              <Printer className="mr-1.5 h-3.5 w-3.5" />
+              Export report
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                  Start over
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear this analysis?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The verdict, scoring, lookback, price-file comparison, and
+                    legal scan will be cleared so you can analyze a new
+                    proposal. Export the report first if you want to keep it.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleStartOver}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Clear and start over
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        ) : null}
+
         {/* ── The answer first, evidence below ─────────────────────────── */}
         {verdict && lastScored ? (
           <ProposalVerdictCard
@@ -803,5 +915,22 @@ export function UploadProposalTab({
         />
       </div>
     </div>
+
+    {/* Print-only report — `window.print()` from "Export report" shows ONLY
+        this (the interactive grid above is print:hidden; the app shell is
+        hidden by the scoped @media print rule in app/globals.css). */}
+    {hasAnalysis ? (
+      <ProposalReportPrint
+        vendorName={lookback?.vendorName ?? lastScored?.vendorName ?? null}
+        contractFileName={uploadedFileName}
+        pricingFileName={pricingFileName}
+        verdict={verdict}
+        scored={lastScored}
+        lookback={lookback}
+        pricing={pricingAnalysis}
+        legal={canonicalResult?.analysis ?? null}
+      />
+    ) : null}
+    </>
   )
 }
