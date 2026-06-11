@@ -27,6 +27,13 @@ type ContractWithFacility = Contract & {
    * NEVER deletable).
    */
   pendingStatus?: string
+  /**
+   * When the row's status last changed (bugs.rtfd 2026-06-11 B4).
+   * Resolved at the mapping boundary in vendor-contract-list.tsx via
+   * `resolveLastActionAt`: pending rows `reviewedAt ?? submittedAt`,
+   * real Contract rows `updatedAt`.
+   */
+  lastActionAt?: Date | null
 }
 
 export function getVendorContractColumns(
@@ -70,6 +77,14 @@ export function getVendorContractColumns(
       cell: ({ row }) => (
         <StatusBadge status={row.original.status} config={contractStatusConfig} />
       ),
+    },
+    {
+      // bugs.rtfd 2026-06-11 B4: when the row's status last changed —
+      // resolved upstream in vendor-contract-list.tsx (resolveLastActionAt),
+      // never computed here.
+      accessorKey: "lastActionAt",
+      header: "Last Action",
+      cell: ({ row }) => formatDate(row.original.lastActionAt),
     },
     {
       accessorKey: "expirationDate",

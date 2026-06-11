@@ -15,6 +15,7 @@ import {
   useVendorPendingContracts,
   useDeletePendingContract,
 } from "@/hooks/use-pending-contracts"
+import { resolveLastActionAt } from "./last-action"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,6 +92,13 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
             : null,
           productCategory: null,
           pendingStatus: pc.status,
+          // bugs.rtfd 2026-06-11 B4: "Last Action" = the facility's
+          // review decision if one happened, else the submission time.
+          lastActionAt: resolveLastActionAt({
+            kind: "pending",
+            reviewedAt: pc.reviewedAt,
+            submittedAt: pc.submittedAt,
+          }),
         })),
     [pendingContracts],
   )
@@ -102,7 +110,24 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
         : (statusTab as ContractStatus),
   })
 
-  const rawContracts = data?.contracts ?? []
+  const rawContractRows = data?.contracts ?? []
+
+  // bugs.rtfd 2026-06-11 B4: real Contract rows carry no persisted
+  // status-change timestamp, so "Last Action" is Prisma's @updatedAt —
+  // the last time anything acted on the row (approval created it;
+  // edits touch it). Resolved here at the mapping boundary, not in
+  // the column cell.
+  const rawContracts = useMemo(
+    () =>
+      rawContractRows.map((c) => ({
+        ...c,
+        lastActionAt: resolveLastActionAt({
+          kind: "contract",
+          updatedAt: c.updatedAt,
+        }),
+      })),
+    [rawContractRows],
+  )
 
   // Merge contracts with pending depending on the active status filter.
   // Contract-table statuses (active / draft / pending) are filtered
