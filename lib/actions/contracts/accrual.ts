@@ -38,6 +38,15 @@ import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 import { resolveOverlayTierRate } from "@/lib/contracts/tier-rebate-label"
+// bug-bash 2026-06-11 follow-up F2: the volume writer's tier math +
+// window bucketing, exported as pure helpers so the timeline's
+// display-only in-progress accrual is writer-consistent by construction
+// (the writer calls the same functions — canonical-helper culture).
+import {
+  computeVolumeTierRebate,
+  currentOpenVolumeWindow,
+  normalizeVolumeTiers,
+} from "@/lib/contracts/recompute/volume"
 
 export async function getAccrualTimeline(contractId: string) {
   const { facility } = await requireFacility()
@@ -742,6 +751,12 @@ async function _buildAccrualTimelineForContract(
   // We sum across every volume_rebate term so a month's "Volume" reads
   // as the total qty that drove ANY volume tier this month.
   const volumeByMonth = new Map<string, number>()
+  // bug-bash 2026-06-11 follow-up F2: per-term per-month unit + in-scope
+  // spend maps, captured while the volume series is built. They feed the
+  // display-only in-progress accrual for the current UNCLOSED evaluation
+  // window below (the writer only persists rows for CLOSED windows).
+  const volumeUnitsByTermMonth = new Map<string, Map<string, number>>()
+  const volumeSpendByTermMonth = new Map<string, Map<string, number>>()
   if (isVolumeRebate) {
     const volumeTerms = termsWithTiers.filter(
       (t) => t.termType === "volume_rebate",
@@ -787,9 +802,17 @@ async function _buildAccrualTimelineForContract(
             seen.add(`case:${c.id}|cpt:${p.cptCode}`)
           }
         }
+        const termUnits = new Map<string, number>()
         for (const [m, set] of seenPerMonth) {
           volumeByMonth.set(m, (volumeByMonth.get(m) ?? 0) + set.size)
+          termUnits.set(m, set.size)
         }
+        // F2: CPT counts feed the in-progress display too (the helper
+        // works on counts regardless of source). No per-month COG spend
+        // basis here, so percent_of_spend tiers display $0 mid-window —
+        // status quo, no regression; the writer's CPT path sources its
+        // spend separately at window close.
+        volumeUnitsByTermMonth.set(term.id, termUnits)
       }
     }
 
@@ -808,13 +831,21 @@ async function _buildAccrualTimelineForContract(
       const cogVolRows = await prisma.cOGRecord.findMany({
         where: {
           facilityId,
-          vendorId: contract.vendorId,
+          // bug-bash 2026-06-11 follow-up F1, same drift class as the
+          // 2026-06-09 audit fix above: group-aware vendor set — bare
+          // contract.vendorId under-counted the displayed "Volume (units)"
+          // on grouped contracts whose spend sits under member vendors,
+          // while the group-aware writer counted the full vendor basis.
+          vendorId: { in: contractVendorIds(contract) },
           transactionDate: { gte: contract.effectiveDate, lte: end },
           ...unionWhereForVolume,
         },
         select: {
           transactionDate: true,
           quantity: true,
+          // F2: per-month in-scope spend basis so percent_of_spend volume
+          // tiers can show in-progress display accrual mid-window.
+          extendedPrice: true,
           category: true,
         },
       })
@@ -826,6 +857,8 @@ async function _buildAccrualTimelineForContract(
         const where = buildCategoryWhereClause(termScope, cogCategoryUniverse)
         const categoryIn = where.category?.in ?? null
         const categorySet = categoryIn ? new Set(categoryIn) : null
+        const termUnits = new Map<string, number>()
+        const termSpend = new Map<string, number>()
         for (const r of cogVolRows) {
           const d = r.transactionDate
           if (!d) continue
@@ -834,8 +867,135 @@ async function _buildAccrualTimelineForContract(
           if (categorySet && !categorySet.has(r.category ?? "")) continue
           const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
           volumeByMonth.set(key, (volumeByMonth.get(key) ?? 0) + (r.quantity ?? 0))
+          termUnits.set(key, (termUnits.get(key) ?? 0) + (r.quantity ?? 0))
+          termSpend.set(
+            key,
+            (termSpend.get(key) ?? 0) +
+              (r.extendedPrice == null ? 0 : Number(r.extendedPrice)),
+          )
+        }
+        volumeUnitsByTermMonth.set(term.id, termUnits)
+        volumeSpendByTermMonth.set(term.id, termSpend)
+      }
+    }
+  }
+
+  // bug-bash 2026-06-11 follow-up F2 (Charles screenshot — bug A5
+  // residual): an annual volume term showed per-month units (802, 485…)
+  // and a real "$11.00 / unit" rate in the timeline but Accrued $0 for
+  // every month until the first evaluation window CLOSED, because the
+  // writer (`lib/contracts/recompute/volume.ts`) only persists
+  // `[auto-volume-accrual]` rows for closed windows (W1.W-B1 honesty
+  // rule — ledger earned stays `payPeriodEnd <= today`; the writer's
+  // gating is intentionally untouched) and the walk zeroes volume-term
+  // accrual in favor of that overlay. Spend terms, meanwhile, show LIVE
+  // walk accrual every month on the SAME timeline — the inconsistency is
+  // the bug. Close the gap with a DISPLAY-ONLY in-progress accrual for
+  // months inside the current UNCLOSED window, computed by the writer's
+  // own exported helper (`computeVolumeTierRebate` on window-cumulative
+  // units — never a reimplementation). Each month is attributed the
+  // DELTA of the window-to-date value, so when a tier boundary is
+  // crossed mid-window the cumulative-method recompute-on-window-total
+  // behavior is preserved and the month series sums to exactly what the
+  // writer WILL persist at window close. Scope: timeline display only —
+  // this file writes no Rebate rows; Earned cards / ledger are untouched.
+  const inProgressVolumeByTermMonth = new Map<
+    string,
+    Map<
+      string,
+      { accrued: number; tierAchieved: number; rebatePercent: number }
+    >
+  >()
+  if (isVolumeRebate) {
+    for (const term of termsWithTiers) {
+      if (term.termType !== "volume_rebate") continue
+      // PO-basis terms count PurchaseOrders, not COG units — the unit
+      // series captured above would be the wrong basis for them.
+      if (term.volumeType === "purchase_order") continue
+      const termUnits = volumeUnitsByTermMonth.get(term.id)
+      if (!termUnits) continue
+      const window = currentOpenVolumeWindow({
+        contractEffectiveDate: contract.effectiveDate,
+        contractExpirationDate: contract.expirationDate,
+        effectiveStart: term.effectiveStart,
+        effectiveEnd: term.effectiveEnd,
+        evaluationPeriod: term.evaluationPeriod,
+      })
+      if (!window) continue
+      // No-double-count guard: by construction the unclosed window holds
+      // no persisted overlay rows, but ASSERT it — any month at or before
+      // the latest persisted `[auto-volume-accrual]` payPeriodEnd for
+      // this term is already covered by the overlay and must not also
+      // receive in-progress display accrual.
+      const termOverlayPrefix = `[auto-volume-accrual] term:${term.id}`
+      let latestOverlayEnd: Date | null = null
+      for (const cr of overlayRebateRows) {
+        if (!cr.payPeriodEnd) continue
+        if (!cr.notes?.startsWith(termOverlayPrefix)) continue
+        if (!latestOverlayEnd || cr.payPeriodEnd > latestOverlayEnd) {
+          latestOverlayEnd = cr.payPeriodEnd
         }
       }
+      const latestOverlayMonth = latestOverlayEnd
+        ? `${latestOverlayEnd.getUTCFullYear()}-${String(
+            latestOverlayEnd.getUTCMonth() + 1,
+          ).padStart(2, "0")}`
+        : null
+
+      const sortedTiers = normalizeVolumeTiers(term.tiers)
+      const termSpend = volumeSpendByTermMonth.get(term.id)
+      const out = new Map<
+        string,
+        { accrued: number; tierAchieved: number; rebatePercent: number }
+      >()
+      let cumulativeUnits = 0
+      let cumulativeSpend = 0
+      let prevWindowToDate = 0
+      // Walk the open window's months up to the timeline horizon (`end`
+      // = min(today, expiry)) — never past the window's natural close.
+      const horizon = new Date(
+        Math.min(end.getTime(), window.windowEnd.getTime()),
+      )
+      const cursor = new Date(
+        Date.UTC(
+          window.windowStart.getUTCFullYear(),
+          window.windowStart.getUTCMonth(),
+          1,
+        ),
+      )
+      const lastMonth = new Date(
+        Date.UTC(horizon.getUTCFullYear(), horizon.getUTCMonth(), 1),
+      )
+      while (cursor <= lastMonth) {
+        const key = `${cursor.getUTCFullYear()}-${String(
+          cursor.getUTCMonth() + 1,
+        ).padStart(2, "0")}`
+        cumulativeUnits += termUnits.get(key) ?? 0
+        cumulativeSpend += termSpend?.get(key) ?? 0
+        const { achieved, rebateEarned } = computeVolumeTierRebate(
+          sortedTiers,
+          cumulativeUnits,
+          cumulativeSpend,
+        )
+        const delta = rebateEarned - prevWindowToDate
+        prevWindowToDate = rebateEarned
+        const coveredByOverlay =
+          latestOverlayMonth !== null && key <= latestOverlayMonth
+        if (!coveredByOverlay && delta !== 0) {
+          out.set(key, {
+            accrued: delta,
+            tierAchieved: achieved?.tierNumber ?? 0,
+            // Same A2 helper the overlay path uses: percent tiers scale
+            // fraction→percent; dollar tiers stay 0 (never render $ as %).
+            rebatePercent: resolveOverlayTierRate(
+              term,
+              achieved?.tierNumber ?? 0,
+            ),
+          })
+        }
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+      }
+      if (out.size > 0) inProgressVolumeByTermMonth.set(term.id, out)
     }
   }
 
@@ -923,16 +1083,29 @@ async function _buildAccrualTimelineForContract(
       // `[auto-volume-accrual]` overlay rows (the canonical earned source);
       // the walk keeps providing their tier/rate/volume display but must
       // not contribute accrual or it would double-count with the overlay.
-      const walkAccrual = VOLUME_WALK_TERM_TYPES.has(sourceTerm.termType)
-        ? 0
+      //
+      // bug-bash 2026-06-11 follow-up F2: months inside the current
+      // UNCLOSED evaluation window get the display-only in-progress delta
+      // computed above (writer's own helper on window-cumulative units),
+      // so volume terms walk live like spend terms do. Months covered by
+      // persisted overlay rows carry NO in-progress entry by construction
+      // — no double count.
+      const isVolumeWalkTerm = VOLUME_WALK_TERM_TYPES.has(sourceTerm.termType)
+      const inProgressVolume = isVolumeWalkTerm
+        ? inProgressVolumeByTermMonth.get(sourceTerm.id)?.get(month)
+        : undefined
+      const walkAccrual = isVolumeWalkTerm
+        ? (inProgressVolume?.accrued ?? 0)
         : row.accruedAmount
       totalAccrued += walkAccrual
       if (walkAccrual > 0) {
         contributions.push({
           termIndex,
           accruedAmount: walkAccrual,
-          tierAchieved: row.tierAchieved,
-          rebatePercent: row.rebatePercent,
+          // F2: the in-progress entry carries the writer-selected tier +
+          // A2-resolved rate; non-volume terms keep the walk's values.
+          tierAchieved: inProgressVolume?.tierAchieved ?? row.tierAchieved,
+          rebatePercent: inProgressVolume?.rebatePercent ?? row.rebatePercent,
         })
       }
       // Pick the term with the highest tier as the row's headline
