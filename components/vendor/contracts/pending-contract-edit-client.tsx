@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import {
   getVendorPendingContract,
   updatePendingContract,
+  resubmitPendingContract,
 } from "@/lib/actions/pending-contracts"
 import { PageHeader } from "@/components/shared/page-header"
 import { Field } from "@/components/shared/forms/field"
@@ -291,7 +292,17 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
     }
   }, [contract])
 
-  const isEditable = contract?.status === "draft" || contract?.status === "revision_requested"
+  // Charles 2026-06-10: rejected submissions are editable too — the whole
+  // point of the facility's review notes is that the vendor fixes the
+  // submission and RESUBMITS. Saving from rejected / revision_requested
+  // flips the row back to `submitted` via resubmitPendingContract.
+  const isEditable =
+    contract?.status === "draft" ||
+    contract?.status === "revision_requested" ||
+    contract?.status === "rejected"
+  const needsResubmit =
+    contract?.status === "rejected" ||
+    contract?.status === "revision_requested"
 
   const handleSave = async () => {
     setSaving(true)
@@ -346,10 +357,19 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
         terms: contractTerms,
       }
       await updatePendingContract(pendingContractId, updates)
+      // Rejected / revision-requested rows go back into the facility's
+      // review queue on save (Charles 2026-06-10).
+      if (needsResubmit) {
+        await resubmitPendingContract(pendingContractId)
+      }
       await queryClient.invalidateQueries({
-        queryKey: ["pendingContracts", "detail", pendingContractId],
+        queryKey: ["pendingContracts"],
       })
-      toast.success("Pending contract updated successfully")
+      toast.success(
+        needsResubmit
+          ? "Updated and resubmitted for facility review"
+          : "Pending contract updated successfully",
+      )
       router.push("/vendor/contracts")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update pending contract")
@@ -407,7 +427,7 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
             <AlertCircle className="size-5 text-yellow-600 dark:text-yellow-400 shrink-0" />
             <p className="text-sm text-yellow-800 dark:text-yellow-200">
               This contract is in <strong>{cfg.label.toLowerCase()}</strong> status and cannot be
-              edited. Only contracts in draft or revision requested status can be modified.
+              edited. Only draft, revision-requested, or rejected submissions can be modified.
             </p>
           </CardContent>
         </Card>
@@ -712,7 +732,12 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
       {isEditable && (
         <div className="flex justify-end pt-2">
           <Button onClick={handleSave} disabled={saving || !contractName}>
-            <Save className="size-4" /> {saving ? "Saving..." : "Save Changes"}
+            <Save className="size-4" />{" "}
+            {saving
+              ? "Saving..."
+              : needsResubmit
+                ? "Save & Resubmit"
+                : "Save Changes"}
           </Button>
         </div>
       )}

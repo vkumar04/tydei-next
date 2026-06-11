@@ -709,6 +709,57 @@ export async function withdrawPendingContract(id: string) {
   })
 }
 
+// ─── Vendor: Resubmit ───────────────────────────────────────────
+
+/**
+ * Charles 2026-06-10 ("submit one on the vendor side and reject it on the
+ * facility side then edit on the vendor side — it is not working"): the
+ * rejected→edit→resubmit loop had NO action that moved a submission back to
+ * `submitted` — updatePendingContract never touches status, so an edited
+ * rejected/revision_requested row stayed terminal and the facility never
+ * saw the revision. This flips it back into the facility's review queue.
+ */
+export async function resubmitPendingContract(id: string) {
+  const { vendor } = await requireVendor()
+
+  const existing = await prisma.pendingContract.findUniqueOrThrow({
+    where: { id, vendorId: vendor.id },
+    select: {
+      status: true,
+      contractName: true,
+      facilityId: true,
+      vendorName: true,
+      facility: { select: { name: true } },
+    },
+  })
+  if (
+    existing.status !== "rejected" &&
+    existing.status !== "revision_requested" &&
+    existing.status !== "draft"
+  ) {
+    throw new Error(
+      `Only rejected, revision-requested, or draft submissions can be resubmitted (status: ${existing.status}).`,
+    )
+  }
+
+  const contract = await prisma.pendingContract.update({
+    where: { id, vendorId: vendor.id },
+    data: { status: "submitted", submittedAt: new Date() },
+  })
+
+  // Same best-effort facility notification as the original submission.
+  if (existing.facilityId) {
+    void notifyFacilityOfPendingContract({
+      facilityId: existing.facilityId,
+      contractName: existing.contractName,
+      vendorName: existing.vendorName,
+      facilityName: existing.facility?.name ?? null,
+      pendingId: id,
+    })
+  }
+  return serialize(contract)
+}
+
 // ─── Facility: List Pending ─────────────────────────────────────
 
 export async function getFacilityPendingContracts(_facilityId?: string) {

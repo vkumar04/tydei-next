@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/popover"
 import { CalendarIcon } from "lucide-react"
 import { format, parseISO } from "date-fns"
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
 function parseDateString(dateStr: string | undefined): Date | undefined {
@@ -63,16 +63,21 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
   const effectiveDate = parseDateString(effectiveDateStr)
   const expirationDate = parseDateString(expirationDateStr)
 
-  // Performance period and rebate pay period should match by default
-  // (Charles 2026-06-10). Changing the performance period mirrors into the
-  // pay period until the user deliberately picks a different pay period.
-  // Review F3: on the EDIT form a contract may already carry a deliberate
-  // split (e.g. annual eval / quarterly pay) — seed the ref from the initial
-  // values so re-editing performance period never silently clobbers it.
-  const payPeriodTouched = useRef(
-    (watch("performancePeriod") ?? "monthly") !==
-      (watch("rebatePayPeriod") ?? "monthly"),
-  )
+  // Charles 2026-06-10 (round 2, Mako tie-in screenshot showing
+  // annual/quarterly): "Rebate pay period and performance period should be
+  // the same" — not auto-sync-with-override, the SAME. One control writes
+  // both columns; a stored mismatch is aligned on mount so saving the form
+  // converges legacy rows. (Schema keeps both columns; display surfaces
+  // already prefer term-level cadence via deriveContractCadence.)
+  const performancePeriod = watch("performancePeriod") ?? "monthly"
+  const storedPayPeriod = watch("rebatePayPeriod") ?? performancePeriod
+  const hadMismatch = useRef(storedPayPeriod !== performancePeriod)
+  useEffect(() => {
+    if (hadMismatch.current) {
+      setValue("rebatePayPeriod", performancePeriod)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <Card>
@@ -157,39 +162,14 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Performance Period">
+          <Field label="Performance & Rebate Pay Period">
             <Select
-              value={watch("performancePeriod") ?? "monthly"}
+              value={performancePeriod}
               onValueChange={(v) => {
                 setValue(
                   "performancePeriod",
                   v as CreateContractInput["performancePeriod"]
                 )
-                if (!payPeriodTouched.current) {
-                  setValue(
-                    "rebatePayPeriod",
-                    v as CreateContractInput["rebatePayPeriod"]
-                  )
-                }
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">Monthly - Evaluated every month</SelectItem>
-                <SelectItem value="quarterly">Quarterly - Evaluated every 3 months</SelectItem>
-                <SelectItem value="semi_annual">Semi-Annual - Evaluated every 6 months</SelectItem>
-                <SelectItem value="annual">Annual - Evaluated yearly</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field label="Rebate Pay Period">
-            <Select
-              value={watch("rebatePayPeriod") ?? "quarterly"}
-              onValueChange={(v) => {
-                payPeriodTouched.current = true
                 setValue(
                   "rebatePayPeriod",
                   v as CreateContractInput["rebatePayPeriod"]
@@ -200,12 +180,19 @@ export function ContractDatesCard({ form }: ContractDatesCardProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="monthly">Monthly - Paid every month</SelectItem>
-                <SelectItem value="quarterly">Quarterly - Paid every 3 months</SelectItem>
-                <SelectItem value="semi_annual">Semi-Annual - Paid every 6 months</SelectItem>
-                <SelectItem value="annual">Annual - Paid yearly</SelectItem>
+                <SelectItem value="monthly">Monthly - Evaluated &amp; paid every month</SelectItem>
+                <SelectItem value="quarterly">Quarterly - Evaluated &amp; paid every 3 months</SelectItem>
+                <SelectItem value="semi_annual">Semi-Annual - Evaluated &amp; paid every 6 months</SelectItem>
+                <SelectItem value="annual">Annual - Evaluated &amp; paid yearly</SelectItem>
               </SelectContent>
             </Select>
+            {hadMismatch.current ? (
+              <p className="text-xs text-muted-foreground">
+                This contract had a different pay period (
+                {storedPayPeriod.replace("_", "-")}) — saving aligns it to the
+                performance period.
+              </p>
+            ) : null}
           </Field>
         </div>
 

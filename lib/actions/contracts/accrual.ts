@@ -150,31 +150,46 @@ async function _buildAccrualTimelineForContract(
   // threshold (market_share / compliance) terms is persisted by their
   // dedicated writers — the doctrine-canonical earned source. Overlay those
   // rows into the timeline buckets below.
+  //
+  // 2026-06-10 (Charles "Volume rebates not showing any accrued rebates"):
+  // volume terms are the same class — `recomputeVolumeAccrualForTerm`
+  // persists `[auto-volume-accrual]` rows, but the overlay never fetched
+  // that prefix while the tier walk forces per-unit tiers to rebateValue 0
+  // — so the timeline showed Tier 1 / "$5.00 / unit" and Accrued $0
+  // forever. Volume rows now overlay; the walk's accrual contribution for
+  // volume terms is zeroed below so percent-tier volume terms can't double
+  // count.
   const hasOverlayTerm = contract.terms.some(
     (t) =>
       t.termType === "carve_out" ||
       t.termType === "market_share" ||
-      t.termType === "compliance_rebate",
+      t.termType === "compliance_rebate" ||
+      t.termType === "volume_rebate",
   )
-  const carveOutRebateRows = hasOverlayTerm
+  const overlayRebateRows = hasOverlayTerm
     ? await prisma.rebate.findMany({
         where: {
           contractId: contract.id,
           OR: [
             { notes: { startsWith: "[auto-carve-out-accrual]" } },
             { notes: { startsWith: "[auto-threshold-accrual]" } },
+            { notes: { startsWith: "[auto-volume-accrual]" } },
           ],
         },
-        select: { rebateEarned: true, payPeriodEnd: true },
+        // notes carry `term:<id>` + `tier N` — parsed below so the timeline
+        // can attribute each overlay row to ITS term in the per-term
+        // breakdown (Charles 2026-06-10: "there are two terms one is market
+        // share the other is spend rebate the timeline should reflect that").
+        select: { rebateEarned: true, payPeriodEnd: true, notes: true },
       })
     : []
   if (termsWithTiers.length === 0) {
     // No spend-dollar tier terms — but overlay rows (carve-out /
     // market-share / compliance accrual) may still exist. Render them as a
     // minimal monthly timeline instead of a blank card.
-    if (carveOutRebateRows.length > 0) {
+    if (overlayRebateRows.length > 0) {
       const byMonth = new Map<string, number>()
-      for (const r of carveOutRebateRows) {
+      for (const r of overlayRebateRows) {
         if (!r.payPeriodEnd) continue
         const key = `${r.payPeriodEnd.getUTCFullYear()}-${String(
           r.payPeriodEnd.getUTCMonth() + 1,
@@ -714,11 +729,18 @@ async function _buildAccrualTimelineForContract(
       // record the contribution; only the contributions list (which
       // the UI uses to break down "who paid what this month") skips
       // zero rows so we don't visually clutter the breakdown.
-      totalAccrued += row.accruedAmount
-      if (row.accruedAmount > 0) {
+      //
+      // 2026-06-10: volume terms' accrual comes from the persisted
+      // `[auto-volume-accrual]` overlay rows (the canonical earned source);
+      // the walk keeps providing their tier/rate/volume display but must
+      // not contribute accrual or it would double-count with the overlay.
+      const walkAccrual =
+        sourceTerm.termType === "volume_rebate" ? 0 : row.accruedAmount
+      totalAccrued += walkAccrual
+      if (walkAccrual > 0) {
         contributions.push({
           termIndex,
-          accruedAmount: row.accruedAmount,
+          accruedAmount: walkAccrual,
           tierAchieved: row.tierAchieved,
           rebatePercent: row.rebatePercent,
         })
@@ -776,29 +798,64 @@ async function _buildAccrualTimelineForContract(
     | "annual"
     | "lifetime" = primaryEval
 
-  // 2026-06-09: overlay the persisted carve-out / threshold accrual into the
-  // MONTHLY rows (see hasOverlayTerm above). Each `[auto-carve-out-accrual]`
-  // / `[auto-threshold-accrual]` Rebate row lands in the month containing its
-  // payPeriodEnd; months with no tier-engine row are appended so accrual
-  // outside the COG-spend window still shows. Tier/Rate stay untouched
-  // (overlay terms have no spend-dollar tiers).
-  if (carveOutRebateRows.length > 0) {
+  // 2026-06-09: overlay the persisted carve-out / threshold / volume accrual
+  // into the MONTHLY rows (see hasOverlayTerm above). Each overlay Rebate row
+  // lands in the month containing its payPeriodEnd; months with no
+  // tier-engine row are appended so accrual outside the COG-spend window
+  // still shows.
+  //
+  // 2026-06-10 (Charles "there are two terms one is market share the other
+  // is spend rebate the timeline should reflect that"): overlay rows now
+  // ATTRIBUTE to their term — the writer notes carry `term:<id>` and
+  // `tier N`, so each row joins termContributions under its own label and
+  // the multi-term breakdown shows BOTH terms instead of silently folding
+  // the market-share dollars into an unlabeled total.
+  const overlayTermLabels: Array<{
+    termIndex: number
+    termName: string
+    evaluationPeriod: string
+  }> = []
+  if (overlayRebateRows.length > 0) {
+    const walkIndexByTermId = new Map(
+      termsWithTiers.map((t, i) => [t.id, i] as const),
+    )
+    const overlayIndexByTermId = new Map<string, number>()
+    const overlayIndexFor = (termId: string | null): number | null => {
+      if (!termId) return null
+      const walkIdx = walkIndexByTermId.get(termId)
+      if (walkIdx !== undefined) return walkIdx
+      const existingIdx = overlayIndexByTermId.get(termId)
+      if (existingIdx !== undefined) return existingIdx
+      const term = contract.terms.find((t) => t.id === termId)
+      if (!term) return null
+      const idx = termsWithTiers.length + overlayTermLabels.length
+      overlayIndexByTermId.set(termId, idx)
+      overlayTermLabels.push({
+        termIndex: idx,
+        termName: term.termName ?? "Rebate term",
+        evaluationPeriod: term.evaluationPeriod ?? "annual",
+      })
+      return idx
+    }
+
     const byKey = new Map(rows.map((r) => [r.month, r]))
-    for (const cr of carveOutRebateRows) {
+    for (const cr of overlayRebateRows) {
       if (!cr.payPeriodEnd) continue
       const monthKey = `${cr.payPeriodEnd.getUTCFullYear()}-${String(
         cr.payPeriodEnd.getUTCMonth() + 1,
       ).padStart(2, "0")}`
       const earned = Number(cr.rebateEarned ?? 0)
-      const existing = byKey.get(monthKey)
-      if (existing) {
-        existing.accruedAmount += earned
-      } else {
-        const synthetic: TimelineRowWithVolume = {
+      const termId = cr.notes?.match(/term:(\S+)/)?.[1] ?? null
+      const tierAchieved = Number(cr.notes?.match(/tier (\d+)/)?.[1] ?? 0)
+      const termIndex = overlayIndexFor(termId)
+
+      let target = byKey.get(monthKey)
+      if (!target) {
+        target = {
           month: monthKey,
           spend: 0,
           cumulativeSpend: 0,
-          accruedAmount: earned,
+          accruedAmount: 0,
           tierAchieved: 0,
           rebatePercent: 0,
           termContributions: [],
@@ -806,8 +863,27 @@ async function _buildAccrualTimelineForContract(
           achievedRebateType: null,
           achievedRebateValue: 0,
         }
-        byKey.set(monthKey, synthetic)
-        rows.push(synthetic)
+        byKey.set(monthKey, target)
+        rows.push(target)
+      }
+      target.accruedAmount += earned
+      if (termIndex !== null && earned > 0) {
+        const existing = target.termContributions.find(
+          (c) => c.termIndex === termIndex,
+        )
+        if (existing) {
+          existing.accruedAmount += earned
+          if (tierAchieved > existing.tierAchieved) {
+            existing.tierAchieved = tierAchieved
+          }
+        } else {
+          target.termContributions.push({
+            termIndex,
+            accruedAmount: earned,
+            tierAchieved,
+            rebatePercent: 0,
+          })
+        }
       }
     }
     // Keep chronological order (YYYY-MM sorts lexicographically).
@@ -860,10 +936,27 @@ async function _buildAccrualTimelineForContract(
               achievedRebateValue: better
                 ? r.achievedRebateValue
                 : cur.achievedRebateValue,
-              termContributions: [
-                ...cur.termContributions,
-                ...r.termContributions,
-              ],
+              // Merge by termIndex — a year subtotal must show one line per
+              // term, not one line per term-month (2026-06-10).
+              termContributions: ((): MultiTermTimelineRow["termContributions"] => {
+                const merged = new Map<
+                  number,
+                  MultiTermTimelineRow["termContributions"][number]
+                >(cur.termContributions.map((c) => [c.termIndex, { ...c }]))
+                for (const c of r.termContributions) {
+                  const prev = merged.get(c.termIndex)
+                  if (prev) {
+                    prev.accruedAmount += c.accruedAmount
+                    if (c.tierAchieved > prev.tierAchieved) {
+                      prev.tierAchieved = c.tierAchieved
+                      prev.rebatePercent = c.rebatePercent
+                    }
+                  } else {
+                    merged.set(c.termIndex, { ...c })
+                  }
+                }
+                return Array.from(merged.values())
+              })(),
             }
           }
           flush()
@@ -875,11 +968,17 @@ async function _buildAccrualTimelineForContract(
   // "best" term. Without this, a contract with a spend rebate + a
   // category-scoped rebate shows only the dominant rate, which led users
   // to report "it's only pulling from the 1st one" (2026-04-23).
-  const termLabels = termsWithTiers.map((t, i) => ({
-    termIndex: i,
-    termName: t.termName ?? `Term ${i + 1}`,
-    evaluationPeriod: t.evaluationPeriod ?? "annual",
-  }))
+  const termLabels = [
+    ...termsWithTiers.map((t, i) => ({
+      termIndex: i,
+      termName: t.termName ?? `Term ${i + 1}`,
+      evaluationPeriod: t.evaluationPeriod ?? "annual",
+    })),
+    // 2026-06-10: overlay terms (market-share / compliance / carve-out /
+    // volume rows attributed above) get their own labels so the per-term
+    // breakdown names them.
+    ...overlayTermLabels,
+  ]
 
   return serialize({
     rows: displayRows,

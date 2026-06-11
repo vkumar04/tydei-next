@@ -286,7 +286,10 @@ export function ContractPerformanceCard({
                 </p>
               </div>
             ) : (
-              shareRows.map(({ target, row }, idx) => {
+              <>
+                {shareRows
+                  .filter(({ row }) => row !== null)
+                  .map(({ target, row }, idx) => {
                 const label =
                   row?.category ??
                   productCategories?.find(
@@ -349,7 +352,29 @@ export function ContractPerformanceCard({
                     )}
                   </div>
                 )
-              })
+              })}
+                {/* Charles 2026-06-10 ("categories still showing ones that
+                    are mapped out"): categories with zero categorized COG
+                    used to render one dead "No categorized COG for X" card
+                    EACH — on the Mako tie-in that was four noise rows. They
+                    collapse into a single compact footnote; the categories
+                    are still named so the data gap stays visible. */}
+                {(() => {
+                  const dead = shareRows
+                    .filter(({ row }) => row === null)
+                    .map(
+                      ({ target }) =>
+                        productCategories?.find(
+                          (c) => normalizeCategory(c) === target,
+                        ) ?? target,
+                    )
+                  return dead.length > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No categorized COG for: {dead.join(", ")}.
+                    </p>
+                  ) : null
+                })()}
+              </>
             )}
           </div>
         )}

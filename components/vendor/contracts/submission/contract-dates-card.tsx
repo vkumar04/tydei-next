@@ -116,52 +116,32 @@ export function ContractDatesCard({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
+          {/* Charles 2026-06-10: performance and rebate pay period are the
+              SAME — one control writes both values. */}
           <div className="space-y-2">
-            <Label>Performance Period</Label>
+            <Label>Performance &amp; Rebate Pay Period</Label>
             <Select
               value={performancePeriod}
-              onValueChange={onPerformancePeriodChange}
+              onValueChange={(v) => {
+                onPerformancePeriodChange(v)
+                onRebatePayPeriodChange(v)
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="monthly">
-                  Monthly - Evaluated every month
+                  Monthly - Evaluated &amp; paid every month
                 </SelectItem>
                 <SelectItem value="quarterly">
-                  Quarterly - Evaluated every 3 months
+                  Quarterly - Evaluated &amp; paid every 3 months
                 </SelectItem>
                 <SelectItem value="semi_annual">
-                  Semi-Annual - Evaluated every 6 months
+                  Semi-Annual - Evaluated &amp; paid every 6 months
                 </SelectItem>
                 <SelectItem value="annual">
-                  Annual - Evaluated yearly
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Rebate Pay Period</Label>
-            <Select
-              value={rebatePayPeriod}
-              onValueChange={onRebatePayPeriodChange}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">
-                  Monthly - Paid every month
-                </SelectItem>
-                <SelectItem value="quarterly">
-                  Quarterly - Paid every 3 months
-                </SelectItem>
-                <SelectItem value="semi_annual">
-                  Semi-Annual - Paid every 6 months
-                </SelectItem>
-                <SelectItem value="annual">
-                  Annual - Paid yearly
+                  Annual - Evaluated &amp; paid yearly
                 </SelectItem>
               </SelectContent>
             </Select>

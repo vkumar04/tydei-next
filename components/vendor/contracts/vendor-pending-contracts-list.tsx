@@ -96,10 +96,15 @@ export function VendorPendingContractsList({ vendorId }: VendorPendingContractsL
                   </div>
                 )}
               </div>
-              {pc.status === "revision_requested" && (
+              {/* Charles 2026-06-10: rejected submissions are fixable too —
+                  edit + resubmit puts them back in the facility's queue. */}
+              {(pc.status === "revision_requested" ||
+                pc.status === "rejected" ||
+                pc.status === "draft") && (
                 <Button asChild variant="outline" size="sm" className="shrink-0">
                   <Link href={`/vendor/contracts/pending/${pc.id}/edit`}>
-                    <Pencil className="size-4" /> Edit
+                    <Pencil className="size-4" />{" "}
+                    {pc.status === "draft" ? "Edit" : "Edit & Resubmit"}
                   </Link>
                 </Button>
               )}
