@@ -4,6 +4,7 @@ import {
   formatTierRebateLabel,
   formatTierDollarAnnotation,
 } from "@/lib/contracts/tier-rebate-label"
+import { computeTierBarProgress } from "@/lib/contracts/tier-metric"
 import type { TierLike } from "@/lib/rebates/calculate"
 
 /**
@@ -136,5 +137,73 @@ describe("tier dollar annotation (Charles W1.I / N10 re-label)", () => {
     expect(annotation).toContain("top rate")
     // 375,000 * 0.06 = 22,500
     expect(annotation).toContain("$22,500")
+  })
+})
+
+/**
+ * Bug A3 (bugs.rtfd 2026-06-11): the Rebates & Tiers per-tier bars on a
+ * market_share term compared `currentSpend` (DOLLARS, e.g. $782,541)
+ * against `tier.spendMin` (which for market_share terms stores a PERCENT
+ * 0–100 via the writer's column-reuse mirror). Dollars always dwarf the
+ * percent thresholds, so every bar — 0%+, 50%+, 100%+ — rendered fully
+ * achieved even at 71.1% actual category share. The header's
+ * "Current: Tier 2" was correct because it routes through
+ * `pickThresholdMetric`; the bars hand-rolled the math. These tests pin
+ * the extracted bar-fill helper so both unit families share one formula.
+ */
+describe("computeTierBarProgress — market-share metric routing (bugs.rtfd 2026-06-11 A3)", () => {
+  // Market-share term, tiers 0%+ / 50%+ / 100%+, actual share 71.1%.
+  it("superseded band (0–50%) at 71.1% share fills 100", () => {
+    expect(
+      computeTierBarProgress({ metric: 71.1, thresholdMin: 0, thresholdMax: 50 }),
+    ).toBe(100)
+  })
+
+  it("current band (50–100%) at 71.1% share fills ≈42.2", () => {
+    expect(
+      computeTierBarProgress({ metric: 71.1, thresholdMin: 50, thresholdMax: 100 }),
+    ).toBeCloseTo(42.2, 5)
+  })
+
+  it("unreached open-ended band (100%+) at 71.1% share fills 0 — never full", () => {
+    expect(
+      computeTierBarProgress({ metric: 71.1, thresholdMin: 100, thresholdMax: null }),
+    ).toBe(0)
+  })
+
+  it("metric exactly at an open-ended threshold fills 100", () => {
+    expect(
+      computeTierBarProgress({ metric: 100, thresholdMin: 100, thresholdMax: null }),
+    ).toBe(100)
+  })
+
+  // Spend-dollar regression: same semantics as the old inline TierDisplay
+  // branching (dollars vs dollars) — replicates the W1.I visual case of
+  // $412,000 spend against a $300,000–$500,000 bracket.
+  it("spend-dollar current bracket keeps the legacy partial fill (412k of 300k–500k → 56)", () => {
+    expect(
+      computeTierBarProgress({
+        metric: 412_000,
+        thresholdMin: 300_000,
+        thresholdMax: 500_000,
+      }),
+    ).toBeCloseTo(56, 5)
+  })
+
+  it("spend-dollar below-threshold tier fills 0; exceeded bounded tier fills 100", () => {
+    expect(
+      computeTierBarProgress({
+        metric: 412_000,
+        thresholdMin: 500_000,
+        thresholdMax: null,
+      }),
+    ).toBe(0)
+    expect(
+      computeTierBarProgress({
+        metric: 412_000,
+        thresholdMin: 0,
+        thresholdMax: 300_000,
+      }),
+    ).toBe(100)
   })
 })

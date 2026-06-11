@@ -25,7 +25,10 @@ import { Progress } from "@/components/ui/progress"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
 import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
-import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
+import {
+  pickThresholdMetric,
+  computeTierBarProgress,
+} from "@/lib/contracts/tier-metric"
 
 type ContractTermWithTiers = ContractTerm & { tiers: ContractTier[] }
 
@@ -171,6 +174,7 @@ function TierProgressCard({
 function TierDisplay({
   tier,
   currentSpend,
+  currentMarketShare,
   currentTierNumber,
   isTopTier,
   rebateMethod = "cumulative",
@@ -180,6 +184,12 @@ function TierDisplay({
 }: {
   tier: ContractTier
   currentSpend?: number
+  /** Bug A3 (bugs.rtfd 2026-06-11): the contract-level market-share %
+   *  (0–100) — the metric `pickThresholdMetric` routes market_share
+   *  terms through. The bar fill for market-share tiers must compare
+   *  THIS against the percent thresholds, never `currentSpend` dollars
+   *  (dollars dwarf 0–100, so every bar rendered fully achieved). */
+  currentMarketShare?: number
   currentTierNumber?: number
   isTopTier?: boolean
   rebateMethod?: "cumulative" | "marginal"
@@ -208,16 +218,35 @@ function TierDisplay({
 
   const spendMin = Number(tier.spendMin)
   const spendMax = tier.spendMax ? Number(tier.spendMax) : null
-  const spend = currentSpend ?? 0
 
-  let progress = 0
-  if (spend >= spendMin && spendMax && spend < spendMax) {
-    progress = ((spend - spendMin) / (spendMax - spendMin)) * 100
-  } else if (spend >= spendMin && !spendMax) {
-    progress = 100
-  } else if (spendMax && spend >= spendMax) {
-    progress = 100
-  }
+  // Market-share threshold fields: writers persist dedicated
+  // marketShareMin/Max columns AND mirror them into spendMin/spendMax
+  // (lib/actions/pending-contracts.ts column-reuse); legacy rows carry
+  // the percent only in the mirror — so fall back, same as the range
+  // label below.
+  const msMin =
+    tier.marketShareMin != null ? Number(tier.marketShareMin) : spendMin
+  const msMax =
+    tier.marketShareMax != null ? Number(tier.marketShareMax) : spendMax
+
+  // Bug A3 (bugs.rtfd 2026-06-11): bar fill must compare the metric in
+  // the tier's own unit. Market-share tiers store PERCENT (0–100)
+  // thresholds; the old inline math compared dollar `currentSpend`
+  // ($782,541) against them, so `spend >= spendMin` was always true and
+  // every bar (0%+ / 50%+ / 100%+) rendered fully achieved at 71.1%
+  // actual share. Both unit families now share the canonical
+  // `computeTierBarProgress`; only the metric/threshold routing differs.
+  const progress = isMarketShareTerm
+    ? computeTierBarProgress({
+        metric: currentMarketShare ?? 0,
+        thresholdMin: msMin,
+        thresholdMax: msMax,
+      })
+    : computeTierBarProgress({
+        metric: currentSpend ?? 0,
+        thresholdMin: spendMin,
+        thresholdMax: spendMax,
+      })
 
   // Charles W1.I: show dollar-amount context alongside the rate.
   // "$Y to unlock" / "earning $X at $spend" / non-percent unit suffix.
@@ -298,21 +327,12 @@ function TierDisplay({
                     : `${formatNumber(vMin)} – ${formatNumber(vMax)} units`
                 })()
               : isMarketShareTerm
-              ? (() => {
-                  const msMin =
-                    tier.marketShareMin != null
-                      ? Number(tier.marketShareMin)
-                      : Number(tier.spendMin)
-                  const msMax =
-                    tier.marketShareMax != null
-                      ? Number(tier.marketShareMax)
-                      : tier.spendMax
-                        ? Number(tier.spendMax)
-                        : null
-                  return msMax === null
-                    ? `${msMin.toFixed(1)}%+ market share`
-                    : `${msMin.toFixed(1)}% – ${msMax.toFixed(1)}% market share`
-                })()
+              ? // Same msMin/msMax (dedicated columns ?? spendMin/Max
+                // mirror) that drives the bar fill above — one fallback,
+                // no label-vs-bar drift (bugs.rtfd 2026-06-11 A3).
+                msMax === null
+                ? `${msMin.toFixed(1)}%+ market share`
+                : `${msMin.toFixed(1)}% – ${msMax.toFixed(1)}% market share`
               : (
                 <>
                   {formatCurrency(Number(tier.spendMin))}
@@ -622,6 +642,12 @@ export function ContractTermsDisplay({ terms, currentSpend, termScopedSpend, cur
                                   key={tier.id}
                                   tier={tier}
                                   currentSpend={effectiveSpend}
+                                  // Bug A3 (bugs.rtfd 2026-06-11): the
+                                  // same metric pickThresholdMetric
+                                  // routes market_share terms through —
+                                  // bar fill needs percent vs percent,
+                                  // not dollars vs percent.
+                                  currentMarketShare={currentMarketShare ?? undefined}
                                   currentTierNumber={currentTierNumber}
                                   isTopTier={isTopTierReached}
                                   rebateMethod={(term.rebateMethod ?? "cumulative") as "cumulative" | "marginal"}

@@ -92,6 +92,30 @@ export function isSpendDollarThresholdTermType(termType: string): boolean {
 }
 
 /**
+ * Canonical per-tier progress-bar fill (0–100) for the Rebates & Tiers tab.
+ *
+ * `metric` and the thresholds must be in the SAME unit: dollars for
+ * spend-dollar terms, percent 0–100 for market_share terms (per
+ * `pickThresholdMetric` above). Bug A3 (bugs.rtfd 2026-06-11): `TierDisplay`
+ * inlined this math with `currentSpend` (dollars, e.g. $782,541) compared
+ * against `tier.spendMin` — which for market_share terms stores a PERCENT
+ * via the writer's column-reuse mirror — so `metric >= thresholdMin` was
+ * always true and every tier bar (0%+ / 50%+ / 100%+) rendered fully
+ * achieved at 71.1% actual share. Extracted here so both unit families
+ * share one formula and the unit routing happens at the call site.
+ */
+export function computeTierBarProgress(opts: {
+  metric: number // dollars for spend terms, percent 0-100 for market-share
+  thresholdMin: number
+  thresholdMax: number | null
+}): number {
+  const { metric, thresholdMin, thresholdMax } = opts
+  if (metric < thresholdMin) return 0
+  if (thresholdMax == null || metric >= thresholdMax) return 100
+  return ((metric - thresholdMin) / (thresholdMax - thresholdMin)) * 100
+}
+
+/**
  * True when a term carries a REAL spend-dollar tier ladder that should drive
  * spend-tier display surfaces (Tier Achievement, Rebate utilization).
  *
