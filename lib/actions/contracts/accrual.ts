@@ -47,7 +47,18 @@ import {
   computeVolumeTierRebate,
   currentOpenVolumeWindow,
   normalizeVolumeTiers,
+  selectAchievedVolumeTier,
 } from "@/lib/contracts/recompute/volume"
+// bugs.rtfd 2026-06-13 M: the threshold writer's window grid + per-period
+// market-share computation, exported so the timeline shows the SAME share
+// the writer pays on — including below-threshold windows the writer never
+// persists ($0 payment rows are skipped by its `periodPayment <= 0` gate).
+import {
+  buildThresholdEvaluationWindows,
+  computePerPeriodMarketShare,
+} from "@/lib/contracts/recompute/threshold"
+import { determineTier } from "@/lib/rebates/engine/shared/determine-tier"
+import type { RebateTier } from "@/lib/rebates/engine/types"
 
 export async function getAccrualTimeline(contractId: string) {
   const { facility } = await requireFacility()
@@ -60,6 +71,10 @@ export async function getAccrualTimeline(contractId: string) {
         include: { tiers: { orderBy: { tierNumber: "asc" } } },
         orderBy: { createdAt: "asc" },
       },
+      // bugs.rtfd 2026-06-13 M: the market-share display overlay scopes
+      // its categories exactly like the threshold writer's dispatcher,
+      // whose fallback is `contract.productCategory?.name`.
+      productCategory: { select: { name: true } },
     },
   })
   return _buildAccrualTimelineForContract(contract, facility.id)
@@ -85,13 +100,18 @@ export async function getVendorAccrualTimeline(contractId: string) {
         include: { tiers: { orderBy: { tierNumber: "asc" } } },
         orderBy: { createdAt: "asc" },
       },
+      // bugs.rtfd 2026-06-13 M: see facility-scoped query above.
+      productCategory: { select: { name: true } },
     },
   })
   return _buildAccrualTimelineForContract(contract, contract.facilityId)
 }
 
 type _AccrualContract = Prisma.ContractGetPayload<{
-  include: { terms: { include: { tiers: true } } }
+  include: {
+    terms: { include: { tiers: true } }
+    productCategory: { select: { name: true } }
+  }
 }>
 
 async function _buildAccrualTimelineForContract(
@@ -167,14 +187,19 @@ async function _buildAccrualTimelineForContract(
   // `recompute-accrual.ts` routes through `recomputeVolumeAccrualForTerm`;
   // all persist `[auto-volume-accrual]` rows) — stays in the walk even
   // though the canonical guard classifies them as count-threshold. The
-  // 2026-06-10 volume fix relies on the walk for their Tier / Rate /
-  // Volume display columns and term attribution (walk index), while their
-  // ACCRUAL contribution is zeroed at the contribution site below and
-  // earned comes from the `[auto-volume-accrual]` overlay — so no double
-  // count. CAVEAT: the walk still feeds DOLLAR spend against the COUNT
-  // thresholds these terms store in `spendMin` (pre-existing 2026-06-10
-  // design), so the Tier/Rate columns are best-effort display for the
-  // volume family, not a clean ladder. Pinned by
+  // 2026-06-10 volume fix relies on the walk for their Volume display
+  // column and term attribution (walk index), while their ACCRUAL
+  // contribution is zeroed at the contribution site below and earned
+  // comes from the `[auto-volume-accrual]` overlay — so no double count.
+  // bugs.rtfd 2026-06-13 V: the displayed Tier / Rate no longer comes
+  // from the walk for `volume_rebate` terms — the dollar walk compared
+  // SPEND against the UNIT thresholds these terms store in `spendMin`
+  // (prod: $2.4M ≥ "5001" → showed tier 2 / $7-unit while the accrual
+  // correctly ran tier 1 / $5-unit). They now derive from
+  // window-cumulative UNITS via `selectAchievedVolumeTier` (see
+  // `volumeDisplayByTermMonth` below); `rebate_per_use` /
+  // `capitated_pricing_rebate` keep the walk fallback until they grow a
+  // unit series here. Pinned by
   // `lib/actions/contracts/__tests__/accrual-volume.test.ts`.
   //
   // The two remaining dispatcher types — `po_rebate`
@@ -255,6 +280,26 @@ async function _buildAccrualTimelineForContract(
     Math.min(new Date().getTime(), contract.expirationDate.getTime()),
   )
 
+  // bugs.rtfd 2026-06-13 M (Charles "Spend term with a market share term.
+  // Not showing the market share calculations … Also show the market
+  // share at the time of rebate in a column"): per-evaluation-window
+  // market share, computed by the threshold WRITER's own exported
+  // helpers (`buildThresholdEvaluationWindows` +
+  // `computePerPeriodMarketShare` — never a parallel reimplementation).
+  // Two visibility gaps this closes, display-only (no Rebate writes):
+  //   (a) a window whose share sits below the lowest tier threshold pays
+  //       $0 and the writer persists NO row (`periodPayment <= 0` gate),
+  //       so the term contributed nothing to the timeline —
+  //       indistinguishable from broken. Window-end months now carry a
+  //       $0 contribution with the window's tier (0 → rate "—") so the
+  //       term and its share stay visible.
+  //   (b) "market share at the time of rebate" — every month gets
+  //       `marketSharePercent` (its window's share) for the new column.
+  const marketShareDisplay = await computeMarketShareDisplayForContract(
+    contract,
+    facilityId,
+  )
+
   if (termsWithTiers.length === 0) {
     // No spend-dollar tier terms — but overlay rows (carve-out /
     // market-share / compliance / dispatcher accrual) may still exist.
@@ -314,6 +359,10 @@ async function _buildAccrualTimelineForContract(
       volume: number
       achievedRebateType: string | null
       achievedRebateValue: number
+      /** bugs.rtfd 2026-06-13 M: the market share (%) of the evaluation
+       * window this month belongs to; null when the contract has no
+       * market_share term. */
+      marketSharePercent: number | null
     }
     const emptyRow = (month: string): EarlyTimelineRow => ({
       month,
@@ -326,6 +375,7 @@ async function _buildAccrualTimelineForContract(
       volume: 0,
       achievedRebateType: null,
       achievedRebateValue: 0,
+      marketSharePercent: null,
     })
     const rowByMonth = new Map<string, EarlyTimelineRow>()
 
@@ -534,6 +584,61 @@ async function _buildAccrualTimelineForContract(
         target.achievedRebateValue = achievedTier
           ? Number(achievedTier.rebateValue)
           : 0
+      }
+    }
+
+    // bugs.rtfd 2026-06-13 M: market-share visibility on the early path.
+    // Persisted overlay rows above stay authoritative; this only (1)
+    // stamps each month with its window's share for the Market Share
+    // column and (2) keeps the term visible on windows the writer never
+    // persisted (below-threshold → $0 payment → no row): the window-end
+    // month gets a $0 contribution carrying the share-derived tier/rate.
+    if (marketShareDisplay) {
+      for (const [m, share] of marketShareDisplay.shareByMonth) {
+        const row = rowByMonth.get(m)
+        if (row) row.marketSharePercent = share
+      }
+      for (const we of marketShareDisplay.windowEnds) {
+        const termIndex = overlayIndexByTermId.get(we.termId)
+        if (termIndex === undefined) continue
+        let target = rowByMonth.get(we.month)
+        if (!target) {
+          target = emptyRow(we.month)
+          target.marketSharePercent =
+            marketShareDisplay.shareByMonth.get(we.month) ?? null
+          rowByMonth.set(we.month, target)
+        }
+        const existing = target.termContributions.find(
+          (c) => c.termIndex === termIndex,
+        )
+        // A persisted writer row already represents this window — never
+        // second-guess the ledger with the display recompute.
+        if (existing) continue
+        target.termContributions.push({
+          termIndex,
+          accruedAmount: 0,
+          tierAchieved: we.tierAchieved,
+          rebatePercent: we.rebatePercent,
+        })
+        // Single-term early-path UIs render the HEADLINE columns, not
+        // the per-term breakdown — surface the window's tier/rate there
+        // too (tier 0 keeps the "—" rate by construction).
+        if (
+          we.tierAchieved > target.tierAchieved ||
+          (we.tierAchieved === target.tierAchieved &&
+            we.rebatePercent > target.rebatePercent)
+        ) {
+          const msTerm = contract.terms.find((t) => t.id === we.termId)
+          const achievedTier = msTerm?.tiers.find(
+            (t) => t.tierNumber === we.tierAchieved,
+          )
+          target.tierAchieved = we.tierAchieved
+          target.rebatePercent = we.rebatePercent
+          target.achievedRebateType = achievedTier?.rebateType ?? null
+          target.achievedRebateValue = achievedTier
+            ? Number(achievedTier.rebateValue)
+            : 0
+        }
       }
     }
 
@@ -1107,6 +1212,114 @@ async function _buildAccrualTimelineForContract(
     }
   }
 
+  // bugs.rtfd 2026-06-13 V (prod cmqbcw4wd00040ypgudy9modb): the volume
+  // family's displayed Tier / Rate came from the DOLLAR tier walk, whose
+  // cumulative SPEND was compared against the term's UNIT thresholds
+  // (stored in spendMin/spendMax) — the recurring dollars-vs-units
+  // type-confusion class. $2.4M spend ≥ "5001" showed "Tier 2 ·
+  // $7.00/unit" on rows whose ACCRUAL was correctly $5/unit (3,873
+  // window units) — the display contradicted the math on the same row.
+  //
+  // Fix: derive the displayed tier/rate for EVERY month from
+  // window-cumulative UNITS via the writer's own exported
+  // `selectAchievedVolumeTier` (the same helper the accrual math and the
+  // persisting writer use — no parallel ladder logic). Window bucketing
+  // reuses `currentOpenVolumeWindow` as a pure month→window probe
+  // (`today` = a timestamp inside the month) so the grid anchoring is
+  // writer-identical for closed AND open windows. Closed windows get the
+  // same rule — e.g. a 2024 window ending at 7,755 units displays tier 2
+  // / "$7.00 / unit", matching its persisted 7,755 × $7 overlay row.
+  const volumeDisplayByTermMonth = new Map<
+    string,
+    Map<
+      string,
+      {
+        tierAchieved: number
+        rebatePercent: number
+        rebateType: string | null
+        rebateValue: number
+      }
+    >
+  >()
+  if (isVolumeRebate) {
+    for (const term of termsWithTiers) {
+      if (term.termType !== "volume_rebate") continue
+      // PO-basis terms count PurchaseOrders, not COG units — the unit
+      // series captured above would be the wrong basis for them.
+      if (term.volumeType === "purchase_order") continue
+      const termUnits = volumeUnitsByTermMonth.get(term.id)
+      if (!termUnits) continue
+      const sortedTiers = normalizeVolumeTiers(term.tiers)
+      const termStartMs = Math.max(
+        contract.effectiveDate.getTime(),
+        term.effectiveStart?.getTime() ?? -Infinity,
+      )
+      const horizonMs = Math.min(
+        end.getTime(),
+        term.effectiveEnd?.getTime() ?? Infinity,
+      )
+      if (horizonMs < termStartMs) continue
+      const out = new Map<
+        string,
+        {
+          tierAchieved: number
+          rebatePercent: number
+          rebateType: string | null
+          rebateValue: number
+        }
+      >()
+      const termStart = new Date(termStartMs)
+      const horizon = new Date(horizonMs)
+      const cursor = new Date(
+        Date.UTC(termStart.getUTCFullYear(), termStart.getUTCMonth(), 1),
+      )
+      const lastMonth = new Date(
+        Date.UTC(horizon.getUTCFullYear(), horizon.getUTCMonth(), 1),
+      )
+      let windowStartMs: number | null = null
+      let windowUnits = 0
+      while (cursor <= lastMonth) {
+        const key = `${cursor.getUTCFullYear()}-${String(
+          cursor.getUTCMonth() + 1,
+        ).padStart(2, "0")}`
+        // Probe: any timestamp inside this month past the term clamp —
+        // the writer-grid window containing it is exactly the first
+        // window still open as of that instant.
+        const probe = new Date(Math.max(cursor.getTime(), termStartMs) + 1)
+        const window = currentOpenVolumeWindow({
+          contractEffectiveDate: contract.effectiveDate,
+          contractExpirationDate: contract.expirationDate,
+          effectiveStart: term.effectiveStart,
+          effectiveEnd: term.effectiveEnd,
+          evaluationPeriod: term.evaluationPeriod,
+          today: probe,
+        })
+        if (window) {
+          if (windowStartMs !== window.windowStart.getTime()) {
+            // New evaluation window — cumulative units reset.
+            windowStartMs = window.windowStart.getTime()
+            windowUnits = 0
+          }
+          windowUnits += termUnits.get(key) ?? 0
+          const achieved = selectAchievedVolumeTier(sortedTiers, windowUnits)
+          out.set(key, {
+            tierAchieved: achieved?.tierNumber ?? 0,
+            // A2 rule via the canonical helper: percent tiers scale
+            // fraction→percent; dollar tiers stay 0 (never render $ as %).
+            rebatePercent: resolveOverlayTierRate(
+              term,
+              achieved?.tierNumber ?? 0,
+            ),
+            rebateType: achieved?.rebateType ?? null,
+            rebateValue: achieved?.rebateValue ?? 0,
+          })
+        }
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+      }
+      if (out.size > 0) volumeDisplayByTermMonth.set(term.id, out)
+    }
+  }
+
   // Charles 2026-04-23 — the Cumulative column previously ran a
   // lifetime running sum across all months, which made a quarterly-
   // eval contract look like tier qualification was using lifetime
@@ -1150,6 +1363,10 @@ async function _buildAccrualTimelineForContract(
      * interleaved between the monthly rows (quarter / half / year where the
      * tier settles). Consumers summing accrual MUST skip these rows. */
     isPeriodSubtotal?: boolean
+    /** bugs.rtfd 2026-06-13 M: the market share (%) of the evaluation
+     * window this month belongs to — "market share at the time of
+     * rebate". Null when the contract has no market_share term. */
+    marketSharePercent: number | null
   }
   const rows: TimelineRowWithVolume[] = monthsTimeline.map((month, i) => {
     let totalSpend = 0
@@ -1202,6 +1419,14 @@ async function _buildAccrualTimelineForContract(
       const inProgressVolume = isVolumeWalkTerm
         ? inProgressVolumeByTermMonth.get(sourceTerm.id)?.get(month)
         : undefined
+      // bugs.rtfd 2026-06-13 V: unit-derived display tier/rate for the
+      // volume family — covers EVERY month (closed windows included),
+      // unlike the F2 in-progress entries which only exist for open-
+      // window months with a non-zero delta. Both come from the same
+      // writer helpers on the same unit series, so they always agree.
+      const volumeDisplay = isVolumeWalkTerm
+        ? volumeDisplayByTermMonth.get(sourceTerm.id)?.get(month)
+        : undefined
       const walkAccrual = isVolumeWalkTerm
         ? (inProgressVolume?.accrued ?? 0)
         : row.accruedAmount
@@ -1210,10 +1435,16 @@ async function _buildAccrualTimelineForContract(
         contributions.push({
           termIndex,
           accruedAmount: walkAccrual,
-          // F2: the in-progress entry carries the writer-selected tier +
-          // A2-resolved rate; non-volume terms keep the walk's values.
-          tierAchieved: inProgressVolume?.tierAchieved ?? row.tierAchieved,
-          rebatePercent: inProgressVolume?.rebatePercent ?? row.rebatePercent,
+          // V: unit-derived tier/rate first; then the F2 in-progress
+          // entry; non-volume terms keep the walk's values.
+          tierAchieved:
+            volumeDisplay?.tierAchieved ??
+            inProgressVolume?.tierAchieved ??
+            row.tierAchieved,
+          rebatePercent:
+            volumeDisplay?.rebatePercent ??
+            inProgressVolume?.rebatePercent ??
+            row.rebatePercent,
         })
       }
       // Pick the term with the highest tier as the row's headline
@@ -1221,22 +1452,39 @@ async function _buildAccrualTimelineForContract(
       // still want the term's CURRENT tier on the row so the user
       // sees their tracking progress. Tiebreak on rate when tiers
       // match, then on accrual size.
-      const tierBeat = row.tierAchieved > bestTier
+      //
+      // bugs.rtfd 2026-06-13 V: volume-family candidates use the
+      // unit-derived tier/rate — never the dollar walk's (which compared
+      // dollars against unit thresholds).
+      const candidateTier = volumeDisplay
+        ? volumeDisplay.tierAchieved
+        : row.tierAchieved
+      const candidatePercent = volumeDisplay
+        ? volumeDisplay.rebatePercent
+        : row.rebatePercent
+      const tierBeat = candidateTier > bestTier
       const sameTierBetterRate =
-        row.tierAchieved === bestTier && row.rebatePercent > bestPercent
+        candidateTier === bestTier && candidatePercent > bestPercent
       const sameTierBetterAccrual =
-        row.tierAchieved === bestTier &&
-        row.rebatePercent === bestPercent &&
+        candidateTier === bestTier &&
+        candidatePercent === bestPercent &&
         row.accruedAmount > bestContribution
       if (tierBeat || sameTierBetterRate || sameTierBetterAccrual) {
         bestContribution = row.accruedAmount
-        bestTier = row.tierAchieved
-        bestPercent = row.rebatePercent
-        const sourceTier = sourceTerm.tiers.find(
-          (t) => t.tierNumber === row.tierAchieved,
-        )
-        bestRebateType = sourceTier?.rebateType ?? null
-        bestRebateValue = sourceTier ? Number(sourceTier.rebateValue) : 0
+        bestTier = candidateTier
+        bestPercent = candidatePercent
+        if (volumeDisplay) {
+          // The achieved VOLUME tier's own type + raw value (e.g.
+          // fixed_rebate_per_unit · 5 → "$5.00 / unit").
+          bestRebateType = volumeDisplay.rebateType
+          bestRebateValue = volumeDisplay.rebateValue
+        } else {
+          const sourceTier = sourceTerm.tiers.find(
+            (t) => t.tierNumber === row.tierAchieved,
+          )
+          bestRebateType = sourceTier?.rebateType ?? null
+          bestRebateValue = sourceTier ? Number(sourceTier.rebateValue) : 0
+        }
       }
     }
 
@@ -1257,6 +1505,8 @@ async function _buildAccrualTimelineForContract(
       volume: volumeByMonth.get(month) ?? 0,
       achievedRebateType: bestRebateType,
       achievedRebateValue: bestRebateValue,
+      // bugs.rtfd 2026-06-13 M: stamped from the window shares below.
+      marketSharePercent: null,
     }
   })
 
@@ -1286,30 +1536,34 @@ async function _buildAccrualTimelineForContract(
     termName: string
     evaluationPeriod: string
   }> = []
-  if (overlayRebateRows.length > 0) {
-    const walkIndexByTermId = new Map(
-      termsWithTiers.map((t, i) => [t.id, i] as const),
-    )
-    const overlayIndexByTermId = new Map<string, number>()
-    const overlayIndexFor = (termId: string | null): number | null => {
-      if (!termId) return null
-      const walkIdx = walkIndexByTermId.get(termId)
-      if (walkIdx !== undefined) return walkIdx
-      const existingIdx = overlayIndexByTermId.get(termId)
-      if (existingIdx !== undefined) return existingIdx
-      const term = contract.terms.find((t) => t.id === termId)
-      if (!term) return null
-      const idx = termsWithTiers.length + overlayTermLabels.length
-      overlayIndexByTermId.set(termId, idx)
-      overlayTermLabels.push({
-        termIndex: idx,
-        termName: term.termName ?? "Rebate term",
-        evaluationPeriod: term.evaluationPeriod ?? "annual",
-      })
-      return idx
-    }
+  // bugs.rtfd 2026-06-13 M: hoisted out of the `overlayRebateRows.length`
+  // guard — the market-share visibility pass below must register the
+  // term's label / month rows even when the writer persisted ZERO rows
+  // (below-threshold windows), which was exactly the invisibility bug.
+  const walkIndexByTermId = new Map(
+    termsWithTiers.map((t, i) => [t.id, i] as const),
+  )
+  const overlayIndexByTermId = new Map<string, number>()
+  const overlayIndexFor = (termId: string | null): number | null => {
+    if (!termId) return null
+    const walkIdx = walkIndexByTermId.get(termId)
+    if (walkIdx !== undefined) return walkIdx
+    const existingIdx = overlayIndexByTermId.get(termId)
+    if (existingIdx !== undefined) return existingIdx
+    const term = contract.terms.find((t) => t.id === termId)
+    if (!term) return null
+    const idx = termsWithTiers.length + overlayTermLabels.length
+    overlayIndexByTermId.set(termId, idx)
+    overlayTermLabels.push({
+      termIndex: idx,
+      termName: term.termName ?? "Rebate term",
+      evaluationPeriod: term.evaluationPeriod ?? "annual",
+    })
+    return idx
+  }
+  const byKey = new Map(rows.map((r) => [r.month, r]))
 
-    const byKey = new Map(rows.map((r) => [r.month, r]))
+  if (overlayRebateRows.length > 0) {
     for (const cr of overlayRebateRows) {
       if (!cr.payPeriodEnd) continue
       const monthKey = `${cr.payPeriodEnd.getUTCFullYear()}-${String(
@@ -1317,7 +1571,17 @@ async function _buildAccrualTimelineForContract(
       ).padStart(2, "0")}`
       const earned = Number(cr.rebateEarned ?? 0)
       const termId = cr.notes?.match(/term:(\S+)/)?.[1] ?? null
-      const tierAchieved = Number(cr.notes?.match(/tier (\d+)/)?.[1] ?? 0)
+      const tierFromNotes = Number(cr.notes?.match(/tier (\d+)/)?.[1] ?? 0)
+      // bugs.rtfd 2026-06-13 V: volume-writer notes carry NO `tier N` —
+      // fall back to the unit-derived display tier for the term-month so
+      // a closed window's overlay contribution shows its real tier.
+      const tierAchieved =
+        tierFromNotes > 0
+          ? tierFromNotes
+          : termId
+            ? (volumeDisplayByTermMonth.get(termId)?.get(monthKey)
+                ?.tierAchieved ?? 0)
+            : 0
       const termIndex = overlayIndexFor(termId)
       // bugs.rtfd 2026-06-11 A2: the writer note carries only `tier N` —
       // resolve the achieved tier's RATE from the contributing term's
@@ -1344,6 +1608,7 @@ async function _buildAccrualTimelineForContract(
           volume: 0,
           achievedRebateType: null,
           achievedRebateValue: 0,
+          marketSharePercent: null,
         }
         byKey.set(monthKey, target)
         rows.push(target)
@@ -1370,9 +1635,56 @@ async function _buildAccrualTimelineForContract(
         }
       }
     }
-    // Keep chronological order (YYYY-MM sorts lexicographically).
-    rows.sort((a, b) => (a.month < b.month ? -1 : 1))
   }
+
+  // bugs.rtfd 2026-06-13 M: market-share visibility on the normal path.
+  // (1) Register the term's label + a $0 window-end contribution for any
+  // evaluation window the writer persisted NO row for (below-threshold
+  // → periodPayment 0 → skipped) so the term never silently vanishes;
+  // (2) stamp every month with its window's share for the Market Share
+  // column. Persisted overlay rows above stay authoritative — windows
+  // they already cover are never double-annotated.
+  if (marketShareDisplay) {
+    for (const we of marketShareDisplay.windowEnds) {
+      const termIndex = overlayIndexFor(we.termId)
+      if (termIndex === null) continue
+      let target = byKey.get(we.month)
+      if (!target) {
+        target = {
+          month: we.month,
+          spend: 0,
+          cumulativeSpend: 0,
+          accruedAmount: 0,
+          tierAchieved: 0,
+          rebatePercent: 0,
+          termContributions: [],
+          volume: 0,
+          achievedRebateType: null,
+          achievedRebateValue: 0,
+          marketSharePercent: null,
+        }
+        byKey.set(we.month, target)
+        rows.push(target)
+      }
+      const existing = target.termContributions.find(
+        (c) => c.termIndex === termIndex,
+      )
+      if (existing) continue
+      target.termContributions.push({
+        termIndex,
+        accruedAmount: 0,
+        tierAchieved: we.tierAchieved,
+        rebatePercent: we.rebatePercent,
+      })
+    }
+    for (const r of rows) {
+      r.marketSharePercent =
+        marketShareDisplay.shareByMonth.get(r.month) ?? null
+    }
+  }
+
+  // Keep chronological order (YYYY-MM sorts lexicographically).
+  rows.sort((a, b) => (a.month < b.month ? -1 : 1))
 
   // 2026-06-10 (Charles "the monthly data was removed it is just showing
   // cumulative annuals"): the 2026-06-09 quarterly fix collapsed per-month
@@ -1420,6 +1732,10 @@ async function _buildAccrualTimelineForContract(
               achievedRebateValue: better
                 ? r.achievedRebateValue
                 : cur.achievedRebateValue,
+              // bugs.rtfd 2026-06-13 M: the subtotal carries the period's
+              // settled share — the latest month with a value wins.
+              marketSharePercent:
+                r.marketSharePercent ?? cur.marketSharePercent,
               // Merge by termIndex — a year subtotal must show one line per
               // term, not one line per term-month (2026-06-10).
               termContributions: ((): MultiTermTimelineRow["termContributions"] => {
@@ -1518,6 +1834,143 @@ function buildMonthlySpendSeriesFromCogRows(
     cursor.setUTCMonth(cursor.getUTCMonth() + 1)
   }
   return series
+}
+
+/**
+ * bugs.rtfd 2026-06-13 M: per-evaluation-window market share for the
+ * timeline display (both the early overlay-only path and the normal walk
+ * path), computed through the threshold WRITER's own exported helpers —
+ * `buildThresholdEvaluationWindows` for the window grid (same clamps,
+ * same anchoring) and `computePerPeriodMarketShare` for the share itself
+ * (group-aware vendor union ÷ facility union across the SAME canonical
+ * category variants — multi-category terms use COMBINED spend on both
+ * sides, never a per-category average). Display only: writes nothing.
+ *
+ * The tier per window comes from the writer's same bridge —
+ * `determineTier` over `spendMin`→`thresholdMin` PERCENT points (0-100,
+ * the threshold-units rule) — and the rate from the achieved tier via
+ * `resolveOverlayTierRate` (tier 0 → 0 → the UI's "—").
+ */
+type MarketShareDisplayData = {
+  /** YYYY-MM → share (%) of the evaluation window the month belongs to. */
+  shareByMonth: Map<string, number>
+  /** One entry per evaluation window: its display end month (natural
+   * period end clamped to the horizon) + share-derived tier/rate. */
+  windowEnds: Array<{
+    termId: string
+    month: string
+    share: number
+    tierAchieved: number
+    rebatePercent: number
+  }>
+}
+
+async function computeMarketShareDisplayForContract(
+  contract: _AccrualContract,
+  facilityId: string,
+): Promise<MarketShareDisplayData | null> {
+  const msTerms = contract.terms.filter(
+    (t) => t.termType === "market_share" && t.tiers.length > 0,
+  )
+  if (msTerms.length === 0) return null
+  const vendorIds = contractVendorIds(contract)
+  if (vendorIds.length === 0) return null
+
+  const shareByMonth = new Map<string, number>()
+  const windowEnds: MarketShareDisplayData["windowEnds"] = []
+  for (const term of msTerms) {
+    const grid = buildThresholdEvaluationWindows({
+      contractEffectiveDate: contract.effectiveDate,
+      contractExpirationDate: contract.expirationDate,
+      effectiveStart: term.effectiveStart ?? null,
+      effectiveEnd: term.effectiveEnd ?? null,
+      evaluationPeriod: term.evaluationPeriod ?? null,
+    })
+    if (!grid) continue
+    // Closed windows (the writer's buckets) + the currently-running tail
+    // window when it has started — its share is the to-date share (the
+    // helper's COG queries are clamped at grid.end).
+    const windows = [...grid.windows]
+    if (
+      grid.openTail &&
+      grid.openTail.periodStart.getTime() <= grid.end.getTime()
+    ) {
+      windows.push(grid.openTail)
+    }
+    if (windows.length === 0) continue
+    // Same category scoping the threshold dispatcher feeds the writer
+    // (`recompute-accrual.ts`): explicit term categories, else the
+    // contract's product category name.
+    const scopedCategoryNames =
+      term.appliesTo === "specific_category" &&
+      Array.isArray(term.categories) &&
+      term.categories.length > 0
+        ? Array.from(new Set(term.categories))
+        : contract.productCategory?.name
+          ? [contract.productCategory.name]
+          : []
+    const windowShares = await computePerPeriodMarketShare({
+      facilityId,
+      vendorIds,
+      scopedCategoryNames,
+      windows,
+      queryStart: grid.start,
+      queryEnd: grid.end,
+    })
+    const thresholdTiers: RebateTier[] = term.tiers.map((t) => ({
+      tierNumber: t.tierNumber,
+      tierName: t.tierName ?? null,
+      thresholdMin: Number(t.spendMin ?? 0),
+      thresholdMax:
+        t.spendMax === null || t.spendMax === undefined
+          ? null
+          : Number(t.spendMax),
+      // Unused for tier SELECTION; the display rate comes from
+      // resolveOverlayTierRate so dollar payouts never render as %.
+      rebateValue: Number(t.rebateValue ?? 0),
+    }))
+    for (let i = 0; i < windows.length; i++) {
+      const w = windows[i]
+      const share = windowShares[i]?.share ?? 0
+      const achieved = determineTier(share, thresholdTiers, "EXCLUSIVE")
+      const tierAchieved = achieved?.tierNumber ?? 0
+      const rebatePercent = resolveOverlayTierRate(term, tierAchieved)
+      const last = new Date(
+        Math.min(w.periodEnd.getTime(), grid.end.getTime()),
+      )
+      const cursor = new Date(
+        Date.UTC(
+          w.periodStart.getUTCFullYear(),
+          w.periodStart.getUTCMonth(),
+          1,
+        ),
+      )
+      const lastMonth = new Date(
+        Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), 1),
+      )
+      let endMonthKey: string | null = null
+      while (cursor <= lastMonth) {
+        const key = `${cursor.getUTCFullYear()}-${String(
+          cursor.getUTCMonth() + 1,
+        ).padStart(2, "0")}`
+        // Multi-market-share contracts: later terms win on collisions —
+        // the column carries one number per month.
+        shareByMonth.set(key, share)
+        endMonthKey = key
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+      }
+      if (endMonthKey) {
+        windowEnds.push({
+          termId: term.id,
+          month: endMonthKey,
+          share,
+          tierAchieved,
+          rebatePercent,
+        })
+      }
+    }
+  }
+  return { shareByMonth, windowEnds }
 }
 
 /**

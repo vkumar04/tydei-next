@@ -622,3 +622,242 @@ describe("getAccrualTimeline — in-progress volume accrual (bug-bash 2026-06-11
     expect(total).toBeCloseTo(82_500, 6)
   })
 })
+
+// bugs.rtfd 2026-06-13 V (prod cmqbcw4wd00040ypgudy9modb): the displayed
+// Tier / Rate for volume terms came from the DOLLAR tier walk — cumulative
+// SPEND compared against UNIT thresholds stored in spendMin/spendMax. A
+// 2026 window with 3,873 cumulative units (correctly accruing $5/unit via
+// the F2 path) displayed "Tier 2 · $7.00 / unit" because $2.4M spend ≥
+// "5001". Display must derive from window-cumulative UNITS via the
+// writer's own `selectAchievedVolumeTier`.
+describe("getAccrualTimeline — volume Tier/Rate display derives from UNITS (bugs.rtfd 2026-06-13 V)", () => {
+  // The prod ladder shape: unit thresholds stored ONLY in spendMin /
+  // spendMax (legacy rows — no volumeMin/volumeMax), $/unit payouts.
+  const unitTiers = [
+    {
+      tierNumber: 1,
+      tierName: null,
+      spendMin: 0,
+      spendMax: 5000,
+      rebateValue: 5,
+      rebateType: "fixed_rebate_per_unit",
+    },
+    {
+      tierNumber: 2,
+      tierName: null,
+      spendMin: 5001,
+      spendMax: null,
+      rebateValue: 7,
+      rebateType: "fixed_rebate_per_unit",
+    },
+  ]
+  const annualUnitTerm = {
+    id: "term-1",
+    termType: "volume_rebate",
+    termName: "Annual Volume Rebate",
+    appliesTo: "all_products",
+    categories: [],
+    cptCodes: [],
+    rebateMethod: "cumulative" as const,
+    evaluationPeriod: "annual",
+    effectiveStart: null,
+    effectiveEnd: null,
+    createdAt: new Date("2024-01-01T00:00:00Z"),
+    tiers: unitTiers,
+  }
+
+  type Row = {
+    month: string
+    accruedAmount: number
+    tierAchieved: number
+    achievedRebateType: string | null
+    achievedRebateValue: number
+    isPeriodSubtotal?: boolean
+    termContributions: Array<{
+      termIndex: number
+      accruedAmount: number
+      tierAchieved: number
+      rebatePercent: number
+    }>
+  }
+  const allRows = (result: { rows: unknown }): Row[] => result.rows as Row[]
+  const monthlyRows = (result: { rows: unknown }): Row[] =>
+    allRows(result).filter((r) => !r.isPeriodSubtotal)
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("open window at 3,873 cumulative units displays tier 1 / $5 per unit — NOT the dollar walk's tier 2 / $7", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-04-15T12:00:00Z"))
+
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      effectiveDate: new Date("2026-01-01T00:00:00Z"),
+      expirationDate: new Date("2026-12-31T00:00:00Z"),
+      terms: [annualUnitTerm],
+    })
+    // Dollar spend is HUGE relative to the unit thresholds — the dollar
+    // walk reads $2.4M ≥ "5001" → tier 2, the prod bug.
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date("2026-01-15T00:00:00Z"),
+        extendedPrice: 800_000,
+        quantity: 1000,
+        category: null,
+      },
+      {
+        transactionDate: new Date("2026-02-15T00:00:00Z"),
+        extendedPrice: 800_000,
+        quantity: 1000,
+        category: null,
+      },
+      {
+        transactionDate: new Date("2026-03-15T00:00:00Z"),
+        extendedPrice: 800_000,
+        quantity: 1873,
+        category: null,
+      },
+    ])
+    rebateFindManyMock.mockResolvedValue([]) // open window — nothing persisted
+
+    const result = await getAccrualTimeline("c-1")
+    const rows = monthlyRows(result)
+
+    for (const m of ["2026-01", "2026-02", "2026-03", "2026-04"]) {
+      const row = rows.find((r) => r.month === m)
+      expect(row?.tierAchieved).toBe(1)
+      expect(row?.achievedRebateType).toBe("fixed_rebate_per_unit")
+      expect(row?.achievedRebateValue).toBe(5) // NOT 7
+    }
+    // Accrual stays the F2 $5/unit deltas (units × $5 at tier 1).
+    expect(rows.find((r) => r.month === "2026-01")?.accruedAmount).toBeCloseTo(
+      5000,
+      6,
+    )
+    expect(rows.find((r) => r.month === "2026-02")?.accruedAmount).toBeCloseTo(
+      5000,
+      6,
+    )
+    expect(rows.find((r) => r.month === "2026-03")?.accruedAmount).toBeCloseTo(
+      9365,
+      6,
+    )
+    const total = rows.reduce((s, r) => s + r.accruedAmount, 0)
+    expect(total).toBeCloseTo(19_365, 6) // 3,873 × $5
+  })
+
+  it("closed 2024 window (7,755 units · persisted $54,285) displays tier 2 / $7 per unit on its months + subtotal", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-04-15T12:00:00Z"))
+
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      effectiveDate: new Date("2024-01-01T00:00:00Z"),
+      expirationDate: new Date("2026-12-31T00:00:00Z"),
+      terms: [annualUnitTerm],
+    })
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date("2024-01-15T00:00:00Z"),
+        extendedPrice: 900_000,
+        quantity: 3000,
+        category: null,
+      },
+      {
+        transactionDate: new Date("2024-03-15T00:00:00Z"),
+        extendedPrice: 1_500_000,
+        quantity: 4755,
+        category: null,
+      },
+    ])
+    // The writer's closed-window row: 7,755 × $7 = $54,285. Volume notes
+    // carry no `tier N` — the display tier must come from the units.
+    rebateFindManyMock.mockResolvedValue([
+      {
+        rebateEarned: 54_285,
+        payPeriodEnd: new Date("2024-12-31T23:59:59Z"),
+        notes: "[auto-volume-accrual] term:term-1 · 7755 units · $54285.00",
+      },
+    ])
+
+    const result = await getAccrualTimeline("c-1")
+    const rows = monthlyRows(result)
+
+    // Before the crossing: window-cumulative 3,000 units → tier 1 / $5.
+    const jan = rows.find((r) => r.month === "2024-01")
+    expect(jan?.tierAchieved).toBe(1)
+    expect(jan?.achievedRebateValue).toBe(5)
+    // March crosses 5,001 (7,755 window units) → tier 2 / $7 from there.
+    const mar = rows.find((r) => r.month === "2024-03")
+    expect(mar?.tierAchieved).toBe(2)
+    expect(mar?.achievedRebateValue).toBe(7)
+    // The window-close month carries the persisted accrual AND the
+    // unit-derived tier 2 / $7 — matching the $54,285 = 7,755 × $7 math.
+    const dec = rows.find((r) => r.month === "2024-12")
+    expect(dec?.accruedAmount).toBe(54_285)
+    expect(dec?.tierAchieved).toBe(2)
+    expect(dec?.achievedRebateType).toBe("fixed_rebate_per_unit")
+    expect(dec?.achievedRebateValue).toBe(7)
+    // Overlay contribution picks up the units-derived tier (notes have none).
+    expect(dec?.termContributions).toEqual([
+      expect.objectContaining({ termIndex: 0, accruedAmount: 54_285, tierAchieved: 2 }),
+    ])
+    // The 2024 period subtotal settles at tier 2 / $7 too.
+    const subtotal = allRows(result).find(
+      (r) => r.isPeriodSubtotal && r.month === "2024",
+    )
+    expect(subtotal?.tierAchieved).toBe(2)
+    expect(subtotal?.achievedRebateValue).toBe(7)
+    expect(subtotal?.accruedAmount).toBe(54_285)
+    // Nothing double-counts: lifetime total = the persisted row only.
+    const total = rows.reduce((s, r) => s + r.accruedAmount, 0)
+    expect(total).toBeCloseTo(54_285, 6)
+  })
+
+  it("mid-window unit crossing flips the displayed tier to 2 / $7 from that month on", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-04-15T12:00:00Z"))
+
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      effectiveDate: new Date("2026-01-01T00:00:00Z"),
+      expirationDate: new Date("2026-12-31T00:00:00Z"),
+      terms: [annualUnitTerm],
+    })
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date("2026-01-15T00:00:00Z"),
+        extendedPrice: 800_000,
+        quantity: 3000,
+        category: null,
+      },
+      {
+        transactionDate: new Date("2026-02-15T00:00:00Z"),
+        extendedPrice: 800_000,
+        quantity: 2500, // window-cumulative 5,500 — crosses 5,001
+        category: null,
+      },
+    ])
+    rebateFindManyMock.mockResolvedValue([])
+
+    const result = await getAccrualTimeline("c-1")
+    const rows = monthlyRows(result)
+
+    const jan = rows.find((r) => r.month === "2026-01")
+    expect(jan?.tierAchieved).toBe(1)
+    expect(jan?.achievedRebateValue).toBe(5)
+    expect(jan?.accruedAmount).toBeCloseTo(15_000, 6) // 3,000 × $5
+    const feb = rows.find((r) => r.month === "2026-02")
+    expect(feb?.tierAchieved).toBe(2)
+    expect(feb?.achievedRebateValue).toBe(7)
+    // Cumulative re-rate delta: 5,500 × $7 − 3,000 × $5 = $23,500.
+    expect(feb?.accruedAmount).toBeCloseTo(23_500, 6)
+    // After the crossing (no new units) the displayed tier STAYS 2 / $7.
+    const mar = rows.find((r) => r.month === "2026-03")
+    expect(mar?.tierAchieved).toBe(2)
+    expect(mar?.achievedRebateValue).toBe(7)
+    expect(mar?.accruedAmount).toBe(0)
+  })
+})

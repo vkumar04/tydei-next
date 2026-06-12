@@ -132,6 +132,203 @@ function addMonthsUTC(d: Date, n: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1))
 }
 
+export interface ThresholdEvaluationWindow {
+  periodStart: Date
+  periodEnd: Date
+}
+
+/**
+ * bugs.rtfd 2026-06-13 M: the writer's evaluation-window grid, extracted
+ * verbatim so `getAccrualTimeline` can render a market-share term's
+ * windows (share + tier + $0 accrual) even when the writer persisted no
+ * rows — a below-lowest-threshold window has `periodPayment = 0` and the
+ * writer's `periodPayment <= 0` gate skips it entirely, which made the
+ * term indistinguishable from broken on the timeline.
+ *
+ * Behavior is byte-identical to the inline code this replaces:
+ *   - start = max(contract effective, term effectiveStart)
+ *   - end   = min(today, endOfDay(contract expiry), endOfDay(term end))
+ *   - grid anchored at the first of start's month, stepping
+ *     `widthMonths(evaluationPeriod)`, 200-iteration guard
+ *   - `windows` holds only CLOSED windows (periodEnd <= end) — exactly
+ *     the buckets the writer emits rows for
+ *   - `openTail` is the first window whose natural periodEnd exceeds
+ *     `end` (where the writer's loop breaks) — display-only callers can
+ *     render its to-date share; the writer ignores it.
+ * Returns null when the clamped window is empty (writer's
+ * `end <= start` early return).
+ */
+export function buildThresholdEvaluationWindows(input: {
+  contractEffectiveDate: Date
+  contractExpirationDate: Date
+  effectiveStart: Date | null
+  effectiveEnd: Date | null
+  evaluationPeriod: string | null
+  today?: Date
+}): {
+  start: Date
+  end: Date
+  windows: ThresholdEvaluationWindow[]
+  openTail: ThresholdEvaluationWindow | null
+} | null {
+  const today = input.today ?? new Date()
+  const start = new Date(
+    Math.max(
+      input.contractEffectiveDate.getTime(),
+      input.effectiveStart?.getTime() ?? -Infinity,
+    ),
+  )
+  // Push date-only bounds to end-of-day so a period whose periodEnd
+  // is the same calendar day as the contract/term expiration still
+  // counts as in-window (see the original writer comment).
+  const endOfDay = (d: Date) =>
+    new Date(
+      Date.UTC(
+        d.getUTCFullYear(),
+        d.getUTCMonth(),
+        d.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
+    )
+  const end = new Date(
+    Math.min(
+      today.getTime(),
+      endOfDay(input.contractExpirationDate).getTime(),
+      input.effectiveEnd ? endOfDay(input.effectiveEnd).getTime() : Infinity,
+    ),
+  )
+  if (end.getTime() <= start.getTime()) return null
+
+  const width = widthMonths(input.evaluationPeriod)
+  const firstWindowStart = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
+  )
+  const windows: ThresholdEvaluationWindow[] = []
+  let openTail: ThresholdEvaluationWindow | null = null
+  let cursor = firstWindowStart
+  for (let iter = 0; iter < 200; iter++) {
+    const next = addMonthsUTC(cursor, width)
+    const periodEnd = new Date(next.getTime() - 1)
+    if (periodEnd.getTime() > end.getTime()) {
+      // The writer breaks here — this window is unclosed/unpersisted.
+      openTail = { periodStart: cursor, periodEnd }
+      break
+    }
+    windows.push({ periodStart: cursor, periodEnd })
+    cursor = next
+  }
+  return { start, end, windows, openTail }
+}
+
+/**
+ * Canonical per-period market-share computation (bugs.rtfd 2026-06-13 M).
+ *
+ * Extracted from `recomputeThresholdAccrualForTerm`'s per-period branch
+ * (2026-06-09 fix) so the writer AND `getAccrualTimeline`'s display
+ * overlay compute the share through ONE code path — the drift class this
+ * repo fights. Behavior is byte-identical to the inline code:
+ *   - one vendor-set numerator query + one facility-wide denominator
+ *     query, both scoped to the same canonical category union
+ *     (`expandCategoriesToCogVariants` over the facility's COG category
+ *     universe — never a raw case-sensitive `in`)
+ *   - multi-category terms use the COMBINED union spend on both sides
+ *     (total vendor spend across all scoped categories ÷ total facility
+ *     spend across the same union — never a per-category average and
+ *     never just the first category)
+ *   - in-memory partition of the fetched rows per evaluation window.
+ *
+ * `queryStart` / `queryEnd` are the writer's gte/lte clamps (its `start`
+ * / `end`); pass `buildThresholdEvaluationWindows(...).start/.end` so
+ * rows before the term's clamped start don't leak into the first
+ * window's sums. Defaults to the windows' min/max when omitted.
+ */
+export async function computePerPeriodMarketShare(input: {
+  facilityId: string
+  vendorIds: string[]
+  scopedCategoryNames: string[]
+  windows: ThresholdEvaluationWindow[]
+  queryStart?: Date
+  queryEnd?: Date
+}): Promise<Array<{ share: number; vendorSpend: number; marketSpend: number }>> {
+  const { facilityId, vendorIds, scopedCategoryNames, windows } = input
+  if (windows.length === 0) return []
+  const queryStart =
+    input.queryStart ??
+    new Date(Math.min(...windows.map((w) => w.periodStart.getTime())))
+  const queryEnd =
+    input.queryEnd ??
+    new Date(Math.max(...windows.map((w) => w.periodEnd.getTime())))
+
+  const categoryFilter = await buildScopedCategoryFilter(
+    facilityId,
+    scopedCategoryNames,
+  )
+  const [vendorRows, facilityRows] = await Promise.all([
+    prisma.cOGRecord.findMany({
+      where: {
+        facilityId,
+        // #2: group-aware — spans the contract's full vendor set.
+        vendorId: { in: vendorIds },
+        transactionDate: { gte: queryStart, lte: queryEnd },
+        ...categoryFilter,
+      },
+      select: { transactionDate: true, extendedPrice: true },
+    }),
+    prisma.cOGRecord.findMany({
+      where: {
+        facilityId,
+        transactionDate: { gte: queryStart, lte: queryEnd },
+        ...categoryFilter,
+      },
+      select: { transactionDate: true, extendedPrice: true },
+    }),
+  ])
+  const sumInWindow = (
+    rows: Array<{ transactionDate: Date; extendedPrice: unknown }>,
+    ps: Date,
+    pe: Date,
+  ): number => {
+    let s = 0
+    for (const row of rows) {
+      const t = row.transactionDate.getTime()
+      if (t < ps.getTime() || t > pe.getTime()) continue
+      s += row.extendedPrice == null ? 0 : Number(row.extendedPrice)
+    }
+    return s
+  }
+  return windows.map((w) => {
+    const vendorSpend = sumInWindow(vendorRows, w.periodStart, w.periodEnd)
+    const marketSpend = sumInWindow(facilityRows, w.periodStart, w.periodEnd)
+    return {
+      share: marketSpend > 0 ? (vendorSpend / marketSpend) * 100 : 0,
+      vendorSpend,
+      marketSpend,
+    }
+  })
+}
+
+/**
+ * Canonical category scoping for the threshold writer's COG queries
+ * (2026-06-10 fix — was a raw case-sensitive `in`, see the invariants
+ * table). Shared by `computePerPeriodMarketShare` and the legacy scalar
+ * percent-of-spend fallback below.
+ */
+async function buildScopedCategoryFilter(
+  facilityId: string,
+  scopedCategoryNames: string[],
+): Promise<Record<string, never> | { category: { in: string[] } }> {
+  if (scopedCategoryNames.length === 0) return {}
+  const universe = await facilityCogCategoryUniverse(facilityId)
+  return {
+    category: {
+      in: expandCategoriesToCogVariants(scopedCategoryNames, universe),
+    },
+  }
+}
+
 export async function recomputeThresholdAccrualForTerm(input: {
   contractId: string
   facilityId: string
@@ -176,40 +373,20 @@ export async function recomputeThresholdAccrualForTerm(input: {
     return { inserted: 0, sumEarned: 0 }
   }
 
-  const today = new Date()
-  const start = new Date(
-    Math.max(
-      input.contractEffectiveDate.getTime(),
-      term.effectiveStart?.getTime() ?? -Infinity,
-    ),
-  )
-  // Push date-only bounds to end-of-day so a period whose periodEnd
-  // is the same calendar day as the contract/term expiration still
-  // counts as in-window. Without this an annual contract from
-  // 2025-01-01 through 2025-12-31 emits 0 buckets because
-  // periodEnd = 2025-12-31T23:59:59.999 > end = 2025-12-31T00:00:00.
-  const endOfDay = (d: Date) =>
-    new Date(
-      Date.UTC(
-        d.getUTCFullYear(),
-        d.getUTCMonth(),
-        d.getUTCDate(),
-        23,
-        59,
-        59,
-        999,
-      ),
-    )
-  const end = new Date(
-    Math.min(
-      today.getTime(),
-      endOfDay(input.contractExpirationDate).getTime(),
-      term.effectiveEnd ? endOfDay(term.effectiveEnd).getTime() : Infinity,
-    ),
-  )
-  if (end.getTime() <= start.getTime()) {
+  // bugs.rtfd 2026-06-13 M: clamp + window grid now live in
+  // `buildThresholdEvaluationWindows` (shared with the timeline's
+  // market-share display overlay). Same dates, same guard.
+  const grid = buildThresholdEvaluationWindows({
+    contractEffectiveDate: input.contractEffectiveDate,
+    contractExpirationDate: input.contractExpirationDate,
+    effectiveStart: term.effectiveStart,
+    effectiveEnd: term.effectiveEnd,
+    evaluationPeriod: term.evaluationPeriod,
+  })
+  if (!grid) {
     return { inserted: 0, sumEarned: 0 }
   }
+  const { start, end } = grid
 
   // TODO (Charles canonical engine wiring 2026-05-05): the canonical
   // `calculateRebate(SPEND_REBATE)` engine evaluates a single ladder
@@ -282,31 +459,20 @@ export async function recomputeThresholdAccrualForTerm(input: {
     : 0
 
   // Bucket by evaluation period — one row per closed period inside
-  // the contract window.
-  const width = widthMonths(term.evaluationPeriod)
-  const firstWindowStart = new Date(
-    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
-  )
+  // the contract window (grid extracted to
+  // `buildThresholdEvaluationWindows`, bugs.rtfd 2026-06-13 M).
   type BucketResult = {
     periodStart: Date
     periodEnd: Date
     periodPayment: number
     spendInScope: number
   }
-  const results: BucketResult[] = []
-  let cursor = firstWindowStart
-  for (let iter = 0; iter < 200; iter++) {
-    const next = addMonthsUTC(cursor, width)
-    const periodEnd = new Date(next.getTime() - 1)
-    if (periodEnd.getTime() > end.getTime()) break
-    results.push({
-      periodStart: cursor,
-      periodEnd,
-      periodPayment: flatPerPeriodPayment,
-      spendInScope: 0,
-    })
-    cursor = next
-  }
+  const results: BucketResult[] = grid.windows.map((w) => ({
+    periodStart: w.periodStart,
+    periodEnd: w.periodEnd,
+    periodPayment: flatPerPeriodPayment,
+    spendInScope: 0,
+  }))
 
   // Per-period evaluation for market_share terms (2026-06-09): compute each
   // window's share from COG and qualify ITS tier, instead of stamping the
@@ -329,68 +495,30 @@ export async function recomputeThresholdAccrualForTerm(input: {
       : term.categoryName
         ? [term.categoryName]
         : []
-  const buildScopedCategoryFilter = async (): Promise<
-    Record<string, never> | { category: { in: string[] } }
-  > => {
-    if (scopedCategoryNames.length === 0) return {}
-    const universe = await facilityCogCategoryUniverse(facilityId)
-    return {
-      category: {
-        in: expandCategoriesToCogVariants(scopedCategoryNames, universe),
-      },
-    }
-  }
 
   const perBucketShare = new Map<
     number,
     { share: number; tierNumber: number }
   >()
   if (isPerPeriodMarketShare && results.length > 0) {
-    const categoryFilter = await buildScopedCategoryFilter()
+    // bugs.rtfd 2026-06-13 M: the two-query union + per-window partition
+    // now lives in `computePerPeriodMarketShare` (shared with the
+    // timeline display path). Same queries, same clamps, same math.
     const vendorIdSet = term.vendorIds ?? (term.vendorId ? [term.vendorId] : [])
-    const [vendorRows, facilityRows] = await Promise.all([
-      prisma.cOGRecord.findMany({
-        where: {
-          facilityId,
-          // #2: group-aware — spans the contract's full vendor set.
-          vendorId: { in: vendorIdSet },
-          transactionDate: { gte: start, lte: end },
-          ...categoryFilter,
-        },
-        select: { transactionDate: true, extendedPrice: true },
-      }),
-      prisma.cOGRecord.findMany({
-        where: {
-          facilityId,
-          transactionDate: { gte: start, lte: end },
-          ...categoryFilter,
-        },
-        select: { transactionDate: true, extendedPrice: true },
-      }),
-    ])
-    const sumInWindow = (
-      rows: Array<{ transactionDate: Date; extendedPrice: unknown }>,
-      ps: Date,
-      pe: Date,
-    ): number => {
-      let s = 0
-      for (const row of rows) {
-        const t = row.transactionDate.getTime()
-        if (t < ps.getTime() || t > pe.getTime()) continue
-        s += row.extendedPrice == null ? 0 : Number(row.extendedPrice)
-      }
-      return s
-    }
+    const windowShares = await computePerPeriodMarketShare({
+      facilityId,
+      vendorIds: vendorIdSet,
+      scopedCategoryNames,
+      windows: results.map((r) => ({
+        periodStart: r.periodStart,
+        periodEnd: r.periodEnd,
+      })),
+      queryStart: start,
+      queryEnd: end,
+    })
     for (let i = 0; i < results.length; i++) {
       const r = results[i]
-      const vendorSpend = sumInWindow(vendorRows, r.periodStart, r.periodEnd)
-      const facilitySpend = sumInWindow(
-        facilityRows,
-        r.periodStart,
-        r.periodEnd,
-      )
-      const windowShare =
-        facilitySpend > 0 ? (vendorSpend / facilitySpend) * 100 : 0
+      const { share: windowShare, vendorSpend } = windowShares[i]
       const windowAchieved = determineTier(windowShare, tiers, "EXCLUSIVE")
       perBucketShare.set(i, {
         share: windowShare,
@@ -414,7 +542,10 @@ export async function recomputeThresholdAccrualForTerm(input: {
     // Fallback (vendor info missing from the per-period path): the legacy
     // scalar percent-of-spend branch — Bug #21 math. Same canonical
     // category expansion as the per-period path (2026-06-10).
-    const categoryFilter = await buildScopedCategoryFilter()
+    const categoryFilter = await buildScopedCategoryFilter(
+      facilityId,
+      scopedCategoryNames,
+    )
     const cogRows = await prisma.cOGRecord.findMany({
       where: {
         facilityId,

@@ -952,8 +952,16 @@ describe("getAccrualTimeline — market-share-only contracts (bugs.rtfd 2026-06-
 
     await getAccrualTimeline("c-1")
 
-    expect(cogFindManyMock).toHaveBeenCalledTimes(1)
-    const where = cogFindManyMock.mock.calls[0][0]?.where
+    // bugs.rtfd 2026-06-13 M: the timeline now ALSO computes the
+    // per-window market share through the writer's canonical helper
+    // (vendor numerator + facility denominator = 2 extra queries), so
+    // target the spend-series union fetch by its category select — the
+    // share queries select only transactionDate + extendedPrice.
+    const unionCalls = cogFindManyMock.mock.calls.filter(
+      (c) => c[0]?.select?.category === true,
+    )
+    expect(unionCalls).toHaveLength(1)
+    const where = unionCalls[0][0]?.where
     // Group-aware vendor set (never bare vendorId — recurring drift class).
     expect(where?.vendorId).toEqual({ in: ["v-1"] })
     // Category scope flows through buildUnionCategoryWhereClause.
@@ -1001,6 +1009,265 @@ describe("getAccrualTimeline — market-share-only contracts (bugs.rtfd 2026-06-
     expect(jun?.cumulativeSpend).toBe(50_000)
     expect(jul?.cumulativeSpend).toBe(70_000)
     expect(jun?.accruedAmount).toBeCloseTo(4500, 2)
+  })
+})
+
+// bugs.rtfd 2026-06-13 M (Charles "Spend term with a market share term.
+// Not showing the market share calculations. Should be showing a 7% rebate
+// as well there. Also show the market share at the time of rebate in a
+// column"): two visibility gaps —
+//   (a) a window whose share sits below the lowest tier threshold pays $0,
+//       the writer persists NO row (`periodPayment <= 0` gate), and the
+//       term vanished from the timeline entirely;
+//   (b) no per-period share was surfaced anywhere.
+describe("getAccrualTimeline — market-share visibility + share column (bugs.rtfd 2026-06-13 M)", () => {
+  const spendTerm = {
+    id: "term-spend",
+    termType: "spend_rebate",
+    termName: "Annual Spend Rebate",
+    appliesTo: "all_products",
+    categories: [],
+    cptCodes: [],
+    rebateMethod: "cumulative" as const,
+    evaluationPeriod: "monthly",
+    effectiveStart: null,
+    effectiveEnd: null,
+    createdAt: new Date("2025-01-01T00:00:00Z"),
+    tiers: [
+      {
+        tierNumber: 1,
+        tierName: null,
+        spendMin: 0,
+        spendMax: null,
+        rebateValue: 0.02,
+        rebateType: "percent_of_spend",
+      },
+    ],
+  }
+  /** Market-share term, Bug #21 shape: spendMin = PERCENT threshold,
+   * rebateValue = FRACTION of in-scope spend (0.07 → Charles's "7%"). */
+  const msTerm = (thresholdPercent: number) => ({
+    id: "term-ms",
+    termType: "market_share",
+    termName: "Market Share Rebate",
+    appliesTo: "all_products",
+    categories: [],
+    cptCodes: [],
+    rebateMethod: "cumulative" as const,
+    evaluationPeriod: "annual",
+    effectiveStart: null,
+    effectiveEnd: null,
+    createdAt: new Date("2025-01-02T00:00:00Z"),
+    tiers: [
+      {
+        tierNumber: 1,
+        tierName: null,
+        spendMin: thresholdPercent,
+        spendMax: null,
+        rebateValue: 0.07,
+        rebateType: "percent_of_spend",
+      },
+    ],
+  })
+
+  /** DB-faithful COG mock: honors the vendorId filter so the share
+   * helper's vendor numerator (v-1 only) differs from its facility-wide
+   * denominator. */
+  const installCogRows = (
+    rows: Array<{
+      vendorId: string
+      transactionDate: Date
+      extendedPrice: number
+      category: string | null
+    }>,
+  ) => {
+    cogFindManyMock.mockImplementation(
+      async (args: { where?: { vendorId?: { in: string[] } } }) => {
+        const vendorFilter = args?.where?.vendorId
+        return rows.filter(
+          (r) => !vendorFilter || vendorFilter.in.includes(r.vendorId),
+        )
+      },
+    )
+  }
+
+  type Row = {
+    month: string
+    accruedAmount: number
+    marketSharePercent: number | null
+    termContributions: Array<{
+      termIndex: number
+      accruedAmount: number
+      tierAchieved: number
+      rebatePercent: number
+    }>
+  }
+
+  it("below-threshold share: term label + $0 window contribution + share column all render despite ZERO persisted rows", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [spendTerm, msTerm(70)],
+    })
+    // Vendor share = 30,000 / 100,000 = 30% — below the 70% threshold, so
+    // the writer persisted nothing (the prod invisibility case).
+    installCogRows([
+      {
+        vendorId: "v-1",
+        transactionDate: new Date("2025-01-15T00:00:00Z"),
+        extendedPrice: 30_000,
+        category: null,
+      },
+      {
+        vendorId: "v-other",
+        transactionDate: new Date("2025-01-20T00:00:00Z"),
+        extendedPrice: 70_000,
+        category: null,
+      },
+    ])
+    rebateFindManyMock.mockResolvedValue([])
+
+    const result = await getAccrualTimeline("c-1")
+
+    // (a) The market-share term is named in termLabels even with no rows.
+    expect(
+      result.termLabels.map((l: { termName: string }) => l.termName),
+    ).toEqual(["Annual Spend Rebate", "Market Share Rebate"])
+
+    const rows = result.rows as unknown as Row[]
+    // (b) Every month carries its window's share (30.0%).
+    for (const m of ["2025-01", "2025-02", "2025-06"]) {
+      expect(rows.find((r) => r.month === m)?.marketSharePercent).toBeCloseTo(
+        30,
+        5,
+      )
+    }
+    // The window-end month (horizon-clamped: contract expires 2025-06-30)
+    // carries a $0 contribution — tier 0 → rate 0 → the UI's "—".
+    const jun = rows.find((r) => r.month === "2025-06")
+    const ms = jun?.termContributions.find((c) => c.termIndex === 1)
+    expect(ms).toEqual({
+      termIndex: 1,
+      accruedAmount: 0,
+      tierAchieved: 0,
+      rebatePercent: 0,
+    })
+    // Display only — no phantom dollars anywhere.
+    const msTotal = rows.reduce(
+      (s, r) =>
+        s +
+        r.termContributions
+          .filter((c) => c.termIndex === 1)
+          .reduce((s2, c) => s2 + c.accruedAmount, 0),
+      0,
+    )
+    expect(msTotal).toBe(0)
+  })
+
+  it("above-threshold share with no persisted row yet: window contribution shows tier 1 · 7% (Charles's missing rate)", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [spendTerm, msTerm(70)],
+    })
+    // Vendor share = 80,000 / 100,000 = 80% — qualifies tier 1 (7%).
+    installCogRows([
+      {
+        vendorId: "v-1",
+        transactionDate: new Date("2025-01-15T00:00:00Z"),
+        extendedPrice: 80_000,
+        category: null,
+      },
+      {
+        vendorId: "v-other",
+        transactionDate: new Date("2025-01-20T00:00:00Z"),
+        extendedPrice: 20_000,
+        category: null,
+      },
+    ])
+    rebateFindManyMock.mockResolvedValue([])
+
+    const result = await getAccrualTimeline("c-1")
+    const rows = result.rows as unknown as Row[]
+    expect(rows.find((r) => r.month === "2025-03")?.marketSharePercent).toBeCloseTo(
+      80,
+      5,
+    )
+    const jun = rows.find((r) => r.month === "2025-06")
+    const ms = jun?.termContributions.find((c) => c.termIndex === 1)
+    expect(ms).toMatchObject({
+      termIndex: 1,
+      accruedAmount: 0, // display-only — earned dollars stay writer-owned
+      tierAchieved: 1,
+    })
+    // 0.07 fraction → 7% via resolveOverlayTierRate.
+    expect(ms?.rebatePercent).toBeCloseTo(7, 5)
+  })
+
+  it("persisted writer rows stay authoritative — no duplicate window-end contribution", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [spendTerm, msTerm(70)],
+    })
+    installCogRows([
+      {
+        vendorId: "v-1",
+        transactionDate: new Date("2025-01-15T00:00:00Z"),
+        extendedPrice: 80_000,
+        category: null,
+      },
+      {
+        vendorId: "v-other",
+        transactionDate: new Date("2025-01-20T00:00:00Z"),
+        extendedPrice: 20_000,
+        category: null,
+      },
+    ])
+    // Writer row landing in the SAME month the display pass targets
+    // (the horizon-clamped window end, 2025-06).
+    rebateFindManyMock.mockResolvedValue([
+      {
+        rebateEarned: 5600,
+        payPeriodEnd: new Date("2025-06-30T00:00:00Z"),
+        notes:
+          "[auto-threshold-accrual] term:term-ms · currentMarketShare=80.0% (period) · tier 1 · spend=$80000.00 → $5600.00",
+      },
+    ])
+
+    const result = await getAccrualTimeline("c-1")
+    const rows = result.rows as unknown as Row[]
+    const jun = rows.find((r) => r.month === "2025-06")
+    const msContributions = jun?.termContributions.filter(
+      (c) => c.termIndex === 1,
+    )
+    // Exactly ONE contribution — the ledger row, not a display duplicate.
+    expect(msContributions).toHaveLength(1)
+    expect(msContributions?.[0]).toMatchObject({
+      termIndex: 1,
+      accruedAmount: 5600,
+      tierAchieved: 1,
+    })
+    expect(msContributions?.[0]?.rebatePercent).toBeCloseTo(7, 5)
+  })
+
+  it("contracts without a market_share term keep marketSharePercent null on every row", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      terms: [spendTerm],
+    })
+    cogFindManyMock.mockResolvedValue([
+      {
+        transactionDate: new Date("2025-01-15T00:00:00Z"),
+        extendedPrice: 10_000,
+        category: null,
+      },
+    ])
+    rebateFindManyMock.mockResolvedValue([])
+
+    const result = await getAccrualTimeline("c-1")
+    const rows = result.rows as unknown as Row[]
+    expect(rows.length).toBeGreaterThan(0)
+    for (const r of rows) {
+      expect(r.marketSharePercent).toBeNull()
+    }
   })
 })
 

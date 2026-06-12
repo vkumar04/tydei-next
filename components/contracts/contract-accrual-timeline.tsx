@@ -98,6 +98,17 @@ export function ContractAccrualTimeline({
   const isVolumeRebate =
     "isVolumeRebate" in data ? Boolean(data.isVolumeRebate) : false
 
+  // bugs.rtfd 2026-06-13 M (Charles "show the market share at the time of
+  // rebate in a column"): rows on market-share contracts carry the share
+  // of the evaluation window each month belongs to. Render the column
+  // only when at least one row has a value.
+  const rowMarketShare = (row: (typeof data.rows)[number]): number | null => {
+    const v = (row as unknown as { marketSharePercent?: number | null })
+      .marketSharePercent
+    return v == null ? null : Number(v)
+  }
+  const hasMarketShare = data.rows.some((r) => rowMarketShare(r) != null)
+
   // Bug 3 / leftover from bug #16: the Rate column previously rendered
   // "—" for any non-percent tier. Surface a clean label for each
   // rebate type so users can read what they're earning at a glance.
@@ -153,6 +164,9 @@ export function ContractAccrualTimeline({
                 {isVolumeRebate && (
                   <th className="py-2 text-right font-medium">Volume (units)</th>
                 )}
+                {hasMarketShare && (
+                  <th className="py-2 text-right font-medium">Market Share</th>
+                )}
                 <th className="py-2 text-center font-medium">Tier</th>
                 <th className="py-2 text-right font-medium">Rate</th>
                 <th className="py-2 text-right font-medium">Accrued</th>
@@ -194,6 +208,13 @@ export function ContractAccrualTimeline({
                             (row as unknown as { volume?: number }).volume ?? 0,
                           ),
                         )}
+                      </td>
+                    )}
+                    {hasMarketShare && (
+                      <td className="py-2 text-right tabular-nums">
+                        {rowMarketShare(row) != null
+                          ? `${(rowMarketShare(row) as number).toFixed(1)}%`
+                          : "—"}
                       </td>
                     )}
                     <td className="py-2 text-center">
@@ -272,7 +293,10 @@ export function ContractAccrualTimeline({
             </tbody>
             <tfoot>
               <tr className="border-t font-medium">
-                <td colSpan={isVolumeRebate ? 6 : 5} className="py-2 text-right text-xs text-muted-foreground">
+                <td
+                  colSpan={5 + (isVolumeRebate ? 1 : 0) + (hasMarketShare ? 1 : 0)}
+                  className="py-2 text-right text-xs text-muted-foreground"
+                >
                   Latest cumulative spend: {formatCurrency(Number(latest.cumulativeSpend))}
                 </td>
                 <td className="py-2 text-right tabular-nums">
