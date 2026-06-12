@@ -16,7 +16,7 @@
  * auto-derived from the extracted contract.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Card,
   CardContent,
@@ -45,7 +45,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
+  AlertTriangle,
   FileSpreadsheet,
   FileText,
   Loader2,
@@ -75,9 +77,15 @@ import { ProposalReportPrint } from "./proposal-report-print"
 import {
   getVendorLookbackComparison,
   type AnalyzeProposalInput,
+  type LookbackExtractedTier,
   type VendorLookbackComparison,
 } from "@/lib/actions/prospective-analysis"
 import { getCogPricingBenchmarks } from "@/lib/actions/prospective"
+import {
+  matchVendorOptionByName,
+  resolveAnalysisVendorId,
+  vendorNamesLooselyMatch,
+} from "@/lib/prospective-analysis/analysis-vendor"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import { readPricingRows, pricingRowsToItems } from "./pricing-file-reader"
 import {
@@ -260,16 +268,146 @@ export function UploadProposalTab({
     useState<PricingFileAnalysis | null>(null)
   const [pricingFileName, setPricingFileName] = useState<string | null>(null)
   const [pricingAnalyzing, setPricingAnalyzing] = useState(false)
+  // Bug-round 2026-06-12 R2: vendor precedence. The PDF-detected vendor name
+  // (raw, from extraction) and the extracted spend tiers are kept so the
+  // lookback can be RE-RUN when the user changes the dropdown after the PDF
+  // already resolved a different vendor — a manual selection wins everywhere.
+  const [detectedVendorName, setDetectedVendorName] = useState<string | null>(
+    null,
+  )
+  const [extractedSpendTiers, setExtractedSpendTiers] = useState<
+    LookbackExtractedTier[] | null
+  >(null)
+  // R2 mismatch guard: set when the price file has lines but ZERO matched the
+  // analysis vendor's COG history. `matchesOtherVendor` = an unscoped probe
+  // found the same SKUs in COG under some other vendor.
+  const [pricingVendorMismatch, setPricingVendorMismatch] = useState<{
+    vendorName: string
+    matchesOtherVendor: boolean
+  } | null>(null)
+  // R2: parsed (pre-join) price-file lines, kept so the COG join can re-run
+  // when the user corrects the Vendor dropdown after the file was analyzed.
+  const [pricingFileItems, setPricingFileItems] = useState<{
+    items: PricingFileItem[]
+    fileName: string
+  } | null>(null)
 
   const analyzeMutation = useAnalyzeProspectiveProposal()
   const clauseMutation = useAnalyzePDFClauses()
   const canonicalMutation = useExtractAndAnalyzeCanonical()
+
+  // ── R2 vendor precedence: manual selection wins; PDF detection fills ──
+  const selectedVendor = useMemo(
+    () => vendors.find((v) => v.id === selectedVendorId) ?? null,
+    [vendors, selectedVendorId],
+  )
+  const analysisVendorId = resolveAnalysisVendorId(
+    selectedVendorId,
+    lookback?.vendorId ?? null,
+  )
+  const analysisVendorName = selectedVendor
+    ? (selectedVendor.displayName ?? selectedVendor.name)
+    : (lookback?.vendorName ?? lastScored?.vendorName ?? null)
+  // PDF detection disagrees with an explicit manual pick → visible notice
+  // instead of a silent override (we analyze as the SELECTION).
+  const vendorConflict = Boolean(
+    selectedVendor &&
+      detectedVendorName &&
+      !vendorNamesLooselyMatch(detectedVendorName, selectedVendor.name) &&
+      !vendorNamesLooselyMatch(detectedVendorName, selectedVendor.displayName),
+  )
+  // Mirror of `selectedVendorId` for async callbacks (the lookback promise
+  // resolves long after launch — the closure value would be stale).
+  const selectedVendorIdRef = useRef(selectedVendorId)
+  selectedVendorIdRef.current = selectedVendorId
 
   // Bumped by Start over (bug-bash C1) so an in-flight analysis promise
   // that resolves AFTER the reset can't repopulate the cleared state —
   // each async path captures the generation at launch and bails if it
   // changed.
   const resetGenRef = useRef(0)
+
+  // R2: which vendor the most recent lookback request was issued for —
+  // stops the re-fetch effect below from retry-looping when a lookback
+  // legitimately resolves to nothing for that selection.
+  const lookbackRequestedVendorRef = useRef<string | null>(null)
+
+  // ── Price file: COG join → variance analysis (re-runnable) ──────────
+  // Which vendor drove the most recent join — lets the re-join effect below
+  // fire only when the analysis vendor actually changed.
+  const lastPricingJoinVendorRef = useRef<string | null>(null)
+  const joinAndAnalyzePricing = useCallback(
+    async (items: PricingFileItem[], fileName: string, gen: number) => {
+      // R2: a manual dropdown selection wins over the PDF-detected vendor
+      // (the old `lookback?.vendorId ?? selectedVendorId` let auto-detect
+      // beat an explicit pick — the DePuy-PDF/Arthrex-selection bug).
+      const vendorIdForJoin = resolveAnalysisVendorId(
+        selectedVendorIdRef.current,
+        lookback?.vendorId ?? null,
+      )
+      lastPricingJoinVendorRef.current = vendorIdForJoin
+      const benchmarks = await getCogPricingBenchmarks({
+        itemNumbers: items.map((i) => i.itemNumber),
+        vendorId: vendorIdForJoin,
+      }).catch((err) => {
+        console.error("[proposal-analyzer] COG benchmark join failed:", err)
+        toast.warning(
+          "Couldn't load COG benchmarks — variance will only use the file's own current-price column.",
+        )
+        return []
+      })
+      const bySku = new Map(benchmarks.map((b) => [b.skuKey, b]))
+      const joined: PricingFileItem[] = items.map((i) => {
+        const b = bySku.get(normalizeSku(i.itemNumber))
+        if (!b) return i
+        return {
+          ...i,
+          currentPrice: b.currentPrice,
+          estimatedAnnualQty: i.estimatedAnnualQty ?? b.annualQty,
+        }
+      })
+      const result = analyzePricingFile(joined)
+
+      // R2 mismatch guard ("require a mapping based on COGs"): the file
+      // has lines but ZERO matched the analysis vendor's COG history —
+      // almost certainly a vendor-selection mix-up. Probe the same SKUs
+      // WITHOUT the vendor filter (the query is already bounded to the
+      // file's SKUs, so the unscoped pass is cheap) to tell "wrong
+      // vendor" apart from "items genuinely absent from COG".
+      let mismatch: { vendorName: string; matchesOtherVendor: boolean } | null =
+        null
+      if (
+        vendorIdForJoin &&
+        result.summary.totalItems > 0 &&
+        result.summary.itemsWithCOGMatch === 0
+      ) {
+        const selected = vendors.find((v) => v.id === vendorIdForJoin)
+        const vendorLabel =
+          selected?.displayName ??
+          selected?.name ??
+          lookback?.vendorName ??
+          "the selected vendor"
+        const unscoped = await getCogPricingBenchmarks({
+          itemNumbers: items.map((i) => i.itemNumber),
+          vendorId: null,
+        }).catch(() => [])
+        mismatch = {
+          vendorName: vendorLabel,
+          matchesOtherVendor: unscoped.length > 0,
+        }
+      }
+
+      if (resetGenRef.current !== gen) return // Start over won the race
+      setPricingVendorMismatch(mismatch)
+      setPricingAnalysis(result)
+      setPricingFileName(fileName)
+      setPricingFileItems({ items, fileName })
+      toast.success(
+        `Price file analyzed — ${result.summary.itemsWithCOGMatch} of ${result.summary.totalItems} lines matched to COG`,
+      )
+    },
+    [lookback?.vendorId, lookback?.vendorName, vendors],
+  )
 
   // ── Price file: parse → COG join → variance analysis ────────────────
   const handlePricingFile = useCallback(
@@ -290,33 +428,7 @@ export function UploadProposalTab({
           )
           return
         }
-        const benchmarks = await getCogPricingBenchmarks({
-          itemNumbers: items.map((i) => i.itemNumber),
-          vendorId: lookback?.vendorId ?? selectedVendorId,
-        }).catch((err) => {
-          console.error("[proposal-analyzer] COG benchmark join failed:", err)
-          toast.warning(
-            "Couldn't load COG benchmarks — variance will only use the file's own current-price column.",
-          )
-          return []
-        })
-        const bySku = new Map(benchmarks.map((b) => [b.skuKey, b]))
-        const joined: PricingFileItem[] = items.map((i) => {
-          const b = bySku.get(normalizeSku(i.itemNumber))
-          if (!b) return i
-          return {
-            ...i,
-            currentPrice: b.currentPrice,
-            estimatedAnnualQty: i.estimatedAnnualQty ?? b.annualQty,
-          }
-        })
-        const result = analyzePricingFile(joined)
-        if (resetGenRef.current !== gen) return // Start over won the race
-        setPricingAnalysis(result)
-        setPricingFileName(file.name)
-        toast.success(
-          `Price file analyzed — ${result.summary.itemsWithCOGMatch} of ${result.summary.totalItems} lines matched to COG`,
-        )
+        await joinAndAnalyzePricing(items, file.name, gen)
       } catch (err) {
         if (resetGenRef.current !== gen) return
         toast.error(err instanceof Error ? err.message : "Price file parse failed")
@@ -324,8 +436,31 @@ export function UploadProposalTab({
         setPricingAnalyzing(false)
       }
     },
-    [lookback?.vendorId, selectedVendorId],
+    [joinAndAnalyzePricing],
   )
+
+  // ── R2: re-run the COG join when the analysis vendor changes ────────
+  // Whoever changed it (manual dropdown correction, or the PDF lookback
+  // resolving after the price file was already analyzed), the pricing
+  // comparison must follow the SAME vendor-precedence rule as everything
+  // else. The ref records which vendor the last join used so this only
+  // fires on a real change.
+  useEffect(() => {
+    if (!pricingFileItems || pricingAnalyzing) return
+    if (lastPricingJoinVendorRef.current === analysisVendorId) return
+    const gen = resetGenRef.current
+    setPricingAnalyzing(true)
+    joinAndAnalyzePricing(pricingFileItems.items, pricingFileItems.fileName, gen)
+      .catch((err) => {
+        if (resetGenRef.current !== gen) return
+        toast.error(
+          err instanceof Error ? err.message : "Price re-analysis failed",
+        )
+      })
+      .finally(() => {
+        if (resetGenRef.current === gen) setPricingAnalyzing(false)
+      })
+  }, [analysisVendorId, pricingFileItems, pricingAnalyzing, joinAndAnalyzePricing])
 
   // ── Manual clause paste (fallback for scanned PDFs) ─────────────────
   const handleAnalyzeClauses = useCallback(async () => {
@@ -448,19 +583,41 @@ export function UploadProposalTab({
         const spendTerms = (extracted.terms ?? []).filter((t) =>
           SPEND_DOLLAR_TERM_TYPES.has(String(t.termType ?? "").trim()),
         )
-        void getVendorLookbackComparison({
-          vendorId: selectedVendorId,
-          vendorName: extracted.vendorName ?? null,
-          extractedTiers: spendTerms.flatMap((t) =>
+        const extractedTiers: LookbackExtractedTier[] = spendTerms.flatMap(
+          (t) =>
             (t.tiers ?? []).map((tier) => ({
               tierNumber: tier.tierNumber,
               spendMin: tier.spendMin ?? 0,
               rebateValue: tier.rebateValue ?? 0,
             })),
-          ),
+        )
+        // R2: keep the detection + tiers around so (a) a PDF-vs-selection
+        // conflict is visible, (b) the lookback can re-run if the user
+        // changes the vendor AFTER this analysis (manual pick wins).
+        setDetectedVendorName(extracted.vendorName?.trim() || null)
+        setExtractedSpendTiers(extractedTiers)
+        // Manual selection wins server-side too: vendorId beats vendorName
+        // in getVendorLookbackComparison's resolution order.
+        lookbackRequestedVendorRef.current = selectedVendorId
+        void getVendorLookbackComparison({
+          vendorId: selectedVendorId,
+          vendorName: extracted.vendorName ?? null,
+          extractedTiers,
         })
           .then((result) => {
-            if (resetGenRef.current === gen) setLookback(result)
+            if (resetGenRef.current !== gen) return
+            setLookback(result)
+            // R2: PDF auto-detection only FILLS THE GAP — and when it does,
+            // reflect it in the dropdown so the user sees which vendor the
+            // analysis is running as (instead of a silent invisible pick).
+            if (!selectedVendorIdRef.current && result.vendorId) {
+              const inList = vendors.some((v) => v.id === result.vendorId)
+              const byName = inList
+                ? null
+                : matchVendorOptionByName(vendors, result.vendorName)
+              if (inList) onVendorChange(result.vendorId)
+              else if (byName) onVendorChange(byName.id)
+            }
           })
           .catch((err) => {
             if (resetGenRef.current !== gen) return
@@ -517,8 +674,10 @@ export function UploadProposalTab({
       variantOverride,
       onPhaseChange,
       onProposalScored,
+      onVendorChange,
       selectedVendorId,
       side,
+      vendors,
     ],
   )
 
@@ -542,6 +701,35 @@ export function UploadProposalTab({
     }
     input.click()
   }, [handleFile])
+
+  // ── R2: changing the Vendor dropdown AFTER the PDF analysis re-runs the
+  // lookback as the selected vendor — the manual pick wins everywhere, not
+  // just on the next upload.
+  useEffect(() => {
+    if (!selectedVendorId || !extractedSpendTiers) return
+    if (lookbackLoading) return
+    if (lookback?.vendorId === selectedVendorId) return
+    if (lookbackRequestedVendorRef.current === selectedVendorId) return
+    lookbackRequestedVendorRef.current = selectedVendorId
+    const gen = resetGenRef.current
+    setLookbackLoading(true)
+    getVendorLookbackComparison({
+      vendorId: selectedVendorId,
+      extractedTiers: extractedSpendTiers,
+    })
+      .then((result) => {
+        if (resetGenRef.current === gen) setLookback(result)
+      })
+      .catch((err) => {
+        if (resetGenRef.current !== gen) return
+        toast.error(
+          err instanceof Error ? err.message : "12-month lookback failed",
+        )
+      })
+      .finally(() => {
+        if (resetGenRef.current === gen) setLookbackLoading(false)
+      })
+  }, [selectedVendorId, extractedSpendTiers, lookback, lookbackLoading])
 
   const isAnalyzing = phase === "analyzing"
 
@@ -609,6 +797,12 @@ export function UploadProposalTab({
     setPricingAnalysis(null)
     setPricingFileName(null)
     setPricingAnalyzing(false)
+    setDetectedVendorName(null)
+    setExtractedSpendTiers(null)
+    setPricingVendorMismatch(null)
+    setPricingFileItems(null)
+    lookbackRequestedVendorRef.current = null
+    lastPricingJoinVendorRef.current = null
     onReset?.()
     onPhaseChange("idle")
     toast.success("Analysis cleared — drop a new contract PDF to start over")
@@ -630,7 +824,10 @@ export function UploadProposalTab({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Vendor (optional — auto-detected from the PDF)</Label>
+              <Label>
+                Vendor (your selection wins — auto-filled from the PDF if
+                left blank)
+              </Label>
               <Select
                 value={selectedVendorId ?? ""}
                 onValueChange={(v) => onVendorChange(v || null)}
@@ -646,6 +843,15 @@ export function UploadProposalTab({
                   ))}
                 </SelectContent>
               </Select>
+              {vendorConflict ? (
+                <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    PDF looks like {detectedVendorName} — analyzing as{" "}
+                    {analysisVendorName} (your selection).
+                  </span>
+                </p>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -858,7 +1064,7 @@ export function UploadProposalTab({
         {verdict && lastScored ? (
           <ProposalVerdictCard
             verdict={verdict}
-            vendorName={lookback?.vendorName ?? lastScored.vendorName}
+            vendorName={analysisVendorName ?? lastScored.vendorName}
           />
         ) : null}
 
@@ -869,6 +1075,31 @@ export function UploadProposalTab({
             lookback={lookback}
             isLoading={lookbackLoading}
           />
+        ) : null}
+
+        {/* R2 mismatch guard: price file has lines but NONE matched the
+            analysis vendor's COG history — loud inline warning, not a
+            toast, because the verdict below is unverified until the
+            vendor mapping is right. */}
+        {pricingVendorMismatch && pricingAnalysis ? (
+          <Alert className="border-amber-500/40 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTitle>
+              Price file doesn&rsquo;t match {pricingVendorMismatch.vendorName}
+              &rsquo;s purchase history
+            </AlertTitle>
+            <AlertDescription className="text-amber-800 dark:text-amber-300">
+              <p>
+                None of the price file&rsquo;s items match{" "}
+                {pricingVendorMismatch.vendorName}&rsquo;s purchase history —
+                check the Vendor selection. The price file may belong to a
+                different vendor.
+                {pricingVendorMismatch.matchesOtherVendor
+                  ? " These items DO appear in your COG history under a different vendor — the Vendor selection above is almost certainly wrong for this file."
+                  : ""}
+              </p>
+            </AlertDescription>
+          </Alert>
         ) : null}
 
         {lastScored || pricingAnalysis ? (
@@ -904,14 +1135,12 @@ export function UploadProposalTab({
       </div>
 
       <div className="space-y-6">
+        {/* R2: manual selection wins — the old `lookback?.vendorId ??
+            selectedVendorId` let the PDF-detected vendor drive Spend
+            patterns even when the user explicitly picked another vendor. */}
         <CogSpendPatternCard
-          vendorId={lookback?.vendorId ?? selectedVendorId}
-          vendorName={
-            lookback?.vendorName ??
-            vendors.find((v) => v.id === selectedVendorId)?.displayName ??
-            vendors.find((v) => v.id === selectedVendorId)?.name ??
-            undefined
-          }
+          vendorId={analysisVendorId}
+          vendorName={analysisVendorName ?? undefined}
         />
       </div>
     </div>
@@ -921,7 +1150,7 @@ export function UploadProposalTab({
         hidden by the scoped @media print rule in app/globals.css). */}
     {hasAnalysis ? (
       <ProposalReportPrint
-        vendorName={lookback?.vendorName ?? lastScored?.vendorName ?? null}
+        vendorName={analysisVendorName}
         contractFileName={uploadedFileName}
         pricingFileName={pricingFileName}
         verdict={verdict}
