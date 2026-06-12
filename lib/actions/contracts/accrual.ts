@@ -36,6 +36,7 @@ import {
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 import { resolveOverlayTierRate } from "@/lib/contracts/tier-rebate-label"
 // bug-bash 2026-06-11 follow-up F2: the volume writer's tier math +
@@ -270,16 +271,31 @@ async function _buildAccrualTimelineForContract(
     // The threshold family (market_share / compliance_rebate) accrues on
     // category-scoped COG spend, so this path now runs the SAME scoped
     // monthly bucketing the normal walk uses and merges the overlay
-    // accrual into those months. Carve-out (per-SKU basis) and po /
-    // payment (count basis) terms keep overlay-only rows — their spend
-    // basis is not category-scoped COG (A1 behavior, pinned by the A1
-    // tests in accrual-timeline-display.test.ts).
+    // accrual into those months.
+    //
+    // bugs.rtfd 2026-06-12 R3 ("Carve out performance is unchanged here
+    // in accruals"): A4 deliberately left carve_out overlay-only — wrong
+    // call. A Stryker Mako tie-in carve-out still showed only its 4
+    // semi-annual ledger rows, Spend $0 everywhere, "Latest cumulative
+    // spend: $0". Carve-outs now get a real monthly Spend series too,
+    // mirroring the WRITER's own basis (`recomputeCarveOutAccrualForTerm`
+    // in lib/contracts/recompute/carve-out.ts): COG rows whose
+    // vendorItemNo matches a ContractPricing line with a carveOutPercent
+    // (normalizeSku on BOTH sides — never raw ===), contract-pinned OR
+    // vendor-pinned-unmatched (group-aware vendor set), matchStatus
+    // on_contract / price_variance, clamped to the term's effective
+    // window. Tier / Rate stay 0 ("—"): the ladder is a placeholder and
+    // carve-outs earn per-SKU — never resolve tier rates for them.
+    // po / payment (count basis) terms keep overlay-only rows.
     const overlayTerms = contract.terms.filter((t) =>
       OVERLAY_TERM_TYPES.has(t.termType),
     )
     const thresholdSpendTerms = overlayTerms.filter(
       (t) =>
         t.termType === "market_share" || t.termType === "compliance_rebate",
+    )
+    const carveOutTerms = overlayTerms.filter(
+      (t) => t.termType === "carve_out",
     )
 
     type EarlyTimelineRow = {
@@ -348,6 +364,98 @@ async function _buildAccrualTimelineForContract(
           const row = emptyRow(s.month)
           row.spend = s.spend
           rowByMonth.set(s.month, row)
+        }
+      }
+    }
+
+    if (carveOutTerms.length > 0) {
+      // bugs.rtfd 2026-06-12 R3: writer-basis spend series for carve-out
+      // terms. Step 1 — the carved SKU set, exactly the writer's pricing
+      // query (`carveOutPercent: { not: null }`).
+      const carvedPricingLines = await prisma.contractPricing.findMany({
+        where: { contractId: contract.id, carveOutPercent: { not: null } },
+        select: { vendorItemNo: true },
+      })
+      const carvedSkuKeys = new Set(
+        carvedPricingLines
+          .map((p) => normalizeSku(p.vendorItemNo))
+          .filter((k) => k !== ""),
+      )
+      // No carved lines → the writer earns on nothing; keep overlay-only
+      // rows (pre-R3 shape) and skip the COG query entirely.
+      if (carvedSkuKeys.size > 0) {
+        const vendorIds = contractVendorIds(contract)
+        // Step 2 — the writer's COG selection: rows pinned to THIS
+        // contract, plus vendor-pinned rows not yet contract-matched
+        // (group-aware vendor set — recurring drift class), matched
+        // statuses only.
+        const carveCogRows = await prisma.cOGRecord.findMany({
+          where: {
+            facilityId,
+            transactionDate: { gte: contract.effectiveDate, lte: end },
+            OR: [
+              { contractId: contract.id },
+              ...(vendorIds.length
+                ? [{ contractId: null, vendorId: { in: vendorIds } }]
+                : []),
+            ],
+            matchStatus: { in: ["on_contract", "price_variance"] },
+          },
+          select: {
+            vendorItemNo: true,
+            transactionDate: true,
+            extendedPrice: true,
+          },
+        })
+        // Step 3 — carved-SKU match (normalizeSku, never raw ===) +
+        // per-term effective-window clamp (union across carve-out terms).
+        // The writer treats effectiveEnd as INCLUSIVE of its whole day
+        // (`endOfDay()` in recompute/carve-out.ts) — mirror that, or a
+        // transaction later on the end date would show $0 here while the
+        // writer earned on it.
+        const endOfDayUTC = (d: Date): number =>
+          Date.UTC(
+            d.getUTCFullYear(),
+            d.getUTCMonth(),
+            d.getUTCDate(),
+            23,
+            59,
+            59,
+            999,
+          )
+        const inAnyCarveTermWindow = (d: Date): boolean =>
+          carveOutTerms.some(
+            (t) =>
+              (!t.effectiveStart || d >= t.effectiveStart) &&
+              (!t.effectiveEnd || d.getTime() <= endOfDayUTC(t.effectiveEnd)),
+          )
+        const carvedRows = carveCogRows.filter(
+          (r) =>
+            r.transactionDate != null &&
+            carvedSkuKeys.has(normalizeSku(r.vendorItemNo)) &&
+            inAnyCarveTermWindow(r.transactionDate),
+        )
+        const carveSeries = buildMonthlySpendSeriesFromCogRows(
+          carvedRows,
+          {}, // SKU scoping already applied — no category filter
+          contract.effectiveDate,
+          end,
+        )
+        const hasAnyCarveSpend = carveSeries.some((s) => s.spend > 0)
+        if (hasAnyCarveSpend || overlayRebateRows.length > 0) {
+          for (const s of carveSeries) {
+            // ADD into any month the threshold branch already created so
+            // mixed threshold + carve-out contracts don't lose either
+            // basis.
+            const existing = rowByMonth.get(s.month)
+            if (existing) {
+              existing.spend += s.spend
+            } else {
+              const row = emptyRow(s.month)
+              row.spend = s.spend
+              rowByMonth.set(s.month, row)
+            }
+          }
         }
       }
     }

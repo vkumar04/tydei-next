@@ -15,12 +15,17 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-const { cogFindManyMock, contractFindUniqueMock, rebateFindManyMock } =
-  vi.hoisted(() => ({
-    cogFindManyMock: vi.fn(),
-    contractFindUniqueMock: vi.fn(),
-    rebateFindManyMock: vi.fn(),
-  }))
+const {
+  cogFindManyMock,
+  contractFindUniqueMock,
+  rebateFindManyMock,
+  contractPricingFindManyMock,
+} = vi.hoisted(() => ({
+  cogFindManyMock: vi.fn(),
+  contractFindUniqueMock: vi.fn(),
+  rebateFindManyMock: vi.fn(),
+  contractPricingFindManyMock: vi.fn(),
+}))
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -32,6 +37,9 @@ vi.mock("@/lib/db", () => ({
     },
     rebate: {
       findMany: rebateFindManyMock,
+    },
+    contractPricing: {
+      findMany: contractPricingFindManyMock,
     },
   },
 }))
@@ -63,6 +71,10 @@ beforeEach(() => {
   // Overlay fetch (carve-out / threshold / volume persisted accrual) —
   // default to "no persisted rows"; tests that need overlay rows override.
   rebateFindManyMock.mockResolvedValue([])
+  // bugs.rtfd 2026-06-12 R3: carve-out-only contracts mirror the writer's
+  // pricing-file SKU basis on the early path — default to "no carved
+  // lines" (writer basis empty → no spend series); R3 tests override.
+  contractPricingFindManyMock.mockResolvedValue([])
 })
 
 describe("getAccrualTimeline — Rate column scaling (Charles W1.S)", () => {
@@ -252,8 +264,13 @@ describe("getAccrualTimeline — carve-out placeholder tiers excluded from tier 
 
     const result = await getAccrualTimeline("c-1")
 
-    // Excluded-term contracts take the termsWithTiers.length === 0 path:
-    // overlay-only monthly rows (spend/cumulative 0 — no tier walk ran).
+    // bugs.rtfd 2026-06-12 R3 superseded the A1 display shape: carve-out
+    // contracts now get real spend months mirroring the writer's
+    // pricing-file SKU basis (see the R3 describe block below). THIS test
+    // keeps no carved ContractPricing lines mocked (beforeEach default),
+    // so the writer basis is empty → overlay-only row, exactly as A1
+    // pinned. The tier/rate assertions (still 0 / "—") are unchanged —
+    // placeholder ladders must never drive those columns.
     expect(result.rows.length).toBe(1)
     const row = result.rows[0]
     expect(row.month).toBe("2025-03")
@@ -282,8 +299,236 @@ describe("getAccrualTimeline — carve-out placeholder tiers excluded from tier 
 
     // Pre-fix this produced 6 monthly rows whose Tier column read "1" on
     // every spend month. Post-fix the contract has no spend-dollar tier
-    // ladder and no overlay rows → empty timeline.
+    // ladder and no overlay rows → empty timeline. (R3 2026-06-12: still
+    // empty here because there are no carved ContractPricing lines mocked
+    // — the writer-basis spend series only exists when carve lines do.)
     expect(result.rows).toEqual([])
+  })
+})
+
+describe("getAccrualTimeline — carve-out-only timeline gets real spend months + term cadence (bugs.rtfd 2026-06-12 R3)", () => {
+  /** Prod evidence (Stryker Mako tie-in carve-out): the Performance tab
+   * Accrual Timeline showed ONLY the 4 semi-annual ledger rows, every row
+   * Spend $0 / Tier — / Rate —, "Latest cumulative spend: $0". The
+   * 2026-06-11 A4 fix added real COG spend months to the
+   * `termsWithTiers.length === 0` early path but only for the threshold
+   * family — carve-out terms were deliberately left overlay-only. Wrong
+   * call. R3 mirrors the carve-out WRITER's own spend basis
+   * (`lib/contracts/recompute/carve-out.ts`): COG rows whose vendorItemNo
+   * matches a ContractPricing line with carveOutPercent (normalizeSku on
+   * BOTH sides — never raw ===), contract-pinned OR vendor-pinned
+   * (group-aware vendor set), matchStatus on_contract/price_variance.
+   * Tier / Rate stay 0 ("—"): placeholder ladders, per-SKU earning. */
+  const carveOutTerm = {
+    id: "term-co",
+    termType: "carve_out",
+    termName: "Mako Carve-Out",
+    rebateMethod: "cumulative" as const,
+    // Prod term shape: semi_annual — the recurring drop-from-cadence
+    // regression class. MUST survive the early path's cadence mapping.
+    evaluationPeriod: "semi_annual",
+    appliesTo: "specific_items",
+    categories: [] as string[],
+    effectiveStart: null,
+    effectiveEnd: null,
+    createdAt: new Date("2025-01-01T00:00:00Z"),
+    // Importer placeholder ladder: spend-banded, rebateValue 0.
+    tiers: [
+      {
+        tierNumber: 1,
+        tierName: null,
+        spendMin: 0,
+        spendMax: null,
+        rebateValue: 0,
+        rebateType: "percent_of_spend",
+      },
+    ],
+  }
+
+  /** Carved pricing lines (the writer's basis). COG SKUs below drift in
+   * case/whitespace — normalizeSku must still match them. */
+  const carvedPricingLines = [
+    { vendorItemNo: "MAKO-123" },
+    { vendorItemNo: "KNEE-9" },
+  ]
+
+  /** COG rows across 6 distinct spend months (Jan–Jul 2025, May empty).
+   * "OTHER-SKU" is on-contract but NOT carved — must be excluded from the
+   * displayed Spend (writer-basis mirror, not vendor-wide spend). */
+  const carvedCogRows = [
+    { transactionDate: new Date("2025-01-15T00:00:00Z"), extendedPrice: 10_000, vendorItemNo: "mako-123" },
+    { transactionDate: new Date("2025-02-15T00:00:00Z"), extendedPrice: 20_000, vendorItemNo: "MAKO-123 " },
+    { transactionDate: new Date("2025-03-15T00:00:00Z"), extendedPrice: 30_000, vendorItemNo: "KNEE-9" },
+    { transactionDate: new Date("2025-04-15T00:00:00Z"), extendedPrice: 40_000, vendorItemNo: "Mako-123" },
+    { transactionDate: new Date("2025-05-20T00:00:00Z"), extendedPrice: 99_999, vendorItemNo: "OTHER-SKU" },
+    { transactionDate: new Date("2025-06-15T00:00:00Z"), extendedPrice: 50_000, vendorItemNo: "knee-9" },
+    { transactionDate: new Date("2025-07-15T00:00:00Z"), extendedPrice: 70_000, vendorItemNo: "MAKO-123" },
+  ]
+
+  /** Two persisted semi-annual writer rows — real note format:
+   * `[auto-carve-out-accrual] term:<id> · N carve lines · $X`. No
+   * `tier N` token → tier/rate stay 0. */
+  const semiAnnualWriterRows = [
+    {
+      rebateEarned: 4389.87,
+      payPeriodEnd: new Date("2025-06-30T23:59:59Z"),
+      notes: "[auto-carve-out-accrual] term:term-co · 14487 carve lines · $4389.87",
+    },
+    {
+      rebateEarned: 34000.13,
+      payPeriodEnd: new Date("2025-12-31T23:59:59Z"),
+      notes: "[auto-carve-out-accrual] term:term-co · 14487 carve lines · $34000.13",
+    },
+  ]
+
+  const carveOutOnlyContract = {
+    ...baseContract,
+    contractType: "tie_in",
+    // Full-year window so two semi-annual periods close inside it.
+    expirationDate: new Date("2025-12-31T00:00:00Z"),
+    terms: [carveOutTerm],
+  }
+
+  it("renders every contract month with real carved-SKU spend, lands both period accruals, resets cumulative at H1/H2, names the term", async () => {
+    contractFindUniqueMock.mockResolvedValue(carveOutOnlyContract)
+    contractPricingFindManyMock.mockResolvedValue(carvedPricingLines)
+    cogFindManyMock.mockResolvedValue(carvedCogRows)
+    rebateFindManyMock.mockResolvedValue(semiAnnualWriterRows)
+
+    const result = await getAccrualTimeline("c-1")
+
+    // Rows cover the contract window's months — not just the 2 ledger rows.
+    expect(result.rows.map((r) => r.month)).toEqual([
+      "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06",
+      "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12",
+    ])
+    // Spend = carved-SKU spend only (normalizeSku match; OTHER-SKU's
+    // $99,999 in May is on-contract but not carved → excluded).
+    expect(result.rows.map((r) => r.spend)).toEqual([
+      10_000, 20_000, 30_000, 40_000, 0, 50_000, 70_000, 0, 0, 0, 0, 0,
+    ])
+
+    // Cumulative resets at the term's SEMI_ANNUAL cadence (recurring
+    // regression class — semi_annual must survive the cadence mapping).
+    expect(result.cumulativeReset).toBe("semi_annual")
+    const jun = result.rows.find((r) => r.month === "2025-06")
+    const jul = result.rows.find((r) => r.month === "2025-07")
+    const dec = result.rows.find((r) => r.month === "2025-12")
+    expect(jun?.cumulativeSpend).toBe(150_000) // H1 running total
+    expect(jul?.cumulativeSpend).toBe(70_000) // H2 reset
+    expect(dec?.cumulativeSpend).toBe(70_000)
+
+    // The 2 writer accruals land on their period-end months.
+    expect(jun?.accruedAmount).toBeCloseTo(4389.87, 2)
+    expect(dec?.accruedAmount).toBeCloseTo(34000.13, 2)
+
+    // Tier / Rate stay "—" (0): carve-outs earn per-SKU; the placeholder
+    // ladder must never be resolved into tier/rate display.
+    for (const r of result.rows) {
+      expect(r.tierAchieved).toBe(0)
+      expect(r.rebatePercent).toBe(0)
+    }
+
+    // Per-term breakout attributes the accrual to the carve-out term.
+    const junContribution = jun?.termContributions.find(
+      (c) => c.termIndex === 0,
+    )
+    expect(junContribution).toBeDefined()
+    expect(junContribution?.accruedAmount).toBeCloseTo(4389.87, 2)
+    expect(junContribution?.tierAchieved).toBe(0)
+
+    // termLabels names the carve-out term with its cadence.
+    expect(result.termLabels).toEqual([
+      {
+        termIndex: 0,
+        termName: "Mako Carve-Out",
+        evaluationPeriod: "semi_annual",
+      },
+    ])
+  })
+
+  it("mirrors the writer's COG scoping — carved pricing lines, contract-or-vendor-pinned rows, matched statuses only", async () => {
+    contractFindUniqueMock.mockResolvedValue(carveOutOnlyContract)
+    contractPricingFindManyMock.mockResolvedValue(carvedPricingLines)
+    cogFindManyMock.mockResolvedValue(carvedCogRows)
+    rebateFindManyMock.mockResolvedValue(semiAnnualWriterRows)
+
+    await getAccrualTimeline("c-1")
+
+    // Pricing fetch: only carve-out lines (carveOutPercent set).
+    expect(contractPricingFindManyMock).toHaveBeenCalledTimes(1)
+    const pricingWhere = contractPricingFindManyMock.mock.calls[0][0]?.where
+    expect(pricingWhere).toEqual({
+      contractId: "c-1",
+      carveOutPercent: { not: null },
+    })
+
+    // COG fetch mirrors lib/contracts/recompute/carve-out.ts: contract-
+    // pinned OR vendor-pinned-unmatched (group-aware vendor set — never
+    // bare vendorId), matched statuses only.
+    expect(cogFindManyMock).toHaveBeenCalledTimes(1)
+    const cogWhere = cogFindManyMock.mock.calls[0][0]?.where
+    expect(cogWhere?.facilityId).toBe("fac-1")
+    expect(cogWhere?.OR).toEqual([
+      { contractId: "c-1" },
+      { contractId: null, vendorId: { in: ["v-1"] } },
+    ])
+    expect(cogWhere?.matchStatus).toEqual({
+      in: ["on_contract", "price_variance"],
+    })
+  })
+
+  it("skips the COG fetch entirely when the contract has no carved pricing lines (writer basis empty)", async () => {
+    contractFindUniqueMock.mockResolvedValue(carveOutOnlyContract)
+    contractPricingFindManyMock.mockResolvedValue([])
+    cogFindManyMock.mockResolvedValue(carvedCogRows)
+    rebateFindManyMock.mockResolvedValue(semiAnnualWriterRows)
+
+    const result = await getAccrualTimeline("c-1")
+
+    // No carved lines → the writer earns on nothing → no spend series;
+    // overlay-only rows (pre-R3 / A1 shape) remain.
+    expect(cogFindManyMock).not.toHaveBeenCalled()
+    expect(result.rows.map((r) => r.month)).toEqual(["2025-06", "2025-12"])
+    expect(result.rows.every((r) => r.spend === 0)).toBe(true)
+  })
+
+  it("respects the term's effective window when bucketing carved spend (effectiveEnd inclusive of its whole day, like the writer)", async () => {
+    contractFindUniqueMock.mockResolvedValue({
+      ...carveOutOnlyContract,
+      terms: [
+        {
+          ...carveOutTerm,
+          effectiveStart: new Date("2025-03-01T00:00:00Z"),
+          // Midnight date — the writer clamps with endOfDay(), so a
+          // transaction later on 06-30 still counts.
+          effectiveEnd: new Date("2025-06-30T00:00:00Z"),
+        },
+      ],
+    })
+    contractPricingFindManyMock.mockResolvedValue(carvedPricingLines)
+    cogFindManyMock.mockResolvedValue([
+      ...carvedCogRows,
+      // Lands ON the effectiveEnd date, after midnight — included.
+      {
+        transactionDate: new Date("2025-06-30T18:00:00Z"),
+        extendedPrice: 5_000,
+        vendorItemNo: "MAKO-123",
+      },
+    ])
+    rebateFindManyMock.mockResolvedValue([semiAnnualWriterRows[0]])
+
+    const result = await getAccrualTimeline("c-1")
+
+    // Jan/Feb (before effectiveStart) and Jul (after effectiveEnd) carved
+    // rows are out of the term's window — same clamp the writer applies.
+    const spendByMonth = new Map(result.rows.map((r) => [r.month, r.spend]))
+    expect(spendByMonth.get("2025-01") ?? 0).toBe(0)
+    expect(spendByMonth.get("2025-02") ?? 0).toBe(0)
+    expect(spendByMonth.get("2025-03")).toBe(30_000)
+    expect(spendByMonth.get("2025-04")).toBe(40_000)
+    expect(spendByMonth.get("2025-06")).toBe(55_000) // 50k + 5k on 06-30T18:00
+    expect(spendByMonth.get("2025-07") ?? 0).toBe(0)
   })
 })
 
