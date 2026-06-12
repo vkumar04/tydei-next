@@ -37,7 +37,11 @@ import { prisma } from "@/lib/db"
 import type { RebateTier } from "@/lib/rebates/engine/types"
 import { determineTier } from "@/lib/rebates/engine/shared/determine-tier"
 
-const AUTO_INVOICE_PREFIX = "[auto-invoice-accrual]"
+// bugs.rtfd 2026-06-12 R1: prefix now lives in the shared family
+// module so recomputeAccrualForContract's upfront wipe can cover
+// every writer's rows (term-type edits left the prior writer's
+// rows immortal — volume math 38,775 + stale 26,751 = 65,526).
+import { AUTO_INVOICE_PREFIX } from "@/lib/contracts/recompute/auto-accrual-prefixes"
 
 interface InvoiceRebateTermLike {
   id: string

@@ -50,7 +50,11 @@ import type {
   VolumeRebateConfig,
 } from "@/lib/rebates/engine/types"
 
-const AUTO_VOLUME_PREFIX = "[auto-volume-accrual]"
+// bugs.rtfd 2026-06-12 R1: prefix now lives in the shared family
+// module so recomputeAccrualForContract's upfront wipe can cover
+// every writer's rows (term-type edits left the prior writer's
+// rows immortal — volume math 38,775 + stale 26,751 = 65,526).
+import { AUTO_VOLUME_PREFIX } from "@/lib/contracts/recompute/auto-accrual-prefixes"
 
 interface VolumeRebateTermLike {
   id: string

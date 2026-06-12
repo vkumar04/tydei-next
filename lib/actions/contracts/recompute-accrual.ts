@@ -17,9 +17,14 @@
  * This action owns that regeneration. It is safe to call repeatedly:
  *
  *   1. Delete all system-generated Rebate rows for the contract. Rows
- *      are identified by the `[auto-accrual]` notes prefix so manually
- *      entered rebates (`createContractTransaction` with type=rebate)
- *      are preserved.
+ *      are identified by the auto-accrual notes-prefix FAMILY (see
+ *      `AUTO_ACCRUAL_PREFIXES` — spend writer + every specialty
+ *      writer) so manually entered rebates
+ *      (`createContractTransaction` with type=rebate) are preserved
+ *      while rows from a writer the contract's terms no longer route
+ *      to are still wiped (bugs.rtfd 2026-06-12 R1 — term-type edits
+ *      left the prior writer's rows immortal, double-counting:
+ *      volume math 38,775 + stale 26,751 = 65,526).
  *   2. Walk the same compute path `getAccrualTimeline` uses, and write
  *      one Rebate row per month with a non-zero accrual, tagging each
  *      with the `[auto-accrual]` prefix.
@@ -52,12 +57,17 @@ import {
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import { ENGINE_VERSION } from "@/lib/rebates/engine-version"
-
-// The notes prefix marks rows this action owns so it can rewrite them
-// safely without touching manually-entered rebate rows. Must stay a
-// local (non-exported) const — `"use server"` files can only export
-// async functions per the CLAUDE.md convention.
-const AUTO_ACCRUAL_PREFIX = "[auto-accrual]"
+// AUTO_ACCRUAL_PREFIX marks rows the spend writer owns so it can
+// rewrite them safely without touching manually-entered rebate rows.
+// AUTO_ACCRUAL_PREFIXES is the full writer family — the upfront wipes
+// below must cover EVERY writer's prefix, not just the spend writer's
+// (bugs.rtfd 2026-06-12 R1). Imported (never re-exported) because
+// `"use server"` files can only export async functions per the
+// CLAUDE.md convention; the constants live in a plain module.
+import {
+  AUTO_ACCRUAL_PREFIX,
+  AUTO_ACCRUAL_PREFIXES,
+} from "@/lib/contracts/recompute/auto-accrual-prefixes"
 
 export interface RecomputeAccrualResult {
   deleted: number
@@ -202,11 +212,27 @@ export async function _recomputeAccrualForContractWithFacility(
   // would catch them anyway (same notes prefix), but calling out the
   // future purge as its own step makes the invariant explicit: no
   // `[auto-accrual]` row may ever carry `payPeriodEnd > today`.
+  // bugs.rtfd 2026-06-12 R1: both wipes below must cover the WHOLE
+  // auto-accrual prefix family, not just the spend writer's
+  // `[auto-accrual]`. Pre-fix, a term-type edit (market_share →
+  // volume_rebate) left the prior writer's rows immortal — the
+  // specialty writers each delete only their own prefix and only run
+  // for terms currently of their type, so nothing ever deleted the
+  // old `[auto-threshold-accrual]` rows (volume math 38,775 + stale
+  // 26,751 = 65,526 double-count on prod). The specialty writers still
+  // re-delete their own term prefix before writing; this upfront wipe
+  // only widens what's already deleted, so their assumptions hold.
+  // NOTE: the OR array is constructed fresh here — never spread these
+  // branches into an existing OR clause (Prisma OR-spread collision
+  // class, see project memory).
+  const autoAccrualFamilyOr = AUTO_ACCRUAL_PREFIXES.map((p) => ({
+    notes: { startsWith: p },
+  }))
   const now = new Date()
   await prisma.rebate.deleteMany({
     where: {
       contractId,
-      notes: { startsWith: AUTO_ACCRUAL_PREFIX },
+      OR: autoAccrualFamilyOr,
       payPeriodEnd: { gt: now },
       // Charles W1.W-C1: never wipe a row the user has already marked
       // collected — that stamp is the only record of money received.
@@ -225,10 +251,14 @@ export async function _recomputeAccrualForContractWithFacility(
   // the user logs a collection, the row carries `collectionDate != null`
   // and must survive future recomputes — otherwise Recompute Earned
   // Rebates would silently erase the payment-received stamp.
+  //
+  // bugs.rtfd 2026-06-12 R1: covers the full prefix family (see the
+  // comment on the future-dated purge above) so stale rows from a
+  // writer the term no longer routes to are wiped too.
   const deleteResult = await prisma.rebate.deleteMany({
     where: {
       contractId,
-      notes: { startsWith: AUTO_ACCRUAL_PREFIX },
+      OR: autoAccrualFamilyOr,
       ...(preserveUserCollections ? { collectionDate: null } : {}),
     },
   })

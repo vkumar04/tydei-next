@@ -88,6 +88,19 @@ vi.mock("@/lib/db", () => ({
           if (where.contractId && r.contractId !== where.contractId) return true
           const notes = where.notes as { startsWith?: string } | undefined
           if (notes?.startsWith && !r.notes.startsWith(notes.startsWith)) return true
+          // bugs.rtfd 2026-06-12 R1: the upfront wipes now filter on an
+          // OR of every auto-accrual prefix — mirror Prisma's semantics.
+          const or = where.OR as
+            | Array<{ notes?: { startsWith?: string } }>
+            | undefined
+          if (
+            or &&
+            !or.some(
+              (b) =>
+                b.notes?.startsWith && r.notes.startsWith(b.notes.startsWith),
+            )
+          )
+            return true
           if ("collectionDate" in where && where.collectionDate === null) {
             if (r.collectionDate !== null) return true
           }

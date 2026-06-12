@@ -689,9 +689,10 @@ export async function importContractPricing(input: {
   // so NO Rebate rows were written until the user manually clicked "Recompute
   // Earned Rebates". Mirror bulkImportCOGRecords / createContract: run the
   // full accrual engine (which includes the carve-out dispatcher) for this
-  // contract, once, after match-statuses are settled. Idempotent (deletes its
-  // own [auto-accrual]/[auto-carve-out-accrual] rows, preserves collected
-  // rows); best-effort so a recompute failure never breaks the import.
+  // contract, once, after match-statuses are settled. Idempotent (wipes the
+  // full auto-accrual prefix family — see AUTO_ACCRUAL_PREFIXES, bugs.rtfd
+  // 2026-06-12 R1 — and preserves collected rows); best-effort so a recompute
+  // failure never breaks the import.
   try {
     await recomputeAccrualForContract(input.contractId)
   } catch (err) {
