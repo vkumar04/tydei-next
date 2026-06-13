@@ -20,6 +20,12 @@ import {
   UNIT_PRICE_ALIASES,
   CATEGORY_ALIASES,
 } from "@/lib/utils/parse-pricing-file"
+import {
+  norm,
+  overrideIndex,
+  type ResolvedMapping,
+  type UploadFieldSpec,
+} from "@/components/shared/uploads/field-spec"
 import type { VendorBenchmarkImportInput } from "@/lib/actions/benchmarks"
 
 // ─── Benchmark-specific header aliases ───────────────────────────
@@ -68,11 +74,27 @@ const DATA_DATE_ALIASES = [
   "date", "effective_date", "effectivedate", "benchmark_date", "benchmarkdate",
 ]
 
-// ─── Normalise + resolve (same scheme as the canonical detector) ──
-function norm(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "")
-}
+// ─── Field specs for the shared <PricingFileDropzone> ─────────────
+// (uploader improvements 1, 2026-06-13). The "at least one price-ish
+// field" rule can't be a per-field `required` — it stays inside
+// mapBenchmarkRows (droppedNoPrice), and the Benchmarks surface keys
+// its confirm copy + import gate off that result.
+export const BENCHMARK_UPLOAD_SPECS: UploadFieldSpec[] = [
+  { key: "itemNumber", label: "Item number", aliases: ITEM_NUMBER_ALIASES, required: true, kind: "text" },
+  { key: "description", label: "Description", aliases: DESCRIPTION_ALIASES, kind: "text" },
+  { key: "category", label: "Category", aliases: CATEGORY_ALIASES, kind: "text" },
+  { key: "nationalAvgPrice", label: "National average price", aliases: NATIONAL_AVG_ALIASES, kind: "number" },
+  { key: "percentile25", label: "25th percentile price", aliases: P25_ALIASES, kind: "number" },
+  { key: "percentile50", label: "Median price (P50)", aliases: P50_ALIASES, kind: "number" },
+  { key: "percentile75", label: "75th percentile price", aliases: P75_ALIASES, kind: "number" },
+  { key: "minPrice", label: "Minimum price", aliases: MIN_PRICE_ALIASES, kind: "number" },
+  { key: "maxPrice", label: "Maximum price", aliases: MAX_PRICE_ALIASES, kind: "number" },
+  { key: "sampleSize", label: "Sample size", aliases: SAMPLE_SIZE_ALIASES, kind: "number" },
+  { key: "dataDate", label: "Data date", aliases: DATA_DATE_ALIASES, kind: "date" },
+]
 
+// ─── Resolve (same norm scheme as the canonical detector, via the
+//     shared field-spec module) ─────────────────────────────────────
 function findIndex(normHeaders: string[], aliases: string[]): number {
   for (const alias of aliases) {
     const idx = normHeaders.indexOf(norm(alias))
@@ -114,20 +136,31 @@ export interface ParsedBenchmarkRows {
 export function mapBenchmarkRows(
   headers: string[],
   rows: Record<string, string>[],
+  /**
+   * From the shared <PricingFileDropzone> mapping dialog — when
+   * provided, the user's columns FULLY replace auto-detection
+   * (uploader improvements 1, 2026-06-13).
+   */
+  mappingOverride?: ResolvedMapping,
 ): ParsedBenchmarkRows {
   const normHeaders = headers.map(norm)
 
-  const idxItem = findIndex(normHeaders, ITEM_NUMBER_ALIASES)
-  const idxDesc = findIndex(normHeaders, DESCRIPTION_ALIASES)
-  const idxCat = findIndex(normHeaders, CATEGORY_ALIASES)
-  const idxAvg = findIndex(normHeaders, NATIONAL_AVG_ALIASES)
-  const idxP25 = findIndex(normHeaders, P25_ALIASES)
-  const idxP50 = findIndex(normHeaders, P50_ALIASES)
-  const idxP75 = findIndex(normHeaders, P75_ALIASES)
-  const idxMin = findIndex(normHeaders, MIN_PRICE_ALIASES)
-  const idxMax = findIndex(normHeaders, MAX_PRICE_ALIASES)
-  const idxN = findIndex(normHeaders, SAMPLE_SIZE_ALIASES)
-  const idxDate = findIndex(normHeaders, DATA_DATE_ALIASES)
+  const idx = (key: string, aliases: string[]): number =>
+    mappingOverride
+      ? overrideIndex(headers, mappingOverride, key)
+      : findIndex(normHeaders, aliases)
+
+  const idxItem = idx("itemNumber", ITEM_NUMBER_ALIASES)
+  const idxDesc = idx("description", DESCRIPTION_ALIASES)
+  const idxCat = idx("category", CATEGORY_ALIASES)
+  const idxAvg = idx("nationalAvgPrice", NATIONAL_AVG_ALIASES)
+  const idxP25 = idx("percentile25", P25_ALIASES)
+  const idxP50 = idx("percentile50", P50_ALIASES)
+  const idxP75 = idx("percentile75", P75_ALIASES)
+  const idxMin = idx("minPrice", MIN_PRICE_ALIASES)
+  const idxMax = idx("maxPrice", MAX_PRICE_ALIASES)
+  const idxN = idx("sampleSize", SAMPLE_SIZE_ALIASES)
+  const idxDate = idx("dataDate", DATA_DATE_ALIASES)
 
   const items: VendorBenchmarkImportInput[] = []
   let droppedNoPrice = 0

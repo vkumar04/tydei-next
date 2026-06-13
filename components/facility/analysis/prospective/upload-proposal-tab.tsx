@@ -87,7 +87,16 @@ import {
   vendorNamesLooselyMatch,
 } from "@/lib/prospective-analysis/analysis-vendor"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
-import { readPricingRows, pricingRowsToItems } from "./pricing-file-reader"
+import {
+  readPricingRows,
+  pricingRowsToItems,
+  ANALYZER_PRICE_FILE_SPECS,
+} from "./pricing-file-reader"
+import {
+  PricingFileDropzone,
+  type PricingFileDropzoneHandle,
+} from "@/components/shared/uploads/pricing-file-dropzone"
+import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
 import {
   analyzePricingFile,
   type PricingFileAnalysis,
@@ -409,6 +418,14 @@ export function UploadProposalTab({
     [lookback?.vendorId, lookback?.vendorName, vendors],
   )
 
+  // Uploader improvements 1 (2026-06-13): headless shared dropzone —
+  // the analyzer keeps its own two-card dropzone VISUAL (happy path
+  // stays zero-friction, no confirm dialog when items parse), and the
+  // mapping dialog only opens via ref.openWithFile when auto-detection
+  // yields 0 items (replacing the old dead-end toast). Imperative opens
+  // log header telemetry inside the dropzone (feature 2d).
+  const mappingFallbackRef = useRef<PricingFileDropzoneHandle>(null)
+
   // ── Price file: parse → COG join → variance analysis ────────────────
   const handlePricingFile = useCallback(
     async (file: File) => {
@@ -423,9 +440,9 @@ export function UploadProposalTab({
         const { headers, rows } = await readPricingRows(file)
         const items = pricingRowsToItems(headers, rows)
         if (items.length === 0) {
-          toast.error(
-            "No items found in the price file. Check it has an item-number column.",
-          )
+          // Column-mapper fallback (uploader improvements 1): let the
+          // user map the columns manually instead of dead-ending.
+          mappingFallbackRef.current?.openWithFile(file)
           return
         }
         await joinAndAnalyzePricing(items, file.name, gen)
@@ -434,6 +451,33 @@ export function UploadProposalTab({
         toast.error(err instanceof Error ? err.message : "Price file parse failed")
       } finally {
         setPricingAnalyzing(false)
+      }
+    },
+    [joinAndAnalyzePricing],
+  )
+
+  // Import path for the manual-mapping fallback dialog: same join +
+  // variance pipeline, with the user's columns overriding auto-detect.
+  const handleMappedPricingImport = useCallback(
+    async (
+      rows: Record<string, string>[],
+      mapping: ResolvedMapping,
+      meta: { fileName: string; headers: string[] },
+    ) => {
+      const items = pricingRowsToItems(meta.headers, rows, mapping)
+      if (items.length === 0) {
+        // Thrown so the dropzone toasts it and keeps the dialog open
+        // for another mapping attempt.
+        throw new Error(
+          "no items found with this mapping — the mapped item-number column has no values.",
+        )
+      }
+      const gen = resetGenRef.current
+      setPricingAnalyzing(true)
+      try {
+        await joinAndAnalyzePricing(items, meta.fileName, gen)
+      } finally {
+        if (resetGenRef.current === gen) setPricingAnalyzing(false)
       }
     },
     [joinAndAnalyzePricing],
@@ -935,6 +979,19 @@ export function UploadProposalTab({
                 )}
               </button>
             </div>
+
+            {/* Headless mapping-dialog fallback for the price file
+                (uploader improvements 1, 2026-06-13): trigger={null} —
+                the visible dropzone above stays the entry point; this
+                only opens via ref when auto-detection finds 0 items. */}
+            <PricingFileDropzone
+              ref={mappingFallbackRef}
+              trigger={null}
+              specs={ANALYZER_PRICE_FILE_SPECS}
+              surface="facility-proposal-analyzer-price-file"
+              accept=".csv,.xlsx,.xls"
+              onImport={handleMappedPricingImport}
+            />
 
             {/* Advanced: the old jargon controls + manual clause paste. */}
             <details className="rounded-md border px-3 py-2">

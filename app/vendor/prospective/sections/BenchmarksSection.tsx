@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useCallback, useRef } from "react"
 import {
   Card,
   CardAction,
@@ -9,16 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -30,11 +20,12 @@ import {
   useImportVendorBenchmarks,
   useVendorBenchmarks,
 } from "@/hooks/use-prospective"
-import { readPricingRows } from "@/components/facility/analysis/prospective/pricing-file-reader"
 import {
-  mapBenchmarkRows,
-  type ParsedBenchmarkRows,
-} from "./benchmark-file-reader"
+  PricingFileDropzone,
+  type PricingFileDropzoneHandle,
+} from "@/components/shared/uploads/pricing-file-dropzone"
+import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
+import { mapBenchmarkRows, BENCHMARK_UPLOAD_SPECS } from "./benchmark-file-reader"
 
 interface Props {
   vendorId: string
@@ -44,54 +35,59 @@ export function BenchmarksSection({ vendorId }: Props) {
   const { data: benchmarks, isLoading } = useVendorBenchmarks(vendorId)
   const importMutation = useImportVendorBenchmarks(vendorId)
 
-  // "Need to be able to add data for the benchmarks" (Vick 2026-06-12):
-  // CSV/XLSX upload → parse client-side (XLSX via /api/parse-file) →
-  // confirm row counts → vendor-scoped bulk import.
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [parsing, setParsing] = useState(false)
-  const [pending, setPending] = useState<ParsedBenchmarkRows | null>(null)
+  // "Need to be able to add data for the benchmarks" (Vick 2026-06-12),
+  // reworked onto the shared <PricingFileDropzone> (uploader improvements
+  // 1+2, 2026-06-13): CSV/XLSX upload → parse → mapping/preview dialog
+  // (column-mapper fallback when headers don't auto-resolve) →
+  // vendor-scoped bulk import.
+  const dropzoneRef = useRef<PricingFileDropzoneHandle>(null)
 
-  const onFileSelected = async (file: File) => {
-    setParsing(true)
-    try {
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-      if (!["csv", "xlsx", "xls"].includes(ext)) {
-        toast.error("Benchmark import: please upload a CSV or Excel (.xlsx/.xls) file")
-        return
-      }
-      const { headers, rows } = await readPricingRows(file)
-      const parsed = mapBenchmarkRows(headers, rows)
+  const handleImport = useCallback(
+    (
+      rows: Record<string, string>[],
+      mapping: ResolvedMapping,
+      meta: { fileName: string; headers: string[] },
+    ) => {
+      const parsed = mapBenchmarkRows(meta.headers, rows, mapping)
       if (parsed.items.length === 0) {
+        // Keep this self-service: item numbers mapped but every row was
+        // dropped for missing price data (the dialog already enforces
+        // the item-number column itself).
         toast.error(
-          "Benchmark import: no usable rows found — the file needs an item-number column plus at least one price column (national avg, percentile, min or max).",
+          "Benchmark import: no usable rows — every row is missing price data (national avg, percentile, min or max).",
         )
         return
       }
-      setPending(parsed)
-    } catch (err) {
-      toast.error(
-        `Benchmark import: failed to parse the file — ${err instanceof Error ? err.message : "unknown error"}`,
+      importMutation.mutate(parsed.items)
+    },
+    [importMutation],
+  )
+
+  // The existing confirm copy ("N rows parsed, M with a national average
+  // price") now lives in the mapping dialog's confirm step.
+  const confirmCopy = useCallback(
+    (rows: Record<string, string>[], mapping: ResolvedMapping): string => {
+      // Headers are recoverable from the mapping's claimed columns plus
+      // the row keys; mapBenchmarkRows only reads mapped columns when an
+      // override is passed, so row-key order is irrelevant here.
+      const headers = Object.keys(rows[0] ?? {})
+      const parsed = mapBenchmarkRows(headers, rows, mapping)
+      return (
+        `${parsed.items.length} row${parsed.items.length === 1 ? "" : "s"} parsed, ` +
+        `${parsed.withNationalAvg} with a national average price.` +
+        (parsed.droppedNoPrice > 0
+          ? ` ${parsed.droppedNoPrice} row${parsed.droppedNoPrice === 1 ? " will be" : "s will be"} skipped (no price data).`
+          : "") +
+        " Re-importing an item replaces your prior uploaded benchmark for that item."
       )
-    } finally {
-      setParsing(false)
-    }
-  }
+    },
+    [],
+  )
 
-  const confirmImport = () => {
-    if (!pending) return
-    importMutation.mutate(pending.items)
-    setPending(null)
-  }
-
-  const busy = parsing || importMutation.isPending
+  const busy = importMutation.isPending
 
   const importButton = (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={busy}
-      onClick={() => fileInputRef.current?.click()}
-    >
+    <Button variant="outline" size="sm" disabled={busy}>
       {busy ? (
         <Loader2 className="h-4 w-4 animate-spin" />
       ) : (
@@ -103,18 +99,6 @@ export function BenchmarksSection({ vendorId }: Props) {
 
   return (
     <Card>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,.xlsx,.xls"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          // Reset so re-selecting the same file fires onChange again.
-          e.target.value = ""
-          if (file) void onFileSelected(file)
-        }}
-      />
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Scale className="h-5 w-5" />
@@ -126,7 +110,18 @@ export function BenchmarksSection({ vendorId }: Props) {
           vendor, plus national-benchmark rows that match item numbers seen in
           your COG history.
         </CardDescription>
-        <CardAction>{importButton}</CardAction>
+        <CardAction>
+          <PricingFileDropzone
+            ref={dropzoneRef}
+            specs={BENCHMARK_UPLOAD_SPECS}
+            surface="vendor-benchmarks"
+            accept=".csv,.xlsx,.xls"
+            trigger={importButton}
+            onImport={handleImport}
+            confirmCopy={confirmCopy}
+            disabled={busy}
+          />
+        </CardAction>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -146,7 +141,21 @@ export function BenchmarksSection({ vendorId }: Props) {
               and no national benchmarks match the item numbers in your COG
               history. Import a CSV or Excel benchmark file to get started.
             </p>
-            <div className="mt-4 flex justify-center">{importButton}</div>
+            <div className="mt-4 flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => dropzoneRef.current?.openFilePicker()}
+              >
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                Import benchmarks
+              </Button>
+            </div>
           </div>
         ) : (
           <>
@@ -215,33 +224,6 @@ export function BenchmarksSection({ vendorId }: Props) {
           </>
         )}
       </CardContent>
-
-      <AlertDialog
-        open={pending !== null}
-        onOpenChange={(open) => {
-          if (!open) setPending(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Import benchmark data?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pending
-                ? `${pending.items.length} row${pending.items.length === 1 ? "" : "s"} parsed, ` +
-                  `${pending.withNationalAvg} with a national average price.` +
-                  (pending.droppedNoPrice > 0
-                    ? ` ${pending.droppedNoPrice} row${pending.droppedNoPrice === 1 ? " was" : "s were"} skipped (no price data).`
-                    : "") +
-                  " Re-importing an item replaces your prior uploaded benchmark for that item."
-                : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Card>
   )
 }

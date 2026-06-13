@@ -105,3 +105,45 @@ describe("pricingRowsToItems — proposed vs current price", () => {
     expect(items[0]!.proposedPrice).toBe(0)
   })
 })
+
+describe("pricingRowsToItems — mappingOverride (uploader improvements 1, 2026-06-13)", () => {
+  it("override wins over auto-detect for every field", () => {
+    // "SKU" would auto-detect as the item column — the user remapped to
+    // the unrecognizable "Mfr Code" column instead.
+    const headers = ["SKU", "Mfr Code", "Quote", "Today"]
+    const items = pricingRowsToItems(
+      headers,
+      rowsFor(headers, [["WRONG-1", "RIGHT-1", "$12.50", "15.00"]]),
+      {
+        itemNumber: "Mfr Code",
+        description: null,
+        currentPrice: "Today",
+        proposedPrice: "Quote",
+        quantity: null,
+      },
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      itemNumber: "RIGHT-1",
+      proposedPrice: 12.5,
+      currentPrice: 15,
+      estimatedAnnualQty: null,
+    })
+  })
+
+  it("an explicit null in the override unmaps a field even when an alias matches", () => {
+    const headers = ["SKU", "Price"]
+    const items = pricingRowsToItems(
+      headers,
+      rowsFor(headers, [["A-1", "9.00"]]),
+      {
+        itemNumber: "SKU",
+        description: null,
+        currentPrice: null,
+        proposedPrice: null,
+        quantity: null,
+      },
+    )
+    expect(items[0]).toMatchObject({ itemNumber: "A-1", proposedPrice: 0, currentPrice: null })
+  })
+})

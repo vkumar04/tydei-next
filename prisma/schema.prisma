@@ -2098,3 +2098,27 @@ model RenewalBriefCache {
   @@index([contractId, inputHash])
   @@map("renewal_brief_cache")
 }
+
+// ─── Upload header telemetry (uploader improvements 2, 2026-06-13) ──
+//
+// Fire-and-forget log of upload header rows whose columns did NOT all
+// auto-resolve (or where the user manually remapped/abandoned), written
+// by the shared <PricingFileDropzone>. Lets us mine real-world header
+// vocabularies and grow the canonical alias lists in
+// lib/utils/parse-pricing-file.ts instead of waiting for bug reports.
+// Fully-clean auto imports are NOT logged (noise).
+
+model UploadHeaderEvent {
+  id              String   @id @default(cuid())
+  surface         String
+  fileName        String?
+  headers         Json
+  autoMapping     Json
+  finalMapping    Json?
+  missingRequired Json?
+  outcome         String // "auto" | "manual_fix" | "abandoned"
+  createdAt       DateTime @default(now())
+
+  @@index([surface, createdAt])
+  @@map("upload_header_event")
+}

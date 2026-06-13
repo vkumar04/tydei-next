@@ -16,11 +16,12 @@ import { ProductsSection } from "./builder/products-section"
 import { ContractTerms } from "./builder/contract-terms"
 import { ProposalActions } from "./builder/proposal-actions"
 import {
-  handlePricingFileUpload as doPricingUpload,
-  handleUsageFileUpload as doUsageUpload,
+  handlePricingRowsImport,
+  handleUsageRowsImport,
   parseProductsFromDescription as doParseProducts,
   generateTermsFromNotes,
 } from "./builder/file-handlers"
+import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
 import type {
   NewProposalState,
   ProspectiveFacility,
@@ -117,16 +118,38 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     })
   }
 
-  // Async since the 2026-06-13 fix: the handlers await the shared
-  // readPricingRows (XLSX files round-trip through /api/parse-file).
-  // Errors are caught + toasted inside the handlers, so fire-and-forget.
-  const handlePricingFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void doPricingUpload(e, setFileUploadProgress, setNewProposal, setCustomCategories)
-  }
+  // Uploader improvements 1 (2026-06-13): both file inputs are now the
+  // shared <PricingFileDropzone> (rendered in ProductsSection), which
+  // owns file reading + the column-mapping/preview dialog. These
+  // handlers receive the parsed rows + confirmed mapping and run the
+  // unchanged downstream import (merge, aggregation, #66 category
+  // auto-select, toasts). Errors are caught + toasted inside.
+  const handlePricingImport = (
+    rows: Record<string, string>[],
+    mapping: ResolvedMapping,
+    meta: { fileName: string; headers: string[] },
+  ) =>
+    handlePricingRowsImport(
+      meta.headers,
+      rows,
+      mapping,
+      setFileUploadProgress,
+      setNewProposal,
+      setCustomCategories,
+    )
 
-  const handleUsageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void doUsageUpload(e, setFileUploadProgress, setNewProposal)
-  }
+  const handleUsageImport = (
+    rows: Record<string, string>[],
+    mapping: ResolvedMapping,
+    meta: { fileName: string; headers: string[] },
+  ) =>
+    handleUsageRowsImport(
+      meta.headers,
+      rows,
+      mapping,
+      setFileUploadProgress,
+      setNewProposal,
+    )
 
   const parseProductsFromDescription = useCallback(() => {
     doParseProducts(
@@ -295,8 +318,8 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
           fileUploadProgress={fileUploadProgress}
           productDescription={productDescription}
           setProductDescription={setProductDescription}
-          handleUsageFileUpload={handleUsageFileUpload}
-          handlePricingFileUpload={handlePricingFileUpload}
+          onUsageImport={handleUsageImport}
+          onPricingImport={handlePricingImport}
           parseProductsFromDescription={parseProductsFromDescription}
           removeProductFromProposal={removeProductFromProposal}
         />

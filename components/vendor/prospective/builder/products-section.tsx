@@ -1,4 +1,3 @@
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,16 +11,30 @@ import {
   CheckCircle2,
   Trash2,
 } from "lucide-react"
+import { PricingFileDropzone } from "@/components/shared/uploads/pricing-file-dropzone"
+import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
+import {
+  BUILDER_PRICING_UPLOAD_SPECS,
+  BUILDER_USAGE_UPLOAD_SPECS,
+  validateBuilderPricingMapping,
+} from "./file-handlers"
 import type { NewProposalState, FileUploadProgressState } from "./types"
 import { formatCurrencyShort } from "./types"
+
+/** Shared <PricingFileDropzone> onImport shape (uploader improvements 1). */
+type UploadImportHandler = (
+  rows: Record<string, string>[],
+  mapping: ResolvedMapping,
+  meta: { fileName: string; headers: string[] },
+) => Promise<void> | void
 
 export interface ProductsSectionProps {
   newProposal: NewProposalState
   fileUploadProgress: FileUploadProgressState
   productDescription: string
   setProductDescription: (v: string) => void
-  handleUsageFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
-  handlePricingFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onUsageImport: UploadImportHandler
+  onPricingImport: UploadImportHandler
   parseProductsFromDescription: () => void
   removeProductFromProposal: (benchmarkId: string) => void
 }
@@ -31,8 +44,8 @@ export function ProductsSection({
   fileUploadProgress,
   productDescription,
   setProductDescription,
-  handleUsageFileUpload,
-  handlePricingFileUpload,
+  onUsageImport,
+  onPricingImport,
   parseProductsFromDescription,
   removeProductFromProposal,
 }: ProductsSectionProps) {
@@ -89,15 +102,17 @@ export function ProductsSection({
           <p className="text-xs text-muted-foreground mb-3">
             Load 12-month historical usage with product names, ref numbers, pricing, and volume. This provides the baseline for deal analysis.
           </p>
-          <div className="relative">
-            <Input
-              type="file"
-              accept=".csv,.txt,.xlsx,.xls"
-              onChange={handleUsageFileUpload}
-              className="cursor-pointer"
-              disabled={fileUploadProgress.isLoading}
-            />
-          </div>
+          {/* Shared dropzone (uploader improvements 1, 2026-06-13):
+              parse → column-mapping/preview dialog → onUsageImport. */}
+          <PricingFileDropzone
+            specs={BUILDER_USAGE_UPLOAD_SPECS}
+            surface="vendor-proposal-builder-usage"
+            accept=".csv,.txt,.xlsx,.xls"
+            onImport={onUsageImport}
+            disabled={fileUploadProgress.isLoading}
+            triggerLabel="Upload usage history"
+            triggerHint="drop or click to browse (.csv, .txt, .xlsx, .xls)"
+          />
           {newProposal.products.some(p => p.monthlyUsage && p.monthlyUsage.length > 0) && (
             <div className="mt-2 p-2 rounded bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
               <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1">
@@ -120,15 +135,19 @@ export function ProductsSection({
           <p className="text-xs text-muted-foreground mb-3">
             Load your proposed pricing for this deal. Will merge with usage data if product names match.
           </p>
-          <div className="relative">
-            <Input
-              type="file"
-              accept=".csv,.txt,.xlsx,.xls"
-              onChange={handlePricingFileUpload}
-              className="cursor-pointer"
-              disabled={fileUploadProgress.isLoading}
-            />
-          </div>
+          {/* Shared dropzone (uploader improvements 1, 2026-06-13). The
+              "name OR ref" rule rides the validate hook — per-field
+              `required` can't express either-of. */}
+          <PricingFileDropzone
+            specs={BUILDER_PRICING_UPLOAD_SPECS}
+            surface="vendor-proposal-builder-pricing"
+            accept=".csv,.txt,.xlsx,.xls"
+            onImport={onPricingImport}
+            validate={validateBuilderPricingMapping}
+            disabled={fileUploadProgress.isLoading}
+            triggerLabel="Upload proposed pricing"
+            triggerHint="drop or click to browse (.csv, .txt, .xlsx, .xls)"
+          />
           {newProposal.products.some(p => p.proposedPrice > 0) && (
             <div className="mt-2 p-2 rounded bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
               <p className="text-xs text-green-700 dark:text-green-400 flex items-center gap-1">

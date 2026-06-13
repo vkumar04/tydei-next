@@ -1,7 +1,12 @@
 /**
  * Shared pricing-file reader for the prospective-analysis surfaces
  * (Pricing tab + the proposal "add the price file" ask, 2026-06-10).
- * CSV parses client-side; Excel delegates to /api/parse-file.
+ *
+ * 2026-06-13 (uploader improvements 1+2): the file READER moved to
+ * components/shared/uploads/read-tabular-file.ts (re-exported below so
+ * existing imports keep working). This module keeps the analyzer's
+ * row→item mapping, which now accepts a `mappingOverride` from the
+ * shared <PricingFileDropzone> column-mapping fallback.
  */
 
 import type { PricingFileItem } from "@/lib/prospective-analysis/pricing-file-analysis"
@@ -10,10 +15,15 @@ import {
   DESCRIPTION_ALIASES,
   UNIT_PRICE_ALIASES,
 } from "@/lib/utils/parse-pricing-file"
+import {
+  norm,
+  overrideIndex,
+  type ResolvedMapping,
+  type UploadFieldSpec,
+} from "@/components/shared/uploads/field-spec"
 
-function norm(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "")
-}
+// Canonical reader now lives in the shared uploads module.
+export { readPricingRows } from "@/components/shared/uploads/read-tabular-file"
 
 // `exclude` lets the proposed-price lookup skip the column already
 // claimed as current price (the canonical price aliases include "cost",
@@ -31,122 +41,111 @@ function findIndex(
   return -1
 }
 
-function parseCsvRow(line: string): string[] {
-  const fields: string[] = []
-  let current = ""
-  let inQuotes = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!
-    if (inQuotes) {
-      if (ch === '"') {
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"'
-          i++
-        } else {
-          inQuotes = false
-        }
-      } else {
-        current += ch
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true
-      } else if (ch === ",") {
-        fields.push(current.trim())
-        current = ""
-      } else {
-        current += ch
-      }
-    }
-  }
-  fields.push(current.trim())
-  return fields
-}
+// Analyzer-local alias lists (current/proposed price + qty). The SKU /
+// description / generic price aliases are the canonical lists — bug
+// 2026-06-10 ("Analysis for price not working"): a hand-rolled 7-alias
+// copy missed "ReferenceNumber" and every row was dropped.
+const CURRENT_PRICE_ALIASES = [
+  "current_price",
+  "currentprice",
+  "unit_cost",
+  "cost",
+]
 
-export async function readPricingRows(
-  file: File,
-): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-  // .txt parses as CSV: the vendor proposal-builder uploads accept
-  // comma-separated .txt exports (bugs 2026-06-13); routing them to
-  // /api/parse-file would fail since they aren't Excel workbooks.
-  if (ext === "csv" || ext === "txt") {
-    let text = await file.text()
-    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
-    const lines = text
-      .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n")
-      .split("\n")
-      .filter((l) => l.trim())
-    const headers = parseCsvRow(lines[0] ?? "").map((h) =>
-      h.replace(/^"|"$/g, ""),
-    )
-    const rows = lines.slice(1).map((line) => {
-      const vals = parseCsvRow(line)
-      const row: Record<string, string> = {}
-      headers.forEach((h, i) => {
-        row[h] = vals[i] ?? ""
-      })
-      return row
-    })
-    return { headers, rows }
-  }
-  // Excel — delegate to server
-  const formData = new FormData()
-  formData.append("file", file)
-  const res = await fetch("/api/parse-file", {
-    method: "POST",
-    body: formData,
-  })
-  if (!res.ok) throw new Error("Failed to parse Excel file")
-  return (await res.json()) as {
-    headers: string[]
-    rows: Record<string, string>[]
-  }
-}
+const PROPOSED_PRICE_ALIASES = [
+  "proposed_price",
+  "proposedprice",
+  "new_price",
+  "newprice",
+  "quoted_price",
+  "quotedprice",
+  ...UNIT_PRICE_ALIASES,
+]
+
+const QTY_ALIASES = [
+  "quantity",
+  "qty",
+  "quantity_ordered",
+  "estimated_qty",
+  "annual_qty",
+]
+
+/**
+ * Field specs for the shared mapping-dialog fallback on the proposal
+ * analyzer's price-file dropzone (uploader improvements 1, 2026-06-13).
+ * Order matters: currentPrice resolves BEFORE proposedPrice so its
+ * aliases ("cost", "unit_cost") can't be claimed by the broader
+ * canonical price list (resolveMapping excludes claimed headers).
+ */
+export const ANALYZER_PRICE_FILE_SPECS: UploadFieldSpec[] = [
+  {
+    key: "itemNumber",
+    label: "Item number",
+    aliases: ITEM_NUMBER_ALIASES,
+    required: true,
+    kind: "text",
+  },
+  {
+    key: "description",
+    label: "Description",
+    aliases: [...DESCRIPTION_ALIASES, "product_name"],
+    kind: "text",
+  },
+  {
+    key: "currentPrice",
+    label: "Current price (what you pay today)",
+    aliases: CURRENT_PRICE_ALIASES,
+    kind: "number",
+  },
+  {
+    key: "proposedPrice",
+    label: "Proposed price",
+    aliases: PROPOSED_PRICE_ALIASES,
+    kind: "number",
+  },
+  {
+    key: "quantity",
+    label: "Estimated annual quantity",
+    aliases: QTY_ALIASES,
+    kind: "number",
+  },
+]
 
 export function pricingRowsToItems(
   headers: string[],
   rows: Record<string, string>[],
+  /**
+   * From the shared <PricingFileDropzone> mapping dialog — when
+   * provided, the user's columns FULLY replace auto-detection
+   * (uploader improvements 1, 2026-06-13).
+   */
+  mappingOverride?: ResolvedMapping,
 ): PricingFileItem[] {
   const normHeaders = headers.map(norm)
   // Canonical alias lists from lib/utils/parse-pricing-file.ts — do NOT
   // inline a local list here. Bug 2026-06-10 ("Analysis for price not
   // working"): a hand-rolled 7-alias copy missed "ReferenceNumber"
   // (the Arthrex demo file's SKU header) and every row was dropped.
-  const idxItem = findIndex(normHeaders, ITEM_NUMBER_ALIASES)
-  const idxDesc = findIndex(normHeaders, [
-    ...DESCRIPTION_ALIASES,
-    "product_name",
-  ])
-  // Current price resolves FIRST so its aliases ("cost", "unit_cost")
-  // can't be claimed by the broader canonical price list below.
-  const idxCurrent = findIndex(normHeaders, [
-    "current_price",
-    "currentprice",
-    "unit_cost",
-    "cost",
-  ])
-  const idxProposed = findIndex(
-    normHeaders,
-    [
-      "proposed_price",
-      "proposedprice",
-      "new_price",
-      "newprice",
-      "quoted_price",
-      "quotedprice",
-      ...UNIT_PRICE_ALIASES,
-    ],
-    idxCurrent,
-  )
-  const idxQty = findIndex(normHeaders, [
-    "quantity",
-    "qty",
-    "quantity_ordered",
-    "estimated_qty",
-    "annual_qty",
-  ])
+  let idxItem: number
+  let idxDesc: number
+  let idxCurrent: number
+  let idxProposed: number
+  let idxQty: number
+  if (mappingOverride) {
+    idxItem = overrideIndex(headers, mappingOverride, "itemNumber")
+    idxDesc = overrideIndex(headers, mappingOverride, "description")
+    idxCurrent = overrideIndex(headers, mappingOverride, "currentPrice")
+    idxProposed = overrideIndex(headers, mappingOverride, "proposedPrice")
+    idxQty = overrideIndex(headers, mappingOverride, "quantity")
+  } else {
+    idxItem = findIndex(normHeaders, ITEM_NUMBER_ALIASES)
+    idxDesc = findIndex(normHeaders, [...DESCRIPTION_ALIASES, "product_name"])
+    // Current price resolves FIRST so its aliases ("cost", "unit_cost")
+    // can't be claimed by the broader canonical price list below.
+    idxCurrent = findIndex(normHeaders, CURRENT_PRICE_ALIASES)
+    idxProposed = findIndex(normHeaders, PROPOSED_PRICE_ALIASES, idxCurrent)
+    idxQty = findIndex(normHeaders, QTY_ALIASES)
+  }
 
   const parseNum = (v: string): number =>
     parseFloat(v.replace(/[^0-9.-]/g, "") || "0")
@@ -170,4 +169,3 @@ export function pricingRowsToItems(
     })
     .filter((x): x is PricingFileItem => x !== null)
 }
-

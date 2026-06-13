@@ -184,3 +184,93 @@ describe("readPricingRows — CSV front-end the handlers now share", () => {
     expect(rows).toHaveLength(1)
   })
 })
+
+describe("mapPricingRows / mapUsageRows — mappingOverride (uploader improvements 1, 2026-06-13)", () => {
+  it("mapPricingRows: override wins over auto-detect", () => {
+    // "Description" / "SKU" / "Price" would all auto-detect; the user's
+    // mapping deliberately routes name to the oddball "Line Label"
+    // column and price to "Quote $".
+    const headers = ["Description", "SKU", "Price", "Line Label", "Quote $", "Ct"]
+    const result = mapPricingRows(
+      headers,
+      rowsFor(headers, [["Auto Name", "WRONG-1", "1.00", "Manual Name", "$25.00", "4"]]),
+      {
+        name: "Line Label",
+        ref: null,
+        price: "Quote $",
+        qty: "Ct",
+        costBasis: null,
+        category: null,
+      },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products[0]).toMatchObject({
+      productName: "Manual Name",
+      refNumber: undefined,
+      proposedPrice: 25,
+      projectedVolume: 4,
+    })
+    expect(result.totalSpend).toBe(100)
+  })
+
+  it("mapPricingRows: override with neither name nor ref fails like auto-detect", () => {
+    const headers = ["Description", "Price"]
+    const result = mapPricingRows(
+      headers,
+      rowsFor(headers, [["Widget", "9"]]),
+      { name: null, ref: null, price: "Price", qty: null, costBasis: null, category: null },
+    )
+    expect(result).toEqual({ ok: false, reason: "missing-name-and-ref" })
+  })
+
+  it("mapUsageRows: override wins over auto-detect (the Inventory Number case)", () => {
+    // Charles's invoice export: "Inventory Number" matches no canonical
+    // alias, so auto-detect leaves ref unmapped — the mapping dialog
+    // lets the user claim it manually.
+    const headers = [
+      "Inventory Description", "Inventory Number", "Invoice Date",
+      "Invoice Quantity", "Invoice Price", "Item Extended Cost",
+    ]
+    const result = mapUsageRows(
+      headers,
+      rowsFor(headers, [
+        ["NTI Gas Warmer", "INV-77", "03/15/2026", "2", "100.00", "200.00"],
+      ]),
+      {
+        name: "Inventory Description",
+        ref: "Inventory Number",
+        vendor: null,
+        date: "Invoice Date",
+        qty: "Invoice Quantity",
+        unitCost: "Invoice Price",
+        extendedCost: "Item Extended Cost",
+        category: null,
+      },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products).toHaveLength(1)
+    expect(result.products[0]).toMatchObject({
+      productName: "NTI Gas Warmer",
+      refNumber: "INV-77",
+      projectedVolume: 2,
+    })
+    expect(result.totalRevenue).toBe(200)
+    expect(result.products[0].monthlyUsage?.[0]).toMatchObject({
+      month: "2026-03",
+      volume: 2,
+      revenue: 200,
+    })
+  })
+
+  it("mapUsageRows: override with name null fails like auto-detect", () => {
+    const headers = ["Inventory Description", "Qty"]
+    const result = mapUsageRows(
+      headers,
+      rowsFor(headers, [["Widget", "1"]]),
+      { name: null, ref: null, vendor: null, date: null, qty: "Qty", unitCost: null, extendedCost: null, category: null },
+    )
+    expect(result).toEqual({ ok: false, reason: "missing-name" })
+  })
+})

@@ -1,11 +1,16 @@
 import { toast } from "sonner"
-import { readPricingRows } from "@/components/facility/analysis/prospective/pricing-file-reader"
 import {
   ITEM_NUMBER_ALIASES,
   DESCRIPTION_ALIASES,
   UNIT_PRICE_ALIASES,
   CATEGORY_ALIASES,
 } from "@/lib/utils/parse-pricing-file"
+import {
+  norm,
+  overrideIndex,
+  type ResolvedMapping,
+  type UploadFieldSpec,
+} from "@/components/shared/uploads/field-spec"
 import type { NewProposalState, ProposalProduct, FileUploadProgressState, TermSuggestionsState } from "./types"
 
 // ─── File parsing + column resolution ─────────────────────────────
@@ -15,18 +20,13 @@ import type { NewProposalState, ProposalProduct, FileUploadProgressState, TermSu
 // parsing (FileReader.readAsText — XLSX read as binary garbage, no BOM
 // strip, no CRLF normalization) AND a third copy of the header-alias
 // lists, which missed "ReferenceNumber"-class SKU headers. Parsing now
-// goes through the shared readPricingRows (CSV client-side with
-// BOM/CRLF/quote handling; XLSX/XLS via /api/parse-file) and column
-// detection through the canonical alias lists in
-// lib/utils/parse-pricing-file.ts (invariants table: "Pricing-file
-// header detection") — NEVER inline a copy. Builder-only extras
-// ("Product Name", proposed_price, cost-basis, the usage-file columns)
-// stay here as SECONDARY aliases behind the canonical lists.
-
-// Same normalization convention as pricing-file-reader.ts.
-function norm(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "")
-}
+// goes through the shared <PricingFileDropzone> (readPricingRows: CSV
+// client-side with BOM/CRLF/quote handling; XLSX/XLS via
+// /api/parse-file) and column detection through the canonical alias
+// lists in lib/utils/parse-pricing-file.ts (invariants table:
+// "Pricing-file header detection") — NEVER inline a copy. Builder-only
+// extras ("Product Name", proposed_price, cost-basis, the usage-file
+// columns) stay here as SECONDARY aliases behind the canonical lists.
 
 function findExact(normHeaders: string[], aliases: string[]): number {
   for (const alias of aliases) {
@@ -53,6 +53,106 @@ function findCategoryIdx(normHeaders: string[]): number {
   // still count as a category column.
   return findContains(normHeaders, ["category", "type", "class"])
 }
+
+// ─── Field specs for the shared <PricingFileDropzone> ──────────────
+// (uploader improvements 1, 2026-06-13). Aliases IMPORT the canonical
+// lists; `contains` carries the builder's legacy substring fallbacks so
+// auto-detection in the mapping dialog matches what the mappers do.
+
+export const BUILDER_PRICING_UPLOAD_SPECS: UploadFieldSpec[] = [
+  { key: "name", label: "Product name", aliases: NAME_ALIASES, kind: "text" },
+  { key: "ref", label: "Reference number", aliases: ITEM_NUMBER_ALIASES, kind: "text" },
+  {
+    key: "price",
+    label: "Proposed price",
+    aliases: ["proposed_price", "proposedprice", ...UNIT_PRICE_ALIASES],
+    contains: ["price"],
+    kind: "number",
+  },
+  { key: "qty", label: "Quantity", aliases: QTY_ALIASES, kind: "number" },
+  { key: "costBasis", label: "Cost basis", aliases: COST_BASIS_ALIASES, kind: "number" },
+  {
+    key: "category",
+    label: "Category",
+    aliases: CATEGORY_ALIASES,
+    contains: ["category", "type", "class"],
+    kind: "text",
+  },
+]
+
+/**
+ * "Either of two" can't be a per-field `required` — the pricing file
+ * needs a product name OR a reference number. Wired into the dropzone's
+ * `validate` prop.
+ */
+export function validateBuilderPricingMapping(
+  mapping: ResolvedMapping,
+): string | null {
+  if (mapping.name === null && mapping.ref === null) {
+    return "Map either Product name or Reference number — at least one is required."
+  }
+  return null
+}
+
+export const BUILDER_USAGE_UPLOAD_SPECS: UploadFieldSpec[] = [
+  {
+    key: "name",
+    label: "Product name",
+    aliases: NAME_ALIASES,
+    // Legacy fallback: anything "productname"/"description"-flavored.
+    contains: ["productname", "description"],
+    required: true,
+    kind: "text",
+  },
+  {
+    key: "ref",
+    label: "Reference number",
+    aliases: ITEM_NUMBER_ALIASES,
+    contains: ["ref", "sku", "itemnumber", "partnumber"],
+    kind: "text",
+  },
+  {
+    key: "date",
+    label: "Transaction date",
+    aliases: [],
+    contains: ["date", "ordered"],
+    kind: "date",
+  },
+  {
+    key: "qty",
+    label: "Quantity",
+    aliases: QTY_ALIASES,
+    contains: ["quantity", "qty"],
+    kind: "number",
+  },
+  {
+    key: "unitCost",
+    label: "Unit cost",
+    aliases: ["unit_cost", "unit_price"],
+    contains: ["unitcost", "unitprice", "price"],
+    kind: "number",
+  },
+  {
+    key: "extendedCost",
+    label: "Extended cost (line total)",
+    // Exact-only legacy matches (h === "total" / "cost" / "revenue").
+    aliases: ["total", "cost", "revenue"],
+    contains: [
+      "extended", "totalcost", "linetotal", "amount", "spend",
+      "totalprice", "extcost", "extprice", "lineamount",
+      "invoiceamount", "costtotal", "pricetotal",
+    ],
+    kind: "number",
+  },
+  {
+    key: "category",
+    label: "Category",
+    aliases: CATEGORY_ALIASES,
+    contains: ["category", "type", "class"],
+    kind: "text",
+  },
+  { key: "vendor", label: "Vendor", aliases: [], contains: ["vendor"], kind: "text" },
+]
 
 // Self-service failure toasts (bugs 2026-06-13): show the headers we
 // actually saw so the user can fix the file without filing a bug.
@@ -84,23 +184,44 @@ export type MapPricingResult =
 export function mapPricingRows(
   headers: string[],
   rows: Record<string, string>[],
+  /**
+   * From the shared <PricingFileDropzone> mapping dialog — when
+   * provided, the user's columns FULLY replace auto-detection
+   * (uploader improvements 1, 2026-06-13).
+   */
+  mappingOverride?: ResolvedMapping,
 ): MapPricingResult {
   const normHeaders = headers.map(norm)
 
-  const nameIdx = findExact(normHeaders, NAME_ALIASES)
-  const refIdx = findExact(normHeaders, ITEM_NUMBER_ALIASES)
-  // proposed_price first (a proposal file's own column), then the
-  // canonical price list, then the legacy contains-"price" fallback so
-  // headers like "List Price" still resolve as they did before.
-  let priceIdx = findExact(normHeaders, [
-    "proposed_price",
-    "proposedprice",
-    ...UNIT_PRICE_ALIASES,
-  ])
-  if (priceIdx === -1) priceIdx = findContains(normHeaders, ["price"])
-  const qtyIdx = findExact(normHeaders, QTY_ALIASES)
-  const costIdx = findExact(normHeaders, COST_BASIS_ALIASES)
-  const categoryIdx = findCategoryIdx(normHeaders)
+  let nameIdx: number
+  let refIdx: number
+  let priceIdx: number
+  let qtyIdx: number
+  let costIdx: number
+  let categoryIdx: number
+  if (mappingOverride) {
+    nameIdx = overrideIndex(headers, mappingOverride, "name")
+    refIdx = overrideIndex(headers, mappingOverride, "ref")
+    priceIdx = overrideIndex(headers, mappingOverride, "price")
+    qtyIdx = overrideIndex(headers, mappingOverride, "qty")
+    costIdx = overrideIndex(headers, mappingOverride, "costBasis")
+    categoryIdx = overrideIndex(headers, mappingOverride, "category")
+  } else {
+    nameIdx = findExact(normHeaders, NAME_ALIASES)
+    refIdx = findExact(normHeaders, ITEM_NUMBER_ALIASES)
+    // proposed_price first (a proposal file's own column), then the
+    // canonical price list, then the legacy contains-"price" fallback so
+    // headers like "List Price" still resolve as they did before.
+    priceIdx = findExact(normHeaders, [
+      "proposed_price",
+      "proposedprice",
+      ...UNIT_PRICE_ALIASES,
+    ])
+    if (priceIdx === -1) priceIdx = findContains(normHeaders, ["price"])
+    qtyIdx = findExact(normHeaders, QTY_ALIASES)
+    costIdx = findExact(normHeaders, COST_BASIS_ALIASES)
+    categoryIdx = findCategoryIdx(normHeaders)
+  }
 
   if (nameIdx === -1 && refIdx === -1) {
     return { ok: false, reason: "missing-name-and-ref" }
@@ -151,8 +272,18 @@ export function mapPricingRows(
   return { ok: true, products, totalSpend, totalVolume, distinctCategories, detectedCategory }
 }
 
-export async function handlePricingFileUpload(
-  e: React.ChangeEvent<HTMLInputElement>,
+/**
+ * Downstream import for the builder's pricing upload (uploader
+ * improvements 1, 2026-06-13): the shared <PricingFileDropzone> owns
+ * file reading + column mapping and hands us parsed rows + the
+ * confirmed mapping. Everything downstream (merge with usage, #66
+ * category auto-select, toasts) is unchanged from the pre-dropzone
+ * handlePricingFileUpload.
+ */
+export async function handlePricingRowsImport(
+  headers: string[],
+  rows: Record<string, string>[],
+  mapping: ResolvedMapping,
   setFileUploadProgress: React.Dispatch<React.SetStateAction<FileUploadProgressState>>,
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>,
   /**
@@ -164,24 +295,14 @@ export async function handlePricingFileUpload(
    */
   setCustomCategories?: React.Dispatch<React.SetStateAction<string[]>>,
 ) {
-  const file = e.target.files?.[0]
-  // Reset before any await so re-selecting the same file re-fires onChange.
-  e.target.value = ""
-  if (!file) return
-
-  setFileUploadProgress({ isLoading: true, type: "pricing", progress: 0, message: "Reading pricing file..." })
+  setFileUploadProgress({ isLoading: true, type: "pricing", progress: 30, message: "Parsing pricing data..." })
 
   try {
-      // Shared reader (bugs 2026-06-13): CSV parses client-side with
-      // BOM/CRLF/quote handling; XLSX/XLS go through /api/parse-file,
-      // which also scans for the real header row.
-      const { headers, rows } = await readPricingRows(file)
-
-      setFileUploadProgress({ isLoading: true, type: "pricing", progress: 30, message: "Parsing pricing data..." })
-
-      const mapped = mapPricingRows(headers, rows)
+      const mapped = mapPricingRows(headers, rows, mapping)
 
       if (!mapped.ok) {
+        // Unreachable through the dropzone (validateBuilderPricingMapping
+        // blocks Import) — kept as a guard for programmatic callers.
         setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
         toast.error(
           `Pricing file must have a product name or reference number column — found: ${headerPreview(headers)}`,
@@ -281,9 +402,9 @@ export async function handlePricingFileUpload(
         )
       }
   } catch (err) {
-    console.error("Pricing file parse error:", err)
+    console.error("Pricing rows import error:", err)
     setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
-    toast.error("Failed to parse pricing file")
+    toast.error("Failed to import pricing file")
   }
 }
 
@@ -310,46 +431,71 @@ export type MapUsageResult =
 export function mapUsageRows(
   headers: string[],
   rows: Record<string, string>[],
+  /**
+   * From the shared <PricingFileDropzone> mapping dialog — when
+   * provided, the user's columns FULLY replace auto-detection
+   * (uploader improvements 1, 2026-06-13).
+   */
+  mappingOverride?: ResolvedMapping,
 ): MapUsageResult {
   const normHeaders = headers.map(norm)
 
-  const vendorIdx = findContains(normHeaders, ["vendor"])
-  const dateIdx = findContains(normHeaders, ["date", "ordered"])
-  // Canonical description aliases first; then the legacy contains
-  // behavior ("Product Name" / anything "product" that isn't a ref).
-  let nameIdx = findExact(normHeaders, NAME_ALIASES)
-  if (nameIdx === -1) {
-    nameIdx = normHeaders.findIndex(
+  let vendorIdx: number
+  let dateIdx: number
+  let nameIdx: number
+  let refIdx: number
+  let qtyIdx: number
+  let unitCostIdx: number
+  let extendedCostIdx: number
+  let categoryIdx: number
+  if (mappingOverride) {
+    vendorIdx = overrideIndex(headers, mappingOverride, "vendor")
+    dateIdx = overrideIndex(headers, mappingOverride, "date")
+    nameIdx = overrideIndex(headers, mappingOverride, "name")
+    refIdx = overrideIndex(headers, mappingOverride, "ref")
+    qtyIdx = overrideIndex(headers, mappingOverride, "qty")
+    unitCostIdx = overrideIndex(headers, mappingOverride, "unitCost")
+    extendedCostIdx = overrideIndex(headers, mappingOverride, "extendedCost")
+    categoryIdx = overrideIndex(headers, mappingOverride, "category")
+  } else {
+    vendorIdx = findContains(normHeaders, ["vendor"])
+    dateIdx = findContains(normHeaders, ["date", "ordered"])
+    // Canonical description aliases first; then the legacy contains
+    // behavior ("Product Name" / anything "product" that isn't a ref).
+    nameIdx = findExact(normHeaders, NAME_ALIASES)
+    if (nameIdx === -1) {
+      nameIdx = normHeaders.findIndex(
+        (h) =>
+          h.includes("productname") ||
+          h.includes("description") ||
+          (h.includes("product") && !h.includes("ref")),
+      )
+    }
+    refIdx = findExact(normHeaders, ITEM_NUMBER_ALIASES)
+    if (refIdx === -1) {
+      refIdx = findContains(normHeaders, ["ref", "sku", "itemnumber", "partnumber"])
+    }
+    qtyIdx = findExact(normHeaders, QTY_ALIASES)
+    if (qtyIdx === -1) qtyIdx = findContains(normHeaders, ["quantity", "qty"])
+    // "Unit Cost" must keep resolving as the per-unit price (as today);
+    // the generic contains-"price" fallback comes last.
+    unitCostIdx = findExact(normHeaders, ["unit_cost", "unit_price"])
+    if (unitCostIdx === -1) {
+      unitCostIdx = findContains(normHeaders, ["unitcost", "unitprice", "price"])
+    }
+    // Existing extended-cost alias set, normalized (e.g. "total cost" →
+    // "totalcost").
+    extendedCostIdx = normHeaders.findIndex(
       (h) =>
-        h.includes("productname") ||
-        h.includes("description") ||
-        (h.includes("product") && !h.includes("ref")),
+        [
+          "extended", "totalcost", "linetotal", "amount", "spend",
+          "totalprice", "extcost", "extprice", "lineamount",
+          "invoiceamount", "costtotal", "pricetotal",
+        ].some((n) => h.includes(n)) ||
+        h === "total" || h === "cost" || h === "revenue",
     )
+    categoryIdx = findCategoryIdx(normHeaders)
   }
-  let refIdx = findExact(normHeaders, ITEM_NUMBER_ALIASES)
-  if (refIdx === -1) {
-    refIdx = findContains(normHeaders, ["ref", "sku", "itemnumber", "partnumber"])
-  }
-  let qtyIdx = findExact(normHeaders, QTY_ALIASES)
-  if (qtyIdx === -1) qtyIdx = findContains(normHeaders, ["quantity", "qty"])
-  // "Unit Cost" must keep resolving as the per-unit price (as today);
-  // the generic contains-"price" fallback comes last.
-  let unitCostIdx = findExact(normHeaders, ["unit_cost", "unit_price"])
-  if (unitCostIdx === -1) {
-    unitCostIdx = findContains(normHeaders, ["unitcost", "unitprice", "price"])
-  }
-  // Existing extended-cost alias set, normalized (e.g. "total cost" →
-  // "totalcost").
-  const extendedCostIdx = normHeaders.findIndex(
-    (h) =>
-      [
-        "extended", "totalcost", "linetotal", "amount", "spend",
-        "totalprice", "extcost", "extprice", "lineamount",
-        "invoiceamount", "costtotal", "pricetotal",
-      ].some((n) => h.includes(n)) ||
-      h === "total" || h === "cost" || h === "revenue",
-  )
-  const categoryIdx = findCategoryIdx(normHeaders)
 
   if (nameIdx === -1) {
     return { ok: false, reason: "missing-name" }
@@ -497,23 +643,21 @@ export function mapUsageRows(
   return { ok: true, products, totalVolume, totalRevenue, detectedCategory, processedRows, truncated }
 }
 
-export async function handleUsageFileUpload(
-  e: React.ChangeEvent<HTMLInputElement>,
+/**
+ * Downstream import for the builder's usage upload (uploader
+ * improvements 1, 2026-06-13): rows + confirmed mapping arrive from the
+ * shared <PricingFileDropzone>; the aggregation, pricing-merge and
+ * toast behavior is unchanged from the pre-dropzone
+ * handleUsageFileUpload.
+ */
+export async function handleUsageRowsImport(
+  headers: string[],
+  rows: Record<string, string>[],
+  mapping: ResolvedMapping,
   setFileUploadProgress: React.Dispatch<React.SetStateAction<FileUploadProgressState>>,
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>,
 ) {
-  const file = e.target.files?.[0]
-  // Reset before any await so re-selecting the same file re-fires onChange.
-  e.target.value = ""
-  if (!file) return
-
-  setFileUploadProgress({ isLoading: true, type: "usage", progress: 0, message: "Reading file..." })
-
   try {
-      // Shared reader (bugs 2026-06-13): CSV parses client-side with
-      // BOM/CRLF/quote handling; XLSX/XLS go through /api/parse-file.
-      const { headers, rows } = await readPricingRows(file)
-
       const rowCount = Math.min(rows.length, MAX_USAGE_ROWS)
       setFileUploadProgress({
         isLoading: true,
@@ -525,9 +669,11 @@ export async function handleUsageFileUpload(
       // aggregation pass over (up to) 50k rows.
       await new Promise(resolve => setTimeout(resolve, 0))
 
-      const mapped = mapUsageRows(headers, rows)
+      const mapped = mapUsageRows(headers, rows, mapping)
 
       if (!mapped.ok) {
+        // Unreachable through the dropzone (name is `required` on the
+        // usage spec) — kept as a guard for programmatic callers.
         setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
         toast.error(
           `Usage file must have a product name column — found: ${headerPreview(headers)}`,
@@ -616,9 +762,9 @@ export async function handleUsageFileUpload(
         matchInfo + skippedInfo
       )
   } catch (err) {
-    console.error("Usage file parse error:", err)
+    console.error("Usage rows import error:", err)
     setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
-    toast.error("Failed to parse usage file")
+    toast.error("Failed to import usage file")
   }
 }
 

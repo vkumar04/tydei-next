@@ -202,3 +202,56 @@ describe("mapBenchmarkRows — row-drop rules", () => {
     expect(items[0]!.percentile25).toBe(12)
   })
 })
+
+describe("mapBenchmarkRows — mappingOverride (uploader improvements 1, 2026-06-13)", () => {
+  it("override wins over auto-detect", () => {
+    // "SKU" would auto-detect as the item column; the user's mapping
+    // points at "Internal Code" and maps the oddball "$ Avg" price.
+    const headers = ["SKU", "Internal Code", "$ Avg"]
+    const { items, withNationalAvg } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["WRONG-1", "RIGHT-1", "42.00"]]),
+      {
+        itemNumber: "Internal Code",
+        description: null,
+        category: null,
+        nationalAvgPrice: "$ Avg",
+        percentile25: null,
+        percentile50: null,
+        percentile75: null,
+        minPrice: null,
+        maxPrice: null,
+        sampleSize: null,
+        dataDate: null,
+      },
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]!.vendorItemNo).toBe("RIGHT-1")
+    expect(items[0]!.nationalAvgPrice).toBe(42)
+    expect(withNationalAvg).toBe(1)
+  })
+
+  it("keeps the at-least-one-price rule under an override (rows without price drop)", () => {
+    const headers = ["Code", "Avg"]
+    const { items, droppedNoPrice } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", ""], ["A-2", "10"]]),
+      {
+        itemNumber: "Code",
+        description: null,
+        category: null,
+        nationalAvgPrice: "Avg",
+        percentile25: null,
+        percentile50: null,
+        percentile75: null,
+        minPrice: null,
+        maxPrice: null,
+        sampleSize: null,
+        dataDate: null,
+      },
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]!.vendorItemNo).toBe("A-2")
+    expect(droppedNoPrice).toBe(1)
+  })
+})

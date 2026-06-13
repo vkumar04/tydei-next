@@ -214,6 +214,8 @@ export const RebateInsightFlagScalarFieldEnumSchema = z.enum(['id','facilityId',
 
 export const RenewalBriefCacheScalarFieldEnumSchema = z.enum(['id','contractId','inputHash','response','model','costCents','createdAt','expiresAt']);
 
+export const UploadHeaderEventScalarFieldEnumSchema = z.enum(['id','surface','fileName','headers','autoMapping','finalMapping','missingRequired','outcome','createdAt']);
+
 export const SortOrderSchema = z.enum(['asc','desc']);
 
 export const NullableJsonNullValueInputSchema: z.ZodType<Prisma.NullableJsonNullValueInput> = z.enum(['DbNull','JsonNull',]).transform((value) => value === 'JsonNull' ? Prisma.JsonNull : value === 'DbNull' ? Prisma.DbNull : value);
@@ -7719,6 +7721,42 @@ export const RenewalBriefCacheWithPartialRelationsSchema: z.ZodType<RenewalBrief
 }).partial())
 
 /////////////////////////////////////////
+// UPLOAD HEADER EVENT SCHEMA
+/////////////////////////////////////////
+
+export const UploadHeaderEventSchema = z.object({
+  id: z.cuid(),
+  surface: z.string(),
+  fileName: z.string().nullable(),
+  headers: JsonValueSchema,
+  autoMapping: JsonValueSchema,
+  finalMapping: JsonValueSchema.nullable(),
+  missingRequired: JsonValueSchema.nullable(),
+  outcome: z.string(),
+  createdAt: z.coerce.date(),
+})
+
+export type UploadHeaderEvent = z.infer<typeof UploadHeaderEventSchema>
+
+/////////////////////////////////////////
+// UPLOAD HEADER EVENT PARTIAL SCHEMA
+/////////////////////////////////////////
+
+export const UploadHeaderEventPartialSchema = UploadHeaderEventSchema.partial()
+
+export type UploadHeaderEventPartial = z.infer<typeof UploadHeaderEventPartialSchema>
+
+// UPLOAD HEADER EVENT OPTIONAL DEFAULTS SCHEMA
+//------------------------------------------------------
+
+export const UploadHeaderEventOptionalDefaultsSchema = UploadHeaderEventSchema.merge(z.object({
+  id: z.cuid().optional(),
+  createdAt: z.coerce.date().optional(),
+}))
+
+export type UploadHeaderEventOptionalDefaults = z.infer<typeof UploadHeaderEventOptionalDefaultsSchema>
+
+/////////////////////////////////////////
 // SELECT & INCLUDE
 /////////////////////////////////////////
 
@@ -10083,6 +10121,21 @@ export const RenewalBriefCacheSelectSchema: z.ZodType<Prisma.RenewalBriefCacheSe
   createdAt: z.boolean().optional(),
   expiresAt: z.boolean().optional(),
   contract: z.union([z.boolean(),z.lazy(() => ContractArgsSchema)]).optional(),
+}).strict()
+
+// UPLOAD HEADER EVENT
+//------------------------------------------------------
+
+export const UploadHeaderEventSelectSchema: z.ZodType<Prisma.UploadHeaderEventSelect> = z.object({
+  id: z.boolean().optional(),
+  surface: z.boolean().optional(),
+  fileName: z.boolean().optional(),
+  headers: z.boolean().optional(),
+  autoMapping: z.boolean().optional(),
+  finalMapping: z.boolean().optional(),
+  missingRequired: z.boolean().optional(),
+  outcome: z.boolean().optional(),
+  createdAt: z.boolean().optional(),
 }).strict()
 
 
@@ -17000,6 +17053,81 @@ export const RenewalBriefCacheScalarWhereWithAggregatesInputSchema: z.ZodType<Pr
   costCents: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema), z.number() ]).optional().nullable(),
   createdAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
   expiresAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
+});
+
+export const UploadHeaderEventWhereInputSchema: z.ZodType<Prisma.UploadHeaderEventWhereInput> = z.strictObject({
+  AND: z.union([ z.lazy(() => UploadHeaderEventWhereInputSchema), z.lazy(() => UploadHeaderEventWhereInputSchema).array() ]).optional(),
+  OR: z.lazy(() => UploadHeaderEventWhereInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => UploadHeaderEventWhereInputSchema), z.lazy(() => UploadHeaderEventWhereInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  surface: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  fileName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  headers: z.lazy(() => JsonFilterSchema).optional(),
+  autoMapping: z.lazy(() => JsonFilterSchema).optional(),
+  finalMapping: z.lazy(() => JsonNullableFilterSchema).optional(),
+  missingRequired: z.lazy(() => JsonNullableFilterSchema).optional(),
+  outcome: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
+});
+
+export const UploadHeaderEventOrderByWithRelationInputSchema: z.ZodType<Prisma.UploadHeaderEventOrderByWithRelationInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  surface: z.lazy(() => SortOrderSchema).optional(),
+  fileName: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  headers: z.lazy(() => SortOrderSchema).optional(),
+  autoMapping: z.lazy(() => SortOrderSchema).optional(),
+  finalMapping: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  missingRequired: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  outcome: z.lazy(() => SortOrderSchema).optional(),
+  createdAt: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const UploadHeaderEventWhereUniqueInputSchema: z.ZodType<Prisma.UploadHeaderEventWhereUniqueInput> = z.object({
+  id: z.cuid(),
+})
+.and(z.strictObject({
+  id: z.cuid().optional(),
+  AND: z.union([ z.lazy(() => UploadHeaderEventWhereInputSchema), z.lazy(() => UploadHeaderEventWhereInputSchema).array() ]).optional(),
+  OR: z.lazy(() => UploadHeaderEventWhereInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => UploadHeaderEventWhereInputSchema), z.lazy(() => UploadHeaderEventWhereInputSchema).array() ]).optional(),
+  surface: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  fileName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  headers: z.lazy(() => JsonFilterSchema).optional(),
+  autoMapping: z.lazy(() => JsonFilterSchema).optional(),
+  finalMapping: z.lazy(() => JsonNullableFilterSchema).optional(),
+  missingRequired: z.lazy(() => JsonNullableFilterSchema).optional(),
+  outcome: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
+  createdAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
+}));
+
+export const UploadHeaderEventOrderByWithAggregationInputSchema: z.ZodType<Prisma.UploadHeaderEventOrderByWithAggregationInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  surface: z.lazy(() => SortOrderSchema).optional(),
+  fileName: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  headers: z.lazy(() => SortOrderSchema).optional(),
+  autoMapping: z.lazy(() => SortOrderSchema).optional(),
+  finalMapping: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  missingRequired: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  outcome: z.lazy(() => SortOrderSchema).optional(),
+  createdAt: z.lazy(() => SortOrderSchema).optional(),
+  _count: z.lazy(() => UploadHeaderEventCountOrderByAggregateInputSchema).optional(),
+  _max: z.lazy(() => UploadHeaderEventMaxOrderByAggregateInputSchema).optional(),
+  _min: z.lazy(() => UploadHeaderEventMinOrderByAggregateInputSchema).optional(),
+});
+
+export const UploadHeaderEventScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.UploadHeaderEventScalarWhereWithAggregatesInput> = z.strictObject({
+  AND: z.union([ z.lazy(() => UploadHeaderEventScalarWhereWithAggregatesInputSchema), z.lazy(() => UploadHeaderEventScalarWhereWithAggregatesInputSchema).array() ]).optional(),
+  OR: z.lazy(() => UploadHeaderEventScalarWhereWithAggregatesInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => UploadHeaderEventScalarWhereWithAggregatesInputSchema), z.lazy(() => UploadHeaderEventScalarWhereWithAggregatesInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  surface: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  fileName: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
+  headers: z.lazy(() => JsonWithAggregatesFilterSchema).optional(),
+  autoMapping: z.lazy(() => JsonWithAggregatesFilterSchema).optional(),
+  finalMapping: z.lazy(() => JsonNullableWithAggregatesFilterSchema).optional(),
+  missingRequired: z.lazy(() => JsonNullableWithAggregatesFilterSchema).optional(),
+  outcome: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
+  createdAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
 });
 
 export const UserCreateInputSchema: z.ZodType<Prisma.UserCreateInput> = z.strictObject({
@@ -24271,6 +24399,90 @@ export const RenewalBriefCacheUncheckedUpdateManyInputSchema: z.ZodType<Prisma.R
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
 });
 
+export const UploadHeaderEventCreateInputSchema: z.ZodType<Prisma.UploadHeaderEventCreateInput> = z.strictObject({
+  id: z.cuid().optional(),
+  surface: z.string(),
+  fileName: z.string().optional().nullable(),
+  headers: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]),
+  autoMapping: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]),
+  finalMapping: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  missingRequired: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  outcome: z.string(),
+  createdAt: z.coerce.date().optional(),
+});
+
+export const UploadHeaderEventUncheckedCreateInputSchema: z.ZodType<Prisma.UploadHeaderEventUncheckedCreateInput> = z.strictObject({
+  id: z.cuid().optional(),
+  surface: z.string(),
+  fileName: z.string().optional().nullable(),
+  headers: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]),
+  autoMapping: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]),
+  finalMapping: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  missingRequired: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  outcome: z.string(),
+  createdAt: z.coerce.date().optional(),
+});
+
+export const UploadHeaderEventUpdateInputSchema: z.ZodType<Prisma.UploadHeaderEventUpdateInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  surface: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  headers: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  autoMapping: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  finalMapping: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  missingRequired: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  outcome: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const UploadHeaderEventUncheckedUpdateInputSchema: z.ZodType<Prisma.UploadHeaderEventUncheckedUpdateInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  surface: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  headers: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  autoMapping: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  finalMapping: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  missingRequired: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  outcome: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const UploadHeaderEventCreateManyInputSchema: z.ZodType<Prisma.UploadHeaderEventCreateManyInput> = z.strictObject({
+  id: z.cuid().optional(),
+  surface: z.string(),
+  fileName: z.string().optional().nullable(),
+  headers: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]),
+  autoMapping: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]),
+  finalMapping: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  missingRequired: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  outcome: z.string(),
+  createdAt: z.coerce.date().optional(),
+});
+
+export const UploadHeaderEventUpdateManyMutationInputSchema: z.ZodType<Prisma.UploadHeaderEventUpdateManyMutationInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  surface: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  headers: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  autoMapping: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  finalMapping: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  missingRequired: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  outcome: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const UploadHeaderEventUncheckedUpdateManyInputSchema: z.ZodType<Prisma.UploadHeaderEventUncheckedUpdateManyInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  surface: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  headers: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  autoMapping: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  finalMapping: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  missingRequired: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  outcome: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
 export const StringFilterSchema: z.ZodType<Prisma.StringFilter> = z.strictObject({
   equals: z.string().optional(),
   in: z.string().array().optional(),
@@ -29630,6 +29842,34 @@ export const RenewalBriefCacheMinOrderByAggregateInputSchema: z.ZodType<Prisma.R
 
 export const RenewalBriefCacheSumOrderByAggregateInputSchema: z.ZodType<Prisma.RenewalBriefCacheSumOrderByAggregateInput> = z.strictObject({
   costCents: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const UploadHeaderEventCountOrderByAggregateInputSchema: z.ZodType<Prisma.UploadHeaderEventCountOrderByAggregateInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  surface: z.lazy(() => SortOrderSchema).optional(),
+  fileName: z.lazy(() => SortOrderSchema).optional(),
+  headers: z.lazy(() => SortOrderSchema).optional(),
+  autoMapping: z.lazy(() => SortOrderSchema).optional(),
+  finalMapping: z.lazy(() => SortOrderSchema).optional(),
+  missingRequired: z.lazy(() => SortOrderSchema).optional(),
+  outcome: z.lazy(() => SortOrderSchema).optional(),
+  createdAt: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const UploadHeaderEventMaxOrderByAggregateInputSchema: z.ZodType<Prisma.UploadHeaderEventMaxOrderByAggregateInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  surface: z.lazy(() => SortOrderSchema).optional(),
+  fileName: z.lazy(() => SortOrderSchema).optional(),
+  outcome: z.lazy(() => SortOrderSchema).optional(),
+  createdAt: z.lazy(() => SortOrderSchema).optional(),
+});
+
+export const UploadHeaderEventMinOrderByAggregateInputSchema: z.ZodType<Prisma.UploadHeaderEventMinOrderByAggregateInput> = z.strictObject({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  surface: z.lazy(() => SortOrderSchema).optional(),
+  fileName: z.lazy(() => SortOrderSchema).optional(),
+  outcome: z.lazy(() => SortOrderSchema).optional(),
+  createdAt: z.lazy(() => SortOrderSchema).optional(),
 });
 
 export const SessionCreateNestedManyWithoutUserInputSchema: z.ZodType<Prisma.SessionCreateNestedManyWithoutUserInput> = z.strictObject({
@@ -70262,6 +70502,63 @@ export const RenewalBriefCacheFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.Rene
   where: RenewalBriefCacheWhereUniqueInputSchema, 
 }).strict();
 
+export const UploadHeaderEventFindFirstArgsSchema: z.ZodType<Prisma.UploadHeaderEventFindFirstArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  where: UploadHeaderEventWhereInputSchema.optional(), 
+  orderBy: z.union([ UploadHeaderEventOrderByWithRelationInputSchema.array(), UploadHeaderEventOrderByWithRelationInputSchema ]).optional(),
+  cursor: UploadHeaderEventWhereUniqueInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: z.union([ UploadHeaderEventScalarFieldEnumSchema, UploadHeaderEventScalarFieldEnumSchema.array() ]).optional(),
+}).strict();
+
+export const UploadHeaderEventFindFirstOrThrowArgsSchema: z.ZodType<Prisma.UploadHeaderEventFindFirstOrThrowArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  where: UploadHeaderEventWhereInputSchema.optional(), 
+  orderBy: z.union([ UploadHeaderEventOrderByWithRelationInputSchema.array(), UploadHeaderEventOrderByWithRelationInputSchema ]).optional(),
+  cursor: UploadHeaderEventWhereUniqueInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: z.union([ UploadHeaderEventScalarFieldEnumSchema, UploadHeaderEventScalarFieldEnumSchema.array() ]).optional(),
+}).strict();
+
+export const UploadHeaderEventFindManyArgsSchema: z.ZodType<Prisma.UploadHeaderEventFindManyArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  where: UploadHeaderEventWhereInputSchema.optional(), 
+  orderBy: z.union([ UploadHeaderEventOrderByWithRelationInputSchema.array(), UploadHeaderEventOrderByWithRelationInputSchema ]).optional(),
+  cursor: UploadHeaderEventWhereUniqueInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: z.union([ UploadHeaderEventScalarFieldEnumSchema, UploadHeaderEventScalarFieldEnumSchema.array() ]).optional(),
+}).strict();
+
+export const UploadHeaderEventAggregateArgsSchema: z.ZodType<Prisma.UploadHeaderEventAggregateArgs> = z.object({
+  where: UploadHeaderEventWhereInputSchema.optional(), 
+  orderBy: z.union([ UploadHeaderEventOrderByWithRelationInputSchema.array(), UploadHeaderEventOrderByWithRelationInputSchema ]).optional(),
+  cursor: UploadHeaderEventWhereUniqueInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+}).strict();
+
+export const UploadHeaderEventGroupByArgsSchema: z.ZodType<Prisma.UploadHeaderEventGroupByArgs> = z.object({
+  where: UploadHeaderEventWhereInputSchema.optional(), 
+  orderBy: z.union([ UploadHeaderEventOrderByWithAggregationInputSchema.array(), UploadHeaderEventOrderByWithAggregationInputSchema ]).optional(),
+  by: UploadHeaderEventScalarFieldEnumSchema.array(), 
+  having: UploadHeaderEventScalarWhereWithAggregatesInputSchema.optional(), 
+  take: z.number().optional(),
+  skip: z.number().optional(),
+}).strict();
+
+export const UploadHeaderEventFindUniqueArgsSchema: z.ZodType<Prisma.UploadHeaderEventFindUniqueArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  where: UploadHeaderEventWhereUniqueInputSchema, 
+}).strict();
+
+export const UploadHeaderEventFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.UploadHeaderEventFindUniqueOrThrowArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  where: UploadHeaderEventWhereUniqueInputSchema, 
+}).strict();
+
 export const UserCreateArgsSchema: z.ZodType<Prisma.UserCreateArgs> = z.object({
   select: UserSelectSchema.optional(),
   include: UserIncludeSchema.optional(),
@@ -73919,5 +74216,55 @@ export const RenewalBriefCacheUpdateManyAndReturnArgsSchema: z.ZodType<Prisma.Re
 
 export const RenewalBriefCacheDeleteManyArgsSchema: z.ZodType<Prisma.RenewalBriefCacheDeleteManyArgs> = z.object({
   where: RenewalBriefCacheWhereInputSchema.optional(), 
+  limit: z.number().optional(),
+}).strict();
+
+export const UploadHeaderEventCreateArgsSchema: z.ZodType<Prisma.UploadHeaderEventCreateArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  data: z.union([ UploadHeaderEventCreateInputSchema, UploadHeaderEventUncheckedCreateInputSchema ]),
+}).strict();
+
+export const UploadHeaderEventUpsertArgsSchema: z.ZodType<Prisma.UploadHeaderEventUpsertArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  where: UploadHeaderEventWhereUniqueInputSchema, 
+  create: z.union([ UploadHeaderEventCreateInputSchema, UploadHeaderEventUncheckedCreateInputSchema ]),
+  update: z.union([ UploadHeaderEventUpdateInputSchema, UploadHeaderEventUncheckedUpdateInputSchema ]),
+}).strict();
+
+export const UploadHeaderEventCreateManyArgsSchema: z.ZodType<Prisma.UploadHeaderEventCreateManyArgs> = z.object({
+  data: z.union([ UploadHeaderEventCreateManyInputSchema, UploadHeaderEventCreateManyInputSchema.array() ]),
+  skipDuplicates: z.boolean().optional(),
+}).strict();
+
+export const UploadHeaderEventCreateManyAndReturnArgsSchema: z.ZodType<Prisma.UploadHeaderEventCreateManyAndReturnArgs> = z.object({
+  data: z.union([ UploadHeaderEventCreateManyInputSchema, UploadHeaderEventCreateManyInputSchema.array() ]),
+  skipDuplicates: z.boolean().optional(),
+}).strict();
+
+export const UploadHeaderEventDeleteArgsSchema: z.ZodType<Prisma.UploadHeaderEventDeleteArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  where: UploadHeaderEventWhereUniqueInputSchema, 
+}).strict();
+
+export const UploadHeaderEventUpdateArgsSchema: z.ZodType<Prisma.UploadHeaderEventUpdateArgs> = z.object({
+  select: UploadHeaderEventSelectSchema.optional(),
+  data: z.union([ UploadHeaderEventUpdateInputSchema, UploadHeaderEventUncheckedUpdateInputSchema ]),
+  where: UploadHeaderEventWhereUniqueInputSchema, 
+}).strict();
+
+export const UploadHeaderEventUpdateManyArgsSchema: z.ZodType<Prisma.UploadHeaderEventUpdateManyArgs> = z.object({
+  data: z.union([ UploadHeaderEventUpdateManyMutationInputSchema, UploadHeaderEventUncheckedUpdateManyInputSchema ]),
+  where: UploadHeaderEventWhereInputSchema.optional(), 
+  limit: z.number().optional(),
+}).strict();
+
+export const UploadHeaderEventUpdateManyAndReturnArgsSchema: z.ZodType<Prisma.UploadHeaderEventUpdateManyAndReturnArgs> = z.object({
+  data: z.union([ UploadHeaderEventUpdateManyMutationInputSchema, UploadHeaderEventUncheckedUpdateManyInputSchema ]),
+  where: UploadHeaderEventWhereInputSchema.optional(), 
+  limit: z.number().optional(),
+}).strict();
+
+export const UploadHeaderEventDeleteManyArgsSchema: z.ZodType<Prisma.UploadHeaderEventDeleteManyArgs> = z.object({
+  where: UploadHeaderEventWhereInputSchema.optional(), 
   limit: z.number().optional(),
 }).strict();
