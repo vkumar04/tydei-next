@@ -262,9 +262,12 @@ const BASELINE_HITS = new Set<string>([
   // to lib/alerts/synthesize-persist.ts (2026-06-09 audit H4 — system
   // contexts need it without a session); no by-id ops remain here.
   // benchmarks.ts: read-only public benchmarks
-  "lib/actions/benchmarks.ts:66",
-  "lib/actions/benchmarks.ts:86",
-  "lib/actions/benchmarks.ts:94",
+  // (line numbers bumped 2026-06-12: vendor Benchmarks-tab import added
+  // dataDate to the schema + the importVendorBenchmarks entry point,
+  // which IS vendor-scoped — stamps the session vendorId on every row.)
+  "lib/actions/benchmarks.ts:85",
+  "lib/actions/benchmarks.ts:105",
+  "lib/actions/benchmarks.ts:113",
   // bundles.ts: post-fetch facility equality check
   "lib/actions/bundles.ts:77",
   "lib/actions/bundles.ts:241",

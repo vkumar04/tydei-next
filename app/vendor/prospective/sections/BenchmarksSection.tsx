@@ -1,12 +1,40 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useRef, useState } from "react"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Scale } from "lucide-react"
+import { Loader2, Scale, Upload } from "lucide-react"
+import { toast } from "sonner"
 import { formatCurrency } from "@/lib/formatting"
-import { useVendorBenchmarks } from "@/hooks/use-prospective"
+import {
+  useImportVendorBenchmarks,
+  useVendorBenchmarks,
+} from "@/hooks/use-prospective"
+import { readPricingRows } from "@/components/facility/analysis/prospective/pricing-file-reader"
+import {
+  mapBenchmarkRows,
+  type ParsedBenchmarkRows,
+} from "./benchmark-file-reader"
 
 interface Props {
   vendorId: string
@@ -14,9 +42,79 @@ interface Props {
 
 export function BenchmarksSection({ vendorId }: Props) {
   const { data: benchmarks, isLoading } = useVendorBenchmarks(vendorId)
+  const importMutation = useImportVendorBenchmarks(vendorId)
+
+  // "Need to be able to add data for the benchmarks" (Vick 2026-06-12):
+  // CSV/XLSX upload → parse client-side (XLSX via /api/parse-file) →
+  // confirm row counts → vendor-scoped bulk import.
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [parsing, setParsing] = useState(false)
+  const [pending, setPending] = useState<ParsedBenchmarkRows | null>(null)
+
+  const onFileSelected = async (file: File) => {
+    setParsing(true)
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
+      if (!["csv", "xlsx", "xls"].includes(ext)) {
+        toast.error("Benchmark import: please upload a CSV or Excel (.xlsx/.xls) file")
+        return
+      }
+      const { headers, rows } = await readPricingRows(file)
+      const parsed = mapBenchmarkRows(headers, rows)
+      if (parsed.items.length === 0) {
+        toast.error(
+          "Benchmark import: no usable rows found — the file needs an item-number column plus at least one price column (national avg, percentile, min or max).",
+        )
+        return
+      }
+      setPending(parsed)
+    } catch (err) {
+      toast.error(
+        `Benchmark import: failed to parse the file — ${err instanceof Error ? err.message : "unknown error"}`,
+      )
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  const confirmImport = () => {
+    if (!pending) return
+    importMutation.mutate(pending.items)
+    setPending(null)
+  }
+
+  const busy = parsing || importMutation.isPending
+
+  const importButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={busy}
+      onClick={() => fileInputRef.current?.click()}
+    >
+      {busy ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Upload className="h-4 w-4" />
+      )}
+      Import benchmarks
+    </Button>
+  )
 
   return (
     <Card>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.xlsx,.xls"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          // Reset so re-selecting the same file fires onChange again.
+          e.target.value = ""
+          if (file) void onFileSelected(file)
+        }}
+      />
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Scale className="h-5 w-5" />
@@ -28,6 +126,7 @@ export function BenchmarksSection({ vendorId }: Props) {
           vendor, plus national-benchmark rows that match item numbers seen in
           your COG history.
         </CardDescription>
+        <CardAction>{importButton}</CardAction>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -45,8 +144,9 @@ export function BenchmarksSection({ vendorId }: Props) {
             <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
               No <code>ProductBenchmark</code> rows are linked to this vendor,
               and no national benchmarks match the item numbers in your COG
-              history. Once benchmark data is loaded, it will appear here.
+              history. Import a CSV or Excel benchmark file to get started.
             </p>
+            <div className="mt-4 flex justify-center">{importButton}</div>
           </div>
         ) : (
           <>
@@ -115,6 +215,33 @@ export function BenchmarksSection({ vendorId }: Props) {
           </>
         )}
       </CardContent>
+
+      <AlertDialog
+        open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import benchmark data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pending
+                ? `${pending.items.length} row${pending.items.length === 1 ? "" : "s"} parsed, ` +
+                  `${pending.withNationalAvg} with a national average price.` +
+                  (pending.droppedNoPrice > 0
+                    ? ` ${pending.droppedNoPrice} row${pending.droppedNoPrice === 1 ? " was" : "s were"} skipped (no price data).`
+                    : "") +
+                  " Re-importing an item replaces your prior uploaded benchmark for that item."
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmImport}>Import</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }

@@ -8,6 +8,7 @@ import {
   getVendorProposals,
   getVendorBenchmarks,
 } from "@/lib/actions/prospective"
+import { importVendorBenchmarks } from "@/lib/actions/benchmarks"
 import { toast } from "sonner"
 
 // NOTE: useScoreDeal / useFinancialProjections were removed on
@@ -39,6 +40,28 @@ export function useVendorBenchmarks(vendorId: string) {
     queryKey: ["prospective", "vendorBenchmarks", vendorId],
     queryFn: () => getVendorBenchmarks(),
     enabled: !!vendorId,
+  })
+}
+
+// Benchmarks-tab import ("Need to be able to add data for the benchmarks",
+// Vick 2026-06-12). Invalidates the vendorBenchmarks query so the table
+// refreshes with the new rows.
+export function useImportVendorBenchmarks(vendorId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: importVendorBenchmarks,
+    onSuccess: (res) => {
+      qc.invalidateQueries({
+        queryKey: ["prospective", "vendorBenchmarks", vendorId],
+      })
+      toast.success(
+        `Imported ${res.inserted} benchmark row${res.inserted === 1 ? "" : "s"}` +
+          (res.replaced > 0 ? ` (replaced ${res.replaced} prior upload row${res.replaced === 1 ? "" : "s"})` : ""),
+      )
+    },
+    // The action already throws named messages ("Benchmark import failed: …" /
+    // "Benchmark import rejected an invalid row: …") — don't double-prefix.
+    onError: (err) => toast.error(err.message || "Benchmark import failed"),
   })
 }
 

@@ -87,6 +87,16 @@ export const UNIT_PRICE_ALIASES = [
   "dzprice", "dz_price",
 ]
 
+// Category header aliases — extracted from detectPricingColumnMapping so the
+// benchmark-file reader (vendor Benchmarks tab import, Vick 2026-06-12) can
+// reuse the same canonical list instead of inlining a copy.
+export const CATEGORY_ALIASES = [
+  "category", "product_category", "department",
+  "productcategory", "productcatgory",
+  "productline", "productgroup", "producttype",
+  "segment", "classification", "dept", "division",
+]
+
 // ─── Auto-detect column mapping from raw headers ─────────────────
 export function detectPricingColumnMapping(rawHeaders: string[]): Record<string, string> {
   const normHeaders = rawHeaders.map(norm)
@@ -99,12 +109,7 @@ export function detectPricingColumnMapping(rawHeaders: string[]): Record<string,
     "catalogprice", "regularprice", "standardprice",
     "fullprice", "originalprice",
   )
-  const idxCat = findHeader(normHeaders, rawHeaders,
-    "category", "product_category", "department",
-    "productcategory", "productcatgory",
-    "productline", "productgroup", "producttype",
-    "segment", "classification", "dept", "division",
-  )
+  const idxCat = findHeader(normHeaders, rawHeaders, ...CATEGORY_ALIASES)
   const idxUom = findHeader(normHeaders, rawHeaders,
     "uom", "unit_of_measure", "unit",
     "unitofmeasure", "packsize", "packaging", "pkg", "measure",
