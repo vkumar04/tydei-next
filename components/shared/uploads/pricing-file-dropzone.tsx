@@ -58,6 +58,7 @@ import { Progress } from "@/components/ui/progress"
 import { readPricingRows } from "./read-tabular-file"
 import {
   resolveMapping,
+  mappingNeedsAttention,
   type MappingProvenanceMap,
   type ResolvedMapping,
   type UploadFieldSpec,
@@ -233,14 +234,17 @@ export function PricingFileDropzone({
           missingRequired,
           provenance,
         } = resolveMapping(headers, specs)
-        // Feature 3: a fuzzy "best guess" is something the user should
-        // verify, so it counts as a detection miss (badge + "auto"
-        // telemetry with provenance) even when every field is populated.
-        const hasFuzzy = specs.some((s) => provenance[s.key] === "fuzzy")
-        const detectionMiss =
-          imperative ||
-          hasFuzzy ||
-          specs.some((s) => auto[s.key] === null)
+        // An absent OPTIONAL column is normal, not a detection problem —
+        // flag (amber note + "auto" telemetry with provenance) only on an
+        // imperative open, a missing REQUIRED field, or a fuzzy "best
+        // guess". 2026-06-13: previously flagged on ANY unmapped field,
+        // which fired telemetry on nearly every benchmark upload (11-field
+        // spec, mostly optional). mappingNeedsAttention owns this rule.
+        const detectionMiss = mappingNeedsAttention({
+          imperative,
+          missingRequired,
+          provenance,
+        })
         if (detectionMiss) {
           fireTelemetry({
             fileName: file.name,

@@ -58,6 +58,34 @@ export interface MappingProvenanceMap {
   [fieldKey: string]: MappingProvenance
 }
 
+/**
+ * Decide whether an auto-resolved mapping needs the user's attention —
+ * which drives both the dropzone's amber-vs-green note AND whether we log
+ * an unmapped-header telemetry event.
+ *
+ * An ABSENT OPTIONAL column is NOT a detection problem (most files don't
+ * carry every optional field), so it must not flag. Flag only on:
+ *   - `imperative`: a caller opened the mapper because its own happy path
+ *     failed (e.g. the analyzer parsed 0 items), so something IS wrong;
+ *   - a REQUIRED field that didn't auto-resolve (`missingRequired`);
+ *   - a fuzzy "best guess" the user should verify (worth harvesting into
+ *     real aliases).
+ *
+ * 2026-06-13: the previous inline rule flagged on ANY unmapped field,
+ * which fired telemetry on nearly every benchmark upload (11-field spec,
+ * mostly optional) and suppressed the strongest "all detected" note. This
+ * helper is the one place that decision lives.
+ */
+export function mappingNeedsAttention(opts: {
+  imperative?: boolean
+  missingRequired: string[]
+  provenance: MappingProvenanceMap
+}): boolean {
+  if (opts.imperative) return true
+  if (opts.missingRequired.length > 0) return true
+  return Object.values(opts.provenance).some((p) => p === "fuzzy")
+}
+
 export interface ResolveMappingResult {
   mapping: ResolvedMapping
   /** keys of required specs that did not auto-resolve */

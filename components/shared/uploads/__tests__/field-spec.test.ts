@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest"
 import {
   boundedDamerauLevenshtein,
+  mappingNeedsAttention,
   norm,
   overrideIndex,
   resolveMapping,
@@ -318,5 +319,59 @@ describe("overrideIndex", () => {
     expect(overrideIndex(headers, { x: null }, "x")).toBe(-1)
     expect(overrideIndex(headers, {}, "x")).toBe(-1)
     expect(overrideIndex(headers, { x: "Missing" }, "x")).toBe(-1)
+  })
+})
+
+describe("mappingNeedsAttention — telemetry/amber-note gate (2026-06-13)", () => {
+  it("does NOT flag a clean import with absent optional columns", () => {
+    // The benchmark case: required itemNumber resolved exactly, the 9
+    // optional fields are simply absent. This is a clean import — no
+    // amber note, no telemetry event.
+    expect(
+      mappingNeedsAttention({
+        missingRequired: [],
+        provenance: {
+          itemNumber: "exact",
+          description: "exact",
+          nationalAvgPrice: "exact",
+          p25: null,
+          p50: null,
+          p75: null,
+          minPrice: null,
+          maxPrice: null,
+          sampleSize: null,
+          dataDate: null,
+          category: null,
+        },
+      }),
+    ).toBe(false)
+  })
+
+  it("flags when a REQUIRED field is unmapped", () => {
+    expect(
+      mappingNeedsAttention({
+        missingRequired: ["itemNumber"],
+        provenance: { itemNumber: null },
+      }),
+    ).toBe(true)
+  })
+
+  it("flags when any field resolved by fuzzy best-guess", () => {
+    expect(
+      mappingNeedsAttention({
+        missingRequired: [],
+        provenance: { itemNumber: "exact", price: "fuzzy", qty: null },
+      }),
+    ).toBe(true)
+  })
+
+  it("flags on an imperative open even when everything resolved cleanly", () => {
+    expect(
+      mappingNeedsAttention({
+        imperative: true,
+        missingRequired: [],
+        provenance: { itemNumber: "exact" },
+      }),
+    ).toBe(true)
   })
 })
