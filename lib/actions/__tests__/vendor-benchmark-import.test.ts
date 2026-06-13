@@ -144,6 +144,53 @@ describe("importVendorBenchmarks — replace-on-reimport dedupe", () => {
   })
 })
 
+describe("importVendorBenchmarks — chunk idempotency (feature 5)", () => {
+  // Feature 5 chunks a big file into per-2000-row importVendorBenchmarks
+  // calls. Each call's replace is self-contained (deletes only its OWN
+  // chunk's SKUs' priors), so importing the SAME file twice must land
+  // identically — no duplicate rows accumulate. We model a tiny stateful
+  // store across two calls to prove the second call replaces, not appends.
+  it("re-importing the same SKUs replaces prior rows instead of duplicating", async () => {
+    let store: Array<{ id: string; vendorItemNo: string }> = []
+    let idSeq = 0
+
+    mocks.benchmarkFindMany.mockImplementation(async () => store)
+    mocks.benchmarkDeleteMany.mockImplementation(
+      async ({ where }: { where: { id: { in: string[] } } }) => {
+        const ids = new Set(where.id.in)
+        const before = store.length
+        store = store.filter((r) => !ids.has(r.id))
+        return { count: before - store.length }
+      },
+    )
+    mocks.benchmarkCreateMany.mockImplementation(
+      async ({ data }: { data: Array<{ vendorItemNo: string }> }) => {
+        for (const row of data) {
+          store.push({ id: `id-${idSeq++}`, vendorItemNo: row.vendorItemNo })
+        }
+        return { count: data.length }
+      },
+    )
+
+    const file = [
+      { vendorItemNo: "AR-1", nationalAvgPrice: 10 },
+      { vendorItemNo: "AR-2", nationalAvgPrice: 20 },
+    ]
+
+    const first = await importVendorBenchmarks(file)
+    expect(first).toMatchObject({ inserted: 2, replaced: 0 })
+    expect(store).toHaveLength(2)
+
+    // Same file again — should delete the 2 priors then insert 2, NOT append.
+    const second = await importVendorBenchmarks(file)
+    expect(second).toMatchObject({ inserted: 2, replaced: 2 })
+    expect(store).toHaveLength(2)
+    // Still exactly one row per SKU (no duplicates accrued).
+    const skus = store.map((r) => r.vendorItemNo).sort()
+    expect(skus).toEqual(["AR-1", "AR-2"])
+  })
+})
+
 describe("importVendorBenchmarks — input handling", () => {
   it("returns zeros for an empty batch without touching the DB", async () => {
     const res = await importVendorBenchmarks([])

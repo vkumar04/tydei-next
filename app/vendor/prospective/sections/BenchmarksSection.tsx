@@ -43,10 +43,11 @@ export function BenchmarksSection({ vendorId }: Props) {
   const dropzoneRef = useRef<PricingFileDropzoneHandle>(null)
 
   const handleImport = useCallback(
-    (
+    async (
       rows: Record<string, string>[],
       mapping: ResolvedMapping,
       meta: { fileName: string; headers: string[] },
+      reportProgress: (done: number, total: number) => void,
     ) => {
       const parsed = mapBenchmarkRows(meta.headers, rows, mapping)
       if (parsed.items.length === 0) {
@@ -58,7 +59,14 @@ export function BenchmarksSection({ vendorId }: Props) {
         )
         return
       }
-      importMutation.mutate(parsed.items)
+      // Feature 5: chunked import with progress. mutateAsync so the dropzone
+      // dialog stays open (and shows the progress bar) until every chunk
+      // lands; rethrow on failure so the dialog keeps the file mapped for a
+      // retry (importInChunks' message names how many rows already landed).
+      await importMutation.mutateAsync({
+        items: parsed.items,
+        onProgress: reportProgress,
+      })
     },
     [importMutation],
   )

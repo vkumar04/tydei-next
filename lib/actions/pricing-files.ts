@@ -480,7 +480,22 @@ export async function importContractPricing(input: {
   // Charles 2026-06-06: user-chosen raw-detected-category → canonical remap
   // from the pricing-upload realign step. Applied before canonicalization.
   categoryRemap?: Record<string, string>
+  // Feature 5 (uploader improvement 5, 2026-06-13) — chunked imports:
+  //   mode "replace" (default, fully backward compatible): delete ALL prior
+  //     pricing rows for the contract, then insert. This is today's behavior.
+  //   mode "append": skip the delete and only insert. Used for every chunk
+  //     after the FIRST so a single logical import isn't wiped chunk-by-chunk.
+  mode?: "replace" | "append"
+  // When true, skip ALL trailing post-processing (category-remap persist,
+  // carve-out term auto-create + populate, match recompute, metrics refresh,
+  // accrual recompute). The caller runs the post-processing exactly ONCE on
+  // the FINAL chunk so it isn't re-run per chunk (carve-out auto-create +
+  // recompute are expensive and only need the full row set, which exists
+  // after the last chunk inserts).
+  skipPostProcessing?: boolean
 }) {
+  const mode = input.mode ?? "replace"
+  const skipPostProcessing = input.skipPostProcessing ?? false
   // Charles audit round-7 BLOCKER: verify contract ownership before
   // writing pricing rows. Pre-fix any facility user could inject
   // ContractPricing rows into ANY other facility's contracts,
@@ -564,9 +579,14 @@ export async function importContractPricing(input: {
 
   await prisma.$transaction(
     async (tx) => {
-      await tx.contractPricing.deleteMany({
-        where: { contractId: input.contractId },
-      })
+      // Feature 5: only the "replace" pass wipes the contract's prior pricing
+      // rows. "append" chunks (every chunk after the first in a chunked
+      // import) skip the delete so they accumulate instead of clobbering.
+      if (mode === "replace") {
+        await tx.contractPricing.deleteMany({
+          where: { contractId: input.contractId },
+        })
+      }
       for (let i = 0; i < dedupedItems.length; i += BATCH) {
         const batch = dedupedItems.slice(i, i + BATCH)
         const result = await tx.contractPricing.createMany({
@@ -603,6 +623,16 @@ export async function importContractPricing(input: {
       timeout: 120_000,
     },
   )
+
+  // Feature 5: skip ALL trailing post-processing for non-final chunks. The
+  // chunked caller passes skipPostProcessing=true for every chunk except the
+  // last, then runs the post-processing once (last chunk, skipPostProcessing
+  // false) when the FULL pricing row set is present. Carve-out auto-create +
+  // recompute need the complete set, and are expensive — running them per
+  // chunk would be wrong (partial row set) and slow.
+  if (skipPostProcessing) {
+    return { imported, carveOutLinked: 0, carveOutTermCreated: false }
+  }
 
   // Vick 2026-05-31 bug doc: "It should use the pricing file to pick
   // all of the items for you for carve out." Any carve_out terms on
@@ -722,6 +752,9 @@ export async function importContractPricingSafe(input: {
   contractId: string
   items: ContractPricingItem[]
   categoryRemap?: Record<string, string>
+  // Feature 5: forwarded to importContractPricing for chunked imports.
+  mode?: "replace" | "append"
+  skipPostProcessing?: boolean
 }): Promise<SafeResult<Awaited<ReturnType<typeof importContractPricing>>>> {
   return toSafeResult(
     "importContractPricing",

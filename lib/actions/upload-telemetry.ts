@@ -20,11 +20,24 @@ import { requireAuth } from "@/lib/actions/auth"
 
 const mappingSchema = z.record(z.string(), z.string().nullable())
 
+// Feature 3 (uploader improvement 3): per-field resolution provenance, so
+// "best guess" fuzzy hits can be harvested back into the canonical alias
+// lists. Stored alongside the auto mapping in the same autoMapping Json
+// column (no new column / migration): when provenance is present we persist
+// `{ mapping, provenance }`; otherwise the bare mapping — both shapes read
+// back fine for offline harvesting.
+const provenanceSchema = z.record(
+  z.string(),
+  z.enum(["exact", "contains", "fuzzy"]).nullable(),
+)
+
 const uploadHeaderEventSchema = z.object({
   surface: z.string().min(1).max(100),
   fileName: z.string().max(500).nullish(),
   headers: z.array(z.string()).max(500),
   autoMapping: mappingSchema,
+  /** how each field auto-resolved (feature 3); folded into autoMapping JSON */
+  provenance: provenanceSchema.nullish(),
   finalMapping: mappingSchema.nullish(),
   missingRequired: z.array(z.string()).nullish(),
   outcome: z.enum(["auto", "manual_fix", "abandoned"]),
@@ -38,12 +51,16 @@ export async function logUploadHeaderEvent(
   try {
     await requireAuth()
     const parsed = uploadHeaderEventSchema.parse(input)
+    // Fold provenance into the autoMapping JSON when present (feature 3).
+    const autoMappingJson = parsed.provenance
+      ? { mapping: parsed.autoMapping, provenance: parsed.provenance }
+      : parsed.autoMapping
     await prisma.uploadHeaderEvent.create({
       data: {
         surface: parsed.surface,
         fileName: parsed.fileName ?? null,
         headers: parsed.headers,
-        autoMapping: parsed.autoMapping,
+        autoMapping: autoMappingJson,
         // Json? columns: omit (undefined) → SQL NULL; Prisma rejects a
         // raw JS null for nullable Json without Prisma.JsonNull.
         finalMapping: parsed.finalMapping ?? undefined,

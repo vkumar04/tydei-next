@@ -54,9 +54,11 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
 import { readPricingRows } from "./read-tabular-file"
 import {
   resolveMapping,
+  type MappingProvenanceMap,
   type ResolvedMapping,
   type UploadFieldSpec,
 } from "./field-spec"
@@ -89,10 +91,16 @@ export interface PricingFileDropzoneProps {
    * (the hidden file input + dialog still render).
    */
   trigger?: ReactNode | null
+  /**
+   * Import handler. The optional 4th arg `reportProgress(done, total)`
+   * (feature 5) lets a chunked importer drive the in-dialog progress bar;
+   * surfaces that import in one shot can ignore it.
+   */
   onImport: (
     rows: Record<string, string>[],
     mapping: ResolvedMapping,
     meta: { fileName: string; headers: string[] },
+    reportProgress: (done: number, total: number) => void,
   ) => Promise<void> | void
   /** Confirm-step copy under the preview (e.g. "N rows parsed, …"). */
   confirmCopy?: (
@@ -118,8 +126,19 @@ interface PendingFile {
   rows: Record<string, string>[]
   /** auto-detected mapping, frozen for telemetry comparison */
   auto: ResolvedMapping
+  /**
+   * How each field auto-resolved (feature 3). Frozen at parse time so the
+   * "best guess" badge reflects the AUTO decision, not the live mapping
+   * the user may have since edited. Cleared per-field once the user
+   * overrides that field (a user pick is never a "best guess").
+   */
+  autoProvenance: MappingProvenanceMap
   missingAutoRequired: string[]
-  /** at least one spec field failed auto-detect, or imperative open */
+  /**
+   * Something needs the user's attention before import: a field failed
+   * auto-detect, a field resolved only by fuzzy "best guess", or an
+   * imperative open. Drives telemetry + the badge surfacing.
+   */
   detectionMiss: boolean
 }
 
@@ -144,6 +163,11 @@ export function PricingFileDropzone({
   const [isDragging, setIsDragging] = useState(false)
   const [pending, setPending] = useState<PendingFile | null>(null)
   const [mapping, setMapping] = useState<ResolvedMapping>({})
+  // Feature 5: live import progress driven by onImport's reportProgress.
+  // null = the importer never reported (single-shot import → no bar).
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  )
 
   // Named toasts (match existing patterns like "Benchmark import: …")
   // without leaking the telemetry surface id verbatim.
@@ -163,6 +187,9 @@ export function PricingFileDropzone({
       fileName: string
       headers: string[]
       auto: ResolvedMapping
+      // Feature 3: provenance ships with every event so fuzzy "best guess"
+      // hits are harvestable back into the canonical alias lists.
+      provenance: MappingProvenanceMap
       finalMapping?: ResolvedMapping | null
       missingRequired: string[]
       outcome: "auto" | "manual_fix" | "abandoned"
@@ -174,6 +201,7 @@ export function PricingFileDropzone({
         fileName: input.fileName,
         headers: input.headers,
         autoMapping: input.auto,
+        provenance: input.provenance,
         finalMapping: input.finalMapping ?? null,
         missingRequired: input.missingRequired,
         outcome: input.outcome,
@@ -200,17 +228,25 @@ export function PricingFileDropzone({
           )
           return
         }
-        const { mapping: auto, missingRequired } = resolveMapping(
-          headers,
-          specs,
-        )
+        const {
+          mapping: auto,
+          missingRequired,
+          provenance,
+        } = resolveMapping(headers, specs)
+        // Feature 3: a fuzzy "best guess" is something the user should
+        // verify, so it counts as a detection miss (badge + "auto"
+        // telemetry with provenance) even when every field is populated.
+        const hasFuzzy = specs.some((s) => provenance[s.key] === "fuzzy")
         const detectionMiss =
-          imperative || specs.some((s) => auto[s.key] === null)
+          imperative ||
+          hasFuzzy ||
+          specs.some((s) => auto[s.key] === null)
         if (detectionMiss) {
           fireTelemetry({
             fileName: file.name,
             headers,
             auto,
+            provenance,
             missingRequired,
             outcome: "auto",
           })
@@ -221,6 +257,7 @@ export function PricingFileDropzone({
           headers,
           rows,
           auto,
+          autoProvenance: provenance,
           missingAutoRequired: missingRequired,
           detectionMiss,
         })
@@ -263,6 +300,18 @@ export function PricingFileDropzone({
       specs.some((s) => mapping[s.key] !== pending.auto[s.key]),
     [pending, specs, mapping],
   )
+  // Feature 3: any field still showing its fuzzy auto-pick (user hasn't
+  // overridden it) — drives the "verify the highlighted rows" note.
+  const hasFuzzyBestGuess = useMemo(
+    () =>
+      pending !== null &&
+      specs.some(
+        (s) =>
+          pending.autoProvenance[s.key] === "fuzzy" &&
+          mapping[s.key] === pending.auto[s.key],
+      ),
+    [pending, specs, mapping],
+  )
   const headerOptions = useMemo(
     () =>
       pending
@@ -287,6 +336,7 @@ export function PricingFileDropzone({
         fileName: pending.fileName,
         headers: pending.headers,
         auto: pending.auto,
+        provenance: pending.autoProvenance,
         finalMapping: mapping,
         missingRequired: pending.missingAutoRequired,
         outcome: "abandoned",
@@ -298,23 +348,30 @@ export function PricingFileDropzone({
   const handleImport = useCallback(async () => {
     if (!pending || blocked) return
     setImporting(true)
+    setProgress(null)
     try {
       if (userChangedMapping) {
         fireTelemetry({
           fileName: pending.fileName,
           headers: pending.headers,
           auto: pending.auto,
+          provenance: pending.autoProvenance,
           finalMapping: mapping,
           missingRequired: pending.missingAutoRequired,
           outcome: "manual_fix",
         })
       }
-      await onImport(pending.rows, mapping, {
-        fileName: pending.fileName,
-        headers: pending.headers,
-      })
+      await onImport(
+        pending.rows,
+        mapping,
+        { fileName: pending.fileName, headers: pending.headers },
+        // Feature 5: chunked importers call this after each chunk; the
+        // dialog stays open and renders the Progress bar until resolve.
+        (done, total) => setProgress({ done, total }),
+      )
       // Programmatic close — does NOT route through onOpenChange, so no
-      // spurious "abandoned" event after a successful import.
+      // spurious "abandoned" event after a successful import. Dialog stays
+      // open through reject (the catch leaves `pending` set, error toasts).
       setPending(null)
     } catch (err) {
       toast.error(
@@ -324,6 +381,7 @@ export function PricingFileDropzone({
       )
     } finally {
       setImporting(false)
+      setProgress(null)
     }
   }, [
     pending,
@@ -429,6 +487,16 @@ export function PricingFileDropzone({
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
                   All columns detected automatically — review and import.
                 </p>
+              ) : pending.missingAutoRequired.length === 0 &&
+                hasFuzzyBestGuess ? (
+                // Feature 3: every required field resolved, but at least one
+                // was a fuzzy "best guess" — ask the user to verify the
+                // amber-badged rows before importing.
+                <p className="flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  Some columns were matched by best guess — verify the
+                  highlighted rows below before importing.
+                </p>
               ) : pending.missingAutoRequired.length === 0 ? (
                 <p className="flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -455,12 +523,25 @@ export function PricingFileDropzone({
                     {specs.map((spec) => {
                       const requiredAndMissing =
                         spec.required && mapping[spec.key] === null
+                      // Feature 3: amber "best guess" badge when the field
+                      // auto-resolved by fuzzy match AND the user hasn't
+                      // overridden it (current value still equals the auto
+                      // pick). A manual pick is authoritative — no badge.
+                      const isFuzzyBestGuess =
+                        pending.autoProvenance[spec.key] === "fuzzy" &&
+                        mapping[spec.key] === pending.auto[spec.key]
                       return (
                         <TableRow key={spec.key}>
                           <TableCell className="font-medium">
                             {spec.label}
                             {spec.required ? (
                               <span className="text-destructive"> *</span>
+                            ) : null}
+                            {isFuzzyBestGuess ? (
+                              <span className="mt-1 flex w-fit items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                Best guess — verify
+                              </span>
                             ) : null}
                           </TableCell>
                           <TableCell>
@@ -555,6 +636,25 @@ export function PricingFileDropzone({
 
               {confirmText ? (
                 <p className="text-sm text-muted-foreground">{confirmText}</p>
+              ) : null}
+
+              {/* Feature 5: live chunked-import progress. Only renders once
+                  the importer has reported (single-shot imports keep the
+                  plain "Importing…" button spinner). */}
+              {importing && progress ? (
+                <div className="space-y-1.5">
+                  <Progress
+                    value={
+                      progress.total > 0
+                        ? (progress.done / progress.total) * 100
+                        : 0
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Importing… {progress.done.toLocaleString()} of{" "}
+                    {progress.total.toLocaleString()} rows
+                  </p>
+                </div>
               ) : null}
             </div>
           ) : null}

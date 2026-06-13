@@ -67,6 +67,27 @@ describe("logUploadHeaderEvent", () => {
     })
   })
 
+  it("folds provenance into the autoMapping JSON when present (feature 3)", async () => {
+    await logUploadHeaderEvent({
+      ...validInput,
+      provenance: { itemNumber: "fuzzy", nationalAvgPrice: null },
+    })
+    const data = createMock.mock.calls[0]![0].data
+    expect(data.autoMapping).toEqual({
+      mapping: { itemNumber: "ReferenceNumber", nationalAvgPrice: null },
+      provenance: { itemNumber: "fuzzy", nationalAvgPrice: null },
+    })
+  })
+
+  it("stores the bare mapping when no provenance is supplied (backward compatible)", async () => {
+    await logUploadHeaderEvent({ ...validInput })
+    const data = createMock.mock.calls[0]![0].data
+    expect(data.autoMapping).toEqual({
+      itemNumber: "ReferenceNumber",
+      nationalAvgPrice: null,
+    })
+  })
+
   it("does not insert without a session (and does not throw)", async () => {
     authGetSessionMock.mockResolvedValue(null)
     await expect(logUploadHeaderEvent({ ...validInput })).resolves.toBeUndefined()

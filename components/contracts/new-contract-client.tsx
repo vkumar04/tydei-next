@@ -118,6 +118,11 @@ export function NewContractClient({
   // created a duplicate contract. `finalizing` keeps the action bar
   // disabled through that window.
   const [finalizing, setFinalizing] = useState(false)
+  // Feature 5 (uploader improvement 5, 2026-06-13): chunked pricing import
+  // progress, surfaced in the existing busy label as "Importing pricing… N%".
+  // null while no pricing chunk is in flight (the label falls back to the
+  // plain "Importing pricing…" the B1 fix established).
+  const [pricingPercent, setPricingPercent] = useState<number | null>(null)
   // Bug 7 guardrail: remember how many terms AI populated so submit can
   // warn if the user ended up with fewer than that (accidental delete,
   // or reviewed-but-dropped). Null = no AI populate happened.
@@ -663,14 +668,54 @@ export function NewContractClient({
       // Charles 2026-06-06: pass the realign map captured at upload time so
       // the deferred import applies it ahead of canonicalization (parity with
       // the contract-detail Pricing tab's importWithRemapStep).
-      const res = await importContractPricingSafe({
-        contractId,
-        items: pricingItems,
-        categoryRemap: pricingCategoryRemap,
-      })
-      if (!res.ok) {
-        toast.error(`Contract saved, but pricing import failed: ${res.error}`)
+      //
+      // Feature 5 (2026-06-13): chunk at 2000 rows so each transaction stays
+      // well under the 120s budget on big catalogs (SYK/DePuy 15k+ files).
+      //   chunk 0      → mode "replace", skipPostProcessing (wipe priors once)
+      //   middle chunks→ mode "append",  skipPostProcessing (accumulate)
+      //   final chunk  → mode "append",  run post-processing once on the full
+      //                  row set (carve-out auto-create + recompute)
+      // The realign map is forwarded on the FINAL chunk only — that's the call
+      // that persists the confirmed remap (post-processing). Progress feeds the
+      // busy label "Importing pricing… N%". B1 finalizing gate is unchanged —
+      // this all runs inside the existing setFinalizing(true) window.
+      const PRICING_CHUNK_SIZE = 2000
+      const total = pricingItems.length
+      const chunkCount = Math.ceil(total / PRICING_CHUNK_SIZE)
+      setPricingPercent(0)
+      let pricingFailed = false
+      for (let index = 0; index < chunkCount && !pricingFailed; index++) {
+        const isFirst = index === 0
+        const isLast = index === chunkCount - 1
+        const chunk = pricingItems.slice(
+          index * PRICING_CHUNK_SIZE,
+          index * PRICING_CHUNK_SIZE + PRICING_CHUNK_SIZE,
+        )
+        const res = await importContractPricingSafe({
+          contractId,
+          items: chunk,
+          // The realign map must canonicalize categories on EVERY chunk's
+          // rows (not just the last), so forward it on all chunks. It's only
+          // PERSISTED once, in the final chunk's post-processing
+          // (persistConfirmedCategoryRemap runs only when skipPostProcessing
+          // is false) — so middle chunks apply it without re-persisting.
+          categoryRemap: pricingCategoryRemap,
+          mode: isFirst ? "replace" : "append",
+          skipPostProcessing: !isLast,
+        })
+        if (!res.ok) {
+          pricingFailed = true
+          toast.error(
+            `Contract saved, but pricing import failed after ${(
+              index * PRICING_CHUNK_SIZE
+            ).toLocaleString()} of ${total.toLocaleString()} rows: ${res.error}`,
+          )
+          break
+        }
+        const done = Math.min(total, (index + 1) * PRICING_CHUNK_SIZE)
+        setPricingPercent(Math.round((done / total) * 100))
       }
+      setPricingPercent(null)
     }
     if (contractS3Key) {
       const res = await createContractDocumentSafe({
@@ -934,7 +979,11 @@ export function NewContractClient({
             {createMutation.isPending || finalizing ? (
               <span className="absolute inset-0 inline-flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {finalizing ? "Importing pricing…" : "Creating..."}
+                {finalizing
+                  ? pricingPercent !== null
+                    ? `Importing pricing… ${pricingPercent}%`
+                    : "Importing pricing…"
+                  : "Creating..."}
               </span>
             ) : null}
           </Button>
