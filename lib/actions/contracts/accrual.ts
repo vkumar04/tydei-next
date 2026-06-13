@@ -772,6 +772,9 @@ async function _buildAccrualTimelineForContract(
           ? null
           : Number(term.spendBaseline),
       baselineType: term.baselineType ?? null,
+      // bugs.rtfd 2026-06-13 #1: gate baseline subtraction on growthOnly
+      // so the timeline matches the writer (growth-only subtraction).
+      growthOnly: term.growthOnly ?? false,
     }
   })
 
@@ -878,8 +881,12 @@ async function _buildAccrualTimelineForContract(
           ),
         )
       : new Date(Math.min(nowForBudget.getTime(), end.getTime()))
-    const hasBaseline =
-      r.config.spendBaseline != null && r.config.spendBaseline > 0
+    // bugs.rtfd 2026-06-13 #1: growth-only baseline subtraction (matches
+    // the recompute writer). "From dollar one" earns on full spend.
+    const growthSubtract =
+      r.config.growthOnly === true &&
+      r.config.spendBaseline != null &&
+      r.config.spendBaseline > 0
     const buckets = buildEvaluationPeriodAccruals(
       r.series,
       r.config.tiers,
@@ -888,8 +895,8 @@ async function _buildAccrualTimelineForContract(
       windowAnchor,
       {
         boundedUntil: termWindowEnd,
-        spendBaseline: hasBaseline ? (r.config.spendBaseline ?? null) : null,
-        growthBased: hasBaseline,
+        spendBaseline: growthSubtract ? (r.config.spendBaseline ?? null) : null,
+        growthBased: growthSubtract,
       },
     )
     // Zero the per-month slices (tier/rate progress columns stay), then
@@ -932,7 +939,7 @@ async function _buildAccrualTimelineForContract(
             ? 6
             : 12
       const proRated =
-        hasBaseline && r.config.spendBaseline
+        growthSubtract && r.config.spendBaseline
           ? r.config.spendBaseline * (widthMonths / 12)
           : 0
       const tailTierSpend = Math.max(0, tailSpend - proRated)

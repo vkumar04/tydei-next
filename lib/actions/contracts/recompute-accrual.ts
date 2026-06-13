@@ -405,6 +405,8 @@ export async function _recomputeAccrualForContractWithFacility(
           : Number(term.spendBaseline),
       baselineType: term.baselineType ?? null,
       termType: term.termType ?? null,
+      // bugs.rtfd 2026-06-13 #1: baseline subtraction is gated on this.
+      growthOnly: term.growthOnly ?? false,
     }
   })
 
@@ -697,8 +699,15 @@ export async function _recomputeAccrualForContractWithFacility(
     // tier evaluation. The bucket's reported `totalSpend` still shows
     // gross spend; the tier engine sees `max(0, periodSpend −
     // proRatedBaseline)`.
-    const hasBaseline =
-      config.spendBaseline != null && config.spendBaseline > 0
+    // bugs.rtfd 2026-06-13 #1: subtract the baseline ONLY when the user
+    // chose "Growth" (growthOnly). "From dollar one" earns on full
+    // eligible spend even with a baseline set — the baseline is then a
+    // tier threshold, not a reduction. (Was: subtract whenever
+    // spendBaseline > 0, regardless of the dropdown.)
+    const growthSubtract =
+      config.growthOnly === true &&
+      config.spendBaseline != null &&
+      config.spendBaseline > 0
     const periodBuckets = buildEvaluationPeriodAccruals(
       series,
       config.tiers,
@@ -707,8 +716,8 @@ export async function _recomputeAccrualForContractWithFacility(
       windowAnchor,
       {
         boundedUntil: termWindowEnd,
-        spendBaseline: hasBaseline ? config.spendBaseline ?? null : null,
-        growthBased: hasBaseline,
+        spendBaseline: growthSubtract ? config.spendBaseline ?? null : null,
+        growthBased: growthSubtract,
       },
     )
 

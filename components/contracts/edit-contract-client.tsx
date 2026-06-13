@@ -347,6 +347,10 @@ export function EditContractClient({
               spendBaseline: term.spendBaseline,
               volumeBaseline: term.volumeBaseline,
               growthBaselinePercent: term.growthBaselinePercent,
+              // bugs.rtfd 2026-06-13 #4: the "From dollar one / Growth"
+              // dropdown (growthOnly) was dropped from the EDIT payload —
+              // create persisted it, edit silently reverted it to false.
+              growthOnly: term.growthOnly,
               desiredMarketShare: term.desiredMarketShare,
               scopedCategoryId: term.scopedCategoryId,
               scopedCategoryIds: term.scopedCategoryIds,

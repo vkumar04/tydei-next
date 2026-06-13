@@ -325,4 +325,25 @@ describe("buildEvaluationPeriodAccruals — growth-baseline (Charles 2026-04-25)
     expect(buckets.length).toBe(1)
     expect(buckets[0].rebateEarned).toBe(6_000) // full $120K × 5%
   })
+
+  it("bugs.rtfd 2026-06-13 #1: baseline 1M, spend 5M, 10% → growth=400K, from-dollar-one=500K", () => {
+    // The user's exact spec. Growth chosen → every dollar OVER 1M earns:
+    // (5M − 1M) × 10% = 400K. "From dollar one" → full 5M × 10% = 500K.
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 10 },
+    ]
+    const series = twelveMonthsFrom(2025, 5_000_000 / 12) // $5M total
+    const opts = {
+      boundedUntil: new Date(Date.UTC(2026, 3, 19)),
+      spendBaseline: 1_000_000,
+    }
+    const anchor = new Date(Date.UTC(2025, 0, 1))
+    const growth = buildEvaluationPeriodAccruals(series, tiers, "cumulative", "annual", anchor, {
+      ...opts,
+      growthBased: true,
+    })
+    expect(growth[0].rebateEarned).toBeCloseTo(400_000, 2)
+    const fromDollarOne = buildEvaluationPeriodAccruals(series, tiers, "cumulative", "annual", anchor, opts)
+    expect(fromDollarOne[0].rebateEarned).toBeCloseTo(500_000, 2)
+  })
 })

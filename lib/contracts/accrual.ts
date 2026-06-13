@@ -402,6 +402,16 @@ export interface TermAccrualConfig {
   spendBaseline?: number | null
   baselineType?: string | null
   termType?: string | null
+  /**
+   * bugs.rtfd 2026-06-13 #1: baseline subtraction is GROWTH-only. When
+   * `growthOnly` is true AND a baseline is set, tiers evaluate against
+   * `max(0, periodSpend − proRatedBaseline)` (rebate on growth above the
+   * baseline). When false ("From dollar one"), the baseline does NOT
+   * reduce the rebate base — the full eligible spend earns once the tier
+   * threshold is crossed. Supersedes the earlier "spendBaseline > 0 →
+   * subtract" rule, which subtracted regardless of the user's choice.
+   */
+  growthOnly?: boolean
 }
 
 /**
