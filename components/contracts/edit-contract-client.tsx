@@ -144,6 +144,12 @@ export function EditContractClient({
           effectiveEnd: new Date(t.effectiveEnd).toISOString().split("T")[0],
           spendBaseline: t.spendBaseline ? Number(t.spendBaseline) : undefined,
           volumeBaseline: t.volumeBaseline ?? undefined,
+          // bugs.rtfd 2026-06-13 #4 (live-test finding): the edit LOAD
+          // never hydrated growthOnly, so the "From dollar one / Growth"
+          // dropdown always opened at the default — a saved Growth term
+          // showed "From dollar one", and saving it untouched reverted
+          // growthOnly to false. Hydrate it like every other term field.
+          growthOnly: t.growthOnly ?? false,
           growthBaselinePercent: t.growthBaselinePercent ? Number(t.growthBaselinePercent) : undefined,
           desiredMarketShare: t.desiredMarketShare ? Number(t.desiredMarketShare) : undefined,
           // Previously missing — the ContractTerm.categories String[]
