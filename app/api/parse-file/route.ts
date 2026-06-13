@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth-server"
 import ExcelJS from "exceljs"
 import * as XLSX from "xlsx"
 import { rateLimit } from "@/lib/rate-limit"
+import { matrixToHeadersAndRows } from "@/lib/utils/tabular/detect-headers"
 
 export async function POST(request: Request) {
   try {
@@ -136,122 +137,28 @@ export async function POST(request: Request) {
       })
     }
 
-    if (matrix.length === 0) {
-      return NextResponse.json(
-        { error: "No data found in first sheet" },
-        { status: 400 },
-      )
-    }
-
-    // Step 2: header-row detection. Vendor pricing exports (DePuy,
-    // Stryker, J&J, etc.) frequently put a title row / branding row /
-    // blank row above the real header row, so a strict "row 1 is the
-    // header" rule rejects them with "No headers found in first row".
-    // Scan the first 15 rows for the most plausible header — the row
-    // with the most non-empty cells that also contains at least one
-    // known pricing-token (item, sku, price, description, ref, …).
-    // Fall back to the first row with ≥2 non-empty cells, then row 0.
-    const HEADER_TOKENS = [
-      "item",
-      "sku",
-      "part",
-      "ref",
-      "reference",
-      "catalog",
-      "product",
-      "description",
-      "desc",
-      "price",
-      "cost",
-      "uom",
-      "unit",
-      "category",
-      "vendor",
-      "manufacturer",
-      "list",
-      "contract",
-      "discount",
-      "msrp",
-    ]
-    const looksLikeHeader = (row: string[]): boolean => {
-      const joined = row.join(" ").toLowerCase()
-      return HEADER_TOKENS.some((t) => joined.includes(t))
-    }
-    const nonEmptyCount = (row: string[]) => row.filter((c) => c).length
-
-    const SCAN_LIMIT = Math.min(matrix.length, 15)
-    let headerRowIdx = -1
-    let bestScore = 0
-    for (let r = 0; r < SCAN_LIMIT; r += 1) {
-      const row = matrix[r] ?? []
-      if (!looksLikeHeader(row)) continue
-      const score = nonEmptyCount(row)
-      if (score > bestScore) {
-        bestScore = score
-        headerRowIdx = r
-      }
-    }
-    if (headerRowIdx === -1) {
-      // No token match — accept the first row with ≥2 non-empty cells.
-      for (let r = 0; r < SCAN_LIMIT; r += 1) {
-        if (nonEmptyCount(matrix[r] ?? []) >= 2) {
-          headerRowIdx = r
-          break
-        }
-      }
-    }
-    if (headerRowIdx === -1) headerRowIdx = 0
-
-    const rawHeaderRow = matrix[headerRowIdx] ?? []
-    if (rawHeaderRow.length === 0 || rawHeaderRow.every((h) => h === "")) {
-      return NextResponse.json(
-        {
-          error:
-            "No headers found in the first 15 rows. Make sure your file has a row with column labels like 'Item No', 'Description', 'Price'.",
-        },
-        { status: 400 },
-      )
-    }
-    // Vick 2026-05-30: DePuy export ships duplicate header names
-    // ("Category"/"CATEGORY", "PRICE BOOK" twice, "PRICING END
-    // DATE" twice). When headers collide the row→object map silently
-    // overwrites earlier values with the same key. Disambiguate by
-    // appending " (2)", " (3)" so each column survives the round
-    // trip — the downstream column-mapper UI shows them as distinct
-    // pickable options.
-    const seen = new Map<string, number>()
-    const headers = rawHeaderRow.map((h) => {
-      const trimmed = h.trim()
-      if (!trimmed) return trimmed
-      const lower = trimmed.toLowerCase()
-      const count = (seen.get(lower) ?? 0) + 1
-      seen.set(lower, count)
-      return count === 1 ? trimmed : `${trimmed} (${count})`
-    })
-
-    const rows: Record<string, string>[] = []
-    for (let r = headerRowIdx + 1; r < matrix.length; r += 1) {
-      const arr = matrix[r] ?? []
-      if (arr.every((c) => !c)) continue // skip blank separator rows
-      const record: Record<string, string> = {}
-      headers.forEach((h, idx) => {
-        if (!h) return
-        record[h] = arr[idx] ?? ""
-      })
-      rows.push(record)
-    }
-
-    if (rows.length === 0) {
-      return NextResponse.json(
-        { error: "File contains no data rows" },
-        { status: 400 },
-      )
+    // Step 2: header-row detection + dedup + row→object map. This logic
+    // is shared VERBATIM with the client-side XLSX/XLS reader via
+    // lib/utils/tabular/detect-headers.ts — the matrix above is the only
+    // thing that differs between the two surfaces (ExcelJS/SheetJS here,
+    // SheetJS in the browser). It throws on the empty-matrix / no-headers
+    // / no-data-rows cases with the same user-facing messages the route
+    // previously returned inline; map those back to HTTP 400.
+    let detected: ReturnType<typeof matrixToHeadersAndRows>
+    try {
+      detected = matrixToHeadersAndRows(matrix)
+    } catch (detectError) {
+      const detectMsg =
+        detectError instanceof Error
+          ? detectError.message
+          : "Failed to parse file"
+      return NextResponse.json({ error: detectMsg }, { status: 400 })
     }
 
     return NextResponse.json({
-      headers: headers.filter((h) => h !== ""),
-      rows,
-      headerRowIndex: headerRowIdx,
+      headers: detected.headers,
+      rows: detected.rows,
+      headerRowIndex: detected.headerRowIndex,
     })
   } catch (error) {
     console.error("Parse file error:", error)

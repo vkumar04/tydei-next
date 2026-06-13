@@ -277,6 +277,15 @@ export function UploadProposalTab({
     useState<PricingFileAnalysis | null>(null)
   const [pricingFileName, setPricingFileName] = useState<string | null>(null)
   const [pricingAnalyzing, setPricingAnalyzing] = useState(false)
+  // Staged feedback (perf 2026-06-13): the price-file zone showed a bare
+  // spinner that read as "frozen" even when fast. "reading" → parsing the
+  // workbook client-side; "matching" → joining the N parsed lines to COG.
+  const [pricingPhase, setPricingPhase] = useState<
+    "reading" | "matching" | null
+  >(null)
+  // How many lines the current join is comparing (for the "Comparing N
+  // lines to your COG…" status during the matching phase).
+  const [pricingMatchCount, setPricingMatchCount] = useState<number>(0)
   // Bug-round 2026-06-12 R2: vendor precedence. The PDF-detected vendor name
   // (raw, from extraction) and the extracted spend tiers are kept so the
   // lookback can be RE-RUN when the user changes the dropdown after the PDF
@@ -347,6 +356,11 @@ export function UploadProposalTab({
   const lastPricingJoinVendorRef = useRef<string | null>(null)
   const joinAndAnalyzePricing = useCallback(
     async (items: PricingFileItem[], fileName: string, gen: number) => {
+      // Staged feedback: parse is done, the COG join begins now.
+      if (resetGenRef.current === gen) {
+        setPricingMatchCount(items.length)
+        setPricingPhase("matching")
+      }
       // R2: a manual dropdown selection wins over the PDF-detected vendor
       // (the old `lookback?.vendorId ?? selectedVendorId` let auto-detect
       // beat an explicit pick — the DePuy-PDF/Arthrex-selection bug).
@@ -436,6 +450,7 @@ export function UploadProposalTab({
       }
       const gen = resetGenRef.current
       setPricingAnalyzing(true)
+      setPricingPhase("reading")
       try {
         const { headers, rows } = await readPricingRows(file)
         const items = pricingRowsToItems(headers, rows)
@@ -451,6 +466,7 @@ export function UploadProposalTab({
         toast.error(err instanceof Error ? err.message : "Price file parse failed")
       } finally {
         setPricingAnalyzing(false)
+        setPricingPhase(null)
       }
     },
     [joinAndAnalyzePricing],
@@ -477,7 +493,10 @@ export function UploadProposalTab({
       try {
         await joinAndAnalyzePricing(items, meta.fileName, gen)
       } finally {
-        if (resetGenRef.current === gen) setPricingAnalyzing(false)
+        if (resetGenRef.current === gen) {
+          setPricingAnalyzing(false)
+          setPricingPhase(null)
+        }
       }
     },
     [joinAndAnalyzePricing],
@@ -502,7 +521,10 @@ export function UploadProposalTab({
         )
       })
       .finally(() => {
-        if (resetGenRef.current === gen) setPricingAnalyzing(false)
+        if (resetGenRef.current === gen) {
+          setPricingAnalyzing(false)
+          setPricingPhase(null)
+        }
       })
   }, [analysisVendorId, pricingFileItems, pricingAnalyzing, joinAndAnalyzePricing])
 
@@ -841,6 +863,7 @@ export function UploadProposalTab({
     setPricingAnalysis(null)
     setPricingFileName(null)
     setPricingAnalyzing(false)
+    setPricingPhase(null)
     setDetectedVendorName(null)
     setExtractedSpendTiers(null)
     setPricingVendorMismatch(null)
@@ -963,7 +986,16 @@ export function UploadProposalTab({
                 }`}
               >
                 {pricingAnalyzing ? (
-                  <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                  <div className="space-y-2">
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                    <p className="text-xs text-muted-foreground">
+                      {pricingPhase === "matching"
+                        ? `Comparing ${pricingMatchCount} line${
+                            pricingMatchCount === 1 ? "" : "s"
+                          } to your COG…`
+                        : "Reading price file…"}
+                    </p>
+                  </div>
                 ) : (
                   <div className="space-y-1.5">
                     <FileSpreadsheet className="mx-auto h-8 w-8 text-muted-foreground" />
