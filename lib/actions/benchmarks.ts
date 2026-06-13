@@ -179,21 +179,29 @@ export async function importVendorBenchmarks(
 
     // Delete + insert atomically so a mid-import failure can't leave the
     // vendor's prior rows deleted with nothing inserted in their place.
-    const inserted = await prisma.$transaction(async (tx) => {
-      if (staleIds.length > 0) {
-        await tx.productBenchmark.deleteMany({
-          where: { id: { in: staleIds } },
-        })
-      }
-      // Chunked insert (prod-volume lesson: never unbounded single calls).
-      let count = 0
-      for (let i = 0; i < deduped.length; i += VENDOR_BENCHMARK_BATCH_SIZE) {
-        const chunk = deduped.slice(i, i + VENDOR_BENCHMARK_BATCH_SIZE)
-        const result = await tx.productBenchmark.createMany({ data: chunk })
-        count += result.count
-      }
-      return count
-    })
+    const inserted = await prisma.$transaction(
+      async (tx) => {
+        if (staleIds.length > 0) {
+          await tx.productBenchmark.deleteMany({
+            where: { id: { in: staleIds } },
+          })
+        }
+        // Chunked insert (prod-volume lesson: never unbounded single calls).
+        let count = 0
+        for (let i = 0; i < deduped.length; i += VENDOR_BENCHMARK_BATCH_SIZE) {
+          const chunk = deduped.slice(i, i + VENDOR_BENCHMARK_BATCH_SIZE)
+          const result = await tx.productBenchmark.createMany({ data: chunk })
+          count += result.count
+        }
+        return count
+      },
+      // Vick 2026-06-13 "Adding price file here not working": Prisma's
+      // default interactive-transaction timeout is 5s — a 10k-row price
+      // file (≈21 createMany batches against Railway Postgres) aborts
+      // mid-flight with P2028 and the import fails. Same prod-volume
+      // lesson + numbers as importContractPricing (pricing-files.ts:603).
+      { maxWait: 10_000, timeout: 120_000 },
+    )
 
     return serialize({ inserted, replaced: staleIds.length })
   } catch (err) {
