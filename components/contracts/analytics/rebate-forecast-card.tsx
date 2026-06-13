@@ -15,6 +15,7 @@ import {
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { ChartFrame } from "@/components/contracts/chart-frame"
 import { Skeleton } from "@/components/ui/skeleton"
 import { queryKeys } from "@/lib/query-keys"
 import { getRebateForecast } from "@/lib/actions/analytics/rebate-forecast"
@@ -95,7 +96,7 @@ export function RebateForecastCard({
             Not enough spend history to forecast (need 3+ months).
           </p>
         ) : (
-          <div className="h-72">
+          <ChartFrame className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={series}>
                 {/* Recharts SVG attrs don't resolve hsl(var(--*)) tokens
@@ -175,7 +176,7 @@ export function RebateForecastCard({
                 />
               </AreaChart>
             </ResponsiveContainer>
-          </div>
+          </ChartFrame>
         )}
       </CardContent>
     </Card>

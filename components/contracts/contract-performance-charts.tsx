@@ -2,6 +2,7 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, Label } from "recharts"
 import { useQuery } from "@tanstack/react-query"
+import { ChartFrame } from "@/components/contracts/chart-frame"
 import { getContractPerformanceHistory } from "@/lib/actions/contracts/performance-history"
 
 const formatAxisCurrency = (n: number) =>
@@ -59,6 +60,7 @@ export function ContractPerformanceCharts({
           </p>
         </CardHeader>
         <CardContent className="h-72">
+          <ChartFrame>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.monthly} margin={{ left: 8, right: 8, top: 8, bottom: 24 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -83,6 +85,7 @@ export function ContractPerformanceCharts({
               <Area type="monotone" dataKey="spend" name="Spend" stroke="var(--chart-1)" fill="color-mix(in oklch, var(--chart-1) 20%, transparent)" />
             </AreaChart>
           </ResponsiveContainer>
+          </ChartFrame>
         </CardContent>
       </Card>
       <Card>
@@ -95,6 +98,7 @@ export function ContractPerformanceCharts({
               collection date is recorded.
             </div>
           ) : (
+            <ChartFrame>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.quarterly}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -106,6 +110,7 @@ export function ContractPerformanceCharts({
                 <Bar dataKey="rebateCollected" fill="var(--chart-1)" name="Collected" />
               </BarChart>
             </ResponsiveContainer>
+            </ChartFrame>
           )}
         </CardContent>
       </Card>
