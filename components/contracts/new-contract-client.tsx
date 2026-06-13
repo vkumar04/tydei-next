@@ -22,6 +22,7 @@ import type {
 } from "@/lib/validators/contract-terms"
 import { normalizeAIRebateValue, toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { computeContractYears } from "@/lib/contracts/term-years"
+import { selectScopeableCategories } from "@/lib/contracts/scopeable-categories"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 import { PricingCategoryRemapDialog } from "@/components/pricing/pricing-category-remap-dialog"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
@@ -43,11 +44,15 @@ import type { ExtractedContractData } from "@/lib/ai/schemas"
 interface NewContractClientProps {
   vendors: { id: string; name: string; displayName: string | null }[]
   categories: { id: string; name: string }[]
+  /** Facility's real COG category names — terms scope to any of these
+   *  (bugs.rtfd 2026-06-13 "not all categories are on the category list"). */
+  cogCategories?: string[]
 }
 
 export function NewContractClient({
   vendors,
   categories,
+  cogCategories = [],
 }: NewContractClientProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -922,8 +927,12 @@ export function NewContractClient({
                   vendorItemNo: p.vendorItemNo,
                   description: p.description ?? null,
                 }))}
-                availableCategories={liveCategories.filter((c) =>
-                  (form.watch("categoryIds") ?? []).includes(c.id),
+                // bugs.rtfd 2026-06-13: real COG categories (deduped) plus
+                // the contract's selections. See selectScopeableCategories.
+                availableCategories={selectScopeableCategories(
+                  liveCategories,
+                  cogCategories,
+                  form.watch("categoryIds") ?? [],
                 )}
               />
             </CardContent>

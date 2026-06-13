@@ -26,6 +26,7 @@ import {
   deleteCapitalLineItem,
 } from "@/lib/actions/contracts/capital-line-items"
 import { normalizeCadence } from "@/lib/contracts/capital-line-items"
+import { selectScopeableCategories } from "@/lib/contracts/scopeable-categories"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -37,12 +38,16 @@ interface EditContractClientProps {
   contractId: string
   vendors: { id: string; name: string; displayName: string | null }[]
   categories: { id: string; name: string }[]
+  /** Facility's real COG category names — terms can scope to any of these
+   *  (bugs.rtfd 2026-06-13 "not all categories are on the category list"). */
+  cogCategories?: string[]
 }
 
 export function EditContractClient({
   contractId,
   vendors,
   categories,
+  cogCategories = [],
 }: EditContractClientProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -542,8 +547,14 @@ export function EditContractClient({
             onChange={setTerms}
             contractType={form.watch("contractType")}
             availableItems={availableItems}
-            availableCategories={((liveCategories ?? categories) ?? []).filter((c) =>
-              (form.watch("categoryIds") ?? []).includes(c.id),
+            // bugs.rtfd 2026-06-13: every category with real COG spend
+            // (deduped by canonical name) plus the contract's own
+            // selections — not just the contract subset. See
+            // selectScopeableCategories.
+            availableCategories={selectScopeableCategories(
+              (liveCategories ?? categories) ?? [],
+              cogCategories,
+              form.watch("categoryIds") ?? [],
             )}
           />
         </TabsContent>
