@@ -1079,6 +1079,14 @@ export async function _recomputeAccrualForContractWithFacility(
             appliesTo: term.appliesTo ?? null,
             categories: term.categories ?? [],
             tiers: term.tiers,
+            // bugs.rtfd 2026-06-13: growth baseline must apply to
+            // market_share percent_of_spend rebates too (was spend-writer
+            // only). 9% × (spend − $500K), not 9% × full spend.
+            growthOnly: term.growthOnly ?? false,
+            spendBaseline:
+              term.spendBaseline === null || term.spendBaseline === undefined
+                ? null
+                : Number(term.spendBaseline),
           },
         })
         thresholdInserted += r.inserted

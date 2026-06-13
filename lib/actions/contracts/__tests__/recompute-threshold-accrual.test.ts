@@ -283,4 +283,36 @@ describe("recomputeThresholdAccrualForTerm", () => {
       expect(where.category.in).not.toContain("Spine")
     }
   })
+
+  it("bugs.rtfd 2026-06-13: market_share growth baseline excludes the first $baseline dollars", () => {
+    // 9% tier (50%+ share). 100% share via identical vendor=facility rows.
+    // Vendor spend in window = $1,000,000; growth baseline $500K, annual.
+    // Expected: 9% x (1,000,000 - 500,000) = $45,000 — NOT 9% x 1,000,000.
+    cogFindManyMock.mockResolvedValue([
+      { transactionDate: new Date(Date.UTC(2024, 5, 15)), extendedPrice: 1_000_000, quantity: 10 },
+    ])
+    return recomputeThresholdAccrualForTerm({
+      contractId: "c-1",
+      facilityId: "f-1",
+      contractEffectiveDate: new Date(Date.UTC(2024, 0, 1)),
+      contractExpirationDate: new Date(Date.UTC(2024, 11, 31)),
+      metric: "currentMarketShare",
+      metricValue: 100,
+      term: {
+        id: "term-ms-growth",
+        evaluationPeriod: "annual",
+        effectiveStart: new Date(Date.UTC(2024, 0, 1)),
+        effectiveEnd: new Date(Date.UTC(2024, 11, 31)),
+        termType: "market_share",
+        vendorId: "v-1",
+        growthOnly: true,
+        spendBaseline: 500_000,
+        tiers: [
+          { tierNumber: 1, tierName: "Base", spendMin: 50, spendMax: null, rebateValue: 0.09, rebateType: "percent_of_spend" },
+        ],
+      },
+    }).then((r) => {
+      expect(r.sumEarned).toBeCloseTo(45_000, 2) // 9% of (1M - 500K), not 90K
+    })
+  })
 })

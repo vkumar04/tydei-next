@@ -55,6 +55,17 @@ interface ThresholdRebateTermLike {
   categoryName?: string | null
   appliesTo?: string | null
   categories?: string[]
+  /**
+   * bugs.rtfd 2026-06-13: growth baseline for market_share +
+   * percent_of_spend tiers. When `growthOnly` is true the percent is
+   * applied to `max(0, periodSpend − proRatedBaseline)` (the first
+   * `spendBaseline` annual dollars are excluded), matching the spend
+   * writer. Tier qualification (by market-share %) is unaffected — only
+   * the spend the percent multiplies is reduced. Ignored for flat
+   * fixed_rebate tiers (no spend base) and when growthOnly is false.
+   */
+  growthOnly?: boolean | null
+  spendBaseline?: number | null
   tiers: Array<{
     tierNumber: number
     tierName: string | null
@@ -386,6 +397,20 @@ export async function recomputeThresholdAccrualForTerm(input: {
     return { inserted: 0, sumEarned: 0 }
   }
 
+  // bugs.rtfd 2026-06-13: growth baseline for market_share percent_of_spend
+  // tiers. Pro-rate the annual baseline to the term's evaluation period and
+  // subtract it from the spend the percent multiplies (growthOnly only) so
+  // a $500K growth baseline excludes the first $500K — 9% × (spend − 500K),
+  // not 9% × full spend. Tier qualification (by share %) is unaffected.
+  const growthBaselinePerPeriod =
+    term.growthOnly === true &&
+    term.spendBaseline != null &&
+    term.spendBaseline > 0
+      ? term.spendBaseline * (widthMonths(term.evaluationPeriod) / 12)
+      : 0
+  const growthAdjust = (spend: number): number =>
+    Math.max(0, spend - growthBaselinePerPeriod)
+
   // bugs.rtfd 2026-06-13 M: clamp + window grid now live in
   // `buildThresholdEvaluationWindows` (shared with the timeline's
   // market-share display overlay). Same dates, same guard.
@@ -561,7 +586,7 @@ export async function recomputeThresholdAccrualForTerm(input: {
         windowRawTier?.rebateType === "per_procedure_rebate"
       r.periodPayment =
         windowRawTier?.rebateType === "percent_of_spend"
-          ? vendorSpend * Number(windowRawTier.rebateValue ?? 0)
+          ? growthAdjust(vendorSpend) * Number(windowRawTier.rebateValue ?? 0)
           : isPerUnit
             ? vendorQuantity * Number(windowRawTier.rebateValue ?? 0)
             : windowAchieved.rebateValue
@@ -591,7 +616,9 @@ export async function recomputeThresholdAccrualForTerm(input: {
         spendSum += row.extendedPrice == null ? 0 : Number(row.extendedPrice)
       }
       r.spendInScope = spendSum
-      r.periodPayment = spendSum * percentFraction
+      // bugs.rtfd 2026-06-13: growth baseline applies on the scalar
+      // fallback too (9% × (spend − baseline)).
+      r.periodPayment = growthAdjust(spendSum) * percentFraction
     }
   }
 
