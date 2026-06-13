@@ -2,7 +2,7 @@ import { getVendors } from "@/lib/actions/vendors"
 import { getCategories } from "@/lib/actions/categories"
 import { NewContractClient } from "@/components/contracts/new-contract-client"
 import { requireFacility } from "@/lib/actions/auth"
-import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
+import { facilityChosenCategoryNames } from "@/lib/contracts/facility-category-universe"
 
 export default async function NewContractPage() {
   // Charles 2026-04-25 (audit follow-up — auth-gate scanner): every
@@ -13,8 +13,9 @@ export default async function NewContractPage() {
   const [vendors, categories, cogCategories] = await Promise.all([
     getVendors(),
     getCategories(),
-    // bugs.rtfd 2026-06-13: real COG categories for the term picker.
-    facilityCogCategoryUniverse(facility.id),
+    // bugs.rtfd 2026-06-13: chosen category universe (confirmed
+    // mapping targets + COG spend) for the term picker.
+    facilityChosenCategoryNames(facility.id),
   ])
 
   return (
