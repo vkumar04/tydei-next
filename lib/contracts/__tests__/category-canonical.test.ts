@@ -57,6 +57,26 @@ describe("canonicalizeCategoryName", () => {
       )
     })
 
+    it("collapses dropped-delimiter concatenations with their delimited twin (bugs.rtfd 2026-06-13)", () => {
+      // Vendor exports sometimes drop the ':'/';' entirely, fusing two words
+      // at the case boundary. These must bucket with the delimited form.
+      expect(canonicalizeCategoryName("Supplies & MaterialsOR Supplies & Materials")).toBe(
+        canonicalizeCategoryName("Supplies & Materials:OR Supplies & Materials"),
+      )
+      expect(canonicalizeCategoryName("Supplies & MaterialsImplants:Sports Medicine")).toBe(
+        canonicalizeCategoryName("Supplies & Materials:Implants:Sports Medicine"),
+      )
+      expect(canonicalizeCategoryName("Supplies & MaterialsImplants;Total Joint")).toBe(
+        canonicalizeCategoryName("Supplies & Materials;Implants;Total Joint"),
+      )
+    })
+
+    it("collapses a doubled-with-no-separator name to its single form", () => {
+      expect(canonicalizeCategoryName("Surgical InstrumentationSurgical Instrumentation")).toBe(
+        canonicalizeCategoryName("Surgical Instrumentation"),
+      )
+    })
+
     it("does NOT collapse typos (one edit away)", () => {
       // SSupplies vs Supplies — we can't auto-correct typos without a
       // dictionary, so they stay distinct. Documenting the limitation

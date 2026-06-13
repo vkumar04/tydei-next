@@ -59,7 +59,22 @@ export function canonicalizeCategoryName(input: string | null | undefined): stri
   //   - lemmatize each token (drop trailing -s for len>3 non-ss)
   //   - de-dupe tokens (Set) — `implants implants` → `implants`
   //   - sort and join
+  //
+  // bugs.rtfd 2026-06-13 (Market Share by Category "Still have all these
+  // categories"): vendor exports sometimes DROP the delimiter entirely,
+  // concatenating two words at a case boundary — "Supplies & MaterialsOR
+  // Supplies & Materials", "...MaterialsImplants:Total Joint", "Surgical
+  // InstrumentationSurgical Instrumentation". `:`/`;` variants already
+  // collapse (they normalize to spaces), but a missing delimiter leaves
+  // "materialsor"/"materialsimplants" as one token that never matched its
+  // properly-delimited twin. Insert a space at lowercase/digit→Uppercase
+  // boundaries (and acronym→Word boundaries) BEFORE lowercasing so these
+  // collapse with their delimited form. Verified on prod: 22→18 buckets,
+  // merging only the genuine concatenation artifacts (a leading-letter typo
+  // like "SSupplies" still stays distinct — it gains a stray "s" token).
   const tokens = input
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .toLowerCase()
     .replace(/[\-_/&;,]+/g, " ")
     .replace(/[^a-z0-9\s]+/g, " ")
