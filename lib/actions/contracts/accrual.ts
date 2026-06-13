@@ -826,6 +826,23 @@ async function _buildAccrualTimelineForContract(
     },
   })
 
+  // bugs.rtfd 2026-06-13: the displayed "Spend" column is the contract's
+  // in-scope spend per month counted ONCE (the union of all term scopes),
+  // NOT the sum of each term's scoped series. Summing double-counted on a
+  // multi-term contract where two all-products terms cover the same spend
+  // (prod: 2 terms → 2×, $7,433,959 shown for a real $3,716,979). Tier
+  // qualification stays per-term (per-term series, below); only the
+  // single Spend/Cumulative display number uses the deduplicated union.
+  const unionSpendSeries = buildMonthlySpendSeriesFromCogRows(
+    cogRecords,
+    unionCategoryWhere,
+    contract.effectiveDate,
+    end,
+  )
+  const unionSpendByMonth = new Map(
+    unionSpendSeries.map((s) => [s.month, s.spend]),
+  )
+
   // Per-term accrual series — each term sees ONLY the categories it is
   // scoped to (W1.U-A). Mirrors `recomputeAccrualForContract` so the
   // on-the-fly timeline and the persisted Rebate ledger agree. The
@@ -1343,17 +1360,22 @@ async function _buildAccrualTimelineForContract(
   // it is not based on the cumulative at that point. So after the
   // quarter they have to spend 200K to get to the next year."
   //
-  // Fix the display to match the math: for single-term contracts we
-  // reset the cumulative at the same period boundaries the engine
-  // uses (monthly → every month; quarterly → at each calendar
-  // quarter; semi_annual → at H1/H2; annual → at year start). For
-  // multi-term contracts we keep the lifetime cumulative, since each
-  // term may run on a different cadence and there's no single correct
-  // reset point.
-  const primaryEval =
-    termsWithTiers.length === 1
-      ? termConfigs[0].evaluationPeriod
-      : ("lifetime" as const)
+  // Fix the display to match the math: reset the cumulative at the same
+  // period boundaries the engine uses (monthly → every month; quarterly →
+  // each calendar quarter; semi_annual → H1/H2; annual → year start).
+  // bugs.rtfd 2026-06-13: when ALL terms share one cadence (e.g. two
+  // annual terms), reset on that cadence so "Cumulative" matches the
+  // per-period tier qualification ("the math based on the rebate period
+  // not the cumulative spend"). Only fall back to lifetime when terms
+  // genuinely run on DIFFERENT cadences (no single correct reset point).
+  const allSameEval =
+    termConfigs.length > 0 &&
+    termConfigs.every(
+      (c) => c.evaluationPeriod === termConfigs[0].evaluationPeriod,
+    )
+  const primaryEval = allSameEval
+    ? termConfigs[0].evaluationPeriod
+    : ("lifetime" as const)
   function periodKeyFor(month: string): string {
     // Shared with the overlay-only early path (A4) — see
     // `periodKeyForEval` at module level.
@@ -1383,7 +1405,9 @@ async function _buildAccrualTimelineForContract(
     marketSharePercent: number | null
   }
   const rows: TimelineRowWithVolume[] = monthsTimeline.map((month, i) => {
-    let totalSpend = 0
+    // bugs.rtfd 2026-06-13: union spend for the month, counted ONCE (no
+    // cross-term double-count). Accrual still sums per term below.
+    const totalSpend = unionSpendByMonth.get(month) ?? 0
     let totalAccrued = 0
     let bestTier = 0
     let bestPercent = 0
@@ -1406,7 +1430,8 @@ async function _buildAccrualTimelineForContract(
       const row = tRows[i]
       const entry = series[i]
       if (!row || !entry) continue
-      totalSpend += entry.spend
+      // (display spend is the deduplicated union total, set above — do
+      // NOT add per-term spend here or multi-term contracts double-count.)
 
       // Charles 2026-04-25: previously this `continue`d on
       // accruedAmount <= 0, which dropped tier visibility for any

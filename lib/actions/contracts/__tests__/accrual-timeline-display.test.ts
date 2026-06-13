@@ -1271,3 +1271,43 @@ describe("getAccrualTimeline — market-share visibility + share column (bugs.rt
   })
 })
 
+describe("getAccrualTimeline — multi-term spend not double-counted + per-period cumulative (bugs.rtfd 2026-06-13)", () => {
+  it("two all-products annual terms: Spend column counts once and Cumulative resets per year", async () => {
+    // Two annual all-products spend terms covering the SAME spend. Before
+    // the fix the Spend column summed both terms (2x) and the Cumulative
+    // ran lifetime — so a $3.7M year showed $7.4M and never matched the
+    // per-period tier basis. Now: spend counted once, cumulative resets
+    // annually.
+    contractFindUniqueMock.mockResolvedValue({
+      ...baseContract,
+      effectiveDate: new Date("2024-01-01T00:00:00Z"),
+      expirationDate: new Date("2025-12-31T00:00:00Z"),
+      terms: [
+        { id: "term-a", rebateMethod: "cumulative" as const, evaluationPeriod: "annual",
+          appliesTo: "all_products", categories: [], effectiveStart: null, effectiveEnd: null,
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+          tiers: [{ tierNumber: 1, tierName: null, spendMin: 0, spendMax: null, rebateValue: 0.03, rebateType: "percent_of_spend" }] },
+        { id: "term-b", rebateMethod: "cumulative" as const, evaluationPeriod: "annual",
+          appliesTo: "all_products", categories: [], effectiveStart: null, effectiveEnd: null,
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+          tiers: [{ tierNumber: 1, tierName: null, spendMin: 0, spendMax: null, rebateValue: 0.02, rebateType: "percent_of_spend" }] },
+      ],
+    })
+    cogFindManyMock.mockResolvedValue([
+      { transactionDate: new Date("2024-06-15T00:00:00Z"), extendedPrice: 1_000_000 },
+      { transactionDate: new Date("2025-06-15T00:00:00Z"), extendedPrice: 2_000_000 },
+    ])
+
+    const result = await getAccrualTimeline("c-1")
+    const y2024 = result.rows.find((r) => r.month === "2024")
+    const y2025 = result.rows.find((r) => r.month === "2025")
+    // Spend counted ONCE (not 1M x 2 terms = 2M).
+    expect(y2024?.spend).toBe(1_000_000)
+    expect(y2025?.spend).toBe(2_000_000)
+    // Cumulative resets per year (NOT lifetime 1M -> 3M).
+    expect(y2024?.cumulativeSpend).toBe(1_000_000)
+    expect(y2025?.cumulativeSpend).toBe(2_000_000)
+    // Accrual still sums BOTH terms: 2024 = 1M x (3% + 2%) = 50,000.
+    expect(y2024?.accruedAmount).toBeCloseTo(50_000, 2)
+  })
+})
