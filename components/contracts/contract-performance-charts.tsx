@@ -1,6 +1,6 @@
 "use client"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, Label } from "recharts"
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, Label } from "recharts"
 import { useQuery } from "@tanstack/react-query"
 import { ChartFrame } from "@/components/contracts/chart-frame"
 import { getContractPerformanceHistory } from "@/lib/actions/contracts/performance-history"
@@ -61,8 +61,8 @@ export function ContractPerformanceCharts({
         </CardHeader>
         <CardContent className="h-72">
           <ChartFrame>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data.monthly} margin={{ left: 8, right: 8, top: 8, bottom: 24 }}>
+          {({ width, height }) => (
+            <AreaChart width={width} height={height} data={data.monthly} margin={{ left: 8, right: 8, top: 8, bottom: 24 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month">
                 <Label value="Month" position="insideBottom" offset={-12} style={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
@@ -84,7 +84,7 @@ export function ContractPerformanceCharts({
               />
               <Area type="monotone" dataKey="spend" name="Spend" stroke="var(--chart-1)" fill="color-mix(in oklch, var(--chart-1) 20%, transparent)" />
             </AreaChart>
-          </ResponsiveContainer>
+          )}
           </ChartFrame>
         </CardContent>
       </Card>
@@ -99,8 +99,8 @@ export function ContractPerformanceCharts({
             </div>
           ) : (
             <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.quarterly}>
+            {({ width, height }) => (
+              <BarChart width={width} height={height} data={data.quarterly}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="quarter" />
                 <YAxis width={80} tickFormatter={formatAxisCurrency} />
@@ -109,7 +109,7 @@ export function ContractPerformanceCharts({
                 <Bar dataKey="rebateEarned" fill="var(--chart-2)" name="Earned" />
                 <Bar dataKey="rebateCollected" fill="var(--chart-1)" name="Collected" />
               </BarChart>
-            </ResponsiveContainer>
+            )}
             </ChartFrame>
           )}
         </CardContent>

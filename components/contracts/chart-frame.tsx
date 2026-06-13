@@ -3,51 +3,61 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 
 /**
- * Defers rendering a recharts chart until its frame has a non-zero measured
- * size.
+ * Measures its own box and hands explicit pixel width/height to a recharts
+ * chart — a drop-in replacement for `ResponsiveContainer` that never logs
+ * the "width(-1) and height(-1) of chart should be greater than 0" warning.
  *
  * 2026-06-13 caveat fix: the contract-detail Performance tab is a Radix
- * `TabsContent` that mounts on activation. recharts `ResponsiveContainer`
- * attaches a ResizeObserver that fires ONCE at 0×0 during that first
- * layout pass — before the panel's height resolves — and logs
- * "The width(-1) and height(-1) of chart should be greater than 0". The
- * chart then measures correctly and renders, so it was only console noise,
- * but noise that masks real warnings.
+ * `TabsContent` that mounts on activation. `ResponsiveContainer` always does
+ * a first internal render at -1×-1 before its ResizeObserver measures, and
+ * logs that warning when the initial measurement is 0 (which it is inside a
+ * just-activated tab). Gating ResponsiveContainer behind a measured parent
+ * did NOT help — recharts warns on its own first pass. Passing concrete
+ * `width`/`height` to the chart (e.g. `<AreaChart width={w} height={h}>`)
+ * sidesteps measurement entirely, so the warning never fires. Rendered
+ * output is identical; we just own the ResizeObserver instead of recharts.
  *
- * Gating the children behind a measured size means `ResponsiveContainer`
- * never mounts into a 0×0 box, so the warning never fires. Rendered output
- * is unchanged. Reusable across every contract chart (Monthly Spend,
- * Rebate by Quarter, Rebate Forecast).
+ * Usage:
+ *   <ChartFrame className="h-72">
+ *     {({ width, height }) => (
+ *       <AreaChart width={width} height={height} data={data}>…</AreaChart>
+ *     )}
+ *   </ChartFrame>
  */
 export function ChartFrame({
   children,
   className = "h-full w-full",
 }: {
-  children: ReactNode
+  children: (size: { width: number; height: number }) => ReactNode
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [ready, setReady] = useState(false)
+  const [size, setSize] = useState<{ width: number; height: number } | null>(
+    null,
+  )
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    // Already laid out at mount (direct nav, re-activation) — render now.
-    if (el.clientWidth > 0 && el.clientHeight > 0) {
-      setReady(true)
-      return
+    const apply = (w: number, h: number) => {
+      if (w > 0 && h > 0) {
+        setSize((prev) =>
+          prev && prev.width === w && prev.height === h ? prev : { width: w, height: h },
+        )
+      }
     }
     const ro = new ResizeObserver((entries) => {
       const box = entries[0]?.contentRect
-      if (box && box.width > 0 && box.height > 0) setReady(true)
+      if (box) apply(Math.round(box.width), Math.round(box.height))
     })
     ro.observe(el)
+    apply(el.clientWidth, el.clientHeight)
     return () => ro.disconnect()
   }, [])
 
   return (
     <div ref={ref} className={className}>
-      {ready ? children : null}
+      {size ? children(size) : null}
     </div>
   )
 }

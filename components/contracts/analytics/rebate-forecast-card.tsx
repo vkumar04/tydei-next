@@ -6,7 +6,6 @@ import {
   AreaChart,
   Area,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -97,8 +96,8 @@ export function RebateForecastCard({
           </p>
         ) : (
           <ChartFrame className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={series}>
+            {({ width, height }) => (
+              <AreaChart width={width} height={height} data={series}>
                 {/* Recharts SVG attrs don't resolve hsl(var(--*)) tokens
                     (the project's --primary is oklch, so wrapping it in
                     hsl(...) emits invalid CSS and the chart renders
@@ -175,7 +174,7 @@ export function RebateForecastCard({
                   connectNulls
                 />
               </AreaChart>
-            </ResponsiveContainer>
+            )}
           </ChartFrame>
         )}
       </CardContent>
