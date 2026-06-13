@@ -157,6 +157,41 @@ export function refineTierOrdering(
   }
 }
 
+/**
+ * bugs.rtfd 2026-06-13 #5 (Vick): "When you select product category units it
+ * needs to make you select categories in product scope; All Products should no
+ * longer be an option." When volume is counted by product category
+ * (`volumeType === "product_category"`), the scope can't be All Products —
+ * units are tallied per category, so the term MUST be scoped to at least one
+ * specific category. Enforce both halves at the validator boundary so a save
+ * can never persist a product_category term with an all-products (or empty)
+ * scope, regardless of the form path (manual, AI extract, bulk paste).
+ *
+ * Category field: `scopedCategoryIds` (canonical array; `scopedCategoryId` is
+ * the back-compat first-element mirror written alongside it by the form).
+ */
+export function refineProductCategoryScope(
+  value: {
+    volumeType?: string
+    appliesTo?: string
+    scopedCategoryIds?: string[]
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.volumeType !== "product_category") return
+  if (
+    value.appliesTo !== "specific_category" ||
+    (value.scopedCategoryIds ?? []).length === 0
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["scopedCategoryIds"],
+      message:
+        "Select at least one product category — 'Product category (units)' counts volume by category, so the scope can't be All Products.",
+    })
+  }
+}
+
 // ─── Create Term Schema ──────────────────────────────────────────
 
 export const createTermSchema = z.object({
@@ -248,6 +283,8 @@ const _createTermSchemaBase = createTermSchema
 export const createTermSchemaWithTierCheck = _createTermSchemaBase.superRefine(
   (value, ctx) => {
     refineTierOrdering(value.tiers ?? [], ctx, value.termType)
+    // bugs.rtfd 2026-06-13 #5 — product_category volume forces Specific Category.
+    refineProductCategoryScope(value, ctx)
   },
 )
 
@@ -330,6 +367,8 @@ export const termFormSchema = z.object({
 export const termFormSchemaWithTierCheck = termFormSchema.superRefine(
   (value, ctx) => {
     refineTierOrdering(value.tiers ?? [], ctx, value.termType)
+    // bugs.rtfd 2026-06-13 #5 — product_category volume forces Specific Category.
+    refineProductCategoryScope(value, ctx)
   },
 )
 

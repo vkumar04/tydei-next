@@ -700,6 +700,19 @@ export function ContractTermsEntry({
                               scopedCategoryId: undefined,
                               scopedCategoryIds: undefined,
                             })
+                          } else if (next === "product_category") {
+                            // bugs.rtfd 2026-06-13 #5 (Vick): "Product category
+                            // (units)" counts volume per category, so the scope
+                            // can't be All Products. Force Specific Category and
+                            // KEEP any categories the user already picked (they
+                            // must end up with ≥1 — required by
+                            // refineProductCategoryScope). If appliesTo was
+                            // all_products / specific_items, flip it to
+                            // specific_category so the Categories picker appears.
+                            updateTerm(termIdx, {
+                              volumeType: next,
+                              appliesTo: "specific_category",
+                            })
                           } else {
                             updateTerm(termIdx, { volumeType: next })
                           }
@@ -877,7 +890,17 @@ export function ContractTermsEntry({
                   ) : (
                     <Field label="Product Scope">
                       <Select
-                        value={term.appliesTo}
+                        // bugs.rtfd 2026-06-13 #5 — product_category volume
+                        // forces Specific Category; coerce the displayed value
+                        // so an inconsistent inbound state (e.g. AI extract
+                        // arriving as all_products) doesn't render a blank
+                        // trigger for the now-removed All Products item.
+                        value={
+                          term.termType === "volume_rebate" &&
+                          term.volumeType === "product_category"
+                            ? "specific_category"
+                            : term.appliesTo
+                        }
                         disabled={
                           // Review F7: lock only when the state is CONSISTENT
                           // (AI extracts can arrive with volumeType=all_products
@@ -907,7 +930,16 @@ export function ContractTermsEntry({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all_products">All Products</SelectItem>
+                          {/* bugs.rtfd 2026-06-13 #5 (Vick): when volume is
+                              counted by product category, the scope can't be
+                              All Products — units are tallied per category — so
+                              the "All Products" option is removed entirely. */}
+                          {!(
+                            term.termType === "volume_rebate" &&
+                            term.volumeType === "product_category"
+                          ) && (
+                            <SelectItem value="all_products">All Products</SelectItem>
+                          )}
                           <SelectItem value="specific_category">Specific Category</SelectItem>
                           <SelectItem value="specific_items">Specific Items</SelectItem>
                         </SelectContent>
@@ -918,6 +950,16 @@ export function ContractTermsEntry({
                           <p className="text-xs text-muted-foreground">
                             Locked to All Products by &quot;All products on
                             contract&quot; above.
+                          </p>
+                        )}
+                      {/* bugs.rtfd 2026-06-13 #5 — spell out why All Products is
+                          gone for product-category volume. */}
+                      {term.termType === "volume_rebate" &&
+                        term.volumeType === "product_category" && (
+                          <p className="text-xs text-muted-foreground">
+                            &quot;Product category (units)&quot; counts volume by
+                            category — pick at least one category below. All
+                            Products isn&apos;t available for this volume type.
                           </p>
                         )}
                     </Field>
