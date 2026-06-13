@@ -945,6 +945,10 @@ async function _buildAccrualTimelineForContract(
         accruedAmount: r.rows[idx].accruedAmount + b.rebateEarned,
         tierAchieved: b.tierAchieved,
         rebatePercent: b.rebatePercent,
+        // bugs.rtfd 2026-06-13: carry the window's growth-baseline cut onto
+        // its period-end month so the subtotal can render the basis.
+        growthBaselineApplied:
+          (r.rows[idx].growthBaselineApplied ?? 0) + b.growthBaselineApplied,
       }
     }
     // Open / partial TAIL window — the engine (like the writer) drops a
@@ -978,6 +982,11 @@ async function _buildAccrualTimelineForContract(
           accruedAmount: r.rows[last].accruedAmount + res.rebateEarned,
           tierAchieved: res.tierAchieved,
           rebatePercent: res.rebatePercent,
+          // Open/partial tail window: surface the baseline cut applied to
+          // the to-date growth slice (same proRated basis as the engine).
+          growthBaselineApplied:
+            (r.rows[last].growthBaselineApplied ?? 0) +
+            Math.max(0, tailSpend - tailTierSpend),
         }
       }
     }
@@ -1403,12 +1412,23 @@ async function _buildAccrualTimelineForContract(
      * window this month belongs to — "market share at the time of
      * rebate". Null when the contract has no market_share term. */
     marketSharePercent: number | null
+    /** bugs.rtfd 2026-06-13 ("not taking the 500K growth baseline into
+     * account"): dollars removed by the growth baseline for the evaluation
+     * window that settles on this row. 0 unless a growth-only term applied
+     * a baseline. Surfaced on the period-subtotal so the UI can show
+     * `rate × (spend − baseline) = accrued` instead of an unreconcilable
+     * `rate × gross spend`. */
+    growthBaselineApplied: number
   }
   const rows: TimelineRowWithVolume[] = monthsTimeline.map((month, i) => {
     // bugs.rtfd 2026-06-13: union spend for the month, counted ONCE (no
     // cross-term double-count). Accrual still sums per term below.
     const totalSpend = unionSpendByMonth.get(month) ?? 0
     let totalAccrued = 0
+    // bugs.rtfd 2026-06-13: sum the growth-baseline cut the per-term
+    // evaluation-period walk stamped on this month (only the period-end
+    // month of a growth term is non-zero).
+    let totalGrowthBaseline = 0
     let bestTier = 0
     let bestPercent = 0
     let bestContribution = -1
@@ -1470,6 +1490,7 @@ async function _buildAccrualTimelineForContract(
         ? (inProgressVolume?.accrued ?? 0)
         : row.accruedAmount
       totalAccrued += walkAccrual
+      totalGrowthBaseline += Number(row.growthBaselineApplied ?? 0)
       if (walkAccrual > 0) {
         contributions.push({
           termIndex,
@@ -1546,6 +1567,10 @@ async function _buildAccrualTimelineForContract(
       achievedRebateValue: bestRebateValue,
       // bugs.rtfd 2026-06-13 M: stamped from the window shares below.
       marketSharePercent: null,
+      // bugs.rtfd 2026-06-13: growth-baseline cut summed across this month's
+      // contributing terms; the period-end month carries the window's full
+      // cut, which the subtotal merge rolls up.
+      growthBaselineApplied: totalGrowthBaseline,
     }
   })
 
@@ -1648,6 +1673,7 @@ async function _buildAccrualTimelineForContract(
           achievedRebateType: null,
           achievedRebateValue: 0,
           marketSharePercent: null,
+          growthBaselineApplied: 0,
         }
         byKey.set(monthKey, target)
         rows.push(target)
@@ -1701,6 +1727,7 @@ async function _buildAccrualTimelineForContract(
           achievedRebateType: null,
           achievedRebateValue: 0,
           marketSharePercent: null,
+          growthBaselineApplied: 0,
         }
         byKey.set(we.month, target)
         rows.push(target)
@@ -1762,6 +1789,11 @@ async function _buildAccrualTimelineForContract(
               // period-end running total (cumulative already resets per period)
               cumulativeSpend: r.cumulativeSpend,
               accruedAmount: cur.accruedAmount + r.accruedAmount,
+              // bugs.rtfd 2026-06-13: the subtotal's growth-baseline basis is
+              // the sum of the window's monthly cuts (only the period-end
+              // month is non-zero, but sum to be cadence-agnostic).
+              growthBaselineApplied:
+                cur.growthBaselineApplied + r.growthBaselineApplied,
               volume: cur.volume + r.volume,
               tierAchieved: better ? r.tierAchieved : cur.tierAchieved,
               rebatePercent: better ? r.rebatePercent : cur.rebatePercent,

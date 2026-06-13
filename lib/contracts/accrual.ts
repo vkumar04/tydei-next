@@ -273,6 +273,13 @@ export interface TimelineRow {
   accruedAmount: number
   tierAchieved: number
   rebatePercent: number
+  /** bugs.rtfd 2026-06-13 ("not taking the 500K growth baseline into
+   *  account"): dollars the growth baseline removed before the rate applied,
+   *  stamped on the period-end month by the evaluation-period walk. Optional
+   *  on the base row (most walks don't set it); the display layer aggregates
+   *  it onto the period-subtotal so `rate × (spend − baseline) = accrued`
+   *  reads honestly. */
+  growthBaselineApplied?: number
 }
 
 /**
@@ -631,9 +638,18 @@ export interface EvaluationPeriodBucket {
   periodEnd: Date
   /** Aggregate COG spend across every month in this window. */
   totalSpend: number
-  /** Aggregate rebate earned: engine run once on `totalSpend`. */
+  /** Growth-baseline mode only: the spend the rate actually applied to,
+   *  `max(0, totalSpend − proRatedBaseline)`. Equals `totalSpend` when no
+   *  baseline. Surfaced so display/notes can show why `rate × totalSpend`
+   *  ≠ `rebateEarned` (bugs.rtfd 2026-06-13 "not taking the 500K growth
+   *  baseline into account" — the basis was hidden). */
+  qualifyingSpend: number
+  /** Dollars removed by the pro-rated growth baseline this window
+   *  (`totalSpend − qualifyingSpend`); 0 when not growth-based. */
+  growthBaselineApplied: number
+  /** Aggregate rebate earned: engine run once on `qualifyingSpend`. */
   rebateEarned: number
-  /** Tier hit by `totalSpend`. */
+  /** Tier hit by `qualifyingSpend`. */
   tierAchieved: number
   /** Rate at the achieved tier. */
   rebatePercent: number
@@ -792,6 +808,8 @@ export function buildEvaluationPeriodAccruals(
       periodStart: cursorStart,
       periodEnd,
       totalSpend,
+      qualifyingSpend: tierSpend,
+      growthBaselineApplied: Math.max(0, totalSpend - tierSpend),
       rebateEarned: engineResult.rebateEarned,
       tierAchieved: engineResult.tierResult?.tier.tierNumber ?? fallback.tierAchieved,
       rebatePercent: engineResult.tierResult?.tier.rebateValue ?? fallback.rebatePercent,

@@ -200,6 +200,27 @@ export function ContractAccrualTimeline({
                     </td>
                     <td className="py-2 text-right tabular-nums">
                       {formatCurrency(Number(row.cumulativeSpend))}
+                      {/* bugs.rtfd 2026-06-13 ("not taking the 500K growth
+                          baseline into account"): when a growth baseline was
+                          subtracted before the rate applied, show the basis so
+                          rate × basis = accrued reconciles. */}
+                      {(() => {
+                        const baseline = Number(
+                          (row as unknown as { growthBaselineApplied?: number })
+                            .growthBaselineApplied ?? 0,
+                        )
+                        if (!subtotal || baseline <= 0) return null
+                        const basis = Math.max(
+                          0,
+                          Number(row.cumulativeSpend) - baseline,
+                        )
+                        return (
+                          <div className="text-[10px] font-normal text-muted-foreground">
+                            − {formatCurrency(baseline)} growth baseline
+                            <br />= {formatCurrency(basis)} basis
+                          </div>
+                        )
+                      })()}
                     </td>
                     {isVolumeRebate && (
                       <td className="py-2 text-right tabular-nums">

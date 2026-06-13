@@ -245,6 +245,54 @@ describe("buildEvaluationPeriodAccruals — growth-baseline (Charles 2026-04-25)
     expect(buckets[0].totalSpend).toBe(120_000)
     // ...but rebate is computed on growth slice only: $20K × 5% = $1,000.
     expect(buckets[0].rebateEarned).toBe(1_000)
+    // bugs.rtfd 2026-06-13 ("not taking the 500K growth baseline into
+    // account"): the basis the rate applied to + the cut are now surfaced so
+    // display/notes can reconcile rate × basis = earned.
+    expect(buckets[0].qualifyingSpend).toBe(20_000)
+    expect(buckets[0].growthBaselineApplied).toBe(100_000)
+    // Reconciles: 5% × qualifyingSpend === rebateEarned.
+    expect(buckets[0].qualifyingSpend * 0.05).toBe(buckets[0].rebateEarned)
+  })
+
+  it("no baseline: qualifyingSpend === totalSpend, cut is 0", () => {
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 5 },
+    ]
+    const series = twelveMonthsFrom(2025, 10_000) // $120K total
+    const buckets = buildEvaluationPeriodAccruals(
+      series,
+      tiers,
+      "cumulative",
+      "annual",
+      new Date(Date.UTC(2025, 0, 1)),
+      { boundedUntil: new Date(Date.UTC(2026, 3, 19)) },
+    )
+    expect(buckets.length).toBe(1)
+    expect(buckets[0].qualifyingSpend).toBe(120_000)
+    expect(buckets[0].growthBaselineApplied).toBe(0)
+  })
+
+  it("below-baseline: cut is capped at gross spend (never negative basis)", () => {
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 0, spendMax: null, rebateValue: 5 },
+    ]
+    const series = twelveMonthsFrom(2025, 5_000) // $60K total, baseline $100K
+    const buckets = buildEvaluationPeriodAccruals(
+      series,
+      tiers,
+      "cumulative",
+      "annual",
+      new Date(Date.UTC(2025, 0, 1)),
+      {
+        boundedUntil: new Date(Date.UTC(2026, 3, 19)),
+        spendBaseline: 100_000,
+        growthBased: true,
+      },
+    )
+    expect(buckets[0].qualifyingSpend).toBe(0)
+    // Cut never exceeds gross spend, so basis = max(0, spend − cut) stays ≥ 0.
+    expect(buckets[0].growthBaselineApplied).toBe(60_000)
+    expect(buckets[0].rebateEarned).toBe(0)
   })
 
   it("quarterly: pro-rates the annual baseline to the period (÷4)", () => {

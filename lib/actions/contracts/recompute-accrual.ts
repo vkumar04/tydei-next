@@ -736,7 +736,15 @@ export async function _recomputeAccrualForContractWithFacility(
       if (b.rebateEarned <= 0 && b.totalSpend <= 0) continue
       // Charles W1.W-C1: skip if a collected row already exists for this window.
       if (preservedKeys.has(periodKey(b.periodStart, b.periodEnd))) continue
-      const noteBody = `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on $${b.totalSpend.toFixed(2)} (${config.evaluationPeriod}-eval)`
+      // bugs.rtfd 2026-06-13 ("not taking the 500K growth baseline into
+      // account"): when a growth baseline was subtracted, the rate applied to
+      // the qualifying (net) spend, not gross. Show that basis so the note
+      // reconciles `rate × basis = earned` instead of citing gross spend.
+      const baseClause =
+        b.growthBaselineApplied > 0
+          ? `$${b.qualifyingSpend.toFixed(2)} (gross $${b.totalSpend.toFixed(2)} − $${b.growthBaselineApplied.toFixed(2)} growth baseline)`
+          : `$${b.totalSpend.toFixed(2)}`
+      const noteBody = `${b.label} · tier ${b.tierAchieved} @ ${b.rebatePercent}% on ${baseClause} (${config.evaluationPeriod}-eval)`
       toInsert.push({
         contractId,
         facilityId: facilityId,
