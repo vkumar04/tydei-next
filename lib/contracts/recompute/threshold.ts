@@ -252,7 +252,14 @@ export async function computePerPeriodMarketShare(input: {
   windows: ThresholdEvaluationWindow[]
   queryStart?: Date
   queryEnd?: Date
-}): Promise<Array<{ share: number; vendorSpend: number; marketSpend: number }>> {
+}): Promise<
+  Array<{
+    share: number
+    vendorSpend: number
+    marketSpend: number
+    vendorQuantity: number
+  }>
+> {
   const { facilityId, vendorIds, scopedCategoryNames, windows } = input
   if (windows.length === 0) return []
   const queryStart =
@@ -275,7 +282,9 @@ export async function computePerPeriodMarketShare(input: {
         transactionDate: { gte: queryStart, lte: queryEnd },
         ...categoryFilter,
       },
-      select: { transactionDate: true, extendedPrice: true },
+      // bugs.rtfd 2026-06-13 #3: also pull quantity so per-unit
+      // market-share tiers can earn units × rate (not a flat rate).
+      select: { transactionDate: true, extendedPrice: true, quantity: true },
     }),
     prisma.cOGRecord.findMany({
       where: {
@@ -286,26 +295,30 @@ export async function computePerPeriodMarketShare(input: {
       select: { transactionDate: true, extendedPrice: true },
     }),
   ])
-  const sumInWindow = (
-    rows: Array<{ transactionDate: Date; extendedPrice: unknown }>,
+  const sumField = (
+    rows: Array<{ transactionDate: Date; extendedPrice?: unknown; quantity?: unknown }>,
     ps: Date,
     pe: Date,
+    field: "extendedPrice" | "quantity",
   ): number => {
     let s = 0
     for (const row of rows) {
       const t = row.transactionDate.getTime()
       if (t < ps.getTime() || t > pe.getTime()) continue
-      s += row.extendedPrice == null ? 0 : Number(row.extendedPrice)
+      const v = row[field]
+      s += v == null ? 0 : Number(v)
     }
     return s
   }
   return windows.map((w) => {
-    const vendorSpend = sumInWindow(vendorRows, w.periodStart, w.periodEnd)
-    const marketSpend = sumInWindow(facilityRows, w.periodStart, w.periodEnd)
+    const vendorSpend = sumField(vendorRows, w.periodStart, w.periodEnd, "extendedPrice")
+    const marketSpend = sumField(facilityRows, w.periodStart, w.periodEnd, "extendedPrice")
+    const vendorQuantity = sumField(vendorRows, w.periodStart, w.periodEnd, "quantity")
     return {
       share: marketSpend > 0 ? (vendorSpend / marketSpend) * 100 : 0,
       vendorSpend,
       marketSpend,
+      vendorQuantity,
     }
   })
 }
@@ -466,12 +479,16 @@ export async function recomputeThresholdAccrualForTerm(input: {
     periodEnd: Date
     periodPayment: number
     spendInScope: number
+    // bugs.rtfd 2026-06-13 #3: per-period scoped vendor unit count, for
+    // per-unit market-share rebates + the timeline's units display.
+    unitsInScope: number
   }
   const results: BucketResult[] = grid.windows.map((w) => ({
     periodStart: w.periodStart,
     periodEnd: w.periodEnd,
     periodPayment: flatPerPeriodPayment,
     spendInScope: 0,
+    unitsInScope: 0,
   }))
 
   // Per-period evaluation for market_share terms (2026-06-09): compute each
@@ -518,7 +535,7 @@ export async function recomputeThresholdAccrualForTerm(input: {
     })
     for (let i = 0; i < results.length; i++) {
       const r = results[i]
-      const { share: windowShare, vendorSpend } = windowShares[i]
+      const { share: windowShare, vendorSpend, vendorQuantity } = windowShares[i]
       const windowAchieved = determineTier(windowShare, tiers, "EXCLUSIVE")
       perBucketShare.set(i, {
         share: windowShare,
@@ -526,6 +543,7 @@ export async function recomputeThresholdAccrualForTerm(input: {
       })
       if (!windowAchieved) {
         r.spendInScope = vendorSpend
+        r.unitsInScope = vendorQuantity
         r.periodPayment = 0
         continue
       }
@@ -533,10 +551,20 @@ export async function recomputeThresholdAccrualForTerm(input: {
         (t) => t.tierNumber === windowAchieved.tierNumber,
       )
       r.spendInScope = vendorSpend
+      r.unitsInScope = vendorQuantity
+      // bugs.rtfd 2026-06-13 #3: per-unit market-share tiers earn
+      // units × rate (the period's scoped vendor quantity), not a flat
+      // per-period rate. percent_of_spend stays spend × fraction; a flat
+      // fixed_rebate stays the per-period dollar amount.
+      const isPerUnit =
+        windowRawTier?.rebateType === "fixed_rebate_per_unit" ||
+        windowRawTier?.rebateType === "per_procedure_rebate"
       r.periodPayment =
         windowRawTier?.rebateType === "percent_of_spend"
           ? vendorSpend * Number(windowRawTier.rebateValue ?? 0)
-          : windowAchieved.rebateValue
+          : isPerUnit
+            ? vendorQuantity * Number(windowRawTier.rebateValue ?? 0)
+            : windowAchieved.rebateValue
     }
   } else if (isMarketSharePercentOfSpend && term.vendorId && results.length > 0) {
     // Fallback (vendor info missing from the per-period path): the legacy
@@ -611,9 +639,11 @@ export async function recomputeThresholdAccrualForTerm(input: {
       payPeriodStart: r.periodStart,
       payPeriodEnd: r.periodEnd,
       collectionDate: isTieIn ? r.periodEnd : null,
+      // bugs.rtfd 2026-06-13 #3: include units on per-unit rows so the
+      // timeline + audit show units × rate, not a bare flat amount.
       notes:
         isMarketSharePercentOfSpend || windowInfo
-          ? `${termPrefix} · ${noteMetric} · spend=$${r.spendInScope.toFixed(2)} → $${r.periodPayment.toFixed(2)}`
+          ? `${termPrefix} · ${noteMetric} · spend=$${r.spendInScope.toFixed(2)} · units=${r.unitsInScope} → $${r.periodPayment.toFixed(2)}`
           : `${termPrefix} · ${noteMetric} · $${r.periodPayment.toFixed(2)}`,
     })
   }

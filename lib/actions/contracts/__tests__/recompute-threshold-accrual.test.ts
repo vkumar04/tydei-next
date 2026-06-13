@@ -170,6 +170,46 @@ describe("recomputeThresholdAccrualForTerm", () => {
     expect(data[0].notes).toContain("tier 1")
   })
 
+  it("bugs.rtfd 2026-06-13 #3: market_share per-unit tier earns units × rate, not a flat rate", async () => {
+    // Per-period market-share path needs a vendor; COG mock returns the
+    // same rows for the vendor + facility queries → 100% share → tier
+    // qualifies. 120 units total in the window → 120 × $10 = $1,200.
+    cogFindManyMock.mockResolvedValue([
+      { transactionDate: new Date(Date.UTC(2024, 2, 15)), extendedPrice: 50_000, quantity: 70 },
+      { transactionDate: new Date(Date.UTC(2024, 7, 15)), extendedPrice: 40_000, quantity: 50 },
+    ])
+    const r = await recomputeThresholdAccrualForTerm({
+      contractId: "c-1",
+      facilityId: "f-1",
+      contractEffectiveDate: new Date(Date.UTC(2024, 0, 1)),
+      contractExpirationDate: new Date(Date.UTC(2024, 11, 31)),
+      metric: "currentMarketShare",
+      metricValue: 100,
+      term: {
+        id: "term-ms-unit",
+        evaluationPeriod: "annual",
+        effectiveStart: new Date(Date.UTC(2024, 0, 1)),
+        effectiveEnd: new Date(Date.UTC(2024, 11, 31)),
+        termType: "market_share",
+        vendorId: "v-1",
+        tiers: [
+          {
+            tierNumber: 1,
+            tierName: "Base",
+            spendMin: 50, // 50%+ market share
+            spendMax: null,
+            rebateValue: 10, // $10 per unit
+            rebateType: "fixed_rebate_per_unit",
+          },
+        ],
+      },
+    })
+    expect(r.inserted).toBe(1)
+    expect(r.sumEarned).toBe(1_200) // 120 units × $10 — NOT $10
+    const data = createManyMock.mock.calls[0][0].data
+    expect(data[0].notes).toContain("units=120")
+  })
+
   it("compliance + null metric still writes no rows (untracked ≠ 0%)", async () => {
     const r = await recomputeThresholdAccrualForTerm({
       contractId: "c-1",
