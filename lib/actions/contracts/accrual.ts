@@ -872,15 +872,22 @@ async function _buildAccrualTimelineForContract(
     }
     const term = termsWithTiers[r.termIndex]
     const windowAnchor = term.effectiveStart ?? contract.effectiveDate
+    // bugs.rtfd 2026-06-13 #2: end-of-day the date-only end bounds so a
+    // window ending on the same calendar day as the term/contract end
+    // counts as complete (matches the recompute writer + threshold path).
+    // Without it an annual term ending on a period boundary lost its
+    // final window and the timeline showed $0.
+    const endOfDayUTC = (d: Date) =>
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999)
     const termWindowEnd = term.effectiveEnd
       ? new Date(
           Math.min(
             nowForBudget.getTime(),
-            term.effectiveEnd.getTime(),
-            end.getTime(),
+            endOfDayUTC(term.effectiveEnd),
+            endOfDayUTC(end),
           ),
         )
-      : new Date(Math.min(nowForBudget.getTime(), end.getTime()))
+      : new Date(Math.min(nowForBudget.getTime(), endOfDayUTC(end)))
     // bugs.rtfd 2026-06-13 #1: growth-only baseline subtraction (matches
     // the recompute writer). "From dollar one" earns on full spend.
     const growthSubtract =

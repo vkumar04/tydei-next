@@ -467,4 +467,44 @@ describe("recomputeAccrualForContract — cadence-aware bucketing (Charles W1.O)
     // Two non-zero months, monthly cadence fallback -> two rows.
     expect(args.data).toHaveLength(2)
   })
+  it("bugs.rtfd 2026-06-13 #2: two annual terms accrue their final window when the contract ends ON a period boundary (sparse spend)", () => {
+    // Repro: a contract ending exactly 2024-12-31 with two annual-eval
+    // spend terms and spend in only 3 of 12 months. Before the fix the
+    // period-eval path computed termWindowEnd at midnight 2024-12-31, so
+    // the window's end-of-day periodEnd (23:59:59) exceeded it and
+    // buildEvaluationPeriodAccruals dropped the window — BOTH terms
+    // earned $0. (When two terms have different effectiveEnd dates, only
+    // the boundary-aligned one drops, which reads as "one term doesn't
+    // calculate".) End-of-day-ing the bound fixes it: each term cumulates
+    // its scoped spend over the year and earns at the closed period.
+    contractFindUniqueMock.mockResolvedValue({
+      id: "c-1", vendorId: "v-1", facilityId: "fac-1", contractType: "usage",
+      effectiveDate: new Date("2024-01-01T00:00:00Z"),
+      expirationDate: new Date("2024-12-31T00:00:00Z"),
+      terms: [
+        { id: "term-a", rebateMethod: "cumulative" as const, evaluationPeriod: "annual",
+          appliesTo: "all_products", categories: [],
+          effectiveStart: new Date("2024-01-01T00:00:00Z"), effectiveEnd: new Date("2024-12-31T00:00:00Z"),
+          tiers: [{ tierNumber: 1, tierName: null, spendMin: 0, spendMax: null, rebateValue: 2 }] },
+        { id: "term-b", rebateMethod: "cumulative" as const, evaluationPeriod: "annual",
+          appliesTo: "all_products", categories: [],
+          effectiveStart: new Date("2024-01-01T00:00:00Z"), effectiveEnd: new Date("2024-12-31T00:00:00Z"),
+          tiers: [{ tierNumber: 1, tierName: null, spendMin: 0, spendMax: null, rebateValue: 3 }] },
+      ],
+    })
+    cogFindManyMock.mockResolvedValue([
+      { transactionDate: new Date("2024-02-10T00:00:00Z"), extendedPrice: 100000 },
+      { transactionDate: new Date("2024-06-10T00:00:00Z"), extendedPrice: 200000 },
+      { transactionDate: new Date("2024-11-10T00:00:00Z"), extendedPrice: 150000 },
+    ])
+
+    return recomputeAccrualForContract("c-1").then(() => {
+      const rows = rebateCreateManyMock.mock.calls.flatMap(
+        (c) => (c[0] as { data: Array<{ rebateEarned: number }> }).data,
+      )
+      const total = rows.reduce((s, r) => s + r.rebateEarned, 0)
+      // $450K × 2% + $450K × 3% = $9,000 + $13,500 = $22,500.
+      expect(total).toBeCloseTo(22_500, 2)
+    })
+  })
 })

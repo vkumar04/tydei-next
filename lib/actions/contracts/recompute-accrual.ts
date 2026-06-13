@@ -682,11 +682,22 @@ export async function _recomputeAccrualForContractWithFacility(
     const series = buildSeries(cogRecords, termCategoryWhere)
 
     const windowAnchor = term.effectiveStart ?? contract.effectiveDate
+    // bugs.rtfd 2026-06-13 #2: push date-only end bounds to end-of-day so
+    // a period whose periodEnd is the SAME calendar day as the term/
+    // contract end still counts as complete. Without this, an annual term
+    // ending 2024-12-31 emits ZERO buckets — its window's periodEnd
+    // (2024-12-31T23:59:59.999) > termWindowEnd (2024-12-31T00:00:00) and
+    // `buildEvaluationPeriodAccruals` drops it as incomplete. The
+    // threshold writer already does this (W1.W-B1); the spend writer's
+    // period-eval path didn't, so any contract whose expiration aligns
+    // with a period boundary lost its final (or only) window.
+    const endOfDayUTC = (d: Date) =>
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999)
     const termWindowEnd = term.effectiveEnd
       ? new Date(
-          Math.min(now.getTime(), term.effectiveEnd.getTime(), end.getTime()),
+          Math.min(now.getTime(), endOfDayUTC(term.effectiveEnd), endOfDayUTC(end)),
         )
-      : new Date(Math.min(now.getTime(), end.getTime()))
+      : new Date(Math.min(now.getTime(), endOfDayUTC(end)))
 
     // Bug #22 (2026-05-11, Vick): a contract with `spendBaseline > 0`
     // should pay rebate only on dollars ABOVE the baseline. Charles
