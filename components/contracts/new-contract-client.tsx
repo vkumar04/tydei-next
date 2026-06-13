@@ -44,15 +44,11 @@ import type { ExtractedContractData } from "@/lib/ai/schemas"
 interface NewContractClientProps {
   vendors: { id: string; name: string; displayName: string | null }[]
   categories: { id: string; name: string }[]
-  /** Facility's real COG category names — terms scope to any of these
-   *  (bugs.rtfd 2026-06-13 "not all categories are on the category list"). */
-  cogCategories?: string[]
 }
 
 export function NewContractClient({
   vendors,
   categories,
-  cogCategories = [],
 }: NewContractClientProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -927,11 +923,14 @@ export function NewContractClient({
                   vendorItemNo: p.vendorItemNo,
                   description: p.description ?? null,
                 }))}
-                // bugs.rtfd 2026-06-13: real COG categories (deduped) plus
-                // the contract's selections. See selectScopeableCategories.
+                // bugs.rtfd 2026-06-13 ("Wrong list... Should just be what
+                // was mapped off the price list"): the term picker's universe
+                // is the categories mapped off this contract's price file
+                // (pricingCategories), not the facility's whole COG/mapping
+                // taxonomy. See selectScopeableCategories.
                 availableCategories={selectScopeableCategories(
                   liveCategories,
-                  cogCategories,
+                  pricingCategories,
                   form.watch("categoryIds") ?? [],
                 )}
               />

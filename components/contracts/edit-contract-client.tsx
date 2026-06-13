@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, Loader2, Save, X } from "lucide-react"
 import { useContract, useUpdateContract } from "@/hooks/use-contracts"
@@ -38,16 +38,12 @@ interface EditContractClientProps {
   contractId: string
   vendors: { id: string; name: string; displayName: string | null }[]
   categories: { id: string; name: string }[]
-  /** Facility's real COG category names — terms can scope to any of these
-   *  (bugs.rtfd 2026-06-13 "not all categories are on the category list"). */
-  cogCategories?: string[]
 }
 
 export function EditContractClient({
   contractId,
   vendors,
   categories,
-  cogCategories = [],
 }: EditContractClientProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -74,6 +70,24 @@ export function EditContractClient({
     vendorItemNo: p.vendorItemNo,
     description: p.description ?? null,
   }))
+
+  // bugs.rtfd 2026-06-13 ("Wrong list... Should just be what was mapped off
+  // the price list"): the term category picker's universe is the set of
+  // categories the user mapped onto THIS contract's price file — the
+  // distinct non-empty ContractPricing.category values — not the facility's
+  // whole COG/mapping taxonomy. Feeds selectScopeableCategories as the
+  // universe (selections still unioned in so an already-scoped category
+  // never disappears).
+  const priceFileCategories = useMemo(
+    () => [
+      ...new Set(
+        (pricingItems ?? [])
+          .map((p) => p.category)
+          .filter((c): c is string => !!c && c.trim().length > 0),
+      ),
+    ],
+    [pricingItems],
+  )
 
   const { form, terms, setTerms } = useContractForm()
 
@@ -547,13 +561,12 @@ export function EditContractClient({
             onChange={setTerms}
             contractType={form.watch("contractType")}
             availableItems={availableItems}
-            // bugs.rtfd 2026-06-13: every category with real COG spend
-            // (deduped by canonical name) plus the contract's own
-            // selections — not just the contract subset. See
-            // selectScopeableCategories.
+            // bugs.rtfd 2026-06-13: only the categories mapped off this
+            // contract's price file (deduped by canonical name), plus the
+            // contract's own selections. See selectScopeableCategories.
             availableCategories={selectScopeableCategories(
               (liveCategories ?? categories) ?? [],
-              cogCategories,
+              priceFileCategories,
               form.watch("categoryIds") ?? [],
             )}
           />
