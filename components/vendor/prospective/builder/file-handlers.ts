@@ -1,26 +1,157 @@
 import { toast } from "sonner"
+import { readPricingRows } from "@/components/facility/analysis/prospective/pricing-file-reader"
+import {
+  ITEM_NUMBER_ALIASES,
+  DESCRIPTION_ALIASES,
+  UNIT_PRICE_ALIASES,
+  CATEGORY_ALIASES,
+} from "@/lib/utils/parse-pricing-file"
 import type { NewProposalState, ProposalProduct, FileUploadProgressState, TermSuggestionsState } from "./types"
 
-function parseCSVLine(line: string): string[] {
-  const result: string[] = []
-  let current = ""
-  let inQuotes = false
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-    if (char === '"') {
-      inQuotes = !inQuotes
-    } else if (char === "," && !inQuotes) {
-      result.push(current.trim().replace(/"/g, ""))
-      current = ""
-    } else {
-      current += char
-    }
-  }
-  result.push(current.trim().replace(/"/g, ""))
-  return result
+// ─── File parsing + column resolution ─────────────────────────────
+// Bugs 2026-06-13 ("Pricing file must have a product name or reference
+// number column" / "Usage file must have a product name column" on the
+// real vendor exports): this file used to hand-roll BOTH the file
+// parsing (FileReader.readAsText — XLSX read as binary garbage, no BOM
+// strip, no CRLF normalization) AND a third copy of the header-alias
+// lists, which missed "ReferenceNumber"-class SKU headers. Parsing now
+// goes through the shared readPricingRows (CSV client-side with
+// BOM/CRLF/quote handling; XLSX/XLS via /api/parse-file) and column
+// detection through the canonical alias lists in
+// lib/utils/parse-pricing-file.ts (invariants table: "Pricing-file
+// header detection") — NEVER inline a copy. Builder-only extras
+// ("Product Name", proposed_price, cost-basis, the usage-file columns)
+// stay here as SECONDARY aliases behind the canonical lists.
+
+// Same normalization convention as pricing-file-reader.ts.
+function norm(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
-export function handlePricingFileUpload(
+function findExact(normHeaders: string[], aliases: string[]): number {
+  for (const alias of aliases) {
+    const idx = normHeaders.indexOf(norm(alias))
+    if (idx >= 0) return idx
+  }
+  return -1
+}
+
+function findContains(normHeaders: string[], needles: string[]): number {
+  const normNeedles = needles.map(norm)
+  return normHeaders.findIndex((h) => normNeedles.some((n) => h.includes(n)))
+}
+
+// Builder-specific SECONDARY aliases (canonical lists come first).
+const NAME_ALIASES = [...DESCRIPTION_ALIASES, "product_name", "name", "product"]
+const QTY_ALIASES = ["quantity", "qty", "volume", "units", "quantity_ordered"]
+const COST_BASIS_ALIASES = ["cost_basis", "cog", "cost_of_goods", "vendor_cost"]
+
+function findCategoryIdx(normHeaders: string[]): number {
+  const exact = findExact(normHeaders, CATEGORY_ALIASES)
+  if (exact >= 0) return exact
+  // Pre-existing contains-fallback so "Type" / "Class"-flavored headers
+  // still count as a category column.
+  return findContains(normHeaders, ["category", "type", "class"])
+}
+
+// Self-service failure toasts (bugs 2026-06-13): show the headers we
+// actually saw so the user can fix the file without filing a bug.
+function headerPreview(headers: string[]): string {
+  return (
+    headers
+      .slice(0, 6)
+      .map((h) => `"${h}"`)
+      .join(", ") + (headers.length > 6 ? ", …" : "")
+  )
+}
+
+const parseMoney = (v: string): number => parseFloat(v.replace(/[$,]/g, "")) || 0
+
+// ─── Pricing rows → proposal products (pure; unit-tested) ─────────
+
+export interface MappedPricing {
+  products: ProposalProduct[]
+  totalSpend: number
+  totalVolume: number
+  distinctCategories: string[]
+  detectedCategory: string | null
+}
+
+export type MapPricingResult =
+  | ({ ok: true } & MappedPricing)
+  | { ok: false; reason: "missing-name-and-ref" }
+
+export function mapPricingRows(
+  headers: string[],
+  rows: Record<string, string>[],
+): MapPricingResult {
+  const normHeaders = headers.map(norm)
+
+  const nameIdx = findExact(normHeaders, NAME_ALIASES)
+  const refIdx = findExact(normHeaders, ITEM_NUMBER_ALIASES)
+  // proposed_price first (a proposal file's own column), then the
+  // canonical price list, then the legacy contains-"price" fallback so
+  // headers like "List Price" still resolve as they did before.
+  let priceIdx = findExact(normHeaders, [
+    "proposed_price",
+    "proposedprice",
+    ...UNIT_PRICE_ALIASES,
+  ])
+  if (priceIdx === -1) priceIdx = findContains(normHeaders, ["price"])
+  const qtyIdx = findExact(normHeaders, QTY_ALIASES)
+  const costIdx = findExact(normHeaders, COST_BASIS_ALIASES)
+  const categoryIdx = findCategoryIdx(normHeaders)
+
+  if (nameIdx === -1 && refIdx === -1) {
+    return { ok: false, reason: "missing-name-and-ref" }
+  }
+
+  const get = (row: Record<string, string>, idx: number): string =>
+    idx >= 0 ? (row[headers[idx]] ?? "") : ""
+
+  const products: ProposalProduct[] = []
+  let totalSpend = 0
+  let totalVolume = 0
+  const categoryCounts: Record<string, number> = {}
+
+  for (const row of rows) {
+    const productName = (nameIdx !== -1 ? get(row, nameIdx) : get(row, refIdx)).trim()
+    if (!productName) continue
+
+    const refNumber = refIdx !== -1 ? get(row, refIdx).trim() || undefined : undefined
+    const price = priceIdx !== -1 ? parseMoney(get(row, priceIdx)) : 0
+    const qty = qtyIdx !== -1 ? parseInt(get(row, qtyIdx).replace(/,/g, "")) || 0 : 0
+    const costBasis = costIdx !== -1 ? parseMoney(get(row, costIdx)) || undefined : undefined
+    const category = categoryIdx !== -1 ? get(row, categoryIdx).trim() : undefined
+
+    if (category) {
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1
+    }
+
+    products.push({
+      benchmarkId: `pricing-${Date.now()}-${products.length}`,
+      productName,
+      refNumber,
+      proposedPrice: price,
+      projectedVolume: qty,
+      costBasis,
+      fromPricingFile: true,
+    })
+
+    totalSpend += price * qty
+    totalVolume += qty
+  }
+
+  const distinctCategories = Object.keys(categoryCounts).filter(Boolean)
+  const detectedCategory =
+    distinctCategories.length > 0
+      ? Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0][0]
+      : null
+
+  return { ok: true, products, totalSpend, totalVolume, distinctCategories, detectedCategory }
+}
+
+export async function handlePricingFileUpload(
   e: React.ChangeEvent<HTMLInputElement>,
   setFileUploadProgress: React.Dispatch<React.SetStateAction<FileUploadProgressState>>,
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>,
@@ -34,108 +165,33 @@ export function handlePricingFileUpload(
   setCustomCategories?: React.Dispatch<React.SetStateAction<string[]>>,
 ) {
   const file = e.target.files?.[0]
+  // Reset before any await so re-selecting the same file re-fires onChange.
+  e.target.value = ""
   if (!file) return
 
   setFileUploadProgress({ isLoading: true, type: "pricing", progress: 0, message: "Reading pricing file..." })
 
-  const reader = new FileReader()
-  reader.onload = (event) => {
-    try {
+  try {
+      // Shared reader (bugs 2026-06-13): CSV parses client-side with
+      // BOM/CRLF/quote handling; XLSX/XLS go through /api/parse-file,
+      // which also scans for the real header row.
+      const { headers, rows } = await readPricingRows(file)
+
       setFileUploadProgress({ isLoading: true, type: "pricing", progress: 30, message: "Parsing pricing data..." })
 
-      const text = event.target?.result as string
-      const lines = text.split("\n").filter(line => line.trim())
-      const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim())
+      const mapped = mapPricingRows(headers, rows)
 
-      const nameIdx = headers.findIndex(h =>
-        h === "product name" ||
-        h === "description" ||
-        h === "product description" ||
-        h === "productdescription" ||
-        h === "item description" ||
-        h === "name" ||
-        h === "product"
-      )
-      const refIdx = headers.findIndex(h => {
-        const normalized = h.replace(/[\s\-_]/g, "")
-        const exactMatches = [
-          "product ref number", "productrefnumber", "product ref",
-          "ref number", "refnumber", "ref", "reference",
-          "sku", "item number", "itemnumber", "item no", "itemno",
-          "item #", "vendor item no", "vendoritemno",
-          "catalog number", "catalognumber", "cat no", "catno",
-          "part number", "partnumber", "part no", "partno",
-          "inventory number", "inventorynumber", "inv no",
-          "product code", "productcode", "code",
-          "material number", "materialnumber",
-        ]
-        return exactMatches.some(m => h === m || normalized === m.replace(/[\s\-_]/g, ""))
-      })
-      const priceIdx = headers.findIndex(h =>
-        h === "price" ||
-        h === "proposed price" ||
-        h === "unit price" ||
-        h === "unit cost" ||
-        h === "cost" ||
-        h.includes("price")
-      )
-      const qtyIdx = headers.findIndex(h =>
-        h === "quantity" || h === "qty" || h === "volume" || h === "units"
-      )
-      const costIdx = headers.findIndex(h =>
-        h === "cost basis" || h === "cog" || h === "cost of goods" || h === "vendor cost"
-      )
-      const categoryIdx = headers.findIndex(h =>
-        h.includes("category") || h.includes("type") || h.includes("class")
-      )
-
-      if (nameIdx === -1 && refIdx === -1) {
+      if (!mapped.ok) {
         setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
-        toast.error("Pricing file must have a product name or reference number column")
+        toast.error(
+          `Pricing file must have a product name or reference number column — found: ${headerPreview(headers)}`,
+        )
         return
       }
 
       setFileUploadProgress({ isLoading: true, type: "pricing", progress: 60, message: "Loading products..." })
 
-      const products: ProposalProduct[] = []
-      let totalSpend = 0
-      let totalVolume = 0
-      let detectedCategory: string | null = null
-      const categoryCounts: Record<string, number> = {}
-
-      for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i])
-        const productName = nameIdx !== -1 ? values[nameIdx]?.trim() : (refIdx !== -1 ? values[refIdx]?.trim() : "")
-        if (!productName) continue
-
-        const refNumber = refIdx !== -1 ? values[refIdx]?.trim() : undefined
-        const price = priceIdx !== -1 ? parseFloat(values[priceIdx]?.replace(/[$,]/g, "")) || 0 : 0
-        const qty = qtyIdx !== -1 ? parseInt(values[qtyIdx]?.replace(/,/g, "")) || 0 : 0
-        const costBasis = costIdx !== -1 ? parseFloat(values[costIdx]?.replace(/[$,]/g, "")) || undefined : undefined
-        const category = categoryIdx !== -1 ? values[categoryIdx]?.trim() : undefined
-
-        if (category) {
-          categoryCounts[category] = (categoryCounts[category] || 0) + 1
-        }
-
-        products.push({
-          benchmarkId: `pricing-${Date.now()}-${products.length}`,
-          productName,
-          refNumber,
-          proposedPrice: price,
-          projectedVolume: qty,
-          costBasis,
-          fromPricingFile: true,
-        })
-
-        totalSpend += price * qty
-        totalVolume += qty
-      }
-
-      const distinctCategories = Object.keys(categoryCounts).filter(Boolean)
-      if (distinctCategories.length > 0) {
-        detectedCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0][0]
-      }
+      const { products, totalSpend, totalVolume, distinctCategories, detectedCategory } = mapped
 
       if (products.length === 0) {
         setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
@@ -224,194 +280,262 @@ export function handlePricingFileUpload(
           { duration: 8_000 },
         )
       }
-    } catch (err) {
-      console.error("Pricing file parse error:", err)
-      setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
-      toast.error("Failed to parse pricing file")
-    }
+  } catch (err) {
+    console.error("Pricing file parse error:", err)
+    setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
+    toast.error("Failed to parse pricing file")
   }
-  reader.readAsText(file)
-  e.target.value = ""
 }
 
-export function handleUsageFileUpload(
+// ─── Usage rows → proposal products (pure; unit-tested) ───────────
+
+/** 50k-row cap (was a 50k-LINE cap on the raw CSV text pre-2026-06-13;
+ *  now applies to parsed data rows so XLSX files get the same guard). */
+export const MAX_USAGE_ROWS = 50_000
+
+export interface MappedUsage {
+  products: ProposalProduct[]
+  totalVolume: number
+  totalRevenue: number
+  detectedCategory: string | null
+  /** transaction rows aggregated (rows with a product name, post-cap) */
+  processedRows: number
+  truncated: boolean
+}
+
+export type MapUsageResult =
+  | ({ ok: true } & MappedUsage)
+  | { ok: false; reason: "missing-name" }
+
+export function mapUsageRows(
+  headers: string[],
+  rows: Record<string, string>[],
+): MapUsageResult {
+  const normHeaders = headers.map(norm)
+
+  const vendorIdx = findContains(normHeaders, ["vendor"])
+  const dateIdx = findContains(normHeaders, ["date", "ordered"])
+  // Canonical description aliases first; then the legacy contains
+  // behavior ("Product Name" / anything "product" that isn't a ref).
+  let nameIdx = findExact(normHeaders, NAME_ALIASES)
+  if (nameIdx === -1) {
+    nameIdx = normHeaders.findIndex(
+      (h) =>
+        h.includes("productname") ||
+        h.includes("description") ||
+        (h.includes("product") && !h.includes("ref")),
+    )
+  }
+  let refIdx = findExact(normHeaders, ITEM_NUMBER_ALIASES)
+  if (refIdx === -1) {
+    refIdx = findContains(normHeaders, ["ref", "sku", "itemnumber", "partnumber"])
+  }
+  let qtyIdx = findExact(normHeaders, QTY_ALIASES)
+  if (qtyIdx === -1) qtyIdx = findContains(normHeaders, ["quantity", "qty"])
+  // "Unit Cost" must keep resolving as the per-unit price (as today);
+  // the generic contains-"price" fallback comes last.
+  let unitCostIdx = findExact(normHeaders, ["unit_cost", "unit_price"])
+  if (unitCostIdx === -1) {
+    unitCostIdx = findContains(normHeaders, ["unitcost", "unitprice", "price"])
+  }
+  // Existing extended-cost alias set, normalized (e.g. "total cost" →
+  // "totalcost").
+  const extendedCostIdx = normHeaders.findIndex(
+    (h) =>
+      [
+        "extended", "totalcost", "linetotal", "amount", "spend",
+        "totalprice", "extcost", "extprice", "lineamount",
+        "invoiceamount", "costtotal", "pricetotal",
+      ].some((n) => h.includes(n)) ||
+      h === "total" || h === "cost" || h === "revenue",
+  )
+  const categoryIdx = findCategoryIdx(normHeaders)
+
+  if (nameIdx === -1) {
+    return { ok: false, reason: "missing-name" }
+  }
+
+  const get = (row: Record<string, string>, idx: number): string =>
+    idx >= 0 ? (row[headers[idx]] ?? "") : ""
+
+  const productUsageMap: Record<string, {
+    productName: string
+    refNumber?: string
+    vendor?: string
+    category?: string
+    transactions: {
+      date: Date
+      month: string
+      quantity: number
+      unitCost: number
+      extendedCost: number
+    }[]
+  }> = {}
+
+  const truncated = rows.length > MAX_USAGE_ROWS
+  const cappedRows = truncated ? rows.slice(0, MAX_USAGE_ROWS) : rows
+  let processedRows = 0
+
+  for (const row of cappedRows) {
+    const productName = get(row, nameIdx).trim()
+    if (!productName) continue
+
+    const refNumber = refIdx !== -1 ? get(row, refIdx).trim() || undefined : undefined
+    const key = (refNumber || productName).toLowerCase()
+
+    if (!productUsageMap[key]) {
+      productUsageMap[key] = {
+        productName,
+        refNumber,
+        vendor: vendorIdx !== -1 ? get(row, vendorIdx).trim() : undefined,
+        category: categoryIdx !== -1 ? get(row, categoryIdx).trim() : undefined,
+        transactions: [],
+      }
+    }
+
+    let date = new Date()
+    let month = ""
+    if (dateIdx !== -1 && get(row, dateIdx)) {
+      const dateStr = get(row, dateIdx).trim()
+      const mdyMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+      if (mdyMatch) {
+        date = new Date(parseInt(mdyMatch[3]), parseInt(mdyMatch[1]) - 1, parseInt(mdyMatch[2]))
+        month = `${mdyMatch[3]}-${mdyMatch[1].padStart(2, "0")}`
+      } else {
+        const ymdMatch = dateStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)
+        if (ymdMatch) {
+          date = new Date(parseInt(ymdMatch[1]), parseInt(ymdMatch[2]) - 1, parseInt(ymdMatch[3]))
+          month = `${ymdMatch[1]}-${ymdMatch[2].padStart(2, "0")}`
+        }
+      }
+    }
+    if (!month) {
+      month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+    }
+
+    const quantity = qtyIdx !== -1 ? parseInt(get(row, qtyIdx).replace(/,/g, "")) || 0 : 1
+    const unitCost = unitCostIdx !== -1 ? parseMoney(get(row, unitCostIdx)) : 0
+    const extendedCost = extendedCostIdx !== -1
+      ? parseMoney(get(row, extendedCostIdx)) || (unitCost * quantity)
+      : (unitCost * quantity)
+
+    productUsageMap[key].transactions.push({
+      date,
+      month,
+      quantity,
+      unitCost,
+      extendedCost,
+    })
+    processedRows++
+  }
+
+  const products: ProposalProduct[] = []
+  let totalVolume = 0
+  let totalRevenue = 0
+  const categoryCounts: Record<string, number> = {}
+
+  for (const [, data] of Object.entries(productUsageMap)) {
+    const monthlyAggregates: Record<string, { volume: number; revenue: number; totalUnitCost: number; count: number }> = {}
+
+    for (const tx of data.transactions) {
+      if (!monthlyAggregates[tx.month]) {
+        monthlyAggregates[tx.month] = { volume: 0, revenue: 0, totalUnitCost: 0, count: 0 }
+      }
+      monthlyAggregates[tx.month].volume += tx.quantity
+      monthlyAggregates[tx.month].revenue += tx.extendedCost
+      monthlyAggregates[tx.month].totalUnitCost += tx.unitCost
+      monthlyAggregates[tx.month].count++
+    }
+
+    const monthlyUsage = Object.entries(monthlyAggregates)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([m, agg]) => ({
+        month: m,
+        volume: agg.volume,
+        revenue: agg.revenue,
+        avgPrice: agg.count > 0 ? agg.totalUnitCost / agg.count : 0,
+      }))
+
+    const totalVol = monthlyUsage.reduce((sum, m) => sum + m.volume, 0)
+    const totalRev = monthlyUsage.reduce((sum, m) => sum + m.revenue, 0)
+    const avgPrice = monthlyUsage.length > 0
+      ? monthlyUsage.reduce((sum, m) => sum + m.avgPrice, 0) / monthlyUsage.length
+      : 0
+
+    if (data.category) {
+      categoryCounts[data.category] = (categoryCounts[data.category] || 0) + 1
+    }
+
+    products.push({
+      benchmarkId: `usage-${Date.now()}-${products.length}`,
+      productName: data.productName,
+      refNumber: data.refNumber,
+      proposedPrice: 0,
+      fromPricingFile: false,
+      projectedVolume: totalVol,
+      historicalAvgPrice: avgPrice,
+      historicalAvgVolume: totalVol,
+      monthlyUsage: monthlyUsage.length > 0 ? monthlyUsage : undefined,
+    })
+
+    totalVolume += totalVol
+    totalRevenue += totalRev
+  }
+
+  // Highest-revenue products first (matches the pre-2026-06-13 order).
+  products.sort((a, b) => {
+    const aRev = a.monthlyUsage?.reduce((sum, m) => sum + m.revenue, 0) || 0
+    const bRev = b.monthlyUsage?.reduce((sum, m) => sum + m.revenue, 0) || 0
+    return bRev - aRev
+  })
+
+  const detectedCategory =
+    Object.keys(categoryCounts).length > 0
+      ? Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0][0]
+      : null
+
+  return { ok: true, products, totalVolume, totalRevenue, detectedCategory, processedRows, truncated }
+}
+
+export async function handleUsageFileUpload(
   e: React.ChangeEvent<HTMLInputElement>,
   setFileUploadProgress: React.Dispatch<React.SetStateAction<FileUploadProgressState>>,
   setNewProposal: React.Dispatch<React.SetStateAction<NewProposalState>>,
 ) {
   const file = e.target.files?.[0]
+  // Reset before any await so re-selecting the same file re-fires onChange.
+  e.target.value = ""
   if (!file) return
 
   setFileUploadProgress({ isLoading: true, type: "usage", progress: 0, message: "Reading file..." })
 
-  const reader = new FileReader()
-  reader.onload = async (event) => {
-    try {
-      setFileUploadProgress({ isLoading: true, type: "usage", progress: 10, message: "Parsing CSV..." })
+  try {
+      // Shared reader (bugs 2026-06-13): CSV parses client-side with
+      // BOM/CRLF/quote handling; XLSX/XLS go through /api/parse-file.
+      const { headers, rows } = await readPricingRows(file)
 
-      const text = event.target?.result as string
-      const lines = text.split("\n").filter(line => line.trim())
-      const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase())
+      const rowCount = Math.min(rows.length, MAX_USAGE_ROWS)
+      setFileUploadProgress({
+        isLoading: true,
+        type: "usage",
+        progress: 30,
+        message: `Processing ${rowCount.toLocaleString()} row${rowCount === 1 ? "" : "s"}...`,
+      })
+      // Yield once so the progress state paints before the synchronous
+      // aggregation pass over (up to) 50k rows.
+      await new Promise(resolve => setTimeout(resolve, 0))
 
-      const vendorIdx = headers.findIndex(h => h.includes("vendor"))
-      const dateIdx = headers.findIndex(h => h.includes("date") || h.includes("ordered"))
-      const nameIdx = headers.findIndex(h => h.includes("product name") || h.includes("description") || (h.includes("product") && !h.includes("ref")))
-      const refIdx = headers.findIndex(h => h.includes("ref") || h.includes("sku") || h.includes("item number") || h.includes("part number"))
-      const qtyIdx = headers.findIndex(h => h.includes("quantity") || h.includes("qty"))
-      const unitCostIdx = headers.findIndex(h => h.includes("unit cost") || h.includes("unit price") || h.includes("price"))
-      const extendedCostIdx = headers.findIndex(h =>
-        h.includes("extended") || h.includes("total cost") || h.includes("line total") ||
-        h.includes("amount") || h.includes("spend") || h.includes("total price") ||
-        h.includes("ext cost") || h.includes("ext price") || h.includes("line amount") ||
-        h.includes("invoice amount") || h.includes("cost total") || h.includes("price total") ||
-        h === "total" || h === "cost" || h === "revenue"
-      )
-      const categoryIdx = headers.findIndex(h => h.includes("category") || h.includes("type") || h.includes("class"))
+      const mapped = mapUsageRows(headers, rows)
 
-      if (nameIdx === -1) {
+      if (!mapped.ok) {
         setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
-        toast.error("Usage file must have a product name column")
+        toast.error(
+          `Usage file must have a product name column — found: ${headerPreview(headers)}`,
+        )
         return
       }
 
-      const productUsageMap: Record<string, {
-        productName: string
-        refNumber?: string
-        vendor?: string
-        category?: string
-        transactions: {
-          date: Date
-          month: string
-          quantity: number
-          unitCost: number
-          extendedCost: number
-        }[]
-      }> = {}
-
-      let processedLines = 0
-      const maxLines = Math.min(lines.length, 50000)
-      const totalLines = maxLines - 1
-
-      for (let i = 1; i < maxLines; i++) {
-        if (i % 1000 === 0) {
-          const progress = 10 + Math.round((i / totalLines) * 60)
-          setFileUploadProgress({
-            isLoading: true,
-            type: "usage",
-            progress,
-            message: `Processing ${i.toLocaleString()} of ${totalLines.toLocaleString()} lines...`,
-          })
-          await new Promise(resolve => setTimeout(resolve, 0))
-        }
-
-        const values = parseCSVLine(lines[i])
-        const productName = values[nameIdx]?.trim()
-        if (!productName) continue
-
-        const refNumber = refIdx !== -1 ? values[refIdx]?.trim() : undefined
-        const key = (refNumber || productName).toLowerCase()
-
-        if (!productUsageMap[key]) {
-          productUsageMap[key] = {
-            productName,
-            refNumber,
-            vendor: vendorIdx !== -1 ? values[vendorIdx]?.trim() : undefined,
-            category: categoryIdx !== -1 ? values[categoryIdx]?.trim() : undefined,
-            transactions: [],
-          }
-        }
-
-        let date = new Date()
-        let month = ""
-        if (dateIdx !== -1 && values[dateIdx]) {
-          const dateStr = values[dateIdx].trim()
-          const mdyMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
-          if (mdyMatch) {
-            date = new Date(parseInt(mdyMatch[3]), parseInt(mdyMatch[1]) - 1, parseInt(mdyMatch[2]))
-            month = `${mdyMatch[3]}-${mdyMatch[1].padStart(2, "0")}`
-          } else {
-            const ymdMatch = dateStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)
-            if (ymdMatch) {
-              date = new Date(parseInt(ymdMatch[1]), parseInt(ymdMatch[2]) - 1, parseInt(ymdMatch[3]))
-              month = `${ymdMatch[1]}-${ymdMatch[2].padStart(2, "0")}`
-            }
-          }
-        }
-        if (!month) {
-          month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
-        }
-
-        const quantity = qtyIdx !== -1 ? parseInt(values[qtyIdx]?.replace(/,/g, "")) || 0 : 1
-        const unitCost = unitCostIdx !== -1 ? parseFloat(values[unitCostIdx]?.replace(/[$,]/g, "")) || 0 : 0
-        const extendedCost = extendedCostIdx !== -1 ? parseFloat(values[extendedCostIdx]?.replace(/[$,]/g, "")) || (unitCost * quantity) : (unitCost * quantity)
-
-        productUsageMap[key].transactions.push({
-          date,
-          month,
-          quantity,
-          unitCost,
-          extendedCost,
-        })
-        processedLines++
-      }
-
-      const products: ProposalProduct[] = []
-      let totalVolume = 0
-      let totalRevenue = 0
-      const categoryCounts: Record<string, number> = {}
-
-      for (const [, data] of Object.entries(productUsageMap)) {
-        const monthlyAggregates: Record<string, { volume: number; revenue: number; totalUnitCost: number; count: number }> = {}
-
-        for (const tx of data.transactions) {
-          if (!monthlyAggregates[tx.month]) {
-            monthlyAggregates[tx.month] = { volume: 0, revenue: 0, totalUnitCost: 0, count: 0 }
-          }
-          monthlyAggregates[tx.month].volume += tx.quantity
-          monthlyAggregates[tx.month].revenue += tx.extendedCost
-          monthlyAggregates[tx.month].totalUnitCost += tx.unitCost
-          monthlyAggregates[tx.month].count++
-        }
-
-        const monthlyUsage = Object.entries(monthlyAggregates)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([m, agg]) => ({
-            month: m,
-            volume: agg.volume,
-            revenue: agg.revenue,
-            avgPrice: agg.count > 0 ? agg.totalUnitCost / agg.count : 0,
-          }))
-
-        const totalVol = monthlyUsage.reduce((sum, m) => sum + m.volume, 0)
-        const totalRev = monthlyUsage.reduce((sum, m) => sum + m.revenue, 0)
-        const avgPrice = monthlyUsage.length > 0
-          ? monthlyUsage.reduce((sum, m) => sum + m.avgPrice, 0) / monthlyUsage.length
-          : 0
-
-        if (data.category) {
-          categoryCounts[data.category] = (categoryCounts[data.category] || 0) + 1
-        }
-
-        products.push({
-          benchmarkId: `usage-${Date.now()}-${products.length}`,
-          productName: data.productName,
-          refNumber: data.refNumber,
-          proposedPrice: 0,
-          fromPricingFile: false,
-          projectedVolume: totalVol,
-          historicalAvgPrice: avgPrice,
-          historicalAvgVolume: totalVol,
-          monthlyUsage: monthlyUsage.length > 0 ? monthlyUsage : undefined,
-        })
-
-        totalVolume += totalVol
-        totalRevenue += totalRev
-      }
-
-      let detectedCategory: string | null = null
-      if (Object.keys(categoryCounts).length > 0) {
-        detectedCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0][0]
-      }
+      const { products, totalVolume, totalRevenue, detectedCategory, processedRows, truncated } = mapped
 
       if (products.length === 0) {
         setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
@@ -420,12 +544,6 @@ export function handleUsageFileUpload(
       }
 
       setFileUploadProgress({ isLoading: true, type: "usage", progress: 90, message: "Matching with pricing data..." })
-
-      products.sort((a, b) => {
-        const aRev = a.monthlyUsage?.reduce((sum, m) => sum + m.revenue, 0) || 0
-        const bRev = b.monthlyUsage?.reduce((sum, m) => sum + m.revenue, 0) || 0
-        return bRev - aRev
-      })
 
       let matchedWithPricing = 0
       let addedNew = 0
@@ -487,24 +605,21 @@ export function handleUsageFileUpload(
 
       setFileUploadProgress({ isLoading: false, type: null, progress: 100, message: "" })
 
-      if (lines.length > maxLines) {
-        toast.warning(`File truncated: processed first ${maxLines - 1} lines of ${lines.length - 1}`)
+      if (truncated) {
+        toast.warning(`File truncated: processed first ${MAX_USAGE_ROWS.toLocaleString()} rows of ${rows.length.toLocaleString()}`)
       }
 
       const matchInfo = matchedWithPricing > 0 ? ` Matched ${matchedWithPricing} products with pricing data.` : ""
       const skippedInfo = addedNew > 0 ? ` (${addedNew} usage-only products not in pricing file)` : ""
       toast.success(
-        `Processed ${products.length} products from ${processedLines.toLocaleString()} transactions.` +
+        `Processed ${products.length} products from ${processedRows.toLocaleString()} transactions.` +
         matchInfo + skippedInfo
       )
-    } catch (err) {
-      console.error("Usage file parse error:", err)
-      setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
-      toast.error("Failed to parse usage file")
-    }
+  } catch (err) {
+    console.error("Usage file parse error:", err)
+    setFileUploadProgress({ isLoading: false, type: null, progress: 0, message: "" })
+    toast.error("Failed to parse usage file")
   }
-  reader.readAsText(file)
-  e.target.value = ""
 }
 
 /**

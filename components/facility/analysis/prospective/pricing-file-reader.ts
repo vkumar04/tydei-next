@@ -67,7 +67,10 @@ export async function readPricingRows(
   file: File,
 ): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-  if (ext === "csv") {
+  // .txt parses as CSV: the vendor proposal-builder uploads accept
+  // comma-separated .txt exports (bugs 2026-06-13); routing them to
+  // /api/parse-file would fail since they aren't Excel workbooks.
+  if (ext === "csv" || ext === "txt") {
     let text = await file.text()
     if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
     const lines = text

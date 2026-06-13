@@ -117,12 +117,15 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     })
   }
 
+  // Async since the 2026-06-13 fix: the handlers await the shared
+  // readPricingRows (XLSX files round-trip through /api/parse-file).
+  // Errors are caught + toasted inside the handlers, so fire-and-forget.
   const handlePricingFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    doPricingUpload(e, setFileUploadProgress, setNewProposal, setCustomCategories)
+    void doPricingUpload(e, setFileUploadProgress, setNewProposal, setCustomCategories)
   }
 
   const handleUsageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    doUsageUpload(e, setFileUploadProgress, setNewProposal)
+    void doUsageUpload(e, setFileUploadProgress, setNewProposal)
   }
 
   const parseProductsFromDescription = useCallback(() => {
