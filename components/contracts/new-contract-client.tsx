@@ -23,6 +23,7 @@ import type {
 import { normalizeAIRebateValue, toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { computeContractYears } from "@/lib/contracts/term-years"
 import { selectScopeableCategories } from "@/lib/contracts/scopeable-categories"
+import { applyCategoryRemap } from "@/lib/categories/apply-category-remap"
 import { PricingColumnMapper } from "@/components/contracts/pricing-column-mapper"
 import { PricingCategoryRemapDialog } from "@/components/pricing/pricing-category-remap-dialog"
 import { ContractFormBasicInfo } from "@/components/contracts/contract-form"
@@ -235,6 +236,7 @@ export function NewContractClient({
     await finalizePricingImport(
       pendingPricingItems,
       pendingPricingFileName ?? "pricing-file",
+      remap,
     )
     setPendingPricingItems([])
     setPendingPricingCategories([])
@@ -242,9 +244,25 @@ export function NewContractClient({
   }
 
   /** Shared finalization: set state, compute totals, auto-create categories, show toast */
-  async function finalizePricingImport(items: ContractPricingItem[], fileName: string) {
+  async function finalizePricingImport(
+    items: ContractPricingItem[],
+    fileName: string,
+    // bugs.rtfd 2026-06-13 (Realign Categories screenshot): the realign step
+    // collapses detected names into canonical targets (e.g. "Extremities &
+    // Trauma" → "Ortho-Extremity"). The deferred DB import already applies
+    // this remap, but the in-memory category list that drives the TERM
+    // PICKER and auto-select must reflect the SAME remap — otherwise the
+    // picker offers the raw pre-remap name the user just collapsed away.
+    // `setPricingCategoryRemap` is async (stale in this closure), so the
+    // remap is passed in explicitly from handlePricingRemapApply.
+    remap: Record<string, string> = {},
+  ) {
     const cats = Array.from(
-      new Set(items.map((i) => i.category).filter((c): c is string => !!c))
+      new Set(
+        items
+          .map((i) => applyCategoryRemap(i.category, remap))
+          .filter((c): c is string => !!c),
+      ),
     )
     setPricingCategories(cats)
 
