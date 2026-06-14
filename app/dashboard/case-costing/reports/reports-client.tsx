@@ -123,8 +123,17 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
     facilityId,
     dateFrom ? { dateFrom } : undefined
   )
+  // 2026-06-14: the surgeon/procedure/cost/rebate tables aggregate the
+  // CLIENT-side `cases` list, while the header card uses the server-side
+  // `report.totalCases`. A hardcoded `pageSize: 500` silently truncated
+  // those tables for any facility with >500 in-range cases (prod: 674) —
+  // the header read 674 but the surgeon table only covered 500. Drive the
+  // page size off the true in-range count (same facility + dateFrom filter
+  // backs both queries) so the tables cover every case. Floor at 500 while
+  // the report total is still loading.
+  const casesPageSize = Math.max(report?.totalCases ?? 0, 500)
   const { data: casesData } = useCases(facilityId, {
-    pageSize: 500,
+    pageSize: casesPageSize,
     ...(dateFrom ? { dateFrom } : {}),
   })
   const { data: trueMargin, isLoading: trueMarginLoading } =
