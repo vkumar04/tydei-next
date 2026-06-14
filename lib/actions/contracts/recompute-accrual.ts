@@ -386,7 +386,9 @@ export async function _recomputeAccrualForContractWithFacility(
     const evaluationPeriod: EvaluationPeriod =
       term.evaluationPeriod === "monthly" ||
       term.evaluationPeriod === "quarterly" ||
-      term.evaluationPeriod === "semi_annual"
+      term.evaluationPeriod === "semi_annual" ||
+      // bugs.rtfd 2026-06-13: lifetime accumulates over the whole contract.
+      term.evaluationPeriod === "lifetime"
         ? term.evaluationPeriod
         : "annual"
     return {
