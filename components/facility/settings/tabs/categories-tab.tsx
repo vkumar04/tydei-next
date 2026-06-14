@@ -35,7 +35,7 @@ export function CategoriesTab() {
   const qc = useQueryClient()
   const { data: categories, isLoading } = useQuery({
     queryKey: ["categories"],
-    queryFn: getCategories,
+    queryFn: () => getCategories(),
   })
 
   const createMut = useMutation({

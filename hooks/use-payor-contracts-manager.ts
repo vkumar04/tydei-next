@@ -17,6 +17,10 @@ export function useCreatePayorContract() {
     mutationFn: (input: CreatePayorContractInput) => createFacilityPayorContract(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.cases.payorContracts() })
+      // bugs.rtfd 2026-06-14: also refresh the Payor Contract Margin dropdown
+      // (distinct query key) so a newly added/removed contract appears without
+      // a page reload.
+      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
       toast.success("Payor contract created")
     },
     onError: (err) => toast.error(err.message || "Failed to create payor contract"),
@@ -30,6 +34,10 @@ export function useUpdatePayorContract() {
       updateFacilityPayorContract(id, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.cases.payorContracts() })
+      // bugs.rtfd 2026-06-14: also refresh the Payor Contract Margin dropdown
+      // (distinct query key) so a newly added/removed contract appears without
+      // a page reload.
+      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
       toast.success("Payor contract updated")
     },
     onError: (err) => toast.error(err.message || "Failed to update payor contract"),
@@ -42,6 +50,10 @@ export function useDeletePayorContract() {
     mutationFn: (id: string) => deleteFacilityPayorContract(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.cases.payorContracts() })
+      // bugs.rtfd 2026-06-14: also refresh the Payor Contract Margin dropdown
+      // (distinct query key) so a newly added/removed contract appears without
+      // a page reload.
+      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
       toast.success("Payor contract deleted")
     },
     onError: (err) => toast.error(err.message || "Failed to delete payor contract"),
@@ -55,6 +67,10 @@ export function useImportPayorRates() {
       importPayorContractRates(contractId, rates),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: queryKeys.cases.payorContracts() })
+      // bugs.rtfd 2026-06-14: also refresh the Payor Contract Margin dropdown
+      // (distinct query key) so a newly added/removed contract appears without
+      // a page reload.
+      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
       toast.success(`Imported ${result.imported} CPT rates (${result.total} total)`)
     },
     onError: (err) => toast.error(err.message || "Failed to import rates"),

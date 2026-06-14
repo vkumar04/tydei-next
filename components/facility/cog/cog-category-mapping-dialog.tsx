@@ -78,7 +78,7 @@ export function CogCategoryMappingDialog({ open, onOpenChange }: Props) {
   })
   const categoriesQuery = useQuery({
     queryKey: queryKeys.categories.all,
-    queryFn: getCategories,
+    queryFn: () => getCategories(),
     enabled: open,
   })
 

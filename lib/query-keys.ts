@@ -141,6 +141,11 @@ export const queryKeys = {
       ["cases", "reportData", facilityId, filters] as const,
     payorContracts: (facilityId?: string) =>
       ["cases", "payorContracts", facilityId] as const,
+    // bugs.rtfd 2026-06-14: the Payor Contract Margin dropdown's option list.
+    // Distinct queryFn from `payorContracts` (returns {id,label}), so it needs
+    // its own key — and the add/update/delete/import mutations must invalidate
+    // it or the dropdown stays empty until a reload.
+    payorMarginOptions: () => ["case-costing", "payor-contracts"] as const,
     payorMargins: (contractId: string) =>
       ["cases", "payorMargins", contractId] as const,
     trueMargin: (

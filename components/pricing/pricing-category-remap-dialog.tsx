@@ -73,9 +73,12 @@ export function PricingCategoryRemapDialog({
   detectedCategories,
   onApply,
 }: Props) {
+  // bugs.rtfd 2026-06-14: include superseded sources so every canonical name
+  // (e.g. Ortho-Joints) is selectable as a "Map to" target. Distinct query key
+  // from the de-cluttered `categories.all` so the two lists don't collide.
   const categoriesQuery = useQuery({
-    queryKey: queryKeys.categories.all,
-    queryFn: getCategories,
+    queryKey: [...queryKeys.categories.all, "all-incl-superseded"] as const,
+    queryFn: () => getCategories({ includeSuperseded: true }),
     enabled: open,
   })
 

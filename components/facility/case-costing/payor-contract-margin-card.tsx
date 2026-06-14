@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
+import { queryKeys } from "@/lib/query-keys"
 import {
   getPayorContractsForFacility,
   getPayorContractMarginSummary,
@@ -33,7 +34,7 @@ export function PayorContractMarginCard() {
   const [selected, setSelected] = useState<string | undefined>(undefined)
 
   const contractsQuery = useQuery({
-    queryKey: ["case-costing", "payor-contracts"] as const,
+    queryKey: queryKeys.cases.payorMarginOptions(),
     queryFn: () => getPayorContractsForFacility(),
   })
 

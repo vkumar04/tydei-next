@@ -22,13 +22,23 @@ export interface CategoryNode extends ProductCategory {
 // me out" bug. ProductCategory rows are global, not
 // facility-scoped, so authenticated is enough.
 
-export async function getCategories() {
+export async function getCategories(opts?: { includeSuperseded?: boolean }) {
   await requireAuth()
 
   const categories = await prisma.productCategory.findMany({
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   })
+  // bugs.rtfd 2026-06-14 ("Ortho-Joints is not on the list anymore"): the
+  // Realign "Map to" dropdown is a TARGET picker — the user is choosing which
+  // canonical name to map a detected category INTO, so it must offer every
+  // category, including ones that are themselves the source of a confirmed
+  // mapping (e.g. Ortho-Joints, mapped to Joints-Ortho). Callers that want the
+  // de-cluttered list (term pickers) omit the flag and keep hiding superseded
+  // sources.
+  if (opts?.includeSuperseded) {
+    return serialize(categories)
+  }
   // Charles 2026-06-10 ("the categories here should reflect the names of
   // what was mapped not what was on the price file"): a name that is the
   // SOURCE of a confirmed mapping is superseded — remapCOGCategory deletes
