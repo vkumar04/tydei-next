@@ -11,6 +11,7 @@
  * state via usePayorContracts + the payor-contract mutation hooks.)
  */
 import { Stethoscope, User, TrendingUp, ShieldCheck, FileText } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CasesListTab } from "./cases-list-tab"
 import { SurgeonsTab } from "./surgeons-tab"
@@ -58,8 +59,19 @@ export function CaseCostingTabs({
   financial,
   compliance,
 }: CaseCostingTabsProps) {
+  // bugs.rtfd 2026-06-14: honor ?tab= so the Import Data modal's "Payor
+  // Contracts" link deep-links straight to that tab.
+  const tabParam = useSearchParams().get("tab")
+  const validTabs = new Set([
+    "cases",
+    "surgeons",
+    "financial",
+    "compliance",
+    "payor-contracts",
+  ])
+  const initialTab = tabParam && validTabs.has(tabParam) ? tabParam : "cases"
   return (
-    <Tabs defaultValue="cases" className="w-full">
+    <Tabs defaultValue={initialTab} className="w-full">
       <TabsList>
         <TabsTrigger value="cases" className="gap-2">
           <Stethoscope className="h-4 w-4" />

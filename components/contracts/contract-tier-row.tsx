@@ -36,6 +36,24 @@ interface ContractTierRowProps {
   termType?: string
 }
 
+// bugs.rtfd 2026-06-14 ("Per volume per unit math is off"): count-based
+// ladders (occurrences / PO count / invoices) must store their threshold in
+// the `volumeMin`/`volumeMax` Int columns — the volume engine reads those
+// FIRST and only falls back to spendMin for legacy rows. The form historically
+// wrote every threshold to spendMin (a Decimal), so volume tiers carried
+// volumeMin=null and the engine ran on the fallback. Binding count thresholds
+// to volumeMin makes the data model correct and the tier math unambiguous.
+const COUNT_THRESHOLD_TERMS = new Set([
+  "volume_rebate",
+  "rebate_per_use",
+  "capitated_pricing_rebate",
+  "po_rebate",
+  "payment_rebate",
+])
+function usesCountThreshold(termType: string | undefined): boolean {
+  return termType != null && COUNT_THRESHOLD_TERMS.has(termType)
+}
+
 function thresholdLabels(termType: string | undefined): { min: string; max: string | null; suffix?: string } {
   switch (termType) {
     case "volume_rebate":
@@ -157,6 +175,7 @@ export function ContractTierRow({
 }: ContractTierRowProps) {
   const isPercent = isPercentRebateType(tier.rebateType)
   const labels = thresholdLabels(termType)
+  const isCountThreshold = usesCountThreshold(termType)
 
   // The DB stores percent_of_spend as a fraction (0.03 = 3%) but we
   // want the user to type plain percent. Charles R5.25: typing "3"
@@ -197,9 +216,17 @@ export function ContractTierRow({
           <Input
             type="number"
             className={labels.suffix ? "w-28 pr-7" : "w-28"}
-            value={tier.spendMin}
+            value={
+              isCountThreshold
+                ? (tier.volumeMin ?? tier.spendMin ?? 0)
+                : tier.spendMin
+            }
             onChange={(e) =>
-              onChange({ ...tier, spendMin: Number(e.target.value) })
+              onChange(
+                isCountThreshold
+                  ? { ...tier, volumeMin: Math.round(Number(e.target.value)), spendMin: 0 }
+                  : { ...tier, spendMin: Number(e.target.value) },
+              )
             }
           />
           {labels.suffix && (
@@ -217,12 +244,26 @@ export function ContractTierRow({
             <Input
               type="number"
               className={labels.suffix ? "w-28 pr-7" : "w-28"}
-              value={tier.spendMax ?? ""}
+              value={
+                isCountThreshold
+                  ? (tier.volumeMax ?? tier.spendMax ?? "")
+                  : (tier.spendMax ?? "")
+              }
               onChange={(e) =>
-                onChange({
-                  ...tier,
-                  spendMax: e.target.value ? Number(e.target.value) : undefined,
-                })
+                onChange(
+                  isCountThreshold
+                    ? {
+                        ...tier,
+                        volumeMax: e.target.value
+                          ? Math.round(Number(e.target.value))
+                          : undefined,
+                        spendMax: undefined,
+                      }
+                    : {
+                        ...tier,
+                        spendMax: e.target.value ? Number(e.target.value) : undefined,
+                      },
+                )
               }
             />
             {labels.suffix && (
