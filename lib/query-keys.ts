@@ -22,6 +22,7 @@ export const queryKeys = {
     all: ["categories"] as const,
     tree: () => ["categories", "tree"] as const,
     mappings: () => ["categories", "mappings"] as const,
+    mappedUniverse: ["categories", "mapped-universe"] as const,
   },
   vendors: {
     all: ["vendors"] as const,

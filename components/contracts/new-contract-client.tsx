@@ -10,7 +10,7 @@ import { useCreateContract } from "@/hooks/use-contracts"
 import { createContractDocumentSafe } from "@/lib/actions/contracts"
 import { importContractPricingSafe, type ContractPricingItem } from "@/lib/actions/pricing-files"
 import { parsePricingFile, buildPricingItems } from "@/lib/utils/parse-pricing-file"
-import { createCategory, getCategories } from "@/lib/actions/categories"
+import { createCategory, getCategories, getMappedCategoryUniverse } from "@/lib/actions/categories"
 import { computePricingVsCOG } from "@/lib/actions/cog-records"
 import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-cog"
 import { useAutoFillWhenPristine } from "@/hooks/use-auto-fill-when-pristine"
@@ -69,6 +69,13 @@ export function NewContractClient({
     () => dynamicCategories ?? categories,
     [dynamicCategories, categories],
   )
+  // bugs.rtfd 2026-06-13: live mapped-category universe (refetches), so the
+  // term picker never freezes at a stale page-load snapshot.
+  const { data: liveMappedCategories } = useQuery({
+    queryKey: queryKeys.categories.mappedUniverse,
+    queryFn: () => getMappedCategoryUniverse(),
+    initialData: mappedCategories,
+  })
 
   // Bug #20 (2026-05-11, Vick): default to Upload PDF because that's
   // the primary intake path — almost every contract starts as a
@@ -288,6 +295,11 @@ export function NewContractClient({
     if (createdCount > 0) {
       await queryClient.invalidateQueries({ queryKey: queryKeys.categories.all })
     }
+    // bugs.rtfd 2026-06-13: a price-file import adds to the mapped universe —
+    // refetch it so the term picker reflects the new categories immediately.
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.categories.mappedUniverse,
+    })
 
     // Auto-select all pricing categories in the form
     if (cats.length > 0) {
@@ -955,7 +967,7 @@ export function NewContractClient({
                 // selectScopeableCategories.
                 availableCategories={selectScopeableCategories(
                   liveCategories,
-                  [...mappedCategories, ...pricingCategories],
+                  [...liveMappedCategories, ...pricingCategories],
                   form.watch("categoryIds") ?? [],
                 )}
               />

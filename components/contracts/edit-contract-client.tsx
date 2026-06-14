@@ -7,7 +7,7 @@ import { ArrowLeft, Loader2, Save, X } from "lucide-react"
 import { useContract, useUpdateContract } from "@/hooks/use-contracts"
 import { useContractForm } from "@/hooks/use-contract-form"
 import { upsertContractTiers, createContractTerm, deleteContractTerm, updateContractTerm } from "@/lib/actions/contract-terms"
-import { createCategory, getCategories } from "@/lib/actions/categories"
+import { createCategory, getCategories, getMappedCategoryUniverse } from "@/lib/actions/categories"
 import { getContractPricing } from "@/lib/actions/pricing-files"
 import { deriveContractTotalFromCOG } from "@/lib/actions/contracts/derive-from-cog"
 import { useAutoFillWhenPristine } from "@/hooks/use-auto-fill-when-pristine"
@@ -59,6 +59,13 @@ export function EditContractClient({
     queryKey: queryKeys.categories.all,
     queryFn: () => getCategories(),
     initialData: categories,
+  })
+  // bugs.rtfd 2026-06-13: live mapped-category universe (refetches) so the
+  // term picker isn't frozen at a stale page-load snapshot.
+  const { data: liveMappedCategories } = useQuery({
+    queryKey: queryKeys.categories.mappedUniverse,
+    queryFn: () => getMappedCategoryUniverse(),
+    initialData: mappedCategories,
   })
 
   // Charles W1.X-A4 — Specific Items picker in the term form needs the
@@ -574,7 +581,7 @@ export function EditContractClient({
             // selectScopeableCategories.
             availableCategories={selectScopeableCategories(
               (liveCategories ?? categories) ?? [],
-              [...mappedCategories, ...priceFileCategories],
+              [...liveMappedCategories, ...priceFileCategories],
               form.watch("categoryIds") ?? [],
             )}
           />

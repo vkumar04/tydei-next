@@ -277,8 +277,8 @@ const BASELINE_HITS = new Set<string>([
   // reads / user-create paths
   // bumped 2026-06-09 after removeInverseCategoryMapping import + the
   // confirm-mapping cycle guard added lines.
-  "lib/actions/categories.ts:123",
-  "lib/actions/categories.ts:167",
+  "lib/actions/categories.ts:138",
+  "lib/actions/categories.ts:182",
   // change-proposals.ts: post-mutation re-read
   "lib/actions/change-proposals.ts:175",
   // contract-periods.ts: post-period-mutation re-reads. Lines drift

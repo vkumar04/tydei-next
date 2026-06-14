@@ -5,6 +5,7 @@ import { requireAdmin, requireAuth, requireFacility } from "@/lib/actions/auth"
 import type { ProductCategory } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
+import { mappedCategoryUniverse } from "@/lib/contracts/mapped-category-universe"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -53,6 +54,20 @@ export async function getCategories() {
   return serialize(
     categories.filter((c) => !superseded.has(normKey(c.name))),
   )
+}
+
+// ─── Mapped-category universe (for the term picker) ─────────────
+//
+// bugs.rtfd 2026-06-13 ("no categories to choose ... won't let me use
+// Ortho-extremity"): the new/edit contract pages used to pass the
+// mapped-category universe as a server-rendered PROP computed at page load.
+// After the prod wipe, pages loaded while the DB was empty froze that prop at
+// `[]` and never recovered — so the term picker stayed empty even once the
+// user re-uploaded a price file. Exposing it as a live action lets the client
+// refetch (and invalidate after a price-file import) so it stays current.
+export async function getMappedCategoryUniverse(): Promise<string[]> {
+  const { facility } = await requireFacility()
+  return mappedCategoryUniverse(facility.id)
 }
 
 // ─── Get Category Tree ──────────────────────────────────────────
