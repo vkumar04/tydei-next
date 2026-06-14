@@ -55,13 +55,38 @@ const PAYOR_TYPES: readonly PayorType[] = [
  * carriers (blue_cross / aetna / united) all count as "commercial".
  * Unknown non-empty classes fall into "other" so they still classify
  * (rather than distorting the casesWithoutPayor count); null/blank → null.
+ *
+ * 2026-06-14 ("I elected a payor and it still says no payor data"): real
+ * case-upload files carry the payor as a free-text carrier name —
+ * "Medicare Advantage", "Anthem BCBS", "UnitedHealthcare", "UHC",
+ * "Cigna PPO", "Self-Pay" — not the tidy seed tokens. The old exact-token
+ * match dropped every one of those to "other", so a facility whose cases
+ * DID carry payor still read as undifferentiated. This now matches on
+ * substrings/aliases (same canonical-comparison philosophy as
+ * `normalizeSku` / `canonicalizeCategoryName`), so the surgeon + facility
+ * payor-mix surfaces classify real carrier names. Order matters: medicaid
+ * before medicare (so "medicare"-substring tests don't swallow it), and
+ * the specific government/comp buckets before the broad commercial sweep.
  */
-const COMMERCIAL_PAYOR_CLASSES = new Set([
+const COMMERCIAL_ALIASES = [
   "commercial",
   "blue_cross",
+  "blue cross",
+  "bcbs",
+  "anthem",
+  "wellpoint",
   "aetna",
   "united",
-])
+  "unitedhealth",
+  "uhc",
+  "cigna",
+  "humana",
+  "oscar",
+  "ppo",
+  "hmo",
+  "epo",
+  "pos",
+]
 
 export function classifyPayorClass(
   payorClass: string | null | undefined,
@@ -69,11 +94,36 @@ export function classifyPayorClass(
   if (!payorClass) return null
   const cls = payorClass.trim().toLowerCase()
   if (!cls) return null
-  if (COMMERCIAL_PAYOR_CLASSES.has(cls)) return "commercial"
-  if (cls === "medicare") return "medicare"
-  if (cls === "medicaid") return "medicaid"
-  if (cls === "private") return "private"
-  if (cls === "workers_comp" || cls === "workers comp") return "workers_comp"
+
+  // Specific buckets first — these tokens are unambiguous and must not be
+  // swallowed by the broad commercial sweep below.
+  if (cls.includes("medicaid")) return "medicaid"
+  if (cls.includes("medicare")) return "medicare" // incl. "Medicare Advantage"
+  if (
+    cls.includes("workers_comp") ||
+    cls.includes("workers comp") ||
+    cls.includes("workers' comp") ||
+    cls.includes("work comp") ||
+    cls === "wc"
+  ) {
+    return "workers_comp"
+  }
+  if (
+    cls.includes("self-pay") ||
+    cls.includes("self pay") ||
+    cls.includes("selfpay") ||
+    cls.includes("private pay") ||
+    cls === "private" ||
+    cls === "cash" ||
+    cls === "uninsured"
+  ) {
+    return "private"
+  }
+
+  if (COMMERCIAL_ALIASES.some((a) => cls.includes(a))) return "commercial"
+
+  // Non-empty but unrecognized — classify as "other" so it still counts
+  // toward the share denominator (vs. distorting casesWithoutPayor).
   return "other"
 }
 

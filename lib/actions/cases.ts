@@ -317,6 +317,11 @@ export async function importCases(input: {
             margin: reimburse - spend,
             timeInOr: caseData.timeInOr,
             timeOutOr: caseData.timeOutOr,
+            // 2026-06-14: thread the payor/insurance class through so the
+            // Surgeons + Facility payor-mix surfaces have data. Store the
+            // raw carrier string trimmed; `classifyPayorClass` buckets it
+            // at read time. Blank → null (counts as casesWithoutPayor).
+            payorClass: caseData.payorClass?.trim() || null,
           }
         }),
       })

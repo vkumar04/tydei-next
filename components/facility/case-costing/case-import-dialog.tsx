@@ -242,7 +242,12 @@ export function CaseImportDialog({
       >()
       const patientFields = new Map<
         string,
-        { surgeon: string; facility: string; date: string }
+        {
+          surgeon: string
+          facility: string
+          date: string
+          payorClass: string | undefined
+        }
       >()
       const supplyRecords = new Map<
         string,
@@ -424,7 +429,40 @@ export function CaseImportDialog({
               ])
             const date =
               parseDate(rawDate) || new Date().toISOString().split("T")[0]
-            patientFields.set(caseId, { surgeon, facility, date })
+            // 2026-06-14: capture the payor/insurance class so the Surgeons
+            // + Facility payor-mix surfaces have data. Raw carrier string;
+            // bucketed at read time by `classifyPayorClass`. Generous alias
+            // list — real exports label this column many ways.
+            const payorClass =
+              findValue(r, [
+                "payor",
+                "payer",
+                "payor class",
+                "payer class",
+                "payorclass",
+                "payerclass",
+                "payor name",
+                "payer name",
+                "payorname",
+                "payername",
+                "payor type",
+                "payer type",
+                "insurance",
+                "insurance class",
+                "insurance type",
+                "insurance carrier",
+                "insurance plan",
+                "carrier",
+                "plan",
+                "plan name",
+                "primary insurance",
+                "primary payor",
+                "primary payer",
+                "financial class",
+                "fin class",
+                "coverage",
+              ]) || undefined
+            patientFields.set(caseId, { surgeon, facility, date, payorClass })
           }
         })
 
@@ -474,6 +512,7 @@ export function CaseImportDialog({
           totalReimbursement: undefined,
           timeInOr: undefined,
           timeOutOr: undefined,
+          payorClass: patient?.payorClass,
         }
       })
 

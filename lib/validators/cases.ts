@@ -12,6 +12,12 @@ export const caseInputSchema = z.object({
   totalReimbursement: z.number().min(0).optional(),
   timeInOr: z.string().optional(),
   timeOutOr: z.string().optional(),
+  // Insurance/payor class for payor-mix scoring (raw carrier string;
+  // classified at read time by `classifyPayorClass`). 2026-06-14: the
+  // importer previously dropped this column entirely, so every uploaded
+  // case landed with a null payorClass → "No payor data" on the Surgeons
+  // tab regardless of what the source file contained.
+  payorClass: z.string().optional(),
 })
 
 export type CaseInput = z.infer<typeof caseInputSchema>
