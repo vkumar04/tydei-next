@@ -314,6 +314,10 @@ export function currentOpenVolumeWindow(input: {
     ),
   )
   if (end.getTime() <= start.getTime()) return null
+  // bugs.rtfd 2026-06-14: a lifetime term is a single window spanning the
+  // whole contract through `end` (already min(today,…)); there is no separate
+  // currently-running window to surface, so the open-window probe is null.
+  if (input.evaluationPeriod === "lifetime") return null
   const width = widthMonths(input.evaluationPeriod)
   let cursor = new Date(
     Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
@@ -561,10 +565,25 @@ export async function recomputeVolumeAccrualForTerm(input: {
 
   // Bucket purchases by evaluation period. Iterate from start through
   // end in evaluation-period steps, computing rebate per bucket.
-  const width = widthMonths(term.evaluationPeriod)
   const firstWindowStart = new Date(
     Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
   )
+  // bugs.rtfd 2026-06-14 ("it should take the volume on all product use and
+  // give $15 per unit"): a `lifetime` volume term qualifies on CUMULATIVE
+  // units over the whole contract, not per-year. One window spanning
+  // firstWindowStart → end (end is already min(today, contract/term end)),
+  // so 26,568 cumulative units clear the 21,000 tier-2 threshold instead of
+  // each year (≤11,304) sitting in tier 1. Mirrors the spend writer's
+  // lifetime mode in buildEvaluationPeriodAccruals.
+  const width =
+    term.evaluationPeriod === "lifetime"
+      ? Math.max(
+          1,
+          (end.getUTCFullYear() - firstWindowStart.getUTCFullYear()) * 12 +
+            (end.getUTCMonth() - firstWindowStart.getUTCMonth()) +
+            1,
+        )
+      : widthMonths(term.evaluationPeriod)
   type Bucket = {
     periodStart: Date
     periodEnd: Date
