@@ -20,8 +20,20 @@
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
-import { Upload, BarChart3 } from "lucide-react"
+import { Upload, BarChart3, Trash2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { useDeleteAllCases } from "@/hooks/use-case-costing"
 import { CaseImportDialog } from "./case-import-dialog"
 import { CaseCostingHero } from "./case-costing-hero"
 import { CaseCostingTabs } from "./case-costing-tabs"
@@ -50,6 +62,8 @@ export function CaseCostingClient({
   facilityName,
 }: CaseCostingClientProps) {
   const [importOpen, setImportOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const deleteAll = useDeleteAllCases()
 
   // Cases list tab — filters live here so both the filters bar and the table
   // can read/mutate the same object.
@@ -95,6 +109,20 @@ export function CaseCostingClient({
     queryFn: () => getFacilityPayorMix(),
   })
 
+  // Refetch every case-costing surface. These queries use the
+  // ["case-costing", …] key namespace (not queryKeys.cases.*), so the
+  // mutation hooks' invalidate(["cases"]) doesn't reach them — refetch
+  // explicitly after an import or a delete-all.
+  function refetchAll() {
+    casesQuery.refetch()
+    surgeonOptionsQuery.refetch()
+    cptOptionsQuery.refetch()
+    scorecardsQuery.refetch()
+    averagesQuery.refetch()
+    complianceQuery.refetch()
+    payorMixQuery.refetch()
+  }
+
   const heroStats = useMemo(() => {
     const totalCases = complianceQuery.data?.perCase.length ?? 0
     const averages = averagesQuery.data
@@ -129,6 +157,60 @@ export function CaseCostingClient({
             Reports
           </Button>
         </Link>
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              disabled={heroStats.totalCases === 0 || deleteAll.isPending}
+            >
+              {deleteAll.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              Delete All Cases
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Delete all {heroStats.totalCases.toLocaleString()} case
+                {heroStats.totalCases === 1 ? "" : "s"}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently removes every case, along with its supplies
+                and procedures, for {facilityName}. Payor contracts are not
+                affected. This cannot be undone — re-import to restore data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteAll.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteAll.isPending}
+                onClick={(e) => {
+                  // Keep the dialog open until the mutation resolves so the
+                  // user sees the pending state; close on success.
+                  e.preventDefault()
+                  deleteAll.mutate(undefined, {
+                    onSuccess: () => {
+                      refetchAll()
+                      setDeleteOpen(false)
+                    },
+                  })
+                }}
+              >
+                {deleteAll.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Delete all cases
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <Button onClick={() => setImportOpen(true)}>
           <Upload className="mr-2 h-4 w-4" />
           Upload Data
@@ -168,13 +250,7 @@ export function CaseCostingClient({
         facilityId={facilityId}
         open={importOpen}
         onOpenChange={setImportOpen}
-        onComplete={() => {
-          casesQuery.refetch()
-          scorecardsQuery.refetch()
-          averagesQuery.refetch()
-          complianceQuery.refetch()
-          payorMixQuery.refetch()
-        }}
+        onComplete={refetchAll}
       />
     </div>
   )
