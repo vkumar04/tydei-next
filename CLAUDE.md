@@ -58,9 +58,10 @@ skip brainstorming and ship directly. Use judgment — when in doubt, brainstorm
   `computeRebateFromPrismaTiers`. The tier engine is reserved for clearly-labeled
   *projection* surfaces (rebate-optimizer scenarios, tier-progress estimates).
   Earned counts only periods where `payPeriodEnd <= today`; collected counts
-  only rows with a `collectionDate` set. See:
-  - `docs/superpowers/specs/2026-04-18-contracts-rewrite.md` (cross-cutting rule)
-  - `docs/superpowers/specs/2026-04-18-contracts-list-closure.md` Subsystem 1
+  only rows with a `collectionDate` set. (The 2026-04-18 contracts-rewrite /
+  contracts-list-closure specs that documented this were deleted with all of
+  `docs/` in `b70f641e` "remove docs/ in favor of the graphify knowledge
+  graph" — the rule now lives here and in the graph: `/graphify query`.)
 - **Canonical "Collected" aggregate:** every surface that renders a "Rebates
   Collected" number (contracts list, contract detail header card, contract
   Transactions tab summary card, dashboard, reports) MUST go through
@@ -68,11 +69,20 @@ skip brainstorming and ship directly. Use judgment — when in doubt, brainstorm
   hand-roll a `r.collectionDate ? ... : ...` reducer — the helper is the one
   place the filter lives so surfaces cannot drift. See Charles W1.R.
 - **Rebate engine units:** `ContractTier.rebateValue` is stored as a fraction
-  (0.02 = 2%). The math engine in `lib/contracts/rebate-method.ts` expects integer
-  percent. `computeRebateFromPrismaTiers` and `lib/contracts/tier-rebate-label.ts`
-  scale by 100 at the Prisma boundary — don't hand-roll the conversion elsewhere.
-- **Specs live in `docs/superpowers/specs/`** as `YYYY-MM-DD-<topic>-design.md`.
-  **Plans live in `docs/superpowers/plans/`** as `YYYY-MM-DD-<topic>.md`.
+  (0.02 = 2%). The math engine — `lib/rebates/engine/` (per-method writers,
+  dispatched via `lib/rebates/engine/index.ts`) and `lib/rebates/calculate.ts`
+  — expects integer percent. `computeRebateFromPrismaTiers`
+  (`lib/rebates/calculate.ts`) and `lib/contracts/tier-rebate-label.ts` scale by
+  100 at the Prisma boundary — don't hand-roll the conversion elsewhere.
+  (There is no `lib/contracts/rebate-method.ts`; only the label helper
+  `lib/contracts/rebate-method-label.ts`.)
+- **Plans live in `docs/superpowers/plans/`** as `YYYY-MM-DD-<topic>.md` (the
+  only surviving `docs/` subdir). The old `docs/superpowers/specs/` directory —
+  and the rest of `docs/` — was removed in `b70f641e` "remove docs/ in favor of
+  the graphify knowledge graph." Design context now lives in the graphify graph
+  under `graphify-out/` (query with `/graphify query "<question>"`,
+  human-readable summary in `graphify-out/GRAPH_REPORT.md`). Do NOT write or
+  cite `docs/superpowers/specs/...` paths — they no longer exist.
 - **Worktrees** for parallel subagent work: `.claude/worktrees/agent-<id>/`.
   `.claude/` and `.worktrees/` are gitignored. Cherry-pick the subagent's commit
   by SHA from main; don't merge whole branches.
@@ -147,7 +157,12 @@ Every `"use server"` action that calls the Anthropic API (`renewal-brief.ts`,
 
 ## Reference codebase
 
-The v0 prototype lives at `/Users/vickkumar/Downloads/b_T2SEkJJdo8w/`. When the
-user asks to port v0 features, treat that path as the read-only reference — the
-spec/plan documents the gap; subagents implement against tydei's Prisma + Next
-architecture, not v0's localStorage stores.
+The v0 prototype folder (`/Users/vickkumar/Downloads/b_T2SEkJJdo8w/`) is **no
+longer on disk** — do not try to read it. For v0-parity work the user supplies
+screenshots or points at the live surface; port against tydei's Prisma + Next
+architecture (not v0's localStorage stores). Many v0 reports already have tydei
+equivalents — check before rebuilding. Example: the "Contract Performance
+Details" report is `components/facility/reports/report-period-table.tsx` +
+`report-trend-chart.tsx`, fed by `getReportData` in `lib/actions/reports.ts`
+(per-contract-type columns already wired for usage/service/capital/tie_in/
+grouped/pricing_only).
