@@ -15,6 +15,10 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
+import {
+  buildCptRateMap,
+  resolveCaseReimbursement,
+} from "@/lib/case-costing/cpt-rate-map"
 
 export interface GetCasesForFacilityFilters {
   dateFrom?: string | Date | null
@@ -33,45 +37,73 @@ export async function getCasesForFacility(
   const dateTo = toDate(filters.dateTo)
   const limit = filters.limit ?? 500
 
-  const cases = await prisma.case.findMany({
-    where: {
-      facilityId: facility.id,
-      ...(dateFrom && { dateOfSurgery: { gte: dateFrom } }),
-      ...(dateTo && !dateFrom && { dateOfSurgery: { lte: dateTo } }),
-      ...(dateFrom && dateTo && { dateOfSurgery: { gte: dateFrom, lte: dateTo } }),
-      ...(filters.surgeons &&
-        filters.surgeons.length > 0 && {
-          surgeonName: { in: filters.surgeons },
-        }),
-      ...(filters.cptCodes &&
-        filters.cptCodes.length > 0 && {
-          primaryCptCode: { in: filters.cptCodes },
-        }),
-    },
-    take: limit,
-    orderBy: { dateOfSurgery: "desc" },
-    include: {
-      supplies: {
-        select: {
-          id: true,
-          vendorItemNo: true,
-          materialName: true,
-          usedCost: true,
-          quantity: true,
-          extendedCost: true,
-          contractId: true,
+  const [cases, payorContracts] = await Promise.all([
+    prisma.case.findMany({
+      where: {
+        facilityId: facility.id,
+        ...(dateFrom && { dateOfSurgery: { gte: dateFrom } }),
+        ...(dateTo && !dateFrom && { dateOfSurgery: { lte: dateTo } }),
+        ...(dateFrom && dateTo && { dateOfSurgery: { gte: dateFrom, lte: dateTo } }),
+        ...(filters.surgeons &&
+          filters.surgeons.length > 0 && {
+            surgeonName: { in: filters.surgeons },
+          }),
+        ...(filters.cptCodes &&
+          filters.cptCodes.length > 0 && {
+            primaryCptCode: { in: filters.cptCodes },
+          }),
+      },
+      take: limit,
+      orderBy: { dateOfSurgery: "desc" },
+      include: {
+        supplies: {
+          select: {
+            id: true,
+            vendorItemNo: true,
+            materialName: true,
+            usedCost: true,
+            quantity: true,
+            extendedCost: true,
+            contractId: true,
+          },
+        },
+        procedures: {
+          select: {
+            id: true,
+            cptCode: true,
+          },
         },
       },
-      procedures: {
-        select: {
-          id: true,
-          cptCode: true,
-        },
+    }),
+    prisma.payorContract.findMany({
+      where: { facilityId: facility.id, status: "active" },
+      select: { cptRates: true },
+    }),
+  ])
+
+  // 2026-06-14: the Reimb./Margin columns read raw `totalReimbursement`
+  // (0 for most rows) → "—". Backfill each case's reimbursement from the
+  // canonical CPT-rate map (same helper as the hero card, surgeon
+  // scorecards, and the report) and recompute margin so the list, surgeon
+  // margin%, and Financial tab all agree.
+  const cptRateMap = buildCptRateMap(payorContracts)
+  const withReimbursement = cases.map((c) => {
+    const reimbursement = resolveCaseReimbursement(
+      {
+        storedReimbursement: Number(c.totalReimbursement),
+        primaryCptCode: c.primaryCptCode,
+        procedureCptCodes: c.procedures.map((p) => p.cptCode),
       },
-    },
+      cptRateMap,
+    )
+    return {
+      ...c,
+      totalReimbursement: reimbursement,
+      margin: reimbursement - Number(c.totalSpend),
+    }
   })
 
-  return serialize(cases)
+  return serialize(withReimbursement)
 }
 
 function toDate(v: string | Date | null | undefined): Date | null {

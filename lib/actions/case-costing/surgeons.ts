@@ -55,16 +55,29 @@ import {
 export async function getSurgeonScorecardsForFacility(): Promise<Surgeon[]> {
   const { facility, user } = await requireFacility()
 
-  const cases = await prisma.case.findMany({
-    where: { facilityId: facility.id },
-    select: {
-      surgeonName: true,
-      primaryCptCode: true,
-      payorClass: true,
-      totalSpend: true,
-      totalReimbursement: true,
-    },
-  })
+  // 2026-06-14: surgeon margin% read raw `totalReimbursement` (0 for most
+  // rows) → every surgeon showed "—". Apply the SAME canonical CPT-rate
+  // backfill the hero card + cases list use (`buildCptRateMap` +
+  // `resolveCaseReimbursement`) so margin% reflects payor-contract rates.
+  const [cases, payorContracts] = await Promise.all([
+    prisma.case.findMany({
+      where: { facilityId: facility.id },
+      select: {
+        surgeonName: true,
+        primaryCptCode: true,
+        payorClass: true,
+        totalSpend: true,
+        totalReimbursement: true,
+        procedures: { select: { cptCode: true } },
+      },
+    }),
+    prisma.payorContract.findMany({
+      where: { facilityId: facility.id, status: "active" },
+      select: { cptRates: true },
+    }),
+  ])
+
+  const cptRateMap = buildCptRateMap(payorContracts)
 
   const input: CaseForDerivation[] = cases
     .filter((c): c is typeof c & { surgeonName: string } =>
@@ -74,7 +87,14 @@ export async function getSurgeonScorecardsForFacility(): Promise<Surgeon[]> {
       surgeonName: c.surgeonName,
       primaryCptCode: c.primaryCptCode,
       totalSpend: Number(c.totalSpend),
-      totalReimbursement: Number(c.totalReimbursement),
+      totalReimbursement: resolveCaseReimbursement(
+        {
+          storedReimbursement: Number(c.totalReimbursement),
+          primaryCptCode: c.primaryCptCode,
+          procedureCptCodes: c.procedures.map((p) => p.cptCode),
+        },
+        cptRateMap,
+      ),
       // Audit M8: map Case.payorClass → canonical payor-mix bucket so
       // payorMixScore computes from real data instead of a hardcoded null.
       payorType: classifyPayorClass(c.payorClass),
