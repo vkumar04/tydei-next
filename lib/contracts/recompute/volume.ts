@@ -915,10 +915,22 @@ async function recomputeVolumeFromCogRecords(input: {
   })
 
   // Bucket by evaluation period.
-  const width = widthMonths(term.evaluationPeriod)
   const firstWindowStart = new Date(
     Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
   )
+  // bugs.rtfd 2026-06-14: lifetime = ONE window over the whole contract so
+  // cumulative all-product units qualify the tier (26,568 ≥ 21,000 → $15/unit)
+  // instead of per-year buckets each in tier 1. `end` is already min(today,
+  // contract/term end). Same handling as the CPT path above.
+  const width =
+    term.evaluationPeriod === "lifetime"
+      ? Math.max(
+          1,
+          (end.getUTCFullYear() - firstWindowStart.getUTCFullYear()) * 12 +
+            (end.getUTCMonth() - firstWindowStart.getUTCMonth()) +
+            1,
+        )
+      : widthMonths(term.evaluationPeriod)
   type Bucket = {
     periodStart: Date
     periodEnd: Date
