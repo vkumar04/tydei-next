@@ -590,11 +590,14 @@ export async function recomputeVolumeAccrualForTerm(input: {
     purchases: PurchaseRecord[]
   }
   const buckets: Bucket[] = []
+  const isLifetime = term.evaluationPeriod === "lifetime"
   let cursor = firstWindowStart
   for (let iter = 0; iter < 200; iter++) {
     const next = addMonthsUTC(cursor, width)
-    const periodEnd = new Date(next.getTime() - 1)
-    if (periodEnd.getTime() > end.getTime()) break
+    // bugs.rtfd 2026-06-14: lifetime = one window clamped to `end` (see the
+    // COG-fallback writer for the rationale).
+    const periodEnd = isLifetime ? end : new Date(next.getTime() - 1)
+    if (!isLifetime && periodEnd.getTime() > end.getTime()) break
     const bucketPurchases = purchases.filter((p) => {
       const t = p.purchaseDate.getTime()
       return t >= cursor.getTime() && t <= periodEnd.getTime()
@@ -604,6 +607,7 @@ export async function recomputeVolumeAccrualForTerm(input: {
       periodEnd,
       purchases: bucketPurchases,
     })
+    if (isLifetime) break
     cursor = next
   }
 
@@ -938,11 +942,16 @@ async function recomputeVolumeFromCogRecords(input: {
     spendSum: number
   }
   const buckets: Bucket[] = []
+  const isLifetime = term.evaluationPeriod === "lifetime"
   let cursor = firstWindowStart
   for (let iter = 0; iter < 200; iter++) {
     const next = addMonthsUTC(cursor, width)
-    const periodEnd = new Date(next.getTime() - 1)
-    if (periodEnd.getTime() > end.getTime()) break
+    // bugs.rtfd 2026-06-14: lifetime is ONE window [firstWindowStart, end].
+    // `end` (= min(today, contract/term end)) is rarely on a month boundary,
+    // so clamp periodEnd to `end` rather than the month-aligned overshoot that
+    // would `break` the loop and drop the window entirely.
+    const periodEnd = isLifetime ? end : new Date(next.getTime() - 1)
+    if (!isLifetime && periodEnd.getTime() > end.getTime()) break
     let qSum = 0
     let spendSum = 0
     for (const r of cogRecords) {
@@ -957,6 +966,7 @@ async function recomputeVolumeFromCogRecords(input: {
       quantitySum: qSum,
       spendSum,
     })
+    if (isLifetime) break
     cursor = next
   }
 
