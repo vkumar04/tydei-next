@@ -777,6 +777,10 @@ export function ContractTermsEntry({
                           <SelectItem value="quarterly">Quarterly</SelectItem>
                           <SelectItem value="semi_annual">Semi-Annual</SelectItem>
                           <SelectItem value="annual">Annual</SelectItem>
+                          {/* bugs.rtfd 2026-06-13: a threshold that accumulates
+                              over the whole contract instead of resetting each
+                              period (tier qualifies on cumulative spend). */}
+                          <SelectItem value="lifetime">Lifetime (contract total)</SelectItem>
                         </SelectContent>
                       </Select>
                     </Field>

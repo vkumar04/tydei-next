@@ -722,6 +722,20 @@ export async function getContract(
   const termScopedSpend: Record<string, number> = {}
   // detailCogUniverse hoisted above the currentSpend cascade (audit #4).
   for (const t of contract.terms ?? []) {
+    // bugs.rtfd 2026-06-13 ("OrthoJoints ... not being picked up with the
+    // rebate"): a `lifetime` term's tier qualifies on spend accumulated over
+    // the WHOLE contract, so its progress display must aggregate the full
+    // contract window — not the trailing-12-month window the periodic terms
+    // use. Without this a lifetime term whose yearly spend never clears the
+    // threshold (but whose cumulative does) would render $0/Tier 0.
+    const isLifetimeTerm =
+      (t as { evaluationPeriod?: string }).evaluationPeriod === "lifetime"
+    const termWindowStart = isLifetimeTerm ? contract.effectiveDate : windowStart
+    const termWindowEnd = isLifetimeTerm
+      ? new Date(
+          Math.min(windowEnd.getTime(), contract.expirationDate.getTime()),
+        )
+      : windowEnd
     const catWhere = buildCategoryWhereClause(
       {
         appliesTo: t.appliesTo,
@@ -729,8 +743,9 @@ export async function getContract(
       },
       detailCogUniverse,
     )
-    // Short-circuit: all_products (empty where) → reuse currentSpend.
-    if (Object.keys(catWhere).length === 0) {
+    // Short-circuit: all_products (empty where) → reuse currentSpend, except
+    // a lifetime all-products term still needs its cumulative window summed.
+    if (Object.keys(catWhere).length === 0 && !isLifetimeTerm) {
       termScopedSpend[t.id] = currentSpend
       continue
     }
@@ -742,7 +757,7 @@ export async function getContract(
           { contractId: null, vendorId: { in: detailVendorIds } },
         ],
         matchStatus: { in: ["on_contract", "price_variance"] },
-        transactionDate: { gte: windowStart, lte: windowEnd },
+        transactionDate: { gte: termWindowStart, lte: termWindowEnd },
         ...catWhere,
       },
       _sum: { extendedPrice: true },

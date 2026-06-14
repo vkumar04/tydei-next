@@ -322,8 +322,8 @@ const BASELINE_HITS = new Set<string>([
   // universe + union clause above the currentSpend cascade) shifted them.
   // bumped again 2026-06-11 after the B1 dedupe-window extension
   // (CREATE_DEDUPE_WINDOW_MS + widened idempotencyPut calls) shifted them.
-  "lib/actions/contracts.ts:1634",
-  "lib/actions/contracts.ts:1654",
+  "lib/actions/contracts.ts:1649",
+  "lib/actions/contracts.ts:1669",
   // imports/case-costing-import.ts: REMOVED from baseline 2026-06-09
   // (case-costing audit batch) — the remaining by-id ops (primaryCptCode
   // update, margin-rollup re-read + update) now carry inline

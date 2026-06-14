@@ -37,6 +37,51 @@ function twelveMonthsFrom(year: number, tenKPerMonth: number): MonthlySpend[] {
   return months
 }
 
+describe("buildEvaluationPeriodAccruals — lifetime (bugs.rtfd 2026-06-13)", () => {
+  it("emits ONE window over the whole contract; tier qualifies on cumulative spend", () => {
+    // 3 calendar years, ~$340K/yr = $1.02M total, tier 1 = $825K @ 2%.
+    // Per-year ($340K) never reaches $825K, but lifetime accumulates → 2%.
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 825_000, spendMax: null, rebateValue: 2 },
+    ]
+    const series: MonthlySpend[] = []
+    for (const y of [2024, 2025, 2026])
+      for (let m = 1; m <= 12; m++)
+        series.push({ month: `${y}-${String(m).padStart(2, "0")}`, spend: 28_333.34 })
+    const buckets = buildEvaluationPeriodAccruals(
+      series,
+      tiers,
+      "cumulative",
+      "lifetime",
+      new Date(Date.UTC(2024, 0, 1)),
+      { boundedUntil: new Date(Date.UTC(2026, 11, 31, 23, 59, 59, 999)) },
+    )
+    expect(buckets.length).toBe(1)
+    expect(buckets[0].label).toBe("Contract total")
+    const total = 28_333.34 * 36
+    expect(buckets[0].totalSpend).toBeCloseTo(total, 1)
+    expect(buckets[0].tierAchieved).toBe(1)
+    // 2% × cumulative $1.02M
+    expect(buckets[0].rebateEarned).toBeCloseTo(total * 0.02, 1)
+  })
+
+  it("an annual term on the same series earns $0 (no single year clears $825K)", () => {
+    const tiers: TierLike[] = [
+      { tierNumber: 1, spendMin: 825_000, spendMax: null, rebateValue: 2 },
+    ]
+    const series: MonthlySpend[] = []
+    for (const y of [2024, 2025, 2026])
+      for (let m = 1; m <= 12; m++)
+        series.push({ month: `${y}-${String(m).padStart(2, "0")}`, spend: 28_333.34 })
+    const buckets = buildEvaluationPeriodAccruals(
+      series, tiers, "cumulative", "annual",
+      new Date(Date.UTC(2024, 0, 1)),
+      { boundedUntil: new Date(Date.UTC(2026, 11, 31, 23, 59, 59, 999)) },
+    )
+    expect(buckets.every((b) => b.rebateEarned === 0)).toBe(true)
+  })
+})
+
 describe("buildEvaluationPeriodAccruals — annual (W1.W-B1)", () => {
   it("emits ONE row at period-end for a 12-month annual term", () => {
     const series = twelveMonthsFrom(2025, 10_000)

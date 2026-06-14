@@ -94,6 +94,11 @@ export type EvaluationPeriod =
   | "monthly"
   | "quarterly"
   | "semi_annual"
+  // bugs.rtfd 2026-06-13 ("OrthoJoints ... not being picked up with the
+  // rebate"): a threshold the user means to apply over the WHOLE contract,
+  // not reset each calendar period. One evaluation window spans the entire
+  // contract term, so tier qualification accumulates across all years.
+  | "lifetime"
 
 // ─── Monthly accrual ────────────────────────────────────────────────
 
@@ -673,6 +678,9 @@ function formatPeriodLabel(
 ): string {
   const year = start.getUTCFullYear()
   const month = start.getUTCMonth() // 0-indexed
+  if (evaluationPeriod === "lifetime") {
+    return "Contract total"
+  }
   if (evaluationPeriod === "annual") {
     return `${year}`
   }
@@ -740,14 +748,7 @@ export function buildEvaluationPeriodAccruals(
 ): EvaluationPeriodBucket[] {
   if (series.length === 0 || tiers.length === 0) return []
 
-  const width = monthsInEvaluationPeriod(evaluationPeriod)
   const fn = engine(method)
-  // Pro-rate the annual baseline to the evaluation period. Annual eval
-  // = full baseline; quarterly = baseline/4; etc.
-  const proRatedBaseline =
-    options?.growthBased && options.spendBaseline && options.spendBaseline > 0
-      ? options.spendBaseline * (width / 12)
-      : 0
 
   const byMonth = new Map<string, number>()
   for (const s of series) byMonth.set(s.month, s.spend)
@@ -764,9 +765,30 @@ export function buildEvaluationPeriodAccruals(
   const seriesLastMonthEnd = new Date(Date.UTC(lsY, lsM, 0, 23, 59, 59, 999))
   const boundedUntil = options?.boundedUntil ?? seriesLastMonthEnd
 
+  // bugs.rtfd 2026-06-13: a "lifetime" term is one window spanning the whole
+  // contract — width = the full month span from the first window start
+  // through boundedUntil, so the loop emits exactly one bucket whose tier
+  // qualifies on cumulative spend. Fixed-cadence periods keep their width.
+  const width =
+    evaluationPeriod === "lifetime"
+      ? Math.max(
+          1,
+          (boundedUntil.getUTCFullYear() - firstWindowStart.getUTCFullYear()) *
+            12 +
+            (boundedUntil.getUTCMonth() - firstWindowStart.getUTCMonth()) +
+            1,
+        )
+      : monthsInEvaluationPeriod(evaluationPeriod)
+  // Pro-rate the annual baseline to the evaluation period. Annual eval
+  // = full baseline; quarterly = baseline/4; lifetime = baseline × years.
+  const proRatedBaseline =
+    options?.growthBased && options.spendBaseline && options.spendBaseline > 0
+      ? options.spendBaseline * (width / 12)
+      : 0
+
   const buckets: EvaluationPeriodBucket[] = []
   let cursorStart = firstWindowStart
-  const maxIterations = 40 * (12 / width)
+  const maxIterations = Math.max(1, Math.ceil((40 * 12) / width))
   for (let iter = 0; iter < maxIterations; iter++) {
     const nextStart = addMonthsUTC(cursorStart, width)
     const periodEnd = new Date(nextStart.getTime() - 1)
