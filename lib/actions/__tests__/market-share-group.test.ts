@@ -66,6 +66,11 @@ vi.mock("@/lib/db", () => ({
     categoryMapping: {
       findMany: vi.fn(async () => []),
     },
+    // mappedCategoryUniverse (bugs.rtfd 2026-06-13): empty → display filter is
+    // a no-op, so grouping behavior is unchanged.
+    contractPricing: {
+      findMany: vi.fn(async () => []),
+    },
   },
 }))
 

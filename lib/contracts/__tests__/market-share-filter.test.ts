@@ -114,6 +114,51 @@ describe("computeCategoryMarketShare", () => {
     expect(result.rows.map((r) => r.category)).toEqual(["Joint Replacement", "Spine"])
   })
 
+  describe("displayCategoryUniverse (bugs.rtfd 2026-06-13 — only mapped categories shown)", () => {
+    const rows = [
+      { vendorId: VENDOR, category: "Ortho-Extremity", extendedPrice: 100, contractId: null },
+      { vendorId: OTHER, category: "Ortho-Extremity", extendedPrice: 100, contractId: null },
+      // unmapped raw COG buckets that must NOT render
+      { vendorId: VENDOR, category: "Supplies & Materials:OR Supplies & Materials", extendedPrice: 50, contractId: null },
+      { vendorId: VENDOR, category: "Surgical InstrumentationSurgical Instrumentation", extendedPrice: 30, contractId: null },
+    ]
+
+    it("drops buckets whose canonical is not in the mapped universe", () => {
+      const result = computeCategoryMarketShare({
+        rows,
+        contractCategoryMap: new Map(),
+        vendorId: VENDOR,
+        displayCategoryUniverse: ["Ortho-Extremity", "Ortho-Joints", "Spine"],
+      })
+      // Only the mapped category renders; the raw COG buckets are hidden.
+      expect(result.rows.map((r) => r.category)).toEqual(["Ortho-Extremity"])
+      // …but their spend still counts in the vendor total (not silently lost).
+      expect(result.totalVendorSpend).toBe(180)
+    })
+
+    it("matches the universe canonically (delimiter / word-order insensitive)", () => {
+      const result = computeCategoryMarketShare({
+        rows: [
+          { vendorId: VENDOR, category: "Ortho-Joints", extendedPrice: 100, contractId: null },
+        ],
+        contractCategoryMap: new Map(),
+        vendorId: VENDOR,
+        // universe spelled differently but same canonical
+        displayCategoryUniverse: ["Joints Ortho"],
+      })
+      expect(result.rows.map((r) => r.category)).toEqual(["Ortho-Joints"])
+    })
+
+    it("renders every bucket when no universe is supplied (unchanged)", () => {
+      const result = computeCategoryMarketShare({
+        rows,
+        contractCategoryMap: new Map(),
+        vendorId: VENDOR,
+      })
+      expect(result.rows.length).toBeGreaterThan(1)
+    })
+  })
+
   describe("confirmedCategoryMap (Charles 2026-06-07 remap honoring)", () => {
     // The user mapped "Ortho-Upper Extremity" -> "Ortho-Extremity" via the
     // Map Categories dialog (a confirmed CategoryMapping). Market share must

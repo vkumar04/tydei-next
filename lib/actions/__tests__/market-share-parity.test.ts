@@ -85,6 +85,12 @@ vi.mock("@/lib/db", () => ({
     categoryMapping: {
       findMany: vi.fn(async () => []),
     },
+    // mappedCategoryUniverse (bugs.rtfd 2026-06-13): no mappings/pricing in
+    // this fixture → empty universe → display filter is a no-op, so parity
+    // and fallback assertions are unchanged.
+    contractPricing: {
+      findMany: vi.fn(async () => []),
+    },
     productCategory: {
       findMany: vi.fn(async () => []),
     },

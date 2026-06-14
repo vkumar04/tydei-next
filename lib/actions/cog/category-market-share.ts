@@ -19,6 +19,7 @@ import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { serialize } from "@/lib/serialize"
 import { loadConfirmedCategoryMap } from "@/lib/categories/resolve"
+import { mappedCategoryUniverse } from "@/lib/contracts/mapped-category-universe"
 import {
   computeCategoryMarketShare,
   type MarketShareResult,
@@ -127,7 +128,14 @@ export async function getCategoryMarketShareForVendor(input: {
     // so an explicit "Map Categories" rule (e.g. Ortho-Upper Extremity ->
     // Ortho-Extremity) collapses the source into its target here, exactly as
     // the import path applies it (resolveCategoryNamesBulk Pass 0).
-    const confirmedCategoryMap = await loadConfirmedCategoryMap()
+    // bugs.rtfd 2026-06-13 ("cog and pricing file mapped categories should be
+    // the only ones displayed"): restrict the rendered rows to the mapped
+    // universe so raw unmapped COG buckets ("Supplies & Materials:OR …", the
+    // concatenated variants) don't surface.
+    const [confirmedCategoryMap, displayUniverse] = await Promise.all([
+      loadConfirmedCategoryMap(),
+      mappedCategoryUniverse(facility.id),
+    ])
 
     const computed = computeCategoryMarketShare({
       rows: cogRows,
@@ -135,6 +143,7 @@ export async function getCategoryMarketShareForVendor(input: {
       vendorId: numeratorVendorIds,
       commitmentByCategory,
       confirmedCategoryMap,
+      displayCategoryUniverse: displayUniverse,
     })
 
     return serialize(computed)

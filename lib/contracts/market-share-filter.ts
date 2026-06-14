@@ -86,6 +86,16 @@ export interface ComputeMarketShareInput {
    * agree. When omitted, behavior is unchanged (string-canonical grouping).
    */
   confirmedCategoryMap?: Map<string, string>
+  /**
+   * bugs.rtfd 2026-06-13 ("cog and pricing file mapped categories should be
+   * the only ones displayed"): when provided, ONLY emit rows whose canonical
+   * name is in this allow-list (the mapped-category universe — confirmed
+   * `CategoryMapping` targets ∪ price-file categories). Unmapped raw COG
+   * buckets are dropped from the rendered rows (their spend still counts in
+   * `totalVendorSpend`). Omit to render every bucket (unchanged behavior).
+   * Build it from `mappedCategoryUniverse`.
+   */
+  displayCategoryUniverse?: readonly string[]
 }
 
 /**
@@ -131,7 +141,13 @@ export function computeCategoryMarketShare(
     vendorId,
     commitmentByCategory,
     confirmedCategoryMap,
+    displayCategoryUniverse,
   } = input
+  // Mapped-category allow-list, canonicalized for comparison. null = no filter.
+  const displayCanon =
+    displayCategoryUniverse && displayCategoryUniverse.length > 0
+      ? new Set(displayCategoryUniverse.map((c) => canonicalizeCategoryName(c)))
+      : null
   // Normalize to a set so grouped contracts (array) and the common
   // single-vendor case share one code path.
   const vendorIdSet = new Set(Array.isArray(vendorId) ? vendorId : [vendorId])
@@ -178,7 +194,11 @@ export function computeCategoryMarketShare(
   }
 
   const result: MarketShareRow[] = []
-  for (const [, bucket] of byCategory.entries()) {
+  for (const [canonKey, bucket] of byCategory.entries()) {
+    // bugs.rtfd 2026-06-13: when a mapped-category allow-list is supplied,
+    // only render buckets whose canonical is mapped. Unmapped raw COG buckets
+    // are dropped from display (spend already counted in totalVendorSpend).
+    if (displayCanon && !displayCanon.has(canonKey)) continue
     // Numerator = combined spend of every vendor in the set (the group).
     let vendorSpend = 0
     for (const [vid, amt] of bucket.byVendor) {

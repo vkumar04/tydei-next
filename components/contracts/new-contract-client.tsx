@@ -45,11 +45,16 @@ import type { ExtractedContractData } from "@/lib/ai/schemas"
 interface NewContractClientProps {
   vendors: { id: string; name: string; displayName: string | null }[]
   categories: { id: string; name: string }[]
+  /** bugs.rtfd 2026-06-13: mapped-category universe (confirmed CategoryMapping
+   *  targets ∪ this facility's price-file categories) — the term picker's base
+   *  list, unioned with the in-memory price file being uploaded. */
+  mappedCategories?: string[]
 }
 
 export function NewContractClient({
   vendors,
   categories,
+  mappedCategories = [],
 }: NewContractClientProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -941,14 +946,16 @@ export function NewContractClient({
                   vendorItemNo: p.vendorItemNo,
                   description: p.description ?? null,
                 }))}
-                // bugs.rtfd 2026-06-13 ("Wrong list... Should just be what
-                // was mapped off the price list"): the term picker's universe
-                // is the categories mapped off this contract's price file
-                // (pricingCategories), not the facility's whole COG/mapping
-                // taxonomy. See selectScopeableCategories.
+                // bugs.rtfd 2026-06-13 ("cog and pricing file mapped
+                // categories should be the only ones displayed"): the term
+                // picker offers the mapped-category universe (confirmed
+                // CategoryMapping targets ∪ this facility's price-file
+                // categories) unioned with the price file being uploaded right
+                // now (pricingCategories, not yet persisted). See
+                // selectScopeableCategories.
                 availableCategories={selectScopeableCategories(
                   liveCategories,
-                  pricingCategories,
+                  [...mappedCategories, ...pricingCategories],
                   form.watch("categoryIds") ?? [],
                 )}
               />

@@ -38,12 +38,17 @@ interface EditContractClientProps {
   contractId: string
   vendors: { id: string; name: string; displayName: string | null }[]
   categories: { id: string; name: string }[]
+  /** bugs.rtfd 2026-06-13: mapped-category universe (confirmed CategoryMapping
+   *  targets ∪ this facility's price-file categories) — unioned with this
+   *  contract's persisted ContractPricing categories for the term picker. */
+  mappedCategories?: string[]
 }
 
 export function EditContractClient({
   contractId,
   vendors,
   categories,
+  mappedCategories = [],
 }: EditContractClientProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -561,12 +566,15 @@ export function EditContractClient({
             onChange={setTerms}
             contractType={form.watch("contractType")}
             availableItems={availableItems}
-            // bugs.rtfd 2026-06-13: only the categories mapped off this
-            // contract's price file (deduped by canonical name), plus the
-            // contract's own selections. See selectScopeableCategories.
+            // bugs.rtfd 2026-06-13 ("cog and pricing file mapped categories
+            // should be the only ones displayed"): the mapped-category
+            // universe (confirmed CategoryMapping targets ∪ facility price-file
+            // categories) unioned with this contract's own price-file
+            // categories, plus the contract's selections. See
+            // selectScopeableCategories.
             availableCategories={selectScopeableCategories(
               (liveCategories ?? categories) ?? [],
-              priceFileCategories,
+              [...mappedCategories, ...priceFileCategories],
               form.watch("categoryIds") ?? [],
             )}
           />
