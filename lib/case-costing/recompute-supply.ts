@@ -96,6 +96,7 @@ export async function recomputeCaseSupplyContractStatus(
         select: {
           id: true,
           vendorItemNo: true,
+          materialName: true,
           isOnContract: true,
           contractId: true,
         },
@@ -113,22 +114,29 @@ export async function recomputeCaseSupplyContractStatus(
   for (const c of cases) {
     for (const s of c.supplies) {
       scanned += 1
-      const supplyKey = normalizeSku(s.vendorItemNo)
-      if (!supplyKey) {
-        // No (normalizable) vendorItemNo = can't match. Zero it out only
-        // if it was previously stamped on-contract (guards against churn).
+      // 2026-06-14: real clinical exports leave `vendorItemNo` blank/"-" and
+      // carry the catalog number in the material description tail
+      // ("ANCHOR … WITHOUT T - SMK100101"). Try the vendorItemNo first, then
+      // fall back to the SKU parsed from materialName — otherwise every
+      // supply is "off-contract" and On-Contract % is a flat 0 even when
+      // 27% of supply dollars sit on a priced contract.
+      const supplyKeys = supplyMatchKeys(s.vendorItemNo, s.materialName)
+      if (supplyKeys.length === 0) {
+        // No (normalizable) key = can't match. Zero it out only if it was
+        // previously stamped on-contract (guards against churn).
         if (s.isOnContract) {
           updates.push({ id: s.id, isOnContract: false, contractId: null })
           flippedOff += 1
         }
         continue
       }
-      const candidates = byItem.get(supplyKey) ?? []
       const dateMs = c.dateOfSurgery.getTime()
-      const match = candidates.find(
-        (cand) =>
-          cand.start.getTime() <= dateMs && cand.end.getTime() >= dateMs,
-      )
+      const match = supplyKeys
+        .flatMap((k) => byItem.get(k) ?? [])
+        .find(
+          (cand) =>
+            cand.start.getTime() <= dateMs && cand.end.getTime() >= dateMs,
+        )
       if (match) {
         if (!s.isOnContract || s.contractId !== match.contractId) {
           updates.push({
@@ -162,4 +170,32 @@ export async function recomputeCaseSupplyContractStatus(
   }
 
   return { scanned, flippedOn, flippedOff }
+}
+
+/**
+ * Candidate normalized SKU keys for a supply, in priority order:
+ *   1. `vendorItemNo` (when it's a real catalog number, not blank/"-")
+ *   2. the catalog number embedded in the material description tail —
+ *      "<DESCRIPTION> - <SKU>" → the segment after the last " - "
+ *
+ * Returns normalized keys (`normalizeSku`) with blanks and the "-"
+ * placeholder dropped, de-duplicated. Exported for unit testing.
+ */
+export function supplyMatchKeys(
+  vendorItemNo: string | null | undefined,
+  materialName: string | null | undefined,
+): string[] {
+  const keys: string[] = []
+  const vn = (vendorItemNo ?? "").trim()
+  if (vn && vn !== "-") {
+    const k = normalizeSku(vn)
+    if (k && k !== "-") keys.push(k)
+  }
+  const name = (materialName ?? "").trim()
+  if (name.includes(" - ")) {
+    const tail = name.slice(name.lastIndexOf(" - ") + 3).trim()
+    const k = normalizeSku(tail)
+    if (k && k !== "-") keys.push(k)
+  }
+  return [...new Set(keys)]
 }

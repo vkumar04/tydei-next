@@ -204,6 +204,9 @@ describe("getSurgeonScorecardsForFacility", () => {
       payorClass: true,
       totalSpend: true,
       totalReimbursement: true,
+      // 2026-06-14: procedure CPT codes feed the resolveCaseReimbursement
+      // backfill so surgeon margin% reflects payor-contract rates.
+      procedures: { select: { cptCode: true } },
     })
   })
 

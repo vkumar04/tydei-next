@@ -9,6 +9,7 @@ import {
   buildCptRateMap,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
+import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -355,6 +356,25 @@ export async function importCases(input: {
   })
 
   return { imported, errors, caseIds }
+}
+
+// ─── Recompute supply on-contract status ───────────────────────
+
+/**
+ * Re-match every CaseSupply at the active facility against its priced
+ * contracts and stamp `isOnContract` + `contractId`. 2026-06-14: case
+ * import never triggered this (only contract CRUD + COG import did), so a
+ * fresh case upload left every supply "off-contract" → flat 0% compliance
+ * until an unrelated contract edit. The case-import dialog now calls this
+ * after supplies land so On-Contract %/compliance reflect the new cases.
+ */
+export async function recomputeSupplyContractStatus(): Promise<{
+  scanned: number
+  flippedOn: number
+  flippedOff: number
+}> {
+  const { facility } = await requireFacility()
+  return recomputeCaseSupplyContractStatus(prisma, facility.id)
 }
 
 // ─── Delete All Cases (clear prior case-costing data) ──────────

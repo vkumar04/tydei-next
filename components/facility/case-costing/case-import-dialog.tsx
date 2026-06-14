@@ -26,7 +26,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { useImportCases } from "@/hooks/use-case-costing"
-import { importCaseSupplies, importCaseProcedures } from "@/lib/actions/cases"
+import {
+  importCaseSupplies,
+  importCaseProcedures,
+  recomputeSupplyContractStatus,
+} from "@/lib/actions/cases"
 import type { CaseInput } from "@/lib/validators/cases"
 
 // ── File type definitions matching v0 prototype ────────────────
@@ -569,6 +573,16 @@ export function CaseImportDialog({
             })),
           })
         }
+      }
+
+      // 2026-06-14: now that supplies exist, re-match them against the
+      // facility's priced contracts so On-Contract %/compliance reflect the
+      // freshly-imported cases (case import previously never triggered this,
+      // leaving every supply off-contract until an unrelated contract edit).
+      try {
+        await recomputeSupplyContractStatus()
+      } catch (err) {
+        console.error("[case-import] recomputeSupplyContractStatus failed", err)
       }
 
       // Supplies/procedures landed after the import mutation's own
