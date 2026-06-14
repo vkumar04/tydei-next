@@ -66,6 +66,20 @@ tieInDetails with EVERY available value:
   Total with 8.5% Interest $865,384 → capitalEquipmentValue = 651900.
   Look for "purchase price", "system cost", "equipment cost",
   "capital amount", "discounted price", "net price", "subtotal".
+  ── FINANCING / AMORTIZATION SCHEDULES (Truth-in-Lending box,
+  "TValue" tables, loan/payment schedules) ── Many capital/tie-in
+  PDFs express the equipment cost as a LOAN, not a quote. There the
+  capitalEquipmentValue is the **"Amount Financed"** (a.k.a. the
+  "Loan" principal, the "amount of credit provided", the opening
+  loan balance, or the "Principal" total). It is NOT the "Total of
+  Payments" and NOT the "Grand Total" — those include the Finance
+  Charge / interest. Concrete shape: a Truth-in-Lending box reading
+  "AMOUNT FINANCED $785,195 · FINANCE CHARGE $114,929 · TOTAL OF
+  PAYMENTS $900,124 · APR 4.953%" → capitalEquipmentValue = 785195
+  (the Amount Financed), interestRatePercent = 4.953, and the Total
+  of Payments ($900,124) is IGNORED for capitalEquipmentValue.
+  Equivalently, the first "Loan" row of an amortization table
+  (e.g. "Loan 06/01/2020 785,195.00") is the financed principal.
   Distinct from totalValue — capitalEquipmentValue is the upfront
   financed price; totalValue (if present) is the running multi-year
   commitment ceiling.
