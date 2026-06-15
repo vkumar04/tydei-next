@@ -197,11 +197,18 @@ ${text.trim()}`,
     // omit pdfText from the response.
     let pdfTextLayer = ""
     let pdfPageCount = 0
+    // 2026-06-15: scanned PDFs (no text layer) must go through the chunked
+    // path even when small — it's the only one that runs the OCR pass that
+    // reads scanned financing/capital tables (the single-call path below is
+    // vision-only). Default true so a text-extraction failure doesn't force
+    // every file into chunking.
+    let pdfHasTextLayer = true
     try {
       const { extractPdfText } = await import("@/lib/ai/pdf-text-helper")
       const pdfRes = await extractPdfText(fileData)
       pdfTextLayer = pdfRes.text
       pdfPageCount = pdfRes.pageCount
+      pdfHasTextLayer = pdfRes.hasTextLayer
     } catch (pdfErr) {
       console.warn("[extract-contract] pdf-text-layer extraction failed:", pdfErr)
     }
@@ -280,7 +287,10 @@ ${text.trim()}`,
     // Assist). Mirror the stream route: chunk large PDFs up front, and
     // fall back to small-chunk extraction when the single call fails.
     let extracted: ExtractedContractData | undefined
-    if (pdfPageCount > MAX_PAGES_PER_CHUNK) {
+    // Scanned PDFs (no text layer) → chunked path even when small, so the
+    // OCR pass runs and the financing/capital table is read (Vick 2026-06-15
+    // "still can't get the AI to see the capital").
+    if (pdfPageCount > MAX_PAGES_PER_CHUNK || !pdfHasTextLayer) {
       try {
         const { merged } = await runChunkedExtraction({
           fileData,

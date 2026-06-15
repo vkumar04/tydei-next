@@ -204,7 +204,14 @@ export async function POST(req: Request) {
   // parallel, merges into one final ExtractedContractData, and emits
   // it as a single-chunk response (same envelope as the cache-hit
   // path so the client dialog doesn't need a separate code path).
-  if (pdfText.pageCount > MAX_PAGES_PER_CHUNK) {
+  // 2026-06-15 (Vick "still can't get the AI to see the capital"): route
+  // SCANNED PDFs (no text layer) through the chunked path even when small,
+  // because that's the ONLY path that runs the Tesseract OCR pass. The
+  // single-call path below is vision-only — fine for prose, but it drops
+  // the numbers in scanned financing/Truth-in-Lending tables (tie-in
+  // capital), and since the single call usually "succeeds" it never falls
+  // back to OCR. A scanned ≤10-page tie-in then imports with empty capital.
+  if (pdfText.pageCount > MAX_PAGES_PER_CHUNK || !pdfText.hasTextLayer) {
     try {
       const { merged, chunkCount } = await runChunkedExtraction({
         fileData,
