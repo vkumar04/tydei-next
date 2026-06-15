@@ -23,4 +23,21 @@ echo "[standalone-postbuild] copying full pdfjs-dist (worker + wasm) → standal
 rm -rf .next/standalone/node_modules/pdfjs-dist
 cp -R node_modules/pdfjs-dist .next/standalone/node_modules/
 
+# 2026-06-15: same class of failure for the scanned-PDF OCR packages.
+# tesseract.js spawns a worker_threads child (src/worker-script/node/…)
+# that does relative require('..') + loads tesseract.js-core's WASM, and
+# mupdf loads its own .wasm — all dynamic, so nft misses them and the
+# worker threw "Cannot find module '..'" as an uncaught exception in prod
+# (Vick "still not getting the capital"). Copy the full package trees so
+# the worker + WASM resolve at runtime (these are serverExternalPackages).
+echo "[standalone-postbuild] copying OCR packages (tesseract.js + core + mupdf) → standalone…"
+for _ocr_pkg in tesseract.js tesseract.js-core mupdf; do
+  if [ -d "node_modules/${_ocr_pkg}" ]; then
+    rm -rf ".next/standalone/node_modules/${_ocr_pkg}"
+    cp -R "node_modules/${_ocr_pkg}" .next/standalone/node_modules/
+  else
+    echo "[standalone-postbuild] WARN: node_modules/${_ocr_pkg} missing — OCR falls back to vision"
+  fi
+done
+
 echo "[standalone-postbuild] done."

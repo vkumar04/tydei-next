@@ -66,6 +66,11 @@ export async function ocrPdfBuffer(
     // fetches eng.traineddata from its CDN on first use and caches it here.
     worker = await createWorker("eng", undefined, {
       cachePath: os.tmpdir(),
+      // The OCR worker runs in a worker_thread; without a handler a worker
+      // load/runtime failure surfaces as an UNCAUGHT process exception
+      // (prod 2026-06-15). Swallow it here — the outer catch returns "" and
+      // extraction falls back to vision-only.
+      errorHandler: (err) => console.warn(`${logPrefix} worker error:`, err),
     })
     const scale = mupdf.Matrix.scale(dpi / 72, dpi / 72)
     const parts: string[] = []

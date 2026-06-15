@@ -33,6 +33,21 @@ const config: NextConfig = {
     "mupdf",
     "tesseract.js",
   ],
+  // 2026-06-15: tesseract.js spawns a worker_threads child
+  // (src/worker-script/node/index.js) that does relative `require('..')`
+  // calls + loads tesseract.js-core's WASM, and mupdf loads its own .wasm —
+  // all resolved dynamically, so Next's static file tracing misses them.
+  // In the standalone bundle the worker threw "Cannot find module '..'" as
+  // an UNCAUGHT exception (Vick prod 2026-06-15: "still not getting the
+  // capital") and OCR silently fell back to vision. Force the whole package
+  // trees into .next/standalone so the worker + WASM resolve at runtime.
+  outputFileTracingIncludes: {
+    "**": [
+      "./node_modules/tesseract.js/**",
+      "./node_modules/tesseract.js-core/**",
+      "./node_modules/mupdf/**",
+    ],
+  },
   // 2026-04-26: cacheComponents was enabled but caused build failures
   // during static-page generation — `cacheComponents: true` requires
   // every uncached data access (e.g. `await requireFacility()`) to be
