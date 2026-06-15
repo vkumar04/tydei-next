@@ -318,7 +318,13 @@ export function VendorContractSubmission({
     }
   }, [capitalItems, contractTotal])
 
-  function handleAIExtract(data: ExtractedContractData, s3Key?: string, fileName?: string) {
+  function handleAIExtract(
+    data: ExtractedContractData,
+    s3Key?: string,
+    fileName?: string,
+    aiPricingItems?: ContractPricingItem[],
+    aiPricingCategories?: string[],
+  ) {
     if (s3Key) {
       setContractS3Key(s3Key)
       if (fileName) {
@@ -543,6 +549,27 @@ export function VendorContractSubmission({
           }
         })
       )
+    }
+
+    // 2026-06-15 (Vick "vendor side is not mapping categories for price
+    // file"): a price file dropped INSIDE the AI extraction dialog returns
+    // its rows + categories via these params. The vendor handler used to
+    // take only (data, s3Key, fileName) — so the AI-dialog pricing path
+    // silently dropped them and the category-realign dialog never fired
+    // (facility-side new-contract-client.tsx already staged these). Route
+    // them through stageVendorPricingItems so detected categories realign
+    // to the canonical taxonomy, same as the explicit pricing-file dropzone.
+    if (aiPricingItems && aiPricingItems.length > 0) {
+      stageVendorPricingItems(aiPricingItems, fileName ?? "pricing-file")
+    } else if (aiPricingCategories && aiPricingCategories.length > 0) {
+      // No item rows but the model surfaced categories — keep them visible.
+      setPricingFileData((prev) => ({
+        total: prev?.total ?? 0,
+        itemCount: prev?.itemCount ?? 0,
+        categories: Array.from(
+          new Set([...(prev?.categories ?? []), ...aiPricingCategories]),
+        ),
+      }))
     }
 
     toast.success("Contract data extracted and populated")
