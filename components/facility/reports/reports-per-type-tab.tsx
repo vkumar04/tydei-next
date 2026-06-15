@@ -14,6 +14,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { queryKeys } from "@/lib/query-keys"
 import { getReportData } from "@/lib/actions/reports"
+import { ReportContractHeader } from "./report-contract-header"
+import { ReportPeriodTable } from "./report-period-table"
+import { ReportTrendChart } from "./report-trend-chart"
+import type { ContractPeriodRow } from "./report-columns"
 import type { ReportsDateRange, ReportsContract } from "./reports-types"
 
 /**
@@ -63,25 +67,17 @@ const TAB_TITLE: Record<PerTypeTab, string> = {
   pricing: "Pricing-Only Contract Performance",
 }
 
-interface PeriodRow {
-  id: string
-  periodStart: string
-  periodEnd: string
-  totalSpend: number
-  totalVolume: number
-  rebateEarned: number
-  rebateCollected: number
-  paymentExpected: number
-  paymentActual: number
-  tierAchieved: number | null
-}
-
 interface ContractRow {
   id: string
   name: string
+  // Contract.contractNumber — may be null; the drill-down falls back to
+  // `name` for the displayed Contract ID.
+  contractNumber: string | null
   vendor: string
   vendorId: string
   contractType: string
+  effectiveDate: string
+  expirationDate: string
   totalValue: number
   // Charles 2026-04-23 audit — canonical Rebate-table totals computed
   // server-side in getReportData via sumEarnedRebatesLifetime /
@@ -89,8 +85,28 @@ interface ContractRow {
   // Contract Detail header + Dashboard KPIs.
   rebateEarnedCanonical: number
   rebateCollectedCanonical: number
-  periods: PeriodRow[]
+  // marginCanonical = rebateEarnedCanonical − Σ period.paymentActual
+  // (computed server-side in getReportData).
+  marginCanonical: number
+  periods: ContractPeriodRow[]
 }
+
+// The period-detail table + trend chart accept a narrower report-type
+// union than the tab keys. Map the tab to what those components render.
+// `pricing` has no dedicated branch in ReportPeriodTable/ReportTrendChart
+// so it falls back to "usage" (shared period shape).
+const TAB_TO_DETAIL_TYPE: Record<PerTypeTab, string> = {
+  usage: "usage",
+  capital: "capital",
+  service: "service",
+  tie_in: "tie_in",
+  grouped: "grouped",
+  pricing: "usage",
+}
+
+// Mirrors data-report-tab-content.tsx: every contract-type tab charts
+// monthly spend.
+const DETAIL_METRIC: "totalSpend" = "totalSpend"
 
 interface ContractAggregate {
   id: string
@@ -125,12 +141,22 @@ export function ReportsPerTypeTab({
       }),
   })
 
+  const facilityName = (data?.facilityName as string | undefined) ?? ""
+
   // Narrow contracts to the currently selected one (when any).
   const contracts = useMemo<ContractRow[]>(() => {
     const rows = (data?.contracts ?? []) as ContractRow[]
     if (!selectedContract) return rows
     return rows.filter((c) => c.id === selectedContract.id)
   }, [data, selectedContract])
+
+  // When a specific contract is selected and present in this tab's
+  // dataset, render its full drill-down (header band + per-period table
+  // + monthly chart) instead of the one-row aggregate.
+  const drillDownContract = useMemo<ContractRow | null>(() => {
+    if (!selectedContract) return null
+    return contracts.find((c) => c.id === selectedContract.id) ?? null
+  }, [contracts, selectedContract])
 
   const aggregates = useMemo<ContractAggregate[]>(() => {
     return contracts.map((c) => {
@@ -169,6 +195,49 @@ export function ReportsPerTypeTab({
           No contracts in this category for the selected range.
         </CardContent>
       </Card>
+    )
+  }
+
+  // ── Per-contract drill-down (a single contract is selected) ──────
+  if (drillDownContract) {
+    const detailType = TAB_TO_DETAIL_TYPE[tab]
+    return (
+      <div>
+        <ReportContractHeader
+          facilityName={facilityName}
+          contractId={drillDownContract.contractNumber ?? drillDownContract.name}
+          contractType={drillDownContract.contractType}
+          effectiveDate={drillDownContract.effectiveDate}
+          expirationDate={drillDownContract.expirationDate}
+          totalValue={drillDownContract.totalValue}
+          margin={drillDownContract.marginCanonical}
+          dateFrom={dateRange.from}
+          dateTo={dateRange.to}
+        />
+        <Card>
+          <CardHeader>
+            <CardTitle>{drillDownContract.name}</CardTitle>
+            <CardDescription>{drillDownContract.vendor}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ReportPeriodTable
+              periods={drillDownContract.periods}
+              reportType={detailType}
+              canonicalTotals={{
+                rebateEarned: drillDownContract.rebateEarnedCanonical,
+                rebateCollected: drillDownContract.rebateCollectedCanonical,
+              }}
+            />
+            <div className="mt-6">
+              <ReportTrendChart
+                data={drillDownContract.periods}
+                metric={DETAIL_METRIC}
+                reportType={detailType}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 

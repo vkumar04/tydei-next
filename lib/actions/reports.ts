@@ -90,19 +90,40 @@ export async function getReportData(input: {
 
   const windowEnd = new Date(dateTo)
   return serialize({
-    contracts: contracts.map((c) => ({
-      id: c.id,
-      name: c.name,
-      vendor: c.vendor.name,
-      vendorId: c.vendor.id,
-      contractType: c.contractType,
-      totalValue: Number(c.totalValue),
-      // Canonical per-contract rebate totals over the report window.
-      // These are what all downstream tabs should display — the raw
-      // `periods[].rebateEarned/Collected` reducers drift.
-      rebateEarnedCanonical: sumEarnedRebatesLifetime(c.rebates, windowEnd),
-      rebateCollectedCanonical: sumCollectedRebates(c.rebates),
-      periods: c.periods.map((p) => ({
+    // Active facility name — surfaced once at the top level (not
+    // per-contract) for the Contract Performance Details header band.
+    facilityName: facility.name,
+    contracts: contracts.map((c) => {
+      const rebateEarnedCanonical = sumEarnedRebatesLifetime(
+        c.rebates,
+        windowEnd,
+      )
+      // Margin = canonical earned rebate − payments actually made over
+      // the returned periods. For usage/pricing/grouped contracts (no
+      // payment ledger) the payment sum is 0, so margin === earned.
+      const paymentActualSum = c.periods.reduce(
+        (s, p) => s + Number(p.paymentActual),
+        0,
+      )
+      return {
+        id: c.id,
+        name: c.name,
+        // Contract identifier for display — may be null, callers fall
+        // back to `name`.
+        contractNumber: c.contractNumber,
+        vendor: c.vendor.name,
+        vendorId: c.vendor.id,
+        contractType: c.contractType,
+        effectiveDate: c.effectiveDate.toISOString(),
+        expirationDate: c.expirationDate.toISOString(),
+        totalValue: Number(c.totalValue),
+        // Canonical per-contract rebate totals over the report window.
+        // These are what all downstream tabs should display — the raw
+        // `periods[].rebateEarned/Collected` reducers drift.
+        rebateEarnedCanonical,
+        rebateCollectedCanonical: sumCollectedRebates(c.rebates),
+        marginCanonical: rebateEarnedCanonical - paymentActualSum,
+        periods: c.periods.map((p) => ({
         id: p.id,
         periodStart: p.periodStart.toISOString(),
         periodEnd: p.periodEnd.toISOString(),
@@ -113,8 +134,9 @@ export async function getReportData(input: {
         paymentExpected: Number(p.paymentExpected),
         paymentActual: Number(p.paymentActual),
         tierAchieved: p.tierAchieved,
-      })),
-    })),
+        })),
+      }
+    }),
     reportType,
     dateFrom,
     dateTo,
