@@ -932,7 +932,13 @@ export function NewContractClient({
             Capital Contract" picker has been retired — capital is the
             line-items table below, not a foreign-key to a separate
             capital contract. */}
-        {form.watch("contractType") === "tie_in" && (
+        {/* 2026-06-15: render for capital AND tie_in — the AI-seed (line
+            395) and persist (line 610) gates already cover both, but the
+            editor was tie_in-only, so a `capital`-type contract hid its
+            Capital/Leased Items and you couldn't add items (Vick "capital
+            items not adding still"). Matches the vendor-submission gate. */}
+        {(form.watch("contractType") === "tie_in" ||
+          form.watch("contractType") === "capital") && (
           <CapitalLineItemsEditor
             items={capitalItems}
             onChange={setCapitalItems}

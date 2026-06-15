@@ -557,12 +557,17 @@ export function EditContractClient({
               contractType prop, so the tie-in capital auto-fill effect
               (and any future contractType-dependent behavior) sees a
               stale value. */}
-          {form.watch("contractType") === "tie_in" && (
+          {(form.watch("contractType") === "tie_in" ||
+            form.watch("contractType") === "capital") && (
             // Charles audit suggestion #4 (v0-port): per-asset capital
             // line items are the only way to express tie-in capital.
             // Legacy single-row Contract.capitalCost/etc fields were
             // migrated to line items via
             // scripts/migrate-capital-to-line-items.ts.
+            // 2026-06-15: also render for `capital` type (was tie_in-only,
+            // so capital contracts hid the editor — Vick "capital items not
+            // adding"). The edit-page auto-fill effect (line 293) already
+            // covers both types.
             <CapitalLineItemsEditor
               items={capitalItems}
               onChange={setCapitalItems}
