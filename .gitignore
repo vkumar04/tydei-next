@@ -67,3 +67,6 @@ graphify-out/
 
 # gstack/browse skill local state
 .gstack/
+
+# Tesseract OCR model (downloaded at runtime to tmpdir)
+*.traineddata
