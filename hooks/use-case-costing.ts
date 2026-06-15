@@ -18,6 +18,7 @@ import {
   calculatePayorMargins,
 } from "@/lib/actions/payor-contracts"
 import { getTrueMarginReport } from "@/lib/actions/case-costing/true-margin"
+import { getSurgeonRebateContribution } from "@/lib/actions/case-costing/surgeon-rebate-contribution"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { toast } from "sonner"
 
@@ -111,6 +112,23 @@ export function useCaseCostingReport(
   return useQuery({
     queryKey: queryKeys.cases.reportData(facilityId, filters),
     queryFn: () => getCaseCostingReportData({ facilityId, ...filters }),
+  })
+}
+
+/**
+ * Per-surgeon rebate contribution — attributes each contract's REAL
+ * earned-rebate rate (earned ÷ on-contract COG spend) to the surgeons
+ * who used that contract's products. Replaces the legacy flat-3%
+ * estimate. Date window matches the cases query.
+ */
+export function useSurgeonRebateContribution(
+  facilityId: string,
+  filters?: Record<string, unknown>,
+) {
+  return useQuery({
+    queryKey: queryKeys.cases.surgeonRebateContribution(facilityId, filters),
+    queryFn: () =>
+      getSurgeonRebateContribution({ facilityId, ...filters }),
   })
 }
 

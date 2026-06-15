@@ -27,6 +27,7 @@ import { CostDistributionChart } from "@/components/facility/case-costing/cost-d
 import {
   useCaseCostingReport,
   useCases,
+  useSurgeonRebateContribution,
   useTrueMarginReport,
 } from "@/hooks/use-case-costing"
 import {
@@ -139,7 +140,26 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
   const { data: trueMargin, isLoading: trueMarginLoading } =
     useTrueMarginReport(facilityId, trueMarginPeriodStart, todayIso)
 
+  // Per-surgeon attributed rebate (real contract-rebate rates, not a
+  // flat 3%). Computed server-side over ALL in-range cases — the
+  // `useCases` payload only carries supply IDs, so the supply-level
+  // attribution must come from the action. Same date window as cases.
+  const { data: surgeonRebates } = useSurgeonRebateContribution(
+    facilityId,
+    dateFrom ? { dateFrom } : undefined
+  )
+
   const cases = casesData?.cases ?? []
+
+  // surgeonName -> attributed rebate dollars. The surgeon FILTER below
+  // narrows this by name; the PROCEDURE filter can't apply here because
+  // attribution is computed at surgeon (not CPT) granularity — picking a
+  // procedure leaves the per-surgeon rebate at its full-history value.
+  const rebateMap = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const r of surgeonRebates ?? []) m.set(r.name, r.attributedRebate)
+    return m
+  }, [surgeonRebates])
 
   // Audit M11: the Surgeon / Procedure dropdowns previously did nothing —
   // every stats memo consumed the unfiltered list. Filter once here; the
@@ -268,11 +288,14 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
         name,
         cases: d.cases,
         spend: d.spend,
-        estRebate: d.spend * 0.03,
+        // Real attribution: the contract-rebate dollars the action
+        // attributed to this surgeon from their on-contract supply
+        // usage. Replaces the invented flat 3% of spend.
+        estRebate: rebateMap.get(name) ?? 0,
         complianceRate: d.cases > 0 ? (d.compliant / d.cases) * 100 : 0,
       }))
       .sort((a, b) => b.estRebate - a.estRebate)
-  }, [filteredCases])
+  }, [filteredCases, rebateMap])
 
   // 2026-06-09 audit BLOCKER: these three useMemos previously sat BELOW
   // the isLoading/!report early returns — first render mounted N hooks,
@@ -471,7 +494,9 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
             <div className="text-2xl font-bold">
               ${Math.round(totalRebates).toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">Estimated @ 3%</p>
+            <p className="text-xs text-muted-foreground">
+              From contract rebate rates
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -738,7 +763,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                         <TableHead>Surgeon</TableHead>
                         <TableHead className="text-right">Cases</TableHead>
                         <TableHead className="text-right">Spend</TableHead>
-                        <TableHead className="text-right">Est. Rebate (3%)</TableHead>
+                        <TableHead className="text-right">Est. Rebate</TableHead>
                         <TableHead className="text-right">Compliance %</TableHead>
                       </TableRow>
                     </TableHeader>

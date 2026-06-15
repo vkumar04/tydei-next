@@ -139,6 +139,10 @@ export const queryKeys = {
       ["cases", "comparison", facilityId, surgeons] as const,
     reportData: (facilityId: string, filters?: Record<string, unknown>) =>
       ["cases", "reportData", facilityId, filters] as const,
+    surgeonRebateContribution: (
+      facilityId: string,
+      filters?: Record<string, unknown>,
+    ) => ["cases", "surgeonRebateContribution", facilityId, filters] as const,
     payorContracts: (facilityId?: string) =>
       ["cases", "payorContracts", facilityId] as const,
     // bugs.rtfd 2026-06-14: the Payor Contract Margin dropdown's option list.
