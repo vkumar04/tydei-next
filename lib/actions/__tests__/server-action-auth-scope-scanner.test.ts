@@ -292,9 +292,12 @@ const BASELINE_HITS = new Set<string>([
   // again same day after the group-aware vendor set (contractVendorIds)
   // import + select shifted them; bumped again 2026-06-09 after the
   // vendor UI parity split (PERIODS_CONTRACT_SELECT + getVendorContractPeriods)
-  // shifted the delete.
-  "lib/actions/contract-periods.ts:455",
-  "lib/actions/contract-periods.ts:684",
+  // shifted the delete. bumped 2026-06-15 after extracting
+  // computeSyntheticContractPeriods (exported fallback reused by the
+  // facility Reports surface) added the wrapper + doc-comment lines above
+  // these re-reads.
+  "lib/actions/contract-periods.ts:473",
+  "lib/actions/contract-periods.ts:702",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:94",

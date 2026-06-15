@@ -127,6 +127,24 @@ async function _buildContractPeriods(
   })
   if (persisted.length > 0) return serialize(persisted)
 
+  return serialize(await computeSyntheticContractPeriods(contract, facilityId))
+}
+
+/**
+ * Synthetic-period fallback, extracted from `_buildContractPeriods` so the
+ * facility Reports surface (`getReportData`) can reuse the exact same monthly
+ * COG-derived periods the vendor / Transactions surfaces already render when
+ * a contract has zero persisted `ContractPeriod` rows.
+ *
+ * Returns the raw synthetic period objects (Dates NOT yet serialized) in
+ * descending `periodStart` order, mirroring the persisted branch's ordering.
+ * Callers are responsible for `serialize()` (the original `_buildContractPeriods`
+ * does so; `getReportData` maps the fields itself).
+ */
+export async function computeSyntheticContractPeriods(
+  contract: _PeriodsContract,
+  facilityId: string,
+) {
   // ── Fallback: compute monthly periods from COG matched to this
   // vendor at this facility, bounded by the contract's effective window
   // AND the union of category scopes the contract's terms cover.
@@ -164,7 +182,7 @@ async function _buildContractPeriods(
     select: { transactionDate: true, extendedPrice: true },
   })
 
-  if (cogRows.length === 0) return serialize([])
+  if (cogRows.length === 0) return []
 
   // Bucket by YYYY-MM
   const monthBuckets = new Map<string, { start: Date; end: Date; spend: number }>()
@@ -275,7 +293,7 @@ async function _buildContractPeriods(
   })
 
   // UI expects desc order (latest first) — same as the persisted branch.
-  return serialize(synthetic.reverse())
+  return synthetic.reverse()
 }
 
 /**

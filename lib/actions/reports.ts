@@ -5,6 +5,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { computeSyntheticContractPeriods } from "@/lib/actions/contract-periods"
 
 // ─── Contracts List (for report selector) ───────────────────────
 
@@ -54,6 +55,21 @@ export async function getReportData(input: {
     },
     include: {
       vendor: { select: { id: true, name: true } },
+      // Mirror PERIODS_CONTRACT_SELECT.terms so the synthetic-period
+      // fallback (computeSyntheticContractPeriods) can scope the COG query
+      // to the categories the contract's terms cover and qualify the
+      // per-month tier. The contract's scalar fields the fallback needs
+      // (effectiveDate, expirationDate, vendorId, additionalVendorIds,
+      // facilityId) come back by default under `include`.
+      terms: {
+        select: {
+          evaluationPeriod: true,
+          appliesTo: true,
+          categories: true,
+          tiers: { orderBy: { tierNumber: "asc" as const } },
+        },
+        orderBy: { createdAt: "asc" as const },
+      },
       periods: {
         where: {
           periodStart: { gte: new Date(dateFrom) },
@@ -89,11 +105,26 @@ export async function getReportData(input: {
   })
 
   const windowEnd = new Date(dateTo)
-  return serialize({
-    // Active facility name — surfaced once at the top level (not
-    // per-contract) for the Contract Performance Details header band.
-    facilityName: facility.name,
-    contracts: contracts.map((c) => {
+  const windowStart = new Date(dateFrom)
+
+  // Per-period shape the report tabs (reports-per-type-tab / report-period-table
+  // → ContractPeriodRow) consume. Built from persisted ContractPeriod rows
+  // when present, otherwise from the synthetic COG-derived fallback.
+  interface ReportPeriodRow {
+    id: string
+    periodStart: string
+    periodEnd: string
+    totalSpend: number
+    totalVolume: number
+    rebateEarned: number
+    rebateCollected: number
+    paymentExpected: number
+    paymentActual: number
+    tierAchieved: number | null
+  }
+
+  const contractRows = await Promise.all(
+    contracts.map(async (c) => {
       const rebateEarnedCanonical = sumEarnedRebatesLifetime(
         c.rebates,
         windowEnd,
@@ -105,6 +136,51 @@ export async function getReportData(input: {
         (s, p) => s + Number(p.paymentActual),
         0,
       )
+
+      // Per-period rows: prefer persisted ContractPeriod; when a contract
+      // has ZERO persisted periods (the facility-Reports-empty bug), fall
+      // back to the same COG-derived synthetic periods the vendor /
+      // Transactions surfaces use, filtered to the requested window (the
+      // persisted path filters via the Prisma `where` on periodStart/
+      // periodEnd — we replicate that filter here on the synthetic rows).
+      let periodRows: ReportPeriodRow[]
+      if (c.periods.length > 0) {
+        periodRows = c.periods.map((p) => ({
+          id: p.id,
+          periodStart: p.periodStart.toISOString(),
+          periodEnd: p.periodEnd.toISOString(),
+          totalSpend: Number(p.totalSpend),
+          totalVolume: p.totalVolume,
+          rebateEarned: Number(p.rebateEarned),
+          rebateCollected: Number(p.rebateCollected),
+          paymentExpected: Number(p.paymentExpected),
+          paymentActual: Number(p.paymentActual),
+          tierAchieved: p.tierAchieved,
+        }))
+      } else {
+        const synthetic = await computeSyntheticContractPeriods(c, facilityId)
+        periodRows = synthetic
+          .filter(
+            (p) => p.periodStart >= windowStart && p.periodEnd <= windowEnd,
+          )
+          .map((p) => ({
+            id: p.id,
+            periodStart: p.periodStart.toISOString(),
+            periodEnd: p.periodEnd.toISOString(),
+            // Synthetic rows carry real per-month spend, rebate earned, and
+            // tier; fields they cannot derive (volume, collected, payments)
+            // are 0 — the canonical Rebate-table totals below remain the
+            // source of truth for earned/collected aggregates.
+            totalSpend: p.totalSpend,
+            totalVolume: 0,
+            rebateEarned: p.rebateEarned,
+            rebateCollected: 0,
+            paymentExpected: 0,
+            paymentActual: 0,
+            tierAchieved: p.tierAchieved,
+          }))
+      }
+
       return {
         id: c.id,
         name: c.name,
@@ -123,20 +199,16 @@ export async function getReportData(input: {
         rebateEarnedCanonical,
         rebateCollectedCanonical: sumCollectedRebates(c.rebates),
         marginCanonical: rebateEarnedCanonical - paymentActualSum,
-        periods: c.periods.map((p) => ({
-        id: p.id,
-        periodStart: p.periodStart.toISOString(),
-        periodEnd: p.periodEnd.toISOString(),
-        totalSpend: Number(p.totalSpend),
-        totalVolume: p.totalVolume,
-        rebateEarned: Number(p.rebateEarned),
-        rebateCollected: Number(p.rebateCollected),
-        paymentExpected: Number(p.paymentExpected),
-        paymentActual: Number(p.paymentActual),
-        tierAchieved: p.tierAchieved,
-        })),
+        periods: periodRows,
       }
     }),
+  )
+
+  return serialize({
+    // Active facility name — surfaced once at the top level (not
+    // per-contract) for the Contract Performance Details header band.
+    facilityName: facility.name,
+    contracts: contractRows,
     reportType,
     dateFrom,
     dateTo,
