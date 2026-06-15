@@ -68,12 +68,44 @@ skip brainstorming and ship directly. Use judgment — when in doubt, brainstorm
   `sumCollectedRebates` in `lib/contracts/rebate-collected-filter.ts`. Do not
   hand-roll a `r.collectionDate ? ... : ...` reducer — the helper is the one
   place the filter lives so surfaces cannot drift. See Charles W1.R.
-- **Rebate engine units:** `ContractTier.rebateValue` is stored as a fraction
-  (0.02 = 2%). The math engine — `lib/rebates/engine/` (per-method writers,
-  dispatched via `lib/rebates/engine/index.ts`) and `lib/rebates/calculate.ts`
-  — expects integer percent. `computeRebateFromPrismaTiers`
-  (`lib/rebates/calculate.ts`) and `lib/contracts/tier-rebate-label.ts` scale by
-  100 at the Prisma boundary — don't hand-roll the conversion elsewhere.
+- **Rebate engine units (the ×100 is PER rebateType — NOT a blanket scale):**
+  `ContractTier.rebateValue` is stored as a **fraction** (`0.02` = 2%) ONLY for
+  `rebateType === "percent_of_spend"`. For every OTHER type the stored value is
+  already a **dollar amount** and must NOT be multiplied by 100:
+  - `percent_of_spend` → fraction; scale ×100 to the integer percent the engine
+    wants (`0.02` → `2`).
+  - `fixed_rebate` → flat dollar amount (e.g. `30000` = $30,000), used as-is.
+  - `fixed_rebate_per_unit` / `per_procedure_rebate` → dollars **per unit**
+    (e.g. `10` = $10/unit), used as-is; needs a unit count, so it can't be
+    computed from spend alone.
+
+  The one helper that owns this routing is
+  **`scaleRebateValueForEngine(rebateValue, rebateType)`**
+  (`lib/rebates/calculate.ts`): it returns `raw * 100` for `percent_of_spend`
+  and `raw` unchanged for everything else. Route ALL Prisma→engine scaling
+  through it — never blanket-multiply by 100 (that's what inflated a
+  `fixed_rebate $30,000` to $3,000,000 and a `$10/unit` tier to $1,000/unit;
+  Charles W1.S / W1.V, Medtronic regression).
+
+  Two consumers:
+  - **`computeRebateFromPrismaTiers`** (`lib/rebates/calculate.ts`) returns a
+    `RebateResult` **object** (`.rebateEarned`, `.rebateCollected`,
+    `.rebatePercent`, `.tierAchieved`) — **not a bare number**. It is
+    spend-based: it computes `percent_of_spend` (scaled) and `fixed_rebate`
+    (flat), but **returns `rebateEarned: 0` for the unit-based types** because
+    spend alone can't price them. For a real per-unit number, build the config
+    via `buildRebateConfigFromPrisma` (`lib/rebates/prisma-engine-bridge.ts`),
+    which has the `ContractPeriod` unit rollups.
+  - **`lib/contracts/tier-rebate-label.ts`** (display) applies the same
+    per-type rule (`formatTierRebateLabel` / `formatPercent(rebateValue*100)`
+    for percent only; unit suffix for the rest).
+
+  Caveat: the ×100 is specifically for feeding the **integer-percent engine**
+  (`computeRebate`/`calculateRebate`). If you instead multiply the fraction
+  **directly** against a dollar spend yourself (`0.02 × $1,000 = $20`), do NOT
+  scale — that path already uses the fraction (see
+  `lib/actions/case-costing/surgeon-rebate-contribution.ts` `spend_pct`).
+
   (There is no `lib/contracts/rebate-method.ts`; only the label helper
   `lib/contracts/rebate-method-label.ts`.)
 - **Plans live in `docs/superpowers/plans/`** as `YYYY-MM-DD-<topic>.md` (the
@@ -104,7 +136,7 @@ a new invariant, add a row.
 | COG in-term-scope | `buildCategoryWhereClause` / `buildUnionCategoryWhereClause` (pass `cogCategoryUniverse` from `facilityCogCategoryUniverse`) | `lib/contracts/cog-category-filter.ts` + `lib/contracts/cog-category-universe.ts` | `recomputeAccrualForContract`, `getAccrualTimeline`, contracts-list trailing-12mo cascade, contract-detail per-term scoped spend, `getContractPeriods`, `recompute/volume.ts` |
 | Category-name match (case/word-order/plural insensitive) | `canonicalizeCategoryName` (JS boundary) + `expandCategoriesToCogVariants` (SQL `IN` boundary) | `lib/contracts/category-canonical.ts` + `lib/contracts/cog-category-filter.ts` | match-engine eligibility gate `cogCategoryCoveredByContract` (`match.ts`), every `buildCategoryWhereClause`/`buildUnionCategoryWhereClause` caller, `derived-metrics.ts` market-share scope, `volume.ts`, threshold writer market-share COG scope (`lib/contracts/recompute/threshold.ts`, fixed 2026-06-10 — was raw `in`, computed 0% share → $0 rows), category-mapping retro term rewrite (`lib/actions/cog-category-mapping.ts`). **Why it exists:** Prisma `category: { in }` and raw `Set.has` are case-SENSITIVE, so a COG row "Joint replacement" never matched the selected "Joint Replacement" → under-counted eligible spend AND inflated "Pre-Match" out_of_scope (Charles 2026-06-09 "I selected every category, not all the spend is brought in"). NEVER compare category names with raw `===`/`in`; canonicalize both sides (mirrors `normalizeSku`). Regression-guarded by `lib/contracts/__tests__/cog-category-filter.test.ts` + `match.test.ts` |
 | Contract ownership | `contractOwnershipWhere` / `contractsOwnedByFacility` | `lib/actions/contracts-auth.ts` | every read in `lib/actions/` that takes a `contractId` |
-| Rebate-units scaling | `computeRebateFromPrismaTiers` + `formatTierRebateLabel` | `lib/rebates/calculate.ts` + `lib/contracts/tier-rebate-label.ts` | every surface displaying % or earned from `ContractTier.rebateValue` |
+| Rebate-units scaling (per `rebateType` — `percent_of_spend` ×100, all others unchanged) | `scaleRebateValueForEngine` (the owner) → consumed by `computeRebateFromPrismaTiers` + `formatTierRebateLabel` | `lib/rebates/calculate.ts` + `lib/contracts/tier-rebate-label.ts` | every Prisma→engine feed (`recompute-accrual.ts`, `accrual.ts`, `vendor-analytics.ts`, `prisma-engine-bridge.ts`, `scripts/regen-all-accruals.ts`) + every surface displaying % or earned from `ContractTier.rebateValue`. **Never blanket-×100** — inflates `fixed_rebate`/per-unit tiers 100×. Regression-guarded by `lib/contracts/__tests__/rebate-value-scaling-drift.test.ts` |
 | Rebate applied to capital (tie-in) | `sumRebateAppliedToCapital` | `lib/contracts/rebate-capital-filter.ts` | contract-header applied-to-capital sublabel (`tie-in-rebate-split.tsx`), Capital Amortization card Paid-to-Date + Rebates-Applied + Balance-Due (`contract-amortization-card.tsx` via `getContractCapitalSchedule.rebateAppliedToCapital`) |
 | Vendor spend compliance (trailing-12mo vendor COG spend ÷ Σ active-contract annual targets, `annualValue \|\| totalValue`, capped at `VENDOR_COMPLIANCE_CAP_PCT` = 120, rounded 0.1) | `computeVendorCompliance` (vendor/facility rollup) + `computeContractCompliance` (per-contract) | `lib/contracts/vendor-compliance.ts` | `getVendorPerformance` + `getVendorPerformanceContracts` (`lib/actions/vendor-analytics.ts` — vendor /performance radar, hero, contract/rebate tabs), `getVendorPerformanceSummary` (`lib/actions/vendor-reports.ts` — Vendor Performance Summary CSV). **Why it exists:** vendor surfaces showed up to THREE different compliance values — cap 100 vs cap 120 vs an average of the persisted `Contract.complianceRate` (a *match*-compliance metric, % of COG rows on-contract — different invariant entirely). Displays needing a 0–100 domain (radar) clamp at display time; the underlying value keeps the over-target signal. Regression-guarded by `lib/actions/__tests__/vendor-compliance-parity.test.ts` (same inputs → same value through every call path) + `lib/contracts/__tests__/vendor-compliance.test.ts` |
 | Per-category market share | `computeCategoryMarketShare` | `lib/contracts/market-share-filter.ts` | facility action `getCategoryMarketShareForVendor` (contract-detail Performance tab — `category-market-share-card.tsx`), vendor action `getVendorMarketShareByCategory` (vendor dashboard widget). Regression-guarded by `lib/actions/__tests__/market-share-parity.test.ts` |
