@@ -4,6 +4,7 @@ import React, { useState, useCallback, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { ingestExtractedContracts } from "@/lib/actions/imports/contract-import"
+import { toRichExtractedContract } from "@/lib/ai/contract-extract-mapper"
 import { ingestExtractedInvoices } from "@/lib/actions/imports/invoice-import"
 import {
   ingestCaseDataCSV,
@@ -485,13 +486,21 @@ export function MassUpload({
           try {
             updateDocument(doc.id, { status: "extracting", progress: 70 })
             const result = await extractContract(currentDoc)
-            // extract-contract returns { richExtracted, extracted (legacy), ... }.
-            // Store the rich shape so handleComplete can feed it directly to
-            // ingestExtractedContracts without shape-shifting.
-            const richData =
+            // extract-contract returns the FLAT `extracted` shape
+            // (capitalCost/termMonths/…). ingestExtractedContracts reads the
+            // RICH `tieInDetails` shape, so lift flat→rich here — otherwise a
+            // perfectly-extracted capital value is dropped at import (Vick
+            // 2026-06-15 "still not getting the capital").
+            const rawExtract =
               (result?.richExtracted as Record<string, unknown> | undefined) ??
               (result?.extracted as Record<string, unknown> | undefined) ??
               null
+            const richData = rawExtract
+              ? (toRichExtractedContract(rawExtract) as unknown as Record<
+                  string,
+                  unknown
+                >)
+              : null
             updateDocument(doc.id, {
               extracted: richData,
               status: "completed",

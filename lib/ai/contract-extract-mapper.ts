@@ -1,6 +1,61 @@
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 
 /**
+ * Inverse of {@link toLegacyExtractedContract}: lift the FLAT
+ * `ExtractedContractData` shape (what the /api/ai/extract-contract route
+ * returns — `capitalCost` / `interestRatePercent` / `termMonths` /
+ * `paymentCadence` / `downPayment`) into the RICH shape that
+ * `ingestExtractedContracts` consumes (`tieInDetails.…`).
+ *
+ * 2026-06-15 (Vick "still not getting the capital"): the mass-upload flow
+ * cast the flat extraction `as unknown as RichContractExtractData` and the
+ * importer then read `tieInDetails?.capitalEquipmentValue` — always
+ * undefined, so a perfectly-extracted capital value (e.g. the ROSA
+ * tie-in's $785,195 Amount Financed) was silently dropped at the boundary.
+ * Build tieInDetails from the flat fields so capital survives import.
+ * Idempotent: a payload that already carries a non-null `tieInDetails`
+ * (the rich path) is passed through untouched.
+ */
+export function toRichExtractedContract(
+  flat: Record<string, unknown>,
+): RichContractExtractData {
+  type Cadence = "monthly" | "quarterly" | "semi_annual" | "annual"
+  const f = flat as {
+    tieInDetails?: RichContractExtractData["tieInDetails"]
+    capitalCost?: number | null
+    termMonths?: number | null
+    interestRatePercent?: number | null
+    paymentCadence?: Cadence | null
+    downPayment?: number | null
+  }
+
+  const existing = f.tieInDetails
+  const hasFlatCapital =
+    f.capitalCost != null ||
+    f.downPayment != null ||
+    f.interestRatePercent != null ||
+    f.termMonths != null
+
+  const tieInDetails =
+    existing ??
+    (hasFlatCapital
+      ? {
+          capitalEquipmentValue: f.capitalCost ?? null,
+          payoffPeriodMonths: f.termMonths ?? null,
+          interestRatePercent: f.interestRatePercent ?? null,
+          paymentCadence: f.paymentCadence ?? null,
+          downPayment: f.downPayment ?? null,
+          linkedProductCategories: null,
+        }
+      : null)
+
+  return {
+    ...(flat as unknown as RichContractExtractData),
+    tieInDetails,
+  }
+}
+
+/**
  * Project the rich contract extract shape into the legacy
  * `ExtractedContractData` shape so existing callers (AIExtractReview,
  * ai-extract-dialog, contract form hook) keep working unchanged.
