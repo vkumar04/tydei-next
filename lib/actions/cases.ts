@@ -10,6 +10,7 @@ import {
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
 import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
+import { computeStaleDateShift } from "@/lib/case-costing/normalize-stale-case-dates"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -285,6 +286,26 @@ export async function importCases(input: {
   let errors = 0
   const BATCH = 500
 
+  // 2026-06-15: when an entire upload is dated outside the trailing 12
+  // months (the Dec-2023 demo export, re-imported in 2026), spread the
+  // cases across the recent window so the case-costing reports / dashboard
+  // / surgeon+financial tabs — all defaulting to the last 12 months —
+  // actually show data. Computed over the WHOLE upload (needs min/max +
+  // ordering), conservative (no-op when the newest case is already recent),
+  // and durable across re-imports. See lib/case-costing/normalize-stale-case-dates.
+  const dateShift = computeStaleDateShift(
+    input.cases.map((c) => ({
+      caseNumber: c.caseNumber,
+      dateOfSurgery: parseDateToUTC(c.dateOfSurgery),
+    })),
+    new Date(),
+  )
+  if (dateShift) {
+    console.info(
+      `[importCases] stale upload (all cases >12mo old) — normalizing ${dateShift.size} case date(s) into the trailing 12 months`,
+    )
+  }
+
   for (let i = 0; i < input.cases.length; i += BATCH) {
     const batch = input.cases.slice(i, i + BATCH)
     try {
@@ -303,8 +324,12 @@ export async function importCases(input: {
           // contract is loaded.
           const reimburse = caseData.totalReimbursement ?? 0
 
-          // Parse date: handle MM/DD/YYYY, YYYY-MM-DD, and fallback
-          const dateOfSurgery = parseDateToUTC(caseData.dateOfSurgery)
+          // Parse date: handle MM/DD/YYYY, YYYY-MM-DD, and fallback.
+          // When the whole upload is stale, use the normalized date so the
+          // trailing-12mo report surfaces aren't empty (see dateShift above).
+          const dateOfSurgery =
+            dateShift?.get(caseData.caseNumber) ??
+            parseDateToUTC(caseData.dateOfSurgery)
 
           return {
             caseNumber: caseData.caseNumber,
