@@ -25,7 +25,12 @@
 export interface OcrPdfOptions {
   /** Cap pages OCR'd (OCR is ~1-3s/page). Default 10. */
   maxPages?: number
-  /** Rasterization DPI. Higher = sharper text, slower. Default 200. */
+  /**
+   * Rasterization DPI. Higher = sharper text but quadratically more
+   * memory. Default 150 — enough for printed financing tables while
+   * keeping each page's pixmap small (a 200-DPI RGB render of an 11-page
+   * scan OOM-killed the prod container, 2026-06-15).
+   */
   dpi?: number
   /** Abort cooperatively between pages. */
   signal?: AbortSignal
@@ -41,7 +46,7 @@ export async function ocrPdfBuffer(
   pdf: Uint8Array,
   opts: OcrPdfOptions = {},
 ): Promise<string> {
-  const { maxPages = 10, dpi = 200, signal, logPrefix = "[ocr-pdf]" } = opts
+  const { maxPages = 10, dpi = 150, signal, logPrefix = "[ocr-pdf]" } = opts
 
   let worker: Awaited<
     ReturnType<typeof import("tesseract.js").createWorker>
@@ -79,9 +84,13 @@ export async function ocrPdfBuffer(
       if (signal?.aborted) break
       const page = doc.loadPage(i)
       try {
+        // DeviceGray (not RGB) → 1/3 the pixmap memory; tesseract converts
+        // to grayscale internally anyway, so accuracy is unaffected. With
+        // 150 DPI this keeps an 11-page scan well under the container's
+        // memory ceiling (the RGB/200 combo OOM-killed it, 2026-06-15).
         const pixmap = page.toPixmap(
           scale,
-          mupdf.ColorSpace.DeviceRGB,
+          mupdf.ColorSpace.DeviceGray,
           false,
           true,
         )
