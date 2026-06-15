@@ -25,6 +25,13 @@ const config: NextConfig = {
     // runtime, where pdfjs-dist's worker sits next to its entry file.
     "pdf-parse",
     "pdfjs-dist",
+    // 2026-06-15: scanned-PDF OCR for contract capital extraction.
+    // mupdf (WASM, top-level await) rasterizes pages and tesseract.js
+    // (WASM worker + lazily-fetched language data) OCRs them. Both must
+    // resolve from node_modules at runtime — bundling the WASM/worker
+    // assets breaks them the same way pdfjs-dist's worker broke above.
+    "mupdf",
+    "tesseract.js",
   ],
   // 2026-04-26: cacheComponents was enabled but caused build failures
   // during static-page generation — `cacheComponents: true` requires

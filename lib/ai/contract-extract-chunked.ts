@@ -16,6 +16,7 @@ import { generateObject, NoObjectGeneratedError } from "ai"
 import { claudeHaiku } from "@/lib/ai/config"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import { extractPdfText } from "@/lib/ai/pdf-text-helper"
+import { ocrPdfBuffer } from "@/lib/ai/ocr-pdf"
 import { splitPdfByPages } from "@/lib/ai/pdf-chunker"
 import {
   chunkExtractSchema,
@@ -134,6 +135,22 @@ export async function runChunkedExtraction(opts: {
           text: `Extracted text layer (pages ${chunk.pageStart}-${chunk.pageEnd}):\n\n${chunkText.text}`,
         })
 
+    // 2026-06-15: scanned chunks (no text layer) go to vision, where the
+    // model reliably reads prose but drops numbers in dense financing /
+    // Truth-in-Lending tables (tie-in capital). Run a local Tesseract OCR
+    // pass and hand the model the OCR text ALONGSIDE the page image —
+    // the image anchors layout, the OCR text anchors the dollar figures.
+    // Best-effort: ocrPdfBuffer returns "" on failure → vision-only.
+    const ocrText = !chunkText.hasTextLayer
+      ? await ocrPdfBuffer(chunk.pdf, { signal: abortSignal, logPrefix })
+      : ""
+    const ocrBlock = ocrText
+      ? ({
+          type: "text" as const,
+          text: `OCR text (Tesseract, pages ${chunk.pageStart}-${chunk.pageEnd}) — use these exact figures for any financing / capital / dollar amounts:\n\n${ocrText}`,
+        })
+      : null
+
     const request = () =>
       generateObject({
         model: claudeHaiku,
@@ -160,9 +177,10 @@ export async function runChunkedExtraction(opts: {
               },
               {
                 type: "text",
-                text: `This is chunk ${chunk.pageStart}-${chunk.pageEnd} of a ${pageCount}-page PDF (${useVision ? "sent as image" : "text layer included"}). Extract only what's visible in these pages — if header fields (contract name, vendor, type) are not on these pages, return null for them. Per-chunk results are merged downstream.`,
+                text: `This is chunk ${chunk.pageStart}-${chunk.pageEnd} of a ${pageCount}-page PDF (${useVision ? "sent as image" : "text layer included"}${ocrBlock ? " + OCR text" : ""}). Extract only what's visible in these pages — if header fields (contract name, vendor, type) are not on these pages, return null for them. Per-chunk results are merged downstream.`,
               },
               sourceBlock,
+              ...(ocrBlock ? [ocrBlock] : []),
             ],
           },
         ],
