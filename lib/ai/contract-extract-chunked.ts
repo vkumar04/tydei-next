@@ -141,8 +141,17 @@ export async function runChunkedExtraction(opts: {
     // pass and hand the model the OCR text ALONGSIDE the page image —
     // the image anchors layout, the OCR text anchors the dollar figures.
     // Best-effort: ocrPdfBuffer returns "" on failure → vision-only.
+    // OCR the WHOLE chunk — the PDF is already split into ≤MAX_PAGES_PER_CHUNK
+    // pieces, and every scanned chunk runs through here, so capping at the
+    // chunk's own page count covers an arbitrarily long PDF (a 30-page scan =
+    // 3 chunks, all OCR'd) without a hidden truncation if MAX_PAGES_PER_CHUNK
+    // ever grows past ocrPdfBuffer's default cap.
     const ocrText = !chunkText.hasTextLayer
-      ? await ocrPdfBuffer(chunk.pdf, { signal: abortSignal, logPrefix })
+      ? await ocrPdfBuffer(chunk.pdf, {
+          signal: abortSignal,
+          logPrefix,
+          maxPages: chunk.pageEnd - chunk.pageStart + 1,
+        })
       : ""
     const ocrBlock = ocrText
       ? ({
