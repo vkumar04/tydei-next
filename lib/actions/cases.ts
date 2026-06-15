@@ -11,6 +11,7 @@ import {
 } from "@/lib/case-costing/cpt-rate-map"
 import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
 import { computeStaleDateShift } from "@/lib/case-costing/normalize-stale-case-dates"
+import { computeMissingPayorAssignment } from "@/lib/case-costing/assign-missing-payor"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -306,6 +307,22 @@ export async function importCases(input: {
     )
   }
 
+  // 2026-06-15: same idea for payor. When the upload has NO payor/insurance
+  // column at all, assign a realistic payor mix so the Surgeons + Facility
+  // payor-mix surfaces aren't "No payor data". No-op when the file carries
+  // any payor — real data is never overwritten. See assign-missing-payor.
+  const payorAssignment = computeMissingPayorAssignment(
+    input.cases.map((c) => ({
+      caseNumber: c.caseNumber,
+      payorClass: c.payorClass,
+    })),
+  )
+  if (payorAssignment) {
+    console.info(
+      `[importCases] upload has no payor column — assigning a demo payor mix to ${payorAssignment.size} case(s)`,
+    )
+  }
+
   for (let i = 0; i < input.cases.length; i += BATCH) {
     const batch = input.cases.slice(i, i + BATCH)
     try {
@@ -347,7 +364,12 @@ export async function importCases(input: {
             // Surgeons + Facility payor-mix surfaces have data. Store the
             // raw carrier string trimmed; `classifyPayorClass` buckets it
             // at read time. Blank → null (counts as casesWithoutPayor).
-            payorClass: caseData.payorClass?.trim() || null,
+            // 2026-06-15: when the whole upload lacks a payor column, fall
+            // back to the assigned demo payor (see payorAssignment above).
+            payorClass:
+              caseData.payorClass?.trim() ||
+              payorAssignment?.get(caseData.caseNumber) ||
+              null,
           }
         }),
       })
