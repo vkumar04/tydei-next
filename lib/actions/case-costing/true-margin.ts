@@ -34,6 +34,10 @@ import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { allocateRebatesToProcedures } from "@/lib/contracts/true-margin"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import {
+  buildCptRateMap,
+  resolveCaseReimbursement,
+} from "@/lib/case-costing/cpt-rate-map"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -129,23 +133,39 @@ export async function getTrueMarginReport(
   const periodStart = parseDateOrThrow("periodStart", input.periodStart)
   const periodEnd = parseDateOrThrow("periodEnd", input.periodEnd)
 
-  // 1. Load cases + supplies in the window.
-  const cases = await prisma.case.findMany({
-    where: {
-      facilityId: facility.id,
-      dateOfSurgery: { gte: periodStart, lte: periodEnd },
-    },
-    include: {
-      supplies: {
-        select: {
-          extendedCost: true,
-          contractId: true,
-          isOnContract: true,
+  // 1. Load cases + supplies in the window, plus the facility's active
+  // payor contracts so we can backfill reimbursement (Revenue) from the
+  // canonical CPT-rate map when `Case.totalReimbursement` is 0 (the prod
+  // demo state). Same helper as the cases list / hero card / report —
+  // see CLAUDE.md "Case reimbursement backfill" invariant. Without this,
+  // the Revenue column reads raw stored reimbursement and shows $0.
+  const [cases, payorContracts] = await Promise.all([
+    prisma.case.findMany({
+      where: {
+        facilityId: facility.id,
+        dateOfSurgery: { gte: periodStart, lte: periodEnd },
+      },
+      include: {
+        supplies: {
+          select: {
+            extendedCost: true,
+            contractId: true,
+            isOnContract: true,
+          },
+        },
+        procedures: {
+          select: { cptCode: true },
         },
       },
-    },
-    orderBy: { dateOfSurgery: "asc" },
-  })
+      orderBy: { dateOfSurgery: "asc" },
+    }),
+    prisma.payorContract.findMany({
+      where: { facilityId: facility.id, status: "active" },
+      select: { cptRates: true },
+    }),
+  ])
+
+  const cptRateMap = buildCptRateMap(payorContracts)
 
   // 2. Resolve contractId → vendorId via a single batched lookup.
   const contractIds = new Set<string>()
@@ -204,7 +224,14 @@ export async function getTrueMarginReport(
       procedureName: c.primaryCptCode
         ? `${c.primaryCptCode} — ${c.surgeonName ?? "Unknown"}`
         : `Case ${c.caseNumber}`,
-      totalRevenue: Number(c.totalReimbursement),
+      totalRevenue: resolveCaseReimbursement(
+        {
+          storedReimbursement: Number(c.totalReimbursement),
+          primaryCptCode: c.primaryCptCode,
+          procedureCptCodes: c.procedures.map((p) => p.cptCode),
+        },
+        cptRateMap,
+      ),
       directCost: Number(c.totalSpend),
       vendorSpend: new Map(),
     }

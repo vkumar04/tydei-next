@@ -26,6 +26,7 @@ interface CaseRow {
   totalReimbursement: number
   dateOfSurgery: Date
   supplies: SupplyRow[]
+  procedures?: { cptCode: string | null }[]
 }
 
 interface SupplyRow {
@@ -49,6 +50,7 @@ interface RebateRow {
 let caseRows: CaseRow[] = []
 let contractRows: ContractRow[] = []
 let rebateRows: RebateRow[] = []
+let payorContractRows: { cptRates: unknown }[] = []
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -73,9 +75,13 @@ vi.mock("@/lib/db", () => ({
                 contractId: s.contractId,
                 isOnContract: s.isOnContract,
               })),
+              procedures: c.procedures ?? [],
             }))
         },
       ),
+    },
+    payorContract: {
+      findMany: vi.fn(async () => payorContractRows),
     },
     contract: {
       findMany: vi.fn(
@@ -121,6 +127,7 @@ beforeEach(() => {
   caseRows = []
   contractRows = []
   rebateRows = []
+  payorContractRows = []
 })
 
 // ─── Happy path: 3 procedures, 2 vendors ────────────────────────
@@ -324,5 +331,85 @@ describe("getTrueMarginReport — edge cases", () => {
     // so it never enters the spend map.
     expect(report.vendors).toHaveLength(1)
     expect(report.vendors[0]!.vendorName).toBe("Medtronic")
+  })
+})
+
+// ─── Reimbursement (Revenue) backfill ───────────────────────────
+//
+// Regression guard for "Revenue is reimbursement" (Vick 2026-06-16):
+// the prod demo cases carry `totalReimbursement = 0`, so the action used
+// to render Revenue = $0 for every row. Revenue must backfill from the
+// canonical CPT-rate map (`resolveCaseReimbursement`) like the cases
+// list / hero card / report do — CLAUDE.md "Case reimbursement backfill".
+
+describe("getTrueMarginReport — Revenue backfill", () => {
+  it("fills Revenue from the payor CPT-rate map when totalReimbursement is 0", async () => {
+    contractRows = [
+      {
+        id: "ctr-medtronic",
+        vendorId: "vnd-medtronic",
+        vendor: { id: "vnd-medtronic", name: "Medtronic" },
+      },
+    ]
+    caseRows = [
+      {
+        id: "case-1",
+        caseNumber: "C-1",
+        facilityId: "fac-1",
+        surgeonName: "Dr. A",
+        primaryCptCode: "27447",
+        totalSpend: 1000,
+        // Prod state: no stored reimbursement.
+        totalReimbursement: 0,
+        dateOfSurgery: new Date("2026-02-01"),
+        supplies: [
+          { extendedCost: 1000, contractId: "ctr-medtronic", isOnContract: true },
+        ],
+        procedures: [{ cptCode: "27447" }],
+      },
+    ]
+    // Payor contract prices CPT 27447 at $12,000.
+    payorContractRows = [
+      { cptRates: [{ cpt: "27447", rate: 12000 }] },
+    ]
+
+    const report = await getTrueMarginReport({
+      facilityId: "fac-1",
+      periodStart: "2026-01-01",
+      periodEnd: "2026-02-28",
+    })
+
+    expect(report.procedures[0]!.totalRevenue).toBe(12000)
+    expect(report.summary.totalRevenue).toBe(12000)
+    // Standard margin = revenue - direct cost = 12000 - 1000.
+    expect(report.summary.standardMargin).toBe(11000)
+  })
+
+  it("keeps the stored reimbursement when it is already set (> 0)", async () => {
+    contractRows = []
+    caseRows = [
+      {
+        id: "case-2",
+        caseNumber: "C-2",
+        facilityId: "fac-1",
+        surgeonName: "Dr. B",
+        primaryCptCode: "27447",
+        totalSpend: 500,
+        totalReimbursement: 9000,
+        dateOfSurgery: new Date("2026-02-02"),
+        supplies: [{ extendedCost: 500, contractId: null, isOnContract: false }],
+        procedures: [{ cptCode: "27447" }],
+      },
+    ]
+    // A rate map exists but must NOT override an explicit stored value.
+    payorContractRows = [{ cptRates: [{ cpt: "27447", rate: 12000 }] }]
+
+    const report = await getTrueMarginReport({
+      facilityId: "fac-1",
+      periodStart: "2026-01-01",
+      periodEnd: "2026-02-28",
+    })
+
+    expect(report.summary.totalRevenue).toBe(9000)
   })
 })
