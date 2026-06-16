@@ -133,7 +133,7 @@ export async function getVendorReportData(input: {
       // `where` on periodStart/periodEnd — we replicate that filter here on
       // the synthetic rows). COG is per-facility, so the fallback is scoped
       // to the contract's OWN facilityId, never the vendor id.
-      let periodRows: ReportPeriodRow[]
+      let periodRows: ReportPeriodRow[] = []
       if (c.periods.length > 0) {
         periodRows = c.periods.map((p) => ({
           id: p.id,
@@ -147,7 +147,10 @@ export async function getVendorReportData(input: {
           paymentActual: Number(p.paymentActual),
           tierAchieved: p.tierAchieved,
         }))
-      } else {
+      } else if (c.facilityId) {
+        // Synthetic-period fallback scopes COG per-facility, so it needs
+        // the contract's own facilityId (nullable on the vendor side —
+        // a facility-less contract has no COG to synthesize from).
         const synthetic = await computeSyntheticContractPeriods(
           c,
           c.facilityId,
