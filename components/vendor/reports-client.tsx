@@ -14,6 +14,7 @@ import { VendorReportsControlBar } from "@/components/vendor/reports/reports-con
 import { ReportTypeGrid } from "@/components/vendor/reports/report-type-grid"
 import { RecentReportsTable } from "@/components/vendor/reports/recent-reports-table"
 import { VendorPurchaseLeakageCard } from "@/components/vendor/reports/vendor-purchase-leakage-card"
+import { VendorReportsHubClient } from "@/components/vendor/reports/hub/vendor-reports-hub-client"
 import {
   getVendorRebateStatement,
   getVendorPerformanceSummary,
@@ -85,9 +86,10 @@ const reportTypes: ReportType[] = [
 ]
 
 interface VendorReportsClientProps {
-  // vendorId is read by the server actions via the auth gate
-  // (`requireVendor`), so we don't pass it through — kept on the prop
-  // for future per-vendor UI customization.
+  // vendorId is read by the CSV-export server actions via the auth gate
+  // (`requireVendor`), so those don't need it threaded through. It IS
+  // passed to the Contract Performance Details hub below, which keys its
+  // TanStack queries by vendor (`queryKeys.vendorReports.*`).
   vendorId: string
   // Real facilities this vendor relates to, fetched server-side. Drives
   // the Facility filter in the control bar (replaces the old hardcoded
@@ -120,7 +122,10 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function VendorReportsClient({ facilities }: VendorReportsClientProps) {
+export function VendorReportsClient({
+  vendorId,
+  facilities,
+}: VendorReportsClientProps) {
   const [selectedFacility, setSelectedFacility] = useState("all")
   const [generatedReports, setGeneratedReports] = useState<RecentReport[]>([])
   const [category, setCategory] = useState<"all" | ReportTypeId>("all")
@@ -345,6 +350,23 @@ export function VendorReportsClient({ facilities }: VendorReportsClientProps) {
           handleGenerateReport(first)
         }}
       />
+
+      {/* Contract Performance Details — full Reports Hub parity with the
+          facility side, vendor-scoped (Overview / per-contract-type /
+          By Rebate Type / Calculations). Sits above the CSV export grid
+          so the rich interactive surface is the first thing a vendor
+          sees; the CSV exports below remain for download workflows. */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Contract Performance Details</h2>
+          <p className="text-sm text-muted-foreground">
+            Interactive performance across your contracts and the
+            facilities you serve — overview, per-contract-type details,
+            rebate-type breakdown, and the full calculation audit trail.
+          </p>
+        </div>
+        <VendorReportsHubClient vendorId={vendorId} facilities={facilities} />
+      </section>
 
       <ReportTypeGrid
         reportTypes={visibleReportTypes}

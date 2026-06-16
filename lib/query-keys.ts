@@ -86,6 +86,18 @@ export const queryKeys = {
     priceDiscrepancies: (facilityId: string) =>
       ["reports", "priceDiscrepancies", facilityId] as const,
   },
+  vendorReports: {
+    contracts: (vendorId: string) =>
+      ["vendorReports", "contracts", vendorId] as const,
+    data: (vendorId: string, reportType: string, dateRange: DateRange) =>
+      ["vendorReports", "data", vendorId, reportType, dateRange] as const,
+    overview: (vendorId: string, dateRange: DateRange) =>
+      ["vendorReports", "overview", vendorId, dateRange] as const,
+    byRebateType: (vendorId: string) =>
+      ["vendorReports", "byRebateType", vendorId] as const,
+    audit: (vendorId: string, contractId: string) =>
+      ["vendorReports", "audit", vendorId, contractId] as const,
+  },
   vendorContracts: {
     all: ["vendorContracts"] as const,
     list: (vendorId: string, filters?: Record<string, unknown>) =>
