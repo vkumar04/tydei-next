@@ -89,6 +89,10 @@ interface VendorReportsClientProps {
   // (`requireVendor`), so we don't pass it through — kept on the prop
   // for future per-vendor UI customization.
   vendorId: string
+  // Real facilities this vendor relates to, fetched server-side. Drives
+  // the Facility filter in the control bar (replaces the old hardcoded
+  // mock-hospital list).
+  facilities: { id: string; name: string }[]
 }
 
 // Default window: trailing 90 days. Each card uses this; future work
@@ -116,7 +120,7 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
-export function VendorReportsClient(_props: VendorReportsClientProps) {
+export function VendorReportsClient({ facilities }: VendorReportsClientProps) {
   const [selectedFacility, setSelectedFacility] = useState("all")
   const [generatedReports, setGeneratedReports] = useState<RecentReport[]>([])
   const [category, setCategory] = useState<"all" | ReportTypeId>("all")
@@ -325,6 +329,7 @@ export function VendorReportsClient(_props: VendorReportsClientProps) {
       />
 
       <VendorReportsControlBar
+        facilities={facilities}
         selectedFacility={selectedFacility}
         onFacilityChange={setSelectedFacility}
         searchQuery={searchQuery}

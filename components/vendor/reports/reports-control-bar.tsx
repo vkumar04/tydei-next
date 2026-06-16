@@ -24,6 +24,13 @@ import type { ReportType, ReportTypeId } from "./reports-types"
  * `components/facility/reports/reports-control-bar.tsx`.
  */
 export interface VendorReportsControlBarProps {
+  /**
+   * Real facilities this vendor relates to (fetched server-side via
+   * `getVendorRelatedFacilities`). Rendered after the "All Facilities"
+   * sentinel. Was previously a hardcoded mock-hospital list, which is
+   * why the real demo facility never showed up (Vick 2026-06-15).
+   */
+  facilities: { id: string; name: string }[]
   selectedFacility: string
   onFacilityChange: (facility: string) => void
   searchQuery: string
@@ -34,14 +41,8 @@ export interface VendorReportsControlBarProps {
   onNewReport: () => void
 }
 
-const FACILITY_OPTIONS = [
-  { value: "all", label: "All Facilities" },
-  { value: "firsthealth", label: "FirstHealth Regional" },
-  { value: "memorial", label: "Memorial Hospital" },
-  { value: "clearwater", label: "Clearwater Medical" },
-] as const
-
 export function VendorReportsControlBar({
+  facilities,
   selectedFacility,
   onFacilityChange,
   searchQuery,
@@ -51,6 +52,10 @@ export function VendorReportsControlBar({
   reportTypes,
   onNewReport,
 }: VendorReportsControlBarProps) {
+  const facilityOptions = [
+    { value: "all", label: "All Facilities" },
+    ...facilities.map((f) => ({ value: f.id, label: f.name })),
+  ]
   return (
     <section className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -65,7 +70,7 @@ export function VendorReportsControlBar({
             <SelectValue placeholder="Facility" />
           </SelectTrigger>
           <SelectContent>
-            {FACILITY_OPTIONS.map((opt) => (
+            {facilityOptions.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}
               </SelectItem>
