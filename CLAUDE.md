@@ -262,3 +262,37 @@ grouped/pricing_only).
   `ProductBenchmark` mutations are `requireAdmin`. API routes that serve
   tenant data (e.g. `app/api/reports/pdf`) must hard-fail when the caller has
   no facility — never gate ownership behind `if (userFacilityId)`.
+
+## Client-side & data-access conventions (best-practices sweep, 2026-06-17)
+
+- **TanStack Query keys go through the factory.** Use `queryKeys.*` from
+  `lib/query-keys.ts` for EVERY `useQuery`/`useMutation`/`invalidateQueries`
+  — never an inline `queryKey: ["…"]` literal. A query's READ key and every
+  INVALIDATION that should refresh it MUST share a matching prefix
+  (invalidation is prefix-based). Hand-rolled literals drifting from their
+  invalidations caused 3 real stale-cache bugs (a card and its invalidation
+  used different strings, so the contract Performance-tab market share, the
+  payor-margin tiles, and a dead `["cog"]` key never refreshed). When you add
+  a query for a new resource, add a factory entry (with a `*Base` family key
+  for prefix invalidation) rather than a literal.
+- **Editable/reorderable lists use STABLE ids as keys, never the array
+  index.** Any list whose rows can be deleted/reordered AND that holds
+  per-row UI state (expand, focus, controlled inputs) must `key={row.id}` and
+  delete by id — `key={idx}` reuses the wrong row's state on delete (capital-
+  line-items + market-share-commitment editors shipped this bug; fixed with a
+  UI-only `_uid` minted via `crypto.randomUUID()`, stripped at the persist
+  boundary). Same for value-based keys that can collide (`{contractId}-{tier}`
+  → use `{contractId}-{index}`).
+- **Multi-write server-action sequences are atomic.** Dependent
+  create/update/delete sequences (e.g. category remap, invoice variance
+  recompute, invoice line revalidate) run inside `prisma.$transaction(async
+  (tx) => …)` using `tx`, not `prisma` — partial-write hazard otherwise.
+- **Derive, don't mirror.** Compute values from props/state during render (or
+  `useMemo`), not via `useEffect` + `setState`; reset state on a prop change
+  with a `key` prop, not a reset effect ("You Might Not Need an Effect").
+- **Validate JSON-column writes.** Any server action writing a client array
+  into a JSON column (e.g. `importCPTRates` → `PayorContract.cptRates`) must
+  `zod.parse()` it first — it feeds canonical helpers downstream.
+- `normalizeCategoryKey` (case/whitespace key-normalizer, distinct from the
+  matching-oriented `canonicalizeCategoryName`) lives in ONE pure module
+  `lib/categories/normalize-key.ts` — import it, never re-inline.

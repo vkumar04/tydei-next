@@ -261,10 +261,11 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 - **Small components** (50-150 lines) — split if bigger
 - **Server actions** grouped by entity in `lib/actions/`
 - **Zod validation** on all inputs, auto-generated from Prisma where possible
-- **TanStack Query** for all data fetching with factory-pattern query keys
+- **TanStack Query** for all data fetching with factory-pattern query keys — reads and invalidations both derive from the `lib/query-keys.ts` factory (never inline literals) so a query and the mutation that should refresh it can't drift apart
 - **Config-driven** status badges, nav items, alert types
 - **CSS vars** in oklch format — never wrap in `hsl()`
 - **Canonical reducers** — every business metric (rebates earned/collected, COG in-scope spend, vendor compliance, per-supply rebate, reimbursement backfill) has ONE helper that owns the filter; all surfaces call it so numbers can't drift. The full invariants table lives in `CLAUDE.md`.
+- **Stable list keys + atomic writes** — editable/reorderable lists key by a stable id (never the array index); multi-write server-action sequences run inside `prisma.$transaction`. See `CLAUDE.md` → "Client-side & data-access conventions".
 
 ### Notable surfaces
 
@@ -303,4 +304,4 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 | Hooks | 32 |
 | Prisma Models | 69 |
 | Prisma Enums | 41 |
-| Tests | 3,259 passing |
+| Tests | 3,264 passing |
