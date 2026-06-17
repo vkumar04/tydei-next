@@ -57,6 +57,12 @@ export function LoginForm() {
   return (
     <motion.form
       onSubmit={handleSubmit(onSubmit)}
+      // method="post" so a submit fired BEFORE React hydrates (user clicks
+      // "Sign in" early) posts credentials in the request body, not as a GET
+      // query string — otherwise the password lands in the URL / server
+      // access logs / browser history. Once hydrated, handleSubmit
+      // preventDefaults and runs the real signIn.
+      method="post"
       className="space-y-4"
       variants={staggerContainer}
       initial="hidden"

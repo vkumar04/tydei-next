@@ -41,7 +41,7 @@ export function QuickAccessCards() {
           </CardContent>
         </Card>
       </Link>
-      <Link href="/dashboard/analysis">
+      <Link href="/dashboard/analysis/prospective">
         <Card className="cursor-pointer transition-colors hover:bg-accent/50">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">

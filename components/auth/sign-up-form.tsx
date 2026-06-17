@@ -55,7 +55,8 @@ export function SignUpForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    // method="post": a pre-hydration submit posts creds in the body, not the URL.
+    <form onSubmit={handleSubmit(onSubmit)} method="post" className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="name">Full Name</Label>
         <Input id="name" placeholder="John Smith" {...register("name")} />

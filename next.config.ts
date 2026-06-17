@@ -121,6 +121,18 @@ const config: NextConfig = {
         destination: "/dashboard/renewals",
         permanent: true,
       },
+      // /dashboard/analysis is just a redirect to the prospective analyzer
+      // (the legacy existing-contract ROI surface was retired). Doing it at
+      // the routing layer instead of a render-time `redirect()` in the page
+      // avoids a Next.js client-Router hooks glitch ("Rendered more hooks
+      // than during the previous render", React #310) that fired when the
+      // client followed the in-render redirect. Verified: direct nav to the
+      // prospective page throws 0 errors; only the in-render redirect did.
+      {
+        source: "/dashboard/analysis",
+        destination: "/dashboard/analysis/prospective",
+        permanent: false,
+      },
     ]
   },
 }

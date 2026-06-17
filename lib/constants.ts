@@ -7,7 +7,10 @@ export const facilityNav: NavItem[] = [
   { label: "Contracts", href: "/dashboard/contracts", icon: "FileSignature" },
   { label: "Renewals", href: "/dashboard/renewals", icon: "RefreshCw" },
   { label: "Rebate Optimizer", href: "/dashboard/rebate-optimizer", icon: "Target" },
-  { label: "Analysis", href: "/dashboard/analysis", icon: "TrendingUp" },
+  // Link straight to the prospective analyzer (the only Analysis surface) so
+  // the nav never traverses the /dashboard/analysis render-time redirect that
+  // tripped a Next client-Router hooks glitch (React #310).
+  { label: "Analysis", href: "/dashboard/analysis/prospective", icon: "TrendingUp" },
   { label: "COG Data", href: "/dashboard/cog-data", icon: "DollarSign" },
   { label: "Case Costing", href: "/dashboard/case-costing", icon: "Stethoscope" },
   { label: "Purchase Orders", href: "/dashboard/purchase-orders", icon: "ShoppingCart" },

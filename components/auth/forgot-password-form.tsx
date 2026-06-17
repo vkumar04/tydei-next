@@ -51,7 +51,8 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    // method="post": a pre-hydration submit posts the email in the body, not the URL.
+    <form onSubmit={handleSubmit(onSubmit)} method="post" className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="forgot-email">Email</Label>
         <Input
