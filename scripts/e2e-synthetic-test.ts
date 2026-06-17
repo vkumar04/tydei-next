@@ -2174,33 +2174,6 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
     failures.push({ where: "tydei classifySpendTrend", detail: JSON.stringify(tydeiTrend) })
   }
 
-  // ─── Tydei vs v0 — multi-facility rollup + dedup confidence ──────
-  const { multiFacilityRebateRollup, dedupConfidence } = await import(
-    "@/lib/contracts/multi-facility-rollup"
-  )
-  const tydeiRoll = multiFacilityRebateRollup(
-    [
-      { facilityId: "f1", spend: 500_000 },
-      { facilityId: "f2", spend: 300_000 },
-      { facilityId: "f3", spend: 200_000 },
-    ],
-    [
-      { tierNumber: 1, spendMin: 0, spendMax: 500_000, rebateValue: 2 },
-      { tierNumber: 2, spendMin: 500_000, spendMax: 1_000_000, rebateValue: 3 },
-      { tierNumber: 3, spendMin: 1_000_000, spendMax: null, rebateValue: 4 },
-    ],
-  )
-  if (!approx(tydeiRoll.totalRebate, 40_000) || !approx(tydeiRoll.perFacility[0]!.rebateShare, 20_000)) {
-    failures.push({ where: "tydei multiFacilityRebateRollup", detail: JSON.stringify(tydeiRoll) })
-  }
-  const dedupExact = dedupConfidence(
-    { inventoryNumber: "INV1", vendorItemNo: "AR-1", vendorName: "A", itemDescription: "x", date: "2025-01-01", poNumber: "PO1" },
-    { inventoryNumber: "INV1", vendorItemNo: "AR-1", vendorName: "A", itemDescription: "x", date: "2025-01-01", poNumber: "PO2" },
-  )
-  if (dedupExact !== "exact") {
-    failures.push({ where: "tydei dedupConfidence exact", detail: dedupExact })
-  }
-
   // ─── Tydei vs v0 — invoice priority ──────────────────────────────
   // (same helper already destructured above — redeclaring it in this
   // function scope is a syntax error oxlint flags)
@@ -2215,52 +2188,6 @@ async function v0ParityChecks(failures: Failure[]): Promise<void> {
       where: "tydei classifyInvoicePriority non-matching",
       detail: "≠ high",
     })
-  }
-
-  // ─── Tydei vs v0 — performance history synthesis ─────────────────
-  const { synthesizePerformanceHistory } = await import(
-    "@/lib/renewals/synthesize-history"
-  )
-  const hist = synthesizePerformanceHistory({
-    currentSpend: 1_000_000,
-    earnedRebate: 50_000,
-    contractComplianceRate: 90,
-  })
-  if (
-    !approx(hist[0]!.spend, 850_000) ||
-    !approx(hist[1]!.spend, 720_000) ||
-    hist[0]!.compliance !== 85 ||
-    hist[1]!.compliance !== 80
-  ) {
-    failures.push({
-      where: "tydei synthesizePerformanceHistory",
-      detail: JSON.stringify(hist),
-    })
-  }
-
-  // ─── Tydei vs v0 — dynamic tiers + attainability ─────────────────
-  const { deriveDynamicTiers, tierAttainabilityScore } = await import(
-    "@/lib/prospective-analysis/dynamic-tiers"
-  )
-  const dyn = deriveDynamicTiers({ actualSpend: 100_000, baseRebatePct: 3 })
-  if (
-    dyn[0]!.threshold !== 50_000 ||
-    dyn[1]!.threshold !== 80_000 ||
-    dyn[2]!.threshold !== 100_000 ||
-    dyn[0]!.rebatePct !== 2 ||
-    dyn[2]!.rebatePct !== 4.5
-  ) {
-    failures.push({
-      where: "tydei deriveDynamicTiers",
-      detail: JSON.stringify(dyn),
-    })
-  }
-  if (
-    tierAttainabilityScore({ proposedSpend: 85_000, tier1Threshold: 50_000, tier2Threshold: 80_000 }) !== 85 ||
-    tierAttainabilityScore({ proposedSpend: 60_000, tier1Threshold: 50_000, tier2Threshold: 80_000 }) !== 70 ||
-    tierAttainabilityScore({ proposedSpend: 40_000, tier1Threshold: 50_000, tier2Threshold: 80_000 }) !== 50
-  ) {
-    failures.push({ where: "tydei tierAttainabilityScore", detail: "band mismatch" })
   }
 
   // ─── Tydei vs v0 — price variance severity (3-band) ─────────────

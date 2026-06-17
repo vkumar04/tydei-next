@@ -55,6 +55,7 @@ import {
   buildUnionCategoryWhereClause,
 } from "@/lib/contracts/cog-category-filter"
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
+import type { MarketShareCogRow } from "@/lib/contracts/market-share-filter"
 import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
 import { ENGINE_VERSION } from "@/lib/rebates/engine-version"
 // AUTO_ACCRUAL_PREFIX marks rows the spend writer owns so it can
@@ -977,36 +978,22 @@ export async function _recomputeAccrualForContractWithFacility(
     const { recomputeThresholdAccrualForTerm } = await import(
       "@/lib/contracts/recompute/threshold"
     )
-    for (const term of thresholdTerms) {
-      const metric: "complianceRate" | "currentMarketShare" =
-        term.termType === "market_share"
-          ? "currentMarketShare"
-          : "complianceRate"
-      // UNITS (audit-confirmed 2026-04-25): both contract columns are
-      // `Decimal(5,2)` storing percent points 0-100 (the form writes a
-      // 0-100 number directly via `setValueAs: Number(v)`), and tier
-      // `spendMin` is also percent points. Pass through verbatim — the
-      // bridge in recompute-threshold-accrual.ts compares them directly.
-      let metricValue: number | null =
-        metric === "currentMarketShare"
-          ? contract.currentMarketShare === null ||
-            contract.currentMarketShare === undefined
-            ? null
-            : Number(contract.currentMarketShare)
-          : contract.complianceRate === null ||
-              contract.complianceRate === undefined
-            ? null
-            : Number(contract.complianceRate)
-
-      // Charles 2026-04-28: derive currentMarketShare dynamically from
-      // computeCategoryMarketShare when the contract field isn't set,
-      // so market_share terms can recompute without manual entry. Uses
-      // the vendor's highest-spend category share as a stand-in;
-      // category-scoped terms can pick a specific category in a future
-      // revision. complianceRate has no derivable analog (it's a
-      // workflow signal), so that path is unchanged.
-      if (metric === "currentMarketShare" && metricValue == null) {
-        try {
+    // Perf: the full-facility trailing-12mo COG fetch and the
+    // contract→category map it derives are LOOP-INVARIANT (they depend
+    // only on facilityId + a "now − 12mo" cutoff that's stable across
+    // iterations), but they were previously re-run for EVERY market_share
+    // term whose metric needed derivation — an N+1 over thresholdTerms.
+    // Hoist them into a lazily-cached loader so they're fetched at most
+    // once per recompute, only when a term actually needs the derivation.
+    let marketShareCogCachePromise:
+      | Promise<{
+          cogRows: MarketShareCogRow[]
+          contractCategoryMap: Map<string, string | null>
+        }>
+      | null = null
+    const loadMarketShareCog = () => {
+      if (marketShareCogCachePromise === null) {
+        marketShareCogCachePromise = (async () => {
           const since = new Date()
           since.setMonth(since.getMonth() - 12)
           const cogRows = await prisma.cOGRecord.findMany({
@@ -1044,6 +1031,43 @@ export async function _recomputeAccrualForContractWithFacility(
               c.productCategory?.name ?? null,
             ]),
           )
+          return { cogRows, contractCategoryMap }
+        })()
+      }
+      return marketShareCogCachePromise
+    }
+    for (const term of thresholdTerms) {
+      const metric: "complianceRate" | "currentMarketShare" =
+        term.termType === "market_share"
+          ? "currentMarketShare"
+          : "complianceRate"
+      // UNITS (audit-confirmed 2026-04-25): both contract columns are
+      // `Decimal(5,2)` storing percent points 0-100 (the form writes a
+      // 0-100 number directly via `setValueAs: Number(v)`), and tier
+      // `spendMin` is also percent points. Pass through verbatim — the
+      // bridge in recompute-threshold-accrual.ts compares them directly.
+      let metricValue: number | null =
+        metric === "currentMarketShare"
+          ? contract.currentMarketShare === null ||
+            contract.currentMarketShare === undefined
+            ? null
+            : Number(contract.currentMarketShare)
+          : contract.complianceRate === null ||
+              contract.complianceRate === undefined
+            ? null
+            : Number(contract.complianceRate)
+
+      // Charles 2026-04-28: derive currentMarketShare dynamically from
+      // computeCategoryMarketShare when the contract field isn't set,
+      // so market_share terms can recompute without manual entry. Uses
+      // the vendor's highest-spend category share as a stand-in;
+      // category-scoped terms can pick a specific category in a future
+      // revision. complianceRate has no derivable analog (it's a
+      // workflow signal), so that path is unchanged.
+      if (metric === "currentMarketShare" && metricValue == null) {
+        try {
+          const { cogRows, contractCategoryMap } =
+            await loadMarketShareCog()
           const { computeCategoryMarketShare } = await import(
             "@/lib/contracts/market-share-filter"
           )

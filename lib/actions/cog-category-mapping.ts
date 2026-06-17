@@ -264,19 +264,26 @@ export async function remapCOGCategory(input: {
   // term-scope rewrites and category-scoped spend both move when names merge.
   const rewrittenTermContractIds = new Set<string>()
   if (to) {
-    const updated = await prisma.cOGRecord.updateMany({
+    // All-or-nothing: the COG retag, price-file/term-scope rewrites,
+    // CategoryMapping upsert, and taxonomy retarget+prune must commit
+    // together — a partial apply would leave the data tagged to the new
+    // name while the term scopes / taxonomy still point at the old one
+    // (or vice-versa). The recompute fan-out stays OUTSIDE (separate
+    // concern, and it must run against committed rows).
+    recordsUpdated = await prisma.$transaction(async (tx) => {
+    const updated = await tx.cOGRecord.updateMany({
       where: {
         facilityId: facility.id,
         category: { in: variants, mode: "insensitive" },
       },
       data: { category: to },
     })
-    recordsUpdated = updated.count
+    const recordsUpdatedInner = updated.count
 
     // Bug 1/10: retag matching price-file rows too, so the contract's
     // pricing categories line up with COG immediately (not just on the
     // next import). Scoped to this facility via the contract relation.
-    await prisma.contractPricing.updateMany({
+    await tx.contractPricing.updateMany({
       where: {
         category: { in: variants, mode: "insensitive" },
         contract: { facilityId: facility.id },
@@ -289,7 +296,7 @@ export async function remapCOGCategory(input: {
     // ["JOINT"] stops matching COG retagged to "Ortho-Joints"; canonical
     // variant expansion bridges case/word-order drift, not arbitrary
     // renames).
-    await prisma.pricingFile.updateMany({
+    await tx.pricingFile.updateMany({
       where: {
         facilityId: facility.id,
         category: { in: variants, mode: "insensitive" },
@@ -303,7 +310,7 @@ export async function remapCOGCategory(input: {
     // survived the rewrite and kept rendering the dead name. Fetch every
     // scoped term at the facility and compare canonically.
     const fromCanonical = canonicalizeCategoryName(from)
-    const scopedTerms = await prisma.contractTerm.findMany({
+    const scopedTerms = await tx.contractTerm.findMany({
       where: {
         categories: { isEmpty: false },
         contract: { facilityId: facility.id },
@@ -328,7 +335,7 @@ export async function remapCOGCategory(input: {
         ),
       )
       // auth-scope-scanner-skip: term ids come from the facility-scoped findMany above.
-      await prisma.contractTerm.update({
+      await tx.contractTerm.update({
         where: { id: t.id },
         data: { categories: next },
       })
@@ -340,26 +347,26 @@ export async function remapCOGCategory(input: {
     // facilityId column, same as ProductCategory) — it cannot be
     // tenant-scoped. Looked up by cogCategory; the action is gated by
     // requireFacility above.
-    const existing = await prisma.categoryMapping.findFirst({
+    const existing = await tx.categoryMapping.findFirst({
       where: { cogCategory: { equals: from, mode: "insensitive" } },
       select: { id: true },
     })
     if (existing) {
       // auth-scope-scanner-skip: CategoryMapping is global taxonomy (no
       // facilityId) — updating the row found by cogCategory above.
-      await prisma.categoryMapping.update({
+      await tx.categoryMapping.update({
         where: { id: existing.id },
         data: { contractCategory: to, isConfirmed: true },
       })
     } else {
-      await prisma.categoryMapping.create({
+      await tx.categoryMapping.create({
         data: { cogCategory: from, contractCategory: to, isConfirmed: true },
       })
     }
     // 2026-06-09 audit: saving from→to supersedes any confirmed inverse
     // (to→from). Leaving both creates a swap cycle that flips the two
     // names between buckets instead of merging them.
-    await removeInverseCategoryMapping(from, to)
+    await removeInverseCategoryMapping(from, to, tx)
 
     // 2026-06-09 (Charles "it shows the old ones with no spend, they can be
     // removed"): the remap retagged the DATA but left the old name's
@@ -368,32 +375,32 @@ export async function remapCOGCategory(input: {
     // showed as a dead $0 row. Retarget its taxonomy references to the new
     // category, then delete it once NOTHING anywhere (any facility — the
     // taxonomy is tenant-shared) still references the old name.
-    const oldCat = await prisma.productCategory.findFirst({
+    const oldCat = await tx.productCategory.findFirst({
       where: { name: { equals: from, mode: "insensitive" } },
     })
     // auth-scope-scanner-skip: lookup by NAME on global taxonomy (no facilityId column).
-    const newCat = await prisma.productCategory.findFirst({
+    const newCat = await tx.productCategory.findFirst({
       where: { name: { equals: to, mode: "insensitive" } },
     })
     if (oldCat && newCat && oldCat.id !== newCat.id) {
       // Primary-category pointers move to the new category.
-      await prisma.contract.updateMany({
+      await tx.contract.updateMany({
         where: { productCategoryId: oldCat.id },
         data: { productCategoryId: newCat.id },
       })
       // Join rows: drop would-be duplicates first (@@unique on
       // [contractId, productCategoryId]), then retarget the rest.
-      const haveNew = await prisma.contractProductCategory.findMany({
+      const haveNew = await tx.contractProductCategory.findMany({
         where: { productCategoryId: newCat.id },
         select: { contractId: true },
       })
-      await prisma.contractProductCategory.deleteMany({
+      await tx.contractProductCategory.deleteMany({
         where: {
           productCategoryId: oldCat.id,
           contractId: { in: haveNew.map((h) => h.contractId) },
         },
       })
-      await prisma.contractProductCategory.updateMany({
+      await tx.contractProductCategory.updateMany({
         where: { productCategoryId: oldCat.id },
         data: { productCategoryId: newCat.id },
       })
@@ -402,42 +409,44 @@ export async function remapCOGCategory(input: {
       if (newCat.parentId === oldCat.id) {
         // auth-scope-scanner-skip: ProductCategory is global taxonomy (no
         // facilityId column); row was resolved by name above.
-        await prisma.productCategory.update({
+        await tx.productCategory.update({
           where: { id: newCat.id },
           data: { parentId: oldCat.parentId ?? null },
         })
       }
-      await prisma.productCategory.updateMany({
+      await tx.productCategory.updateMany({
         where: { parentId: oldCat.id },
         data: { parentId: newCat.id },
       })
       // Global zero-reference check before deleting the taxonomy row.
       const [cogN, cpN, pfN, pbN, termN] = await Promise.all([
-        prisma.cOGRecord.count({
+        tx.cOGRecord.count({
           where: { category: { equals: oldCat.name, mode: "insensitive" } },
         }),
-        prisma.contractPricing.count({
+        tx.contractPricing.count({
           where: { category: { equals: oldCat.name, mode: "insensitive" } },
         }),
-        prisma.pricingFile.count({
+        tx.pricingFile.count({
           where: { category: { equals: oldCat.name, mode: "insensitive" } },
         }),
-        prisma.productBenchmark.count({
+        tx.productBenchmark.count({
           where: { category: { equals: oldCat.name, mode: "insensitive" } },
         }),
-        prisma.contractTerm.count({
+        tx.contractTerm.count({
           where: { categories: { has: oldCat.name } },
         }),
       ])
       if (cogN + cpN + pfN + pbN + termN === 0) {
         // auth-scope-scanner-skip: global taxonomy row, resolved by name
         // above and verified unreferenced everywhere.
-        await prisma.productCategory.delete({ where: { id: oldCat.id } })
+        await tx.productCategory.delete({ where: { id: oldCat.id } })
         console.info(
           `[remapCOGCategory] deleted unreferenced taxonomy row "${oldCat.name}" after remap → "${to}"`,
         )
       }
     }
+    return recordsUpdatedInner
+    }, { timeout: 30_000 })
   } else {
     // Unmap — drop any rule for this category.
     await prisma.categoryMapping.deleteMany({

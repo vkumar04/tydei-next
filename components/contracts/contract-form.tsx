@@ -47,6 +47,18 @@ interface CategoryOption {
   name: string
 }
 
+/**
+ * UI-only shape for a per-category market-share commitment row. `_uid` is a
+ * stable client identity for React keys / delete; it is NOT persisted (the
+ * contract validator strips it on save). Rows hydrated from stored JSON on
+ * the edit page arrive without `_uid`, so it is backfilled on read.
+ */
+interface MsbcUiRow {
+  _uid: string
+  category: string
+  commitmentPct: number
+}
+
 interface ContractFormProps {
   form: UseFormReturn<CreateContractInput>
   vendors: VendorOption[]
@@ -76,30 +88,62 @@ export function ContractFormBasicInfo({
   const selectedCategoryIds = watch("categoryIds") ?? []
   // Charles 2026-04-25 audit facility C1: per-category market-share
   // commitment overlay (validator + engine already accept this).
-  const msbcRows = watch("marketShareCommitmentByCategory") ?? []
+  //
+  // Each row carries a UI-only `_uid` so React keys + delete target a
+  // STABLE identity, not the array index (index-as-key reused the wrong
+  // row's state when a middle row was removed). The persist boundary —
+  // `createContractSchema`/`updateContractSchema` `.parse()` in
+  // createContract/updateContract — strips `_uid` (Zod object schemas
+  // drop unknown keys), so it never reaches the stored JSON. The local
+  // `MsbcUiRow` type + casts exist only because `CreateContractInput`'s
+  // inferred element type has no `_uid`.
+  const rawMsbcRows = watch("marketShareCommitmentByCategory") ?? []
+  // Backfill a stable `_uid` for any row missing one (rows hydrated from
+  // stored JSON on the edit page arrive without it). Done in an effect so
+  // the generated uid is written back to the form value and stays stable
+  // across renders — generating it inline in render would mint a fresh uid
+  // every pass and defeat the whole point of a stable key.
+  useEffect(() => {
+    if (rawMsbcRows.length === 0) return
+    const rows = rawMsbcRows as MsbcUiRow[]
+    if (rows.every((r) => typeof r._uid === "string" && r._uid)) return
+    setValue(
+      "marketShareCommitmentByCategory",
+      rows.map((r) =>
+        typeof r._uid === "string" && r._uid
+          ? r
+          : { ...r, _uid: crypto.randomUUID() },
+      ) as CreateContractInput["marketShareCommitmentByCategory"],
+      { shouldDirty: false },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawMsbcRows, setValue])
+  const msbcRows = rawMsbcRows as MsbcUiRow[]
+  const setMsbcRows = (next: MsbcUiRow[] | null) => {
+    setValue(
+      "marketShareCommitmentByCategory",
+      (next && next.length > 0
+        ? next
+        : null) as CreateContractInput["marketShareCommitmentByCategory"],
+      { shouldDirty: true },
+    )
+  }
   const updateMsbcRow = (
-    index: number,
+    uid: string,
     patch: Partial<{ category: string; commitmentPct: number }>,
   ) => {
-    const next = [...msbcRows]
-    const current = next[index] ?? { category: "", commitmentPct: 0 }
-    next[index] = { ...current, ...patch }
-    setValue("marketShareCommitmentByCategory", next, { shouldDirty: true })
+    setMsbcRows(
+      msbcRows.map((row) => (row._uid === uid ? { ...row, ...patch } : row)),
+    )
   }
   const addMsbcRow = () => {
-    setValue(
-      "marketShareCommitmentByCategory",
-      [...msbcRows, { category: "", commitmentPct: 0 }],
-      { shouldDirty: true },
-    )
+    setMsbcRows([
+      ...msbcRows,
+      { _uid: crypto.randomUUID(), category: "", commitmentPct: 0 },
+    ])
   }
-  const removeMsbcRow = (index: number) => {
-    const next = msbcRows.filter((_, i) => i !== index)
-    setValue(
-      "marketShareCommitmentByCategory",
-      next.length > 0 ? next : null,
-      { shouldDirty: true },
-    )
+  const removeMsbcRow = (uid: string) => {
+    setMsbcRows(msbcRows.filter((row) => row._uid !== uid))
   }
   const [cogAutoFilled, setCogAutoFilled] = useState(false)
   const [linkedContractId, setLinkedContractId] = useState<string>("")
@@ -555,8 +599,8 @@ export function ContractFormBasicInfo({
             </div>
             {msbcRows.length > 0 && (
               <div className="space-y-2">
-                {msbcRows.map((row, idx) => (
-                  <div key={idx} className="flex items-end gap-2">
+                {msbcRows.map((row) => (
+                  <div key={row._uid} className="flex items-end gap-2">
                     <div className="flex-1 space-y-1">
                       <label className="text-xs text-muted-foreground">
                         Category
@@ -567,7 +611,7 @@ export function ContractFormBasicInfo({
                       <Select
                         value={row.category}
                         onValueChange={(v) =>
-                          updateMsbcRow(idx, { category: v })
+                          updateMsbcRow(row._uid, { category: v })
                         }
                       >
                         <SelectTrigger>
@@ -599,7 +643,7 @@ export function ContractFormBasicInfo({
                         step="0.1"
                         value={row.commitmentPct}
                         onChange={(e) =>
-                          updateMsbcRow(idx, {
+                          updateMsbcRow(row._uid, {
                             commitmentPct: Number(e.target.value),
                           })
                         }
@@ -608,7 +652,7 @@ export function ContractFormBasicInfo({
                     <button
                       type="button"
                       className="mb-1.5 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeMsbcRow(idx)}
+                      onClick={() => removeMsbcRow(row._uid)}
                       aria-label="Remove row"
                     >
                       <X className="size-4" />

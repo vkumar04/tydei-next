@@ -19,19 +19,26 @@
  *      import paths legitimately need to coin new ones. We tag the
  *      `source` column so admins can audit/dedupe later.
  */
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { normalizeCategoryKey } from "@/lib/categories/normalize-key"
 
 type CategoryRow = { id: string; name: string }
 
 /**
- * The mapping-key normalization used by every CategoryMapping lookup
- * (confirmed-mapping Pass 0 here, the Map-Categories dialog, and the
- * market-share callers). Exported so non-import surfaces key the
- * confirmed map identically — `normalizeCategoryKey(cogCategory)`.
+ * Either the global Prisma client or an interactive-transaction client —
+ * the subset of methods these helpers call is identical on both.
  */
-export const normalizeCategoryKey = (s: string): string =>
-  s.trim().toLowerCase().replace(/\s+/g, " ")
+type PrismaClientOrTx = typeof prisma | Prisma.TransactionClient
+
+/**
+ * Re-exported so existing callers (e.g. `lib/actions/vendor-analytics.ts`)
+ * can keep importing it from here. The implementation now lives in the
+ * pure, DB-free `@/lib/categories/normalize-key` module so DB-free
+ * helpers can share it without dragging in prisma.
+ */
+export { normalizeCategoryKey }
 
 const normalize = normalizeCategoryKey
 
@@ -124,8 +131,12 @@ export function applyConfirmedCategoryMapToNames(
 export async function removeInverseCategoryMapping(
   from: string,
   to: string,
+  // Optional transaction client so callers running this inside a
+  // `$transaction` (e.g. remapCOGCategory) keep the delete atomic with
+  // the surrounding upsert. Defaults to the global client.
+  client: PrismaClientOrTx = prisma,
 ): Promise<number> {
-  const res = await prisma.categoryMapping.deleteMany({
+  const res = await client.categoryMapping.deleteMany({
     where: {
       cogCategory: { equals: to, mode: "insensitive" },
       contractCategory: { equals: from, mode: "insensitive" },

@@ -22,6 +22,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
+import {
+  type PeriodRow,
+  rebateCollectedForRow,
+} from "@/lib/contracts/transactions-display"
 import { queryKeys } from "@/lib/query-keys"
 import { toast } from "sonner"
 
@@ -41,23 +45,6 @@ export function dialogDescription(mode: DialogMode): string {
   if (mode.kind === "rebate-collected")
     return "Records a payment received from the vendor. Adds to Rebates Collected only — does NOT add to Rebates Earned."
   return "Records a credit memo or vendor payment against this contract."
-}
-
-// Charles W1.W-C1: Per-row "Collected" amount — gates on collectionDate per
-// the canonical sumCollectedRebates rule.
-function rebateCollectedForRow(row: PeriodRow): number {
-  return row.collectionDate ? row.rebateCollected : 0
-}
-
-// Subset of PeriodRow fields this dialog needs. Matches the shape defined
-// in contract-transactions.tsx — duplicated here so the file is self-contained.
-export interface PeriodRow {
-  id: string
-  periodStart: string
-  periodEnd: string
-  rebateEarned: number
-  rebateCollected: number
-  collectionDate?: string | null
 }
 
 type TransactionType = "rebate" | "credit" | "payment"
@@ -160,8 +147,8 @@ export function TransactionDialog({
       // the contract detail so the "Rebates Earned / Collected" cards
       // pick it up immediately (rebates are a fact written into the
       // `Rebate` table and aggregated server-side — see getContract).
-      queryClient.invalidateQueries({ queryKey: ["contractPeriods", contractId] })
-      queryClient.invalidateQueries({ queryKey: ["contractRebates", contractId] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.periods(contractId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.rebates(contractId) })
       queryClient.invalidateQueries({
         queryKey: queryKeys.contracts.detail(contractId),
       })

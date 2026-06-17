@@ -40,6 +40,16 @@ import { TieInAmortizationPreview } from "@/components/contracts/tie-in-amortiza
 export interface CapitalLineItemDraft {
   /** Optional — server-generated for persisted rows; tempId for unsaved rows. */
   id?: string
+  /**
+   * UI-only stable identity. Set once via `crypto.randomUUID()` when a row
+   * is created or hydrated and NEVER changes for the life of the row, so
+   * React keys + per-row expand state survive a middle-row delete (which
+   * reindexes the array). NOT part of the persist payload — every consumer
+   * builds its create/update/delete payload field-by-field and omits this.
+   * Do not conflate with `id` (the server DB id used to diff new-vs-existing
+   * rows on save).
+   */
+  _uid: string
   description: string
   itemNumber: string
   serialNumber: string
@@ -54,6 +64,7 @@ export interface CapitalLineItemDraft {
 
 export function makeEmptyCapitalLineItem(): CapitalLineItemDraft {
   return {
+    _uid: crypto.randomUUID(),
     description: "",
     itemNumber: "",
     serialNumber: "",
@@ -79,35 +90,35 @@ export function CapitalLineItemsEditor({
   // capitalLineItems) must not crash the whole entry form with
   // "Cannot read properties of undefined (reading 'length')".
   const items = itemsProp ?? []
-  const [expandedIdx, setExpandedIdx] = useState<Set<number>>(
-    () => new Set(items.length === 0 ? [] : [0]),
+  // Track expand state by the row's stable `_uid`, never by array index —
+  // deleting a middle row reindexes survivors, so an index-keyed Set would
+  // leave the wrong panel open / reuse a sibling row's state.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(
+    () => new Set(items.length === 0 ? [] : [items[0]._uid]),
   )
 
-  const toggle = (idx: number) => {
-    const next = new Set(expandedIdx)
-    if (next.has(idx)) next.delete(idx)
-    else next.add(idx)
-    setExpandedIdx(next)
+  const toggle = (uid: string) => {
+    const next = new Set(expandedIds)
+    if (next.has(uid)) next.delete(uid)
+    else next.add(uid)
+    setExpandedIds(next)
   }
 
   const add = () => {
-    const next = [...items, makeEmptyCapitalLineItem()]
-    onChange(next)
-    setExpandedIdx(new Set([...expandedIdx, next.length - 1]))
+    const created = makeEmptyCapitalLineItem()
+    onChange([...items, created])
+    setExpandedIds(new Set([...expandedIds, created._uid]))
   }
 
-  const remove = (idx: number) => {
-    onChange(items.filter((_, i) => i !== idx))
-    const next = new Set<number>()
-    for (const i of expandedIdx) {
-      if (i < idx) next.add(i)
-      else if (i > idx) next.add(i - 1)
-    }
-    setExpandedIdx(next)
+  const remove = (uid: string) => {
+    onChange(items.filter((it) => it._uid !== uid))
+    const next = new Set(expandedIds)
+    next.delete(uid)
+    setExpandedIds(next)
   }
 
-  const update = (idx: number, patch: Partial<CapitalLineItemDraft>) => {
-    onChange(items.map((it, i) => (i === idx ? { ...it, ...patch } : it)))
+  const update = (uid: string, patch: Partial<CapitalLineItemDraft>) => {
+    onChange(items.map((it) => (it._uid === uid ? { ...it, ...patch } : it)))
   }
 
   const totalFinanced = items.reduce(
@@ -163,13 +174,13 @@ export function CapitalLineItemsEditor({
         ) : (
           <div className="space-y-2">
             {items.map((item, idx) => {
-              const isOpen = expandedIdx.has(idx)
+              const isOpen = expandedIds.has(item._uid)
               const financed = Math.max(0, item.contractTotal - item.initialSales)
               return (
-                <div key={idx} className="rounded-md border">
+                <div key={item._uid} className="rounded-md border">
                   <button
                     type="button"
-                    onClick={() => toggle(idx)}
+                    onClick={() => toggle(item._uid)}
                     className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/40"
                   >
                     <div className="flex min-w-0 flex-1 items-baseline gap-2">
@@ -199,7 +210,7 @@ export function CapitalLineItemsEditor({
                           <Input
                             value={item.description}
                             onChange={(e) =>
-                              update(idx, { description: e.target.value })
+                              update(item._uid, { description: e.target.value })
                             }
                             placeholder="e.g., Stryker MAKO Robotic Arm"
                           />
@@ -208,7 +219,7 @@ export function CapitalLineItemsEditor({
                           <Input
                             value={item.itemNumber}
                             onChange={(e) =>
-                              update(idx, { itemNumber: e.target.value })
+                              update(item._uid, { itemNumber: e.target.value })
                             }
                             placeholder="MAKO-2024-RIO"
                           />
@@ -217,7 +228,7 @@ export function CapitalLineItemsEditor({
                           <Input
                             value={item.serialNumber}
                             onChange={(e) =>
-                              update(idx, { serialNumber: e.target.value })
+                              update(item._uid, { serialNumber: e.target.value })
                             }
                             placeholder="SN-12345"
                           />
@@ -229,7 +240,7 @@ export function CapitalLineItemsEditor({
                             step="0.01"
                             value={item.contractTotal}
                             onChange={(e) =>
-                              update(idx, {
+                              update(item._uid, {
                                 contractTotal: Number(e.target.value),
                               })
                             }
@@ -248,7 +259,7 @@ export function CapitalLineItemsEditor({
                             value={item.initialSales}
                             onChange={(e) => {
                               const next = Number(e.target.value)
-                              update(idx, {
+                              update(item._uid, {
                                 initialSales: Math.min(
                                   Math.max(0, next),
                                   item.contractTotal || next,
@@ -274,7 +285,7 @@ export function CapitalLineItemsEditor({
                             step="0.01"
                             value={item.interestRatePercent}
                             onChange={(e) =>
-                              update(idx, {
+                              update(item._uid, {
                                 interestRatePercent: Number(e.target.value),
                               })
                             }
@@ -287,7 +298,7 @@ export function CapitalLineItemsEditor({
                             step="1"
                             value={item.termMonths}
                             onChange={(e) =>
-                              update(idx, { termMonths: Number(e.target.value) })
+                              update(item._uid, { termMonths: Number(e.target.value) })
                             }
                           />
                         </Field>
@@ -295,7 +306,7 @@ export function CapitalLineItemsEditor({
                           <Select
                             value={item.paymentType}
                             onValueChange={(v) =>
-                              update(idx, {
+                              update(item._uid, {
                                 paymentType: v as "fixed" | "variable",
                               })
                             }
@@ -317,7 +328,7 @@ export function CapitalLineItemsEditor({
                           <Select
                             value={item.paymentCadence}
                             onValueChange={(v) =>
-                              update(idx, {
+                              update(item._uid, {
                                 paymentCadence: v as
                                   | "monthly"
                                   | "quarterly"
@@ -348,7 +359,7 @@ export function CapitalLineItemsEditor({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => remove(idx)}
+                          onClick={() => remove(item._uid)}
                           className="text-destructive hover:text-destructive"
                         >
                           <Trash2 className="mr-1 size-3.5" />

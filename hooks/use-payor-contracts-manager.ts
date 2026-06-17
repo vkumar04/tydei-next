@@ -21,6 +21,11 @@ export function useCreatePayorContract() {
       // (distinct query key) so a newly added/removed contract appears without
       // a page reload.
       qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
+      // best-practices sweep 2026-06-17: refresh the Payor Contract Margin
+      // card's summary tiles (Est. Reimbursement / CPT Matched / Total
+      // Margin) — nothing was invalidating that key before, so a rate
+      // import left the tiles stale until reload.
+      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginSummaryBase })
       toast.success("Payor contract created")
     },
     onError: (err) => toast.error(err.message || "Failed to create payor contract"),
@@ -38,6 +43,7 @@ export function useUpdatePayorContract() {
       // (distinct query key) so a newly added/removed contract appears without
       // a page reload.
       qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
+      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginSummaryBase })
       toast.success("Payor contract updated")
     },
     onError: (err) => toast.error(err.message || "Failed to update payor contract"),
@@ -54,6 +60,7 @@ export function useDeletePayorContract() {
       // (distinct query key) so a newly added/removed contract appears without
       // a page reload.
       qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
+      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginSummaryBase })
       toast.success("Payor contract deleted")
     },
     onError: (err) => toast.error(err.message || "Failed to delete payor contract"),
@@ -71,6 +78,7 @@ export function useImportPayorRates() {
       // (distinct query key) so a newly added/removed contract appears without
       // a page reload.
       qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
+      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginSummaryBase })
       toast.success(`Imported ${result.imported} CPT rates (${result.total} total)`)
     },
     onError: (err) => toast.error(err.message || "Failed to import rates"),

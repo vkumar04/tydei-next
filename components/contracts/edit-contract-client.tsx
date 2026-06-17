@@ -222,6 +222,7 @@ export function EditContractClient({
       // synthesizes one row from contract-level fields when needed).
       void getCapitalLineItems(contract.id).then((rows) => {
         const drafts: CapitalLineItemDraft[] = rows.map((r) => ({
+          _uid: crypto.randomUUID(),
           id: r.id,
           description: r.description,
           itemNumber: r.itemNumber ?? "",
@@ -421,16 +422,21 @@ export function EditContractClient({
           queryKey: queryKeys.contractTerms.list(contractId),
         }),
         queryClient.invalidateQueries({
-          queryKey: ["contractRebates", contractId],
+          queryKey: queryKeys.contracts.rebates(contractId),
         }),
         queryClient.invalidateQueries({
-          queryKey: ["contractPeriods", contractId],
+          queryKey: queryKeys.contracts.periods(contractId),
         }),
         queryClient.invalidateQueries({
           queryKey: ["contract-accrual-timeline", contractId],
         }),
+        // best-practices sweep 2026-06-17: the capital-schedule READ key is
+        // ["contract-capital-schedule", scope, contractId] — this site used
+        // ["contract-capital-schedule", contractId] (omitting scope), so it
+        // only prefix-matched by luck on the family namespace. Invalidate the
+        // whole family explicitly so every scope variant refetches.
         queryClient.invalidateQueries({
-          queryKey: ["contract-capital-schedule", contractId],
+          queryKey: queryKeys.contracts.capitalScheduleBase,
         }),
       ])
 

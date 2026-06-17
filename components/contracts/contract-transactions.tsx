@@ -54,6 +54,10 @@ import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { mapRebateRowsToLedger } from "@/components/contracts/contract-transactions-display"
+import {
+  type PeriodRow,
+  rebateCollectedForRow,
+} from "@/lib/contracts/transactions-display"
 import { queryKeys } from "@/lib/query-keys"
 import { toast } from "sonner"
 import {
@@ -72,19 +76,6 @@ interface ContractTransactionsProps {
 // values don't respect current tier config and produced ghost rows
 // (e.g. $0 spend with $76K earned). The Recompute Earned Rebates button
 // is the user's path to regenerate accrual Rebate rows from tier terms.
-interface PeriodRow {
-  id: string
-  periodStart: string
-  periodEnd: string
-  totalSpend: number
-  rebateEarned: number
-  rebateCollected: number
-  tierAchieved: number | null
-  collectionDate?: string | null
-  notes?: string | null
-  createdAt?: string | null
-}
-
 type TransactionType = "rebate" | "credit" | "payment"
 
 function getCollectionStatus(row: PeriodRow): "collected" | "pending" | "overdue" {
@@ -99,16 +90,6 @@ function getCollectionStatus(row: PeriodRow): "collected" | "pending" | "overdue
   const end = new Date(row.periodEnd)
   if (end < now && row.rebateEarned > 0) return "overdue"
   return "pending"
-}
-
-/**
- * Per-row "Collected" amount — gates on collectionDate per the canonical
- * sumCollectedRebates rule. Without this, rows with rebateCollected populated
- * but collectionDate=null silently inflated the per-row column while the
- * summary card (which DOES gate) read $0. Same drift the F2-M1 audit caught.
- */
-function rebateCollectedForRow(row: PeriodRow): number {
-  return row.collectionDate ? row.rebateCollected : 0
 }
 
 const collectionStatusConfig: Record<
@@ -221,10 +202,10 @@ function AddTransactionButtons({
         )
       }
       queryClient.invalidateQueries({
-        queryKey: ["contractPeriods", contractId],
+        queryKey: queryKeys.contracts.periods(contractId),
       })
       queryClient.invalidateQueries({
-        queryKey: ["contractRebates", contractId],
+        queryKey: queryKeys.contracts.rebates(contractId),
       })
       queryClient.invalidateQueries({
         queryKey: queryKeys.contracts.detail(contractId),
@@ -452,7 +433,7 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
   // user-logged collections / credits / payments both land here, so the
   // query covers every surface the user expects in the ledger.
   const { data: rebatesData, isLoading: rebatesLoading } = useQuery({
-    queryKey: ["contractRebates", contractId],
+    queryKey: queryKeys.contracts.rebates(contractId),
     queryFn: () => getContractRebates(contractId),
     enabled: !!contractId,
   })
@@ -465,10 +446,10 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
   // stale numbers until the next tab flip.
   function invalidateLedger() {
     queryClient.invalidateQueries({
-      queryKey: ["contractPeriods", contractId],
+      queryKey: queryKeys.contracts.periods(contractId),
     })
     queryClient.invalidateQueries({
-      queryKey: ["contractRebates", contractId],
+      queryKey: queryKeys.contracts.rebates(contractId),
     })
     queryClient.invalidateQueries({
       queryKey: queryKeys.contracts.detail(contractId),
@@ -500,7 +481,7 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
       await deleteContractTransaction({ id: row.id, contractId })
     },
     onMutate: async (row: PeriodRow) => {
-      const queryKey = ["contractRebates", contractId] as const
+      const queryKey = queryKeys.contracts.rebates(contractId)
       await queryClient.cancelQueries({ queryKey })
       const previous = queryClient.getQueryData<{ id: string }[]>(queryKey)
       if (previous) {
@@ -518,7 +499,7 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
     ) => {
       if (context?.previous) {
         queryClient.setQueryData(
-          ["contractRebates", contractId],
+          queryKeys.contracts.rebates(contractId),
           context.previous,
         )
       }

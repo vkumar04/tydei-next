@@ -82,7 +82,7 @@ export function useSubmitRenewalProposal() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["renewals"] })
-      void qc.invalidateQueries({ queryKey: ["contracts"] })
+      void qc.invalidateQueries({ queryKey: queryKeys.contracts.all })
     },
   })
 }

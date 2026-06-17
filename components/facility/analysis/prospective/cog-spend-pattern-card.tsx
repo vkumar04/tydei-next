@@ -28,15 +28,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 import { useVendorCOGPatterns } from "./hooks"
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
-}
+import { formatCurrency } from "@/lib/formatting"
 
 function formatPercent(value: number, digits = 1): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`

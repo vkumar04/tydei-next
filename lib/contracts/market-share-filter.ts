@@ -18,18 +18,14 @@
  */
 
 import { canonicalizeCategoryName } from "./category-canonical"
+import { normalizeCategoryKey } from "@/lib/categories/normalize-key"
 
-/**
- * Mapping-key normalization for confirmed `CategoryMapping` lookups.
- * MUST stay identical to `normalizeCategoryKey` in
- * `lib/categories/resolve.ts` (the import path's Pass-0 key) so a user's
- * confirmed remap collapses the same way in market share as on import.
- * Inlined (not imported) to keep this helper DB-free — `resolve.ts`
- * imports prisma. Callers build the map via `loadConfirmedCategoryMap`,
- * which keys by the same function.
- */
-const normalizeCategoryKey = (s: string): string =>
-  s.trim().toLowerCase().replace(/\s+/g, " ")
+// `normalizeCategoryKey` is the pure, DB-free mapping-key normalizer for
+// confirmed `CategoryMapping` lookups (shared with the import path's Pass-0
+// key so a user's confirmed remap collapses the same way in market share as
+// on import). Callers build the map via `loadConfirmedCategoryMap`, which
+// keys by the same function. This file stays DB-free — the helper has no
+// prisma dependency.
 
 export interface MarketShareCogRow {
   vendorId: string | null

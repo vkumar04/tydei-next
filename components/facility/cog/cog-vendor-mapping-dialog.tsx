@@ -44,12 +44,7 @@ import {
 } from "@/lib/actions/cog-vendor-mapping"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
-
-const currency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
+import { formatCurrency } from "@/lib/formatting"
 
 interface Props {
   open: boolean
@@ -189,7 +184,9 @@ function MappingRow({
       )
       queryClient.invalidateQueries({ queryKey: ["cog-vendor-mappings"] })
       queryClient.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      queryClient.invalidateQueries({ queryKey: ["contracts"] })
+      // Kept broad: a vendor remap reassigns spend across every contract
+      // for the old/new vendor — affected ids unknown here.
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all })
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Re-map failed")
@@ -203,7 +200,7 @@ function MappingRow({
         {row.recordCount.toLocaleString()}
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {currency.format(row.totalSpend)}
+        {formatCurrency(row.totalSpend)}
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-1">

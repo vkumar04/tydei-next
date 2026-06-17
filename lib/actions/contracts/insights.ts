@@ -24,6 +24,7 @@ import {
 } from "@/lib/contracts/price-variance"
 import { serialize } from "@/lib/serialize"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 
 export async function getContractInsights(contractId: string) {
   const { facility } = await requireFacility()
@@ -75,17 +76,26 @@ export async function getContractInsights(contractId: string) {
     priceByItem: priceMap,
   }
 
+  // Group-aware: a grouped contract spans every vendor in
+  // contractVendorIds(), not just the primary. Scoping the PO/invoice
+  // reads to the bare `contract.vendorId` silently dropped the member
+  // vendors' purchases (the recurring group-vendor drift class).
+  const vendorIds = contractVendorIds(contract)
+
   const poLines = await prisma.pOLineItem.findMany({
     where: {
       purchaseOrder: {
         facilityId: facility.id,
-        vendorId: contract.vendorId,
+        vendorId: { in: vendorIds },
       },
     },
     include: { purchaseOrder: { select: { orderDate: true } } },
   })
 
   const purchases: CompliancePurchase[] = poLines.map((l) => ({
+    // Keep the primary contract vendorId so every grouped purchase still
+    // matches the single ComplianceContract (calculateComplianceRate
+    // matches purchase↔contract by exact vendorId equality).
     vendorId: contract.vendorId,
     vendorItemNo: l.vendorItemNo ?? "",
     unitPrice: Number(l.unitPrice),
@@ -101,7 +111,7 @@ export async function getContractInsights(contractId: string) {
   const invoiceLines = await prisma.invoiceLineItem.findMany({
     where: {
       vendorItemNo: { in: contract.pricingItems.map((p) => p.vendorItemNo) },
-      invoice: { facilityId: facility.id, vendorId: contract.vendorId },
+      invoice: { facilityId: facility.id, vendorId: { in: vendorIds } },
     },
     select: {
       id: true,

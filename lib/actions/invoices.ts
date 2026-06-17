@@ -456,21 +456,28 @@ export async function revalidateInvoice(id: string) {
 
   const results = await computeInvoiceValidation(id, facility.id)
 
-  let updated = 0
-  for (const r of results) {
-    if (r.contractPrice !== null || r.variancePercent !== null) {
-      // auth-scope-scanner-skip: lineItemId comes from the
-      // facility-scoped computeInvoiceValidation read above.
-      await prisma.invoiceLineItem.update({
-        where: { id: r.lineItemId },
-        data: {
-          contractPrice: r.contractPrice,
-          variancePercent: r.variancePercent,
-        },
-      })
-      updated++
-    }
+  const toUpdate = results.filter(
+    (r) => r.contractPrice !== null || r.variancePercent !== null,
+  )
+  // All-or-nothing: persist every line item's recomputed
+  // contractPrice/variancePercent in one commit so the persisted
+  // variance fields can't end up partially updated mid-loop.
+  if (toUpdate.length > 0) {
+    await prisma.$transaction(
+      toUpdate.map((r) =>
+        // auth-scope-scanner-skip: lineItemId comes from the
+        // facility-scoped computeInvoiceValidation read above.
+        prisma.invoiceLineItem.update({
+          where: { id: r.lineItemId },
+          data: {
+            contractPrice: r.contractPrice,
+            variancePercent: r.variancePercent,
+          },
+        }),
+      ),
+    )
   }
+  const updated = toUpdate.length
 
   revalidatePath("/dashboard/invoice-validation")
 
@@ -541,6 +548,8 @@ export async function deleteInvoice(id: string) {
     throw new Error("Only draft invoices can be deleted")
   }
 
+  // auth-scope-scanner-skip: id was re-read under the facility scope in
+  // the findUniqueOrThrow above (post-authorized delete).
   await prisma.invoice.delete({ where: { id } })
 
   await logAudit({

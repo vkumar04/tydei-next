@@ -12,6 +12,7 @@ import {
   ingestCaseSuppliesCSV,
 } from "@/lib/actions/imports/case-costing-import"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
+import { queryKeys } from "@/lib/query-keys"
 import { generateId, calculateSimilarity } from "./_mass-upload-helpers"
 import { renderStatusBadge } from "./_mass-upload-status-badge"
 import {
@@ -830,7 +831,7 @@ export function MassUpload({
     }
 
     // Invalidate relevant caches so whatever page is in view refreshes.
-    queryClient.invalidateQueries({ queryKey: ["contracts"] })
+    queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all })
     queryClient.invalidateQueries({ queryKey: ["invoices"] })
     queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     queryClient.invalidateQueries({ queryKey: ["vendors"] })

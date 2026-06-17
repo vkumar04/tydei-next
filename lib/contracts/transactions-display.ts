@@ -26,10 +26,31 @@ export interface PeriodRow {
   tierAchieved: number | null
   // Rows sourced from the `Rebate` table (vs synthesized ContractPeriods)
   // have a collectionDate + notes. Used to label the row in the ledger
-  // and to short-circuit status logic.
-  source: "period" | "rebate"
+  // and to short-circuit status logic. Optional because the contract
+  // Transactions ledger (`contract-transactions.tsx`) feeds rows straight
+  // from `mapRebateRowsToLedger` — those are ALL `Rebate`-sourced and never
+  // carry an explicit `source`. The source-aware `displayedCollected` /
+  // `sumDisplayedCollected` helpers treat an absent `source` as a non-rebate
+  // row (they filter to `source === "rebate"`), so the parity surfaces that
+  // DO mix period + rebate rows must continue to set it explicitly.
+  source?: "period" | "rebate"
   collectionDate?: string | null
   notes?: string | null
+  // Creation timestamp shown as an audit sub-line in the ledger (Bug 13).
+  createdAt?: string | null
+}
+
+/**
+ * Per-row "Collected" amount for the Transactions ledger UI — gates ONLY
+ * on `collectionDate` (the canonical sumCollectedRebates rule). Unlike
+ * `displayedCollected`, this does NOT also require `source === "rebate"`,
+ * because the contract Transactions ledger only ever holds `Rebate`-sourced
+ * rows (it never merges synthesized ContractPeriods). Shared by
+ * `contract-transactions.tsx` and the add/edit transaction dialogs so the
+ * per-row column can't drift from the summary card.
+ */
+export function rebateCollectedForRow(row: PeriodRow): number {
+  return row.collectionDate ? row.rebateCollected : 0
 }
 
 /**

@@ -146,44 +146,52 @@ export async function recomputeInvoiceVariance(invoiceId: string): Promise<{
   })
 
   let variancesWritten = 0
-  for (const row of rows) {
-    const direction = directionFor(row.actualPrice, row.contractPrice)
-    await prisma.invoicePriceVariance.upsert({
-      where: { invoiceLineItemId: row.invoiceLineItemId },
-      create: {
-        invoiceLineItemId: row.invoiceLineItemId,
-        contractId: row.contractId,
-        contractPrice: row.contractPrice,
-        actualPrice: row.actualPrice,
-        variancePercent: row.variancePercent,
-        severity: row.severity,
-        direction,
-        dollarImpact: row.variance,
-      },
-      update: {
-        contractId: row.contractId,
-        contractPrice: row.contractPrice,
-        actualPrice: row.actualPrice,
-        variancePercent: row.variancePercent,
-        severity: row.severity,
-        direction,
-        dollarImpact: row.variance,
-      },
-    })
-    variancesWritten++
-  }
+  // All-or-nothing: the per-row upserts and the stale-row prune must
+  // commit together so a re-run never leaves the variance set half-new,
+  // half-stale (the table must converge to exactly `rows`).
+  await prisma.$transaction(
+    async (tx) => {
+      for (const row of rows) {
+        const direction = directionFor(row.actualPrice, row.contractPrice)
+        await tx.invoicePriceVariance.upsert({
+          where: { invoiceLineItemId: row.invoiceLineItemId },
+          create: {
+            invoiceLineItemId: row.invoiceLineItemId,
+            contractId: row.contractId,
+            contractPrice: row.contractPrice,
+            actualPrice: row.actualPrice,
+            variancePercent: row.variancePercent,
+            severity: row.severity,
+            direction,
+            dollarImpact: row.variance,
+          },
+          update: {
+            contractId: row.contractId,
+            contractPrice: row.contractPrice,
+            actualPrice: row.actualPrice,
+            variancePercent: row.variancePercent,
+            severity: row.severity,
+            direction,
+            dollarImpact: row.variance,
+          },
+        })
+        variancesWritten++
+      }
 
-  // M9: delete stale variance rows the engine no longer produces
-  // (line item re-priced to exact match, contract expired, SKU edited)
-  // so re-runs converge instead of accreting.
-  await prisma.invoicePriceVariance.deleteMany({
-    where: {
-      invoiceLineItemId: {
-        in: lineItemIds,
-        notIn: rows.map((r) => r.invoiceLineItemId),
-      },
+      // M9: delete stale variance rows the engine no longer produces
+      // (line item re-priced to exact match, contract expired, SKU edited)
+      // so re-runs converge instead of accreting.
+      await tx.invoicePriceVariance.deleteMany({
+        where: {
+          invoiceLineItemId: {
+            in: lineItemIds,
+            notIn: rows.map((r) => r.invoiceLineItemId),
+          },
+        },
+      })
     },
-  })
+    { timeout: 30_000 },
+  )
 
   return { variancesWritten }
 }
