@@ -385,16 +385,25 @@ export function NewContractClient({
     }
     if (data.description) form.setValue("description", data.description)
 
-    // Bug #8: AI was extracting capital fields (capitalCost, interestRate,
-    // termMonths, paymentCadence, downPayment) from the PDF but nothing was
-    // populating the Capital / Leased Items editor. For tie_in / capital
-    // contracts with at least a capitalCost, seed a single line item from
-    // the extraction so the user lands on the form with capital prefilled
-    // instead of an empty editor.
-    if (
-      (data.contractType === "tie_in" || data.contractType === "capital") &&
-      (data.capitalCost ?? 0) > 0
-    ) {
+    // Bug #8 / "No capital coming up" (Vick 2026-06-16): a tie_in / capital
+    // contract BY DEFINITION finances equipment, so the Capital / Leased
+    // Items editor must never land empty after extraction — an empty editor
+    // also BLOCKS save (the submit gate below requires >=1 capital item).
+    // The AI reliably classifies the type (contractType="tie_in") but
+    // sometimes misses the explicit capitalCost line (returns undefined)
+    // while still extracting totalValue / term / cadence — when that
+    // happened, the old `capitalCost > 0` gate seeded NOTHING and capital
+    // "stopped coming up." Seed for ANY tie_in / capital, using the best
+    // available amount as the financed total (capitalCost → totalValue →
+    // annualValue), so the row is present and prefilled for the user to
+    // correct rather than an empty, un-saveable editor.
+    if (data.contractType === "tie_in" || data.contractType === "capital") {
+      const seededTotal =
+        (data.capitalCost ?? 0) > 0
+          ? data.capitalCost!
+          : (data.totalValue ?? 0) > 0
+            ? data.totalValue!
+            : form.getValues("annualValue") || 0
       const seeded: CapitalLineItemDraft = {
         description:
           data.description?.slice(0, 80) ||
@@ -402,7 +411,7 @@ export function NewContractClient({
           "Capital equipment",
         itemNumber: "",
         serialNumber: "",
-        contractTotal: data.capitalCost ?? 0,
+        contractTotal: seededTotal,
         initialSales: data.downPayment ?? 0,
         interestRatePercent: data.interestRatePercent ?? 0,
         termMonths: data.termMonths ?? 60,
