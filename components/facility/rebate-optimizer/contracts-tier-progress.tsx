@@ -35,7 +35,7 @@ export function ContractsTierProgress({
 
   return (
     <div className="space-y-6">
-      {contracts.map((contract) => {
+      {contracts.map((contract, idx) => {
         const progressToNext = contract.percentToNextTier
         const urgency =
           contract.percentToNextTier >= 70
@@ -46,7 +46,7 @@ export function ContractsTierProgress({
 
         return (
           <div
-            key={`${contract.contractId}-${contract.currentTier}`}
+            key={`${contract.contractId}-${idx}`}
             className="p-4 rounded-lg border bg-card"
           >
             <div className="flex items-start justify-between mb-4">

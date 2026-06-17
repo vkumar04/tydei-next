@@ -47,8 +47,10 @@ export const adminNav: NavItem[] = [
   { label: "Vendors", href: "/admin/vendors", icon: "Truck" },
   { label: "Users", href: "/admin/users", icon: "Users" },
   { label: "Billing", href: "/admin/billing", icon: "CreditCard" },
-  { label: "Analytics", href: "/admin/analytics", icon: "BarChart3" },
-  { label: "Settings", href: "/admin/settings", icon: "Settings" },
+  // "Analytics" (/admin/analytics) and "Settings" (/admin/settings) were
+  // removed — neither route has a page (the admin portal is dashboard /
+  // facilities / payor-contracts / vendors / users / billing), so both
+  // sidebar links 404'd. Re-add with a real page when those land.
 ]
 
 // ─── Status Badge Configs ─────────────────────────────────────────
