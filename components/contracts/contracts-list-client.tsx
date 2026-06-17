@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import Link from "next/link"
 import {
@@ -98,15 +98,31 @@ export function ContractsListClient({
     id: string
     name: string
   } | null>(null)
-  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
 
-  useEffect(() => {
-    setSelectedForCompare(
-      Object.keys(rowSelection).filter((k) => rowSelection[k]),
-    )
-  }, [rowSelection])
+  // `rowSelection` (owned by the table + the Compare tab) is the single
+  // source of truth for which contracts are selected to compare. Deriving
+  // this with useMemo removes the old useState+effect mirror, which could
+  // tear (the effect overwrote Compare-tab selections on the next
+  // rowSelection change) and rendered one frame stale.
+  const selectedForCompare = useMemo(
+    () => Object.keys(rowSelection).filter((k) => rowSelection[k]),
+    [rowSelection],
+  )
+
+  // Compare tab toggles the same `rowSelection` map, capped at 5 rows.
+  const toggleCompareSelection = useCallback((id: string) => {
+    setRowSelection((prev) => {
+      if (prev[id]) {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      }
+      if (Object.values(prev).filter(Boolean).length >= 5) return prev
+      return { ...prev, [id]: true }
+    })
+  }, [])
 
   const filters = {
     ...(statusFilter !== "all" && { status: statusFilter }),
@@ -414,14 +430,8 @@ export function ContractsListClient({
           <CompareTab
             contracts={contracts}
             selected={selectedForCompare}
-            onToggle={(id) =>
-              setSelectedForCompare((prev) => {
-                if (prev.includes(id)) return prev.filter((x) => x !== id)
-                if (prev.length >= 5) return prev
-                return [...prev, id]
-              })
-            }
-            onClear={() => setSelectedForCompare([])}
+            onToggle={toggleCompareSelection}
+            onClear={() => setRowSelection({})}
           />
         </TabsContent>
       </Tabs>

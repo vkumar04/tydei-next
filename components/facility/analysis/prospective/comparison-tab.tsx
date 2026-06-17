@@ -33,19 +33,11 @@ import {
   type ProposalForComparison,
 } from "@/lib/prospective-analysis/comparison"
 import type { ScoredProposal } from "./types"
+import { formatCurrency } from "@/lib/formatting"
 
 interface ComparisonTabProps {
   proposals: ScoredProposal[] // exactly 2 when compareable
   onClear: () => void
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
 }
 
 function toComparable(p: ScoredProposal): ProposalForComparison {

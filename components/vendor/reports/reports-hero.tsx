@@ -17,16 +17,13 @@
 
 import { FileText } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { formatNumber } from "@/lib/formatting"
 
 export interface VendorReportsHeroProps {
   generatedThisMonth: number
   scheduledCount: number
   lastSentAt: string | null
   facilitiesReached: number
-}
-
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value)
 }
 
 function relativeTime(iso: string | null): string {
@@ -67,7 +64,7 @@ export function VendorReportsHero({
 
   const headline =
     generatedThisMonth > 0
-      ? `${formatCount(generatedThisMonth)} report${generatedThisMonth === 1 ? "" : "s"} generated this month across ${formatCount(facilitiesReached)} facilit${facilitiesReached === 1 ? "y" : "ies"}.`
+      ? `${formatNumber(generatedThisMonth)} report${generatedThisMonth === 1 ? "" : "s"} generated this month across ${formatNumber(facilitiesReached)} facilit${facilitiesReached === 1 ? "y" : "ies"}.`
       : "No reports generated yet this month — pick a type below to start."
 
   return (
@@ -93,12 +90,12 @@ export function VendorReportsHero({
       <div className="mt-8 grid gap-6 border-y py-6 sm:grid-cols-2 lg:grid-cols-4">
         <HeroStat
           label="Generated (MTD)"
-          value={formatCount(generatedThisMonth)}
+          value={formatNumber(generatedThisMonth)}
           sublabel="month-to-date deliveries"
         />
         <HeroStat
           label="Scheduled"
-          value={formatCount(scheduledCount)}
+          value={formatNumber(scheduledCount)}
           sublabel={
             scheduledCount > 0 ? "recurring schedules" : "none configured"
           }
@@ -112,7 +109,7 @@ export function VendorReportsHero({
         />
         <HeroStat
           label="Facilities Reached"
-          value={formatCount(facilitiesReached)}
+          value={formatNumber(facilitiesReached)}
           sublabel="distinct recipients"
         />
       </div>

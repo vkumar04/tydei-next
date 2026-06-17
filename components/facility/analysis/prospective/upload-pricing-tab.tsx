@@ -42,6 +42,7 @@ import {
 import { getCogPricingBenchmarks } from "@/lib/actions/prospective"
 import { readPricingRows, pricingRowsToItems } from "./pricing-file-reader"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { formatCurrency } from "@/lib/formatting"
 import type {
   PricingFileAnalysisRecord,
   VendorOption,
@@ -53,15 +54,6 @@ interface UploadPricingTabProps {
   onVendorChange: (vendorId: string | null) => void
   onAnalysisComplete: (record: PricingFileAnalysisRecord) => void
   lastAnalysis: PricingFileAnalysisRecord | null
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
 }
 
 function varianceColor(variancePct: number | null): string {

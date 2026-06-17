@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import type { Alert, Contract, Vendor, Facility } from "@/lib/generated/prisma/client"
+import { formatCurrency } from "@/lib/formatting"
 
 type AlertDetail = Alert & {
   contract?: Pick<
@@ -40,11 +41,10 @@ function meta(alert: AlertDetail, key: string): string | number | null {
   return m[key] as string | number
 }
 
+// The shared `formatCurrency(value, precise=true)` matches the default
+// 2-decimal currency output this card has always rendered.
 function fmtCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount)
+  return formatCurrency(amount, true)
 }
 
 /**

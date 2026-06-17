@@ -12,7 +12,7 @@
 import { Building2, ShieldCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatNumber } from "@/lib/formatting"
 
 export interface VendorDashboardHeroProps {
   vendorName: string
@@ -27,10 +27,6 @@ export interface VendorDashboardHeroProps {
   activeFacilities: number
   marketSharePercent: number
   isLoading?: boolean
-}
-
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value)
 }
 
 export function VendorDashboardHero({
@@ -60,9 +56,9 @@ export function VendorDashboardHero({
                 {vendorName}
                 {" · "}
                 <span className="text-muted-foreground">
-                  {formatCount(activeContracts)} active{" "}
+                  {formatNumber(activeContracts)} active{" "}
                   {activeContracts === 1 ? "contract" : "contracts"} across{" "}
-                  {formatCount(activeFacilities)}{" "}
+                  {formatNumber(activeFacilities)}{" "}
                   {activeFacilities === 1 ? "facility" : "facilities"}
                 </span>
               </>
@@ -81,13 +77,13 @@ export function VendorDashboardHero({
       <div className="mt-8 grid gap-6 border-y py-6 sm:grid-cols-2 lg:grid-cols-4">
         <HeroStat
           label="Active Contracts"
-          value={isLoading ? null : formatCount(activeContracts)}
-          sublabel={`of ${formatCount(totalContracts)} total`}
+          value={isLoading ? null : formatNumber(activeContracts)}
+          sublabel={`of ${formatNumber(totalContracts)} total`}
           tone="positive"
         />
         <HeroStat
           label="Active Facilities"
-          value={isLoading ? null : formatCount(activeFacilities)}
+          value={isLoading ? null : formatNumber(activeFacilities)}
           sublabel="With active contracts"
         />
         {/* 2026-06-09 audit: primary sales figure is now trailing-12mo

@@ -405,6 +405,7 @@ export function NewContractClient({
             ? data.totalValue!
             : form.getValues("annualValue") || 0
       const seeded: CapitalLineItemDraft = {
+        _uid: crypto.randomUUID(),
         description:
           data.description?.slice(0, 80) ||
           data.contractName ||

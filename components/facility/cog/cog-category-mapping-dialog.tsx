@@ -51,12 +51,7 @@ import { getCategories } from "@/lib/actions/categories"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
-
-const currency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
+import { formatCurrency } from "@/lib/formatting"
 
 // Sentinel for the "Keep as-is" target — maps the source category to
 // itself so it counts as a confirmed/recognized mapping rather than
@@ -233,7 +228,7 @@ function MappingRow({
         {row.recordCount.toLocaleString()}
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {currency.format(row.totalSpend)}
+        {formatCurrency(row.totalSpend)}
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-1">

@@ -1,5 +1,6 @@
 "use server"
 
+import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { requireAdmin } from "@/lib/actions/auth"
 import type {
@@ -8,6 +9,28 @@ import type {
   PayorContractRate,
 } from "@/lib/validators/payor-contracts"
 import { serialize } from "@/lib/serialize"
+
+// Tolerate the dual CPT-rate shape that the canonical rate-map builder
+// (`buildCptRateMap` / `resolveCaseReimbursement` in
+// lib/case-costing/cpt-rate-map.ts) reads: seeded payor JSON uses
+// `{cpt, rate, description}`, a future relational migration may use
+// `{cptCode, rate}`. At least one of cpt/cptCode is required and rate
+// must be a finite number — otherwise the row would silently poison the
+// canonical reimbursement backfill. Rows that fail are dropped (see
+// importCPTRates), matching the lenient ingest convention.
+const importCptRateRowSchema = z
+  .object({
+    cpt: z.string().min(1).optional(),
+    cptCode: z.string().min(1).optional(),
+    rate: z.number().finite(),
+    description: z.string().optional(),
+    effectiveDate: z.string().optional(),
+  })
+  .refine((r) => Boolean(r.cpt) || Boolean(r.cptCode), {
+    message: "each rate row needs a cpt or cptCode",
+  })
+
+type ImportCptRateRow = z.infer<typeof importCptRateRowSchema>
 
 // ─── List Payor Contracts ───────────────────────────────────────
 
@@ -100,19 +123,35 @@ export async function deletePayorContract(id: string) {
 export async function importCPTRates(contractId: string, rates: PayorContractRate[]) {
   await requireAdmin()
 
+  // Validate before this JSON lands in the `cptRates` column — it feeds
+  // the canonical `buildCptRateMap`/`resolveCaseReimbursement` backfill,
+  // which silently skips malformed rows (no code, or a non-number rate).
+  // Reject when the payload isn't an array at all; otherwise drop
+  // individual malformed rows so one bad row can't poison the column
+  // (and a single bad row doesn't reject an otherwise-good import).
+  if (!Array.isArray(rates)) {
+    throw new Error("importCPTRates: rates must be an array")
+  }
+  const validRates: ImportCptRateRow[] = []
+  for (const row of rates) {
+    const parsed = importCptRateRowSchema.safeParse(row)
+    if (parsed.success) validRates.push(parsed.data)
+  }
+  const skipped = rates.length - validRates.length
+
   const contract = await prisma.payorContract.findUniqueOrThrow({
     where: { id: contractId },
   })
 
-  const existingRates = (contract.cptRates as unknown as PayorContractRate[]) ?? []
-  const mergedRates = [...existingRates, ...rates]
+  const existingRates = (contract.cptRates as unknown as ImportCptRateRow[]) ?? []
+  const mergedRates = [...existingRates, ...validRates]
 
   await prisma.payorContract.update({
     where: { id: contractId },
     data: { cptRates: JSON.parse(JSON.stringify(mergedRates)) },
   })
 
-  return { imported: rates.length }
+  return { imported: validRates.length, skipped }
 }
 
 // ─── Assign to Facility ─────────────────────────────────────────

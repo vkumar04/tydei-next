@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, AlertTriangle, Layers } from "lucide-react"
 import type { ScoredProposal } from "./types"
 import { ScoreBars } from "./score-bars"
+import { formatCurrency } from "@/lib/formatting"
 
 interface ScoredProposalCardProps {
   proposal: ScoredProposal
@@ -45,15 +46,6 @@ const VERDICT_META: Record<
     className:
       "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200 border-red-300",
   },
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
 }
 
 export function ScoredProposalCard({ proposal }: ScoredProposalCardProps) {

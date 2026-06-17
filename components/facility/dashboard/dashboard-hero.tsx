@@ -20,7 +20,7 @@
 
 import { AlertTriangle, LayoutDashboard } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatNumber } from "@/lib/formatting"
 
 export interface DashboardHeroProps {
   totalContracts: number
@@ -31,10 +31,6 @@ export interface DashboardHeroProps {
   totalRebatesEarned: number
   totalRebatesCollected: number
   pendingAlerts: number
-}
-
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value)
 }
 
 function percent(part: number, whole: number): string {
@@ -66,7 +62,7 @@ export function DashboardHero({
           </div>
           <h2 className="text-balance text-xl font-semibold leading-tight sm:text-2xl">
             {formatCurrency(totalSpendYTD)} YTD spend tracked across{" "}
-            {formatCount(totalContracts)}{" "}
+            {formatNumber(totalContracts)}{" "}
             {totalContracts === 1 ? "contract" : "contracts"}
             {" · "}
             <span className="text-muted-foreground">
@@ -88,8 +84,8 @@ export function DashboardHero({
       <div className="mt-8 grid gap-6 border-y py-6 sm:grid-cols-2 lg:grid-cols-4">
         <HeroStat
           label="Active Contracts"
-          value={formatCount(activeContracts)}
-          sublabel={`of ${formatCount(totalContracts)} total`}
+          value={formatNumber(activeContracts)}
+          sublabel={`of ${formatNumber(totalContracts)} total`}
           tone="positive"
         />
         <HeroStat
@@ -118,7 +114,7 @@ export function DashboardHero({
         />
         <HeroStat
           label="Pending Alerts"
-          value={formatCount(pendingAlerts)}
+          value={formatNumber(pendingAlerts)}
           sublabel={pendingAlerts === 0 ? "All clear" : "Review in Alerts tab"}
           tone={pendingAlerts === 0 ? "positive" : "negative"}
         />

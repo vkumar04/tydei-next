@@ -222,6 +222,7 @@ export function EditContractClient({
       // synthesizes one row from contract-level fields when needed).
       void getCapitalLineItems(contract.id).then((rows) => {
         const drafts: CapitalLineItemDraft[] = rows.map((r) => ({
+          _uid: crypto.randomUUID(),
           id: r.id,
           description: r.description,
           itemNumber: r.itemNumber ?? "",

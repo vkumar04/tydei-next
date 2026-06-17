@@ -129,8 +129,34 @@ const varianceDeleteMany = vi.fn(
   },
 )
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
+vi.mock("@/lib/db", () => {
+  type PrismaMock = {
+    invoice: {
+      findUnique: (args: { where: { id: string; facilityId?: string } }) => unknown
+      findMany: (args: { where: { facilityId: string } }) => unknown
+    }
+    contractPricing: {
+      findMany: (args: {
+        where: {
+          contract: {
+            OR: Array<
+              { vendorId: string } | { additionalVendorIds: { has: string } }
+            >
+            status: string
+            facilityId: string
+          }
+        }
+      }) => unknown
+    }
+    invoicePriceVariance: {
+      upsert: (args: UpsertCall) => unknown
+      deleteMany: (args: {
+        where: { invoiceLineItemId: { in: string[]; notIn?: string[] } }
+      }) => unknown
+    }
+    $transaction: (fn: (tx: PrismaMock) => Promise<unknown>) => Promise<unknown>
+  }
+  const prismaMock: PrismaMock = {
     invoice: {
       findUnique: (args: { where: { id: string; facilityId?: string } }) =>
         invoiceFindUnique(args),
@@ -157,8 +183,14 @@ vi.mock("@/lib/db", () => ({
         where: { invoiceLineItemId: { in: string[]; notIn?: string[] } }
       }) => varianceDeleteMany(args),
     },
-  },
-}))
+    // recomputeInvoiceVariance now wraps its upsert+deleteMany in an
+    // interactive transaction; the mock runs the callback against the
+    // same client so the spies above still fire.
+    $transaction: (fn: (tx: PrismaMock) => Promise<unknown>) =>
+      fn(prismaMock),
+  }
+  return { prisma: prismaMock }
+})
 
 const requireFacilityMock = vi.fn(async () => ({
   facility: { id: "fac-1" },

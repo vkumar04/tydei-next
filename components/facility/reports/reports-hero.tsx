@@ -23,6 +23,7 @@ import {
   FileText,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { formatNumber } from "@/lib/formatting"
 
 export interface ReportsHeroProps {
   contractCount: number
@@ -32,10 +33,6 @@ export interface ReportsHeroProps {
   lastSentAt: string | null
   priceDiscrepancyHref: string
   onOpenScheduledReports: () => void
-}
-
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value)
 }
 
 function relativeTime(iso: string | null): string {
@@ -82,7 +79,7 @@ export function ReportsHero({
 
   const headline =
     contractCount > 0
-      ? `Tracking ${formatCount(contractCount)} contract${contractCount === 1 ? "" : "s"} across ${formatCount(vendorCount)} vendor${vendorCount === 1 ? "" : "s"}.`
+      ? `Tracking ${formatNumber(contractCount)} contract${contractCount === 1 ? "" : "s"} across ${formatNumber(vendorCount)} vendor${vendorCount === 1 ? "" : "s"}.`
       : "No contracts tracked yet — add a contract to start reporting."
 
   return (
@@ -108,20 +105,20 @@ export function ReportsHero({
       <div className="mt-8 grid gap-6 border-y py-6 sm:grid-cols-2 lg:grid-cols-4">
         <HeroStat
           label="Contracts"
-          value={formatCount(contractCount)}
+          value={formatNumber(contractCount)}
           sublabel="multi-contract reporting"
         />
         <HeroStat
           label="Vendors"
-          value={formatCount(vendorCount)}
-          sublabel={`across ${formatCount(contractCount)} contract${contractCount === 1 ? "" : "s"}`}
+          value={formatNumber(vendorCount)}
+          sublabel={`across ${formatNumber(contractCount)} contract${contractCount === 1 ? "" : "s"}`}
         />
         <HeroStat
           label="Active Schedules"
-          value={formatCount(activeSchedules)}
+          value={formatNumber(activeSchedules)}
           sublabel={
             totalSchedules > 0
-              ? `of ${formatCount(totalSchedules)} total`
+              ? `of ${formatNumber(totalSchedules)} total`
               : "set up recurring delivery"
           }
           tone={activeSchedules > 0 ? "positive" : "muted"}

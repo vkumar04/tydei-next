@@ -44,12 +44,7 @@ import {
 } from "@/lib/actions/cog-vendor-mapping"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
-
-const currency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-})
+import { formatCurrency } from "@/lib/formatting"
 
 interface Props {
   open: boolean
@@ -203,7 +198,7 @@ function MappingRow({
         {row.recordCount.toLocaleString()}
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {currency.format(row.totalSpend)}
+        {formatCurrency(row.totalSpend)}
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-1">

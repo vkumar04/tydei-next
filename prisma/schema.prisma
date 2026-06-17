@@ -1349,6 +1349,7 @@ model COGRecord {
   @@index([vendorItemNo])
   @@index([matchStatus])
   @@index([facilityId, matchStatus])
+  @@index([facilityId, transactionDate])
   @@index([contractId])
   @@index([facilityId, isOnContract])
   @@index([fileImportId])
