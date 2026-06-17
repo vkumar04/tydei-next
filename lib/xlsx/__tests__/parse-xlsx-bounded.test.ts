@@ -34,9 +34,9 @@ describe("parseXlsxMatrixBounded", () => {
   })
 
   it("applies the caller's cellToString (e.g. trimming)", async () => {
-    const buf = await buildXlsx([["  padded  "]])
+    const buf = await buildXlsx([["  pad a  ", "  pad b  "]])
     const matrix = await parseXlsxMatrixBounded(buf, trimmed)
-    expect(matrix[0]).toEqual(["padded"])
+    expect(matrix[0]).toEqual(["pad a", "pad b"])
   })
 
   it("rejects when the zip declares an oversized uncompressed payload (bomb guard)", async () => {
@@ -51,7 +51,7 @@ describe("parseXlsxMatrixBounded", () => {
   })
 
   it("rejects a workbook that exceeds the row cap", async () => {
-    const rows = Array.from({ length: 50 }, (_, i) => [`row-${i}`])
+    const rows = Array.from({ length: 50 }, (_, i) => [`row-${i}`, `v-${i}`])
     const buf = await buildXlsx(rows)
 
     await expect(
@@ -80,5 +80,26 @@ describe("parseXlsxMatrixBounded", () => {
     })
     expect(matrix).toHaveLength(500)
     expect(matrix[499]).toEqual(["r499", "499"])
+  })
+
+  it("trims a phantom tail of one-column-filled rows (real-world fill-down)", async () => {
+    // Mirrors `syk joint pricing COG.xlsx`: real data, then a column
+    // fill-dragged to the sheet bottom leaves thousands of rows with a
+    // single non-empty cell. Those must be dropped, not counted toward the
+    // row cap.
+    const real = [
+      ["Catalog", "Description", "Price"],
+      ["A-1", "Screw", 10],
+      ["B-2", "Plate", 20],
+    ]
+    const phantom = Array.from({ length: 1500 }, () => ["", "", "FILLED-ID"])
+    const buf = await buildXlsx([...real, ...phantom])
+
+    const matrix = await parseXlsxMatrixBounded(buf, identity)
+
+    // Only the 3 real rows survive — the 1,500-row phantom tail is dropped.
+    expect(matrix).toHaveLength(3)
+    expect(matrix[0]).toEqual(["Catalog", "Description", "Price"])
+    expect(matrix[2]).toEqual(["B-2", "Plate", "20"])
   })
 })

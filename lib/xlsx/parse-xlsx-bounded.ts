@@ -44,8 +44,19 @@ export interface ParseXlsxBoundedOptions {
 
 const DEFAULT_MAX_UNCOMPRESSED = 400 * 1024 * 1024 // 400 MB
 const DEFAULT_MAX_RATIO = 200
-const DEFAULT_MAX_ROWS = 1_000_000
+// Excel's hard per-sheet maximum is 1,048,576 rows (2^20) — a single
+// worksheet physically cannot exceed it, so the row cap only protects
+// against a pathological dense sheet, never a legit one. Setting it AT the
+// max means a full-height sheet is never false-rejected.
+const DEFAULT_MAX_ROWS = 1_048_576
 const DEFAULT_MAX_CELLS = 20_000_000
+// Real-world exports routinely fill one column (e.g. a contract id) all the
+// way to the sheet bottom, inflating the used range to the row max with a
+// "phantom tail" of near-empty rows. Stop materializing after this many
+// consecutive rows with ≤1 non-empty cell — that's the end-of-data signal
+// (mirrors the import path's sparse-run trim). Real data with short blank
+// gaps (< this) is preserved.
+const SPARSE_RUN_STOP = 500
 
 const EOCD_SIG = 0x06054b50 // End Of Central Directory
 const CDH_SIG = 0x02014b50 // Central Directory file Header
@@ -144,25 +155,58 @@ export async function parseXlsxMatrixBounded(
   const matrix: string[][] = []
   let cellCount = 0
   let tripped: XlsxLimitError | null = null
-  sheet.eachRow((row) => {
-    if (tripped) return
+  let stopped = false
+  // Buffer near-empty rows so a trailing phantom tail is dropped, but an
+  // internal short gap (followed by more data) is still committed.
+  let sparsePending: string[][] = []
+  let sparseRun = 0
+
+  const commit = (cells: string[]): void => {
     if (matrix.length >= maxRows) {
       tripped = new XlsxLimitError(
         `Spreadsheet exceeds the ${maxRows.toLocaleString()}-row limit. Split it into smaller files.`,
       )
+      stopped = true
       return
     }
-    // ExcelJS rows are 1-indexed; index 0 is always undefined.
-    const values = row.values
-    const cells = Array.isArray(values) ? values.slice(1) : []
     cellCount += cells.length
     if (cellCount > maxCells) {
       tripped = new XlsxLimitError(
         `Spreadsheet exceeds the ${maxCells.toLocaleString()}-cell limit. Split it into smaller files.`,
       )
+      stopped = true
       return
     }
-    matrix.push(cells.map((v) => cellToString(v)))
+    matrix.push(cells)
+  }
+
+  sheet.eachRow((row) => {
+    if (stopped) return
+    // ExcelJS rows are 1-indexed; index 0 is always undefined.
+    const values = row.values
+    const raw = Array.isArray(values) ? values.slice(1) : []
+    const cells = raw.map((v) => cellToString(v))
+    const nonEmpty = cells.reduce((a, c) => a + (c.trim() !== "" ? 1 : 0), 0)
+
+    if (nonEmpty <= 1) {
+      // Near-empty: hold it; a long run means we've hit the phantom tail.
+      sparseRun += 1
+      if (sparseRun >= SPARSE_RUN_STOP) {
+        stopped = true // drop the trailing sparse tail entirely
+        return
+      }
+      sparsePending.push(cells)
+      return
+    }
+
+    // Real row: flush any held (internal-gap) sparse rows, then commit.
+    sparseRun = 0
+    for (const p of sparsePending) {
+      commit(p)
+      if (stopped) return
+    }
+    sparsePending = []
+    commit(cells)
   })
   if (tripped) throw tripped
 
