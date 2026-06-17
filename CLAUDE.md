@@ -233,3 +233,32 @@ grouped/pricing_only).
   BLOCKS save (the submit gate requires ≥1 capital item). The render gate and
   persist loop both use `tie_in || capital` (not `tie_in` alone). Vick "No
   capital coming up" 2026-06-16.
+
+## File parsing & security hardening (2026-06-17 audit)
+
+- **All `.xlsx` parsing MUST go through `parseXlsxMatrixBounded`**
+  (`lib/xlsx/parse-xlsx-bounded.ts`) — NEVER raw `workbook.xlsx.load(buffer)`.
+  It is the one chokepoint that (1) guards against decompression bombs by
+  reading the ZIP central-directory declared uncompressed size + ratio
+  BEFORE decompressing (caps 400 MB / 200:1), and (2) trims the
+  **phantom tail** — real exports routinely fill one column to Excel's hard
+  max (1,048,576 rows), so it stops after 500 consecutive ≤1-cell rows
+  (mirrors the import sparse-run). Callers pass their own `cellToString`.
+  Used by `app/api/parse-file/route.ts` and `parseXlsxBufferToRows`
+  (`lib/actions/imports/shared.ts`, shared by `import-cog` + `import-pricing`);
+  all three map `XlsxLimitError` → 400. Regression-guarded by
+  `lib/xlsx/__tests__/parse-xlsx-bounded.test.ts` (incl. the phantom-tail
+  case) and verified against the real Stryker / Arthrex / invoice exports.
+- **Tenant isolation is the #1 invariant** (PHI + financial, multi-tenant).
+  Every server action / API route that takes a client id MUST scope it to
+  the caller's own facility/vendor (`contractOwnershipWhere` /
+  `contractsOwnedByVendor`, etc.). The static guard is
+  `lib/actions/__tests__/server-action-auth-scope-scanner.test.ts` — when it
+  flags a bare `where: { id }`, add a REAL ownership check, never a false
+  allowlist comment (the 2026-06-17 audit found two such false exemptions
+  hiding live IDORs in `bundles.ts` + the now-DELETED `report-scheduling.ts`).
+  Schedule CRUD lives ONLY in `lib/actions/reports/schedule.ts`
+  (facility-scoped); the duplicate `report-scheduling.ts` was removed. Global
+  `ProductBenchmark` mutations are `requireAdmin`. API routes that serve
+  tenant data (e.g. `app/api/reports/pdf`) must hard-fail when the caller has
+  no facility — never gate ownership behind `if (userFacilityId)`.

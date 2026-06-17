@@ -18,7 +18,7 @@ Healthcare contract management SaaS with dual portals for facilities and vendors
 | Data Fetching | TanStack Query |
 | Tables | TanStack Table |
 | Charts | Recharts |
-| AI | Vercel AI SDK + Google Gemini |
+| AI | Vercel AI SDK + Anthropic Claude & Google Gemini |
 | File Storage | S3-compatible (Railway Object Storage) |
 | Payments | Stripe (via @better-auth/stripe) |
 | Icons | Lucide React |
@@ -78,7 +78,9 @@ Copy `.env.example` to `.env` and fill in values:
 
 ```env
 # Database (Docker default works out of the box)
-DATABASE_URL=postgresql://tydei:tydei_dev_password@localhost:5432/tydei
+# Host port is 5435 (docker-compose maps 5435→5432, since 5432 is often
+# taken by other local Postgres instances).
+DATABASE_URL=postgresql://tydei:tydei_dev_password@localhost:5435/tydei
 
 # Auth
 BETTER_AUTH_SECRET=         # Generate: openssl rand -base64 32
@@ -236,9 +238,10 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 - Better Auth handles registration, login, sessions, organizations
 - `proxy.ts` (Next.js 16) protects routes at the edge — redirects unauthenticated users to `/login`
 - Server actions use `requireFacility()` / `requireVendor()` / `requireAdmin()` for role-specific access
-- Vendor data is scoped — vendors can only see their own contracts, no cross-vendor data leakage
+- **Tenant isolation is enforced per-query.** Every read/write that takes a client id is scoped to the caller's own facility/vendor via canonical helpers — `contractOwnershipWhere` / `contractsOwnedByFacility` (`lib/actions/contracts-auth.ts`) and `contractsOwnedByVendor` (`lib/actions/contracts-vendor-auth.ts`). A static guard, `lib/actions/__tests__/server-action-auth-scope-scanner.test.ts`, fails the build on any unscoped `where: { id }` in a `"use server"` file, preventing cross-tenant IDORs.
+- **File uploads** are bounded against decompression bombs — all `.xlsx` parsing flows through `parseXlsxMatrixBounded` (`lib/xlsx/parse-xlsx-bounded.ts`), which checks the ZIP's declared uncompressed size/ratio before decompressing.
 
-### Data Model (44 Prisma Models)
+### Data Model (69 Prisma Models)
 
 **Core:** HealthSystem, Facility, Vendor, Contract, ContractTerm, ContractTier, ContractPricing
 
@@ -261,6 +264,14 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 - **TanStack Query** for all data fetching with factory-pattern query keys
 - **Config-driven** status badges, nav items, alert types
 - **CSS vars** in oklch format — never wrap in `hsl()`
+- **Canonical reducers** — every business metric (rebates earned/collected, COG in-scope spend, vendor compliance, per-supply rebate, reimbursement backfill) has ONE helper that owns the filter; all surfaces call it so numbers can't drift. The full invariants table lives in `CLAUDE.md`.
+
+### Notable surfaces
+
+- **Contracts** — per-type terms/tiers (usage/service/capital/tie-in/grouped/pricing), AI contract extraction (PDF → terms + capital line items, with OCR for scanned docs), rebate accrual engine, tie-in capital amortization.
+- **Case Costing** — surgeon scorecards, payor-mix, and a per-procedure **True-Margin** report (revenue from CPT payor-rate reimbursement, rebate allocated by matching each supply's product number to its contract's rebate terms).
+- **Reports** — facility Reports Hub and a vendor-scoped **Vendor Reports Hub** at full parity (Overview / per-contract-type / By Rebate Type / Calculations), reusing the same presentational components.
+- **Prospective analysis** — unified proposal analyzer (PDF terms + price file + lookback + legal scan → one verdict).
 
 ## Deployment (Railway)
 
@@ -284,13 +295,12 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 
 | Metric | Count |
 |--------|-------|
-| TypeScript/TSX files | 430 |
-| Pages | 52 |
-| Components | 216 |
-| Server Actions | 38 files |
-| Hooks | 25 |
-| Validators | 20 |
-| Prisma Models | 44 |
-| Prisma Enums | 24 |
-| shadcn Components | 29 |
-| Loading States | 42 |
+| TypeScript/TSX files | ~1,560 |
+| Pages | 63 |
+| Components | 506 |
+| Server Action files | 149 (424 exported actions) |
+| API routes | 26 |
+| Hooks | 32 |
+| Prisma Models | 69 |
+| Prisma Enums | 41 |
+| Tests | 3,259 passing |
