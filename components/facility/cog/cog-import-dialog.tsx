@@ -705,9 +705,8 @@ export function COGImportDialog({
         )}
 
         {importState.step === "import" && !result && (
-          <div
+          <output
             className="flex flex-col items-center justify-center space-y-4 py-12 text-center"
-            role="status"
             aria-live="polite"
           >
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -723,7 +722,7 @@ export function COGImportDialog({
             <p className="text-xs text-muted-foreground">
               This may take 30-60s for files with 500+ rows.
             </p>
-          </div>
+          </output>
         )}
 
         {result && (

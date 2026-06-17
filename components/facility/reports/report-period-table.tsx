@@ -154,7 +154,7 @@ export function ReportPeriodTable({
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalRebateEarned)}</td>
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalRebateCollected)}</td>
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalPaymentActual)}</td>
-                <td className="px-3 py-3"></td>
+                <td className="px-3 py-3" aria-label="Actions" />
               </>
             )}
             {reportType === "grouped" && (

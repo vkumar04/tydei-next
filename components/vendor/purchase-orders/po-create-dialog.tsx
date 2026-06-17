@@ -325,10 +325,21 @@ export function POCreateDialog({
                               return (
                                 <div
                                   key={p.id}
+                                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- selectable product row: must stay a <div> to hold the two-column description/price layout; role="button"+tabIndex+onKeyDown+aria-label give it button semantics.
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-pressed={isSelected}
+                                  aria-label={p.description}
                                   className={`p-3 cursor-pointer hover:bg-muted/50 flex items-start justify-between gap-3 ${isSelected ? "bg-primary/10 border-l-2 border-l-primary" : ""}`}
                                   onClick={() =>
                                     onSelectedProductToAddChange(isSelected ? "" : p.id)
                                   }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault()
+                                      onSelectedProductToAddChange(isSelected ? "" : p.id)
+                                    }
+                                  }}
                                 >
                                   <div className="flex-1 min-w-0">
                                     <div className="font-medium">{p.description}</div>
@@ -373,10 +384,21 @@ export function POCreateDialog({
                               return (
                                 <div
                                   key={p.id}
+                                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- selectable product row: must stay a <div> to hold the two-column description/price layout; role="button"+tabIndex+onKeyDown+aria-label give it button semantics.
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-pressed={isSelected}
+                                  aria-label={p.description}
                                   className={`p-3 cursor-pointer hover:bg-muted/50 flex items-start justify-between gap-3 ${isSelected ? "bg-primary/10 border-l-2 border-l-primary" : ""}`}
                                   onClick={() =>
                                     onSelectedProductToAddChange(isSelected ? "" : p.id)
                                   }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault()
+                                      onSelectedProductToAddChange(isSelected ? "" : p.id)
+                                    }
+                                  }}
                                 >
                                   <div className="flex-1 min-w-0">
                                     <div className="font-medium">{p.description}</div>
@@ -439,7 +461,6 @@ export function POCreateDialog({
                       onChange={(e) => onScanInputChange(e.target.value)}
                       onKeyDown={onScanKeyPress}
                       className="pl-10"
-                      autoFocus
                     />
                   </div>
                   <Button onClick={onScanProduct} disabled={!scanInput.trim()}>

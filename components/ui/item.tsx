@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator"
 function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- vendored shadcn Item primitive: ItemGroup is a styled <div> that accepts arbitrary children/className; role="list" is the intended shadcn semantics.
       role="list"
       data-slot="item-group"
       className={cn("group/item-group flex flex-col", className)}

@@ -90,11 +90,11 @@ export function ChatInterface({ portalType }: ChatInterfaceProps) {
         ) : (
           <div className="space-y-4">
             {messages.map((m) => (
-              <ChatMessage key={m.id} role={m.role} parts={m.parts} />
+              <ChatMessage key={m.id} author={m.role} parts={m.parts} />
             ))}
             {isLoading && (
               <ChatMessage
-                role="assistant"
+                author="assistant"
                 parts={[]}
                 isLoading
               />

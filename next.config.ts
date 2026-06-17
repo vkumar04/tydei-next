@@ -133,6 +133,18 @@ const config: NextConfig = {
         destination: "/dashboard/analysis/prospective",
         permanent: false,
       },
+      // Portal-index + legacy redirects done at the routing layer (not a
+      // render-time `redirect()` in the page) for the same reason as
+      // /dashboard/analysis above — the in-render redirect tripped the
+      // Next client-Router React #310 hooks glitch, which adding a
+      // segment `loading.tsx` made fire reliably on /admin.
+      { source: "/admin", destination: "/admin/dashboard", permanent: false },
+      { source: "/vendor", destination: "/vendor/dashboard", permanent: false },
+      {
+        source: "/dashboard/purchase-orders/new",
+        destination: "/dashboard/purchase-orders",
+        permanent: false,
+      },
     ]
   },
 }

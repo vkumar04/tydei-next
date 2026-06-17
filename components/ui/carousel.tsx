@@ -121,6 +121,7 @@ function Carousel({
       <div
         onKeyDownCapture={handleKeyDown}
         className={cn("relative", className)}
+        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- vendored shadcn Carousel primitive: role="region"+aria-roledescription="carousel" is the documented embla/shadcn pattern; <section> can't carry aria-roledescription the same way.
         role="region"
         aria-roledescription="carousel"
         data-slot="carousel"
@@ -158,6 +159,7 @@ function CarouselItem({ className, ...props }: React.ComponentProps<"div">) {
 
   return (
     <div
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- vendored shadcn Carousel primitive: role="group"+aria-roledescription="slide" is the documented embla/shadcn slide pattern.
       role="group"
       aria-roledescription="slide"
       data-slot="carousel-item"

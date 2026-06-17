@@ -66,7 +66,9 @@ export function CptCodeList({
       />
       <datalist id={datalistId}>
         {(caseCptCodes ?? []).map((c) => (
-          <option key={c} value={c} />
+          <option key={c} value={c}>
+            {c}
+          </option>
         ))}
       </datalist>
       {suggestions.length > 0 && (

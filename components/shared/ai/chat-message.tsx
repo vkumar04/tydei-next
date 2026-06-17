@@ -4,13 +4,13 @@ import { Bot, User, Loader2 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 interface ChatMessageProps {
-  role: string
+  author: string
   parts: Array<{ type: string; text?: string; [key: string]: unknown }>
   isLoading?: boolean
 }
 
-export function ChatMessage({ role, parts, isLoading }: ChatMessageProps) {
-  const isUser = role === "user"
+export function ChatMessage({ author, parts, isLoading }: ChatMessageProps) {
+  const isUser = author === "user"
   const textContent = parts
     .filter((p) => p.type === "text")
     .map((p) => p.text ?? "")

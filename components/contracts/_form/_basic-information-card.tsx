@@ -358,7 +358,10 @@ export function BasicInformationCard({
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    role="combobox"
+                    // PopoverTrigger (Radix) sets aria-expanded + aria-controls
+                    // on this Button; a manual role="combobox" here is both
+                    // wrong (no listbox/textbox child) and missing those props.
+                    aria-label="Select categories"
                     className="w-full justify-between font-normal"
                   >
                     {selectedCategoryIds.length > 0
@@ -528,6 +531,7 @@ export function BasicInformationCard({
                 value={newVendorName}
                 onChange={(e) => setNewVendorName(e.target.value)}
                 placeholder="e.g., Acme Medical"
+                // oxlint-disable-next-line jsx-a11y/no-autofocus -- modal-dialog first field: moving focus into the dialog on open is the expected a11y behavior
                 autoFocus
               />
             </Field>

@@ -73,13 +73,14 @@ export function FacilityMultiSelect({ facilities, selected, onChange }: Props) {
       <ScrollArea className="h-48 rounded-md border p-2">
         <ul className="space-y-1">
           {filtered.map((fac) => (
-            <li
-              key={fac.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-accent"
-              onClick={() => toggle(fac.id)}
-            >
-              <Checkbox checked={selected.includes(fac.id)} />
-              <span className="text-sm">{fac.name}</span>
+            <li key={fac.id}>
+              <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-accent">
+                <Checkbox
+                  checked={selected.includes(fac.id)}
+                  onCheckedChange={() => toggle(fac.id)}
+                />
+                <span className="text-sm">{fac.name}</span>
+              </label>
             </li>
           ))}
         </ul>

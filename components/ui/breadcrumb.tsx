@@ -53,6 +53,7 @@ function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="breadcrumb-page"
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- vendored shadcn Breadcrumb primitive: the current page is a non-navigable <span> with role="link" aria-disabled aria-current="page"; a real <a> would imply a working link.
       role="link"
       aria-disabled="true"
       aria-current="page"

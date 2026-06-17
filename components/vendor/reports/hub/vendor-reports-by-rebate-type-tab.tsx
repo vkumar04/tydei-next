@@ -126,9 +126,9 @@ export function VendorReportsByRebateTypeTab({
                     data.reduce((s, r) => s + r.collected, 0),
                   )}
                 </td>
-                <td className="py-2 pr-3" />
-                <td className="py-2 pr-3" />
-                <td className="py-2" />
+                <td className="py-2 pr-3" aria-hidden="true" />
+                <td className="py-2 pr-3" aria-hidden="true" />
+                <td className="py-2" aria-hidden="true" />
               </tr>
             </tbody>
           </table>

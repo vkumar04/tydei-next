@@ -108,15 +108,17 @@ function SortableHeader({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
+              <button
+                type="button"
                 className="inline-flex cursor-help items-center"
                 onClick={(e) => e.stopPropagation()}
+                aria-label={tooltipAriaLabel ?? `${label} help`}
               >
                 <HelpCircle
                   className="h-3.5 w-3.5 text-muted-foreground"
-                  aria-label={tooltipAriaLabel ?? `${label} help`}
+                  aria-hidden="true"
                 />
-              </span>
+              </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-[320px] p-3 text-xs">
               <p>{tooltip}</p>

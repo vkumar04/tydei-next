@@ -80,6 +80,7 @@ export function ContractDatesCard({
                   mode="single"
                   selected={effectiveDate}
                   onSelect={onEffectiveDateChange}
+                  // oxlint-disable-next-line jsx-a11y/no-autofocus -- Calendar inside a Popover: focus must land on the day grid when the popover opens so keyboard users can navigate dates (canonical shadcn/react-day-picker pattern).
                   autoFocus
                 />
               </PopoverContent>
@@ -108,6 +109,7 @@ export function ContractDatesCard({
                   mode="single"
                   selected={expirationDate}
                   onSelect={onExpirationDateChange}
+                  // oxlint-disable-next-line jsx-a11y/no-autofocus -- Calendar inside a Popover: focus must land on the day grid when the popover opens so keyboard users can navigate dates (canonical shadcn/react-day-picker pattern).
                   autoFocus
                 />
               </PopoverContent>

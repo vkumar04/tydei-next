@@ -50,6 +50,7 @@ export function VendorFilterCombobox({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/role-has-required-aria-props -- shadcn combobox pattern: Radix Popover trigger keeps role="combobox"; Radix wires aria-controls to the popover content at runtime.
           role="combobox"
           aria-expanded={open}
           className="justify-between font-normal"

@@ -86,6 +86,7 @@ function Field({
 }: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
   return (
     <div
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- vendored shadcn Field primitive: styled <div> wrapper; role="group" groups the field's label/control/description.
       role="group"
       data-slot="field"
       data-orientation={orientation}

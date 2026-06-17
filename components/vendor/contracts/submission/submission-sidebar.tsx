@@ -198,8 +198,9 @@ export function SubmissionSidebar({
             </div>
           ) : (
             <div className="space-y-2">
-              <div
-                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              <button
+                type="button"
+                className="w-full border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
                 onClick={() => document.getElementById("pricing-file")?.click()}
               >
                 <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
@@ -209,7 +210,7 @@ export function SubmissionSidebar({
                 <p className="text-xs text-muted-foreground/60 mt-0.5">
                   CSV, Excel (.xlsx, .xls)
                 </p>
-              </div>
+              </button>
               <input
                 type="file"
                 id="pricing-file"

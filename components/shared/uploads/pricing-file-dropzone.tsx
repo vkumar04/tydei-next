@@ -414,6 +414,7 @@ export function PricingFileDropzone({
 
       {trigger === null ? null : (
         <div
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- drag-and-drop zone: must stay a <div> to carry onDragOver/onDragLeave/onDrop and nested content; role="button"+tabIndex+onKeyDown give it button semantics.
           role="button"
           tabIndex={disabled ? -1 : 0}
           aria-disabled={disabled || parsing}

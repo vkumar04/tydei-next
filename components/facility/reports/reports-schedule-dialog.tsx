@@ -275,7 +275,7 @@ export function ReportsScheduleDialog({
                         Recipients
                       </th>
                       <th className="px-3 py-2 text-left font-medium">Active</th>
-                      <th className="px-3 py-2" />
+                      <th className="px-3 py-2" aria-label="Actions" />
                     </tr>
                   </thead>
                   <tbody>
@@ -302,17 +302,19 @@ export function ReportsScheduleDialog({
                             <Button
                               size="sm"
                               variant="ghost"
+                              aria-label="Edit scheduled report"
                               onClick={() => startEdit(s)}
                             >
-                              <Pencil className="h-3.5 w-3.5" />
+                              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                             </Button>
                             <Button
                               size="sm"
                               variant="ghost"
+                              aria-label="Delete scheduled report"
                               onClick={() => deleteMut.mutate(s.id)}
                               disabled={deleteMut.isPending}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                             </Button>
                           </div>
                         </td>

@@ -31,6 +31,7 @@ function ButtonGroup({
 }: React.ComponentProps<"div"> & VariantProps<typeof buttonGroupVariants>) {
   return (
     <div
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- vendored shadcn ButtonGroup primitive: styled <div> wrapper; role="group" is the intended semantics.
       role="group"
       data-slot="button-group"
       data-orientation={orientation}

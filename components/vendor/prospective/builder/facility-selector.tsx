@@ -113,7 +113,6 @@ export function FacilitySelector({
                 placeholder="Enter facility name"
                 value={newFacilityName}
                 onChange={(e) => setNewFacilityName(e.target.value)}
-                autoFocus
               />
               <Button
                 size="sm"
@@ -207,7 +206,6 @@ export function FacilitySelector({
                 placeholder="Enter category name"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                autoFocus
               />
               <Button
                 size="sm"

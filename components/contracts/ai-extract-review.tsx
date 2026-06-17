@@ -152,6 +152,7 @@ export function AIExtractReview({
             <Textarea
               defaultValue={value}
               rows={4}
+              // oxlint-disable-next-line jsx-a11y/no-autofocus -- click-to-edit: focus the field the user just chose to edit
               autoFocus
               onBlur={(e) => updateField(field, e.target.value)}
               onKeyDown={(e) => {
@@ -162,6 +163,7 @@ export function AIExtractReview({
           ) : (
             <Input
               defaultValue={value}
+              // oxlint-disable-next-line jsx-a11y/no-autofocus -- click-to-edit: focus the field the user just chose to edit
               autoFocus
               onBlur={(e) => updateField(field, e.target.value)}
               onKeyDown={(e) => {
@@ -171,15 +173,17 @@ export function AIExtractReview({
             />
           )
         ) : (
-          <div
-            className="flex items-start gap-1.5 group cursor-pointer"
+          <button
+            type="button"
+            className="flex items-start gap-1.5 group cursor-pointer text-left"
             onClick={() => setEditField(field)}
+            aria-label={`Edit ${label}`}
           >
             <p className="font-semibold text-sm leading-snug">
               {value || "Not detected"}
             </p>
-            <Pencil className="h-3 w-3 shrink-0 mt-0.5 opacity-0 group-hover:opacity-60 transition-opacity" />
-          </div>
+            <Pencil aria-hidden="true" className="h-3 w-3 shrink-0 mt-0.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+          </button>
         )}
       </div>
     )
@@ -287,17 +291,20 @@ export function AIExtractReview({
             <Input
               type="date"
               defaultValue={data.effectiveDate ?? ""}
+              // oxlint-disable-next-line jsx-a11y/no-autofocus -- click-to-edit: focus the field the user just chose to edit
               autoFocus
               onBlur={(e) => updateField("effectiveDate", e.target.value)}
             />
           ) : (
-            <p
-              className="font-medium text-sm cursor-pointer group flex items-center gap-1"
+            <button
+              type="button"
+              className="font-medium text-sm cursor-pointer group flex items-center gap-1 text-left"
               onClick={() => setEditField("effectiveDate")}
+              aria-label="Edit Effective Date"
             >
               {data.effectiveDate ?? "Not detected"}
-              <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
-            </p>
+              <Pencil aria-hidden="true" className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+            </button>
           )}
         </div>
         <div className="p-3 rounded-lg border space-y-1">
@@ -308,17 +315,20 @@ export function AIExtractReview({
             <Input
               type="date"
               defaultValue={data.expirationDate ?? ""}
+              // oxlint-disable-next-line jsx-a11y/no-autofocus -- click-to-edit: focus the field the user just chose to edit
               autoFocus
               onBlur={(e) => updateField("expirationDate", e.target.value)}
             />
           ) : (
-            <p
-              className="font-medium text-sm cursor-pointer group flex items-center gap-1"
+            <button
+              type="button"
+              className="font-medium text-sm cursor-pointer group flex items-center gap-1 text-left"
               onClick={() => setEditField("expirationDate")}
+              aria-label="Edit Expiration Date"
             >
               {data.expirationDate ?? "Evergreen"}
-              <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
-            </p>
+              <Pencil aria-hidden="true" className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+            </button>
           )}
         </div>
         <div className="p-3 rounded-lg border space-y-1">
@@ -327,6 +337,7 @@ export function AIExtractReview({
             <Input
               type="number"
               defaultValue={String(data.totalValue ?? 0)}
+              // oxlint-disable-next-line jsx-a11y/no-autofocus -- click-to-edit: focus the field the user just chose to edit
               autoFocus
               onBlur={(e) => updateField("totalValue", e.target.value)}
               onKeyDown={(e) => {
@@ -335,15 +346,17 @@ export function AIExtractReview({
               }}
             />
           ) : (
-            <p
-              className="font-medium text-sm cursor-pointer group flex items-center gap-1"
+            <button
+              type="button"
+              className="font-medium text-sm cursor-pointer group flex items-center gap-1 text-left"
               onClick={() => setEditField("totalValue")}
+              aria-label="Edit Total Value"
             >
               {data.totalValue
                 ? `$${data.totalValue.toLocaleString()}`
                 : "Not detected"}
-              <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
-            </p>
+              <Pencil aria-hidden="true" className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+            </button>
           )}
         </div>
       </div>

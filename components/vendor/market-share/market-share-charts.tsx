@@ -208,6 +208,8 @@ export function MarketShareCharts({ data }: MarketShareChartsProps) {
                   <div key={item.category} className="space-y-2">
                     <button
                       className="w-full text-left"
+                      aria-label={`${item.category}: ${share}% market share. Toggle details`}
+                      aria-expanded={expandedCategory === item.category}
                       onClick={() =>
                         setExpandedCategory(
                           expandedCategory === item.category ? null : item.category

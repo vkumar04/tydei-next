@@ -202,7 +202,9 @@ function RemapRow({
               <Button
                 variant="outline"
                 size="sm"
+                // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/role-has-required-aria-props -- shadcn combobox pattern: Radix Popover trigger keeps role="combobox"; Radix wires aria-controls/aria-expanded to the popover content at runtime.
                 role="combobox"
+                aria-expanded={open}
                 className="w-[260px] justify-between"
               >
                 <span
@@ -225,6 +227,7 @@ function RemapRow({
               }}
             >
               <Command>
+                {/* oxlint-disable-next-line jsx-a11y/no-autofocus -- shadcn combobox: search input must take focus when the popover opens so keyboard users can type-to-filter immediately. */}
                 <CommandInput placeholder="Search categories…" autoFocus />
                 <CommandList style={{ maxHeight: 320 }}>
                   <CommandEmpty>No categories found.</CommandEmpty>

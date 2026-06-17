@@ -118,15 +118,16 @@ export function GroupedVendorPicker({
           <div className="max-h-48 overflow-y-auto rounded-md border p-2">
             <ul className="space-y-1">
               {filtered.map((vendor) => (
-                <li
-                  key={vendor.id}
-                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-accent"
-                  onClick={() => toggle(vendor.id)}
-                >
-                  <Checkbox checked={selected.includes(vendor.id)} />
-                  <span className="text-sm">
-                    {vendor.displayName || vendor.name}
-                  </span>
+                <li key={vendor.id}>
+                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-accent">
+                    <Checkbox
+                      checked={selected.includes(vendor.id)}
+                      onCheckedChange={() => toggle(vendor.id)}
+                    />
+                    <span className="text-sm">
+                      {vendor.displayName || vendor.name}
+                    </span>
+                  </label>
                 </li>
               ))}
             </ul>

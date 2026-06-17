@@ -602,7 +602,7 @@ export function ContractFormBasicInfo({
                 {msbcRows.map((row) => (
                   <div key={row._uid} className="flex items-end gap-2">
                     <div className="flex-1 space-y-1">
-                      <label className="text-xs text-muted-foreground">
+                      <label htmlFor={`msbc-category-${row._uid}`} className="text-xs text-muted-foreground">
                         Category
                       </label>
                       {/* Charles 2026-04-25 audit re-pass: bind to the
@@ -614,7 +614,7 @@ export function ContractFormBasicInfo({
                           updateMsbcRow(row._uid, { category: v })
                         }
                       >
-                        <SelectTrigger>
+                        <SelectTrigger id={`msbc-category-${row._uid}`}>
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                         <SelectContent>
@@ -633,10 +633,11 @@ export function ContractFormBasicInfo({
                       </Select>
                     </div>
                     <div className="w-32 space-y-1">
-                      <label className="text-xs text-muted-foreground">
+                      <label htmlFor={`msbc-commitment-${row._uid}`} className="text-xs text-muted-foreground">
                         Commitment %
                       </label>
                       <Input
+                        id={`msbc-commitment-${row._uid}`}
                         type="number"
                         min="0"
                         max="100"

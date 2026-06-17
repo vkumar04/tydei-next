@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import { HelpCircle, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -176,6 +177,7 @@ export function ContractTierRow({
   const isPercent = isPercentRebateType(tier.rebateType)
   const labels = thresholdLabels(termType)
   const isCountThreshold = usesCountThreshold(termType)
+  const fieldId = useId()
 
   // The DB stores percent_of_spend as a fraction (0.03 = 3%) but we
   // want the user to type plain percent. Charles R5.25: typing "3"
@@ -196,8 +198,9 @@ export function ContractTierRow({
           the field but the form never let the user populate it.
           Optional friendly label like "Bronze / Silver / Gold". */}
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Label (optional)</label>
+        <label htmlFor={`${fieldId}-label`} className="text-xs text-muted-foreground">Label (optional)</label>
         <Input
+          id={`${fieldId}-label`}
           className="w-28"
           placeholder="Bronze"
           value={tier.tierName ?? ""}
@@ -276,7 +279,7 @@ export function ContractTierRow({
       )}
 
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Rebate Type</label>
+        <label htmlFor={`${fieldId}-rebate-type`} className="text-xs text-muted-foreground">Rebate Type</label>
         <Select
           value={tier.rebateType}
           onValueChange={(v) => {
@@ -296,7 +299,7 @@ export function ContractTierRow({
             })
           }}
         >
-          <SelectTrigger className="w-36">
+          <SelectTrigger id={`${fieldId}-rebate-type`} className="w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

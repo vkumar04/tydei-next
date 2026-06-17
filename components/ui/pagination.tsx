@@ -49,6 +49,7 @@ function PaginationLink({
   ...props
 }: PaginationLinkProps) {
   return (
+    // oxlint-disable-next-line jsx-a11y/anchor-has-content -- vendored shadcn Pagination primitive: PaginationLink is a reusable <a> whose content is always supplied by callers via children/props (page number, Previous/Next labels).
     <a
       aria-current={isActive ? "page" : undefined}
       data-slot="pagination-link"

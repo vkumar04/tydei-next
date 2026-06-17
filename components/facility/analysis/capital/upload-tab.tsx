@@ -150,8 +150,18 @@ export function UploadTab({ onExtracted, onNavigateToInputs, onNavigateToAnalysi
             </div>
           ) : (
             <div
+              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- dropzone wraps a hidden file <input> (interactive), so a native <button> would be invalid HTML; role="button" + tabIndex + onKeyDown is the accessible pattern.
+              role="button"
+              tabIndex={0}
+              aria-label="Upload capital contract PDF"
               className="border-2 border-dashed rounded-lg p-8 text-center border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50 transition-colors cursor-pointer"
               onClick={() => inputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  inputRef.current?.click()
+                }
+              }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
             >

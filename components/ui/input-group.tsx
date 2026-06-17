@@ -12,6 +12,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="input-group"
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- vendored shadcn InputGroup primitive: styled <div> wrapper with flexible children; role="group" is the intended semantics.
       role="group"
       className={cn(
         "group/input-group border-input dark:bg-input/30 relative flex w-full items-center rounded-md border shadow-xs transition-[color,box-shadow] outline-none",
@@ -63,7 +64,9 @@ function InputGroupAddon({
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
   return (
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- vendored shadcn InputGroupAddon: onClick is a mouse-only convenience that forwards focus to the sibling input; keyboard users tab straight to the input, so no key handler is needed.
     <div
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- vendored shadcn InputGroupAddon: role="group" is the intended semantics on this styled <div>.
       role="group"
       data-slot="input-group-addon"
       data-align={align}

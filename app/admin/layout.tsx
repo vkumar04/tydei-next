@@ -11,6 +11,7 @@ export default async function AdminLayout({
 
   return (
     <PortalShell
+      // oxlint-disable-next-line jsx-a11y/aria-role -- `role` is a typed PortalShell prop (PortalRole), not an HTML ARIA attribute; it never reaches the DOM.
       role="admin"
       navItems={adminNav}
       user={{

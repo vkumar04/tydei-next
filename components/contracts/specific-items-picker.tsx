@@ -119,18 +119,19 @@ export function SpecificItemsPicker({
       <ScrollArea className="h-48 rounded-md border p-2">
         <ul className="space-y-1">
           {filtered.map((item) => (
-            <li
-              key={item.vendorItemNo}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-accent"
-              onClick={() => toggle(item.vendorItemNo)}
-            >
-              <Checkbox checked={selected.includes(item.vendorItemNo)} />
+            <li key={item.vendorItemNo}>
+              <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-accent">
+                <Checkbox
+                  checked={selected.includes(item.vendorItemNo)}
+                  onCheckedChange={() => toggle(item.vendorItemNo)}
+                />
               <span className="font-mono text-xs">{item.vendorItemNo}</span>
               {item.description && (
                 <span className="truncate text-xs text-muted-foreground">
                   {item.description}
                 </span>
               )}
+              </label>
             </li>
           ))}
         </ul>

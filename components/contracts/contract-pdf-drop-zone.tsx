@@ -91,8 +91,10 @@ export function ContractPdfDropZone({
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- drag-drop zone wraps a file <input>; a native <button> cannot contain interactive content. Keyboard + role handled below.
       role="button"
       tabIndex={0}
+      aria-label="Upload contract PDF: click or drag and drop a file"
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()

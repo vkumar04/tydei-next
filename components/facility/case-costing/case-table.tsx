@@ -67,7 +67,7 @@ export function CaseTable({ facilityId }: CaseTableProps) {
       <div className="flex flex-wrap items-end gap-2">
         {/* Surgeon filter */}
         <div className="w-[200px]">
-          <label className="mb-1 block text-xs text-muted-foreground">
+          <label htmlFor="case-filter-surgeon" className="mb-1 block text-xs text-muted-foreground">
             Surgeon
           </label>
           <Select
@@ -77,7 +77,7 @@ export function CaseTable({ facilityId }: CaseTableProps) {
               setPage(1)
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="case-filter-surgeon">
               <SelectValue placeholder="All surgeons" />
             </SelectTrigger>
             <SelectContent>
@@ -93,7 +93,7 @@ export function CaseTable({ facilityId }: CaseTableProps) {
 
         {/* Procedure filter */}
         <div className="w-[160px]">
-          <label className="mb-1 block text-xs text-muted-foreground">
+          <label htmlFor="case-filter-procedure" className="mb-1 block text-xs text-muted-foreground">
             Procedure
           </label>
           <Select
@@ -103,7 +103,7 @@ export function CaseTable({ facilityId }: CaseTableProps) {
               setPage(1)
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="case-filter-procedure">
               <SelectValue placeholder="All CPT" />
             </SelectTrigger>
             <SelectContent>
@@ -119,10 +119,11 @@ export function CaseTable({ facilityId }: CaseTableProps) {
 
         {/* Date range */}
         <div className="w-[150px]">
-          <label className="mb-1 block text-xs text-muted-foreground">
+          <label htmlFor="case-filter-from" className="mb-1 block text-xs text-muted-foreground">
             From
           </label>
           <Input
+            id="case-filter-from"
             type="date"
             value={dateFrom}
             onChange={(e) => {
@@ -132,10 +133,11 @@ export function CaseTable({ facilityId }: CaseTableProps) {
           />
         </div>
         <div className="w-[150px]">
-          <label className="mb-1 block text-xs text-muted-foreground">
+          <label htmlFor="case-filter-to" className="mb-1 block text-xs text-muted-foreground">
             To
           </label>
           <Input
+            id="case-filter-to"
             type="date"
             value={dateTo}
             onChange={(e) => {

@@ -209,7 +209,10 @@ function MappingRow({
               <Button
                 variant="outline"
                 size="sm"
+                // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- shadcn/Radix combobox pattern: the trigger is a Button in a Popover, not a native input/select.
                 role="combobox"
+                aria-expanded={open}
+                aria-controls="cog-vendor-mapping-listbox"
                 className="w-[240px] justify-between"
               >
                 <span className="truncate">
@@ -223,6 +226,7 @@ function MappingRow({
               </Button>
             </PopoverTrigger>
             <PopoverContent
+              id="cog-vendor-mapping-listbox"
               className="w-[300px] p-0"
               align="start"
               style={{
@@ -231,7 +235,7 @@ function MappingRow({
               }}
             >
               <Command>
-                <CommandInput placeholder="Search vendors…" autoFocus />
+                <CommandInput placeholder="Search vendors…" />
                 <CommandList style={{ maxHeight: 320 }}>
                   <CommandEmpty>No vendors found.</CommandEmpty>
                   <CommandGroup heading={`${vendors.length} vendors`}>

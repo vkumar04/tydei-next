@@ -1079,7 +1079,7 @@ export function MassUpload({
                     <SparklesIcon className="h-3 w-3" />
                     AI will automatically classify and extract data from each document
                   </div>
-                  <label>
+                  <label aria-label="Select files to upload">
                     <Button variant="outline" asChild disabled={isProcessing}>
                       <span>Select Files</span>
                     </Button>

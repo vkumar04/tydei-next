@@ -83,6 +83,7 @@ export function CompareTab({
                         : "border-border hover:border-primary/50"
                     } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                     aria-pressed={isSelected}
+                    aria-label={`${isSelected ? "Deselect" : "Select"} ${contract.name} for comparison`}
                   >
                     <div className="flex items-start justify-between">
                       <div>

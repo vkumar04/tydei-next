@@ -670,10 +670,10 @@ export function CaseImportDialog({
                   </Button>
                 </div>
               ) : (
-                <label className="cursor-pointer shrink-0">
+                <label aria-label={`Select ${fileType.name} file`} className="cursor-pointer shrink-0">
                   <Button variant="outline" size="sm" asChild>
                     <span>
-                      <Upload className="mr-1 h-3 w-3" />
+                      <Upload className="mr-1 h-3 w-3" aria-hidden="true" />
                       Select
                     </span>
                   </Button>

@@ -465,8 +465,18 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
                   Upload Contract PDF (AI Extraction)
                 </Label>
                 <div
+                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- dropzone wraps non-phrasing/interactive content (Progress progressbar), so a native <button> would be invalid HTML; role="button" + tabIndex + onKeyDown is the accessible pattern.
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload contract PDF for AI extraction"
                   className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
                   onClick={() => document.getElementById("payor-contract-file")?.click()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      document.getElementById("payor-contract-file")?.click()
+                    }
+                  }}
                 >
                   {selectedFile ? (
                     <div className="space-y-2">
@@ -584,8 +594,18 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
                   Upload Rate Schedule (optional)
                 </Label>
                 <div
+                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- dropzone container; role="button" + tabIndex + onKeyDown is the accessible pattern for a clickable file-drop region.
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload rate schedule PDF or CSV"
                   className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
                   onClick={() => document.getElementById("payor-rates-file")?.click()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      document.getElementById("payor-rates-file")?.click()
+                    }
+                  }}
                 >
                   {selectedFile ? (
                     <div className="flex items-center justify-center gap-2">

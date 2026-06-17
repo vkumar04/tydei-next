@@ -189,6 +189,7 @@ export function ProductAddMethods({
                       <button
                         key={`${result.id}-${idx}`}
                         type="button"
+                        aria-label={`Select ${result.vendorItemNo} ${result.description}`}
                         className="w-full px-3 py-2 text-left hover:bg-muted flex items-center justify-between gap-2 border-b last:border-b-0"
                         onClick={() => onSelectResult(result)}
                       >
@@ -283,6 +284,7 @@ export function ProductAddMethods({
                 onChange={(e) => onSkuScanInputChange(e.target.value)}
                 onKeyDown={onSkuScanKeyPress}
                 placeholder="Scan barcode or enter UDI/SKU..."
+                // oxlint-disable-next-line jsx-a11y/no-autofocus -- barcode-scanner field: hardware scanners type into the focused input immediately, so autofocus is essential to the workflow.
                 autoFocus
               />
               <Button

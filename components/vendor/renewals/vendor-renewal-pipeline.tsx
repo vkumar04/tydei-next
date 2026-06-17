@@ -275,6 +275,11 @@ export function VendorRenewalPipeline({
                         })()}
                       </TableCell>
                       <TableCell className="text-right">
+                        {/* Presentational wrapper: its only handler stops mouse-click
+                            bubbling so the row's onClick doesn't fire when the action
+                            buttons are clicked. Keyboard users tab straight into the
+                            buttons, so no key handler is needed here. */}
+                        {/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
                         <div
                           className="flex items-center justify-end gap-2"
                           onClick={(e) => e.stopPropagation()}
