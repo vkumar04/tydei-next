@@ -13,17 +13,25 @@
  * Returns 404 when CRON_SECRET is unset so the route is invisible in
  * environments that haven't opted in; 401 on a bad/missing token.
  */
+import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/db"
 import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
 
 export const dynamic = "force-dynamic"
+
+/** Constant-time bearer-token check — avoids a timing side-channel on CRON_SECRET. */
+function authorized(request: Request, secret: string): boolean {
+  const provided = Buffer.from(request.headers.get("authorization") ?? "")
+  const expected = Buffer.from(`Bearer ${secret}`)
+  return provided.length === expected.length && timingSafeEqual(provided, expected)
+}
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
   if (!secret) {
     return new Response("Not found", { status: 404 })
   }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!authorized(request, secret)) {
     return new Response("Unauthorized", { status: 401 })
   }
 

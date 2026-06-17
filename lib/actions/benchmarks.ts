@@ -1,7 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireAuth, requireVendor } from "@/lib/actions/auth"
+import { requireAuth, requireAdmin, requireVendor } from "@/lib/actions/auth"
 import { z } from "zod"
 import { serialize } from "@/lib/serialize"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
@@ -88,8 +88,15 @@ export async function getBenchmark(id: string) {
 
 // ─── Create Benchmark ───────────────────────────────────────────
 
+// ProductBenchmark is a GLOBAL, cross-tenant reference table (national
+// pricing) that feeds every facility's savings/benchmark surfaces. These
+// admin-supplied mutations let the caller set `vendorId` and aren't tenant-
+// scoped, so they must be requireAdmin — not requireAuth (which let ANY
+// logged-in user overwrite/delete shared benchmark rows). 2026-06-17
+// security fix. The vendor self-service path is `importVendorBenchmarks`
+// (requireVendor, stamps the session vendorId).
 export async function createBenchmark(input: CreateBenchmarkInput) {
-  await requireAuth()
+  await requireAdmin()
   const data = createBenchmarkSchema.parse(input)
   const benchmark = await prisma.productBenchmark.create({ data })
   return serialize(benchmark)
@@ -101,15 +108,16 @@ export async function updateBenchmark(
   id: string,
   input: Partial<CreateBenchmarkInput>
 ) {
-  await requireAuth()
-  const benchmark = await prisma.productBenchmark.update({ where: { id }, data: input })
+  await requireAdmin()
+  const data = createBenchmarkSchema.partial().parse(input)
+  const benchmark = await prisma.productBenchmark.update({ where: { id }, data })
   return serialize(benchmark)
 }
 
 // ─── Delete Benchmark ───────────────────────────────────────────
 
 export async function deleteBenchmark(id: string) {
-  await requireAuth()
+  await requireAdmin()
   const benchmark = await prisma.productBenchmark.delete({ where: { id } })
   return serialize(benchmark)
 }
@@ -117,7 +125,7 @@ export async function deleteBenchmark(id: string) {
 // ─── Bulk Import Benchmarks ─────────────────────────────────────
 
 export async function bulkImportBenchmarks(items: CreateBenchmarkInput[]) {
-  await requireAuth()
+  await requireAdmin()
   const validated = items.map((item) => createBenchmarkSchema.parse(item))
   const result = await prisma.productBenchmark.createMany({ data: validated, skipDuplicates: true })
   return serialize(result)

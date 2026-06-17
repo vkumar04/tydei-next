@@ -24,8 +24,14 @@ export interface CSVExportInput<TRow extends Record<string, unknown>> {
 }
 
 function escapeCell(value: string): string {
+  // CSV formula-injection defense: spreadsheet apps (Excel/Sheets) execute
+  // a cell whose text starts with = + - @ (or a leading tab/CR). Exported
+  // values include user/vendor-supplied free text (item descriptions,
+  // vendor names, notes imported from uploaded files), so neutralize those
+  // by prefixing a single quote, which Excel treats as "literal text".
+  const neutralized = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
   // Wrap every cell in double quotes and double-escape internal quotes.
-  return `"${value.replace(/"/g, '""')}"`
+  return `"${neutralized.replace(/"/g, '""')}"`
 }
 
 /** Default formatter — handles common primitive types; falls through to String(). */

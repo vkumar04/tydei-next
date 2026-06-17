@@ -23,6 +23,15 @@ export async function POST(request: Request) {
     const file = formData.get("file") as File | null
     const folder = (formData.get("folder") as string) || "uploads"
 
+    // The object key is `${folder}/${userId}/...`. `folder` is
+    // client-supplied, so restrict it to a single safe path segment —
+    // otherwise a caller can inject `/` or `..` to write outside their own
+    // `userId` namespace (e.g. folder="x/../<victimUserId>") and break the
+    // per-user isolation the userId segment provides.
+    if (!/^[a-zA-Z0-9_-]+$/.test(folder)) {
+      return NextResponse.json({ error: "Invalid folder" }, { status: 400 })
+    }
+
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }

@@ -253,3 +253,36 @@ export async function deleteReportSchedule(id: string): Promise<void> {
 
   await prisma.reportSchedule.delete({ where: { id } })
 }
+
+export async function toggleReportSchedule(id: string): Promise<ReportSchedule> {
+  const { facility } = await requireFacility()
+
+  // Ownership check — only toggle rows in this facility (never a bare
+  // `where: { id }`, which would be a cross-tenant IDOR).
+  const existing = await prisma.reportSchedule.findFirst({
+    where: { id, facilityId: facility.id },
+    select: { id: true, isActive: true },
+  })
+  if (!existing) {
+    throw new Error("Report schedule not found")
+  }
+
+  const row = await prisma.reportSchedule.update({
+    where: { id },
+    data: { isActive: !existing.isActive },
+  })
+
+  return serialize({
+    id: row.id,
+    facilityId: row.facilityId,
+    reportType: row.reportType,
+    frequency: row.frequency,
+    dayOfWeek: row.dayOfWeek,
+    dayOfMonth: row.dayOfMonth,
+    emailRecipients: row.emailRecipients,
+    isActive: row.isActive,
+    lastSentAt: row.lastSentAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  })
+}

@@ -8,7 +8,7 @@ import { DataTable } from "@/components/shared/tables/data-table"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
 import { Pencil, Trash2 } from "lucide-react"
 import { formatDate } from "@/lib/formatting"
-import { toggleReportSchedule, deleteReportSchedule } from "@/lib/actions/report-scheduling"
+import { toggleReportSchedule, deleteReportSchedule } from "@/lib/actions/reports/schedule"
 import { queryKeys } from "@/lib/query-keys"
 import type { ColumnDef } from "@tanstack/react-table"
 

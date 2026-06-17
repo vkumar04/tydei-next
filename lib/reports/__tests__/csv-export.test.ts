@@ -1,6 +1,38 @@
 import { describe, it, expect } from "vitest"
 import { toCSV, buildReportFilename } from "../csv-export"
 
+describe("toCSV — formula-injection defense (2026-06-17 security fix)", () => {
+  // Spreadsheet apps execute a cell whose text starts with = + - @ (or a
+  // leading tab/CR). Exported values include user/vendor-supplied free text
+  // (item descriptions, vendor names), so those must be neutralized with a
+  // leading single quote before quoting.
+  const cases: Array<[string, string]> = [
+    ["=HYPERLINK(\"http://evil\",\"x\")", "'=HYPERLINK"],
+    ["+1+1", "'+1+1"],
+    ["-2+3", "'-2+3"],
+    ["@SUM(A1:A9)", "'@SUM(A1:A9)"],
+    ["\t=cmd", "'\t=cmd"],
+  ]
+  for (const [danger, expectedPrefix] of cases) {
+    it(`neutralizes a cell starting with ${JSON.stringify(danger[0])}`, () => {
+      const csv = toCSV({
+        columns: [{ key: "description", label: "Description" }],
+        rows: [{ description: danger }],
+      })
+      const dataLine = csv.split("\n")[1]!
+      expect(dataLine.startsWith(`"${expectedPrefix}`)).toBe(true)
+    })
+  }
+
+  it("leaves a benign value untouched (no spurious quote prefix)", () => {
+    const csv = toCSV({
+      columns: [{ key: "description", label: "Description" }],
+      rows: [{ description: "Titanium screw 4.5mm" }],
+    })
+    expect(csv.split("\n")[1]).toBe('"Titanium screw 4.5mm"')
+  })
+})
+
 describe("toCSV", () => {
   it("produces header-only output for empty rows", () => {
     const csv = toCSV({

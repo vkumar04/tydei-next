@@ -24,12 +24,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Resolve user's facility for ownership verification
+    // Resolve user's facility for ownership verification. This route
+    // serves facility-scoped PHI/financial PDFs, so a caller WITHOUT a
+    // facility membership (vendor users, admins, facility-less accounts)
+    // must be rejected outright — never fall through to an unguarded
+    // generate. (Mirrors better-auth's own org pattern: no membership →
+    // reject. Previously `if (userFacilityId)` made the ownership check
+    // optional, leaking any tenant's report to any authenticated user.)
     const member = await prisma.member.findFirst({
       where: { userId: session.user.id },
       include: { organization: { include: { facility: true } } },
     })
     const userFacilityId = member?.organization?.facility?.id
+    if (!userFacilityId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
 
     const body = await request.json()
     const { type, id, dateRange, facilityId, surgeonName } = body as {
@@ -51,15 +60,13 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
-        // Verify contract belongs to user's facility
-        if (userFacilityId) {
-          const contract = await prisma.contract.findFirst({
-            where: { id, facilityId: userFacilityId },
-            select: { id: true },
-          })
-          if (!contract) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-          }
+        // Verify contract belongs to user's facility.
+        const contract = await prisma.contract.findFirst({
+          where: { id, facilityId: userFacilityId },
+          select: { id: true },
+        })
+        if (!contract) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 })
         }
         pdfBytes = await generateContractReport(id)
         filename = `contract-report-${id}.pdf`
@@ -72,7 +79,7 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
-        if (userFacilityId && facilityId !== userFacilityId) {
+        if (facilityId !== userFacilityId) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 })
         }
         const range = dateRange ?? getDefaultDateRange()
@@ -87,7 +94,7 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
-        if (userFacilityId && facilityId !== userFacilityId) {
+        if (facilityId !== userFacilityId) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 })
         }
         pdfBytes = await generateSurgeonScorecard(facilityId, surgeonName)

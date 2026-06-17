@@ -261,17 +261,23 @@ const BASELINE_HITS = new Set<string>([
   // alerts.ts: the synthesize-pipeline resolve-by-id transaction moved
   // to lib/alerts/synthesize-persist.ts (2026-06-09 audit H4 — system
   // contexts need it without a session); no by-id ops remain here.
-  // benchmarks.ts: read-only public benchmarks
-  // (line numbers bumped 2026-06-12: vendor Benchmarks-tab import added
-  // dataDate to the schema + the importVendorBenchmarks entry point,
-  // which IS vendor-scoped — stamps the session vendorId on every row.)
+  // benchmarks.ts: getBenchmark (85) is a read of the GLOBAL, non-tenant
+  // ProductBenchmark reference table (requireAuth, by-id read — no tenant
+  // boundary to cross). The create/update/delete/bulkImport MUTATIONS were
+  // moved to requireAdmin (2026-06-17 security fix) — the scanner auto-
+  // exempts requireAdmin functions, so their prior allowlist entries
+  // (105, 113) were removed as stale.
   "lib/actions/benchmarks.ts:85",
-  "lib/actions/benchmarks.ts:105",
-  "lib/actions/benchmarks.ts:113",
-  // bundles.ts: post-fetch facility equality check
-  "lib/actions/bundles.ts:77",
-  "lib/actions/bundles.ts:241",
-  "lib/actions/bundles.ts:281",
+  // bundles.ts: updateBundle (292) / deleteBundle (333) run
+  // assertBundleOwnedByFacility(facility.id, bundleId) — which findFirst's
+  // the bundle via `primaryContract: contractsOwnedByFacility(...)` — IMMEDIATELY
+  // before the bare-id update/delete the scanner sees (2026-06-17 security
+  // fix). Same legitimate assert-then-mutate pattern as reports/schedule.ts
+  // below; the static scanner can't follow the helper call. (The PRIOR
+  // allowlist here claimed a "post-fetch facility equality check" that did
+  // NOT exist and hid a real IDOR — these entries are the genuine fix.)
+  "lib/actions/bundles.ts:292",
+  "lib/actions/bundles.ts:333",
   // categories.ts: requireAdmin gates via admin-only UI; scanner
   // already exempts requireAdmin functions but these are public
   // reads / user-create paths
@@ -351,14 +357,17 @@ const BASELINE_HITS = new Set<string>([
   // listRenewalNotesForVendor / submitRenewalProposal shifted lines)
   "lib/actions/renewals/notes.ts:184",
   "lib/actions/renewals/proposals.ts:220",
-  // report-scheduling.ts: org-scoped via session lookup
-  "lib/actions/report-scheduling.ts:43",
-  "lib/actions/report-scheduling.ts:52",
-  "lib/actions/report-scheduling.ts:60",
-  "lib/actions/report-scheduling.ts:64",
-  // reports/schedule.ts: facility-scoped via assertion helper
+  // report-scheduling.ts: DELETED 2026-06-17 (was a duplicate, vulnerable
+  // ReportSchedule CRUD module with unscoped where:{id} IDORs + a
+  // client-trusted facilityId on create — the allowlist comment claimed an
+  // "org-scoped session lookup" that did NOT exist). The correct,
+  // facility-scoped module is lib/actions/reports/schedule.ts.
+  // reports/schedule.ts: facility-scoped — each mutation runs a
+  // findFirst({id, facilityId}) ownership check before the bare-id
+  // update/delete the scanner sees (update 223, delete 254, toggle 270).
   "lib/actions/reports/schedule.ts:223",
   "lib/actions/reports/schedule.ts:254",
+  "lib/actions/reports/schedule.ts:270",
   // settings.ts: assertCallerCanManage / session-derived id
   // (lines bumped 2026-04-26 after better-auth org-plugin migration
   // added `import { headers }` + `import { auth }` at the top; bumped

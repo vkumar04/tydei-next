@@ -2,11 +2,47 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { revalidatePath } from "next/cache"
 import { computeBundleStatus } from "@/lib/contracts/bundle-compute"
 import { reportServerError } from "@/lib/errors/report"
 import { z } from "zod"
+
+// ─── Ownership guards ───────────────────────────────────────────────
+//
+// TieInBundle has no facilityId of its own — it belongs to a facility
+// transitively through its `primaryContract`. Every read/mutation that
+// takes a bundleId or a contractId from the client MUST verify the
+// caller's facility owns it, or a tenant can read/corrupt/delete another
+// facility's bundle (which drives rebate-compliance math). These throw
+// on a foreign id; callers run them right after requireFacility().
+
+async function assertBundleOwnedByFacility(
+  facilityId: string,
+  bundleId: string,
+): Promise<void> {
+  const owned = await prisma.tieInBundle.findFirst({
+    where: { id: bundleId, primaryContract: contractsOwnedByFacility(facilityId) },
+    select: { id: true },
+  })
+  if (!owned) throw new Error("Bundle not found")
+}
+
+async function assertContractsOwnedByFacility(
+  facilityId: string,
+  contractIds: string[],
+): Promise<void> {
+  const ids = Array.from(new Set(contractIds.filter(Boolean)))
+  if (ids.length === 0) return
+  const found = await prisma.contract.findMany({
+    where: { id: { in: ids }, ...contractsOwnedByFacility(facilityId) },
+    select: { id: true },
+  })
+  if (found.length !== ids.length) {
+    throw new Error("One or more contracts are not owned by this facility")
+  }
+}
 
 // ─── Schemas ───────────────────────────────────────────────────────
 
@@ -74,8 +110,14 @@ export async function listBundles() {
 export async function getBundle(bundleId: string) {
   try {
     const { facility } = await requireFacility()
-    const bundle = await prisma.tieInBundle.findUnique({
-      where: { id: bundleId },
+    // Scope the read to bundles whose primary contract this facility owns —
+    // a foreign bundleId returns null (handled below), never another
+    // tenant's config.
+    const bundle = await prisma.tieInBundle.findFirst({
+      where: {
+        id: bundleId,
+        primaryContract: contractsOwnedByFacility(facility.id),
+      },
       include: {
         primaryContract: {
           select: {
@@ -157,8 +199,16 @@ export async function getBundleMembershipsForContract(contractId: string) {
 
 export async function createBundle(input: CreateBundleInput) {
   try {
-    await requireFacility()
+    const { facility } = await requireFacility()
     const data = createBundleSchema.parse(input)
+
+    // Ownership: the primary contract and every member contract must
+    // belong to the caller's facility — otherwise a tenant could attach a
+    // bundle to another facility's contract.
+    await assertContractsOwnedByFacility(facility.id, [
+      data.primaryContractId,
+      ...data.members.map((m) => m.contractId).filter((id): id is string => !!id),
+    ])
 
     // Cross-vendor members must carry vendorId + rebateContribution.
     // All-or-nothing / proportional members must carry contractId.
@@ -236,8 +286,9 @@ export type UpdateBundleInput = z.infer<typeof updateBundleSchema>
  */
 export async function updateBundle(input: UpdateBundleInput) {
   try {
-    await requireFacility()
+    const { facility } = await requireFacility()
     const data = updateBundleSchema.parse(input)
+    await assertBundleOwnedByFacility(facility.id, data.bundleId)
     await prisma.tieInBundle.update({
       where: { id: data.bundleId },
       data: {
@@ -276,7 +327,8 @@ export async function updateBundle(input: UpdateBundleInput) {
 
 export async function deleteBundle(bundleId: string) {
   try {
-    await requireFacility()
+    const { facility } = await requireFacility()
+    await assertBundleOwnedByFacility(facility.id, bundleId)
     await prisma.tieInBundleMember.deleteMany({ where: { bundleId } })
     await prisma.tieInBundle.delete({ where: { id: bundleId } })
     revalidatePath("/dashboard/contracts/bundles")

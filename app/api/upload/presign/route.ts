@@ -33,6 +33,13 @@ export async function POST(request: Request) {
       )
     }
 
+    // `folder` becomes the key prefix before the per-user `userId` segment.
+    // Restrict it to one safe path segment so a caller can't inject `/`/`..`
+    // and obtain a signed PUT URL for another user's namespace.
+    if (!/^[a-zA-Z0-9_-]+$/.test(folder)) {
+      return NextResponse.json({ error: "Invalid folder" }, { status: 400 })
+    }
+
     const ALLOWED_CONTENT_TYPES = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
