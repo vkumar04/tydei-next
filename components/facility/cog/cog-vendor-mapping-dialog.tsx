@@ -184,7 +184,9 @@ function MappingRow({
       )
       queryClient.invalidateQueries({ queryKey: ["cog-vendor-mappings"] })
       queryClient.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      queryClient.invalidateQueries({ queryKey: ["contracts"] })
+      // Kept broad: a vendor remap reassigns spend across every contract
+      // for the old/new vendor — affected ids unknown here.
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all })
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Re-map failed")

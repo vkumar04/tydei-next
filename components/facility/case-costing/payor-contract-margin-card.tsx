@@ -39,7 +39,7 @@ export function PayorContractMarginCard() {
   })
 
   const summaryQuery = useQuery({
-    queryKey: ["case-costing", "payor-margin", selected] as const,
+    queryKey: queryKeys.cases.payorMarginSummary(selected),
     queryFn: () =>
       selected ? getPayorContractMarginSummary(selected) : null,
     enabled: !!selected,

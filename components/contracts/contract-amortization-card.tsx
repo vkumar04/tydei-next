@@ -42,6 +42,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { computeMinAnnualShortfall } from "@/lib/contracts/min-annual-shortfall"
 import { computeCapitalRetirementNeeded } from "@/lib/contracts/capital-retirement-needed"
+import { queryKeys } from "@/lib/query-keys"
 
 interface ContractAmortizationCardProps {
   contractId: string
@@ -61,7 +62,7 @@ export function ContractAmortizationCard({
   scope = "facility",
 }: ContractAmortizationCardProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contract-capital-schedule", scope, contractId],
+    queryKey: queryKeys.contracts.capitalSchedule(scope, contractId),
     queryFn: () => fetcher(contractId),
   })
 

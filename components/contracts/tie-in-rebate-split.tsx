@@ -36,6 +36,7 @@ import {
   getContractCapitalSchedule,
   type ContractCapitalScheduleResult,
 } from "@/lib/actions/contracts/tie-in"
+import { queryKeys } from "@/lib/query-keys"
 
 interface TieInRebateSplitProps {
   contractId: string
@@ -56,7 +57,7 @@ export function TieInRebateSplit({
   scope = "facility",
 }: TieInRebateSplitProps) {
   const { data } = useQuery({
-    queryKey: ["contract-capital-schedule", scope, contractId],
+    queryKey: queryKeys.contracts.capitalSchedule(scope, contractId),
     queryFn: () => fetcher(contractId),
   })
 

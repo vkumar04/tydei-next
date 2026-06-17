@@ -147,8 +147,8 @@ export function TransactionDialog({
       // the contract detail so the "Rebates Earned / Collected" cards
       // pick it up immediately (rebates are a fact written into the
       // `Rebate` table and aggregated server-side — see getContract).
-      queryClient.invalidateQueries({ queryKey: ["contractPeriods", contractId] })
-      queryClient.invalidateQueries({ queryKey: ["contractRebates", contractId] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.periods(contractId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.rebates(contractId) })
       queryClient.invalidateQueries({
         queryKey: queryKeys.contracts.detail(contractId),
       })

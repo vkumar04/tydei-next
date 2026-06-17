@@ -52,7 +52,7 @@ export function useCreateCOGRecord() {
       // per-category share denominator. Invalidate the market-share
       // card explicitly so the contract-detail Performance tab and
       // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: ["category-market-share"] })
+      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
       toast.success("COG record created")
     },
     onError: (err) => toast.error(err.message || "Failed to create record"),
@@ -69,7 +69,7 @@ export function useImportCOGRecords() {
       // per-category share denominator. Invalidate the market-share
       // card explicitly so the contract-detail Performance tab and
       // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: ["category-market-share"] })
+      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
       toast.success(
         `Imported ${result.imported} records (${result.skipped} skipped, ${result.errors} errors)`
       )
@@ -99,7 +99,7 @@ export function useDeleteCOGRecord() {
       // per-category share denominator. Invalidate the market-share
       // card explicitly so the contract-detail Performance tab and
       // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: ["category-market-share"] })
+      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
       toast.success("Record deleted")
     },
     onError: (err) => toast.error(err.message || "Failed to delete record"),
@@ -116,7 +116,7 @@ export function useBulkDeleteCOGRecords() {
       // per-category share denominator. Invalidate the market-share
       // card explicitly so the contract-detail Performance tab and
       // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: ["category-market-share"] })
+      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
       toast.success(`Deleted ${result.deleted} records`)
     },
     onError: (err) => toast.error(err.message || "Failed to delete records"),
@@ -133,7 +133,7 @@ export function useClearAllCOGRecords() {
       // per-category share denominator. Invalidate the market-share
       // card explicitly so the contract-detail Performance tab and
       // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: ["category-market-share"] })
+      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
       toast.success(`Cleared all ${result.deleted.toLocaleString()} COG records`)
     },
     onError: (err) => toast.error(err.message || "Failed to clear records"),
@@ -150,7 +150,7 @@ export function useDeleteCOGFile() {
       // per-category share denominator. Invalidate the market-share
       // card explicitly so the contract-detail Performance tab and
       // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: ["category-market-share"] })
+      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
       toast.success(`Deleted ${result.deleted} records`)
     },
     onError: (err) => toast.error(err.message || "Failed to delete file"),
@@ -168,7 +168,7 @@ export function useUpdateCOGRecord() {
       // per-category share denominator. Invalidate the market-share
       // card explicitly so the contract-detail Performance tab and
       // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: ["category-market-share"] })
+      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
       toast.success("Record updated")
     },
     onError: (err) => toast.error(err.message || "Failed to update record"),
@@ -185,8 +185,7 @@ export function useBackfillCOGEnrichment() {
       // per-category share denominator. Invalidate the market-share
       // card explicitly so the contract-detail Performance tab and
       // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: ["category-market-share"] })
-      qc.invalidateQueries({ queryKey: ["cog"] })
+      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
       toast.success(
         `Enriched ${r.enriched} records (${r.pendingAfter} still pending)`,
       )

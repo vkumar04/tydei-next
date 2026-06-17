@@ -142,7 +142,7 @@ export function ContractDetailClient({
     initialData: initialContract,
   })
   const { data: periods } = useQuery({
-    queryKey: ["contractPeriods", contractId],
+    queryKey: queryKeys.contracts.periods(contractId),
     queryFn: () => getContractPeriods(contractId),
     enabled: !!contractId,
   })

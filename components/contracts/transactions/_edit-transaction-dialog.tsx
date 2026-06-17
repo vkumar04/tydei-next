@@ -108,10 +108,10 @@ function EditTransactionForm({
       })
       toast.success("Row updated")
       queryClient.invalidateQueries({
-        queryKey: ["contractPeriods", contractId],
+        queryKey: queryKeys.contracts.periods(contractId),
       })
       queryClient.invalidateQueries({
-        queryKey: ["contractRebates", contractId],
+        queryKey: queryKeys.contracts.rebates(contractId),
       })
       queryClient.invalidateQueries({
         queryKey: queryKeys.contracts.detail(contractId),

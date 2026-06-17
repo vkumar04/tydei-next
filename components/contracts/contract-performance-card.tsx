@@ -15,6 +15,7 @@ import { Activity, AlertTriangle, PieChart, Target } from "lucide-react"
 import { getContractPerformance } from "@/lib/actions/contracts/performance-read"
 import { getCategoryMarketShareForVendor } from "@/lib/actions/cog/category-market-share"
 import { getCarveOutRebate } from "@/lib/actions/contracts/carve-out"
+import { queryKeys } from "@/lib/query-keys"
 import { Scissors } from "lucide-react"
 
 /**
@@ -57,7 +58,13 @@ export function ContractPerformanceCard({
   // row when the vendor has no categorized COG, without blocking the
   // utilization + risk render.
   const { data: shareData } = useQuery({
-    queryKey: ["contract-performance-share", vendorId, contractId],
+    // Shares the canonical category-market-share key with
+    // CategoryMarketShareCard so COG mutations (use-cog.ts) invalidate
+    // BOTH surfaces. Previously this used a divergent
+    // `contract-performance-share` literal that nothing invalidated, so
+    // the Market Share row went stale after a COG import. (Best-practices
+    // sweep 2026-06-17.)
+    queryKey: queryKeys.contracts.categoryMarketShare(vendorId, contractId),
     queryFn: () =>
       vendorId
         ? getCategoryMarketShareForVendor({ vendorId, contractId })

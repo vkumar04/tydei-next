@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { getCategoryMarketShareForVendor } from "@/lib/actions/cog/category-market-share"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * Per-category market share for a contract's vendor at the active
@@ -41,7 +42,7 @@ export function CategoryMarketShareCard({
   contractId?: string
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["category-market-share", vendorId, contractId ?? null],
+    queryKey: queryKeys.contracts.categoryMarketShare(vendorId, contractId),
     queryFn: () =>
       getCategoryMarketShareForVendor({ vendorId, contractId }),
     // 2026-04-28: invalidation is now wired from every COG mutation

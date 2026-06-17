@@ -13,6 +13,30 @@ export const queryKeys = {
       ["contracts", "renewalBrief", id] as const,
     pricing: (id: string) =>
       ["contracts", "pricing", id] as const,
+    // Per-category market share for a contract's vendor, read by BOTH the
+    // standalone CategoryMarketShareCard and the ContractPerformanceCard
+    // Market Share row. They previously used two divergent literal keys
+    // (`category-market-share` vs `contract-performance-share`), so the
+    // use-cog.ts COG-mutation invalidations (which only hit
+    // `category-market-share`) silently left the Performance-tab row
+    // stale. Both cards now derive from this one entry; `categoryMarketShareBase`
+    // is the family prefix the COG mutations invalidate.
+    categoryMarketShareBase: ["category-market-share"] as const,
+    categoryMarketShare: (vendorId: string | undefined, contractId?: string) =>
+      ["category-market-share", vendorId, contractId ?? null] as const,
+    // Contract-detail ledger surfaces (Transactions tab + terms page).
+    // Read in contract-transactions / contract-detail / terms clients;
+    // invalidated by the transaction dialogs and edit-contract.
+    periods: (contractId: string) =>
+      ["contractPeriods", contractId] as const,
+    rebates: (contractId: string) =>
+      ["contractRebates", contractId] as const,
+    // Capital amortization schedule. The READ carries a `scope`
+    // discriminator; every invalidation MUST pass the same scope (or use
+    // the `capitalScheduleBase` family prefix) or it won't prefix-match.
+    capitalScheduleBase: ["contract-capital-schedule"] as const,
+    capitalSchedule: (scope: string, contractId: string) =>
+      ["contract-capital-schedule", scope, contractId] as const,
   },
   contractTerms: {
     all: ["contractTerms"] as const,
@@ -164,6 +188,14 @@ export const queryKeys = {
     payorMarginOptions: () => ["case-costing", "payor-contracts"] as const,
     payorMargins: (contractId: string) =>
       ["cases", "payorMargins", contractId] as const,
+    // Payor Contract Margin card summary (Est. Reimbursement / CPT Matched /
+    // Total Margin). Distinct queryFn from `payorMargins` — keeps its own
+    // `case-costing/payor-margin` namespace. The payor-contract mutations
+    // (esp. rate import) must invalidate the `payorMarginSummaryBase` family
+    // prefix or the card stays stale after a rate import.
+    payorMarginSummaryBase: ["case-costing", "payor-margin"] as const,
+    payorMarginSummary: (contractId: string | undefined) =>
+      ["case-costing", "payor-margin", contractId] as const,
     trueMargin: (
       facilityId: string,
       periodStart: string,

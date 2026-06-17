@@ -183,16 +183,19 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
           queryKey: queryKeys.contracts.detail(contractId),
         }),
         queryClient.invalidateQueries({
-          queryKey: ["contractRebates", contractId],
+          queryKey: queryKeys.contracts.rebates(contractId),
         }),
         queryClient.invalidateQueries({
-          queryKey: ["contractPeriods", contractId],
+          queryKey: queryKeys.contracts.periods(contractId),
         }),
         queryClient.invalidateQueries({
           queryKey: ["contract-accrual-timeline", contractId],
         }),
+        // best-practices sweep 2026-06-17: same scope-mismatch fix as
+        // edit-contract-client — the read key carries a scope segment, so
+        // invalidate the whole capital-schedule family to cover every scope.
         queryClient.invalidateQueries({
-          queryKey: ["contract-capital-schedule", contractId],
+          queryKey: queryKeys.contracts.capitalScheduleBase,
         }),
       ])
       toast.success("Terms saved successfully")

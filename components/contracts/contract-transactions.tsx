@@ -202,10 +202,10 @@ function AddTransactionButtons({
         )
       }
       queryClient.invalidateQueries({
-        queryKey: ["contractPeriods", contractId],
+        queryKey: queryKeys.contracts.periods(contractId),
       })
       queryClient.invalidateQueries({
-        queryKey: ["contractRebates", contractId],
+        queryKey: queryKeys.contracts.rebates(contractId),
       })
       queryClient.invalidateQueries({
         queryKey: queryKeys.contracts.detail(contractId),
@@ -433,7 +433,7 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
   // user-logged collections / credits / payments both land here, so the
   // query covers every surface the user expects in the ledger.
   const { data: rebatesData, isLoading: rebatesLoading } = useQuery({
-    queryKey: ["contractRebates", contractId],
+    queryKey: queryKeys.contracts.rebates(contractId),
     queryFn: () => getContractRebates(contractId),
     enabled: !!contractId,
   })
@@ -446,10 +446,10 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
   // stale numbers until the next tab flip.
   function invalidateLedger() {
     queryClient.invalidateQueries({
-      queryKey: ["contractPeriods", contractId],
+      queryKey: queryKeys.contracts.periods(contractId),
     })
     queryClient.invalidateQueries({
-      queryKey: ["contractRebates", contractId],
+      queryKey: queryKeys.contracts.rebates(contractId),
     })
     queryClient.invalidateQueries({
       queryKey: queryKeys.contracts.detail(contractId),
@@ -481,7 +481,7 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
       await deleteContractTransaction({ id: row.id, contractId })
     },
     onMutate: async (row: PeriodRow) => {
-      const queryKey = ["contractRebates", contractId] as const
+      const queryKey = queryKeys.contracts.rebates(contractId)
       await queryClient.cancelQueries({ queryKey })
       const previous = queryClient.getQueryData<{ id: string }[]>(queryKey)
       if (previous) {
@@ -499,7 +499,7 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
     ) => {
       if (context?.previous) {
         queryClient.setQueryData(
-          ["contractRebates", contractId],
+          queryKeys.contracts.rebates(contractId),
           context.previous,
         )
       }

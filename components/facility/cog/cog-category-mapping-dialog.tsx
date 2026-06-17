@@ -185,7 +185,10 @@ function MappingRow({
       )
       queryClient.invalidateQueries({ queryKey: ["cog-category-mappings"] })
       queryClient.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      queryClient.invalidateQueries({ queryKey: ["contracts"] })
+      // Kept broad: a category remap retro-rewrites scoped spend across
+      // every contract carrying that category — the affected contract ids
+      // aren't known here, so refresh the whole contracts family.
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all })
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Re-map failed")
