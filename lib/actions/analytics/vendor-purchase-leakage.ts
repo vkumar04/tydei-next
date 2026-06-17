@@ -132,13 +132,13 @@ async function _getVendorPurchaseLeakageImpl(input: {
           WHEN any_active.has_any IS NULL THEN 'OFF_CONTRACT'::text
           WHEN any_in_period.has_any IS NULL THEN 'OUT_OF_PERIOD'::text
           WHEN match.unit_price IS NOT NULL
-               AND ABS((cog.unit_cost - match.unit_price) / match.unit_price) >= 0.05
+               AND ABS((cog.unit_cost - match.unit_price) / NULLIF(match.unit_price, 0)) >= 0.05
             THEN 'PRICE_VARIANCE'::text
           ELSE NULL
         END AS reason,
         CASE
           WHEN match.unit_price IS NOT NULL THEN
-            ROUND(((cog.unit_cost - match.unit_price) / match.unit_price) * 100, 2)
+            ROUND(((cog.unit_cost - match.unit_price) / NULLIF(match.unit_price, 0)) * 100, 2)
           ELSE NULL
         END AS variance_pct
       FROM cog
@@ -222,7 +222,7 @@ async function _getVendorPurchaseLeakageImpl(input: {
           WHEN any_active.has_any IS NULL THEN 'OFF_CONTRACT'
           WHEN any_in_period.has_any IS NULL THEN 'OUT_OF_PERIOD'
           WHEN match.unit_price IS NOT NULL
-               AND ABS((cog."unitCost" - match.unit_price) / match.unit_price) >= 0.05
+               AND ABS((cog."unitCost" - match.unit_price) / NULLIF(match.unit_price, 0)) >= 0.05
             THEN 'PRICE_VARIANCE'
           ELSE NULL
         END AS reason
