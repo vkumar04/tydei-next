@@ -200,3 +200,36 @@ Details" report is `components/facility/reports/report-period-table.tsx` +
 `report-trend-chart.tsx`, fed by `getReportData` in `lib/actions/reports.ts`
 (per-contract-type columns already wired for usage/service/capital/tie_in/
 grouped/pricing_only).
+
+## Key surfaces added recently (2026-06)
+
+- **Vendor Reports Hub** (`components/vendor/reports/hub/` + `lib/actions/vendor-reports/`)
+  — full parity with the facility Reports Hub, vendor-scoped. The vendor
+  actions (`getVendorReportData` / `getVendorReportsOverview` /
+  `getVendorRebateBreakdownByType` / `getVendorRebateCalculationAudit` /
+  `getVendorReportContracts`) return the SAME payload shapes as their facility
+  counterparts so the facility's presentational components (`ReportPeriodTable`,
+  `ReportTrendChart`, `ReportContractHeader`) are REUSED verbatim — never fork
+  them. All vendor contract reads go through `contractsOwnedByVendor`
+  (invariants table). The hub mounts inside `components/vendor/reports-client.tsx`
+  as the "Contract Performance Details" section above the CSV export cards
+  (those CSVs are separate and still display-only on their facility filter).
+- **Case-costing True-Margin (per-procedure)** table —
+  `app/dashboard/case-costing/reports/reports-client.tsx`, fed by
+  `getTrueMarginReport` (`lib/actions/case-costing/true-margin.ts`). **Revenue**
+  = reimbursement via the canonical `resolveCaseReimbursement` backfill;
+  **Rebate Allocation** = per-supply product match via `buildSupplyRebateRuleMap`
+  + `applySupplyRebateRule` (NOT proportional distribution of earned rebate).
+  Both are invariants — see the table above.
+
+## Contract-form conventions
+
+- **Capital / Leased Items editor seeds for EVERY tie_in/capital extraction.**
+  In `components/contracts/new-contract-client.tsx` the AI-extract handler seeds
+  one capital line item whenever `contractType ∈ {tie_in, capital}`, using the
+  best available financed total (`capitalCost → totalValue → annualValue`). Do
+  NOT re-gate the seed on `capitalCost > 0` — the AI often classifies the type
+  correctly but misses the explicit capital-cost line, and an empty editor also
+  BLOCKS save (the submit gate requires ≥1 capital item). The render gate and
+  persist loop both use `tie_in || capital` (not `tie_in` alone). Vick "No
+  capital coming up" 2026-06-16.
