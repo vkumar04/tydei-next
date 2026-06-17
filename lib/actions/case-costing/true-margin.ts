@@ -32,12 +32,12 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { allocateRebatesToProcedures } from "@/lib/contracts/true-margin"
-import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import {
   buildCptRateMap,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
+import { buildSupplyRebateRuleMap } from "@/lib/actions/case-costing/supply-rebate-rules"
+import { applySupplyRebateRule } from "@/lib/case-costing/attribute-surgeon-rebates"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -151,6 +151,8 @@ export async function getTrueMarginReport(
             extendedCost: true,
             contractId: true,
             isOnContract: true,
+            // quantity drives per-unit (volume) rebate rules.
+            quantity: true,
           },
         },
         procedures: {
@@ -209,13 +211,29 @@ export async function getTrueMarginReport(
     procedureName: string
     totalRevenue: number
     directCost: number
+    /** Per-supply contributed rebate, summed across the case's supplies. */
+    rebate: number
     /** vendorId -> dollars */
     vendorSpend: Map<string, number>
   }
 
+  // 3a. Per-supply rebate rule per contract — the SAME derivation the
+  // surgeon Rebate-Contribution report uses (CLAUDE.md "Per-supply rebate
+  // rule"). This is what makes the Rebate Allocation column reflect the
+  // actual products used on each case, matched to their contract's rebate
+  // terms — rather than spreading each vendor's earned rebate by spend
+  // share. Vick 2026-06-16.
+  const ruleByContract = await buildSupplyRebateRuleMap(
+    facility.id,
+    Array.from(contractIds),
+  )
+
   const caseAggMap = new Map<string, CaseAggregate>()
   const vendorSpendTotal = new Map<string, number>()
   const vendorNameMap = new Map<string, string>()
+  // vendorId -> Σ per-supply contributed rebate (drives the vendor roll-up,
+  // kept coherent with the per-procedure allocation — same numbers).
+  const vendorRebateMap = new Map<string, number>()
 
   for (const c of cases) {
     const agg: CaseAggregate = {
@@ -233,6 +251,7 @@ export async function getTrueMarginReport(
         cptRateMap,
       ),
       directCost: Number(c.totalSpend),
+      rebate: 0,
       vendorSpend: new Map(),
     }
 
@@ -256,96 +275,37 @@ export async function getTrueMarginReport(
         (vendorSpendTotal.get(vendorId) ?? 0) + ext,
       )
       if (!vendorNameMap.has(vendorId)) vendorNameMap.set(vendorId, vendorName)
+
+      // Per-supply contributed rebate: match the product to its contract
+      // and apply that contract's rebate rule. Only ON-contract supplies
+      // tied to a contract can contribute; the rule's ≤extendedCost clamp
+      // lives in applySupplyRebateRule.
+      if (s.isOnContract && s.contractId) {
+        const rule = ruleByContract.get(s.contractId) ?? { kind: "none" }
+        const supplyRebate = applySupplyRebateRule(rule, {
+          extendedCost: ext,
+          quantity: Number(s.quantity),
+        })
+        if (supplyRebate > 0) {
+          agg.rebate += supplyRebate
+          if (vendorId !== OFF_CONTRACT_VENDOR_KEY) {
+            vendorRebateMap.set(
+              vendorId,
+              (vendorRebateMap.get(vendorId) ?? 0) + supplyRebate,
+            )
+          }
+        }
+      }
     }
 
     caseAggMap.set(c.id, agg)
   }
 
-  // 4. For every real vendor (off-contract is excluded by definition),
-  // sum earned rebates from Rebate rows whose payPeriodEnd lands in
-  // the window. We funnel through the canonical helper so the "earned"
-  // filter logic stays in one place.
-  const realVendorIds = Array.from(vendorSpendTotal.keys()).filter(
-    (id) => id !== OFF_CONTRACT_VENDOR_KEY,
-  )
-
-  const vendorRebateMap = new Map<string, number>()
-
-  if (realVendorIds.length > 0) {
-    const rebateRows = await prisma.rebate.findMany({
-      where: {
-        facilityId: facility.id,
-        contract: { vendorId: { in: realVendorIds } },
-        payPeriodEnd: { gte: periodStart, lte: periodEnd },
-      },
-      select: {
-        rebateEarned: true,
-        payPeriodEnd: true,
-        contract: { select: { vendorId: true } },
-      },
-    })
-
-    // Bucket by vendor, then sum-through the canonical helper.
-    const byVendor = new Map<
-      string,
-      Array<{ payPeriodEnd: Date; rebateEarned: unknown }>
-    >()
-    for (const r of rebateRows) {
-      const vid = r.contract.vendorId
-      const arr = byVendor.get(vid) ?? []
-      arr.push({
-        payPeriodEnd: r.payPeriodEnd,
-        rebateEarned: r.rebateEarned,
-      })
-      byVendor.set(vid, arr)
-    }
-
-    for (const [vid, rows] of byVendor) {
-      // Use periodEnd as `today` so any row with payPeriodEnd <=
-      // periodEnd is treated as earned. The Prisma where clause
-      // already constrained the lower bound.
-      const earned = sumEarnedRebatesLifetime(
-        rows.map((r) => ({
-          payPeriodEnd: r.payPeriodEnd,
-          rebateEarned: r.rebateEarned as number | string | null | undefined,
-        })),
-        periodEnd,
-      )
-      vendorRebateMap.set(vid, earned)
-    }
-  }
-
-  // 5. Allocate per vendor using the canonical helper. Build
-  // procedureId -> rebateAllocation rolled across all vendors.
+  // 4. Per-procedure rebate allocation = the case's summed per-supply
+  // contributed rebate (computed above).
   const procedureRebateAllocation = new Map<string, number>()
-
-  for (const vendorId of vendorSpendTotal.keys()) {
-    if (vendorId === OFF_CONTRACT_VENDOR_KEY) continue
-
-    const totalVendorSpend = vendorSpendTotal.get(vendorId) ?? 0
-    const totalRebate = vendorRebateMap.get(vendorId) ?? 0
-    if (totalRebate <= 0 || totalVendorSpend <= 0) continue
-
-    // Build the helper's `procedures` input: one row per case that
-    // touched this vendor, keyed by case id (so we can fold back).
-    const procRows: Array<{ procedureId: string; vendorSpend: number }> = []
-    for (const agg of caseAggMap.values()) {
-      const spend = agg.vendorSpend.get(vendorId) ?? 0
-      if (spend > 0) procRows.push({ procedureId: agg.caseId, vendorSpend: spend })
-    }
-
-    const allocation = allocateRebatesToProcedures(
-      procRows,
-      totalVendorSpend,
-      totalRebate,
-    )
-
-    for (const [procedureId, dollars] of allocation) {
-      procedureRebateAllocation.set(
-        procedureId,
-        (procedureRebateAllocation.get(procedureId) ?? 0) + dollars,
-      )
-    }
+  for (const agg of caseAggMap.values()) {
+    procedureRebateAllocation.set(agg.caseId, agg.rebate)
   }
 
   // 6. Build per-procedure rows + summary roll-up.
