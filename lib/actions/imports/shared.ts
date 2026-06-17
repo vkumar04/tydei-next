@@ -13,7 +13,7 @@
  *   - get (row-by-mapping field getter)
  *   - toContractType / toPerfPeriod / toTermType / toRebateType (AI→enum)
  */
-import ExcelJS from "exceljs"
+import { parseXlsxMatrixBounded } from "@/lib/xlsx/parse-xlsx-bounded"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { prisma } from "@/lib/db"
@@ -284,48 +284,40 @@ export function parseCSV(text: string): Record<string, string>[] {
 export async function parseXlsxBufferToRows(
   buffer: Buffer,
 ): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
-  const workbook = new ExcelJS.Workbook()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await workbook.xlsx.load(buffer as any)
-  const sheet = workbook.worksheets[0]
-  if (!sheet) return { headers: [], rows: [] }
+  // Memory-bounded streaming parse (security #9): never materialize the
+  // whole sheet via `xlsx.load` — a decompression bomb would OOM the
+  // container. `parseXlsxMatrixBounded` streams the first worksheet
+  // row-by-row, coercing each cell with `excelCellToString`, and aborts
+  // past hard row/cell caps. Row 0 of the matrix is the header row
+  // (matches the prior `getRow(1)`); rows 1.. are data.
+  const matrix = await parseXlsxMatrixBounded(buffer, excelCellToString)
+  if (matrix.length === 0) return { headers: [], rows: [] }
 
-  const headerRow = sheet.getRow(1)
-  const rawValues = headerRow.values as (ExcelJS.CellValue | undefined)[]
-  // Use a dense loop — exceljs returns a 1-indexed (sparse) array, and
-  // Array.prototype.map preserves empty slots without invoking the
-  // callback, which would leak `undefined` into the headers.
-  const headers: string[] = []
-  for (let i = 1; i < rawValues.length; i++) {
-    headers.push(excelCellToString(rawValues[i]).trim())
-  }
+  const headers = (matrix[0] ?? []).map((h) => h.trim())
 
   const STOP_AFTER_SPARSE_RUN = 200
   let sparseRun = 0
-  let stop = false
   const rows: Record<string, string>[] = []
-  sheet.eachRow((row, rowNumber) => {
-    if (stop) return
-    if (rowNumber === 1) return
+  for (let r = 1; r < matrix.length; r++) {
+    const cells = matrix[r] ?? []
     const record: Record<string, string> = {}
-    const values = row.values as (ExcelJS.CellValue | undefined)[]
     let nonEmpty = 0
     headers.forEach((header, index) => {
       if (!header) return
-      const v = excelCellToString(values[index + 1])
+      const v = cells[index] ?? ""
       if (v.trim() !== "") nonEmpty++
       record[header] = v
     })
     if (nonEmpty < 2) {
       sparseRun++
-      if (sparseRun >= STOP_AFTER_SPARSE_RUN) stop = true
-      if (nonEmpty === 0) return
+      if (sparseRun >= STOP_AFTER_SPARSE_RUN) break
+      if (nonEmpty === 0) continue
       rows.push(record)
-      return
+      continue
     }
     sparseRun = 0
     rows.push(record)
-  })
+  }
   while (rows.length > 0) {
     const last = rows[rows.length - 1]
     const nonEmpty = Object.values(last).filter(

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth-server"
 import { rateLimit } from "@/lib/rate-limit"
 import { ingestCOGRecordsRows } from "@/lib/actions/imports/cog-csv-import"
 import { parseXlsxBufferToRows } from "@/lib/actions/imports/shared"
+import { XlsxLimitError } from "@/lib/xlsx/parse-xlsx-bounded"
 
 /**
  * Bug 2026-05-18 (Vick "Primary full COG.xlsx" via MassUpload):
@@ -128,6 +129,9 @@ export async function POST(request: Request) {
     return NextResponse.json(result)
   } catch (error) {
     console.error("[/api/import-cog]", error)
+    if (error instanceof XlsxLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     const message = error instanceof Error ? error.message : "Failed to import"
     if (message.includes("end of central directory")) {
       return NextResponse.json(

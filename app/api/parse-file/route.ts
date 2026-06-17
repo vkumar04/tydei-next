@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import ExcelJS from "exceljs"
 import * as XLSX from "xlsx"
 import { rateLimit } from "@/lib/rate-limit"
 import { matrixToHeadersAndRows } from "@/lib/utils/tabular/detect-headers"
+import {
+  parseXlsxMatrixBounded,
+  XlsxLimitError,
+} from "@/lib/xlsx/parse-xlsx-bounded"
 
 export async function POST(request: Request) {
   try {
@@ -118,23 +121,12 @@ export async function POST(request: Request) {
         (row ?? []).map((v) => coerceCellToString(v).trim()),
       )
     } else {
-      const workbook = new ExcelJS.Workbook()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await workbook.xlsx.load(Buffer.from(arrayBuffer) as any)
-
-      const sheet = workbook.worksheets[0]
-      if (!sheet) {
-        return NextResponse.json(
-          { error: "No sheets found in file" },
-          { status: 400 },
-        )
-      }
-      matrix = []
-      sheet.eachRow((row) => {
-        const values = row.values as (ExcelJS.CellValue | undefined)[]
-        // ExcelJS row.values is 1-indexed; index 0 is undefined.
-        matrix.push(values.slice(1).map((v) => coerceCellToString(v).trim()))
-      })
+      // Memory-bounded streaming parse (security #9): never materialize the
+      // whole sheet — a decompression bomb would OOM the container. Caps
+      // abort an absurd row/cell count early.
+      matrix = await parseXlsxMatrixBounded(Buffer.from(arrayBuffer), (v) =>
+        coerceCellToString(v).trim(),
+      )
     }
 
     // Step 2: header-row detection + dedup + row→object map. This logic
@@ -162,6 +154,10 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Parse file error:", error)
+    // Workbook exceeded the memory-safety caps (decompression-bomb guard).
+    if (error instanceof XlsxLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     // ExcelJS throws "Can't find end of central directory" when the file
     // isn't a valid .xlsx zip — most commonly because a CSV was renamed.
     // Classify that case so the user knows how to self-correct.
