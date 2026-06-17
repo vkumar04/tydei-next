@@ -11,6 +11,8 @@
     "build:analyze": "ANALYZE=true bun run build",
     "start": "HOSTNAME=0.0.0.0 bun .next/standalone/server.js",
     "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "lint:ci": "oxlint . --deny-warnings",
     "db:push": "prisma db push --config prisma/prisma.config.ts",
     "db:migrate": "prisma migrate dev --config prisma/prisma.config.ts",
     "db:seed": "bun run prisma/seed.ts && bun run scripts/qa-sanity.ts",

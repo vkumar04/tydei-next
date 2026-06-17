@@ -1,6 +1,64 @@
 {
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "nextjs",
+    "jsx-a11y",
+    "import",
+    "promise",
+    "node",
+    "vitest"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "settings": {
+    "react": {
+      "version": "detect"
+    }
+  },
   "rules": {
     "no-unused-vars": "warn",
-    "no-console": "warn"
-  }
+    "no-console": "warn",
+
+    "react/react-in-jsx-scope": "off",
+    "react/no-children-prop": "warn",
+    "react/no-array-index-key": "warn",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+
+    "unicorn/no-new-array": "warn",
+    "unicorn/no-useless-length-check": "warn",
+    "typescript/prefer-as-const": "warn",
+
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/require-to-throw-message": "off"
+  },
+  "overrides": [
+    {
+      "files": ["scripts/**", "**/*.config.{ts,js,mjs}", "prisma/**"],
+      "rules": {
+        "no-console": "off",
+        "no-unused-expressions": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**", "tests/**"],
+      "rules": {
+        "no-console": "off",
+        "no-unused-vars": "off",
+        "no-unsafe-optional-chaining": "off",
+        "vitest/no-conditional-expect": "warn"
+      }
+    }
+  ]
 }

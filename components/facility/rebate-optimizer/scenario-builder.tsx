@@ -236,6 +236,7 @@ export function ScenarioBuilder({
             optimizer engine doesn't model them yet. Re-add when
             the per-type optimizer math ships.
             Charles 2026-04-25. */}
+        {/* oxlint-disable-next-line no-constant-binary-expression -- intentional dead UI, see comment above */}
         {false && (
           <div className="mt-4 max-w-sm space-y-2">
             <Label htmlFor="scenario-share">Market Share (%)</Label>

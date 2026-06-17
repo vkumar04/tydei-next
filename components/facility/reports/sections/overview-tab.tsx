@@ -58,6 +58,37 @@ export function OverviewTab({
     ) ?? 0
   const contractCount = data?.contracts.length ?? 0
 
+  // Hooks must run unconditionally on every render — keep these above the
+  // `selectedContract` early return below (oxlint react-hooks/rules-of-hooks).
+  // Build pie chart data from contracts
+  const lifecycleData = useMemo(() => {
+    if (!data?.contracts) return []
+    const active = data.contracts.length
+    return [
+      { name: "Active", value: active, color: "#22c55e" },
+      { name: "Expired", value: 0, color: "#ef4444" },
+      { name: "Expiring", value: 0, color: "#eab308" },
+    ].filter((d) => d.value > 0)
+  }, [data])
+
+  // Build monthly bar chart data from periods
+  const monthlyChartData = useMemo(() => {
+    const monthMap = new Map<string, { spend: number; rebate: number }>()
+    for (const p of allPeriods) {
+      const d = new Date(p.periodStart)
+      const key = d.toLocaleString("default", { month: "short" })
+      const existing = monthMap.get(key) ?? { spend: 0, rebate: 0 }
+      existing.spend += p.totalSpend
+      existing.rebate += p.rebateEarned
+      monthMap.set(key, existing)
+    }
+    return Array.from(monthMap.entries()).map(([month, vals]) => ({
+      month,
+      spend: vals.spend,
+      rebate: vals.rebate,
+    }))
+  }, [allPeriods])
+
   if (selectedContract) {
     const c = selectedContract as { name?: string; contractType?: string; status?: string }
     return (
@@ -177,35 +208,6 @@ export function OverviewTab({
       </>
     )
   }
-
-  // Build pie chart data from contracts
-  const lifecycleData = useMemo(() => {
-    if (!data?.contracts) return []
-    const active = data.contracts.length
-    return [
-      { name: "Active", value: active, color: "#22c55e" },
-      { name: "Expired", value: 0, color: "#ef4444" },
-      { name: "Expiring", value: 0, color: "#eab308" },
-    ].filter((d) => d.value > 0)
-  }, [data])
-
-  // Build monthly bar chart data from periods
-  const monthlyChartData = useMemo(() => {
-    const monthMap = new Map<string, { spend: number; rebate: number }>()
-    for (const p of allPeriods) {
-      const d = new Date(p.periodStart)
-      const key = d.toLocaleString("default", { month: "short" })
-      const existing = monthMap.get(key) ?? { spend: 0, rebate: 0 }
-      existing.spend += p.totalSpend
-      existing.rebate += p.rebateEarned
-      monthMap.set(key, existing)
-    }
-    return Array.from(monthMap.entries()).map(([month, vals]) => ({
-      month,
-      spend: vals.spend,
-      rebate: vals.rebate,
-    }))
-  }, [allPeriods])
 
   // All-contracts overview
   return (
