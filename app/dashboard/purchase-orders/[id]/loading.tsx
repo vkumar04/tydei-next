@@ -28,7 +28,7 @@ export default function PODetailLoading() {
         <Skeleton className="mb-4 h-5 w-32" />
         <div className="space-y-3">
           <Skeleton className="h-10 w-full" />
-          {Array.from({ length: 3 }).map((_, i) => (
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
         </div>
