@@ -50,7 +50,20 @@ export const resetPasswordSchema = z.object({
   path: ["confirmPassword"],
 })
 
+// Public marketing contact form (app/(marketing)/contact).
+export const contactSchema = z.object({
+  name: z.string().trim().min(1, "Please enter your name").max(120, "Name is too long"),
+  email: z.email("Enter a valid email address"),
+  company: z.string().trim().max(160, "Company name is too long").optional(),
+  message: z
+    .string()
+    .trim()
+    .min(10, "Please include at least a sentence (10+ characters)")
+    .max(5000, "Message is too long (5000 character max)"),
+})
+
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignUpInput = z.infer<typeof signUpSchema>
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+export type ContactInput = z.infer<typeof contactSchema>
