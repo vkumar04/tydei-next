@@ -71,8 +71,8 @@ export function AlertBell({
       <Button variant="ghost" size="icon" className="relative h-9 w-9">
         <TriangleAlert className="h-4 w-4" />
         {displayCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
-            {displayCount > 9 ? "9+" : displayCount}
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] text-destructive-foreground">
+            {displayCount}
           </span>
         )}
       </Button>
