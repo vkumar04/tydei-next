@@ -349,11 +349,16 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/case-costing">
-            <Button variant="ghost" size="icon">
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            aria-label="Back to Case Costing"
+          >
+            <Link href="/dashboard/case-costing">
               <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
               Case Costing Reports
@@ -395,7 +400,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                 value={activeTab}
                 onValueChange={(v) => setActiveTab(v as ReportTab)}
               >
-                <SelectTrigger>
+                <SelectTrigger aria-label="Report type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -422,7 +427,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                 value={selectedSurgeon}
                 onValueChange={setSelectedSurgeon}
               >
-                <SelectTrigger>
+                <SelectTrigger aria-label="Filter by surgeon">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -441,7 +446,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                 value={selectedProcedure}
                 onValueChange={setSelectedProcedure}
               >
-                <SelectTrigger>
+                <SelectTrigger aria-label="Filter by procedure">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -460,7 +465,7 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                 value={dateRange}
                 onValueChange={(v) => setDateRange(v as DateRange)}
               >
-                <SelectTrigger>
+                <SelectTrigger aria-label="Date range">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
