@@ -1,7 +1,6 @@
 "use client"
 
 import { motion } from "motion/react"
-import { FileText } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -22,14 +21,15 @@ interface AuthCardProps {
 export function AuthCard({ title, description, children, footer, showTermsFooter = true }: AuthCardProps) {
   return (
     <motion.div className="flex flex-col gap-6" variants={scaleIn} initial="hidden" animate="show">
-      {/* Logo */}
+      {/* Logo — canonical brand mark, matches marketing header + portals
+          (Vick 2026-06-18: auth card had drifted to a FileText icon). */}
       <div className="flex items-center justify-center gap-2">
-        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-          <FileText className="h-7 w-7 text-primary-foreground" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
+          <span className="text-xl font-bold text-primary-foreground">T</span>
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">TYDEi</h1>
-          <p className="text-sm text-muted-foreground">Platform</p>
+          <p className="text-sm text-muted-foreground">Healthcare Platform</p>
         </div>
       </div>
 
