@@ -123,6 +123,7 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractedRates, setExtractedRates] = useState<{ cptCode: string; description?: string; rate: number }[]>([])
+  const [extractedGroupers, setExtractedGroupers] = useState<{ grouperName: string; rate: number; cptCodes: string[] }[]>([])
   const [extractionDone, setExtractionDone] = useState(false)
 
   // Manual text entry
@@ -144,6 +145,7 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
     setIsExtracting(false)
     setExtractionProgress(0)
     setExtractedRates([])
+    setExtractedGroupers([])
     setExtractionDone(false)
     setRateText("")
     setSelectedContractId("")
@@ -200,9 +202,24 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
         rate: r.rate,
       }))
       setExtractedRates(rates)
+
+      // Map extracted grouper/case rates (shape differs from the save
+      // schema): {groupNumber, description, rate} → {grouperName, rate,
+      // cptCodes}. These were previously dropped on save — ASC contracts
+      // like the Anthem amendment reimburse primarily by grouper.
+      const groupers = (extracted.grouperRates ?? []).map(
+        (g: { groupNumber: number; description?: string | null; rate: number }) => ({
+          grouperName: g.description?.trim() || `Grouper ${g.groupNumber}`,
+          rate: g.rate,
+          cptCodes: [] as string[],
+        }),
+      )
+      setExtractedGroupers(groupers)
       setExtractionDone(true)
 
-      toast.success(`Extracted ${rates.length} CPT rates from ${selectedFile.name}`)
+      toast.success(
+        `Extracted ${rates.length} CPT rates${groupers.length ? ` and ${groupers.length} grouper rates` : ""} from ${selectedFile.name}`,
+      )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Extraction failed")
     } finally {
@@ -212,8 +229,11 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
 
   // Handle save new contract
   async function handleSaveContract() {
-    if (!payorName || !contractNumber || !effectiveDate || !expirationDate) {
-      toast.error("Please fill in all required fields")
+    // contractNumber is intentionally NOT required — executed amendments
+    // (e.g. the Anthem ASC amendment) carry no agreement number; the server
+    // derives a stable fallback from payor + effective date.
+    if (!payorName || !effectiveDate || !expirationDate) {
+      toast.error("Please fill in payor name, effective date, and expiration date")
       return
     }
 
@@ -230,7 +250,7 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
       expirationDate,
       status: "active",
       cptRates: allRates,
-      grouperRates: [],
+      grouperRates: extractedGroupers,
       implantPassthrough: true,
       implantMarkup: 0,
       notes: notes || undefined,
@@ -418,11 +438,11 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Contract Number *</Label>
+                  <Label>Contract Number <span className="text-muted-foreground">(optional)</span></Label>
                   <Input
                     value={contractNumber}
                     onChange={(e) => setContractNumber(e.target.value)}
-                    placeholder="e.g., BCBS-2024-001"
+                    placeholder="Auto-generated if left blank"
                   />
                 </div>
                 <div className="space-y-2">

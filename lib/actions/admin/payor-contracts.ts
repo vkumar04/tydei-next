@@ -81,7 +81,10 @@ export async function createPayorContract(input: CreatePayorContractInput) {
       payorName: input.payorName,
       payorType: input.payorType,
       facilityId: input.facilityId,
-      contractNumber: input.contractNumber,
+      // Same fallback as the facility-side create: contractNumber is
+      // NOT NULL + part of the unique key, but amendments often lack one.
+      contractNumber:
+        input.contractNumber?.trim() || `${input.payorName} (${input.effectiveDate})`,
       effectiveDate: new Date(input.effectiveDate),
       expirationDate: new Date(input.expirationDate),
       status: input.status ?? "active",

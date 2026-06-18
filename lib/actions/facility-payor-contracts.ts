@@ -9,12 +9,19 @@ import { logAudit } from "@/lib/audit"
 export async function createFacilityPayorContract(input: CreatePayorContractInput) {
   const session = await requireFacility()
 
+  // contractNumber is NOT NULL + part of the unique(facilityId, payorName,
+  // contractNumber) key, but executed amendments often have no agreement
+  // number. Derive a stable, human-readable fallback so the upload can save
+  // without forcing the user to invent one.
+  const contractNumber =
+    input.contractNumber?.trim() || `${input.payorName} (${input.effectiveDate})`
+
   const contract = await prisma.payorContract.create({
     data: {
       payorName: input.payorName,
       payorType: input.payorType,
       facilityId: session.facility.id,
-      contractNumber: input.contractNumber,
+      contractNumber,
       effectiveDate: new Date(input.effectiveDate),
       expirationDate: new Date(input.expirationDate),
       status: input.status ?? "active",

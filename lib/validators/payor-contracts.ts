@@ -27,7 +27,11 @@ export const createPayorContractSchema = z.object({
   payorName: z.string().min(1, "Payor name is required"),
   payorType: z.enum(["commercial", "medicare_advantage", "medicaid_managed", "workers_comp"]),
   facilityId: z.string().min(1, "Facility is required"),
-  contractNumber: z.string().min(1, "Contract number is required"),
+  // Optional: many executed amendments (e.g. the Anthem ASC amendment)
+  // carry no agreement number. The create action derives a stable
+  // fallback from payorName + effectiveDate so the NOT-NULL +
+  // unique(facilityId, payorName, contractNumber) column is always set.
+  contractNumber: z.string().optional(),
   effectiveDate: z.string().min(1, "Effective date is required"),
   expirationDate: z.string().min(1, "Expiration date is required"),
   status: z.string().default("active"),
