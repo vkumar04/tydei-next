@@ -6,7 +6,10 @@ import {
   BarChart3,
   Bell,
   Building2,
-  Shield,
+  Sparkles,
+  Stethoscope,
+  Target,
+  FileSearch,
   CheckCircle2,
 } from "lucide-react"
 import { motion } from "motion/react"
@@ -38,13 +41,57 @@ const features = [
     ],
   },
   {
+    icon: Sparkles,
+    title: "AI Document Extraction",
+    description:
+      "Let AI read your contracts — terms, tiers, and pricing pulled straight from PDFs and spreadsheets",
+    features: [
+      "Contract & amendment PDF parsing",
+      "Payor-contract CPT rate extraction",
+      "Intelligent column mapping for COG & pricing files",
+    ],
+  },
+  {
+    icon: Stethoscope,
+    title: "Case Costing & Margins",
+    description:
+      "True per-case margin from supply cost, payor reimbursement, and rebate contribution",
+    features: [
+      "CPT / payor reimbursement rate cards",
+      "Surgeon × vendor spend & compliance",
+      "On- vs off-contract supply tracking",
+    ],
+  },
+  {
+    icon: Target,
+    title: "Rebate Optimizer",
+    description:
+      "Model tier and rebate scenarios to find the best structure before you commit",
+    features: [
+      "What-if tier & threshold scenarios",
+      "Projected earnings by structure",
+      "Market-share modeling",
+    ],
+  },
+  {
+    icon: FileSearch,
+    title: "Prospective Analysis",
+    description:
+      "Evaluate a proposed contract before signing — terms, pricing, and lookback in one verdict",
+    features: [
+      "Proposal & price-file analysis",
+      "Historical lookback comparison",
+      "Vendor proposal builder",
+    ],
+  },
+  {
     icon: BarChart3,
     title: "Analytics & Reports",
     description:
       "Comprehensive dashboards with automated report delivery",
     features: [
-      "Contract Overview by type",
-      "Spend by Vendor/Category analysis",
+      "Contract performance by type",
+      "Spend by vendor / category analysis",
       "Scheduled PDF reports via email",
     ],
   },
@@ -55,8 +102,8 @@ const features = [
       "Real-time notifications for off-contract purchases and price discrepancies",
     features: [
       "Off-contract PO detection",
-      "Price discrepancy warnings",
-      "Contract expiration reminders",
+      "Price discrepancy & invoice variance",
+      "Contract expiration & renewal reminders",
     ],
   },
   {
@@ -65,20 +112,9 @@ const features = [
     description:
       "Separate views for facilities and vendors with appropriate data filtering",
     features: [
-      "Facility: Full COG and pricing access",
-      "Vendor: Filtered market share view",
+      "Facility: full COG and pricing access",
+      "Vendor: filtered market-share view",
       "Role-based contract entry",
-    ],
-  },
-  {
-    icon: Shield,
-    title: "AI-Powered Import",
-    description:
-      "Auto-extract contract terms from PDFs and organize COG data from CSVs",
-    features: [
-      "PDF contract parsing",
-      "Intelligent CSV mapping",
-      "Automatic field population",
     ],
   },
 ]
@@ -97,11 +133,11 @@ export function FeaturesGrid() {
           Features
         </Badge>
         <h2 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">
-          Everything You Need for Contract Excellence
+          From Contract Terms to Case-Level Margins
         </h2>
         <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-          Comprehensive tools for both facilities and vendors to manage healthcare
-          contracts effectively.
+          One platform for the whole lifecycle — capture contracts, automate
+          rebates, cost every case, and keep facilities and vendors in sync.
         </p>
       </motion.div>
 

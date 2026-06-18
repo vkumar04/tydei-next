@@ -40,11 +40,11 @@ export function HeroSection() {
             className="mb-6 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl text-balance"
           >
             <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              Make Your Vendors
+              Turn Healthcare Contracts
             </span>
             <br />
             <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              Manage Your Contracts
+              Into Earnings
             </span>
           </motion.h1>
 
@@ -52,8 +52,11 @@ export function HeroSection() {
             variants={fadeInUp}
             className="mb-10 text-lg text-muted-foreground max-w-2xl mx-auto text-pretty leading-relaxed"
           >
-            TYDEi Platform empowers vendors to track their own contracts, validate rebates,
-            and maintain compliance - reducing your administrative burden while maximizing your earnings.
+            The contract, rebate, and case-costing intelligence platform for
+            healthcare supply chains. Automate rebate tracking, see true
+            per-case margins, and let AI extract the terms from your contracts —
+            while vendors manage their own data, so your team oversees instead
+            of administers.
           </motion.p>
 
           <motion.div
