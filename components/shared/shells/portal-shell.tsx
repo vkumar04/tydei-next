@@ -6,7 +6,6 @@ import Link from "next/link"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
 import {
   Building2,
-  FileText,
   Shield,
   Upload,
 } from "lucide-react"
@@ -62,15 +61,17 @@ export function PortalShell({
           {/* Logo */}
           <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
             <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-                <FileText className="h-5 w-5 text-sidebar-primary-foreground" />
+              {/* Canonical brand mark — matches the marketing header
+                  (Vick 2026-06-18: portal had drifted to a FileText icon). */}
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
+                <span className="text-base font-bold text-primary-foreground">T</span>
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-sidebar-foreground">
                   TYDEi
                 </span>
                 <span className="text-xs text-sidebar-foreground/70">
-                  Platform
+                  Healthcare Platform
                 </span>
               </div>
             </Link>
