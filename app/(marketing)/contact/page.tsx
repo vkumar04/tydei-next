@@ -3,9 +3,10 @@ import { Mail, MessageSquare, Building2 } from "lucide-react"
 import { ContactForm } from "@/components/marketing/contact-form"
 
 export const metadata: Metadata = {
-  title: "Contact — TYDEi",
+  title: "Contact",
   description:
     "Get in touch with the TYDEi team about contract management, rebates, and onboarding for your facility or vendor organization.",
+  alternates: { canonical: "/contact" },
 }
 
 export default function ContactPage() {

@@ -13,10 +13,64 @@ const geistMono = Geist_Mono({
   variable: "--font-mono",
 })
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  "https://tydei-app-production.up.railway.app"
+
 export const metadata: Metadata = {
-  title: "TYDEi Platform",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "TYDEi — Healthcare Contract & Rebate Intelligence",
+    template: "%s · TYDEi",
+  },
   description:
-    "Healthcare contract management platform for facilities and vendors",
+    "The contract, rebate, and case-costing intelligence platform for healthcare supply chains. Automate rebate tracking, see true per-case margins, extract contract terms with AI, and let vendors manage their own data.",
+  applicationName: "TYDEi Platform",
+  authors: [{ name: "TYDEi" }],
+  creator: "TYDEi",
+  publisher: "TYDEi",
+  keywords: [
+    "healthcare contract management",
+    "rebate tracking",
+    "rebate management software",
+    "case costing",
+    "payor contract reimbursement",
+    "GPO contract compliance",
+    "vendor contract portal",
+    "medical supply chain analytics",
+    "true margin analysis",
+    "off-contract spend",
+    "ASC contract management",
+    "AI contract extraction",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "TYDEi Platform",
+    title: "TYDEi — Turn Healthcare Contracts Into Earnings",
+    description:
+      "Automate rebate tracking, cost every case, extract contract terms with AI, and let vendors manage their own data — one platform for the whole contract lifecycle.",
+    url: siteUrl,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TYDEi — Healthcare Contract & Rebate Intelligence",
+    description:
+      "Automate rebate tracking, cost every case, and extract contract terms with AI. The contract intelligence platform for healthcare supply chains.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  category: "technology",
 }
 
 export const viewport: Viewport = {

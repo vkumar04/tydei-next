@@ -2,9 +2,10 @@ import type { Metadata } from "next"
 import { LegalPage } from "@/components/marketing/legal-page"
 
 export const metadata: Metadata = {
-  title: "Terms of Service — TYDEi",
+  title: "Terms of Service",
   description:
     "The terms and conditions governing access to and use of the TYDEi healthcare contract management platform.",
+  alternates: { canonical: "/terms" },
 }
 
 export default function TermsPage() {

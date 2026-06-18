@@ -2,9 +2,10 @@ import type { Metadata } from "next"
 import { LegalPage } from "@/components/marketing/legal-page"
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — TYDEi",
+  title: "Privacy Policy",
   description:
     "How TYDEi collects, uses, protects, and shares information across its healthcare contract management platform.",
+  alternates: { canonical: "/privacy" },
 }
 
 export default function PrivacyPage() {
