@@ -24,10 +24,12 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { CostDistributionChart } from "@/components/facility/case-costing/cost-distribution-chart"
+import { SurgeonVendorSpendReport } from "@/components/facility/case-costing/surgeon-vendor-spend-report"
 import {
   useCaseCostingReport,
   useCases,
   useSurgeonRebateContribution,
+  useSurgeonVendorSpend,
   useTrueMarginReport,
 } from "@/hooks/use-case-costing"
 import {
@@ -56,6 +58,7 @@ import {
   Activity,
   BarChart3,
   Sparkles,
+  Store,
 } from "lucide-react"
 
 interface CaseCostingReportsClientProps {
@@ -68,6 +71,7 @@ type ReportTab =
   | "cost-trends"
   | "rebate-contribution"
   | "true-margin"
+  | "surgeon-vendor-spend"
 
 type DateRange =
   | "1month"
@@ -148,6 +152,10 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
     facilityId,
     dateFrom ? { dateFrom } : undefined
   )
+
+  // Surgeon × Vendor spend (Charles 2026-06-18). Same server-side date window.
+  const { data: surgeonVendorSpend, isLoading: svsLoading } =
+    useSurgeonVendorSpend(facilityId, dateFrom ? { dateFrom } : undefined)
 
   const cases = casesData?.cases ?? []
 
@@ -402,6 +410,9 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                     Rebate Contribution
                   </SelectItem>
                   <SelectItem value="true-margin">True Margin</SelectItem>
+                  <SelectItem value="surgeon-vendor-spend">
+                    Surgeon Vendor Spend
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -556,6 +567,10 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
           <TabsTrigger value="true-margin" className="gap-2">
             <Sparkles className="h-4 w-4" />
             True Margin
+          </TabsTrigger>
+          <TabsTrigger value="surgeon-vendor-spend" className="gap-2">
+            <Store className="h-4 w-4" />
+            Surgeon Vendor Spend
           </TabsTrigger>
         </TabsList>
 
@@ -1016,6 +1031,28 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                   )}
                 </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── Tab 6: Surgeon Vendor Spend ───────────────────────── */}
+        <TabsContent value="surgeon-vendor-spend" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Surgeon spend by vendor</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Each surgeon&apos;s supply spend with each vendor, from case
+                supplies. Vendor is the contract&apos;s vendor for on-contract
+                supplies and resolved from COG data (by SKU) for off-contract
+                supplies. Compliance is on-contract ÷ total spend.
+                {dateFrom ? ` Window: ${dateFrom} → ${todayIso}.` : ""}
+              </p>
+            </CardHeader>
+            <CardContent>
+              <SurgeonVendorSpendReport
+                rows={surgeonVendorSpend}
+                isLoading={svsLoading}
+              />
             </CardContent>
           </Card>
         </TabsContent>

@@ -19,6 +19,7 @@ import {
 } from "@/lib/actions/payor-contracts"
 import { getTrueMarginReport } from "@/lib/actions/case-costing/true-margin"
 import { getSurgeonRebateContribution } from "@/lib/actions/case-costing/surgeon-rebate-contribution"
+import { getSurgeonVendorSpend } from "@/lib/actions/case-costing/surgeon-vendor-spend"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { toast } from "sonner"
 
@@ -129,6 +130,21 @@ export function useSurgeonRebateContribution(
     queryKey: queryKeys.cases.surgeonRebateContribution(facilityId, filters),
     queryFn: () =>
       getSurgeonRebateContribution({ facilityId, ...filters }),
+  })
+}
+
+/**
+ * Surgeon × Vendor spend (Charles 2026-06-18) — per surgeon, spend with each
+ * vendor from case supplies, with on/off-contract compliance. Date window
+ * matches the cases query.
+ */
+export function useSurgeonVendorSpend(
+  facilityId: string,
+  filters?: Record<string, unknown>,
+) {
+  return useQuery({
+    queryKey: queryKeys.cases.surgeonVendorSpend(facilityId, filters),
+    queryFn: () => getSurgeonVendorSpend({ facilityId, ...filters }),
   })
 }
 
