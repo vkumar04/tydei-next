@@ -83,7 +83,8 @@ export function CommandSearch() {
       try {
         const data = await globalSearch(value)
         setResults(data)
-      } catch {
+      } catch (err) {
+        console.error("[command-search] globalSearch failed", err)
         setResults(EMPTY)
       } finally {
         setLoading(false)
@@ -129,6 +130,9 @@ export function CommandSearch() {
         onOpenChange={setOpen}
         title="Global Search"
         description="Search contracts, vendors, alerts, POs, invoices, COG items, categories, and report schedules"
+        // Results are already filtered server-side by globalSearch; disable
+        // cmdk's built-in client filter so it doesn't hide our results.
+        shouldFilter={false}
       >
         <CommandInput
           placeholder="Search contracts, vendors, alerts..."

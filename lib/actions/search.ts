@@ -62,8 +62,18 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
   const search = { contains: trimmed, mode: "insensitive" as const }
 
+  // Per-source resilience: one failing query must NOT reject the whole
+  // Promise.all and blank every result group. Wrap each source so a failure
+  // degrades that group to [] and is logged, instead of taking down search.
+  // (A stale `sku` field on the COG query did exactly that — silently.)
+  const safe = <T>(p: Promise<T[]>, label: string): Promise<T[]> =>
+    p.catch((err) => {
+      console.error(`[globalSearch] ${label} query failed`, err)
+      return []
+    })
+
   const [contracts, vendors, alerts, purchaseOrders, invoices, reports, categories, cogItems] = await Promise.all([
-    prisma.contract.findMany({
+    safe(prisma.contract.findMany({
       // AND-combine the ownership scope with the text-search OR so the two
       // OR clauses don't collide. Vendor scope uses contractsOwnedByVendor so
       // grouped contracts where the vendor is only in additionalVendorIds are
@@ -93,9 +103,9 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       },
       take: 5,
       orderBy: { updatedAt: "desc" },
-    }),
+    }), "contracts"),
 
-    prisma.vendor.findMany({
+    safe(prisma.vendor.findMany({
       where: {
         OR: [
           { name: search },
@@ -106,9 +116,9 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       select: { id: true, name: true, displayName: true, division: true },
       take: 5,
       orderBy: { name: "asc" },
-    }),
+    }), "vendors"),
 
-    prisma.alert.findMany({
+    safe(prisma.alert.findMany({
       where: {
         ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
         OR: [
@@ -119,9 +129,9 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       select: { id: true, title: true, description: true, severity: true, portalType: true },
       take: 5,
       orderBy: { createdAt: "desc" },
-    }),
+    }), "alerts"),
 
-    prisma.purchaseOrder.findMany({
+    safe(prisma.purchaseOrder.findMany({
       where: {
         ...(facilityId ? { facilityId } : {}),
         OR: [
@@ -137,9 +147,9 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       },
       take: 5,
       orderBy: { createdAt: "desc" },
-    }),
+    }), "purchaseOrders"),
 
-    prisma.invoice.findMany({
+    safe(prisma.invoice.findMany({
       where: {
         ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
         OR: [
@@ -155,11 +165,11 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       },
       take: 5,
       orderBy: { createdAt: "desc" },
-    }),
+    }), "invoices"),
 
     // Scheduled reports — facility-scoped only. Filter on enum reportType.
     facilityId
-      ? prisma.reportSchedule.findMany({
+      ? safe(prisma.reportSchedule.findMany({
           where: { facilityId },
           select: {
             id: true,
@@ -168,26 +178,27 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
           },
           take: 25,
           orderBy: { updatedAt: "desc" },
-        })
+        }), "reports")
       : Promise.resolve([]),
 
     // Product categories — global taxonomy.
-    prisma.productCategory.findMany({
+    safe(prisma.productCategory.findMany({
       where: { OR: [{ name: search }, { description: search }] },
       select: { id: true, name: true, description: true },
       take: 5,
       orderBy: { name: "asc" },
-    }),
+    }), "categories"),
 
     // COG items — facility-scoped, by vendorItemNo + description.
     facilityId
-      ? prisma.cOGRecord.findMany({
+      ? safe(prisma.cOGRecord.findMany({
           where: {
             facilityId,
             OR: [
               { vendorItemNo: search },
               { inventoryDescription: search },
-              { sku: search },
+              { manufacturerNo: search },
+              { inventoryNumber: search },
             ],
           },
           select: {
@@ -199,7 +210,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
           take: 5,
           orderBy: { transactionDate: "desc" },
           distinct: ["vendorItemNo"],
-        })
+        }), "cogItems")
       : Promise.resolve([]),
   ])
 

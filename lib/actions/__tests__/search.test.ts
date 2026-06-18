@@ -126,6 +126,43 @@ describe("globalSearch — contract ownership scope (group-vendor drift)", () =>
   })
 })
 
+describe("globalSearch — COG query fields", () => {
+  it("searches real COGRecord fields, never a stale `sku`", async () => {
+    asFacility("fac-1")
+    await globalSearch("12345")
+    const where = cogFindManyMock.mock.calls[0][0].where
+    const orFields = where.OR.map((c: Record<string, unknown>) => Object.keys(c)[0])
+    // The bad `sku` field threw `Unknown argument 'sku'` at runtime and
+    // rejected the whole Promise.all → blanked every result group.
+    expect(orFields).not.toContain("sku")
+    expect(orFields).toEqual(
+      expect.arrayContaining([
+        "vendorItemNo",
+        "inventoryDescription",
+        "manufacturerNo",
+        "inventoryNumber",
+      ]),
+    )
+  })
+})
+
+describe("globalSearch — per-source resilience", () => {
+  it("one failing source degrades to [] without rejecting the whole search", async () => {
+    asFacility("fac-1")
+    // Simulate the COG-style failure: one source throws.
+    contractFindManyMock.mockRejectedValue(new Error("Unknown argument `sku`"))
+    vendorFindManyMock.mockResolvedValue([
+      { id: "v-1", name: "Stryker", displayName: null, division: null },
+    ])
+
+    // Must NOT throw — and other groups still populate.
+    const res = await globalSearch("stryker")
+    expect(res.contracts).toEqual([])
+    expect(res.vendors).toHaveLength(1)
+    expect(res.vendors[0].name).toBe("Stryker")
+  })
+})
+
 describe("globalSearch — invoice deep-link", () => {
   beforeEach(() => {
     invoiceFindManyMock.mockResolvedValue([
