@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { buildCptRateMap } from "@/lib/case-costing/cpt-rate-map"
+import { buildCptRateSchedule, rateAsOf } from "@/lib/case-costing/cpt-rate-map"
 
 export interface FacilityPayorContract {
   id: string
@@ -101,7 +101,7 @@ export async function calculatePayorMargins(input: {
   // Canonical shape-tolerant CPT rate map (audit H5) — accepts both
   // {cpt, rate} (seed format) and {cptCode, rate}; shared with getCases,
   // the facility-averages hero, and the case-costing report.
-  const rateMap = buildCptRateMap([contract])
+  const rateSchedule = buildCptRateSchedule([contract])
 
   let totalEstimatedReimbursement = 0
   let totalSpend = 0
@@ -114,16 +114,22 @@ export async function calculatePayorMargins(input: {
     // Try the primary CPT first, then any procedure's CPT (take the
     // highest matching rate). The old implementation only checked
     // primaryCptCode, which misses cases that have procedures rows but
-    // no primary flag — exactly the shape the CSV importer writes.
+    // no primary flag — exactly the shape the CSV importer writes. Each
+    // CPT's rate is the one effective as of the case's date of surgery
+    // (multi-year payor contracts list a rate per contract year).
     let reimbursement = 0
     let matched = false
-    if (c.primaryCptCode && rateMap.has(c.primaryCptCode)) {
-      reimbursement = rateMap.get(c.primaryCptCode)!
-      matched = true
+    if (c.primaryCptCode) {
+      const r = rateAsOf(rateSchedule.get(c.primaryCptCode), c.dateOfSurgery)
+      if (r !== undefined) {
+        reimbursement = r
+        matched = true
+      }
     }
     for (const p of c.procedures) {
-      if (p.cptCode && rateMap.has(p.cptCode)) {
-        const r = rateMap.get(p.cptCode)!
+      if (!p.cptCode) continue
+      const r = rateAsOf(rateSchedule.get(p.cptCode), c.dateOfSurgery)
+      if (r !== undefined) {
         if (r > reimbursement) reimbursement = r
         matched = true
       }

@@ -33,7 +33,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import {
-  buildCptRateMap,
+  buildCptRateSchedule,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
 import { buildSupplyRebateRuleMap } from "@/lib/actions/case-costing/supply-rebate-rules"
@@ -167,7 +167,7 @@ export async function getTrueMarginReport(
     }),
   ])
 
-  const cptRateMap = buildCptRateMap(payorContracts)
+  const cptRateSchedule = buildCptRateSchedule(payorContracts)
 
   // 2. Resolve contractId → vendorId via a single batched lookup.
   const contractIds = new Set<string>()
@@ -248,7 +248,8 @@ export async function getTrueMarginReport(
           primaryCptCode: c.primaryCptCode,
           procedureCptCodes: c.procedures.map((p) => p.cptCode),
         },
-        cptRateMap,
+        cptRateSchedule,
+        c.dateOfSurgery,
       ),
       directCost: Number(c.totalSpend),
       rebate: 0,

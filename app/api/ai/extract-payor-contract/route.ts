@@ -66,8 +66,8 @@ export async function POST(request: Request) {
 - Facility name
 - Contract or agreement number
 - Effective date and termination/expiration date (in YYYY-MM-DD format)
-- ALL CPT code reimbursement rates (every CPT code with its dollar rate)
-- ALL grouper/case-based rates (group numbers with rates)
+- ALL CPT code reimbursement rates (every CPT code with its dollar rate). IMPORTANT: many contracts list multiple rate columns per CPT, one for each contract year (e.g. "Rates Effective 6/1/2023 - 5/31/2024", "6/1/2024 - 5/31/2025", "6/1/2025 - 5/31/2026"). Capture EVERY year's rate for each CPT and note which effective period (start date) each rate belongs to.
+- ALL grouper/case-based rates (group numbers with rates, including each effective year)
 - Implant reimbursement policies (passthrough at cost, discount percentage, maximum amounts)
 - Multi-procedure payment reduction rules (primary %, secondary %, additional %)
 - Any other notable contract terms
@@ -106,7 +106,7 @@ Be thorough - extract EVERY CPT code and rate you can find. Return all informati
       messages: [
         {
           role: "user",
-          content: `Parse this payor contract information into structured data. Extract ALL CPT codes and their reimbursement rates. For dates use YYYY-MM-DD format. If a field is not clearly present, use null.
+          content: `Parse this payor contract information into structured data. Extract ALL CPT codes and their reimbursement rates. When a CPT has different rates for different contract years, emit a SEPARATE cptRates entry per year, each with that year's effectiveDate (the window start, YYYY-MM-DD). For dates use YYYY-MM-DD format. If a field is not clearly present, use null.
 
 Return valid JSON only — no markdown fences.
 

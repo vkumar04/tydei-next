@@ -204,6 +204,9 @@ describe("getSurgeonScorecardsForFacility", () => {
       payorClass: true,
       totalSpend: true,
       totalReimbursement: true,
+      // 2026-06-17: dateOfSurgery drives date-aware payor-rate selection
+      // (multi-year contracts list a rate per contract year).
+      dateOfSurgery: true,
       // 2026-06-14: procedure CPT codes feed the resolveCaseReimbursement
       // backfill so surgeon margin% reflects payor-contract rates.
       procedures: { select: { cptCode: true } },
@@ -339,6 +342,8 @@ describe("getFacilityAveragesForFacility", () => {
       totalSpend: true,
       totalReimbursement: true,
       primaryCptCode: true,
+      // 2026-06-17: date-aware payor-rate selection needs the surgery date.
+      dateOfSurgery: true,
       procedures: { select: { cptCode: true } },
     })
   })

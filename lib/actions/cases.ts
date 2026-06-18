@@ -6,7 +6,7 @@ import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import {
-  buildCptRateMap,
+  buildCptRateSchedule,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
 import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
@@ -164,7 +164,7 @@ export async function getCases(input: {
   // Canonical CPT-rate map (audit H5) — shared with the facility-averages
   // hero, payor-margin calculator, and the case-costing report so every
   // surface backfills reimbursement identically.
-  const cptRateMap = buildCptRateMap(payorContracts)
+  const cptRateSchedule = buildCptRateSchedule(payorContracts)
 
   return serialize({
     cases: records.map((c) => {
@@ -174,7 +174,8 @@ export async function getCases(input: {
           primaryCptCode: c.primaryCptCode,
           procedureCptCodes: c.procedures.map((p) => p.cptCode),
         },
-        cptRateMap,
+        cptRateSchedule,
+        c.dateOfSurgery,
       )
       const effectiveMargin = effectiveReimbursement - Number(c.totalSpend)
 
@@ -905,7 +906,7 @@ export async function getCaseCostingReportData(input: {
     }),
   ])
 
-  const cptRateMap = buildCptRateMap(payorContracts)
+  const cptRateSchedule = buildCptRateSchedule(payorContracts)
   const reimbursementFor = (c: (typeof cases)[number]): number =>
     resolveCaseReimbursement(
       {
@@ -913,7 +914,8 @@ export async function getCaseCostingReportData(input: {
         primaryCptCode: c.primaryCptCode,
         procedureCptCodes: c.procedures.map((p) => p.cptCode),
       },
-      cptRateMap,
+      cptRateSchedule,
+      c.dateOfSurgery,
     )
 
   const totalCases = cases.length

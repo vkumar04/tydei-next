@@ -42,7 +42,7 @@ import {
 } from "@/lib/case-costing/facility-averages"
 import { classifyPayorClass } from "@/lib/case-costing/payor-mix"
 import {
-  buildCptRateMap,
+  buildCptRateSchedule,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
 
@@ -68,6 +68,7 @@ export async function getSurgeonScorecardsForFacility(): Promise<Surgeon[]> {
         payorClass: true,
         totalSpend: true,
         totalReimbursement: true,
+        dateOfSurgery: true,
         procedures: { select: { cptCode: true } },
       },
     }),
@@ -77,7 +78,7 @@ export async function getSurgeonScorecardsForFacility(): Promise<Surgeon[]> {
     }),
   ])
 
-  const cptRateMap = buildCptRateMap(payorContracts)
+  const cptRateSchedule = buildCptRateSchedule(payorContracts)
 
   const input: CaseForDerivation[] = cases
     .filter((c): c is typeof c & { surgeonName: string } =>
@@ -93,7 +94,8 @@ export async function getSurgeonScorecardsForFacility(): Promise<Surgeon[]> {
           primaryCptCode: c.primaryCptCode,
           procedureCptCodes: c.procedures.map((p) => p.cptCode),
         },
-        cptRateMap,
+        cptRateSchedule,
+        c.dateOfSurgery,
       ),
       // Audit M8: map Case.payorClass → canonical payor-mix bucket so
       // payorMixScore computes from real data instead of a hardcoded null.
@@ -138,6 +140,7 @@ export async function getFacilityAveragesForFacility(): Promise<FacilityAverages
         totalSpend: true,
         totalReimbursement: true,
         primaryCptCode: true,
+        dateOfSurgery: true,
         procedures: { select: { cptCode: true } },
       },
     }),
@@ -149,7 +152,7 @@ export async function getFacilityAveragesForFacility(): Promise<FacilityAverages
 
   // Canonical CPT-rate map (audit H5) — shared with getCases, the
   // payor-margin calculator, and the case-costing report.
-  const cptRateMap = buildCptRateMap(payorContracts)
+  const cptRateSchedule = buildCptRateSchedule(payorContracts)
 
   const input: CaseForAverages[] = cases.map((c) => ({
     totalSpend: Number(c.totalSpend),
@@ -159,7 +162,8 @@ export async function getFacilityAveragesForFacility(): Promise<FacilityAverages
         primaryCptCode: c.primaryCptCode,
         procedureCptCodes: c.procedures.map((p) => p.cptCode),
       },
-      cptRateMap,
+      cptRateSchedule,
+      c.dateOfSurgery,
     ),
     // Case.timeInOr is time-of-day (String?) — see file header.
     timeInOrMinutes: null,

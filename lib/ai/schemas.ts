@@ -493,8 +493,14 @@ export const extractedPayorContractSchema = z.object({
       description: z.string().nullable().describe("Procedure description"),
       rate: z.number().describe("Reimbursement rate in dollars"),
       modifier: z.string().nullable().describe("CPT modifier if applicable"),
+      effectiveDate: z
+        .string()
+        .nullable()
+        .describe(
+          "Start date (YYYY-MM-DD) of the rate's effective window. Multi-year contracts list one rate per CPT per contract year — emit a SEPARATE entry for each year's rate with that year's start date. Null if the contract has a single undated rate.",
+        ),
     })
-  ).describe("All CPT code reimbursement rates found"),
+  ).describe("All CPT code reimbursement rates found — one entry per (CPT, effective-year) when rates vary by year"),
   grouperRates: z.array(
     z.object({
       groupNumber: z.number().describe("Grouper number"),

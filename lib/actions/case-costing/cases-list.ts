@@ -16,7 +16,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import {
-  buildCptRateMap,
+  buildCptRateSchedule,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
 
@@ -86,7 +86,7 @@ export async function getCasesForFacility(
   // canonical CPT-rate map (same helper as the hero card, surgeon
   // scorecards, and the report) and recompute margin so the list, surgeon
   // margin%, and Financial tab all agree.
-  const cptRateMap = buildCptRateMap(payorContracts)
+  const cptRateSchedule = buildCptRateSchedule(payorContracts)
   const withReimbursement = cases.map((c) => {
     const reimbursement = resolveCaseReimbursement(
       {
@@ -94,7 +94,8 @@ export async function getCasesForFacility(
         primaryCptCode: c.primaryCptCode,
         procedureCptCodes: c.procedures.map((p) => p.cptCode),
       },
-      cptRateMap,
+      cptRateSchedule,
+      c.dateOfSurgery,
     )
     return {
       ...c,

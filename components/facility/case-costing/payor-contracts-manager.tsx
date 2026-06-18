@@ -122,7 +122,7 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
-  const [extractedRates, setExtractedRates] = useState<{ cptCode: string; description?: string; rate: number }[]>([])
+  const [extractedRates, setExtractedRates] = useState<{ cptCode: string; description?: string; rate: number; effectiveDate?: string }[]>([])
   const [extractedGroupers, setExtractedGroupers] = useState<{ grouperName: string; rate: number; cptCodes: string[] }[]>([])
   const [extractionDone, setExtractionDone] = useState(false)
 
@@ -195,11 +195,13 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
       if (extracted.effectiveDate) setEffectiveDate(extracted.effectiveDate)
       if (extracted.expirationDate) setExpirationDate(extracted.expirationDate)
 
-      // Map extracted CPT rates
-      const rates = (extracted.cptRates ?? []).map((r: { cptCode: string; description?: string | null; rate: number }) => ({
+      // Map extracted CPT rates — preserve per-year effectiveDate so
+      // multi-year contracts keep one rate row per (CPT, contract year).
+      const rates = (extracted.cptRates ?? []).map((r: { cptCode: string; description?: string | null; rate: number; effectiveDate?: string | null }) => ({
         cptCode: r.cptCode,
         description: r.description ?? "",
         rate: r.rate,
+        ...(r.effectiveDate ? { effectiveDate: r.effectiveDate } : {}),
       }))
       setExtractedRates(rates)
 
