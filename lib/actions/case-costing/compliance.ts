@@ -27,6 +27,8 @@ import {
 export interface CaseComplianceWithNumber extends CaseComplianceResult {
   /** Human-readable case number (audit L19 — the table showed cuids). */
   caseNumber: string
+  /** Surgeon on the case (Charles 2026-06-18 — per-case surgeon column). */
+  surgeonName: string | null
 }
 
 export interface FacilityCaseComplianceResult {
@@ -42,6 +44,7 @@ export async function getFacilityCaseCompliance(): Promise<FacilityCaseComplianc
     select: {
       id: true,
       caseNumber: true,
+      surgeonName: true,
       supplies: {
         select: {
           vendorItemNo: true,
@@ -62,11 +65,13 @@ export async function getFacilityCaseCompliance(): Promise<FacilityCaseComplianc
   }))
 
   const caseNumberById = new Map(cases.map((c) => [c.id, c.caseNumber]))
+  const surgeonNameById = new Map(cases.map((c) => [c.id, c.surgeonName]))
   const perCase: CaseComplianceWithNumber[] = computeCaseCompliance(
     input,
   ).map((r) => ({
     ...r,
     caseNumber: caseNumberById.get(r.caseId) ?? r.caseId,
+    surgeonName: surgeonNameById.get(r.caseId) ?? null,
   }))
   const summary = summarizeFacilityCompliance(perCase)
 

@@ -15,7 +15,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { motion } from "motion/react"
-import { Search } from "lucide-react"
+import { Search, ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -116,18 +116,38 @@ export function DataTable<TData, TValue>({
                   <TableHead
                     key={header.id}
                     onClick={header.column.getToggleSortingHandler()}
+                    aria-sort={
+                      header.column.getIsSorted() === "asc"
+                        ? "ascending"
+                        : header.column.getIsSorted() === "desc"
+                          ? "descending"
+                          : undefined
+                    }
                     className={
                       header.column.getCanSort()
-                        ? "cursor-pointer select-none"
+                        ? "cursor-pointer select-none hover:text-foreground transition-colors"
                         : ""
                     }
                   >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
+                    {header.isPlaceholder ? null : (
+                      <span className="inline-flex items-center gap-1">
+                        {flexRender(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
+                        {header.column.getCanSort() &&
+                          (header.column.getIsSorted() === "asc" ? (
+                            <ArrowUp className="size-3.5 shrink-0" aria-hidden="true" />
+                          ) : header.column.getIsSorted() === "desc" ? (
+                            <ArrowDown className="size-3.5 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <ChevronsUpDown
+                              className="size-3.5 shrink-0 text-muted-foreground/50"
+                              aria-hidden="true"
+                            />
+                          ))}
+                      </span>
+                    )}
                   </TableHead>
                 ))}
               </TableRow>

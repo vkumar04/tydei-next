@@ -17,17 +17,21 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
-import { ShieldCheck, AlertTriangle } from "lucide-react"
+import { useTableSort, SortableHead } from "@/components/shared/use-table-sort"
+import { ShieldCheck, AlertTriangle, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
-import type { FacilityCaseComplianceResult } from "@/lib/actions/case-costing/compliance"
+import type {
+  FacilityCaseComplianceResult,
+  CaseComplianceWithNumber,
+} from "@/lib/actions/case-costing/compliance"
 
 interface ComplianceTabProps {
   data: FacilityCaseComplianceResult | null
@@ -107,54 +111,96 @@ export function ComplianceTab({ data, isLoading }: ComplianceTabProps) {
           <CardTitle className="text-base">Per-case compliance</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Case</TableHead>
-                <TableHead className="text-right">Total supply spend</TableHead>
-                <TableHead className="text-right">On contract</TableHead>
-                <TableHead className="text-right">Off contract</TableHead>
-                <TableHead className="text-right">Supplies</TableHead>
-                <TableHead className="text-right">Compliance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {perCase.map((c) => (
-                <TableRow key={c.caseId}>
-                  <TableCell className="font-mono text-xs">
-                    {c.caseNumber}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatCurrency(c.totalSupplySpend)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatCurrency(c.onContractSpend)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatCurrency(c.offContractSpend)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {c.suppliesOnContract}/{c.suppliesTotal}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge
-                      variant={
-                        c.compliancePercent >= 80
-                          ? "default"
-                          : c.compliancePercent >= 50
-                            ? "secondary"
-                            : "destructive"
-                      }
-                    >
-                      {formatPercent(c.compliancePercent, 0)}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <PerCaseComplianceTable rows={perCase} />
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function PerCaseComplianceTable({ rows }: { rows: CaseComplianceWithNumber[] }) {
+  const sort = useTableSort<CaseComplianceWithNumber, string>(rows, {
+    accessors: {
+      caseNumber: (r) => r.caseNumber,
+      surgeonName: (r) => r.surgeonName,
+      totalSupplySpend: (r) => r.totalSupplySpend,
+      onContractSpend: (r) => r.onContractSpend,
+      offContractSpend: (r) => r.offContractSpend,
+      suppliesTotal: (r) => r.suppliesTotal,
+      compliancePercent: (r) => r.compliancePercent,
+    },
+    searchFields: [(r) => r.caseNumber, (r) => r.surgeonName],
+    initialSort: { key: "compliancePercent", dir: "asc" },
+  })
+
+  return (
+    <div className="space-y-3">
+      <div className="relative max-w-xs">
+        <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Input
+          value={sort.query}
+          onChange={(e) => sort.setQuery(e.target.value)}
+          placeholder="Filter by case or surgeon…"
+          aria-label="Filter per-case compliance"
+          className="pl-8"
+        />
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <SortableHead label="Case" sortKey="caseNumber" state={sort} />
+            <SortableHead label="Surgeon" sortKey="surgeonName" state={sort} />
+            <SortableHead label="Total supply spend" sortKey="totalSupplySpend" state={sort} align="right" />
+            <SortableHead label="On contract" sortKey="onContractSpend" state={sort} align="right" />
+            <SortableHead label="Off contract" sortKey="offContractSpend" state={sort} align="right" />
+            <SortableHead label="Supplies" sortKey="suppliesTotal" state={sort} align="right" />
+            <SortableHead label="Compliance" sortKey="compliancePercent" state={sort} align="right" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sort.rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                No cases match your filter.
+              </TableCell>
+            </TableRow>
+          ) : (
+            sort.rows.map((c) => (
+              <TableRow key={c.caseId}>
+                <TableCell className="font-mono text-xs">{c.caseNumber}</TableCell>
+                <TableCell className="text-sm">
+                  {c.surgeonName ?? <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatCurrency(c.totalSupplySpend)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatCurrency(c.onContractSpend)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatCurrency(c.offContractSpend)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {c.suppliesOnContract}/{c.suppliesTotal}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Badge
+                    variant={
+                      c.compliancePercent >= 80
+                        ? "default"
+                        : c.compliancePercent >= 50
+                          ? "secondary"
+                          : "destructive"
+                    }
+                  >
+                    {formatPercent(c.compliancePercent, 0)}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </div>
   )
 }
