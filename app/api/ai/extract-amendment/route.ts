@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -62,9 +63,26 @@ export async function POST(request: Request) {
       return Response.json({ error: "No contractId provided" }, { status: 400 })
     }
 
-    // ── Fetch current contract with terms + tiers ──────────────
-    const contract = await prisma.contract.findUnique({
-      where: { id: contractId },
+    // Tenant isolation: resolve the caller's facility and scope the contract
+    // read to it. Without this, a forged `contractId` leaks another tenant's
+    // confidential terms/tiers/pricing through the amendment diff (2026-06-18
+    // pre-prod IDOR audit). `contractOwnershipWhere` also matches contracts
+    // shared via contractFacilities.
+    const member = await prisma.member.findFirst({
+      where: { userId: session.user.id },
+      include: { organization: { include: { facility: true } } },
+    })
+    const facility = member?.organization?.facility
+    if (!facility) {
+      return Response.json(
+        { error: "No facility associated with this account" },
+        { status: 403 },
+      )
+    }
+
+    // ── Fetch current contract with terms + tiers (facility-scoped) ──
+    const contract = await prisma.contract.findFirst({
+      where: contractOwnershipWhere(contractId, facility.id),
       include: {
         vendor: { select: { name: true } },
         productCategory: { select: { name: true } },
@@ -202,15 +220,9 @@ Return valid JSON only — no markdown fences.`,
     }
 
     try {
-      const member = await prisma.member.findFirst({
-        where: { userId: session.user.id },
-        include: {
-          organization: { include: { facility: true, vendor: true } },
-        },
-      })
       await recordClaudeUsage({
-        facilityId: member?.organization?.facility?.id ?? null,
-        vendorId: member?.organization?.vendor?.id ?? null,
+        facilityId: facility.id,
+        vendorId: null,
         userId: session.user.id,
         userName: session.user.name ?? session.user.email ?? "Unknown",
         action: "full_contract_analysis",

@@ -128,13 +128,19 @@ function findEnclosingFunction(
   return lines.slice(start).join("\n")
 }
 
-async function scanFile(absPath: string): Promise<RawIdHit[]> {
+async function scanFile(
+  absPath: string,
+  opts: { requireUseServer: boolean } = { requireUseServer: true },
+): Promise<RawIdHit[]> {
   const rel = path.relative(REPO_ROOT, absPath)
   if (FILE_ALLOWLIST.has(rel)) return []
 
   const text = await fs.readFile(absPath, "utf8")
-  // Only scan "use server" files — the RPC surface.
-  if (!/^['"]use server['"]/m.test(text)) return []
+  // "use server" files are the RPC surface. API route handlers
+  // (app/api/**) are an equally-reachable tenant surface but aren't
+  // "use server" — scan them too (2026-06-18 pre-prod audit: a real
+  // IDOR hid in app/api/ai/extract-amendment which this gate skipped).
+  if (opts.requireUseServer && !/^['"]use server['"]/m.test(text)) return []
 
   const lines = text.split("\n")
   const hits: RawIdHit[] = []
@@ -302,8 +308,10 @@ const BASELINE_HITS = new Set<string>([
   // computeSyntheticContractPeriods (exported fallback reused by the
   // facility Reports surface) added the wrapper + doc-comment lines above
   // these re-reads.
-  "lib/actions/contract-periods.ts:473",
-  "lib/actions/contract-periods.ts:702",
+  // bumped 2026-06-18 after computeSyntheticContractPeriods gained the
+  // precomputedCogUniverse perf param (+ if-block) shifted these re-reads.
+  "lib/actions/contract-periods.ts:482",
+  "lib/actions/contract-periods.ts:711",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:94",
@@ -394,11 +402,16 @@ describe("server-action auth-scope scanner (Charles audit suggestion #1)", () =>
     for (const d of SCAN_DIRS) {
       await walk(path.join(REPO_ROOT, d), files)
     }
+    // API route handlers — same tenant surface, but not "use server".
+    const apiFiles: string[] = []
+    await walk(path.join(REPO_ROOT, "app/api"), apiFiles)
 
     const allHits: RawIdHit[] = []
     for (const f of files) {
-      const hits = await scanFile(f)
-      allHits.push(...hits)
+      allHits.push(...(await scanFile(f, { requireUseServer: true })))
+    }
+    for (const f of apiFiles) {
+      allHits.push(...(await scanFile(f, { requireUseServer: false })))
     }
 
     const newHits = allHits.filter(
