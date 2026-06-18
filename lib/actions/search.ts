@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
+import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 import { serialize } from "@/lib/serialize"
 
 export interface SearchResult {
@@ -55,17 +56,32 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
   })
   const facilityId = member?.organization?.facility?.id
   const vendorId = member?.organization?.vendor?.id
+  // A vendor-portal caller has a vendor scope and no facility. Used to route
+  // results (e.g. invoices) to the vendor surfaces rather than the facility ones.
+  const isVendorPortal = !facilityId && Boolean(vendorId)
 
   const search = { contains: trimmed, mode: "insensitive" as const }
 
   const [contracts, vendors, alerts, purchaseOrders, invoices, reports, categories, cogItems] = await Promise.all([
     prisma.contract.findMany({
+      // AND-combine the ownership scope with the text-search OR so the two
+      // OR clauses don't collide. Vendor scope uses contractsOwnedByVendor so
+      // grouped contracts where the vendor is only in additionalVendorIds are
+      // included (group-vendor-drift invariant — never bare { vendorId }).
       where: {
-        ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
-        OR: [
-          { name: search },
-          { contractNumber: search },
-          { description: search },
+        AND: [
+          facilityId
+            ? { facilityId }
+            : vendorId
+              ? contractsOwnedByVendor(vendorId)
+              : {},
+          {
+            OR: [
+              { name: search },
+              { contractNumber: search },
+              { description: search },
+            ],
+          },
         ],
       },
       select: {
@@ -224,7 +240,11 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       id: inv.id,
       name: `Invoice ${inv.invoiceNumber}`,
       description: inv.vendor.name,
-      href: `/dashboard/invoice-validation`,
+      // Deep-link to the invoice itself. Facility has a detail route; the
+      // vendor side is a list only, so route vendor-portal hits there.
+      href: isVendorPortal
+        ? `/vendor/invoices`
+        : `/dashboard/invoice-validation/${inv.id}`,
       type: "invoice" as const,
     })),
     reports: reports
