@@ -602,6 +602,23 @@ export function VendorContractSubmission({
       return
     }
 
+    // The server schema requires every rebate term to carry at least one
+    // tier (a term with an empty rebate ladder can't be approved into a
+    // working contract). AI extraction can populate a term's name without
+    // any tiers, so catch it here with a clear message that points at the
+    // Rebate Terms section — otherwise the server rejects with an opaque
+    // "Each term must have at least one tier" that the fan-out toast used
+    // to swallow (Vick 2026-06-17, "vendor contract entry fails").
+    const termMissingTiers = contractTerms.find(
+      (t) => !t.tiers || t.tiers.length === 0,
+    )
+    if (termMissingTiers) {
+      toast.error(
+        `"${termMissingTiers.termName || "A rebate term"}" has no tiers. Add at least one tier in the Rebate Terms section before submitting.`,
+      )
+      return
+    }
+
     startTransition(async () => {
 
     const buildPayloadFor = (
@@ -728,10 +745,16 @@ export function VendorContractSubmission({
           router.push("/vendor/contracts")
           return
         }
+        // Surface the actual rejection reason — not just the facility name —
+        // so a failed submission is debuggable from the toast alone (the
+        // reason was previously captured but dropped). Single-facility is the
+        // common case; show its error inline.
+        const detail =
+          failures.length === 1
+            ? `${failures[0]!.facilityName}: ${failures[0]!.error}`
+            : failures.map((f) => `${f.facilityName} (${f.error})`).join("; ")
         toast.error(
-          `Submitted to ${successes} of ${results.length} facilities. Failed: ${failures
-            .map((f) => f.facilityName)
-            .join(", ")}`,
+          `Submitted to ${successes} of ${results.length} facilities. Failed: ${detail}`,
         )
       } catch {
         // toast already shown by mutationCache global error handler; nothing else to do

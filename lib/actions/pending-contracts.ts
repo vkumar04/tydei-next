@@ -1,5 +1,6 @@
 "use server"
 
+import { ZodError } from "zod"
 import { prisma } from "@/lib/db"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireVendor, requireFacility } from "@/lib/actions/auth"
@@ -527,6 +528,14 @@ export async function createPendingContract(input: CreatePendingContractInput) {
       capitalLineItemCount: input?.capitalLineItems?.length ?? 0,
       termCount: input?.terms?.length ?? 0,
     })
+    // Re-throw a readable message (the raw ZodError stringifies to a JSON
+    // blob). The fan-out toast surfaces `error.message`, so a clean
+    // "field: reason" reaches the vendor instead of an opaque digest.
+    if (err instanceof ZodError) {
+      const first = err.issues[0]
+      const where = first?.path.length ? `${first.path.join(".")}: ` : ""
+      throw new Error(`Contract data was invalid — ${where}${first?.message ?? "check the form fields."}`)
+    }
     throw err
   }
 
