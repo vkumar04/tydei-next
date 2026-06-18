@@ -99,6 +99,16 @@ vi.mock("@/lib/db", () => ({
           return { id: where.id }
         },
       ),
+      // 2026-06-18 perf: margin rollup now batches reimbursement reads.
+      findMany: vi.fn(
+        async ({ where }: { where: { id: { in: string[] } } }) =>
+          caseRows
+            .filter((r) => where.id.in.includes(r.id))
+            .map((r) => ({
+              id: r.id,
+              totalReimbursement: r.totalReimbursement ?? 0,
+            })),
+      ),
     },
     caseProcedure: {
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -132,7 +142,24 @@ vi.mock("@/lib/db", () => ({
           .reduce((acc, s) => acc + Number(s.extendedCost ?? 0), 0)
         return { _sum: { extendedCost: sum } }
       }),
+      // 2026-06-18 perf: per-case supply sums now batched in one groupBy.
+      groupBy: vi.fn(
+        async ({ where }: { where: { caseId: { in: string[] } } }) => {
+          const byCase = new Map<string, number>()
+          for (const s of supplyCreates) {
+            const cid = s.caseId as string
+            if (!where.caseId.in.includes(cid)) continue
+            byCase.set(cid, (byCase.get(cid) ?? 0) + Number(s.extendedCost ?? 0))
+          }
+          return [...byCase.entries()].map(([caseId, sum]) => ({
+            caseId,
+            _sum: { extendedCost: sum },
+          }))
+        },
+      ),
     },
+    // Margin-rollup updates are batched in a transaction (array form).
+    $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
 }))
 

@@ -144,6 +144,12 @@ async function _buildContractPeriods(
 export async function computeSyntheticContractPeriods(
   contract: _PeriodsContract,
   facilityId: string,
+  // 2026-06-18 perf audit: callers looping over many contracts (Reports Hub,
+  // vendor reports) should fetch the facility COG-category universe ONCE and
+  // pass it in — it's facility-scoped and identical across contracts, so
+  // re-fetching per contract was an N× full-COG groupBy. Omit for
+  // single-contract callers (it falls back to fetching internally).
+  precomputedCogUniverse?: string[],
 ) {
   // ── Fallback: compute monthly periods from COG matched to this
   // vendor at this facility, bounded by the contract's effective window
@@ -155,15 +161,18 @@ export async function computeSyntheticContractPeriods(
   const { buildUnionCategoryWhereClause } = await import(
     "@/lib/contracts/cog-category-filter"
   )
-  const { facilityCogCategoryUniverse } = await import(
-    "@/lib/contracts/cog-category-universe"
-  )
   const termScopes = contract.terms.map((t) => ({
     appliesTo: t.appliesTo,
     categories: t.categories,
   }))
   // 2026-06-08: expand to drifted COG category variants (see cog-category-filter).
-  const cogUniverse = await facilityCogCategoryUniverse(facilityId)
+  let cogUniverse = precomputedCogUniverse
+  if (cogUniverse === undefined) {
+    const { facilityCogCategoryUniverse } = await import(
+      "@/lib/contracts/cog-category-universe"
+    )
+    cogUniverse = await facilityCogCategoryUniverse(facilityId)
+  }
   const unionCategoryWhere = buildUnionCategoryWhereClause(
     termScopes,
     cogUniverse,

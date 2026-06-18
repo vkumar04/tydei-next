@@ -1351,6 +1351,9 @@ model COGRecord {
   @@index([facilityId, matchStatus])
   @@index([facilityId, transactionDate])
   @@index([contractId])
+  // 2026-06-18 perf audit: per-contract windowed groupBys (contracts-list
+  // trailing-12mo cascade, vendor-performance) range on (contractId, date).
+  @@index([contractId, transactionDate])
   @@index([facilityId, isOnContract])
   @@index([fileImportId])
   @@map("cog_record")
@@ -1791,6 +1794,9 @@ model Case {
   @@index([surgeonName])
   @@index([dateOfSurgery])
   @@index([facilityId, payorClass])
+  // 2026-06-18 perf audit: cases list + surgeon-vendor-spend filter
+  // { facilityId, dateOfSurgery range } ordered by dateOfSurgery.
+  @@index([facilityId, dateOfSurgery])
   @@map("case_record")
 }
 

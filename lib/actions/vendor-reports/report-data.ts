@@ -112,6 +112,28 @@ export async function getVendorReportData(input: {
     tierAchieved: number | null
   }
 
+  // 2026-06-18 perf audit: the synthetic-period fallback below runs a
+  // full-COG groupBy per contract. Vendor contracts span multiple facilities,
+  // so fetch each DISTINCT facility's COG-category universe ONCE up front
+  // (usually 1–3 facilities) and reuse it — turning N full-COG groupBys into
+  // D, where D = distinct facilities.
+  const { facilityCogCategoryUniverse } = await import(
+    "@/lib/contracts/cog-category-universe"
+  )
+  const distinctFacilityIds = [
+    ...new Set(
+      contracts
+        .map((c) => c.facilityId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ]
+  const universeByFacility = new Map<string, string[]>()
+  await Promise.all(
+    distinctFacilityIds.map(async (fid) => {
+      universeByFacility.set(fid, await facilityCogCategoryUniverse(fid))
+    }),
+  )
+
   const contractRows = await Promise.all(
     contracts.map(async (c) => {
       const rebateEarnedCanonical = sumEarnedRebatesLifetime(
@@ -154,6 +176,7 @@ export async function getVendorReportData(input: {
         const synthetic = await computeSyntheticContractPeriods(
           c,
           c.facilityId,
+          universeByFacility.get(c.facilityId),
         )
         periodRows = synthetic
           .filter(

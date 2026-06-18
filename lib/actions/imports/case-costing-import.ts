@@ -440,28 +440,41 @@ export async function ingestCaseSuppliesCSV(
     }
   }
 
-  for (const caseId of caseIdsTouched) {
-    const agg = await prisma.caseSupply.aggregate({
-      where: { caseId },
+  // 2026-06-18 perf audit: was 3 sequential queries PER touched case
+  // (aggregate + findUnique + update) — 3×N round-trips on a large upload.
+  // Now: one groupBy for all supply sums, one findMany for reimbursements,
+  // and the margin updates batched in a single transaction.
+  if (caseIdsTouched.size > 0) {
+    const ids = [...caseIdsTouched]
+    const sums = await prisma.caseSupply.groupBy({
+      by: ["caseId"],
+      where: { caseId: { in: ids } },
       _sum: { extendedCost: true },
     })
-    const total = Number(agg._sum.extendedCost ?? 0)
+    const totalByCase = new Map(
+      sums.map((s) => [s.caseId, Number(s._sum.extendedCost ?? 0)]),
+    )
+    const caseRecords = await prisma.case.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, totalReimbursement: true },
+    })
     // Audit M10: recompute margin in the SAME update that writes the new
     // totalSpend (the old `margin: { decrement: 0 }` no-op left margin
     // frozen at its pre-import value).
-    // auth-scope-scanner-skip: caseId comes from the facility-scoped
-    // lookup/create in the loop above.
-    const caseRecord = await prisma.case.findUnique({
-      where: { id: caseId },
-      select: { totalReimbursement: true },
-    })
-    const reimbursement = Number(caseRecord?.totalReimbursement ?? 0)
-    // auth-scope-scanner-skip: caseId comes from the facility-scoped
-    // lookup/create in the loop above.
-    await prisma.case.update({
-      where: { id: caseId },
-      data: { totalSpend: total, margin: reimbursement - total },
-    })
+    // auth-scope-scanner-skip: ids come from the facility-scoped
+    // lookup/create in the loop above; batched in one transaction.
+    await prisma.$transaction(
+      caseRecords.map((cr) => {
+        const total = totalByCase.get(cr.id) ?? 0
+        const reimbursement = Number(cr.totalReimbursement ?? 0)
+        // auth-scope-scanner-skip: cr.id is from the facility-scoped
+        // case.findMany above (ids ⊂ facility-scoped creates in the loop).
+        return prisma.case.update({
+          where: { id: cr.id },
+          data: { totalSpend: total, margin: reimbursement - total },
+        })
+      }),
+    )
   }
 
   await logAudit({

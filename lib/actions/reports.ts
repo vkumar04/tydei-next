@@ -123,6 +123,16 @@ export async function getReportData(input: {
     tierAchieved: number | null
   }
 
+  // 2026-06-18 perf audit: fetch the facility COG-category universe ONCE (it's
+  // facility-scoped, identical across all contracts) and thread it into the
+  // per-contract synthetic-period fallback below — instead of that fallback
+  // re-running a full-COG groupBy per contract (the N+1 worst case on
+  // freshly-imported facilities with no persisted ContractPeriod rollups).
+  const { facilityCogCategoryUniverse } = await import(
+    "@/lib/contracts/cog-category-universe"
+  )
+  const reportsCogUniverse = await facilityCogCategoryUniverse(facilityId)
+
   const contractRows = await Promise.all(
     contracts.map(async (c) => {
       const rebateEarnedCanonical = sumEarnedRebatesLifetime(
@@ -158,7 +168,11 @@ export async function getReportData(input: {
           tierAchieved: p.tierAchieved,
         }))
       } else {
-        const synthetic = await computeSyntheticContractPeriods(c, facilityId)
+        const synthetic = await computeSyntheticContractPeriods(
+          c,
+          facilityId,
+          reportsCogUniverse,
+        )
         periodRows = synthetic
           .filter(
             (p) => p.periodStart >= windowStart && p.periodEnd <= windowEnd,
