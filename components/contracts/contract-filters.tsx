@@ -52,7 +52,7 @@ export function ContractFilters({
   return (
     <>
       <Select value={status} onValueChange={onStatusChange}>
-        <SelectTrigger className="w-[150px]">
+        <SelectTrigger className="w-[150px]" aria-label="Filter by status">
           <SelectValue placeholder="All Status" />
         </SelectTrigger>
         <SelectContent>
@@ -65,7 +65,7 @@ export function ContractFilters({
       </Select>
 
       <Select value={type} onValueChange={onTypeChange}>
-        <SelectTrigger className="w-[150px]">
+        <SelectTrigger className="w-[150px]" aria-label="Filter by contract type">
           <SelectValue placeholder="All Types" />
         </SelectTrigger>
         <SelectContent>
@@ -82,7 +82,7 @@ export function ContractFilters({
           value={facilityFilter}
           onValueChange={(v) => onFacilityChange?.(v)}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[180px]" aria-label="Filter by facility">
             <SelectValue placeholder="All Facilities" />
           </SelectTrigger>
           <SelectContent>
