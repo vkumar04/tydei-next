@@ -144,8 +144,32 @@ export const auth = betterAuth({
       maxAge: 60 * 5, // 5 minutes
     },
   },
+  // Brute-force / credential-stuffing / signup-spam protection on the
+  // auth endpoints (2026-06-18 pre-prod audit: these were relying only on
+  // better-auth's modest default limiter). NOTE: better-auth's limiter is
+  // in-memory per-instance by default — fine at the current single Railway
+  // instance; switch to `storage: "database"` (+ a RateLimit model) or a
+  // shared store before horizontal scaling.
+  rateLimit: {
+    enabled: true,
+    window: 60, // seconds
+    max: 100, // default cap per window per IP
+    customRules: {
+      "/sign-in/email": { window: 60, max: 10 },
+      "/sign-up/email": { window: 60, max: 5 },
+      "/forget-password": { window: 60, max: 5 },
+      "/reset-password": { window: 60, max: 10 },
+    },
+  },
   emailAndPassword: {
     enabled: true,
+    // Explicit, self-documenting password policy (was implicit default 8).
+    minPasswordLength: 8,
+    maxPasswordLength: 128,
+    // Require a verified email before sign-in. The verification email is
+    // wired below via Resend. (Go-live dependency: Resend deliverability —
+    // if verification mail isn't landing, flip this off until it is.)
+    requireEmailVerification: true,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       if (!resend) {

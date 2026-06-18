@@ -9,6 +9,16 @@ vi.mock("@/lib/email", () => ({
     sendEmailMock(args),
 }))
 
+// Contact form is IP-rate-limited via next/headers (2026-06-18 audit). Give
+// each call a distinct IP so the limiter doesn't accumulate across tests.
+vi.mock("next/headers", () => {
+  let n = 0
+  return {
+    headers: async () =>
+      new Map<string, string>([["x-forwarded-for", `10.0.0.${++n}`]]),
+  }
+})
+
 import { submitContactForm } from "@/lib/actions/contact"
 
 const valid = {

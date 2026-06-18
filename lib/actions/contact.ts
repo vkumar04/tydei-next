@@ -1,7 +1,9 @@
 "use server"
 
+import { headers } from "next/headers"
 import { contactSchema, type ContactInput } from "@/lib/validators"
 import { sendEmail } from "@/lib/email"
+import { rateLimit } from "@/lib/rate-limit"
 
 const SUPPORT_INBOX = "support@tydei.com"
 
@@ -27,6 +29,21 @@ export interface ContactResult {
  * can render an inline error without tripping the Server Components overlay.
  */
 export async function submitContactForm(input: ContactInput): Promise<ContactResult> {
+  // Public, unauthenticated surface that sends email on every call — rate
+  // limit by client IP to blunt spam / Resend-quota abuse (2026-06-18 audit).
+  const hdrs = await headers()
+  const ip =
+    hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    hdrs.get("x-real-ip") ||
+    "unknown"
+  const { success } = rateLimit(`contact:${ip}`, 3, 60_000)
+  if (!success) {
+    return {
+      ok: false,
+      error: "Too many messages — please wait a minute and try again.",
+    }
+  }
+
   const parsed = contactSchema.safeParse(input)
   if (!parsed.success) {
     const first = parsed.error.issues[0]
