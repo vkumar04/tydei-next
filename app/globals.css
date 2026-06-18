@@ -213,3 +213,27 @@
     width: 100%;
   }
 }
+
+/* Theme toggle — circular reveal (View Transitions API, 2026-06-18).
+   Disable the default cross-fade so the new theme sweeps in as an expanding
+   circle (animated in theme-toggle.tsx); the new snapshot sits above the old. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  z-index: 1;
+}
+::view-transition-old(root) {
+  z-index: 0;
+}
+
+/* Respect reduced-motion: no theme sweep. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
+}
