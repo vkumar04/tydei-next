@@ -250,6 +250,44 @@ export const queryKeys = {
     connections: (entityId: string) =>
       ["settings", "connections", entityId] as const,
     vendorDivisions: () => ["vendor-divisions"] as const,
+    // Settings/Users feature ───────────────────────────────────────
+    memberAccessTiers: (orgId: string) =>
+      ["settings", "memberAccessTiers", orgId] as const,
+  },
+  // Per-user account/profile (name/email/password). Self-scoped — no id
+  // in the key (it's always the session user).
+  account: {
+    me: () => ["account", "me"] as const,
+  },
+  // Contract-renewal alert settings (per-user; shared row both sides).
+  renewalAlertSettings: {
+    base: ["renewalAlertSettings"] as const,
+    detail: (userId: string) => ["renewalAlertSettings", userId] as const,
+  },
+  // Vendor division membership (Settings/Users feature).
+  divisionMembers: {
+    base: ["divisionMembers"] as const,
+    byVendor: (vendorId: string) => ["divisionMembers", "byVendor", vendorId] as const,
+    byDivision: (divisionId: string) =>
+      ["divisionMembers", "byDivision", divisionId] as const,
+  },
+  // Vendor 1-/2-way connection mode.
+  connectionMode: {
+    base: ["connectionMode"] as const,
+    detail: (connectionId: string) => ["connectionMode", connectionId] as const,
+  },
+  // Vendor-owned COG (1-way mode).
+  vendorCog: {
+    base: ["vendorCog"] as const,
+    list: (vendorId: string, filters?: Record<string, unknown>) =>
+      ["vendorCog", "list", vendorId, filters] as const,
+    stats: (vendorId: string) => ["vendorCog", "stats", vendorId] as const,
+  },
+  // Per-user facility assignment (facility enterprise scoping).
+  facilityAssignment: {
+    base: ["facilityAssignment"] as const,
+    byUser: (userId: string) => ["facilityAssignment", "byUser", userId] as const,
+    forOrg: (orgId: string) => ["facilityAssignment", "forOrg", orgId] as const,
   },
   ai: {
     credits: (entityId: string) => ["ai", "credits", entityId] as const,
