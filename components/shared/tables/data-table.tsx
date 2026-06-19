@@ -1,21 +1,26 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   type ColumnDef,
   type SortingState,
   type ColumnFiltersState,
   type RowSelectionState,
   type OnChangeFn,
+  type FilterFnOption,
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedMinMaxValues,
+  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
 import { motion } from "motion/react"
-import { Search, ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react"
+import { Search, ArrowDown, ArrowUp, ChevronsUpDown, FilterX } from "lucide-react"
+import { ColumnFilter, columnFilterVariant } from "@/components/shared/tables/column-filter"
 import {
   Table,
   TableBody,
@@ -41,6 +46,14 @@ interface DataTableProps<TData, TValue> {
   pageSize?: number
   onRowClick?: (row: TData) => void
   isLoading?: boolean
+  /**
+   * Opt-in per-column filter row (uniform table filtering). Each column's
+   * control is chosen from its `meta.filterVariant` ("text" | "select" |
+   * "range" | "none"); accessor columns default to "text". The matching
+   * built-in filterFn is auto-assigned, so column defs only declare the
+   * variant.
+   */
+  enableColumnFilters?: boolean
   /** Optional controlled row selection state (TanStack rowSelection API). */
   rowSelection?: RowSelectionState
   onRowSelectionChange?: OnChangeFn<RowSelectionState>
@@ -61,16 +74,39 @@ export function DataTable<TData, TValue>({
   rowSelection,
   onRowSelectionChange,
   getRowId,
+  enableColumnFilters = false,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
+  // When per-column filters are enabled, auto-assign the built-in filterFn
+  // that matches each column's variant so callers only declare the variant.
+  // ("select" → array membership; "range" → numeric range; else contains.)
+  const resolvedColumns = useMemo(() => {
+    if (!enableColumnFilters) return columns
+    return columns.map((col) => {
+      const variant = col.meta?.filterVariant
+      if (variant === "none") return { ...col, enableColumnFilter: false }
+      if (col.filterFn) return col
+      const filterFn: FilterFnOption<TData> =
+        variant === "select"
+          ? "arrIncludesSome"
+          : variant === "range"
+            ? "inNumberRange"
+            : "includesString"
+      return { ...col, filterFn }
+    })
+  }, [columns, enableColumnFilters])
+
   const table = useReactTable({
     data,
-    columns,
+    columns: resolvedColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: enableColumnFilters ? getFacetedRowModel() : undefined,
+    getFacetedUniqueValues: enableColumnFilters ? getFacetedUniqueValues() : undefined,
+    getFacetedMinMaxValues: enableColumnFilters ? getFacetedMinMaxValues() : undefined,
     getPaginationRowModel: pagination ? getPaginationRowModel() : undefined,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -86,7 +122,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-4">
-      {(searchKey || filterComponent) && (
+      {(searchKey || filterComponent || enableColumnFilters) && (
         <div className="flex flex-wrap items-center gap-2">
           {searchKey && (
             <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -104,6 +140,20 @@ export function DataTable<TData, TValue>({
             </div>
           )}
           {filterComponent}
+          {enableColumnFilters && columnFilters.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setColumnFilters([])}
+              className="h-8 gap-1 text-muted-foreground"
+            >
+              <FilterX className="size-3.5" />
+              Clear filters
+              <span className="ml-0.5 rounded bg-muted px-1 text-xs">
+                {columnFilters.length}
+              </span>
+            </Button>
+          )}
         </div>
       )}
 
@@ -152,6 +202,20 @@ export function DataTable<TData, TValue>({
                 ))}
               </TableRow>
             ))}
+            {enableColumnFilters &&
+              table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={`${headerGroup.id}-filters`} className="hover:bg-transparent">
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={`${header.id}-filter`} className="py-1.5 align-top">
+                      {header.isPlaceholder ||
+                      columnFilterVariant(header.column) === "none" ||
+                      !header.column.getCanFilter() ? null : (
+                        <ColumnFilter column={header.column} />
+                      )}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
           </TableHeader>
           <TableBody>
             {isLoading ? (
