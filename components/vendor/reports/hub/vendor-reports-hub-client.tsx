@@ -14,6 +14,10 @@ import { VendorReportsOverviewTab } from "./vendor-reports-overview-tab"
 import { VendorReportsPerTypeTab } from "./vendor-reports-per-type-tab"
 import { VendorReportsByRebateTypeTab } from "./vendor-reports-by-rebate-type-tab"
 import { VendorReportsCalculationsTab } from "./vendor-reports-calculations-tab"
+import {
+  ReportPdfButton,
+  tabToPdfReportType,
+} from "@/components/shared/reports/report-pdf-button"
 import type {
   ReportsDateRange,
   ReportTabKey,
@@ -132,7 +136,15 @@ export function VendorReportsHubClient({
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as ReportTabKey)}
         >
-          <VendorReportsTabRouter selectedContract={selectedContract} />
+          <div className="flex items-center justify-between gap-2">
+            <VendorReportsTabRouter selectedContract={selectedContract} />
+            <ReportPdfButton
+              scope="vendor"
+              reportType={tabToPdfReportType(activeTab)}
+              dateRange={dateRange}
+              contractId={selectedContractId}
+            />
+          </div>
 
           <TabsContent value="overview" className="mt-4">
             <VendorReportsOverviewTab
