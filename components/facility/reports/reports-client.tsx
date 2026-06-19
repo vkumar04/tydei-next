@@ -18,6 +18,10 @@ import { ReportsPerTypeTab } from "./reports-per-type-tab"
 import { ReportsByRebateTypeTab } from "./reports-by-rebate-type-tab"
 import { ReportsCalculationsTab } from "./reports-calculations-tab"
 import { ReportsScheduleDialog } from "./reports-schedule-dialog"
+import {
+  ReportPdfButton,
+  tabToPdfReportType,
+} from "@/components/shared/reports/report-pdf-button"
 import type {
   ReportsContract,
   ReportsDateRange,
@@ -162,7 +166,15 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as ReportTabKey)}
         >
-          <ReportsTabRouter selectedContract={selectedContract} />
+          <div className="flex items-center justify-between gap-2">
+            <ReportsTabRouter selectedContract={selectedContract} />
+            <ReportPdfButton
+              scope="facility"
+              reportType={tabToPdfReportType(activeTab)}
+              dateRange={dateRange}
+              contractId={selectedContractId}
+            />
+          </div>
 
           <TabsContent value="overview" className="mt-4">
             <ReportsOverviewTab

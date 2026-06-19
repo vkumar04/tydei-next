@@ -7,7 +7,19 @@ import {
   generateContractReport,
   generateRebateReport,
   generateSurgeonScorecard,
+  generateReportPerformancePDF,
+  type ReportPerfType,
 } from "@/lib/pdf"
+import { getReportData } from "@/lib/actions/reports"
+import { getVendorReportData } from "@/lib/actions/vendor-reports/report-data"
+
+const REPORT_PERF_TYPES: ReportPerfType[] = [
+  "usage",
+  "service",
+  "capital",
+  "tie_in",
+  "grouped",
+]
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,24 +45,105 @@ export async function POST(request: NextRequest) {
     // optional, leaking any tenant's report to any authenticated user.)
     const member = await prisma.member.findFirst({
       where: { userId: session.user.id },
-      include: { organization: { include: { facility: true } } },
+      include: { organization: { include: { facility: true, vendor: true } } },
     })
-    const userFacilityId = member?.organization?.facility?.id
-    if (!userFacilityId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    const userFacility = member?.organization?.facility ?? null
+    const userVendor = member?.organization?.vendor ?? null
+    const userFacilityId = userFacility?.id
 
     const body = await request.json()
-    const { type, id, dateRange, facilityId, surgeonName } = body as {
-      type: "contract" | "rebate" | "surgeon"
+    const {
+      type,
+      id,
+      dateRange,
+      facilityId,
+      surgeonName,
+      scope,
+      reportType,
+      contractId,
+    } = body as {
+      type: "contract" | "rebate" | "surgeon" | "report"
       id?: string
       facilityId?: string
       surgeonName?: string
       dateRange?: { from: string; to: string }
+      scope?: "facility" | "vendor"
+      reportType?: ReportPerfType
+      contractId?: string
     }
 
     let pdfBytes: Uint8Array
     let filename: string
+
+    // ── Contract Performance Details (Reports Hub, both portals) ──
+    // Vendor-scoped exports must NOT require a facility membership; the
+    // server action (requireVendor / requireFacility) enforces ownership.
+    if (type === "report") {
+      if (!reportType || !REPORT_PERF_TYPES.includes(reportType)) {
+        return NextResponse.json(
+          { error: "Invalid or missing reportType" },
+          { status: 400 },
+        )
+      }
+      if (!dateRange?.from || !dateRange?.to) {
+        return NextResponse.json(
+          { error: "dateRange is required" },
+          { status: 400 },
+        )
+      }
+      const isVendor = scope === "vendor"
+      if (isVendor && !userVendor) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      if (!isVendor && !userFacilityId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+
+      const data = isVendor
+        ? await getVendorReportData({
+            reportType,
+            dateFrom: dateRange.from,
+            dateTo: dateRange.to,
+          })
+        : await getReportData({
+            reportType,
+            dateFrom: dateRange.from,
+            dateTo: dateRange.to,
+          })
+
+      const allContracts = (data.contracts ??
+        []) as unknown as Parameters<
+        typeof generateReportPerformancePDF
+      >[0]["contracts"]
+      const contracts = contractId
+        ? allContracts.filter((c) => c.id === contractId)
+        : allContracts
+
+      pdfBytes = generateReportPerformancePDF({
+        entityName: isVendor
+          ? (userVendor?.name ?? "Vendor")
+          : (userFacility?.name ?? "Facility"),
+        reportType,
+        dateFrom: dateRange.from,
+        dateTo: dateRange.to,
+        contracts,
+      })
+      filename = `contract-performance-${reportType}.pdf`
+
+      return new Response(Buffer.from(pdfBytes), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+          "Content-Length": String(pdfBytes.byteLength),
+        },
+      })
+    }
+
+    // Facility-only report types below — require a facility membership.
+    if (!userFacilityId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
 
     switch (type) {
       case "contract": {
