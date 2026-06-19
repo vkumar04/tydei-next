@@ -181,6 +181,30 @@ enum ConnectionInviteType {
   vendor_to_facility
 }
 
+// Per-user access tier (Settings/Users feature). Orthogonal to the
+// better-auth org role on Member.role (owner/admin/member): this axis
+// gates WHAT a user can do (write / settings), not the org-plugin role.
+//   super    — full access incl. Settings
+//   advanced — all access EXCEPT Settings
+//   user     — read-only everywhere (can see, cannot mutate)
+enum AccessTier {
+  super
+  advanced
+  user
+}
+
+// Vendor's interaction mode with a facility, set per facility–vendor
+// connection. two_way = full bidirectional (vendor contracts flow to the
+// facility once invited+accepted). one_way = vendor self-serves contracts
+// (no facility approval) and may enter its OWN COG; nothing flows to the
+// facility.
+enum ConnectionMode {
+  one_way
+  two_way
+
+  @@map("connection_mode")
+}
+
 enum PayorType {
   commercial
   medicare_advantage
@@ -365,6 +389,8 @@ model User {
   rebateInsightFlags RebateInsightFlag[]
   notifications    Notification[]
   contractExtractionCache ContractExtractionCache[]
+  divisionMembers      DivisionMember[]
+  facilityAssignments  FacilityAssignment[]
 
   @@index([role])
   @@map("user")
@@ -440,6 +466,10 @@ model Member {
   organizationId String
   userId         String
   role           String   @default("member")
+  // Settings/Users access tier — see enum AccessTier. Orthogonal to
+  // `role` (org-plugin owner/admin/member). Defaults to `super` so
+  // existing members keep full access until explicitly demoted.
+  accessTier     AccessTier @default(super)
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -522,6 +552,7 @@ model Facility {
   rebateInsightFlags  RebateInsightFlag[]
   crossVendorTieIns  CrossVendorTieIn[]
   vendorNameMappings VendorNameMapping[]
+  facilityAssignments FacilityAssignment[]
 
   @@index([status])
   @@map("facility")
@@ -567,6 +598,7 @@ model Vendor {
   divisions          VendorDivision[]
   productBenchmarks  ProductBenchmark[]
   crossVendorTieInMembers CrossVendorTieInMember[]
+  vendorCogRecords   VendorCogRecord[]
 
   @@map("vendor")
 }
@@ -625,11 +657,58 @@ model VendorDivision {
   name       String
   code       String
   categories String[] @default([])
+  // The catch-all "All Products" division created by the backfill so
+  // existing un-divisioned rows have a home. A vendor has at most one.
+  isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
 
-  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  vendor           Vendor            @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  members          DivisionMember[]
+  contracts        Contract[]        @relation("ContractDivision")
+  vendorCogRecords VendorCogRecord[]
+  connections      Connection[]
 
+  @@unique([vendorId, code])
+  @@index([vendorId])
   @@map("vendor_division")
+}
+
+// User ↔ vendor-division attachment (Settings/Users feature). A user
+// may belong to many divisions within one vendor org; visibility is
+// hard-scoped to the divisions they are attached to. Kept separate from
+// the better-auth Member table (which is one row per user↔organization).
+model DivisionMember {
+  id         String   @id @default(cuid())
+  divisionId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  division VendorDivision @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([divisionId, userId])
+  @@index([userId])
+  @@index([divisionId])
+  @@map("division_member")
+}
+
+// User ↔ facility assignment (facility enterprise scoping). A scoped
+// facility user sees only the facilities assigned here; an enterprise
+// user (by access tier / membership) sees every facility in their
+// HealthSystem and needs no rows.
+model FacilityAssignment {
+  id         String   @id @default(cuid())
+  userId     String
+  facilityId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, facilityId])
+  @@index([userId])
+  @@index([facilityId])
+  @@map("facility_assignment")
 }
 
 model ProductCategory {
@@ -690,6 +769,12 @@ model Contract {
   // the approve path tried to write this column but it didn't
   // exist on Contract, which silently dropped the value.
   division               String?
+  // Settings/Users feature: FK to the vendor's division for hard data
+  // isolation ("each division behaves like a separate company"). Nullable
+  // — facility-only and grouped multi-vendor contracts have no single
+  // vendor division. Distinct from the free-string `division` above
+  // (which is a display label persisted from PendingContract).
+  vendorDivisionId       String?
   // Charles audit suggestion #4 (v0-port): legacy single-item capital
   // fields removed. Capital lives in ContractCapitalLineItem rows
   // (1:N), which support multi-asset financing per v0's
@@ -722,6 +807,7 @@ model Contract {
   facility        Facility?        @relation(fields: [facilityId], references: [id])
   productCategory ProductCategory? @relation(fields: [productCategoryId], references: [id])
   createdBy       User?            @relation("CreatedByUser", fields: [createdById], references: [id])
+  vendorDivision  VendorDivision?  @relation("ContractDivision", fields: [vendorDivisionId], references: [id])
 
   terms              ContractTerm[]
   pricingItems       ContractPricing[]
@@ -753,6 +839,7 @@ model Contract {
   @@index([facilityId])
   @@index([status])
   @@index([expirationDate])
+  @@index([vendorDivisionId])
   @@map("contract")
 }
 
@@ -1359,6 +1446,54 @@ model COGRecord {
   @@map("cog_record")
 }
 
+// Vendor-owned COG (Settings/Users feature, 1-way mode). Mirrors
+// COGRecord but is owned by a VENDOR, not a facility — `facilityId` is
+// OPTIONAL here (a 1-way vendor enters its own purchasing data not tied
+// to any facility). NEVER merged into facility COGRecord reads; keeps the
+// "COG is always facility-scoped" invariant on COGRecord intact.
+model VendorCogRecord {
+  id                   String   @id @default(cuid())
+  vendorId             String
+  // Hard-isolation axis: null = vendor-wide, set = division-scoped.
+  vendorDivisionId     String?
+  // Optional facility context (a vendor may tag a row to a facility).
+  facilityId           String?
+  vendorName           String?
+  inventoryNumber      String
+  inventoryDescription String
+  vendorItemNo         String?
+  manufacturerNo       String?
+  poNumber             String?
+  unitCost             Decimal  @db.Decimal(12, 2)
+  extendedPrice        Decimal? @db.Decimal(14, 2)
+  quantity             Int      @default(1)
+  transactionDate      DateTime @db.Date
+  category             String?
+  notes                String?
+  matchStatus          COGMatchStatus @default(pending)
+  contractId           String?
+  contractPrice        Decimal? @db.Decimal(12, 2)
+  isOnContract         Boolean  @default(false)
+  savingsAmount        Decimal? @db.Decimal(14, 2)
+  variancePercent      Decimal? @db.Decimal(6, 2)
+  // Loose import-batch tag (no FK — FileImport requires a facility).
+  fileImportId         String?
+  createdBy            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  vendor         Vendor          @relation(fields: [vendorId], references: [id])
+  vendorDivision VendorDivision? @relation(fields: [vendorDivisionId], references: [id])
+
+  @@index([vendorId])
+  @@index([vendorDivisionId])
+  @@index([transactionDate])
+  @@index([vendorItemNo])
+  @@index([contractId])
+  @@index([vendorId, transactionDate])
+  @@map("vendor_cog_record")
+}
+
 model PricingFile {
   id                 String    @id @default(cuid())
   vendorId           String
@@ -1906,13 +2041,21 @@ model Connection {
   respondedBy    String?
   expiresAt      DateTime
   message        String?
+  // Settings/Users feature: vendor sets the interaction mode per
+  // facility connection. Defaults two_way so existing connections keep
+  // today's full-bidirectional behavior.
+  mode           ConnectionMode @default(two_way)
+  // Optional division scope for the connection (vendor-wide when null).
+  vendorDivisionId String?
 
-  facility Facility @relation("FacilityConnections", fields: [facilityId], references: [id])
-  vendor   Vendor   @relation("VendorConnections", fields: [vendorId], references: [id])
+  facility       Facility        @relation("FacilityConnections", fields: [facilityId], references: [id])
+  vendor         Vendor          @relation("VendorConnections", fields: [vendorId], references: [id])
+  vendorDivision VendorDivision? @relation(fields: [vendorDivisionId], references: [id])
 
   @@index([facilityId])
   @@index([vendorId])
   @@index([status])
+  @@index([vendorDivisionId])
   @@map("connection")
 }
 
