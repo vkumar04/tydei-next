@@ -131,6 +131,7 @@ export function VendorTable() {
         searchKey="name"
         searchPlaceholder="Search vendors..."
         isLoading={isLoading}
+        enableColumnFilters
         filterComponent={
           <Button size="sm" className="gap-2" onClick={() => { setFormData({}); setFormOpen(true) }}>
             <Plus className="size-4" /> Add Vendor

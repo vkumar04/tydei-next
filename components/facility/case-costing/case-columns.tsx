@@ -10,13 +10,30 @@ export function getCaseColumns(
   onView: (row: CaseWithRelations) => void
 ): ColumnDef<CaseWithRelations>[] {
   return [
-    { accessorKey: "caseNumber", header: "Case #" },
-    { accessorKey: "surgeonName", header: "Surgeon" },
-    { accessorKey: "dateOfSurgery", header: "Date" },
-    { accessorKey: "primaryCptCode", header: "CPT Code" },
+    {
+      accessorKey: "caseNumber",
+      header: "Case #",
+      meta: { filterVariant: "text", filterLabel: "Case #" },
+    },
+    {
+      accessorKey: "surgeonName",
+      header: "Surgeon",
+      meta: { filterVariant: "select", filterLabel: "Surgeon" },
+    },
+    {
+      accessorKey: "dateOfSurgery",
+      header: "Date",
+      meta: { filterVariant: "text", filterLabel: "Date" },
+    },
+    {
+      accessorKey: "primaryCptCode",
+      header: "CPT Code",
+      meta: { filterVariant: "select", filterLabel: "CPT Code" },
+    },
     {
       accessorKey: "totalSpend",
       header: "Total Spend",
+      meta: { filterVariant: "range", filterLabel: "Total Spend" },
       cell: ({ row, table }) => {
         const val = row.original.totalSpend
         const allRows = table.getFilteredRowModel().rows
@@ -47,12 +64,14 @@ export function getCaseColumns(
     {
       accessorKey: "totalReimbursement",
       header: "Reimbursement",
+      meta: { filterVariant: "range", filterLabel: "Reimbursement" },
       cell: ({ row }) =>
         `$${row.original.totalReimbursement.toLocaleString()}`,
     },
     {
       accessorKey: "margin",
       header: "Margin",
+      meta: { filterVariant: "range", filterLabel: "Margin" },
       cell: ({ row }) => {
         const val = row.original.margin
         return (
@@ -65,6 +84,7 @@ export function getCaseColumns(
     {
       accessorKey: "complianceStatus",
       header: "Compliance",
+      meta: { filterVariant: "select", filterLabel: "Compliance" },
       cell: ({ row }) => {
         const s = row.original.complianceStatus
         const variant =
@@ -78,6 +98,7 @@ export function getCaseColumns(
     },
     {
       id: "actions",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <Button
           variant="ghost"

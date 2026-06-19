@@ -18,6 +18,7 @@ const columns: ColumnDef<StripeInvoiceRow>[] = [
   {
     accessorKey: "id",
     header: "Invoice",
+    meta: { filterVariant: "text", filterLabel: "Invoice" },
     cell: ({ row }) => (
       <span className="font-mono text-sm">{row.original.id.slice(0, 20)}...</span>
     ),
@@ -25,6 +26,7 @@ const columns: ColumnDef<StripeInvoiceRow>[] = [
   {
     accessorKey: "customerName",
     header: "Organization",
+    meta: { filterVariant: "text", filterLabel: "Organization" },
     cell: ({ row }) => {
       const name = row.original.customerName
       const email = row.original.customerEmail
@@ -40,6 +42,7 @@ const columns: ColumnDef<StripeInvoiceRow>[] = [
   {
     accessorKey: "period",
     header: "Period",
+    meta: { filterVariant: "select", filterLabel: "Period" },
     cell: ({ row }) => (
       <span className="text-muted-foreground">{row.original.period ?? "-"}</span>
     ),
@@ -47,6 +50,7 @@ const columns: ColumnDef<StripeInvoiceRow>[] = [
   {
     accessorKey: "amount",
     header: () => <div className="text-right">Amount</div>,
+    meta: { filterVariant: "range", filterLabel: "Amount" },
     cell: ({ row }) => (
       <div className="text-right font-medium">{formatCurrency(row.original.amount, true)}</div>
     ),
@@ -54,6 +58,7 @@ const columns: ColumnDef<StripeInvoiceRow>[] = [
   {
     accessorKey: "status",
     header: "Status",
+    meta: { filterVariant: "select" },
     cell: ({ row }) => {
       const status = row.original.status
       return (
@@ -68,6 +73,7 @@ const columns: ColumnDef<StripeInvoiceRow>[] = [
   {
     accessorKey: "date",
     header: () => <div className="text-right">Date</div>,
+    meta: { filterVariant: "none" },
     cell: ({ row }) => (
       <div className="text-right text-muted-foreground">{formatDate(row.original.date)}</div>
     ),
@@ -79,5 +85,5 @@ interface InvoiceTableProps {
 }
 
 export function InvoiceTable({ invoices }: InvoiceTableProps) {
-  return <DataTable columns={columns} data={invoices} searchKey="customerName" searchPlaceholder="Search invoices..." />
+  return <DataTable columns={columns} data={invoices} searchKey="customerName" searchPlaceholder="Search invoices..." enableColumnFilters />
 }

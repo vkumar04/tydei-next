@@ -20,6 +20,7 @@ export function getPricingColumns(
     {
       accessorKey: "vendorItemNo",
       header: "Vendor Item #",
+      meta: { filterVariant: "text", filterLabel: "Vendor Item #" },
       cell: ({ row }) => (
         <span className="font-mono text-sm">{row.original.vendorItemNo}</span>
       ),
@@ -27,6 +28,7 @@ export function getPricingColumns(
     {
       accessorKey: "productDescription",
       header: "Description",
+      meta: { filterVariant: "text", filterLabel: "Description" },
       cell: ({ row }) => (
         <span
           className="max-w-[200px] truncate block"
@@ -39,11 +41,13 @@ export function getPricingColumns(
     {
       accessorKey: "vendor.name",
       header: "Vendor",
+      meta: { filterVariant: "select", filterLabel: "Vendor" },
       cell: ({ row }) => row.original.vendor.name,
     },
     {
       accessorKey: "category",
       header: "Category",
+      meta: { filterVariant: "select", filterLabel: "Category" },
       cell: ({ row }) =>
         row.original.category ? (
           <Badge variant="outline">{row.original.category}</Badge>
@@ -54,6 +58,8 @@ export function getPricingColumns(
     {
       accessorKey: "listPrice",
       header: "List Price",
+      accessorFn: (row) => Number(row.listPrice ?? 0),
+      meta: { filterVariant: "range", filterLabel: "List Price" },
       cell: ({ row }) => (
         <span className="text-right text-muted-foreground">
           {row.original.listPrice
@@ -65,6 +71,8 @@ export function getPricingColumns(
     {
       accessorKey: "contractPrice",
       header: "Contract Price",
+      accessorFn: (row) => Number(row.contractPrice ?? 0),
+      meta: { filterVariant: "range", filterLabel: "Contract Price" },
       cell: ({ row }) => (
         <span className="text-right font-medium">
           {row.original.contractPrice
@@ -76,6 +84,9 @@ export function getPricingColumns(
     {
       id: "savings",
       header: "Savings",
+      accessorFn: (row) =>
+        Number(row.listPrice ?? 0) - Number(row.contractPrice ?? 0),
+      meta: { filterVariant: "range", filterLabel: "Savings" },
       cell: ({ row }) => {
         const list = Number(row.original.listPrice ?? 0)
         const contract = Number(row.original.contractPrice ?? 0)
@@ -94,6 +105,9 @@ export function getPricingColumns(
       // Empty when null (no carve-out for this SKU).
       id: "carveOutPercent",
       header: "Carve-Out",
+      accessorFn: (row) =>
+        row.carveOutPercent == null ? 0 : Number(row.carveOutPercent) * 100,
+      meta: { filterVariant: "range", filterLabel: "Carve-Out" },
       cell: ({ row }) => {
         const raw = row.original.carveOutPercent
         if (raw == null) return <span className="text-muted-foreground">{"\u2014"}</span>
@@ -108,6 +122,8 @@ export function getPricingColumns(
     {
       id: "source",
       header: "Source",
+      accessorFn: (row) => (row.source === "contract" ? "Contract" : "File"),
+      meta: { filterVariant: "select", filterLabel: "Source" },
       cell: ({ row }) => {
         if (row.original.source === "contract") {
           return (
@@ -131,6 +147,7 @@ export function getPricingColumns(
           {
             id: "actions",
             header: "",
+            meta: { filterVariant: "none" },
             cell: ({ row }) => {
               const busy = pendingDeleteId === row.original.id
               return (

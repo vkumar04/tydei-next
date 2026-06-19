@@ -120,6 +120,7 @@ export function FacilityTable() {
         searchKey="name"
         searchPlaceholder="Search facilities..."
         isLoading={isLoading}
+        enableColumnFilters
         filterComponent={
           <Button size="sm" className="gap-2" onClick={() => setFormOpen(true)}>
             <Plus className="size-4" /> Add Facility

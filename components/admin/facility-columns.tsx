@@ -15,6 +15,7 @@ export function getFacilityColumns(
     {
       accessorKey: "name",
       header: "Facility",
+      meta: { filterVariant: "text", filterLabel: "Facility" },
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
@@ -27,6 +28,11 @@ export function getFacilityColumns(
     {
       id: "location",
       header: "Location",
+      meta: { filterVariant: "text", filterLabel: "Location" },
+      accessorFn: (row) => {
+        const { city, state } = row
+        return city && state ? `${city}, ${state}` : (city ?? state ?? "")
+      },
       cell: ({ row }) => {
         const { city, state } = row.original
         return (
@@ -39,6 +45,7 @@ export function getFacilityColumns(
     {
       accessorKey: "status",
       header: "Status",
+      meta: { filterVariant: "select" },
       cell: ({ row }) => (
         <Badge variant={row.original.status === "active" ? "default" : "secondary"}>
           {row.original.status === "active" ? (
@@ -52,16 +59,19 @@ export function getFacilityColumns(
     {
       accessorKey: "userCount",
       header: () => <div className="text-right">Users</div>,
+      meta: { filterVariant: "range", filterLabel: "Users" },
       cell: ({ row }) => <div className="text-right">{row.original.userCount}</div>,
     },
     {
       accessorKey: "contractCount",
       header: () => <div className="text-right">Contracts</div>,
+      meta: { filterVariant: "range", filterLabel: "Contracts" },
       cell: ({ row }) => <div className="text-right">{row.original.contractCount}</div>,
     },
     {
       accessorKey: "createdAt",
       header: () => <div className="text-right">Created</div>,
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <div className="text-right text-muted-foreground">
           {new Date(row.original.createdAt).toLocaleDateString()}
@@ -70,6 +80,7 @@ export function getFacilityColumns(
     },
     {
       id: "actions",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <TableActionMenu
           actions={[

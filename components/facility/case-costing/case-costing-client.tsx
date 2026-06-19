@@ -38,11 +38,7 @@ import { CaseImportDialog } from "./case-import-dialog"
 import { CaseCostingHero } from "./case-costing-hero"
 import { CaseCostingTabs } from "./case-costing-tabs"
 import { PayorContractMarginCard } from "./payor-contract-margin-card"
-import {
-  getCasesForFacility,
-  getSurgeonsForFacility,
-  getCptCodesForFacility,
-} from "@/lib/actions/case-costing/cases-list"
+import { getCasesForFacility } from "@/lib/actions/case-costing/cases-list"
 import {
   getSurgeonScorecardsForFacility,
   getFacilityAveragesForFacility,
@@ -79,16 +75,6 @@ export function CaseCostingClient({
     queryFn: () => getCasesForFacility(caseFilters),
   })
 
-  const surgeonOptionsQuery = useQuery({
-    queryKey: ["case-costing", "surgeon-options", facilityId] as const,
-    queryFn: () => getSurgeonsForFacility(),
-  })
-
-  const cptOptionsQuery = useQuery({
-    queryKey: ["case-costing", "cpt-options", facilityId] as const,
-    queryFn: () => getCptCodesForFacility(),
-  })
-
   const scorecardsQuery = useQuery({
     queryKey: ["case-costing", "surgeon-scorecards", facilityId] as const,
     queryFn: () => getSurgeonScorecardsForFacility(),
@@ -115,8 +101,6 @@ export function CaseCostingClient({
   // explicitly after an import or a delete-all.
   function refetchAll() {
     casesQuery.refetch()
-    surgeonOptionsQuery.refetch()
-    cptOptionsQuery.refetch()
     scorecardsQuery.refetch()
     averagesQuery.refetch()
     complianceQuery.refetch()
@@ -226,8 +210,6 @@ export function CaseCostingClient({
           isLoading: casesQuery.isLoading,
           filters: caseFilters,
           onFiltersChange: setCaseFilters,
-          surgeonOptions: surgeonOptionsQuery.data ?? [],
-          cptOptions: cptOptionsQuery.data ?? [],
         }}
         surgeons={{
           scorecards: scorecardsQuery.data ?? [],

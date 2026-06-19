@@ -33,8 +33,6 @@ export interface CaseCostingTabsProps {
     isLoading: boolean
     filters: GetCasesForFacilityFilters
     onFiltersChange: (next: GetCasesForFacilityFilters) => void
-    surgeonOptions: string[]
-    cptOptions: string[]
   }
   surgeons: {
     scorecards: Surgeon[]

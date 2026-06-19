@@ -19,20 +19,30 @@ export function CPTAnalysisTable({ analyses }: CPTAnalysisTableProps) {
 
   const columns: ColumnDef<CPTCodeAnalysis>[] = useMemo(
     () => [
-      { accessorKey: "cptCode", header: "CPT Code" },
+      {
+        accessorKey: "cptCode",
+        header: "CPT Code",
+        meta: { filterVariant: "select", filterLabel: "CPT Code" },
+      },
       {
         accessorKey: "description",
         header: "Description",
+        meta: { filterVariant: "text", filterLabel: "Description" },
         cell: ({ row }) => (
           <span className="text-muted-foreground">
             {row.original.description ?? "--"}
           </span>
         ),
       },
-      { accessorKey: "caseCount", header: "Cases" },
+      {
+        accessorKey: "caseCount",
+        header: "Cases",
+        meta: { filterVariant: "range", filterLabel: "Cases" },
+      },
       {
         accessorKey: "avgCost",
         header: "Avg Cost",
+        meta: { filterVariant: "range", filterLabel: "Avg Cost" },
         cell: ({ row }) => {
           const cost = row.original.avgCost
           const isBelow = globalAvg > 0 && cost < globalAvg * 0.9
@@ -55,18 +65,22 @@ export function CPTAnalysisTable({ analyses }: CPTAnalysisTableProps) {
       {
         accessorKey: "minCost",
         header: "Min",
+        meta: { filterVariant: "range", filterLabel: "Min Cost" },
         cell: ({ row }) =>
           `$${Math.round(row.original.minCost).toLocaleString()}`,
       },
       {
         accessorKey: "maxCost",
         header: "Max",
+        meta: { filterVariant: "range", filterLabel: "Max Cost" },
         cell: ({ row }) =>
           `$${Math.round(row.original.maxCost).toLocaleString()}`,
       },
       {
         id: "surgeons",
         header: "Surgeons",
+        accessorFn: (row) => row.surgeonBreakdown.length,
+        meta: { filterVariant: "range", filterLabel: "Surgeons" },
         cell: ({ row }) => (
           <span className="text-muted-foreground">
             {row.original.surgeonBreakdown.length} surgeon
@@ -84,6 +98,7 @@ export function CPTAnalysisTable({ analyses }: CPTAnalysisTableProps) {
       data={analyses}
       searchKey="cptCode"
       searchPlaceholder="Search CPT codes..."
+      enableColumnFilters
     />
   )
 }

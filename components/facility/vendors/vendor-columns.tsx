@@ -25,6 +25,7 @@ export function getVendorColumns({
     {
       accessorKey: "name",
       header: "Name",
+      meta: { filterVariant: "text", filterLabel: "Name" },
       cell: ({ row }) => (
         <span className="font-medium">{row.original.name}</span>
       ),
@@ -32,21 +33,25 @@ export function getVendorColumns({
     {
       accessorKey: "code",
       header: "Code",
+      meta: { filterVariant: "text", filterLabel: "Code" },
       cell: ({ row }) => row.original.code ?? "—",
     },
     {
       accessorKey: "contactEmail",
       header: "Email",
+      meta: { filterVariant: "text", filterLabel: "Email" },
       cell: ({ row }) => row.original.contactEmail ?? "—",
     },
     {
       accessorKey: "contactPhone",
       header: "Phone",
+      meta: { filterVariant: "text", filterLabel: "Phone" },
       cell: ({ row }) => row.original.contactPhone ?? "—",
     },
     {
       accessorKey: "status",
       header: "Status",
+      meta: { filterVariant: "select", filterLabel: "Status" },
       cell: ({ row }) => (
         <StatusBadge status={row.original.status} config={vendorStatusConfig} />
       ),
@@ -54,12 +59,14 @@ export function getVendorColumns({
     {
       accessorKey: "tier",
       header: "Tier",
+      meta: { filterVariant: "select", filterLabel: "Tier" },
       cell: ({ row }) => (
         <span className="capitalize">{row.original.tier}</span>
       ),
     },
     {
       id: "actions",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <TableActionMenu
           actions={[
