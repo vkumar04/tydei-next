@@ -301,38 +301,51 @@ export async function exportReportCSV(input: {
 export async function getPriceDiscrepancies(_facilityId?: string) {
   const { facility } = await requireFacility()
 
-  const lineItems = await prisma.invoiceLineItem.findMany({
+  // Source of truth is the facility's matched spend (COGRecord), NOT
+  // imported invoices. The contract match engine stamps each COG row's
+  // matchStatus + contractPrice + variancePercent (lib/cog/enrichment.ts);
+  // the SAME rows drive the off-contract / price-variance ALERTS
+  // (lib/alerts/synthesizer.ts). Reading invoiceLineItem here meant the
+  // report sat empty for facilities that import COG but not invoices,
+  // even though the alerts had data. We surface:
+  //   • price_variance    → on-contract item paid ≠ contract price (has %)
+  //   • off_contract_item → bought off any contract (no contract price;
+  //                          shows in the line-item detail as "No Contract")
+  // Ordered by variance magnitude (off-contract rows, null %, sort last).
+  const rows = await prisma.cOGRecord.findMany({
     where: {
-      invoice: { facilityId: facility.id },
-      isFlagged: false,
-      variancePercent: { not: null },
+      facilityId: facility.id,
+      matchStatus: { in: ["price_variance", "off_contract_item"] },
     },
-    include: {
-      invoice: {
-        select: {
-          id: true,
-          invoiceNumber: true,
-          vendor: { select: { id: true, name: true } },
-        },
-      },
-    },
-    orderBy: { variancePercent: "desc" },
-    take: 100,
+    include: { vendor: { select: { id: true, name: true } } },
+    orderBy: [
+      { variancePercent: { sort: "desc", nulls: "last" } },
+      { extendedPrice: { sort: "desc", nulls: "last" } },
+    ],
+    take: 1500,
   })
 
-  return serialize(lineItems.map((li) => ({
-    id: li.id,
-    invoiceId: li.invoice.id,
-    invoiceNumber: li.invoice.invoiceNumber,
-    vendorName: li.invoice.vendor.name,
-    vendorId: li.invoice.vendor.id,
-    itemDescription: li.inventoryDescription,
-    vendorItemNo: li.vendorItemNo,
-    invoicePrice: Number(li.invoicePrice),
-    contractPrice: li.contractPrice ? Number(li.contractPrice) : null,
-    variancePercent: li.variancePercent ? Number(li.variancePercent) : null,
-    quantity: li.invoiceQuantity,
-    totalLineCost: Number(li.totalLineCost),
-    isFlagged: li.isFlagged,
-  })))
+  return serialize(
+    rows.map((r) => {
+      const unitCost = Number(r.unitCost)
+      return {
+        id: r.id,
+        // No invoice backs these — the PO number is the reference. Empty
+        // invoiceId so the UI can omit the (nonexistent) invoice link.
+        invoiceId: "",
+        invoiceNumber: r.poNumber ?? "",
+        vendorName: r.vendorName ?? r.vendor?.name ?? "Unknown vendor",
+        vendorId: r.vendorId ?? r.vendor?.id ?? "",
+        itemDescription: r.inventoryDescription,
+        vendorItemNo: r.vendorItemNo,
+        invoicePrice: unitCost,
+        contractPrice: r.contractPrice != null ? Number(r.contractPrice) : null,
+        variancePercent: r.variancePercent != null ? Number(r.variancePercent) : null,
+        quantity: r.quantity,
+        totalLineCost:
+          r.extendedPrice != null ? Number(r.extendedPrice) : unitCost * r.quantity,
+        isFlagged: false,
+      }
+    }),
+  )
 }

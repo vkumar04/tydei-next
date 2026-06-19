@@ -211,8 +211,9 @@ export function PriceVarianceDashboard({
             No variance data yet
           </h3>
           <p className="text-sm text-muted-foreground max-w-sm">
-            Once invoices are imported and matched against contract pricing,
-            price-variance rows will appear here grouped by severity.
+            Once COG spend is imported and matched against contract pricing,
+            price-variance and off-contract rows will appear here grouped by
+            severity.
           </p>
         </CardContent>
       </Card>
@@ -371,7 +372,7 @@ export function PriceVarianceDashboard({
                 <TableRow>
                   <TableHead>Item</TableHead>
                   <TableHead>Vendor</TableHead>
-                  <TableHead>Invoice</TableHead>
+                  <TableHead>PO / Ref</TableHead>
                   <TableHead className="text-right">Variance %</TableHead>
                   <TableHead className="text-right">Dollar impact</TableHead>
                   <TableHead>Severity</TableHead>
