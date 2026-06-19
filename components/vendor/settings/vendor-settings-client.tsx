@@ -13,6 +13,9 @@ import {
   SlidersHorizontal,
   Send,
   CreditCard,
+  FolderTree,
+  Boxes,
+  BellRing,
 } from "lucide-react"
 import {
   useVendorProfile,
@@ -36,6 +39,9 @@ import { OrganizationTab } from "@/components/vendor/settings/tabs/organization-
 import { ConnectionsTab } from "@/components/vendor/settings/tabs/connections-tab"
 import { BillingTab } from "@/components/vendor/settings/tabs/billing-tab"
 import { AICreditsTab } from "@/components/vendor/settings/tabs/ai-credits-tab"
+import { DivisionsTab } from "@/components/vendor/settings/tabs/divisions-tab"
+import { CogsTab } from "@/components/vendor/settings/tabs/cogs-tab"
+import { AlertsTab } from "@/components/vendor/settings/tabs/alerts-tab"
 
 interface VendorSettingsClientProps {
   vendorId: string
@@ -95,7 +101,10 @@ export function VendorSettingsClient({
     { value: "profile", label: "Profile", Icon: User },
     { value: "notifications", label: "Notifications", Icon: Bell },
     { value: "organization", label: "Organization", Icon: Building2 },
+    { value: "divisions", label: "Divisions", Icon: FolderTree },
     { value: "connections", label: "Connections", Icon: Link2 },
+    { value: "cogs", label: "COGS", Icon: Boxes },
+    { value: "alerts", label: "Alerts", Icon: BellRing },
     { value: "billing", label: "Billing", Icon: FileText },
     { value: "ai-credits", label: "AI Credits", Icon: Sparkles },
   ]
@@ -192,6 +201,18 @@ export function VendorSettingsClient({
             onRejectConnection={(id) => rejectConn.mutate(id)}
             onRemoveConnection={(id) => removeConn.mutate(id)}
           />
+        </TabsContent>
+
+        <TabsContent value="divisions" className="space-y-6">
+          <DivisionsTab vendorId={vendorId} canManage />
+        </TabsContent>
+
+        <TabsContent value="cogs" className="space-y-6">
+          <CogsTab vendorId={vendorId} isOneWay />
+        </TabsContent>
+
+        <TabsContent value="alerts" className="space-y-6">
+          <AlertsTab />
         </TabsContent>
 
         <TabsContent value="billing" className="space-y-6">

@@ -19,6 +19,13 @@ import {
 } from "@/lib/validators/settings"
 import { parseNotificationPrefs } from "@/lib/notifications/prefs"
 import { serialize } from "@/lib/serialize"
+import { requireCan } from "@/lib/actions/auth-permissions"
+import { ACCESS_TIERS, type AccessTier } from "@/lib/auth/permissions"
+
+// Access tier (Settings/Users feature). Only a Super user may change a
+// member's tier (gated by requireCan("members.manage")). Mirrors the
+// owner-protection discipline used for org roles.
+const accessTierSchema = z.enum(ACCESS_TIERS as unknown as [AccessTier, ...AccessTier[]])
 
 // ─── Role enums (Charles audit C2/C3) ─────────────────────────────
 //
@@ -115,6 +122,7 @@ export interface FacilityProfile {
 export async function getFacilityProfile(_facilityId?: string): Promise<FacilityProfile> {
   const { facility: sessionFacility } = await requireFacility()
 
+  // auth-scope-scanner-skip: id is the session facility's own id.
   const facility = await prisma.facility.findUniqueOrThrow({
     where: { id: sessionFacility.id },
     include: { healthSystem: { select: { name: true } } },
@@ -139,6 +147,8 @@ export async function updateFacilityProfile(
   input: UpdateFacilityProfileInput
 ): Promise<void> {
   const { facility } = await requireFacility()
+  // Settings write — Super only (Advanced/User blocked even via direct call).
+  await requireCan("settings.manage")
   const data = updateFacilityProfileSchema.parse(input)
 
   await prisma.facility.update({
@@ -174,6 +184,7 @@ export interface VendorProfile {
 export async function getVendorProfile(_vendorId?: string): Promise<VendorProfile> {
   const { vendor: sessionVendor } = await requireVendor()
 
+  // auth-scope-scanner-skip: id is the session vendor's own id.
   const vendor = await prisma.vendor.findUniqueOrThrow({
     where: { id: sessionVendor.id },
   })
@@ -207,6 +218,8 @@ export async function updateVendorProfile(
   //   - a vendor-org member whose BASE member role is owner/admin may
   //     update their OWN session vendor — the client-supplied id is
   //     ignored on this path.
+  // Settings write — Super only (Advanced/User blocked even via direct call).
+  await requireCan("settings.manage")
   const data = updateVendorProfileSchema.parse(input)
   const session = await requireAuth()
   const user = await prisma.user.findUnique({
@@ -309,6 +322,7 @@ export async function updateNotificationPreferences(
 ): Promise<void> {
   // Zod-parse so arbitrary JSON can't be injected into org metadata.
   const parsedPrefs = notificationPreferencesSchema.parse(prefs)
+  await requireCan("settings.manage")
   const org = await sessionOrganization()
   if (!org) return
 
@@ -337,6 +351,8 @@ export interface TeamMember {
   email: string
   image: string | null
   role: string
+  /** Settings/Users access tier (super | advanced | user). */
+  accessTier: AccessTier
   createdAt: string
 }
 
@@ -408,6 +424,7 @@ export async function getTeamMembers(organizationId: string): Promise<TeamMember
     email: m.user.email,
     image: m.user.image,
     role: m.role,
+    accessTier: m.accessTier,
     createdAt: m.createdAt.toISOString(),
   })))
 }
@@ -426,6 +443,7 @@ export async function inviteTeamMember(input: {
   // probes are caught BEFORE we cross into better-auth's surface.
   const parsed = inviteTeamMemberInputSchema.parse(input)
   const session = await requireAuth()
+  await requireCan("members.manage")
   await assertCallerCanManage(session.user.id, parsed.organizationId)
 
   await auth.api.createInvitation({
@@ -440,10 +458,12 @@ export async function inviteTeamMember(input: {
 
 export async function removeTeamMember(memberId: string): Promise<void> {
   const session = await requireAuth()
+  // auth-scope-scanner-skip: assertCallerCanManage(target.organizationId) below.
   const target = await prisma.member.findUniqueOrThrow({
     where: { id: memberId },
     select: { organizationId: true, role: true },
   })
+  await requireCan("members.manage")
   const caller = await assertCallerCanManage(session.user.id, target.organizationId)
   // 2026-06-09 settings audit: an admin cannot remove the owner.
   assertOwnerProtected(target.role, caller.role)
@@ -460,10 +480,12 @@ export async function updateTeamMemberRole(
   // to "owner" or being demoted to a string the UI can't render.
   const parsedRole = updateRoleSchema.parse(role)
   const session = await requireAuth()
+  // auth-scope-scanner-skip: assertCallerCanManage(target.organizationId) below.
   const target = await prisma.member.findUniqueOrThrow({
     where: { id: memberId },
     select: { organizationId: true, role: true },
   })
+  await requireCan("members.manage")
   const caller = await assertCallerCanManage(session.user.id, target.organizationId)
   // 2026-06-09 settings audit: an admin cannot demote the owner.
   assertOwnerProtected(target.role, caller.role)
@@ -474,6 +496,33 @@ export async function updateTeamMemberRole(
   await prisma.member.update({
     where: { id: memberId },
     data: { role: parsedRole },
+  })
+}
+
+/**
+ * Settings/Users feature: change a member's access tier
+ * (super | advanced | user). Super-only — `requireCan("members.manage")`
+ * passes for Super tier only. Still org-scoped (caller must manage the
+ * target's org) and owner-protected (an admin cannot retier the owner).
+ */
+export async function updateMemberAccessTier(
+  memberId: string,
+  tier: string,
+): Promise<void> {
+  const parsedTier = accessTierSchema.parse(tier)
+  const session = await requireAuth()
+  // Super-tier capability gate (read-only/advanced callers throw here).
+  await requireCan("members.manage")
+  // auth-scope-scanner-skip: assertCallerCanManage(target.organizationId) below.
+  const target = await prisma.member.findUniqueOrThrow({
+    where: { id: memberId },
+    select: { organizationId: true, role: true },
+  })
+  const caller = await assertCallerCanManage(session.user.id, target.organizationId)
+  assertOwnerProtected(target.role, caller.role)
+  await prisma.member.update({
+    where: { id: memberId },
+    data: { accessTier: parsedTier },
   })
 }
 
@@ -518,6 +567,7 @@ export async function updateFeatureFlags(
   flags: Partial<FeatureFlagData>
 ): Promise<void> {
   const { facility } = await requireFacility()
+  await requireCan("settings.manage")
   const parsed = featureFlagsUpdateSchema.parse(flags)
 
   await prisma.featureFlag.upsert({
@@ -561,6 +611,7 @@ export async function getVendorTeamMembers(
       image: m.user.image,
       role: role ?? m.role,
       subRole: subRole ?? null,
+      accessTier: m.accessTier,
       createdAt: m.createdAt.toISOString(),
     }
   }))
@@ -579,6 +630,7 @@ export async function inviteVendorTeamMember(input: {
   // on assertCallerCanManage so foreign organizationId is rejected.
   const parsed = inviteVendorTeamMemberInputSchema.parse(input)
   const session = await requireAuth()
+  await requireCan("members.manage")
   await assertCallerCanManage(session.user.id, parsed.organizationId)
 
   // Sub-role is concatenated into the stored role with a colon — the

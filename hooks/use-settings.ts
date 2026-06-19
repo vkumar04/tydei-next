@@ -17,6 +17,7 @@ import {
   updateFeatureFlags,
   getVendorTeamMembers,
   inviteVendorTeamMember,
+  updateMemberAccessTier,
   type FeatureFlagData,
 } from "@/lib/actions/settings"
 import type {
@@ -121,6 +122,18 @@ export function useUpdateTeamMemberRole(orgId: string) {
   return useMutation({
     mutationFn: ({ memberId, role }: { memberId: string; role: string }) =>
       updateTeamMemberRole(memberId, role),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.settings.team(orgId) })
+    },
+  })
+}
+
+// Settings/Users feature: change a member's access tier (Super only).
+export function useUpdateMemberAccessTier(orgId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ memberId, tier }: { memberId: string; tier: string }) =>
+      updateMemberAccessTier(memberId, tier),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.settings.team(orgId) })
     },

@@ -10,6 +10,7 @@ import {
   type AccessTier,
   type Permission,
 } from "@/lib/auth/permissions"
+import { AccessDeniedError } from "@/lib/auth/access-error"
 
 /**
  * Session-aware access-tier gates (Settings/Users feature).
@@ -24,13 +25,6 @@ import {
  * `"use server"` files may only export async functions — every export
  * here is async on purpose.
  */
-
-export class AccessDeniedError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "AccessDeniedError"
-  }
-}
 
 /**
  * Resolve the calling user's access context (tier + side). Admin platform
