@@ -158,6 +158,7 @@ export function getContractColumns(
     ),
     enableSorting: false,
     enableHiding: false,
+    meta: { filterVariant: "none" },
   }
 
   const columns: ColumnDef<ContractWithVendor>[] = [
@@ -188,6 +189,7 @@ export function getContractColumns(
       accessorFn: (row) => row.facility?.name ?? "All Facilities",
       cell: ({ row }) => row.original.facility?.name ?? "All Facilities",
       enableSorting: true,
+      meta: { filterVariant: "select" },
     },
     {
       accessorKey: "vendor.name",
@@ -196,10 +198,23 @@ export function getContractColumns(
       ),
       accessorFn: (row) => row.vendor.name,
       enableSorting: true,
+      meta: { filterVariant: "select" },
     },
     {
       id: "scope",
       header: "Scope",
+      meta: { filterVariant: "select", filterLabel: "Scope" },
+      accessorFn: (row) => {
+        const facilityCount =
+          row._count?.contractFacilities ?? row.contractFacilities?.length ?? 0
+        return row.isGrouped
+          ? "Grouped"
+          : row.isMultiFacility
+            ? "Multi-facility"
+            : facilityCount > 1
+              ? "Shared"
+              : "Single"
+      },
       cell: ({ row }) => {
         const c = row.original
         const facilityCount =
@@ -223,6 +238,8 @@ export function getContractColumns(
     {
       accessorKey: "contractType",
       header: "Type",
+      meta: { filterVariant: "select", filterLabel: "Type" },
+      accessorFn: (row) => typeLabels[row.contractType] || "Usage",
       cell: ({ row }) => (
         <Badge variant="outline">
           {typeLabels[row.original.contractType] || "Usage"}
@@ -235,6 +252,7 @@ export function getContractColumns(
         <SortableHeader label="Status" column={column} />
       ),
       enableSorting: true,
+      meta: { filterVariant: "select" },
       cell: ({ row }) => (
         <StatusBadge
           status={row.original.status}
@@ -254,6 +272,7 @@ export function getContractColumns(
         <SortableHeader label="Effective" column={column} />
       ),
       enableSorting: true,
+      meta: { filterVariant: "none" },
       cell: ({ row }) => formatCalendarDate(row.original.effectiveDate),
     },
     {
@@ -262,6 +281,7 @@ export function getContractColumns(
         <SortableHeader label="Expires" column={column} />
       ),
       enableSorting: true,
+      meta: { filterVariant: "none" },
       cell: ({ row }) => formatCalendarDate(row.original.expirationDate),
     },
     {
@@ -269,6 +289,8 @@ export function getContractColumns(
       header: ({ column }) => (
         <SortableHeader label="Total Value" column={column} align="right" />
       ),
+      meta: { filterVariant: "range", filterLabel: "Total Value" },
+      accessorFn: (row) => Number(row.totalValue),
       enableSorting: true,
       cell: ({ row }) => (
         <div className="text-right font-medium">
@@ -284,6 +306,7 @@ export function getContractColumns(
       // shadowing the canonical value and drove the list-vs-detail drift
       // Charles reported on 2026-04-20.
       accessorFn: (row) => row.currentSpend ?? 0,
+      meta: { filterVariant: "range", filterLabel: "Spend (Last 12 Months)" },
       header: ({ column }) => (
         <SortableHeader
           label="Spend (Last 12 Months)"
@@ -313,6 +336,7 @@ export function getContractColumns(
       // contracts. Contract detail still carries a YTD card for
       // compliance reporting.
       accessorFn: (row) => Number(row.rebateEarned ?? 0),
+      meta: { filterVariant: "range", filterLabel: "Rebate Earned (Lifetime)" },
       header: ({ column }) => (
         <SortableHeader
           label="Rebate Earned (Lifetime)"
@@ -335,6 +359,7 @@ export function getContractColumns(
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>

@@ -219,6 +219,7 @@ export function COGRecordsTable({
           data={filteredRecords}
           isLoading={isLoading}
           pagination={false}
+          enableColumnFilters
           filterComponent={
             <>
               {/* Server-side search — hits all records, not just the

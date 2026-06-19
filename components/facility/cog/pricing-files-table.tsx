@@ -128,6 +128,7 @@ export function PricingFilesTable({ facilityId }: PricingFilesTableProps) {
             searchKey="productDescription"
             searchPlaceholder="Search items, SKUs..."
             isLoading={isLoading}
+            enableColumnFilters
             filterComponent={
               <>
                 <VendorFilterCombobox

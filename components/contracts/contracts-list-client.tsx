@@ -402,6 +402,7 @@ export function ContractsListClient({
                 columns={columns}
                 data={contracts}
                 isLoading={isLoading}
+                enableColumnFilters
                 onRowClick={(row) =>
                   router.push(`/dashboard/contracts/${row.id}`)
                 }

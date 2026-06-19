@@ -22,6 +22,7 @@ export function getUserColumns(
     {
       accessorKey: "name",
       header: "User",
+      meta: { filterVariant: "text", filterLabel: "User" },
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
           <Avatar className="h-9 w-9">
@@ -44,6 +45,7 @@ export function getUserColumns(
     {
       accessorKey: "role",
       header: "Role",
+      meta: { filterVariant: "select" },
       cell: ({ row }) => (
         <Badge variant={roleBadgeVariant[row.original.role] ?? "outline"} className="capitalize">
           {row.original.role}
@@ -53,6 +55,14 @@ export function getUserColumns(
     {
       accessorKey: "userType",
       header: "Type",
+      meta: { filterVariant: "select", filterLabel: "Type" },
+      accessorFn: (row) =>
+        row.userType ??
+        (row.role === "facility"
+          ? "facility"
+          : row.role === "vendor"
+            ? "vendor"
+            : "operator"),
       cell: ({ row }) => {
         const t = row.original.userType ??
           (row.original.role === "facility"
@@ -67,10 +77,11 @@ export function getUserColumns(
         )
       },
     },
-    { accessorKey: "organizationName", header: "Organization" },
+    { accessorKey: "organizationName", header: "Organization", meta: { filterVariant: "select" } },
     {
       accessorKey: "lastLoginAt",
       header: "Last Login",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => {
         const value = row.original.lastLoginAt ?? row.original.createdAt
         return (
@@ -80,6 +91,7 @@ export function getUserColumns(
     },
     {
       id: "actions",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <TableActionMenu
           actions={[

@@ -3,45 +3,26 @@
 /**
  * Case Costing — Surgeons tab.
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4.2.
- * Renders surgeon scorecards table with:
- *   - name / specialty
- *   - overall score (colored by score-calc thresholds)
- *   - payor mix (commercial+private / total)
- *   - total + avg spend + margin %
+ * Renders the "Facility payor mix" card above the surgeon-scorecards table.
+ * The scorecards table is migrated to the shared <DataTable> with per-column
+ * filtering (2026-06-19); column defs live in `surgeon-scorecard-columns.tsx`.
  *
  * Pure presentational — server action calls are in the orchestrator.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { DataTable } from "@/components/shared/tables/data-table"
 import { EmptyState } from "@/components/shared/empty-state"
 import { User } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
+import { surgeonScorecardColumns } from "./surgeon-scorecard-columns"
 import type { Surgeon } from "@/lib/case-costing/surgeon-derivation"
-import type { ScoreColor } from "@/lib/case-costing/score-calc"
 import type { PayorMixSummary } from "@/lib/case-costing/payor-mix"
 
 interface SurgeonsTabProps {
   scorecards: Surgeon[]
   isLoading: boolean
   payorMix: PayorMixSummary | null
-}
-
-const COLOR_CLASSES: Record<ScoreColor, string> = {
-  green: "bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300",
-  amber: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
-  red: "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300",
 }
 
 export function SurgeonsTab({
@@ -58,88 +39,23 @@ export function SurgeonsTab({
           <CardTitle className="text-base">Surgeon scorecards</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
-            </div>
-          ) : scorecards.length === 0 ? (
+          {!isLoading && scorecards.length === 0 ? (
             <EmptyState
               icon={User}
               title="No surgeons yet"
               description="Upload case data to derive surgeon scorecards."
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Surgeon</TableHead>
-                  <TableHead>Specialty</TableHead>
-                  <TableHead className="text-right">Cases</TableHead>
-                  <TableHead className="text-right">Total spend</TableHead>
-                  <TableHead className="text-right">Avg spend</TableHead>
-                  <TableHead className="text-right">Margin %</TableHead>
-                  <TableHead>Payor mix</TableHead>
-                  <TableHead className="text-center">Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scorecards.map((s) => (
-                  <TableRow key={s.name}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{s.specialty}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {s.caseCount.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatCurrency(s.totalSpend)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatCurrency(s.avgSpendPerCase)}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right tabular-nums",
-                        s.avgMarginPct >= 30
-                          ? "text-green-600 dark:text-green-400"
-                          : s.avgMarginPct > 0
-                            ? "text-amber-600 dark:text-amber-400"
-                            : "text-muted-foreground",
-                      )}
-                    >
-                      {s.totalReimbursement > 0
-                        ? formatPercent(s.avgMarginPct)
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {s.totalPayors > 0 ? (
-                        <span className="text-xs text-muted-foreground">
-                          {s.commercialOrPrivatePayors}/{s.totalPayors} commercial
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          No payor data
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span
-                        className={cn(
-                          "inline-flex min-w-[42px] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold",
-                          COLOR_CLASSES[s.color],
-                        )}
-                        aria-label={`Overall score ${s.overallScore}, color ${s.color}`}
-                      >
-                        {s.overallScore}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              columns={surgeonScorecardColumns}
+              data={scorecards}
+              isLoading={isLoading}
+              enableColumnFilters
+              searchKey="name"
+              searchPlaceholder="Search surgeon…"
+              getRowId={(row) => row.name}
+              pagination
+            />
           )}
         </CardContent>
       </Card>

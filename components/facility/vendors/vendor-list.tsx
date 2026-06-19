@@ -50,6 +50,7 @@ export function VendorList() {
         searchKey="name"
         searchPlaceholder="Search vendors..."
         isLoading={isLoading}
+        enableColumnFilters
       />
 
       <VendorFormDialog

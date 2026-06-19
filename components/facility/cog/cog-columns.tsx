@@ -100,6 +100,7 @@ export function getCOGColumns({
     {
       accessorKey: "poNumber",
       header: "PO #",
+      meta: { filterVariant: "text", filterLabel: "PO #" },
       cell: ({ row }) => (
         <span className="font-mono text-sm">
           {row.original.poNumber ?? "\u2014"}
@@ -109,6 +110,7 @@ export function getCOGColumns({
     {
       accessorKey: "transactionDate",
       header: "PO Date",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <span className="text-muted-foreground">
           {formatCalendarDate(row.original.transactionDate)}
@@ -118,6 +120,7 @@ export function getCOGColumns({
     {
       accessorKey: "inventoryNumber",
       header: "Item #",
+      meta: { filterVariant: "text", filterLabel: "Item #" },
       cell: ({ row }) => (
         <span className="font-mono text-sm">
           {row.original.inventoryNumber}
@@ -127,6 +130,7 @@ export function getCOGColumns({
     {
       accessorKey: "inventoryDescription",
       header: "Description",
+      meta: { filterVariant: "text", filterLabel: "Description" },
       cell: ({ row }) => (
         <span
           className="font-medium line-clamp-1"
@@ -139,6 +143,7 @@ export function getCOGColumns({
     {
       accessorKey: "vendor.name",
       header: "Vendor",
+      meta: { filterVariant: "select", filterLabel: "Vendor" },
       cell: ({ row }) =>
         row.original.vendor?.name ?? row.original.vendorName ?? "\u2014",
     },
@@ -148,6 +153,7 @@ export function getCOGColumns({
       // (imported or inferred) showed nothing. Render it explicitly.
       accessorKey: "category",
       header: "Category",
+      meta: { filterVariant: "select", filterLabel: "Category" },
       cell: ({ row }) => (
         <span className={row.original.category ? "" : "text-muted-foreground"}>
           {row.original.category ?? "\u2014"}
@@ -157,6 +163,9 @@ export function getCOGColumns({
     {
       accessorKey: "quantity",
       header: "Qty",
+      accessorFn: (row) =>
+        (row as COGRecordWithVendor & { quantity?: number }).quantity ?? 1,
+      meta: { filterVariant: "range", filterLabel: "Qty" },
       cell: ({ row }) => (
         <span className="text-center">
           {(row.original as COGRecordWithVendor & { quantity?: number }).quantity ?? 1}
@@ -166,6 +175,8 @@ export function getCOGColumns({
     {
       accessorKey: "unitCost",
       header: "Unit Price",
+      accessorFn: (row) => Number(row.unitCost),
+      meta: { filterVariant: "range", filterLabel: "Unit Price" },
       cell: ({ row }) => (
         <span className="text-right font-medium">
           {formatCurrency(Number(row.original.unitCost))}
@@ -176,6 +187,7 @@ export function getCOGColumns({
       // Charles W1.W-A (A1): Multiplier column — extendedPrice / (unitCost * qty).
       id: "multiplier",
       header: "Multiplier",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => {
         const r = row.original
         const unit = Number(r.unitCost)
@@ -198,6 +210,11 @@ export function getCOGColumns({
     {
       accessorKey: "extendedPrice",
       header: "Extended",
+      accessorFn: (row) =>
+        row.extendedPrice === null || row.extendedPrice === undefined
+          ? 0
+          : Number(row.extendedPrice),
+      meta: { filterVariant: "range", filterLabel: "Extended" },
       cell: ({ row }) => (
         <span className="text-right font-medium">
           {row.original.extendedPrice
@@ -215,6 +232,11 @@ export function getCOGColumns({
       // didn't match a contract entry.
       id: "contractPrice",
       header: "Contract Price",
+      accessorFn: (row) =>
+        row.contractPrice === null || row.contractPrice === undefined
+          ? 0
+          : Number(row.contractPrice),
+      meta: { filterVariant: "range", filterLabel: "Contract Price" },
       cell: ({ row }) => {
         const raw = row.original.contractPrice
         if (raw === null || raw === undefined) {
@@ -230,6 +252,11 @@ export function getCOGColumns({
     {
       id: "savings",
       header: "Savings",
+      accessorFn: (row) =>
+        row.savingsAmount === null || row.savingsAmount === undefined
+          ? 0
+          : Number(row.savingsAmount),
+      meta: { filterVariant: "range", filterLabel: "Savings" },
       cell: ({ row }) => {
         const raw = row.original.savingsAmount
         if (raw === null || raw === undefined) {
@@ -253,6 +280,11 @@ export function getCOGColumns({
     {
       id: "variance",
       header: "Variance",
+      accessorFn: (row) =>
+        row.variancePercent === null || row.variancePercent === undefined
+          ? 0
+          : Number(row.variancePercent),
+      meta: { filterVariant: "range", filterLabel: "Variance" },
       cell: ({ row }) => {
         const raw = row.original.variancePercent
         if (raw === null || raw === undefined) {
@@ -273,6 +305,19 @@ export function getCOGColumns({
     },
     {
       id: "status",
+      accessorFn: (row) => {
+        const status = row.matchStatus as COGMatchStatus | undefined
+        let resolved: COGMatchStatus
+        if (!status || status === "pending") {
+          const onContract =
+            row._onContract ?? (row.category && row.category !== "")
+          resolved = onContract ? "on_contract" : "pending"
+        } else {
+          resolved = status
+        }
+        return MATCH_STATUS_META[resolved].label
+      },
+      meta: { filterVariant: "select", filterLabel: "Match Status" },
       header: () => (
         <TooltipProvider>
           <Tooltip>
@@ -339,6 +384,7 @@ export function getCOGColumns({
     {
       accessorKey: "notes",
       header: () => <span className="sr-only">Notes</span>,
+      meta: { filterVariant: "none" },
       cell: ({ row }) => {
         const notes = row.original.notes
         if (!notes) return null
@@ -365,6 +411,7 @@ export function getCOGColumns({
     },
     {
       id: "actions",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <TableActionMenu
           actions={[

@@ -15,6 +15,7 @@ export function getAdminVendorColumns(
     {
       accessorKey: "name",
       header: "Vendor",
+      meta: { filterVariant: "text", filterLabel: "Vendor" },
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
@@ -27,6 +28,7 @@ export function getAdminVendorColumns(
     {
       accessorKey: "tier",
       header: "Category",
+      meta: { filterVariant: "select", filterLabel: "Category" },
       cell: ({ row }) => (
         <Badge variant="outline" className="capitalize">
           {row.original.tier}
@@ -36,6 +38,7 @@ export function getAdminVendorColumns(
     {
       accessorKey: "status",
       header: "Status",
+      meta: { filterVariant: "select" },
       cell: ({ row }) => (
         <Badge variant={row.original.status === "active" ? "default" : "secondary"}>
           {row.original.status === "active" ? (
@@ -49,6 +52,7 @@ export function getAdminVendorColumns(
     {
       accessorKey: "repCount",
       header: () => <div className="text-right">Reps</div>,
+      meta: { filterVariant: "range", filterLabel: "Reps" },
       cell: ({ row }) => (
         <div className="text-right">{row.original.repCount}</div>
       ),
@@ -56,11 +60,13 @@ export function getAdminVendorColumns(
     {
       accessorKey: "contractCount",
       header: () => <div className="text-right">Contracts</div>,
+      meta: { filterVariant: "range", filterLabel: "Contracts" },
       cell: ({ row }) => <div className="text-right">{row.original.contractCount}</div>,
     },
     {
       accessorKey: "createdAt",
       header: () => <div className="text-right">Created</div>,
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <div className="text-right text-muted-foreground">
           {new Date(row.original.createdAt).toLocaleDateString()}
@@ -69,6 +75,7 @@ export function getAdminVendorColumns(
     },
     {
       id: "actions",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <TableActionMenu
           actions={[

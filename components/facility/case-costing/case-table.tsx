@@ -155,6 +155,7 @@ export function CaseTable({ facilityId }: CaseTableProps) {
         searchKey="caseNumber"
         searchPlaceholder="Search cases..."
         pagination={false}
+        enableColumnFilters
       />
 
       {totalPages > 1 && (
