@@ -30,10 +30,33 @@ import type { Prisma } from "@/lib/generated/prisma/client"
  */
 export function contractsOwnedByVendor(
   vendorId: string,
+  divisionIds?: string[],
 ): Prisma.ContractWhereInput {
-  return {
+  const ownership: Prisma.ContractWhereInput = {
     OR: [{ vendorId }, { additionalVendorIds: { has: vendorId } }],
   }
+  return withDivisionScope(ownership, divisionIds)
+}
+
+/**
+ * Hard division-isolation (Settings/Users feature). Composes a base
+ * ownership predicate with an optional vendor-division scope:
+ *   undefined → no division restriction (enterprise / pre-opt-in; byte-
+ *               identical to the un-scoped behavior — DO NOT break this)
+ *   []        → match NOTHING (caller attached to no divisions)
+ *   [a, b]    → AND-in `vendorDivisionId ∈ {a,b}`
+ *
+ * Grouped multi-vendor contracts have no single `vendorDivisionId`
+ * (stays null); they are intentionally NOT surfaced under a division
+ * scope here (see plan open-risk — revisit if grouped contracts must be
+ * visible to a member's division).
+ */
+function withDivisionScope(
+  base: Prisma.ContractWhereInput,
+  divisionIds?: string[],
+): Prisma.ContractWhereInput {
+  if (divisionIds === undefined) return base
+  return { AND: [base, { vendorDivisionId: { in: divisionIds } }] }
 }
 
 /**
@@ -48,9 +71,12 @@ export function contractsOwnedByVendor(
 export function contractOwnershipWhereVendor(
   id: string,
   vendorId: string,
+  divisionIds?: string[],
 ): Prisma.ContractWhereInput {
-  return {
+  const ownership: Prisma.ContractWhereInput = {
     id,
     OR: [{ vendorId }, { additionalVendorIds: { has: vendorId } }],
   }
+  if (divisionIds === undefined) return ownership
+  return { AND: [ownership, { vendorDivisionId: { in: divisionIds } }] }
 }
