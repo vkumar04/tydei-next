@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Trash2 } from "lucide-react"
 import type { TeamMember } from "@/lib/actions/settings"
+import { ACCESS_TIERS, ACCESS_TIER_LABELS } from "@/lib/auth/permissions"
 
 interface TeamTableProps {
   members: TeamMember[]
@@ -27,6 +28,12 @@ interface TeamTableProps {
   onRoleChange: (id: string, role: string) => void
   isAdmin: boolean
   roles?: { value: string; label: string }[]
+  /**
+   * Settings/Users feature: when provided (Super-tier caller only), an
+   * "Access" column renders a tier select per member. Omitted ⇒ no column
+   * (back-compat for callers that don't manage tiers).
+   */
+  onAccessTierChange?: (id: string, tier: string) => void
 }
 
 // Server enforces admin|member (settings.ts updateRoleSchema) —
@@ -42,13 +49,16 @@ export function TeamTable({
   onRoleChange,
   isAdmin,
   roles = DEFAULT_ROLES,
+  onAccessTierChange,
 }: TeamTableProps) {
+  const showAccess = Boolean(onAccessTierChange)
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Member</TableHead>
           <TableHead>Role</TableHead>
+          {showAccess && <TableHead>Access</TableHead>}
           <TableHead>Joined</TableHead>
           {isAdmin && <TableHead className="w-[60px]" />}
         </TableRow>
@@ -94,6 +104,31 @@ export function TeamTable({
                 <Badge variant="outline">{m.role}</Badge>
               )}
             </TableCell>
+            {showAccess && (
+              <TableCell>
+                {/* Owner keeps full access implicitly; don't offer to
+                    down-tier the owner here. */}
+                {m.role !== "owner" ? (
+                  <Select
+                    value={m.accessTier}
+                    onValueChange={(v) => onAccessTierChange?.(m.id, v)}
+                  >
+                    <SelectTrigger className="h-8 w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACCESS_TIERS.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {ACCESS_TIER_LABELS[t]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant="outline">{ACCESS_TIER_LABELS.super}</Badge>
+                )}
+              </TableCell>
+            )}
             <TableCell className="text-sm text-muted-foreground">
               {new Date(m.createdAt).toLocaleDateString()}
             </TableCell>

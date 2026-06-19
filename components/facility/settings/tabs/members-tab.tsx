@@ -27,6 +27,8 @@ export interface MembersTabProps {
   onRemoveMember: (id: string) => void
   onRoleChange: (id: string, role: string) => void
   onInviteMember: (email: string, role: string) => void
+  /** Super-only: change a member's access tier. Omitted ⇒ no Access column. */
+  onAccessTierChange?: (id: string, tier: string) => void
 }
 
 export function MembersTab({
@@ -37,6 +39,7 @@ export function MembersTab({
   onRemoveMember,
   onRoleChange,
   onInviteMember,
+  onAccessTierChange,
 }: MembersTabProps) {
   return (
     <>
@@ -80,6 +83,7 @@ export function MembersTab({
               onRoleChange={onRoleChange}
               isAdmin
               roles={TEAM_ROLES}
+              onAccessTierChange={onAccessTierChange}
             />
           ) : null}
         </CardContent>

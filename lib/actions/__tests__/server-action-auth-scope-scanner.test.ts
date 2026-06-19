@@ -378,20 +378,12 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/reports/schedule.ts:223",
   "lib/actions/reports/schedule.ts:254",
   "lib/actions/reports/schedule.ts:270",
-  // settings.ts: assertCallerCanManage / session-derived id
-  // (lines bumped 2026-04-26 after better-auth org-plugin migration
-  // added `import { headers }` + `import { auth }` at the top; bumped
-  // again 2026-06-09 — settings audit. The five notification-prefs hits
-  // were REMOVED for real: both actions are now session-scoped and no
-  // longer look up client-supplied facility/vendor ids. Remaining:
-  // 118/177 = getFacilityProfile/getVendorProfile reads of the session
-  // entity's own row; 443/463 = removeTeamMember/updateTeamMemberRole
-  // target fetch, followed by assertCallerCanManage + owner-protection
-  // on the fetched org.)
-  "lib/actions/settings.ts:118",
-  "lib/actions/settings.ts:177",
-  "lib/actions/settings.ts:443",
-  "lib/actions/settings.ts:463",
+  // settings.ts: all session-derived / assertCallerCanManage member
+  // lookups now carry inline `// auth-scope-scanner-skip:` comments
+  // (line-number baseline removed 2026-06-19 — the Settings/Users feature
+  // shifted these lines and skip-comments are drift-proof). Covers
+  // getFacilityProfile/getVendorProfile own-row reads and the
+  // remove/update/access-tier member target fetches.
   // vendors.ts: read-only by id (Vendor is a shared resource)
   "lib/actions/vendors.ts:73",
 ])

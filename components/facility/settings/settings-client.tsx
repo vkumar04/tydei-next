@@ -17,6 +17,8 @@ import {
   FolderTree,
   SlidersHorizontal,
   UserPlus,
+  BellRing,
+  ShieldCheck,
 } from "lucide-react"
 import {
   useFacilityProfile,
@@ -27,6 +29,7 @@ import {
   useInviteTeamMember,
   useRemoveTeamMember,
   useUpdateTeamMemberRole,
+  useUpdateMemberAccessTier,
   useFeatureFlags,
   useUpdateFeatureFlags,
 } from "@/hooks/use-settings"
@@ -56,6 +59,8 @@ import { FeaturesTab } from "@/components/facility/settings/tabs/features-tab"
 import { AICreditsTab } from "@/components/facility/settings/tabs/ai-credits-tab"
 import { VendorsTab } from "@/components/facility/settings/tabs/vendors-tab"
 import { CategoriesTab } from "@/components/facility/settings/tabs/categories-tab"
+import { AlertsTab } from "@/components/facility/settings/tabs/alerts-tab"
+import { FacilityAssignmentTab } from "@/components/facility/settings/tabs/facility-assignment-tab"
 
 interface SettingsClientProps {
   facilityId: string
@@ -77,6 +82,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
   const inviteMember = useInviteTeamMember(organizationId)
   const removeMember = useRemoveTeamMember(organizationId)
   const updateRole = useUpdateTeamMemberRole(organizationId)
+  const updateAccessTier = useUpdateMemberAccessTier(organizationId)
   const flags = useFeatureFlags(facilityId)
   const updateFlags = useUpdateFeatureFlags(facilityId)
   const connectionData = useConnections(facilityId, "facility")
@@ -130,6 +136,8 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
     { value: "notifications", label: "Notifications", Icon: Bell },
     { value: "billing", label: "Billing", Icon: CreditCard },
     { value: "members", label: "Members", Icon: Users },
+    { value: "access", label: "Facility Access", Icon: ShieldCheck },
+    { value: "alerts", label: "Alerts", Icon: BellRing },
     { value: "account", label: "Account", Icon: Settings },
     { value: "facilities", label: "Facilities", Icon: Building2 },
     { value: "connections", label: "Connections", Icon: Link2 },
@@ -219,7 +227,30 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             onRemoveMember={(id) => removeMember.mutate(id)}
             onRoleChange={(id, role) => updateRole.mutate({ memberId: id, role })}
             onInviteMember={(email, role) => inviteMember.mutate({ email, role })}
+            onAccessTierChange={(id, tier) =>
+              updateAccessTier.mutate(
+                { memberId: id, tier },
+                {
+                  onSuccess: () => toast.success("Access level updated"),
+                  onError: (err) =>
+                    toast.error(
+                      err instanceof Error ? err.message : "Failed to update access level",
+                    ),
+                },
+              )
+            }
           />
+        </TabsContent>
+
+        <TabsContent value="access" className="space-y-6">
+          <FacilityAssignmentTab
+            orgId={organizationId}
+            canManage
+          />
+        </TabsContent>
+
+        <TabsContent value="alerts" className="space-y-6">
+          <AlertsTab />
         </TabsContent>
 
         <TabsContent value="account" className="space-y-6">
