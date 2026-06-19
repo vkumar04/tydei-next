@@ -255,14 +255,17 @@ function buildColumns(): ColumnDef<
     {
       accessorKey: "vendorName",
       header: "Vendor",
-      cell: ({ row }) => (
-        <Link
-          href={`/dashboard/vendors/${row.original.vendorId}`}
-          className="text-sm hover:underline text-foreground"
-        >
-          {row.original.vendorName}
-        </Link>
-      ),
+      cell: ({ row }) =>
+        row.original.vendorId ? (
+          <Link
+            href={`/dashboard/vendors/${row.original.vendorId}`}
+            className="text-sm hover:underline text-foreground"
+          >
+            {row.original.vendorName}
+          </Link>
+        ) : (
+          <span className="text-sm">{row.original.vendorName}</span>
+        ),
     },
     {
       accessorKey: "contractPrice",
@@ -351,15 +354,24 @@ function buildColumns(): ColumnDef<
     },
     {
       id: "actions",
-      header: "",
-      cell: ({ row }) => (
-        <Button asChild size="sm" variant="ghost">
-          <Link href={`/dashboard/invoices/${row.original.invoiceId}`}>
-            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-            Invoice
-          </Link>
-        </Button>
-      ),
+      header: "Reference",
+      cell: ({ row }) =>
+        // Invoice-backed rows link to the invoice; COG/PO-sourced rows just
+        // show the PO number (no invoice to drill into).
+        row.original.invoiceId ? (
+          <Button asChild size="sm" variant="ghost">
+            <Link href={`/dashboard/invoices/${row.original.invoiceId}`}>
+              <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+              Invoice
+            </Link>
+          </Button>
+        ) : row.original.invoiceNumber ? (
+          <span className="text-xs text-muted-foreground">
+            PO #{row.original.invoiceNumber}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
     },
   ]
 }
