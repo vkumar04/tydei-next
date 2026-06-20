@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { staggerContainer, fadeInUp } from "@/lib/animations"
 import type { DemoAccount } from "@/lib/auth/demo-accounts"
 
@@ -43,7 +44,12 @@ export function DemoLoginButtons({ accounts, onFill, isLoading }: DemoLoginButto
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               {group}
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div
+              className={cn(
+                "grid gap-2",
+                items.length === 1 ? "grid-cols-1" : "grid-cols-3",
+              )}
+            >
               {items.map((acc) => (
                 <Button
                   key={acc.email}
@@ -52,7 +58,7 @@ export function DemoLoginButtons({ accounts, onFill, isLoading }: DemoLoginButto
                   size="sm"
                   disabled={isLoading}
                   onClick={() => onFill(acc.email, acc.password)}
-                  className="w-full text-xs"
+                  className="w-full min-w-0 truncate px-2 text-xs"
                   title={acc.email}
                 >
                   {acc.label}

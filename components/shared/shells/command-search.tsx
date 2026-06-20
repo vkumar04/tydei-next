@@ -115,10 +115,14 @@ export function CommandSearch() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="relative flex h-9 w-full items-center rounded-lg border bg-background pl-9 pr-4 text-sm text-muted-foreground hover:bg-accent/50 transition-colors"
+        className="relative flex h-9 w-full min-w-0 items-center rounded-lg border bg-background pl-9 pr-3 text-sm text-muted-foreground hover:bg-accent/50 transition-colors"
       >
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <span>Search contracts, vendors, COG, POs, invoices, alerts...</span>
+        {/* Short label on mobile so the header stays one line; full text on ≥sm. */}
+        <span className="truncate sm:hidden">Search…</span>
+        <span className="hidden truncate sm:inline">
+          Search contracts, vendors, COG, POs, invoices, alerts...
+        </span>
         <kbd className="pointer-events-none ml-auto hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
           <span className="text-xs">⌘</span>K
         </kbd>

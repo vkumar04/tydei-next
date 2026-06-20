@@ -24,10 +24,10 @@ export interface DemoAccount {
 export const DEMO_LOGIN_ACCOUNTS: readonly DemoAccount[] = [
   { group: "Facility", label: "Super", email: "demo-facility@tydei.com", password: "demo-facility-2024" },
   { group: "Facility", label: "Advanced", email: "demo-facility-adv@tydei.com", password: "demo-2024" },
-  { group: "Facility", label: "User (read-only)", email: "demo-facility-user@tydei.com", password: "demo-2024" },
+  { group: "Facility", label: "User", email: "demo-facility-user@tydei.com", password: "demo-2024" },
   { group: "Vendor", label: "Super", email: "demo-vendor@tydei.com", password: "demo-vendor-2024" },
   { group: "Vendor", label: "Advanced", email: "demo-vendor-adv@tydei.com", password: "demo-2024" },
-  { group: "Vendor", label: "User (read-only)", email: "demo-vendor-user@tydei.com", password: "demo-2024" },
+  { group: "Vendor", label: "User", email: "demo-vendor-user@tydei.com", password: "demo-2024" },
   { group: "Admin", label: "Operator / Super Admin", email: "demo-admin@tydei.com", password: "demo-admin-2024" },
 ]
 
