@@ -9,6 +9,11 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     contract: { findFirst: mocks.findFirstMock },
     rebate: { findMany: mocks.findManyRebateMock },
+    // The schedule now also sums user-logged payments/credits toward the
+    // capital balance (Charles 2026-06-20). No payments in these fixtures.
+    contractPeriod: {
+      aggregate: vi.fn(async () => ({ _sum: { paymentActual: 0 } })),
+    },
   },
 }))
 

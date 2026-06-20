@@ -205,12 +205,12 @@ export function ContractAmortizationCard({
         <div className="grid gap-4 sm:grid-cols-3">
           <SummaryTile
             label="Remaining Balance"
-            tooltip="Capital cost minus the rebate that has been collected and applied to the balance."
+            tooltip="Financed principal minus everything applied to the balance — collected rebate plus logged payments/credits."
             value={formatCurrency(data.remainingBalance)}
           />
           <SummaryTile
             label="Paid To Date"
-            tooltip="Collected rebate that has been applied to the capital balance. On tie-in contracts, 100% of collected rebate retires capital."
+            tooltip="Total applied to the capital balance: collected rebate applied to capital plus logged payments/credits. On a pure capital contract this is your logged payments."
             value={formatCurrency(data.paidToDate)}
           />
           <SummaryTile
@@ -227,7 +227,7 @@ export function ContractAmortizationCard({
             `sumRebateAppliedToCapital` helper (via getContractCapitalSchedule)
             so this row and the header "applied to capital" sublabel
             cannot drift. */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-md border bg-card p-3">
             <p className="text-xs text-muted-foreground">
               Rebates Applied (lifetime)
@@ -236,11 +236,27 @@ export function ContractAmortizationCard({
               {formatCurrency(data.rebateAppliedToCapital)}
             </p>
           </div>
+          {/* Charles 2026-06-20: pure capital contracts are paid off by logged
+              payments/credits, not rebates. Surface them and net them into the
+              balance below so a logged payment visibly reduces what's due. */}
+          <div className="rounded-md border bg-card p-3">
+            <p className="text-xs text-muted-foreground">
+              Payments Applied (lifetime)
+            </p>
+            <p className="mt-1 text-xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+              {formatCurrency(data.paymentsAppliedToCapital)}
+            </p>
+          </div>
           <div className="rounded-md border bg-card p-3">
             <p className="text-xs text-muted-foreground">Balance Due</p>
             <p className="mt-1 text-xl font-semibold tabular-nums">
               {formatCurrency(
-                Math.max(data.capitalCost - data.rebateAppliedToCapital, 0),
+                Math.max(
+                  data.capitalCost -
+                    data.rebateAppliedToCapital -
+                    data.paymentsAppliedToCapital,
+                  0,
+                ),
               )}
             </p>
           </div>
