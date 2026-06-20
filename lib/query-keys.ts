@@ -31,6 +31,14 @@ export const queryKeys = {
       ["contractPeriods", contractId] as const,
     rebates: (contractId: string) =>
       ["contractRebates", contractId] as const,
+    // Logged credits + payments (dedicated Credit/Payment tables), shown in
+    // the Transactions ledger's Credits/Payments tabs. MUST be its own key —
+    // it previously reused `periods`, colliding with the contract-detail
+    // periods query (getContractPeriods) so the ledger rendered the wrong-
+    // shaped data as "$NaN" (Charles 2026-06-20). Invalidated wherever the
+    // ledger is (transaction dialogs, recompute, edit-contract).
+    creditsPayments: (contractId: string) =>
+      ["contractCreditsPayments", contractId] as const,
     // Capital amortization schedule. The READ carries a `scope`
     // discriminator; every invalidation MUST pass the same scope (or use
     // the `capitalScheduleBase` family prefix) or it won't prefix-match.

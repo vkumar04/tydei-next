@@ -149,8 +149,16 @@ export function TransactionDialog({
       // `Rebate` table and aggregated server-side — see getContract).
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.periods(contractId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.rebates(contractId) })
+      // Surface a newly logged credit/payment in the ledger immediately.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.creditsPayments(contractId),
+      })
       queryClient.invalidateQueries({
         queryKey: queryKeys.contracts.detail(contractId),
+      })
+      // Capital balance (amortization card) reflects the new payment/credit.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.capitalScheduleBase,
       })
     } catch {
       toast.error("Failed to save transaction")
