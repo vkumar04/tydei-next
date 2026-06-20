@@ -90,6 +90,16 @@ tieInDetails with EVERY available value:
 - paymentCadence: "monthly" | "quarterly" | "semi_annual" | "annual" — driven by
   phrases like "monthly installments", "quarterly draws".
 - downPayment: upfront payment in dollars before financing.
+
+── REBATE PAY PERIOD (CONTRACT-LEVEL — ALWAYS LOOK FOR THIS) ──
+- rebatePayPeriod: "monthly" | "quarterly" | "semi_annual" | "annual" — how
+  often the REBATE / performance is settled for the whole agreement. Look for
+  "rebates paid quarterly", "paid semi-annually", "settled annually",
+  "evaluated every 6 months", "performance reviewed each quarter". This is the
+  contract's "Performance & Rebate Pay Period" and is DISTINCT from the capital
+  paymentCadence. Default to "quarterly" reasoning ONLY from text; return null
+  if the document states no rebate/performance cadence at all — do NOT silently
+  leave it unset.
 - linkedProductCategories: for tie_in only — consumable categories
   the capital purchase is tied to.
 
@@ -214,6 +224,7 @@ If the rich schema validation fails, respond with the legacy shape instead:
   "contractType": "usage" | "capital" | ...,
   "effectiveDate": "YYYY-MM-DD",
   "expirationDate": "YYYY-MM-DD",
+  "rebatePayPeriod": "monthly" | "quarterly" | "semi_annual" | "annual" | null,
   "terms": [
     {
       "termName": "...",

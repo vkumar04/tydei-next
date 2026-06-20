@@ -104,19 +104,28 @@ export function UserTable() {
   })
 
   // ─── Mutations ──────────────────────────────────────────────────
+  // Charles 2026-06-20: surface admin mutation failures as toasts instead of
+  // unhandled rejections (the "add a user … times out / switches pages"
+  // symptom — a thrown server action escalated to Next's error boundary).
+  const onMutationError = (verb: string) => (err: unknown) =>
+    toast.error(err instanceof Error ? err.message : `Failed to ${verb} user`)
+
   const createMut = useMutation({
     mutationFn: adminCreateUser,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin", "users"] }); resetAddForm(); toast.success("User created") },
+    onError: onMutationError("create"),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, input }: { id: string; input: Record<string, string> }) => adminUpdateUser(id, input),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin", "users"] }); setEditing(null); toast.success("User updated") },
+    onError: onMutationError("update"),
   })
 
   const deleteMut = useMutation({
     mutationFn: adminDeleteUser,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin", "users"] }); setDeleting(null); toast.success("User deleted") },
+    onError: onMutationError("delete"),
   })
 
   // ─── Columns ────────────────────────────────────────────────────
@@ -128,17 +137,21 @@ export function UserTable() {
   // ─── Handlers ───────────────────────────────────────────────────
   const handleEditSubmit = async () => {
     if (editing) {
-      await updateMut.mutateAsync({ id: editing.id, input: editFormData })
+      try {
+        await updateMut.mutateAsync({ id: editing.id, input: editFormData })
+      } catch { /* surfaced via onError toast */ }
     }
   }
 
   const handleAddSubmit = async () => {
-    await createMut.mutateAsync({
-      name: addFormData.name ?? "",
-      email: addFormData.email ?? "",
-      password: addFormData.password ?? "",
-      role: (addFormData.role ?? "facility") as UserRole,
-    })
+    try {
+      await createMut.mutateAsync({
+        name: addFormData.name ?? "",
+        email: addFormData.email ?? "",
+        password: addFormData.password ?? "",
+        role: (addFormData.role ?? "facility") as UserRole,
+      })
+    } catch { /* surfaced via onError toast */ }
   }
 
   const resetAddForm = () => {
@@ -538,7 +551,7 @@ export function UserTable() {
         onOpenChange={() => setDeleting(null)}
         title="Delete User"
         description={`Are you sure you want to delete "${deleting?.name}"?`}
-        onConfirm={async () => { if (deleting) await deleteMut.mutateAsync(deleting.id) }}
+        onConfirm={async () => { if (deleting) { try { await deleteMut.mutateAsync(deleting.id) } catch { /* surfaced via onError toast */ } } }}
         isLoading={deleteMut.isPending}
         variant="destructive"
       />

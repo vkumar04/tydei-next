@@ -101,13 +101,17 @@ describe("getConnections — Iter4-B1", () => {
     expect(where).toEqual({ vendorId: "vendor-caller" })
   })
 
-  it("rejects when the caller is not a member of any facility or vendor org", async () => {
+  it("returns [] (no leak) when the caller is not a member of any facility or vendor org", async () => {
+    // BUG 3 (Charles 2026-06-20): a no-identity caller (e.g. a platform admin
+    // on a tenant settings surface) must NOT throw — that surfaced as the
+    // "Server Components render" digest toast. Returning [] keeps the
+    // tenant-scoping property (no rows leak) without the crash.
     requireAuthMock.mockResolvedValue({
       user: { id: "u-3", email: "x@example.com" },
     })
     memberFindFirstMock.mockResolvedValue(null)
 
-    await expect(getConnections({})).rejects.toThrow(/not authorized/i)
+    await expect(getConnections({})).resolves.toEqual([])
     expect(connectionFindManyMock).not.toHaveBeenCalled()
   })
 })

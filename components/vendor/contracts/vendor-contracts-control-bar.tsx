@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -105,12 +106,14 @@ export function VendorContractsControlBar({
       </Tabs>
 
       <div className="ml-auto flex items-center gap-2">
-        <Button asChild size="sm">
-          <Link href="/vendor/contracts/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Contract
-          </Link>
-        </Button>
+        <ReadOnlyGuard title="Read-only access can't create contracts">
+          <Button asChild size="sm">
+            <Link href="/vendor/contracts/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Contract
+            </Link>
+          </Button>
+        </ReadOnlyGuard>
       </div>
     </div>
   )

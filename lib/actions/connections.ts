@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
-import type { ConnectionStatus } from "@/lib/generated/prisma/client"
+import type { ConnectionStatus, ConnectionMode } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 
 /**
@@ -61,6 +61,8 @@ export interface ConnectionData {
   vendorId: string
   vendorName: string
   status: ConnectionStatus
+  /** 1-way (vendor keeps contracts private) vs 2-way (contracts flow to the facility). */
+  mode: ConnectionMode
   inviteType: string
   invitedByEmail: string
   invitedAt: string
@@ -85,11 +87,13 @@ export async function getConnections(input: {
   // a tenant boundary).
   const session = await requireAuth()
   const identity = await resolveCallerOrgIdentity(session.user.id)
-  if (!identity) {
-    throw new Error(
-      "Not authorized: caller is not a member of any facility or vendor org",
-    )
-  }
+  // A caller with no facility/vendor org membership (e.g. a platform admin
+  // who navigated to a tenant settings surface) simply has no connections
+  // to show. Returning [] keeps this read from throwing an unhandled
+  // Server-Components render error (the digest toast Charles saw) — the
+  // tenant-scoping boundary is still enforced for callers that DO have an
+  // identity below.
+  if (!identity) return []
   const { status } = input
   const scopeWhere =
     identity.kind === "facility"
@@ -112,6 +116,7 @@ export async function getConnections(input: {
     vendorId: c.vendorId,
     vendorName: c.vendorName,
     status: c.status,
+    mode: c.mode,
     inviteType: c.inviteType,
     invitedByEmail: c.invitedByEmail,
     invitedAt: c.invitedAt.toISOString(),
@@ -159,27 +164,60 @@ export async function sendConnectionInvite(input: {
   if (identity.kind === "facility") {
     facilityId = identity.facilityId
     facilityName = identity.facilityName
-    // Look up vendor by email
+    // The invite dialog collects a vendor NAME (not an email), so match by
+    // name (case-insensitive) first, then fall back to contactEmail when a
+    // real email was supplied. Previously this only matched a fabricated
+    // `contact@<name>.com` email that almost never existed, so every invite
+    // threw "Vendor not found" (Charles: "who does this invite go to?").
+    const trimmedName = input.toName?.trim() ?? ""
     const vendor = await prisma.vendor.findFirst({
-      where: { contactEmail: input.toEmail },
+      where: {
+        OR: [
+          ...(trimmedName
+            ? [{ name: { equals: trimmedName, mode: "insensitive" as const } }]
+            : []),
+          ...(input.toEmail ? [{ contactEmail: input.toEmail }] : []),
+        ],
+      },
     })
     vendorId = vendor?.id ?? ""
-    vendorName = vendor?.name ?? input.toName
+    vendorName = vendor?.name ?? trimmedName
     if (!vendorId) {
-      throw new Error("Vendor not found with that email")
+      throw new Error(
+        `No vendor named "${trimmedName || input.toEmail}" is on the platform yet. Ask them to register, then resend the invite.`,
+      )
     }
   } else {
     vendorId = identity.vendorId
     vendorName = identity.vendorName
+    // Match the facility by NAME (case-insensitive) — the invite dialog
+    // collects a facility name, not an email (previously this only matched a
+    // fabricated `admin@<name>.com` member email that almost never existed).
+    const trimmedName = input.toName?.trim() ?? ""
     const facility = await prisma.facility.findFirst({
       where: {
-        organization: { members: { some: { user: { email: input.toEmail } } } },
+        OR: [
+          ...(trimmedName
+            ? [{ name: { equals: trimmedName, mode: "insensitive" as const } }]
+            : []),
+          ...(input.toEmail
+            ? [
+                {
+                  organization: {
+                    members: { some: { user: { email: input.toEmail } } },
+                  },
+                },
+              ]
+            : []),
+        ],
       },
     })
     facilityId = facility?.id ?? ""
-    facilityName = facility?.name ?? input.toName
+    facilityName = facility?.name ?? trimmedName
     if (!facilityId) {
-      throw new Error("Facility not found with that email")
+      throw new Error(
+        `No facility named "${trimmedName || input.toEmail}" is on the platform yet. Ask them to register, then resend the invite.`,
+      )
     }
   }
 
@@ -205,6 +243,7 @@ export async function sendConnectionInvite(input: {
     vendorId: connection.vendorId,
     vendorName: connection.vendorName,
     status: connection.status,
+    mode: connection.mode,
     inviteType: connection.inviteType,
     invitedByEmail: connection.invitedByEmail,
     invitedAt: connection.invitedAt.toISOString(),

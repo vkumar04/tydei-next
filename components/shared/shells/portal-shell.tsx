@@ -1,13 +1,9 @@
 "use client"
 
-import { useState } from "react"
 import type { ReactNode } from "react"
 import Link from "next/link"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
-import {
-  Shield,
-  Upload,
-} from "lucide-react"
+import { Shield } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   SidebarProvider,
@@ -18,7 +14,6 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarNav } from "@/components/shared/shells/sidebar-nav"
 import { UserMenu } from "@/components/shared/shells/user-menu"
@@ -26,7 +21,6 @@ import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { CommandSearch } from "@/components/shared/shells/command-search"
 import { AlertBell } from "@/components/shared/shells/alert-bell"
 import { NotificationBell } from "@/components/shared/notification-bell"
-import { MassUpload } from "@/components/import/mass-upload"
 
 interface PortalShellProps {
   role: PortalRole
@@ -51,8 +45,6 @@ export function PortalShell({
   vendorId,
   children,
 }: PortalShellProps) {
-  const [importDialogOpen, setImportDialogOpen] = useState(false)
-
   return (
     <SidebarProvider>
       <Sidebar>
@@ -120,21 +112,14 @@ export function PortalShell({
           </div>
 
           {/* RIGHT — actions cluster */}
+          {/* The global "Import Data" mass-upload button was deactivated
+              (Charles 2026-06-20: "I don't think it is working for a mass
+              upload… we can de activate it"). The multi-document modal forced
+              a blocking vendor-name dialog per file and stalled on a 2-min
+              timer for spreadsheet uploads. The per-surface importers (COG,
+              pricing, case-costing tabs) and the single-file AI extract on
+              the contract form remain the supported paths. */}
           <div className="flex items-center gap-1 justify-self-end">
-            <Button
-              variant="outline"
-              size="sm"
-              className="hidden md:flex"
-              onClick={() => setImportDialogOpen(true)}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Import Data
-            </Button>
-            <MassUpload
-              facilityId={facilityId ?? ""}
-              open={importDialogOpen}
-              onOpenChange={setImportDialogOpen}
-            />
             <ThemeToggle />
             {/* Alerts (triangle): off-contract purchases, price
                 discrepancies, expirations. Polls every 30s. */}

@@ -34,19 +34,28 @@ export function VendorTable() {
     queryFn: () => adminGetVendors({}),
   })
 
+  // Charles 2026-06-20: surface admin mutation failures as toasts instead of
+  // unhandled rejections (the "add a vendor … times out / switches pages"
+  // symptom).
+  const onMutationError = (verb: string) => (err: unknown) =>
+    toast.error(err instanceof Error ? err.message : `Failed to ${verb} vendor`)
+
   const createMut = useMutation({
     mutationFn: (input: AdminCreateVendorInput) => adminCreateVendor(input),
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.vendors() }); setFormOpen(false); toast.success("Vendor created") },
+    onError: onMutationError("create"),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, input }: { id: string; input: AdminCreateVendorInput }) => adminUpdateVendor(id, input),
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.vendors() }); setEditing(null); toast.success("Vendor updated") },
+    onError: onMutationError("update"),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => adminDeleteVendor(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.vendors() }); setDeleting(null); toast.success("Vendor deleted") },
+    onError: onMutationError("delete"),
   })
 
   const columns = getAdminVendorColumns(
@@ -56,11 +65,13 @@ export function VendorTable() {
 
   const handleSubmit = async () => {
     const input = formData as AdminCreateVendorInput
-    if (editing) {
-      await updateMut.mutateAsync({ id: editing.id, input })
-    } else {
-      await createMut.mutateAsync(input)
-    }
+    try {
+      if (editing) {
+        await updateMut.mutateAsync({ id: editing.id, input })
+      } else {
+        await createMut.mutateAsync(input)
+      }
+    } catch { /* surfaced via onError toast */ }
   }
 
   const vendors = data?.vendors ?? []
@@ -164,7 +175,7 @@ export function VendorTable() {
         onOpenChange={() => setDeleting(null)}
         title="Delete Vendor"
         description={`Are you sure you want to delete "${deleting?.name}"?`}
-        onConfirm={async () => { if (deleting) await deleteMut.mutateAsync(deleting.id) }}
+        onConfirm={async () => { if (deleting) { try { await deleteMut.mutateAsync(deleting.id) } catch { /* surfaced via onError toast */ } } }}
         isLoading={deleteMut.isPending}
         variant="destructive"
       />

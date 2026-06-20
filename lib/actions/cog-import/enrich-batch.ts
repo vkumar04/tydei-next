@@ -19,6 +19,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 
@@ -32,6 +33,10 @@ export async function recomputeAllCOGEnrichments(): Promise<{
   totalRecordsUpdated: number
 }> {
   const { facility, user } = await requireFacility()
+  // Read-only (`user`) tier must not trigger a facility-wide DB recompute.
+  // This writer delegates its writes to recomputeMatchStatusesForVendor, so
+  // the inline-prisma scanner can't see it — gate explicitly.
+  await requireCanMutate()
 
   // Distinct vendorIds across all COG rows at this facility. Using
   // groupBy (rather than distinct select) keeps the row count around

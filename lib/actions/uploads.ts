@@ -1,6 +1,7 @@
 "use server"
 
 import { requireAuth } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { prisma } from "@/lib/db"
 import { uploadRequestSchema, type UploadRequest } from "@/lib/validators/uploads"
 import { generatePresignedUploadUrl, generatePresignedDownloadUrl, deleteObject } from "@/lib/s3"
@@ -94,6 +95,9 @@ export async function getDownloadUrl(key: string) {
 }
 
 export async function deleteFile(key: string) {
+  // Read-only (`user`) tier must not delete files. The write goes to S3
+  // (deleteObject), not prisma, so the inline-prisma scanner can't see it.
+  await requireCanMutate()
   await assertKeyVisibleToUser(key)
   await deleteObject(key)
 }

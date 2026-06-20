@@ -104,7 +104,10 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
     // Toast from the mutation result instead.
     sendInvite.mutate(
       {
-        toEmail: `contact@${name.toLowerCase().replace(/\s/g, "")}.com`,
+        // The invite is resolved by vendor NAME server-side; we no longer
+        // fabricate a `contact@<name>.com` email that never matched a real
+        // vendor row (Charles: "who does this invite go to?").
+        toEmail: "",
         toName: name,
         message: newInviteMessage || undefined,
       },
@@ -226,7 +229,21 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             onSetInviteOpen={setInviteOpen}
             onRemoveMember={(id) => removeMember.mutate(id)}
             onRoleChange={(id, role) => updateRole.mutate({ memberId: id, role })}
-            onInviteMember={(email, role) => inviteMember.mutate({ email, role })}
+            onInviteMember={(email, role) =>
+              inviteMember.mutate(
+                { email, role },
+                {
+                  onSuccess: () => {
+                    toast.success(`Invitation sent to ${email}`)
+                    setInviteOpen(false)
+                  },
+                  onError: (err) =>
+                    toast.error(
+                      err instanceof Error ? err.message : "Failed to send invitation",
+                    ),
+                },
+              )
+            }
             onAccessTierChange={(id, tier) =>
               updateAccessTier.mutate(
                 { memberId: id, tier },
@@ -276,9 +293,24 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
             newInviteMessage={newInviteMessage}
             onSetNewInviteMessage={setNewInviteMessage}
             onSendInvite={handleSendConnectionInvite}
-            onAcceptConnection={(id) => acceptConn.mutate(id)}
-            onRejectConnection={(id) => rejectConn.mutate(id)}
-            onRemoveConnection={(id) => removeConn.mutate(id)}
+            onAcceptConnection={(id) =>
+              acceptConn.mutate(id, {
+                onError: (err) =>
+                  toast.error(err instanceof Error ? err.message : "Failed to accept"),
+              })
+            }
+            onRejectConnection={(id) =>
+              rejectConn.mutate(id, {
+                onError: (err) =>
+                  toast.error(err instanceof Error ? err.message : "Failed to reject"),
+              })
+            }
+            onRemoveConnection={(id) =>
+              removeConn.mutate(id, {
+                onError: (err) =>
+                  toast.error(err instanceof Error ? err.message : "Failed to remove"),
+              })
+            }
           />
         </TabsContent>
 

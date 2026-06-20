@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Building2, CheckCircle, Users, FileText, Plus } from "lucide-react"
@@ -22,6 +23,7 @@ import { queryKeys } from "@/lib/query-keys"
 
 export function FacilityTable() {
   const qc = useQueryClient()
+  const router = useRouter()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<AdminFacilityRow | null>(null)
   const [deleting, setDeleting] = useState<AdminFacilityRow | null>(null)
@@ -31,24 +33,37 @@ export function FacilityTable() {
     queryFn: () => adminGetFacilities({}),
   })
 
+  // Charles 2026-06-20: these admin mutations had only onSuccess. A failing
+  // server action (validation, duplicate, or a requireAdmin redirect-throw)
+  // surfaced as an UNHANDLED rejection — which Next escalates to its error
+  // boundary, the "pages time out and switch randomly" symptom. Surface
+  // failures as toasts so the operator stays on the page.
+  const onMutationError = (verb: string) => (err: unknown) =>
+    toast.error(err instanceof Error ? err.message : `Failed to ${verb} facility`)
+
   const createMut = useMutation({
     mutationFn: (input: AdminCreateFacilityInput) => adminCreateFacility(input),
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.facilities() }); setFormOpen(false); toast.success("Facility created") },
+    onError: onMutationError("create"),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, input }: { id: string; input: AdminCreateFacilityInput }) => adminUpdateFacility(id, input),
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.facilities() }); setEditing(null); toast.success("Facility updated") },
+    onError: onMutationError("update"),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => adminDeleteFacility(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.facilities() }); setDeleting(null); toast.success("Facility deleted") },
+    onError: onMutationError("delete"),
   })
 
   const columns = getFacilityColumns(
     (f) => setEditing(f),
-    (f) => setDeleting(f)
+    (f) => setDeleting(f),
+    // "Manage Users" was a dead no-op; route the operator to user management.
+    () => router.push("/admin/users"),
   )
 
   const facilities = data?.facilities ?? []
@@ -130,7 +145,7 @@ export function FacilityTable() {
       <FacilityFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
-        onSubmit={async (d) => { await createMut.mutateAsync(d) }}
+        onSubmit={async (d) => { try { await createMut.mutateAsync(d) } catch { /* surfaced via onError toast */ } }}
         isSubmitting={createMut.isPending}
       />
       {editing && (
@@ -138,7 +153,7 @@ export function FacilityTable() {
           facility={{ id: editing.id, name: editing.name, type: editing.type as AdminCreateFacilityInput["type"], status: editing.status }}
           open={!!editing}
           onOpenChange={() => setEditing(null)}
-          onSubmit={async (d) => { await updateMut.mutateAsync({ id: editing.id, input: d }) }}
+          onSubmit={async (d) => { try { await updateMut.mutateAsync({ id: editing.id, input: d }) } catch { /* surfaced via onError toast */ } }}
           isSubmitting={updateMut.isPending}
         />
       )}
@@ -147,7 +162,7 @@ export function FacilityTable() {
         onOpenChange={() => setDeleting(null)}
         title="Delete Facility"
         description={`Are you sure you want to delete "${deleting?.name}"?`}
-        onConfirm={async () => { if (deleting) await deleteMut.mutateAsync(deleting.id) }}
+        onConfirm={async () => { if (deleting) { try { await deleteMut.mutateAsync(deleting.id) } catch { /* surfaced via onError toast */ } } }}
         isLoading={deleteMut.isPending}
         variant="destructive"
       />
