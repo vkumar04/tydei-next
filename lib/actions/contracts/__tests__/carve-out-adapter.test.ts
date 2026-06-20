@@ -134,6 +134,11 @@ describe("getCarveOutRebate (W1.Z-A wire)", () => {
     expect(r.rebateEarned).toBe(2_000)
     expect(r.carveOutLines).toHaveLength(1)
     expect(r.carveOutLines![0]!.totalSpend).toBe(100_000)
+    // eligibleSpend must be the carved-out spend basis so the performance
+    // card shows "eligible spend" and the effective-rate line (gated on
+    // eligibleSpend > 0). Effective rate = 2000 / 100000 = 2.0%.
+    expect(r.eligibleSpend).toBe(100_000)
+    expect((r.rebateEarned / r.eligibleSpend) * 100).toBeCloseTo(2.0)
   })
 
   it("single carve-out line at 5% on $10k spend → $500", async () => {
