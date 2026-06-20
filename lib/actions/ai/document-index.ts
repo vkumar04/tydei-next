@@ -12,6 +12,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
   splitTextIntoPages,
   normalizePageText,
@@ -38,6 +39,7 @@ export async function indexContractDocument(input: {
 }) {
   const session = await requireFacility()
   const { facility } = session
+  await requireCanMutate()
 
   // Ownership check via the parent contract.
   const document = await prisma.contractDocument.findUniqueOrThrow({

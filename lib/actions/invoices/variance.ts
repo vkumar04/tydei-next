@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
   computeInvoiceVariances,
   type InvoiceLineForVariance,
@@ -48,6 +49,7 @@ export async function recomputeInvoiceVariance(invoiceId: string): Promise<{
   variancesWritten: number
 }> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId, facilityId: facility.id },

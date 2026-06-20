@@ -10,6 +10,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import {
   parseMoney,
@@ -35,6 +36,7 @@ export async function ingestPricingFile(input: {
   vendorHint?: string | null
 }): Promise<{ imported: number; failed: number; vendorUsed: string | null }> {
   const session = await requireFacility()
+  await requireCanMutate()
   const facilityId = session.facility.id
   const userId = session.user.id
 

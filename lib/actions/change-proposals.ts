@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAuth, requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import type { CreateChangeProposalInput, ReviewChangeProposalInput } from "@/lib/validators/change-proposals"
 import { createChangeProposalSchema, reviewChangeProposalSchema } from "@/lib/validators/change-proposals"
 import { serialize } from "@/lib/serialize"
@@ -103,6 +104,7 @@ export async function createChangeProposal(input: CreateChangeProposalInput) {
   // and verify the target contract actually belongs to the
   // authenticated vendor before writing.
   const { vendor } = await requireVendor()
+  await requireCanMutate()
   const data = createChangeProposalSchema.parse(input)
 
   const contract = await prisma.contract.findUnique({
@@ -187,6 +189,7 @@ export async function reviewChangeProposal(
  */
 export async function withdrawChangeProposal(id: string) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
 
   const result = await prisma.contractChangeProposal.updateMany({
     where: { id, vendorId: vendor.id, status: "pending" },

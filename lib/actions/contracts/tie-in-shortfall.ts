@@ -22,6 +22,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import {
@@ -50,6 +51,7 @@ export async function recomputeTieInShortfallLedger(
   contractId: string,
 ): Promise<RecomputeTieInShortfallResult> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   return _recomputeTieInShortfallLedgerWithFacility(contractId, facility.id)
 }
 
@@ -69,6 +71,9 @@ export async function _recomputeTieInShortfallLedgerWithFacility(
   contractId: string,
   facilityId: string,
 ): Promise<RecomputeTieInShortfallResult> {
+  // read-only-guard-skip: deliberately auth-bypassing engine (facilityId is
+  // passed in) for the COG-import recompute pipeline that runs with facility
+  // context but no session; `recomputeTieInShortfallLedger` is the gated entry.
   const contract = await prisma.contract.findFirst({
     where: contractOwnershipWhere(contractId, facilityId),
     select: {

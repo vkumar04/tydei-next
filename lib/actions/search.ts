@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 import { serialize } from "@/lib/serialize"
+import { rateLimit } from "@/lib/rate-limit"
 
 export interface SearchResult {
   id: string
@@ -34,6 +35,12 @@ export interface GroupedSearchResults {
 
 export async function globalSearch(query: string): Promise<GroupedSearchResults> {
   const session = await requireAuth()
+
+  // DoS amplification guard: each call fans out into ~8 parallel scans.
+  const { success } = rateLimit(`search:${session.user.id}`, 30, 60_000)
+  if (!success) {
+    throw new Error("Too many requests, try again shortly.")
+  }
 
   const trimmed = query.trim()
   if (!trimmed || trimmed.length < 2) {

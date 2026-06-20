@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAdmin, requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
   vendorFiltersSchema,
   createVendorSchema,
@@ -81,6 +82,7 @@ export async function getVendor(id: string) {
 
 export async function createVendor(input: CreateVendorInput) {
   await requireFacility()
+  await requireCanMutate()
   const data = createVendorSchema.parse(input)
 
   const vendor = await prisma.vendor.create({

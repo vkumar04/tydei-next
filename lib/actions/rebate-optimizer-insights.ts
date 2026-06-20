@@ -33,6 +33,8 @@
 import { createHash } from "node:crypto"
 import { generateText, Output } from "ai"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { claudeModel } from "@/lib/ai/config"
@@ -81,6 +83,12 @@ export async function getRebateOptimizerInsights(
   const session = await requireFacility()
   if (session.facility.id !== facilityId) {
     throw new Error("Facility mismatch: cannot request insights for another facility")
+  }
+
+  // Throttle the unthrottled Opus call (cost-abuse DoS guard).
+  const { success } = rateLimit(`ai-insights:${session.user.id}`, 10, 60_000)
+  if (!success) {
+    throw new Error("Too many requests, try again shortly.")
   }
 
   // ── 1. Load engine opportunities + rule-based alerts ───────────────
@@ -278,6 +286,7 @@ export async function flagRebateInsight(input: {
   snapshot: RebateInsight
 }): Promise<{ id: string }> {
   const session = await requireFacility()
+  await requireCanMutate()
 
   const snapshot = rebateInsightSchema.parse(input.snapshot)
 
@@ -349,6 +358,7 @@ export async function listRebateInsightFlags(
 /** Remove a flagged insight. Scoped to the caller's facility. */
 export async function clearRebateInsightFlag(id: string): Promise<void> {
   const session = await requireFacility()
+  await requireCanMutate()
   await prisma.rebateInsightFlag.deleteMany({
     where: {
       id,

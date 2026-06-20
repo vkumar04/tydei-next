@@ -112,6 +112,61 @@ const config: NextConfig = {
       bodySizeLimit: "200mb",
     },
   },
+  // 2026-06-19 security remediation: baseline security headers applied to
+  // EVERY route (including public pages like /login and /). Previously these
+  // were only set in proxy.ts, which runs solely on matched (auth-gated)
+  // routes — so public pages got no HSTS / clickjacking / sniff protection.
+  // Setting them here (Next's headers() applies to all routes) closes that
+  // gap. proxy.ts no longer re-sets these (de-duped) to avoid drift; it keeps
+  // only X-DNS-Prefetch-Control, which is not part of the baseline set.
+  //
+  // The Content-Security-Policy is REPORT-ONLY for now: it logs violations
+  // (browser console) without blocking, so we can observe what a real
+  // enforcing policy would break before flipping to the enforcing header.
+  async headers() {
+    const cspReportOnly = [
+      "default-src 'self'",
+      // Next.js injects inline bootstrap scripts; 'unsafe-inline' is needed
+      // until we wire nonce-based CSP. Report-only, so non-blocking for now.
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      // Tailwind + styled-jsx emit inline styles.
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      // App's own API/server-action calls; blob: for client-side file parsing.
+      "connect-src 'self'",
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; ")
+
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+          {
+            key: "Content-Security-Policy-Report-Only",
+            value: cspReportOnly,
+          },
+        ],
+      },
+    ]
+  },
   async redirects() {
     return [
       // v0 parity: v0's facility renewals route was `/dashboard/contract-renewals`.

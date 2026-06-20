@@ -14,6 +14,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
@@ -212,6 +213,7 @@ export async function remapCOGCategory(input: {
   contractCategory: string | null
 }): Promise<{ recordsUpdated: number }> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const from = input.cogCategory.trim()
   if (!from) throw new Error("cogCategory required")
   const to = input.contractCategory?.trim() || null

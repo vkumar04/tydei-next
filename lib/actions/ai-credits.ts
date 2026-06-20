@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { AI_CREDIT_COSTS, type AIAction } from "@/lib/ai/config"
 import { serialize } from "@/lib/serialize"
 
@@ -107,6 +108,10 @@ export async function getAICredits(_input?: {
   // lib/ai/record-usage.ts — either side can be the first to create it.
   if (!credit) {
     const now = new Date()
+    // read-only-guard-skip: lazy-provisions the caller's OWN default
+    // Enterprise-tier credit row on first read so the AI Credits tab shows
+    // real numbers — a read-shaped, idempotent action (mirrors
+    // lib/ai/record-usage.ts), not a tenant mutation the read-only tier governs.
     credit = await prisma.aICredit.create({
       data: {
         facilityId: tenant.facilityId,
@@ -159,6 +164,7 @@ export async function useAICredits(input: {
   // Ownership + session identity — pre-fix anyone could burn another
   // tenant's credits and attribute usage to an arbitrary userId/userName.
   const { credit, tenant } = await requireOwnedCredit(input.creditId)
+  await requireCanMutate()
 
   const available =
     credit.monthlyCredits + credit.rolloverCredits - credit.usedCredits

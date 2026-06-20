@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
@@ -239,6 +240,7 @@ export async function setSpendTarget(input: {
   targetDate: string
 }): Promise<void> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   // Use Alert model to persist spend target as metadata (avoids schema migration)
   await prisma.alert.create({

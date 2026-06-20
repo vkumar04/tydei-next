@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 import { onlyProspectiveProposalRows } from "@/lib/prospective/proposal-rows"
 import {
@@ -105,6 +106,7 @@ export async function getVendorProspectiveAnalysis(
   input: VendorProspectiveAnalysisInput,
 ): Promise<VendorProspectiveResult> {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
 
   try {
     return await runAnalysis(vendor, input)

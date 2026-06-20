@@ -15,6 +15,7 @@
 import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 import type { ReportType, ReportFrequency } from "@/lib/generated/prisma/client"
 
@@ -160,6 +161,7 @@ export async function createReportSchedule(
   input: CreateReportScheduleActionInput,
 ): Promise<ReportSchedule> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const parsed = createSchema.parse(input)
 
   const { frequency, dayOfMonth } = toDbFrequency(parsed.frequency)
@@ -195,6 +197,7 @@ export async function updateReportSchedule(
   input: UpdateReportScheduleActionInput,
 ): Promise<ReportSchedule> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const parsed = updateSchema.parse(input)
 
   // Ownership check — only touch rows in this facility.
@@ -242,6 +245,7 @@ export async function updateReportSchedule(
 
 export async function deleteReportSchedule(id: string): Promise<void> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   const existing = await prisma.reportSchedule.findFirst({
     where: { id, facilityId: facility.id },
@@ -256,6 +260,7 @@ export async function deleteReportSchedule(id: string): Promise<void> {
 
 export async function toggleReportSchedule(id: string): Promise<ReportSchedule> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   // Ownership check — only toggle rows in this facility (never a bare
   // `where: { id }`, which would be a cross-tenant IDOR).

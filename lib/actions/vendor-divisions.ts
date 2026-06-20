@@ -3,6 +3,7 @@
 import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ export async function setVendorDivisions(
   try {
     const { vendor } = await requireVendor()
     vendorId = vendor.id
+    await requireCanMutate()
 
     const parsed = setVendorDivisionsSchema.parse(divisions)
 

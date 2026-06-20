@@ -34,6 +34,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import {
@@ -70,6 +71,9 @@ export async function getRenewalAlertSettings(): Promise<RenewalAlertSettings> {
   // Defaults mirror the Prisma schema defaults. Hard-coding here
   // (rather than reading schema defaults at runtime) keeps the action
   // deterministic and testable without a live DB for the defaults.
+  // read-only-guard-skip: lazy-materializes the caller's OWN default
+  // settings row on first read — a read-shaped action, not a tenant
+  // mutation the read-only tier governs (mirrors getVendorRenewalAlertSettings).
   const created = await prisma.renewalAlertSettings.create({
     data: {
       userId: user.id,
@@ -90,6 +94,7 @@ export async function saveRenewalAlertSettings(
   input: RenewalAlertSettingsInput,
 ): Promise<RenewalAlertSettings> {
   const { user } = await requireFacility()
+  await requireCanMutate()
 
   // Throws `RenewalAlertSettingsValidationError` on bad shape. The
   // action intentionally lets it propagate so server-action error

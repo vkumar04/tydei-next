@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { alertFiltersSchema, type AlertFilters } from "@/lib/validators/alerts"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
@@ -188,6 +189,7 @@ export async function getUnreadAlertCount(input: {
 
 export async function markAlertRead(id: string) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   await prisma.alert.update({
     where: { id, facilityId: facility.id },
     data: { status: "read", readAt: new Date() },
@@ -198,6 +200,7 @@ export async function markAlertRead(id: string) {
 
 export async function resolveAlert(id: string) {
   const session = await requireFacility()
+  await requireCanMutate()
   await prisma.alert.update({
     where: { id, facilityId: session.facility.id },
     data: { status: "resolved", resolvedAt: new Date() },
@@ -214,6 +217,7 @@ export async function resolveAlert(id: string) {
 
 export async function dismissAlert(id: string) {
   const session = await requireFacility()
+  await requireCanMutate()
   await prisma.alert.update({
     where: { id, facilityId: session.facility.id },
     data: { status: "dismissed", dismissedAt: new Date() },
@@ -230,6 +234,7 @@ export async function dismissAlert(id: string) {
 
 export async function bulkResolveAlerts(ids: string[]) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const result = await prisma.alert.updateMany({
     where: { id: { in: ids }, facilityId: facility.id },
     data: { status: "resolved", resolvedAt: new Date() },
@@ -241,6 +246,7 @@ export async function bulkResolveAlerts(ids: string[]) {
 
 export async function bulkDismissAlerts(ids: string[]) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const result = await prisma.alert.updateMany({
     where: { id: { in: ids }, facilityId: facility.id },
     data: { status: "dismissed", dismissedAt: new Date() },
@@ -283,6 +289,7 @@ export async function bulkUpdateAlerts(input: {
   skipped: number
 }> {
   const session = await requireFacility()
+  await requireCanMutate()
   const facilityId = session.facility.id
 
   if (input.alertIds.length === 0) {
@@ -352,6 +359,7 @@ export async function bulkUpdateAlerts(input: {
  */
 export async function markAllAlertsRead(): Promise<{ updated: number }> {
   const session = await requireFacility()
+  await requireCanMutate()
   const facilityId = session.facility.id
 
   const rows = await prisma.alert.findMany({

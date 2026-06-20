@@ -10,6 +10,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import {
@@ -19,6 +20,7 @@ import {
 
 export async function submitVendorInvoice(input: SubmitVendorInvoiceInput) {
   const { vendor, user } = await requireVendor()
+  await requireCanMutate()
   const data = submitVendorInvoiceSchema.parse(input)
 
   // Same relationship gate as createVendorPurchaseOrder's off-contract

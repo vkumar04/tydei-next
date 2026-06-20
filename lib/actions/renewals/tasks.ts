@@ -17,6 +17,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
@@ -127,6 +128,7 @@ export async function toggleRenewalTask(input: {
   completed: boolean
 }): Promise<RenewalTaskItem> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   if (!isValidTaskKey(input.taskKey)) {
     throw new Error(`Unknown renewal task key: ${input.taskKey}`)

@@ -57,8 +57,7 @@ export async function POST(request: Request) {
     })
     return Response.json({ hits })
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Search failed"
     console.error("[/api/ai/documents/search] failed:", err)
-    return Response.json({ error: message }, { status: 500 })
+    return Response.json({ error: "Search failed" }, { status: 500 })
   }
 }

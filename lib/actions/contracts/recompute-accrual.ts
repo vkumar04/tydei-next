@@ -34,6 +34,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import {
@@ -101,6 +102,7 @@ export async function recomputeAccrualForContract(
   contractId: string,
 ): Promise<RecomputeAccrualResult> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   return _recomputeAccrualForContractWithFacility(contractId, facility.id)
 }
 
@@ -115,6 +117,9 @@ export async function _recomputeAccrualForContractWithFacility(
   contractId: string,
   facilityId: string,
 ): Promise<RecomputeAccrualResult> {
+  // read-only-guard-skip: deliberately auth-bypassing engine (facilityId is
+  // passed in, not session-derived) for the session-less source-oracle harness;
+  // the user-facing entry point `recomputeAccrualForContract` is the gated path.
   const contract = await prisma.contract.findUnique({
     where: contractOwnershipWhere(contractId, facilityId),
     include: {

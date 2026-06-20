@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
   importInvoiceSchema,
   invoiceFiltersSchema,
@@ -238,6 +239,7 @@ export async function importInvoice(input: ImportInvoiceInput) {
   // attaching. Pre-fix a facility user could create an Invoice owned
   // by another facility OR attach a foreign PO id.
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
   const data = importInvoiceSchema.parse(input)
   let purchaseOrderId = data.purchaseOrderId
   if (purchaseOrderId) {
@@ -453,6 +455,7 @@ export async function validateInvoice(id: string) {
  */
 export async function revalidateInvoice(id: string) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   const results = await computeInvoiceValidation(id, facility.id)
 
@@ -488,6 +491,7 @@ export async function revalidateInvoice(id: string) {
 
 export async function approveInvoice(invoiceId: string) {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const invoice = await prisma.invoice.findFirstOrThrow({
     where: { id: invoiceId, facilityId: facility.id },
@@ -523,6 +527,7 @@ export async function approveInvoice(invoiceId: string) {
 
 export async function flagInvoiceLineItem(lineItemId: string, notes?: string) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   // Verify line item belongs to this facility's invoice.
   // Notes from the DisputeDialog are persisted (previously dropped);
@@ -538,6 +543,7 @@ export async function flagInvoiceLineItem(lineItemId: string, notes?: string) {
 
 export async function deleteInvoice(id: string) {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const invoice = await prisma.invoice.findUniqueOrThrow({
     where: { id, facilityId: facility.id },
@@ -565,6 +571,7 @@ export async function deleteInvoice(id: string) {
 
 export async function resolveInvoiceLineItem(lineItemId: string) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   await prisma.invoiceLineItem.update({
     where: { id: lineItemId, invoice: { facilityId: facility.id } },

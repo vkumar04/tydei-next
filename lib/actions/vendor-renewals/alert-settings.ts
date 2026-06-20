@@ -59,6 +59,9 @@ export async function getVendorRenewalAlertSettings(): Promise<RenewalAlertSetti
   }
 
   // Defaults mirror the Prisma schema defaults (and the facility action).
+  // read-only-guard-skip: lazy-materializes the caller's OWN default
+  // settings row on first read — a read-shaped action, not a tenant
+  // mutation the read-only tier governs (save* is the gated write path).
   const created = await prisma.renewalAlertSettings.create({
     data: {
       userId: user.id,

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
@@ -283,6 +284,7 @@ export async function importCases(input: {
   caseIds: Record<string, string>
 }> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   let imported = 0
   let errors = 0
@@ -429,6 +431,7 @@ export async function recomputeSupplyContractStatus(): Promise<{
 
 export async function deleteAllCases(): Promise<{ deleted: number }> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const result = await prisma.case.deleteMany({
     where: { facilityId: facility.id },
@@ -451,6 +454,7 @@ export async function importCaseSupplies(input: {
   supplies: CaseSupplyInput[]
 }): Promise<{ imported: number; matched: number }> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   // Verify case belongs to this facility
   await prisma.case.findUniqueOrThrow({
@@ -519,6 +523,7 @@ export async function importCaseProcedures(input: {
   procedures: CaseProcedureInput[]
 }): Promise<{ imported: number; skipped: number }> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   // Verify case belongs to this facility
   await prisma.case.findUniqueOrThrow({

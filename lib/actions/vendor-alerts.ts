@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import type { AlertFilters } from "@/lib/validators/alerts"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
@@ -93,6 +94,7 @@ export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "
 
 export async function resolveVendorAlert(id: string) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
   await prisma.alert.update({
     where: { id, vendorId: vendor.id },
     data: { status: "resolved", resolvedAt: new Date() },
@@ -101,6 +103,7 @@ export async function resolveVendorAlert(id: string) {
 
 export async function dismissVendorAlert(id: string) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
   await prisma.alert.update({
     where: { id, vendorId: vendor.id },
     data: { status: "dismissed", dismissedAt: new Date() },
@@ -109,6 +112,7 @@ export async function dismissVendorAlert(id: string) {
 
 export async function bulkResolveVendorAlerts(ids: string[]) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
   const result = await prisma.alert.updateMany({
     where: { id: { in: ids }, vendorId: vendor.id },
     data: { status: "resolved", resolvedAt: new Date() },
@@ -118,6 +122,7 @@ export async function bulkResolveVendorAlerts(ids: string[]) {
 
 export async function bulkDismissVendorAlerts(ids: string[]) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
   const result = await prisma.alert.updateMany({
     where: { id: { in: ids }, vendorId: vendor.id },
     data: { status: "dismissed", dismissedAt: new Date() },

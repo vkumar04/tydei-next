@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAdmin, requireAuth, requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import type { ProductCategory } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
@@ -121,6 +122,7 @@ export async function createCategory(input: {
   parentId?: string
 }) {
   await requireFacility()
+  await requireCanMutate()
 
   const category = await prisma.productCategory.create({
     data: {
@@ -188,6 +190,7 @@ export async function confirmCategoryMapping(
   contractCategory: string
 ) {
   await requireFacility()
+  await requireCanMutate()
 
   const row = await prisma.categoryMapping.update({
     where: { id },

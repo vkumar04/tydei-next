@@ -4,6 +4,7 @@ import { ZodError } from "zod"
 import { prisma } from "@/lib/db"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireVendor, requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
   createPendingContractSchema,
   updatePendingContractSchema,
@@ -506,6 +507,7 @@ export async function createPendingContract(input: CreatePendingContractInput) {
   // Facility identity is also looked up from the Facility row when
   // facilityId is provided so the displayed name matches reality.
   const { vendor } = await requireVendor()
+  await requireCanMutate()
   let data: CreatePendingContractInput
   try {
     data = createPendingContractSchema.parse(input)
@@ -648,6 +650,7 @@ export async function createPendingContract(input: CreatePendingContractInput) {
 
 export async function updatePendingContract(id: string, input: UpdatePendingContractInput) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
   const data = updatePendingContractSchema.parse(input)
 
   const contract = await prisma.pendingContract.update({
@@ -712,6 +715,7 @@ export async function updatePendingContract(id: string, input: UpdatePendingCont
 
 export async function withdrawPendingContract(id: string) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
 
   await prisma.pendingContract.update({
     where: { id, vendorId: vendor.id },
@@ -737,6 +741,7 @@ export async function withdrawPendingContract(id: string) {
  */
 export async function deletePendingContract(id: string) {
   const session = await requireVendor()
+  await requireCanMutate()
 
   // Scoped lookup: id + the session vendor's id, so one vendor can never
   // delete another vendor's submission.
@@ -783,6 +788,7 @@ export async function deletePendingContract(id: string) {
  */
 export async function resubmitPendingContract(id: string) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
 
   const existing = await prisma.pendingContract.findUniqueOrThrow({
     where: { id, vendorId: vendor.id },
@@ -848,6 +854,7 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
   // client. Pre-fix the client-supplied string was written verbatim to
   // the audit field, so the reviewer-of-record could be forged.
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
   const reviewedBy = user.id
 
   const pending = await prisma.pendingContract.findUniqueOrThrow({
@@ -1247,6 +1254,7 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
 export async function rejectPendingContract(id: string, _reviewedByIgnored: string, notes: string) {
   // Charles audit round-7 CONCERN: reviewedBy from session.
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const pending = await prisma.pendingContract.findUniqueOrThrow({
     where: { id, facilityId: facility.id },
@@ -1282,6 +1290,7 @@ export async function rejectPendingContract(id: string, _reviewedByIgnored: stri
 export async function requestRevision(id: string, _reviewedByIgnored: string, notes: string) {
   // Charles audit round-7 CONCERN: reviewedBy from session.
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const pending = await prisma.pendingContract.findUniqueOrThrow({
     where: { id, facilityId: facility.id },

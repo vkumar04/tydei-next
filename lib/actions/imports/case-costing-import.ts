@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import {
   parseCSV,
@@ -29,6 +30,7 @@ export async function ingestCaseDataCSV(
   errors: string[]
 }> {
   const session = await requireFacility()
+  await requireCanMutate()
   const facilityId = session.facility.id
   const userId = session.user.id
 
@@ -170,6 +172,7 @@ export async function ingestCaseProceduresCSV(
   errors: string[]
 }> {
   const session = await requireFacility()
+  await requireCanMutate()
   const facilityId = session.facility.id
   const userId = session.user.id
 
@@ -315,6 +318,7 @@ export async function ingestCaseSuppliesCSV(
   errors: string[]
 }> {
   const session = await requireFacility()
+  await requireCanMutate()
   const facilityId = session.facility.id
   const userId = session.user.id
 

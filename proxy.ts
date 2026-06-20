@@ -1,13 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSessionCookie } from "better-auth/cookies"
 
+// The baseline security headers (HSTS, X-Frame-Options, X-Content-Type-Options,
+// Referrer-Policy, Permissions-Policy, CSP) now live in next.config.ts'
+// async headers() so they apply to EVERY route, including public pages like
+// /login. Only X-DNS-Prefetch-Control stays here (not part of that baseline
+// set); leaving the others out avoids double-setting / drift.
 const securityHeaders = {
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
   "X-DNS-Prefetch-Control": "on",
-  "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
 }
 
 export function proxy(request: NextRequest) {

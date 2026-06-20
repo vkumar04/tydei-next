@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import {
   resolveCategoryNamesBulk,
@@ -182,6 +183,7 @@ const PRICING_BATCH_SIZE = 500
 
 export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
   const data = bulkImportPricingSchema.parse(input)
 
   let imported = 0
@@ -256,6 +258,7 @@ export async function deletePricingFilesByVendor(
   facilityId: string
 ) {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   // Enforce facility scope from the session — never trust the caller-passed
   // facilityId. This prevents a client from deleting pricing rows for
@@ -442,6 +445,7 @@ export async function getUploadedPricingFiles(): Promise<
 
 export async function deletePricingFile(id: string): Promise<{ id: string }> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   // Facility-scope guard: verify the row belongs to this facility before
   // deleting.
@@ -501,6 +505,7 @@ export async function importContractPricing(input: {
   // ContractPricing rows into ANY other facility's contracts,
   // corrupting price-variance / savings math for the victim.
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const contract = await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(input.contractId, facility.id),
     // Vick 2026-06-07 (Fix C): load the participating vendor set so we can
@@ -775,6 +780,7 @@ export async function updateContractPricing(id: string, data: {
   // Charles audit round-7 BLOCKER: verify the row's contract belongs
   // to this facility before mutating.
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const existing = await prisma.contractPricing.findUniqueOrThrow({
     where: { id },
     select: { contractId: true },
@@ -837,6 +843,7 @@ export async function getVendorContractPricing(contractId: string) {
 export async function deleteContractPricing(id: string) {
   // Charles audit round-7 BLOCKER: verify ownership before delete.
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const existing = await prisma.contractPricing.findUniqueOrThrow({
     where: { id },
     select: { contractId: true },

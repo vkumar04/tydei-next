@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAuth, requireAdmin, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { z } from "zod"
 import { serialize } from "@/lib/serialize"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
@@ -146,6 +147,7 @@ export async function importVendorBenchmarks(
   items: VendorBenchmarkImportInput[],
 ) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
   try {
     if (items.length === 0) return serialize({ inserted: 0, replaced: 0 })
 

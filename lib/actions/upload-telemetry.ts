@@ -55,6 +55,7 @@ export async function logUploadHeaderEvent(
     const autoMappingJson = parsed.provenance
       ? { mapping: parsed.autoMapping, provenance: parsed.provenance }
       : parsed.autoMapping
+    // read-only-guard-skip: best-effort telemetry, must never block or throw on read-only users
     await prisma.uploadHeaderEvent.create({
       data: {
         surface: parsed.surface,

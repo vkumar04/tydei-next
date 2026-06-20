@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 
@@ -18,6 +19,7 @@ export async function flagInvoiceAsDisputed(input: {
   note: string
 }) {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const note = input.note?.trim() ?? ""
   if (note.length === 0) {
@@ -77,6 +79,7 @@ export async function resolveInvoiceDispute(input: {
   note?: string
 }) {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   // Ownership check + current-status guard.
   const existing = await prisma.invoice.findUnique({
