@@ -45,21 +45,27 @@ export function ScheduleTable({ schedules, facilityId, onEdit }: ScheduleTablePr
     {
       accessorKey: "reportType",
       header: "Report",
+      meta: { filterVariant: "text", filterLabel: "Report" },
       cell: ({ row }) => <span className="capitalize">{row.original.reportType.replace("_", " ")}</span>,
     },
     {
       accessorKey: "frequency",
       header: "Frequency",
+      meta: { filterVariant: "select", filterLabel: "Frequency" },
       cell: ({ row }) => <Badge variant="outline" className="capitalize">{row.original.frequency}</Badge>,
     },
     {
       accessorKey: "emailRecipients",
       header: "Recipients",
+      meta: { filterVariant: "text", filterLabel: "Recipients" },
+      accessorFn: (row) => row.emailRecipients.join(", "),
       cell: ({ row }) => row.original.emailRecipients.join(", "),
     },
     {
       accessorKey: "isActive",
       header: "Active",
+      meta: { filterVariant: "select", filterLabel: "Status" },
+      accessorFn: (row) => (row.isActive ? "Active" : "Inactive"),
       cell: ({ row }) => (
         <Switch
           checked={row.original.isActive}
@@ -71,10 +77,12 @@ export function ScheduleTable({ schedules, facilityId, onEdit }: ScheduleTablePr
     {
       accessorKey: "lastSentAt",
       header: "Last Sent",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => row.original.lastSentAt ? formatDate(row.original.lastSentAt) : "Never",
     },
     {
       id: "actions",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <TableActionMenu
           actions={[
@@ -86,5 +94,5 @@ export function ScheduleTable({ schedules, facilityId, onEdit }: ScheduleTablePr
     },
   ]
 
-  return <DataTable columns={columns} data={schedules} />
+  return <DataTable columns={columns} data={schedules} enableColumnFilters />
 }
