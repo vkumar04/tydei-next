@@ -1,5 +1,33 @@
 import { similarityRatio, normalizeVendorName } from "@/lib/vendors/similarity"
 
+export type PayPeriod = "monthly" | "quarterly" | "semi_annual" | "annual"
+
+/**
+ * Charles 2026-06-20 ("the AI still making one part correctly as annual and
+ * the first part still monthly"): the contract-level "Performance & Rebate Pay
+ * Period". The extractor reliably captures the per-TERM Evaluation Period but
+ * frequently leaves the top-level `rebatePayPeriod` null, so the form defaulted
+ * to monthly even though a term clearly said annual. Derive the contract-level
+ * cadence from the top-level value first, then fall back to the first term's
+ * evaluationPeriod, then paymentTiming. Returns undefined when nothing is
+ * available so the form keeps its existing value.
+ */
+export function deriveRebatePayPeriod(
+  rebatePayPeriod: PayPeriod | null | undefined,
+  terms:
+    | ReadonlyArray<{
+        evaluationPeriod?: PayPeriod | null
+        paymentTiming?: PayPeriod | null
+      }>
+    | undefined,
+): PayPeriod | undefined {
+  if (rebatePayPeriod) return rebatePayPeriod
+  const byEval = terms?.find((t) => t.evaluationPeriod)?.evaluationPeriod
+  if (byEval) return byEval
+  const byTiming = terms?.find((t) => t.paymentTiming)?.paymentTiming
+  return byTiming ?? undefined
+}
+
 export interface VendorRow {
   id: string
   name: string

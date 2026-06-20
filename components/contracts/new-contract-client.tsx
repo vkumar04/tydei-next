@@ -36,7 +36,10 @@ import {
   type CapitalLineItemDraft,
 } from "@/components/contracts/capital-line-items-editor"
 import { createCapitalLineItemSafe } from "@/lib/actions/contracts/capital-line-items"
-import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
+import {
+  matchOrCreateVendorId,
+  deriveRebatePayPeriod,
+} from "@/components/contracts/new-contract-helpers"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
@@ -376,14 +379,19 @@ export function NewContractClient({
     // action (lib/actions/contracts.ts) converts "" back to null.
     form.setValue("effectiveDate", data.effectiveDate ?? "")
     form.setValue("expirationDate", data.expirationDate ?? "")
-    // Bug 8 (Charles 2026-06-20: "on the performance rebate the AI never
-    // captures it… always has it as monthly"). Wire the contract-level
-    // rebate pay period the extractor now returns. The dates card keeps
-    // performancePeriod + rebatePayPeriod in lockstep, so set BOTH; when the
-    // model returns null we leave the form default untouched.
-    if (data.rebatePayPeriod) {
-      form.setValue("performancePeriod", data.rebatePayPeriod)
-      form.setValue("rebatePayPeriod", data.rebatePayPeriod)
+    // Bug 8 (Charles 2026-06-20: "the AI still making one part correctly as
+    // annual and the first part still monthly"). The contract-level
+    // "Performance & Rebate Pay Period". The model reliably captures the
+    // per-TERM Evaluation Period (e.g. "annual") but frequently leaves the
+    // top-level `rebatePayPeriod` null — so the form fell back to its monthly
+    // default even though the term clearly said annual. Derive the pay period
+    // from the terms' evaluationPeriod / paymentTiming when the top-level
+    // field is absent. The dates card keeps performancePeriod +
+    // rebatePayPeriod in lockstep, so set BOTH.
+    const payPeriod = deriveRebatePayPeriod(data.rebatePayPeriod, data.terms)
+    if (payPeriod) {
+      form.setValue("performancePeriod", payPeriod)
+      form.setValue("rebatePayPeriod", payPeriod)
     }
     if (data.totalValue) {
       form.setValue("totalValue", data.totalValue)

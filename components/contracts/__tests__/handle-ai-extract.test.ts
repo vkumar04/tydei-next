@@ -1,5 +1,37 @@
 import { describe, it, expect } from "vitest"
-import { matchOrCreateVendorId } from "@/components/contracts/new-contract-helpers"
+import {
+  matchOrCreateVendorId,
+  deriveRebatePayPeriod,
+} from "@/components/contracts/new-contract-helpers"
+
+describe("deriveRebatePayPeriod", () => {
+  it("prefers the explicit contract-level rebatePayPeriod", () => {
+    expect(
+      deriveRebatePayPeriod("quarterly", [{ evaluationPeriod: "annual" }]),
+    ).toBe("quarterly")
+  })
+
+  it("falls back to a term's evaluationPeriod when the top-level field is null (Charles 2026-06-20)", () => {
+    // The model captured the per-term Evaluation Period as "annual" but left
+    // the contract-level field null — the form must NOT default to monthly.
+    expect(
+      deriveRebatePayPeriod(null, [
+        { evaluationPeriod: "annual", paymentTiming: "quarterly" },
+      ]),
+    ).toBe("annual")
+  })
+
+  it("falls back to paymentTiming when no evaluationPeriod is present", () => {
+    expect(deriveRebatePayPeriod(undefined, [{ paymentTiming: "semi_annual" }])).toBe(
+      "semi_annual",
+    )
+  })
+
+  it("returns undefined when nothing is available (form keeps its value)", () => {
+    expect(deriveRebatePayPeriod(null, undefined)).toBeUndefined()
+    expect(deriveRebatePayPeriod(null, [{}])).toBeUndefined()
+  })
+})
 
 describe("matchOrCreateVendorId", () => {
   it("matches by case-insensitive prefix when name fragment is provided", () => {
