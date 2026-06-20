@@ -354,7 +354,7 @@ export async function createContractTransaction(input: {
   // contract. Ignored for all other code paths.
   rebateId?: string
 }) {
-  const { facility } = await requireFacility()
+  const { facility, user } = await requireFacility()
   await requireCanMutate()
 
   // Verify access
@@ -530,34 +530,44 @@ export async function createContractTransaction(input: {
     return serialize({ kind: "rebate" as const, row: rebate })
   }
 
-  // Charles 2026-04-24 (Bug 14): payments/credits are vendor-invoice
-  // activity and must not be written to `totalSpend`. `totalSpend` is the
-  // canonical source for Current Spend (see lib/actions/contracts.ts
-  // getContracts — `_sum: { totalSpend: true }` over ContractPeriod),
-  // so bleeding a payment amount into it would overwrite the spend card
-  // with the payment value. Both payment and credit mirror the same amount
-  // onto paymentExpected and paymentActual so the per-type report's
-  // variance column (expected − actual) nets to zero per logged row —
-  // matching the seed invoice pattern in prisma/seeds/contract-periods.ts.
-  // If we ever need a distinct expected-vs-actual signal for payments,
-  // split these into a dedicated payments ledger rather than reusing
-  // ContractPeriod rollup fields.
-  const period = await prisma.contractPeriod.create({
+  // Charles 2026-06-20 ("credit not recording against the balance"):
+  // credits and payments now go to their DEDICATED tables (Credit /
+  // Payment) — the `contract.payments` / `contract.creditEntries` relations
+  // the capital balance reads and the ledger surfaces. Previously they were
+  // written to ContractPeriod.paymentActual, which the ledger (Rebate table)
+  // never read and the capital balance ignored, so a logged credit was
+  // invisible AND paid nothing down. Storing here also preserves the user's
+  // description + the credit-vs-payment distinction (ContractPeriod had no
+  // field for either).
+  if (input.type === "payment") {
+    const payment = await prisma.payment.create({
+      data: {
+        contractId: input.contractId,
+        facilityId: facility.id,
+        paymentDate: txnDate,
+        paymentAmount: input.amount,
+        paymentType: "manual",
+        notes: input.description,
+        createdById: user.id,
+      },
+    })
+    await revalidateCapitalRoutes(input.contractId)
+    return serialize({ kind: "payment" as const, row: payment })
+  }
+
+  const credit = await prisma.credit.create({
     data: {
       contractId: input.contractId,
       facilityId: facility.id,
-      periodStart: txnDate,
-      periodEnd: txnDate,
-      totalSpend: 0,
-      rebateEarned: 0,
-      rebateCollected: 0,
-      paymentExpected: input.amount,
-      paymentActual: input.amount,
+      creditDate: txnDate,
+      creditAmount: input.amount,
+      creditReason: input.description,
+      notes: input.description,
+      createdById: user.id,
     },
   })
-
   await revalidateCapitalRoutes(input.contractId)
-  return serialize({ kind: "period" as const, row: period })
+  return serialize({ kind: "credit" as const, row: credit })
 }
 
 // ─── Rebate rows per contract ───────────────────────────────────
@@ -566,6 +576,71 @@ export async function createContractTransaction(input: {
 // surface what the user has actually logged. Aggregation rules live
 // in getContract (see lib/actions/contracts.ts); this endpoint is
 // the row-level companion used by the Transactions ledger.
+export interface LedgerCreditPayment {
+  id: string
+  kind: "credit" | "payment"
+  date: string
+  amount: number
+  notes: string | null
+}
+
+/**
+ * Logged credits + payments for a contract (the dedicated Credit / Payment
+ * tables). Surfaced in the Transaction Ledger so a logged "Log Credit /
+ * Payment" entry is visibly recorded (Charles 2026-06-20). These are
+ * separate from the Rebate-table ledger rows.
+ */
+export async function getContractCreditsAndPayments(
+  contractId: string,
+): Promise<LedgerCreditPayment[]> {
+  const { facility } = await requireFacility()
+  await prisma.contract.findUniqueOrThrow({
+    where: {
+      id: contractId,
+      OR: [
+        { facilityId: facility.id },
+        { contractFacilities: { some: { facilityId: facility.id } } },
+      ],
+    },
+    select: { id: true },
+  })
+  const [payments, credits] = await Promise.all([
+    prisma.payment.findMany({
+      where: { contractId },
+      select: { id: true, paymentDate: true, paymentAmount: true, notes: true },
+      orderBy: { paymentDate: "desc" },
+    }),
+    prisma.credit.findMany({
+      where: { contractId },
+      select: {
+        id: true,
+        creditDate: true,
+        creditAmount: true,
+        creditReason: true,
+        notes: true,
+      },
+      orderBy: { creditDate: "desc" },
+    }),
+  ])
+  const rows: LedgerCreditPayment[] = [
+    ...payments.map((p) => ({
+      id: p.id,
+      kind: "payment" as const,
+      date: p.paymentDate.toISOString(),
+      amount: Number(p.paymentAmount),
+      notes: p.notes,
+    })),
+    ...credits.map((c) => ({
+      id: c.id,
+      kind: "credit" as const,
+      date: c.creditDate.toISOString(),
+      amount: Number(c.creditAmount),
+      notes: c.notes ?? c.creditReason,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date))
+  return serialize(rows)
+}
+
 export async function getContractRebates(contractId: string) {
   const { facility } = await requireFacility()
 
