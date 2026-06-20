@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import {
   contractFiltersSchema,
@@ -990,6 +991,7 @@ async function _createContractImpl(
   input: CreateContractInput & { terms?: TermFormValues[] },
 ) {
   const session = await requireFacility()
+  await requireCanMutate()
   const data = createContractSchema.parse(input)
   // Terms travel alongside the validated contract payload rather than as
   // part of it — embedding them in createContractSchema makes react-hook-form's
@@ -1386,6 +1388,7 @@ async function _updateContractImpl(
 ) {
   const session = await requireFacility()
   const { facility } = session
+  await requireCanMutate()
   const data = updateContractSchema.parse(input)
 
   // Verify ownership before updating
@@ -1607,6 +1610,7 @@ export async function createContractDocument(input: {
   // (deleteContractDocument already verified — pattern was right
   // there to copy).
   const { facility } = await requireFacility()
+  await requireCanMutate()
   await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(input.contractId, facility.id),
     select: { id: true },
@@ -1644,6 +1648,7 @@ export async function createContractDocumentSafe(input: {
 export async function deleteContractDocument(id: string) {
   const session = await requireFacility()
   const { facility } = session
+  await requireCanMutate()
 
   // Verify the document belongs to a contract owned by this facility
   const doc = await prisma.contractDocument.findUniqueOrThrow({
@@ -1682,6 +1687,7 @@ export async function deleteContractDocument(id: string) {
 export async function deleteContract(id: string) {
   const session = await requireFacility()
   const { facility } = session
+  await requireCanMutate()
 
   // Verify ownership + capture vendorId AND the full facility set before
   // deleting so we can recompute COG match-statuses everywhere the

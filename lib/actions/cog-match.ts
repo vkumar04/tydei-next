@@ -19,6 +19,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { resolveVendorIdsBulk } from "@/lib/vendors/resolve"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
@@ -31,6 +32,7 @@ export async function matchCOGToContracts(): Promise<{
   onContractAfter: number
 }> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   // 1. Get distinct (vendorName, current vendorId) pairs
   const distinctVendors = await prisma.cOGRecord.groupBy({

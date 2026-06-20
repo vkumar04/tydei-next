@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
@@ -39,6 +40,7 @@ export async function ingestExtractedContracts(
   results: IngestContractResult[]
 }> {
   const session = await requireFacility()
+  await requireCanMutate()
   const facilityId = session.facility.id
   const userId = session.user.id
 

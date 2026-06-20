@@ -23,6 +23,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { computeContractMetrics } from "@/lib/actions/contracts/derived-metrics"
 
@@ -46,6 +47,7 @@ export async function refreshContractMetrics(
   contractId: string,
 ): Promise<RefreshContractMetricsResult> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   try {
     const contract = await prisma.contract.findFirstOrThrow({
       where: contractOwnershipWhere(contractId, facility.id),

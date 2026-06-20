@@ -21,6 +21,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
@@ -135,6 +136,7 @@ export async function createRenewalNote(input: {
   note: string
 }): Promise<RenewalNote> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const validated = validateRenewalNote(input)
 
@@ -180,6 +182,7 @@ export async function createRenewalNote(input: {
 
 export async function deleteRenewalNote(id: string): Promise<void> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const note = await prisma.renewalNote.findUnique({
     where: { id },

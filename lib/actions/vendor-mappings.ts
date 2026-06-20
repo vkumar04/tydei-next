@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 import { remapCOGVendorName } from "@/lib/actions/cog-vendor-mapping"
 
@@ -72,6 +73,7 @@ export async function createVendorNameMapping(input: {
   confidenceScore?: number
 }) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   // Upsert on the (facilityId, cogVendorName) unique — a plain create would
   // throw if a rule (e.g. an unconfirmed suggestion) already exists.
@@ -102,6 +104,7 @@ export async function createVendorNameMapping(input: {
 
 export async function deleteVendorNameMapping(id: string) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   // Facility-scoped delete — deleteMany so a cross-facility id is a no-op
   // rather than an error.
   await prisma.vendorNameMapping.deleteMany({

@@ -9,6 +9,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
   bulkImportSchema,
   type BulkImportInput,
@@ -27,6 +28,7 @@ const BATCH_SIZE = 500
 
 export async function bulkImportCOGRecords(input: BulkImportInput) {
   const session = await requireFacility()
+  await requireCanMutate()
   const data = bulkImportSchema.parse(input)
   const t0 = Date.now()
   // Charles 2026-04-29: 46,512-record imports were silently failing

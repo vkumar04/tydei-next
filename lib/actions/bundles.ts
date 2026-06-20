@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { revalidatePath } from "next/cache"
@@ -200,6 +201,7 @@ export async function getBundleMembershipsForContract(contractId: string) {
 export async function createBundle(input: CreateBundleInput) {
   try {
     const { facility } = await requireFacility()
+    await requireCanMutate()
     const data = createBundleSchema.parse(input)
 
     // Ownership: the primary contract and every member contract must
@@ -287,6 +289,7 @@ export type UpdateBundleInput = z.infer<typeof updateBundleSchema>
 export async function updateBundle(input: UpdateBundleInput) {
   try {
     const { facility } = await requireFacility()
+    await requireCanMutate()
     const data = updateBundleSchema.parse(input)
     await assertBundleOwnedByFacility(facility.id, data.bundleId)
     await prisma.tieInBundle.update({
@@ -328,6 +331,7 @@ export async function updateBundle(input: UpdateBundleInput) {
 export async function deleteBundle(bundleId: string) {
   try {
     const { facility } = await requireFacility()
+    await requireCanMutate()
     await assertBundleOwnedByFacility(facility.id, bundleId)
     await prisma.tieInBundleMember.deleteMany({ where: { bundleId } })
     await prisma.tieInBundle.delete({ where: { id: bundleId } })

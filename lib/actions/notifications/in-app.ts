@@ -14,6 +14,7 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 
 export interface NotificationRow {
@@ -79,6 +80,7 @@ export async function getMyNotifications(): Promise<{
 
 export async function markNotificationRead(id: string): Promise<void> {
   const userId = await currentUserIdOrThrow()
+  await requireCanMutate()
   await prisma.notification.updateMany({
     where: { id, userId, readAt: null },
     data: { readAt: new Date() },
@@ -87,6 +89,7 @@ export async function markNotificationRead(id: string): Promise<void> {
 
 export async function markAllNotificationsRead(): Promise<{ updated: number }> {
   const userId = await currentUserIdOrThrow()
+  await requireCanMutate()
   const result = await prisma.notification.updateMany({
     where: { userId, readAt: null },
     data: { readAt: new Date() },

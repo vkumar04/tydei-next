@@ -258,9 +258,9 @@ async function scanFile(
  */
 const BASELINE_HITS = new Set<string>([
   // ai/document-index.ts: helpers called from gated AI actions only
-  "lib/actions/ai/document-index.ts:53",
-  "lib/actions/ai/document-index.ts:78",
-  "lib/actions/ai/document-index.ts:99",
+  "lib/actions/ai/document-index.ts:55",
+  "lib/actions/ai/document-index.ts:80",
+  "lib/actions/ai/document-index.ts:101",
   // ai-credits.ts: FIXED 2026-06-09 (audit BLOCKER) — all actions now
   // session-tenant-scoped via sessionTenant()/requireOwnedCredit; the
   // remaining by-id ops carry auth-scope-scanner-skip comments.
@@ -273,7 +273,7 @@ const BASELINE_HITS = new Set<string>([
   // moved to requireAdmin (2026-06-17 security fix) — the scanner auto-
   // exempts requireAdmin functions, so their prior allowlist entries
   // (105, 113) were removed as stale.
-  "lib/actions/benchmarks.ts:85",
+  "lib/actions/benchmarks.ts:86",
   // bundles.ts: updateBundle (292) / deleteBundle (333) run
   // assertBundleOwnedByFacility(facility.id, bundleId) — which findFirst's
   // the bundle via `primaryContract: contractsOwnedByFacility(...)` — IMMEDIATELY
@@ -282,17 +282,17 @@ const BASELINE_HITS = new Set<string>([
   // below; the static scanner can't follow the helper call. (The PRIOR
   // allowlist here claimed a "post-fetch facility equality check" that did
   // NOT exist and hid a real IDOR — these entries are the genuine fix.)
-  "lib/actions/bundles.ts:292",
-  "lib/actions/bundles.ts:333",
+  "lib/actions/bundles.ts:295",
+  "lib/actions/bundles.ts:337",
   // categories.ts: requireAdmin gates via admin-only UI; scanner
   // already exempts requireAdmin functions but these are public
   // reads / user-create paths
   // bumped 2026-06-09 after removeInverseCategoryMapping import + the
   // confirm-mapping cycle guard added lines.
-  "lib/actions/categories.ts:148",
-  "lib/actions/categories.ts:192",
+  "lib/actions/categories.ts:150",
+  "lib/actions/categories.ts:195",
   // change-proposals.ts: post-mutation re-read
-  "lib/actions/change-proposals.ts:175",
+  "lib/actions/change-proposals.ts:177",
   // contract-periods.ts: post-period-mutation re-reads. Lines drift
   // (bumped 2026-05-05 after the auto-match-oldest fallback fix —
   // see Bug #2: the action now does two `findFirst`s in sequence so
@@ -310,18 +310,18 @@ const BASELINE_HITS = new Set<string>([
   // these re-reads.
   // bumped 2026-06-18 after computeSyntheticContractPeriods gained the
   // precomputedCogUniverse perf param (+ if-block) shifted these re-reads.
-  "lib/actions/contract-periods.ts:482",
-  "lib/actions/contract-periods.ts:711",
+  "lib/actions/contract-periods.ts:484",
+  "lib/actions/contract-periods.ts:715",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
-  "lib/actions/contracts/proposals.ts:94",
-  "lib/actions/contracts/proposals.ts:118",
-  "lib/actions/contracts/proposals.ts:160",
-  "lib/actions/contracts/proposals.ts:171",
-  "lib/actions/contracts/proposals.ts:207",
-  "lib/actions/contracts/proposals.ts:220",
-  "lib/actions/contracts/proposals.ts:262",
-  "lib/actions/contracts/proposals.ts:278",
+  "lib/actions/contracts/proposals.ts:96",
+  "lib/actions/contracts/proposals.ts:120",
+  "lib/actions/contracts/proposals.ts:163",
+  "lib/actions/contracts/proposals.ts:174",
+  "lib/actions/contracts/proposals.ts:211",
+  "lib/actions/contracts/proposals.ts:224",
+  "lib/actions/contracts/proposals.ts:267",
+  "lib/actions/contracts/proposals.ts:283",
   // contracts.ts: post-update facility-set re-read + manual ownership
   // verification before contractDocument.delete (lines drift as the
   // file grows — bumped 2026-04-26 after analytics cache invalidation
@@ -339,16 +339,16 @@ const BASELINE_HITS = new Set<string>([
   // universe + union clause above the currentSpend cascade) shifted them.
   // bumped again 2026-06-11 after the B1 dedupe-window extension
   // (CREATE_DEDUPE_WINDOW_MS + widened idempotencyPut calls) shifted them.
-  "lib/actions/contracts.ts:1649",
-  "lib/actions/contracts.ts:1669",
+  "lib/actions/contracts.ts:1654",
+  "lib/actions/contracts.ts:1674",
   // imports/case-costing-import.ts: REMOVED from baseline 2026-06-09
   // (case-costing audit batch) — the remaining by-id ops (primaryCptCode
   // update, margin-rollup re-read + update) now carry inline
   // auth-scope-scanner-skip comments; caseIds come from facility-scoped
   // lookups/creates upstream.
   // invoices/dispute.ts: post-fetch facility equality check
-  "lib/actions/invoices/dispute.ts:43",
-  "lib/actions/invoices/dispute.ts:104",
+  "lib/actions/invoices/dispute.ts:45",
+  "lib/actions/invoices/dispute.ts:107",
   // invoices.ts: post-fetch ownership probe before mutation
   // (invoices.ts:325 removed 2026-06-09 — validateInvoice's render-time
   // line-item write moved into revalidateInvoice, which carries an
@@ -358,15 +358,15 @@ const BASELINE_HITS = new Set<string>([
   // (deleteInvoice's post-authorized delete now carries an inline
   // auth-scope-scanner-skip comment instead of a baseline entry —
   // 2026-06-17 best-practices sweep, robust to line drift.)
-  "lib/actions/invoices.ts:244",
+  "lib/actions/invoices.ts:246",
   // payor-contracts.ts: FIXED 2026-06-09 (audit BLOCKER) — the
   // calculatePayorMargins read is now facility-scoped (findFirstOrThrow
   // with facilityId).
   // renewals: post-fetch facility ownership equality check
   // (bumped 2026-06-09 after the M9 group-vendor OR clauses in
   // listRenewalNotesForVendor / submitRenewalProposal shifted lines)
-  "lib/actions/renewals/notes.ts:184",
-  "lib/actions/renewals/proposals.ts:220",
+  "lib/actions/renewals/notes.ts:187",
+  "lib/actions/renewals/proposals.ts:223",
   // report-scheduling.ts: DELETED 2026-06-17 (was a duplicate, vulnerable
   // ReportSchedule CRUD module with unscoped where:{id} IDORs + a
   // client-trusted facilityId on create — the allowlist comment claimed an
@@ -375,9 +375,9 @@ const BASELINE_HITS = new Set<string>([
   // reports/schedule.ts: facility-scoped — each mutation runs a
   // findFirst({id, facilityId}) ownership check before the bare-id
   // update/delete the scanner sees (update 223, delete 254, toggle 270).
-  "lib/actions/reports/schedule.ts:223",
-  "lib/actions/reports/schedule.ts:254",
-  "lib/actions/reports/schedule.ts:270",
+  "lib/actions/reports/schedule.ts:226",
+  "lib/actions/reports/schedule.ts:258",
+  "lib/actions/reports/schedule.ts:275",
   // settings.ts: all session-derived / assertCallerCanManage member
   // lookups now carry inline `// auth-scope-scanner-skip:` comments
   // (line-number baseline removed 2026-06-19 — the Settings/Users feature
@@ -385,7 +385,7 @@ const BASELINE_HITS = new Set<string>([
   // getFacilityProfile/getVendorProfile own-row reads and the
   // remove/update/access-tier member target fetches.
   // vendors.ts: read-only by id (Vendor is a shared resource)
-  "lib/actions/vendors.ts:73",
+  "lib/actions/vendors.ts:74",
 ])
 
 describe("server-action auth-scope scanner (Charles audit suggestion #1)", () => {

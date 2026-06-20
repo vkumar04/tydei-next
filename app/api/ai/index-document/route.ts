@@ -64,8 +64,7 @@ export async function POST(request: Request) {
     })
     return Response.json(result)
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Indexing failed"
     console.error("[/api/ai/index-document] failed:", err)
-    return Response.json({ error: message }, { status: 500 })
+    return Response.json({ error: "Indexing failed" }, { status: 500 })
   }
 }

@@ -54,8 +54,7 @@ export async function POST(request: Request) {
     const report = await generateReportFromPrompt({ prompt: parsed.data.prompt })
     return Response.json({ report })
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Report generation failed"
     console.error("[/api/ai/generate-report] failed:", err)
-    return Response.json({ error: message }, { status: 500 })
+    return Response.json({ error: "Report generation failed" }, { status: 500 })
   }
 }

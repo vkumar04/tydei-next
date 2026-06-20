@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
 import { revalidatePath } from "next/cache"
@@ -122,6 +123,7 @@ export async function remapCOGVendorName(input: {
   newVendorId: string | null
 }): Promise<{ recordsUpdated: number }> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const name = input.vendorName.trim()
   if (!name) throw new Error("vendorName required")
 

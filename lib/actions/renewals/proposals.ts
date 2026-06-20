@@ -24,6 +24,7 @@
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import {
@@ -77,6 +78,7 @@ export async function submitRenewalProposal(input: {
   notes: string
 }): Promise<ContractChangeProposal> {
   const { vendor, user } = await requireVendor()
+  await requireCanMutate()
 
   // Validate the proposed terms via the pure helper. Throws
   // `ProposalValidationError` on bad shape — we let it bubble so the
@@ -201,6 +203,7 @@ export async function reviewRenewalProposal(input: {
   note?: string
 }): Promise<ContractChangeProposal> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   // Validate the decision + note (countered/rejected require ≥10 chars).
   const validated = validateReviewDecision({

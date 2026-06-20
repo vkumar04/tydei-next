@@ -3,6 +3,7 @@
 import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 
@@ -90,6 +91,7 @@ export async function approveContractChangeProposal(
   proposalId: string,
 ): Promise<void> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id: proposalId },
@@ -156,6 +158,7 @@ export async function rejectContractChangeProposal(
   notes: string,
 ): Promise<void> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id: proposalId },
@@ -203,6 +206,7 @@ export async function requestProposalRevision(
   notes: string,
 ): Promise<void> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id: proposalId },
@@ -258,6 +262,7 @@ export async function counterContractChangeProposal(
   notes: string,
 ): Promise<void> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id: proposalId },

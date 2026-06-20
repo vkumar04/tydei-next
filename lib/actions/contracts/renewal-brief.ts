@@ -25,6 +25,7 @@ import { createHash } from "node:crypto"
 import { generateText, Output } from "ai"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { claudeModel } from "@/lib/ai/config"
@@ -70,6 +71,12 @@ export async function generateRenewalBrief(
   opts?: { forceFresh?: boolean },
 ): Promise<RenewalBrief> {
   const session = await requireFacility()
+
+  // Throttle the unthrottled Opus call (cost-abuse DoS guard).
+  const { success } = rateLimit(`ai-renewal:${session.user.id}`, 10, 60_000)
+  if (!success) {
+    throw new Error("Too many requests, try again shortly.")
+  }
 
   // ── 1. Load contract + all the history Claude needs ────────────────
   const contract = await prisma.contract.findFirst({

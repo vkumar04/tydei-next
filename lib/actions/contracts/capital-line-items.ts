@@ -14,6 +14,7 @@ import { z } from "zod"
 import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
@@ -54,6 +55,7 @@ export async function createCapitalLineItem(
   input: CapitalLineItemInput,
 ) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   await prisma.contract.findFirstOrThrow({
     where: contractOwnershipWhere(contractId, facility.id),
     select: { id: true },
@@ -101,6 +103,7 @@ export async function updateCapitalLineItem(
   input: Partial<CapitalLineItemInput>,
 ) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   // Resolve parent contract through the row to verify ownership.
   const existing = await prisma.contractCapitalLineItem.findUniqueOrThrow({
     where: { id: itemId },
@@ -148,6 +151,7 @@ export async function updateCapitalLineItem(
 /** Delete a line item. */
 export async function deleteCapitalLineItem(itemId: string) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const existing = await prisma.contractCapitalLineItem.findUniqueOrThrow({
     where: { id: itemId },
     select: { contractId: true },

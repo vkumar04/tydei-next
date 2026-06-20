@@ -4,6 +4,7 @@ import type { Prisma } from "@/lib/generated/prisma/client"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
@@ -354,6 +355,7 @@ export async function createContractTransaction(input: {
   rebateId?: string
 }) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
 
   // Verify access
   await prisma.contract.findUniqueOrThrow({
@@ -635,6 +637,7 @@ export async function updateContractTransaction(
   input: UpdateContractTransactionInput,
 ): Promise<void> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   // Ownership guard: the contract must belong to this facility.
   await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(input.contractId, facility.id),
@@ -693,6 +696,7 @@ export async function deleteContractTransaction(input: {
   contractId: string
 }): Promise<void> {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(input.contractId, facility.id),
     select: { id: true },

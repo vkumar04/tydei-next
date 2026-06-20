@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
@@ -36,6 +37,7 @@ export async function createContractDocument(
   input: CreateContractDocumentInput,
 ) {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   // Ownership gate — throws if the contract isn't on this facility (primary
   // or via join table). `facilityId` is kept as a top-level predicate so

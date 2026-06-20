@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
   cogFiltersSchema,
   createCOGRecordSchema,
@@ -109,6 +110,7 @@ export async function getCOGRecords(input: COGFilters) {
 
 export async function createCOGRecord(input: CreateCOGRecordInput) {
   const session = await requireFacility()
+  await requireCanMutate()
   const data = createCOGRecordSchema.parse(input)
 
   // Mirror the bulk-import category inference: when the input doesn't
@@ -241,6 +243,7 @@ export async function computePricingVsCOG(
 
 export async function deleteCOGRecord(id: string) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   await prisma.cOGRecord.delete({ where: { id, facilityId: facility.id } })
 }
 
@@ -248,6 +251,7 @@ export async function deleteCOGRecord(id: string) {
 
 export async function bulkDeleteCOGRecords(ids: string[]) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const result = await prisma.cOGRecord.deleteMany({
     where: { id: { in: ids }, facilityId: facility.id },
   })
@@ -258,6 +262,7 @@ export async function bulkDeleteCOGRecords(ids: string[]) {
 
 export async function clearAllCOGRecords() {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const result = await prisma.cOGRecord.deleteMany({
     where: { facilityId: facility.id },
   })
@@ -268,6 +273,7 @@ export async function clearAllCOGRecords() {
 
 export async function deleteCOGFileByDate(dateStr: string) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const date = new Date(dateStr)
   const nextDay = new Date(date)
   nextDay.setDate(nextDay.getDate() + 1)
@@ -297,6 +303,7 @@ export async function updateCOGRecord(
   }
 ) {
   const { facility } = await requireFacility()
+  await requireCanMutate()
   const extendedPrice =
     data.unitCost !== undefined && data.quantity !== undefined
       ? data.unitCost * data.quantity

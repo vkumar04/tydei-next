@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import {
   createPOSchema,
@@ -152,6 +153,7 @@ export async function createPurchaseOrder(input: CreatePOInput) {
   // Pre-fix a facility could tag its PO/line items with another
   // facility's contract id, polluting joined views and savings math.
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
   const data = createPOSchema.parse(input)
   const contractIds = new Set<string>()
   if (data.contractId) contractIds.add(data.contractId)
@@ -309,6 +311,7 @@ export async function createPurchaseOrder(input: CreatePOInput) {
 
 export async function updatePOStatus(id: string, status: POStatus) {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   // H4 (2026-06-09 audit): validate the transition server-side against the
   // canonical PO_STATUS_FLOW map. Previously any status jump (including

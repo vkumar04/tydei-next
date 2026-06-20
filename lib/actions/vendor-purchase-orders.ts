@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 import {
   createVendorPOSchema,
@@ -266,6 +267,7 @@ export async function getVendorFacilityProducts(input: {
 
 export async function createVendorPurchaseOrder(rawInput: CreateVendorPOInput) {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
 
   // M8 (2026-06-09 audit): validate with zod, mirroring the facility
   // path. Previously quantity 0, negative prices, empty descriptions and

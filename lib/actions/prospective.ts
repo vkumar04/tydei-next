@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { createInAppNotificationsInternal } from "@/lib/notifications/in-app-helper"
@@ -257,6 +258,7 @@ export async function createProposal(input: {
   proposalTerms?: ProposalTermSummary[]
 }): Promise<VendorProposal> {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
 
   const totalCost = input.pricingItems.reduce(
     (s, p) => s + p.proposedPrice * (p.quantity ?? 1),
@@ -373,6 +375,7 @@ export async function createProposal(input: {
  */
 export async function deleteProposal(id: string): Promise<void> {
   const { vendor } = await requireVendor()
+  await requireCanMutate()
 
   // Current storage: draft PendingContract row, vendor-scoped.
   const pending = await prisma.pendingContract.findFirst({
