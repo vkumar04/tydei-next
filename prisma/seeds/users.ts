@@ -55,6 +55,8 @@ export async function seedUsers(
   const vendorHash = await hashPassword("demo-vendor-2024")
   const adminHash = await hashPassword("demo-admin-2024")
   const memberHash = await hashPassword("member-2024")
+  // Per-access-tier demo logins (Advanced / User) share one password.
+  const demoTierHash = await hashPassword("demo-2024")
 
   // --- Demo: facility user ---
   const facilityUser = await prisma.user.create({
@@ -67,6 +69,28 @@ export async function seedUsers(
     data: { userId: facilityUser.id, organizationId: lighthouseOrg.id, role: "admin" },
   })
 
+  // --- Demo: facility Advanced + User (read-only) tiers ---
+  // accessTier drives the Settings/Users gates; org role stays "member".
+  const facilityAdv = await prisma.user.create({
+    data: { name: "Facility Advanced", email: "demo-facility-adv@tydei.com", emailVerified: true, role: "facility", lastLoginAt: new Date() },
+  })
+  await prisma.account.create({
+    data: { userId: facilityAdv.id, accountId: facilityAdv.id, providerId: "credential", password: demoTierHash },
+  })
+  await prisma.member.create({
+    data: { userId: facilityAdv.id, organizationId: lighthouseOrg.id, role: "member", accessTier: "advanced" },
+  })
+
+  const facilityRO = await prisma.user.create({
+    data: { name: "Facility User (Read-only)", email: "demo-facility-user@tydei.com", emailVerified: true, role: "facility", lastLoginAt: new Date() },
+  })
+  await prisma.account.create({
+    data: { userId: facilityRO.id, accountId: facilityRO.id, providerId: "credential", password: demoTierHash },
+  })
+  await prisma.member.create({
+    data: { userId: facilityRO.id, organizationId: lighthouseOrg.id, role: "member", accessTier: "user" },
+  })
+
   // --- Demo: vendor user ---
   const vendorUser = await prisma.user.create({
     data: { name: "Vendor Demo", email: "demo-vendor@tydei.com", emailVerified: true, role: "vendor", lastLoginAt: new Date() },
@@ -76,6 +100,27 @@ export async function seedUsers(
   })
   await prisma.member.create({
     data: { userId: vendorUser.id, organizationId: strykerOrg.id, role: "admin" },
+  })
+
+  // --- Demo: vendor Advanced + User (read-only) tiers ---
+  const vendorAdv = await prisma.user.create({
+    data: { name: "Vendor Advanced", email: "demo-vendor-adv@tydei.com", emailVerified: true, role: "vendor", lastLoginAt: new Date() },
+  })
+  await prisma.account.create({
+    data: { userId: vendorAdv.id, accountId: vendorAdv.id, providerId: "credential", password: demoTierHash },
+  })
+  await prisma.member.create({
+    data: { userId: vendorAdv.id, organizationId: strykerOrg.id, role: "member", accessTier: "advanced" },
+  })
+
+  const vendorRO = await prisma.user.create({
+    data: { name: "Vendor User (Read-only)", email: "demo-vendor-user@tydei.com", emailVerified: true, role: "vendor", lastLoginAt: new Date() },
+  })
+  await prisma.account.create({
+    data: { userId: vendorRO.id, accountId: vendorRO.id, providerId: "credential", password: demoTierHash },
+  })
+  await prisma.member.create({
+    data: { userId: vendorRO.id, organizationId: strykerOrg.id, role: "member", accessTier: "user" },
   })
 
   // --- Demo: admin user ---
@@ -120,7 +165,7 @@ export async function seedUsers(
   const users = { facilityUser, vendorUser, adminUser, sarahChen, jamesWilson, mariaGarcia }
   const organizations = { lighthouseOrg, heritageOrg, summitOrg, strykerOrg, medtronicOrg }
 
-  console.log("  Users: 6 (3 demo + 3 team members)")
+  console.log("  Users: 10 (3 demo + 4 access-tier demos + 3 team members)")
   console.log("  Organizations: 5 (3 facility + 2 vendor)")
 
   return { users, organizations }

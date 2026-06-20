@@ -3,24 +3,24 @@
 import { motion } from "motion/react"
 import { Button } from "@/components/ui/button"
 import { staggerContainer, fadeInUp } from "@/lib/animations"
-
-const DEMO_ACCOUNTS = {
-  facility: { email: "demo-facility@tydei.com", password: "demo-facility-2024" },
-  vendor: { email: "demo-vendor@tydei.com", password: "demo-vendor-2024" },
-  admin: { email: "demo-admin@tydei.com", password: "demo-admin-2024" },
-} as const
+import type { DemoAccount } from "@/lib/auth/demo-accounts"
 
 interface DemoLoginButtonsProps {
+  /** Accounts to render, grouped by side. Supplied by the server (login page)
+   *  only when SHOW_DEMO_LOGINS is on — no credentials are hardcoded here. */
+  accounts: DemoAccount[]
   onFill: (email: string, password: string) => void
   isLoading: boolean
 }
 
-const roles = [
-  { role: "facility" as const, label: "Facility Demo" },
-  { role: "vendor" as const, label: "Vendor Demo" },
-]
+const GROUP_ORDER: DemoAccount["group"][] = ["Facility", "Vendor", "Admin"]
 
-export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
+export function DemoLoginButtons({ accounts, onFill, isLoading }: DemoLoginButtonsProps) {
+  const groups = GROUP_ORDER.map((group) => ({
+    group,
+    items: accounts.filter((a) => a.group === group),
+  })).filter((g) => g.items.length > 0)
+
   return (
     <div className="space-y-3">
       <div className="relative">
@@ -28,29 +28,37 @@ export function DemoLoginButtons({ onFill, isLoading }: DemoLoginButtonsProps) {
           <span className="w-full border-t" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-2 text-muted-foreground">Or</span>
+          <span className="bg-card px-2 text-muted-foreground">Demo logins</span>
         </div>
       </div>
+
       <motion.div
-        className="grid grid-cols-2 gap-2"
+        className="space-y-2"
         variants={staggerContainer}
         initial="hidden"
         animate="show"
       >
-        {roles.map(({ role, label }) => (
-          <motion.div key={role} variants={fadeInUp}>
-            <Button
-              variant="outline"
-              type="button"
-              disabled={isLoading}
-              onClick={() => {
-                const creds = DEMO_ACCOUNTS[role]
-                onFill(creds.email, creds.password)
-              }}
-              className="w-full"
-            >
-              {label}
-            </Button>
+        {groups.map(({ group, items }) => (
+          <motion.div key={group} variants={fadeInUp} className="space-y-1">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {group}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {items.map((acc) => (
+                <Button
+                  key={acc.email}
+                  variant="outline"
+                  type="button"
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={() => onFill(acc.email, acc.password)}
+                  className="w-full text-xs"
+                  title={acc.email}
+                >
+                  {acc.label}
+                </Button>
+              ))}
+            </div>
           </motion.div>
         ))}
       </motion.div>
