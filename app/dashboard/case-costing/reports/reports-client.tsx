@@ -5,7 +5,6 @@ import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
@@ -25,6 +24,11 @@ import {
 import { Label } from "@/components/ui/label"
 import { CostDistributionChart } from "@/components/facility/case-costing/cost-distribution-chart"
 import { SurgeonVendorSpendReport } from "@/components/facility/case-costing/surgeon-vendor-spend-report"
+import { DataTable } from "@/components/shared/tables/data-table"
+import { surgeonComparisonColumns } from "@/components/facility/case-costing/report-surgeon-comparison-columns"
+import { procedureAnalysisColumns } from "@/components/facility/case-costing/report-procedure-analysis-columns"
+import { rebateContributionColumns } from "@/components/facility/case-costing/report-rebate-contribution-columns"
+import { trueMarginColumns } from "@/components/facility/case-costing/report-true-margin-columns"
 import {
   useCaseCostingReport,
   useCases,
@@ -46,7 +50,6 @@ import { chartTooltipStyle } from "@/lib/chart-config"
 import {
   ArrowLeft,
   TrendingUp,
-  TrendingDown,
   Download,
   Filter,
   Printer,
@@ -589,60 +592,15 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
               {surgeonStats.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No surgeon data available.</p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Surgeon</TableHead>
-                      <TableHead className="text-right">Cases</TableHead>
-                      <TableHead className="text-right">Total Spend</TableHead>
-                      <TableHead className="text-right">Avg Margin</TableHead>
-                      <TableHead className="text-right">Compliance %</TableHead>
-                      <TableHead className="text-right">Trend</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {surgeonStats.map((s) => (
-                      <TableRow key={s.name}>
-                        <TableCell className="font-medium">{s.name}</TableCell>
-                        <TableCell className="text-right">{s.cases}</TableCell>
-                        <TableCell className="text-right">
-                          ${Math.round(s.totalSpend).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span
-                            className={
-                              s.avgMargin >= 0
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-red-600 dark:text-red-400"
-                            }
-                          >
-                            ${Math.round(s.avgMargin).toLocaleString()}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge
-                            variant={
-                              s.complianceRate >= 80
-                                ? "default"
-                                : s.complianceRate >= 50
-                                  ? "secondary"
-                                  : "destructive"
-                            }
-                          >
-                            {Math.round(s.complianceRate)}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {s.avgMargin >= 0 ? (
-                            <TrendingUp className="ml-auto size-4 text-green-600 dark:text-green-400" />
-                          ) : (
-                            <TrendingDown className="ml-auto size-4 text-red-600 dark:text-red-400" />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <DataTable
+                  columns={surgeonComparisonColumns}
+                  data={surgeonStats}
+                  enableColumnFilters
+                  searchKey="name"
+                  searchPlaceholder="Search surgeon…"
+                  getRowId={(row) => row.name}
+                  pagination
+                />
               )}
             </CardContent>
           </Card>
@@ -658,36 +616,15 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
               {cptStats.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No procedure data available.</p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>CPT Code</TableHead>
-                      <TableHead className="text-right">Case Count</TableHead>
-                      <TableHead className="text-right">Avg Cost</TableHead>
-                      <TableHead className="text-right">Min Cost</TableHead>
-                      <TableHead className="text-right">Max Cost</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {cptStats.map((p) => (
-                      <TableRow key={p.code}>
-                        <TableCell className="font-medium font-mono">
-                          {p.code}
-                        </TableCell>
-                        <TableCell className="text-right">{p.count}</TableCell>
-                        <TableCell className="text-right">
-                          ${Math.round(p.avgCost).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          ${Math.round(p.minCost).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          ${Math.round(p.maxCost).toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <DataTable
+                  columns={procedureAnalysisColumns}
+                  data={cptStats}
+                  enableColumnFilters
+                  searchKey="code"
+                  searchPlaceholder="Search CPT code…"
+                  getRowId={(row) => row.code}
+                  pagination
+                />
               )}
             </CardContent>
           </Card>
@@ -777,44 +714,15 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                 <p className="text-sm text-muted-foreground">No rebate data available.</p>
               ) : (
                 <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Surgeon</TableHead>
-                        <TableHead className="text-right">Cases</TableHead>
-                        <TableHead className="text-right">Spend</TableHead>
-                        <TableHead className="text-right">Est. Rebate</TableHead>
-                        <TableHead className="text-right">Compliance %</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {rebateStats.map((r) => (
-                        <TableRow key={r.name}>
-                          <TableCell className="font-medium">{r.name}</TableCell>
-                          <TableCell className="text-right">{r.cases}</TableCell>
-                          <TableCell className="text-right">
-                            ${Math.round(r.spend).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right text-green-600 dark:text-green-400">
-                            ${Math.round(r.estRebate).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge
-                              variant={
-                                r.complianceRate >= 80
-                                  ? "default"
-                                  : r.complianceRate >= 50
-                                    ? "secondary"
-                                    : "destructive"
-                              }
-                            >
-                              {Math.round(r.complianceRate)}%
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <DataTable
+                    columns={rebateContributionColumns}
+                    data={rebateStats}
+                    enableColumnFilters
+                    searchKey="name"
+                    searchPlaceholder="Search surgeon…"
+                    getRowId={(row) => row.name}
+                    pagination
+                  />
 
                   <div className="mt-4 flex items-center gap-4 rounded-lg bg-muted/50 p-4">
                     <div>
@@ -923,80 +831,15 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
                     </div>
                   </div>
 
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Procedure</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                        <TableHead className="text-right">
-                          Direct Cost
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Rebate Allocation
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Effective Cost
-                        </TableHead>
-                        <TableHead className="text-right">Standard %</TableHead>
-                        <TableHead className="text-right">True %</TableHead>
-                        <TableHead className="text-right">
-                          Improvement
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {trueMargin.procedures.map((p) => (
-                        <TableRow key={p.procedureId}>
-                          <TableCell className="font-medium">
-                            <div>{p.procedureName}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {p.caseNumber}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${Math.round(p.totalRevenue).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${Math.round(p.directCost).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right text-green-700 dark:text-green-400">
-                            +${Math.round(p.rebateAllocation).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${Math.round(p.effectiveCost).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {p.standardMarginPercent != null
-                              ? `${p.standardMarginPercent.toFixed(1)}%`
-                              : "—"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span
-                              className={
-                                p.trueMarginPercent != null &&
-                                p.trueMarginPercent >= 0
-                                  ? "text-green-600 dark:text-green-400"
-                                  : "text-red-600 dark:text-red-400"
-                              }
-                            >
-                              {p.trueMarginPercent != null
-                                ? `${p.trueMarginPercent.toFixed(1)}%`
-                                : "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {p.marginImprovementPercent != null ? (
-                              <Badge variant="secondary">
-                                +{p.marginImprovementPercent.toFixed(2)} pp
-                              </Badge>
-                            ) : (
-                              "—"
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <DataTable
+                    columns={trueMarginColumns}
+                    data={trueMargin.procedures}
+                    enableColumnFilters
+                    searchKey="procedureName"
+                    searchPlaceholder="Search procedure…"
+                    getRowId={(row) => row.procedureId}
+                    pagination
+                  />
 
                   {trueMargin.vendors.length > 0 && (
                     <div className="mt-6">

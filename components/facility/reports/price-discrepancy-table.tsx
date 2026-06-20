@@ -241,6 +241,7 @@ function buildColumns(): ColumnDef<
     {
       accessorKey: "itemDescription",
       header: "Item",
+      meta: { filterVariant: "text", filterLabel: "Item" },
       cell: ({ row }) => (
         <div className="max-w-[200px]">
           <p className="font-medium truncate">{row.original.itemDescription}</p>
@@ -255,6 +256,7 @@ function buildColumns(): ColumnDef<
     {
       accessorKey: "vendorName",
       header: "Vendor",
+      meta: { filterVariant: "select", filterLabel: "Vendor" },
       cell: ({ row }) =>
         row.original.vendorId ? (
           <Link
@@ -270,8 +272,11 @@ function buildColumns(): ColumnDef<
     {
       accessorKey: "contractPrice",
       header: "Contract Price",
-      cell: ({ getValue }) => {
-        const v = getValue<number | null>()
+      meta: { filterVariant: "range", filterLabel: "Contract $" },
+      accessorFn: (row) =>
+        row.contractPrice == null ? NaN : Number(row.contractPrice),
+      cell: ({ row }) => {
+        const v = row.original.contractPrice
         return v != null ? (
           <span className="font-mono text-sm">{formatCurrency(v, true)}</span>
         ) : (
@@ -282,6 +287,8 @@ function buildColumns(): ColumnDef<
     {
       accessorKey: "invoicePrice",
       header: "Actual Price",
+      meta: { filterVariant: "range", filterLabel: "Actual $" },
+      accessorFn: (row) => Number(row.invoicePrice),
       cell: ({ row }) => {
         const type = row.original._type
         return (
@@ -300,8 +307,11 @@ function buildColumns(): ColumnDef<
     {
       accessorKey: "_varianceDollar",
       header: "Variance $",
-      cell: ({ getValue }) => {
-        const v = getValue<number | null>()
+      meta: { filterVariant: "range", filterLabel: "Variance $" },
+      accessorFn: (row) =>
+        row._varianceDollar == null ? NaN : Number(row._varianceDollar),
+      cell: ({ row }) => {
+        const v = row.original._varianceDollar
         if (v == null) return <span className="text-muted-foreground">--</span>
         const isPositive = v > 0
         return (
@@ -322,8 +332,11 @@ function buildColumns(): ColumnDef<
     {
       accessorKey: "variancePercent",
       header: "Variance %",
-      cell: ({ getValue }) => {
-        const v = getValue<number | null>()
+      meta: { filterVariant: "range", filterLabel: "Variance %" },
+      accessorFn: (row) =>
+        row.variancePercent == null ? NaN : Number(row.variancePercent),
+      cell: ({ row }) => {
+        const v = row.original.variancePercent
         if (v == null) return <span className="text-muted-foreground">--</span>
         const isPositive = v > 0
         return (
@@ -345,16 +358,19 @@ function buildColumns(): ColumnDef<
     {
       accessorKey: "_type",
       header: "Type",
+      meta: { filterVariant: "select", filterLabel: "Type" },
       cell: ({ getValue }) => getTypeBadge(getValue<DiscrepancyType>()),
     },
     {
       accessorKey: "_band",
       header: "Severity",
+      meta: { filterVariant: "select", filterLabel: "Severity" },
       cell: ({ getValue }) => bandBadge(getValue<V0CogVarianceBand | null>()),
     },
     {
       id: "actions",
       header: "Reference",
+      meta: { filterVariant: "none" },
       cell: ({ row }) =>
         // Invoice-backed rows link to the invoice; COG/PO-sourced rows just
         // show the PO number (no invoice to drill into).
@@ -501,6 +517,7 @@ export function PriceDiscrepancyTable({
         data={filtered}
         pagination
         pageSize={20}
+        enableColumnFilters
       />
     </div>
   )

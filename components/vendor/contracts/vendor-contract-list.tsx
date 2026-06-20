@@ -4,7 +4,10 @@ import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DataTable } from "@/components/shared/tables/data-table"
-import { getVendorContractColumns } from "./vendor-contract-columns"
+import {
+  getVendorContractColumns,
+  type ContractWithFacility,
+} from "./vendor-contract-columns"
 import { VendorContractsHero } from "./vendor-contracts-hero"
 import {
   VendorContractsControlBar,
@@ -154,10 +157,13 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
     }
   }, [statusTab, rawContracts, mappedPending])
 
-  // Apply facility + search filters on the client
-  const contracts = useMemo(() => {
+  // Apply facility + search filters on the client. The merged set blends
+  // serialized Contract rows with hand-mapped PendingContract rows; both
+  // satisfy the display-only fields the columns read, so we narrow to the
+  // shared row shape at this single boundary (replaces the old `as any`).
+  const contracts = useMemo((): ContractWithFacility[] => {
     const q = searchQuery.trim().toLowerCase()
-    return mergedContracts.filter((c) => {
+    const rows = mergedContracts.filter((c) => {
       if (facilityFilter !== "all" && c.facility?.id !== facilityFilter) {
         return false
       }
@@ -173,6 +179,7 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
       }
       return true
     })
+    return rows as unknown as ContractWithFacility[]
   }, [mergedContracts, facilityFilter, searchQuery])
 
   const isLoading = contractsLoading || pendingLoading
@@ -283,15 +290,15 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           <DataTable
-            columns={columns as any}
-            data={contracts as any}
+            columns={columns}
+            data={contracts}
             isLoading={isLoading}
+            enableColumnFilters
             // Bug-bash 2026-06-11 B2: whole row clicks through to the
             // contract detail (active) or submission edit page (pending).
             // Menu buttons inside the row stopPropagation in the columns.
-            onRowClick={(row: { id: string }) => handleView(row.id)}
+            onRowClick={(row) => handleView(row.id)}
           />
         </CardContent>
       </Card>

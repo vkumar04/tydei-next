@@ -154,6 +154,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     {
       accessorKey: "invoiceNumber",
       header: "Invoice #",
+      meta: { filterVariant: "text", filterLabel: "Invoice #" },
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <Hash className="h-3.5 w-3.5 text-muted-foreground" />
@@ -164,6 +165,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     {
       accessorKey: "facility.name",
       header: "Facility",
+      meta: { filterVariant: "select", filterLabel: "Facility" },
       accessorFn: (row) => row.facility?.name ?? "N/A",
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
@@ -177,6 +179,8 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     {
       accessorKey: "totalInvoiceCost",
       header: "Amount",
+      meta: { filterVariant: "range", filterLabel: "Amount" },
+      accessorFn: (row) => Number(row.totalInvoiceCost ?? 0),
       cell: ({ row }) => (
         <span className="font-semibold tabular-nums">
           {formatCurrency(Number(row.original.totalInvoiceCost ?? 0))}
@@ -186,6 +190,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     {
       accessorKey: "status",
       header: "Status",
+      meta: { filterVariant: "select", filterLabel: "Status" },
       cell: ({ row }) => {
         const s = row.original.status
         const config = statusConfig[s] ?? statusConfig.pending
@@ -201,6 +206,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     {
       accessorKey: "invoiceDate",
       header: "Submitted",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <CalendarDays className="h-3.5 w-3.5" />
@@ -214,6 +220,8 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     {
       accessorKey: "variance",
       header: "Variance",
+      meta: { filterVariant: "range", filterLabel: "Variance %" },
+      accessorFn: (row) => Number(row.variancePercent ?? 0),
       cell: ({ row }) => {
         const variance = row.original.variance
         const pct = row.original.variancePercent
@@ -240,8 +248,11 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     {
       id: "priority",
       header: "Priority",
+      meta: { filterVariant: "select", filterLabel: "Priority" },
       // v0 doc invoice-validation §8: classify by |variance|.
       // |pct| > 5 → high, > 2 → medium, > 0 → low, else none.
+      accessorFn: (row) =>
+        classifyInvoicePriority({ variancePct: row.variancePercent ?? 0 }),
       cell: ({ row }) => {
         const pct = row.original.variancePercent ?? 0
         const priority = classifyInvoicePriority({ variancePct: pct })
@@ -263,6 +274,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
     {
       id: "actions",
       header: "Actions",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -337,6 +349,7 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
         columns={columns}
         data={invoices}
         isLoading={isLoading}
+        enableColumnFilters
         onRowClick={(row) => {
           setSelectedInvoice(row)
           setViewDialogOpen(true)

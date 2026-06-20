@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-type ContractWithFacility = Contract & {
+export type ContractWithFacility = Contract & {
   facility: Pick<Facility, "id" | "name"> | null
   productCategory: Pick<ProductCategory, "id" | "name"> | null
   /**
@@ -44,6 +44,7 @@ export function getVendorContractColumns(
     {
       accessorKey: "name",
       header: "Contract Name",
+      meta: { filterVariant: "text", filterLabel: "Name" },
       cell: ({ row }) => (
         <div>
           <p className="font-medium">{row.original.name}</p>
@@ -56,6 +57,7 @@ export function getVendorContractColumns(
     {
       accessorKey: "facility.name",
       header: "Facility",
+      meta: { filterVariant: "select", filterLabel: "Facility" },
       accessorFn: (row) => row.facility?.name ?? "N/A",
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
@@ -67,6 +69,7 @@ export function getVendorContractColumns(
     {
       accessorKey: "contractType",
       header: "Type",
+      meta: { filterVariant: "select", filterLabel: "Type" },
       cell: ({ row }) => (
         <span className="capitalize">{row.original.contractType.replace("_", " ")}</span>
       ),
@@ -74,6 +77,7 @@ export function getVendorContractColumns(
     {
       accessorKey: "status",
       header: "Status",
+      meta: { filterVariant: "select", filterLabel: "Status" },
       cell: ({ row }) => (
         <StatusBadge status={row.original.status} config={contractStatusConfig} />
       ),
@@ -84,21 +88,26 @@ export function getVendorContractColumns(
       // never computed here.
       accessorKey: "lastActionAt",
       header: "Last Action",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => formatDate(row.original.lastActionAt),
     },
     {
       accessorKey: "expirationDate",
       header: "End Date",
+      meta: { filterVariant: "none" },
       cell: ({ row }) => formatDate(row.original.expirationDate),
     },
     {
       accessorKey: "totalValue",
       header: "Value",
+      meta: { filterVariant: "range", filterLabel: "Value" },
+      accessorFn: (row) => Number(row.totalValue),
       cell: ({ row }) => formatCurrency(Number(row.original.totalValue)),
     },
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
+      meta: { filterVariant: "none" },
       cell: ({ row }) => {
         // Bug-bash 2026-06-11 B2: only PendingContract submissions are
         // deletable, and never an approved one (those back a live
