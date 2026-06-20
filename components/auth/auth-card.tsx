@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "motion/react"
+import Link from "next/link"
 import {
   Card,
   CardContent,
@@ -22,8 +23,13 @@ export function AuthCard({ title, description, children, footer, showTermsFooter
   return (
     <motion.div className="flex flex-col gap-6" variants={scaleIn} initial="hidden" animate="show">
       {/* Logo — canonical brand mark, matches marketing header + portals
-          (Vick 2026-06-18: auth card had drifted to a FileText icon). */}
-      <div className="flex items-center justify-center gap-2">
+          (Vick 2026-06-18: auth card had drifted to a FileText icon).
+          Links back to the landing page like the portal + marketing logos. */}
+      <Link
+        href="/"
+        className="flex items-center justify-center gap-2 transition-opacity hover:opacity-80"
+        aria-label="TYDEi home"
+      >
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
           <span className="text-xl font-bold text-primary-foreground">T</span>
         </div>
@@ -31,7 +37,7 @@ export function AuthCard({ title, description, children, footer, showTermsFooter
           <h1 className="text-2xl font-bold text-foreground">TYDEi</h1>
           <p className="text-sm text-muted-foreground">Healthcare Platform</p>
         </div>
-      </div>
+      </Link>
 
       <Card className="border-0 shadow-lg">
         <CardHeader className="text-center">

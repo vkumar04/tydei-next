@@ -15,7 +15,11 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <div className="flex items-center gap-3">
+        <Link
+          href="/"
+          className="flex items-center gap-3 transition-opacity hover:opacity-80"
+          aria-label="TYDEi home"
+        >
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
             <span className="text-lg font-bold text-primary-foreground">T</span>
           </div>
@@ -25,7 +29,7 @@ export function SiteHeader() {
               Healthcare Platform
             </span>
           </div>
-        </div>
+        </Link>
 
         <div className="hidden items-center gap-2 md:flex">
           <ThemeToggle />
