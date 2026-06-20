@@ -210,6 +210,9 @@ function AddTransactionButtons({
         queryKey: queryKeys.contracts.rebates(contractId),
       })
       queryClient.invalidateQueries({
+        queryKey: queryKeys.contracts.creditsPayments(contractId),
+      })
+      queryClient.invalidateQueries({
         queryKey: queryKeys.contracts.detail(contractId),
       })
       // E2: refresh the shortfall carry-forward ledger section.
@@ -512,10 +515,10 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
 
   // Logged credits + payments (dedicated Credit/Payment tables). Surfaced in
   // the ledger so a "Log Credit / Payment" entry is visibly recorded
-  // (Charles 2026-06-20). Shares the periods key so createContractTransaction's
-  // invalidate refreshes it.
+  // (Charles 2026-06-20). Uses its OWN key — reusing `periods` collided with
+  // the contract-detail getContractPeriods query and rendered "$NaN".
   const { data: creditPaymentData } = useQuery({
-    queryKey: queryKeys.contracts.periods(contractId),
+    queryKey: queryKeys.contracts.creditsPayments(contractId),
     queryFn: () => getContractCreditsAndPayments(contractId),
     enabled: !!contractId,
   })
@@ -535,6 +538,9 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
     })
     queryClient.invalidateQueries({
       queryKey: queryKeys.contracts.rebates(contractId),
+    })
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.contracts.creditsPayments(contractId),
     })
     queryClient.invalidateQueries({
       queryKey: queryKeys.contracts.detail(contractId),
