@@ -26,7 +26,10 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
+  // max-w-full + overflow-x-auto make a wide horizontal tab bar swipeable on
+  // mobile instead of clipping tabs out of reach. scrollbar-none is Tailwind
+  // v4's scrollbar-width:none utility; the webkit pseudo covers older Safari.
+  "group/tabs-list inline-flex w-fit max-w-full items-center justify-center overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:overflow-x-visible data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
