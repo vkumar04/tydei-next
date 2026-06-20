@@ -203,7 +203,10 @@ export function AdminDashboardClient() {
       )}
 
       {/* Quick Access & Activity */}
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* [&>*]:min-w-0 lets grid items shrink below their content's min-content
+          so the Recent Activity feed's `truncate` actually clips instead of
+          forcing the card (and the whole page) wider than the viewport. */}
+      <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
         {/* Quick Actions */}
         <Card>
           <CardHeader>
