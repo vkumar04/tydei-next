@@ -155,9 +155,20 @@ export async function getVendorReportData(input: {
       // `where` on periodStart/periodEnd — we replicate that filter here on
       // the synthetic rows). COG is per-facility, so the fallback is scoped
       // to the contract's OWN facilityId, never the vendor id.
+      // Exclude payment/credit-shaped legacy ContractPeriod rows so the real
+      // spend/rebate periods (or synthetic fallback) surface — same fix as the
+      // facility report (Charles 2026-06-20).
+      const spendPeriods = c.periods.filter(
+        (p) =>
+          !(
+            Number(p.totalSpend) === 0 &&
+            Number(p.rebateEarned) === 0 &&
+            Number(p.paymentActual) > 0
+          ),
+      )
       let periodRows: ReportPeriodRow[] = []
-      if (c.periods.length > 0) {
-        periodRows = c.periods.map((p) => ({
+      if (spendPeriods.length > 0) {
+        periodRows = spendPeriods.map((p) => ({
           id: p.id,
           periodStart: p.periodStart.toISOString(),
           periodEnd: p.periodEnd.toISOString(),

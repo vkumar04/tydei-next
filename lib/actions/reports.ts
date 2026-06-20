@@ -153,9 +153,25 @@ export async function getReportData(input: {
       // Transactions surfaces use, filtered to the requested window (the
       // persisted path filters via the Prisma `where` on periodStart/
       // periodEnd — we replicate that filter here on the synthetic rows).
+      // Charles 2026-06-20 ("not all the numbers for this contract are coming
+      // up in reports"): exclude payment/credit-shaped legacy ContractPeriod
+      // rows (totalSpend=0 ∧ rebateEarned=0 ∧ paymentActual>0, a single-day
+      // window) from the spend/rebate period set. Those are stray logged
+      // payments (pre-PR#72 storage); leaving them in made a contract with one
+      // such row take the persisted branch and render ONLY that $0-spend row,
+      // hiding the real COG-derived spend + rebate (the synthetic fallback
+      // below produces it).
+      const spendPeriods = c.periods.filter(
+        (p) =>
+          !(
+            Number(p.totalSpend) === 0 &&
+            Number(p.rebateEarned) === 0 &&
+            Number(p.paymentActual) > 0
+          ),
+      )
       let periodRows: ReportPeriodRow[]
-      if (c.periods.length > 0) {
-        periodRows = c.periods.map((p) => ({
+      if (spendPeriods.length > 0) {
+        periodRows = spendPeriods.map((p) => ({
           id: p.id,
           periodStart: p.periodStart.toISOString(),
           periodEnd: p.periodEnd.toISOString(),

@@ -542,6 +542,11 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
     queryClient.invalidateQueries({
       queryKey: queryKeys.contracts.creditsPayments(contractId),
     })
+    // Uncollecting/deleting a logged payment/credit must also refresh the
+    // capital balance card (Charles 2026-06-20 residual).
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.contracts.capitalScheduleBase,
+    })
     queryClient.invalidateQueries({
       queryKey: queryKeys.contracts.detail(contractId),
     })
