@@ -80,6 +80,53 @@ export function ContractAmortizationCard({
   }
 
   if (!data || !data.hasSchedule || data.schedule.length === 0) {
+    // Charles 2026-06-20: a pure capital contract whose cost is the Contract
+    // Value (no per-asset line items / financing schedule) still has a balance
+    // that logged payments + credits pay down. Show that balance instead of a
+    // bare "no schedule" placeholder so a logged credit is visibly applied.
+    if (data && data.capitalCost > 0) {
+      const balanceDue = Math.max(
+        data.capitalCost -
+          data.rebateAppliedToCapital -
+          data.paymentsAppliedToCapital,
+        0,
+      )
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Capital Balance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <SummaryTile
+                label="Capital Cost"
+                tooltip="The contract total — the cost of the capital, paid down by payments, credits, and any rebate applied to capital."
+                value={formatCurrency(data.capitalCost)}
+              />
+              <SummaryTile
+                label="Paid To Date"
+                tooltip="Logged payments + credits, plus any collected rebate applied to capital."
+                value={formatCurrency(data.paidToDate)}
+              />
+              <SummaryTile
+                label="Balance Due"
+                tooltip="Capital cost minus everything applied (payments, credits, rebate)."
+                value={formatCurrency(balanceDue)}
+              />
+              <SummaryTile
+                label="Payments Applied"
+                tooltip="Total of logged payments and credits against this capital balance."
+                value={formatCurrency(data.paymentsAppliedToCapital)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              No financing schedule on this contract — add capital line items
+              (cost, interest rate, term) to amortize it over time.
+            </p>
+          </CardContent>
+        </Card>
+      )
+    }
     return (
       <Card>
         <CardHeader>

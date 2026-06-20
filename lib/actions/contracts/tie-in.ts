@@ -437,6 +437,12 @@ export async function getContractCapitalSchedule(
       // capitalCost/etc. for schedule aggregation.
       capitalLineItems: { orderBy: { createdAt: "asc" } },
       name: true,
+      // Capital cost falls back to totalValue when there are no per-asset
+      // line items (Charles 2026-06-20: "contract total is the cost of the
+      // capital"). Payments + credits are logged paydowns of that balance.
+      totalValue: true,
+      payments: { select: { paymentAmount: true } },
+      creditEntries: { select: { creditAmount: true } },
       rebates: {
         select: {
           collectionDate: true,
@@ -493,11 +499,47 @@ export async function getContractCapitalSchedule(
 
   if (!contract) return empty
 
+  // Logged payments + credits pay down the capital balance regardless of
+  // whether a per-asset financing schedule exists (dedicated Payment/Credit
+  // tables — Charles 2026-06-20 "payments and credits are how things are
+  // paid off").
+  const paymentsAppliedToCapital =
+    (contract.payments ?? []).reduce((s, p) => s + Number(p.paymentAmount), 0) +
+    (contract.creditEntries ?? []).reduce((s, c) => s + Number(c.creditAmount), 0)
+
   // Charles audit suggestion #4 (v0-port): capital lives in line items.
-  // No items → no schedule. Each item carries its own rate / term /
-  // cadence; the aggregation below sums per-item PMTs.
   const lineItems = normalizeCapitalLineItems(contract)
-  if (lineItems.length === 0) return empty
+  if (lineItems.length === 0) {
+    // No per-asset line items: for a capital / tie-in contract the capital
+    // cost is the contract total (Contract.totalValue — Charles 2026-06-20
+    // "contract total is the cost of the capital"). Surface a simple balance
+    // (no financing schedule) so logged payments/credits visibly pay it down.
+    // Previously this returned `empty`, so a pure capital contract had no
+    // balance at all and a logged credit applied to nothing.
+    // Only a pure `capital` contract uses totalValue as the capital cost. A
+    // tie_in's totalValue is its commitment ceiling, not capital — its capital
+    // lives in line items, so a tie_in without line items has no capital
+    // balance here. `!(x > 0)` also rejects NaN (missing totalValue).
+    const capitalCost =
+      contract.contractType === "capital" ? Number(contract.totalValue) : 0
+    if (!(capitalCost > 0)) return empty
+    const rebateAppliedToCapital = sumRebateAppliedToCapital(
+      contract.rebates,
+      contract.contractType === "capital" ? "tie_in" : contract.contractType,
+    )
+    const paidToDate = rebateAppliedToCapital + paymentsAppliedToCapital
+    return serialize({
+      ...empty,
+      hasSchedule: false,
+      capitalCost,
+      financedPrincipal: capitalCost,
+      paidToDate,
+      remainingBalance: Math.max(0, capitalCost - paidToDate),
+      rebateAppliedToCapital,
+      paymentsAppliedToCapital,
+      contractType: contract.contractType,
+    })
+  }
 
   // Cadence source of truth = the per-line-item `paymentCadence` (the capital
   // editor writes it). `contract.performancePeriod` is NON-NULL and defaults to
@@ -652,25 +694,10 @@ export async function getContractCapitalSchedule(
     isCapital ? "tie_in" : contract.contractType,
   )
 
-  // Charles 2026-06-20 ("when I log a payment it does not record or count
-  // toward the balance"): a pure CAPITAL contract earns no rebates — it is
-  // paid off by logged payments/credits. Those land in ContractPeriod with
-  // totalSpend=0 / rebateEarned=0 and the amount on `paymentActual`
-  // (createContractTransaction). Seeded invoice rows always carry
-  // totalSpend>0, so filtering on totalSpend=0 isolates user-logged
-  // payments/credits. Both rebate-applied AND logged payments retire capital.
-  const loggedPaymentAgg = await prisma.contractPeriod.aggregate({
-    where: {
-      contractId: contract.id,
-      totalSpend: 0,
-      rebateEarned: 0,
-      paymentActual: { gt: 0 },
-    },
-    _sum: { paymentActual: true },
-  })
-  const paymentsAppliedToCapital = Number(
-    loggedPaymentAgg._sum.paymentActual ?? 0,
-  )
+  // `paymentsAppliedToCapital` (logged Payment + Credit rows) was computed
+  // above the line-item check so it applies to both the no-schedule and the
+  // financing-schedule paths. Both rebate-applied AND logged payments/credits
+  // retire capital.
   const paidToDate = rebateAppliedToCapital + paymentsAppliedToCapital
   const remainingBalance = Math.max(0, financedPrincipal - paidToDate)
 
@@ -906,6 +933,9 @@ export async function getVendorContractCapitalSchedule(
       amortizationRows: { orderBy: { periodNumber: "asc" } },
       // Charles audit suggestion #4 (v0-port): per-asset capital line items.
       capitalLineItems: { orderBy: { createdAt: "asc" } },
+      totalValue: true,
+      payments: { select: { paymentAmount: true } },
+      creditEntries: { select: { creditAmount: true } },
       rebates: { select: { collectionDate: true, rebateCollected: true } },
     },
   })
@@ -937,10 +967,41 @@ export async function getVendorContractCapitalSchedule(
   }
 
   if (!contract) return empty
+
+  // Logged payments + credits pay down the capital balance (see the facility
+  // schedule for the full rationale — Charles 2026-06-20).
+  const paymentsAppliedToCapital =
+    (contract.payments ?? []).reduce((s, p) => s + Number(p.paymentAmount), 0) +
+    (contract.creditEntries ?? []).reduce((s, c) => s + Number(c.creditAmount), 0)
+
   // Charles audit suggestion #4 (v0-port): aggregate from line items
   // when present, fall back to legacy single-item synthesis.
   const lineItems = normalizeCapitalLineItems(contract)
-  if (lineItems.length === 0) return empty
+  if (lineItems.length === 0) {
+    // Only a pure `capital` contract uses totalValue as the capital cost. A
+    // tie_in's totalValue is its commitment ceiling, not capital — its capital
+    // lives in line items, so a tie_in without line items has no capital
+    // balance here. `!(x > 0)` also rejects NaN (missing totalValue).
+    const capitalCost =
+      contract.contractType === "capital" ? Number(contract.totalValue) : 0
+    if (!(capitalCost > 0)) return empty
+    const rebateAppliedToCapital = sumRebateAppliedToCapital(
+      contract.rebates,
+      contract.contractType === "capital" ? "tie_in" : contract.contractType,
+    )
+    const paidToDate = rebateAppliedToCapital + paymentsAppliedToCapital
+    return serialize({
+      ...empty,
+      hasSchedule: false,
+      capitalCost,
+      financedPrincipal: capitalCost,
+      paidToDate,
+      remainingBalance: Math.max(0, capitalCost - paidToDate),
+      rebateAppliedToCapital,
+      paymentsAppliedToCapital,
+      contractType: contract.contractType,
+    })
+  }
 
   const capitalCost = sumCapitalCost(lineItems)
   const downPayment = sumInitialSales(lineItems)
@@ -1042,25 +1103,9 @@ export async function getVendorContractCapitalSchedule(
     isCapital ? "tie_in" : contract.contractType,
   )
 
-  // Charles 2026-06-20 ("when I log a payment it does not record or count
-  // toward the balance"): a pure CAPITAL contract earns no rebates — it is
-  // paid off by logged payments/credits. Those land in ContractPeriod with
-  // totalSpend=0 / rebateEarned=0 and the amount on `paymentActual`
-  // (createContractTransaction). Seeded invoice rows always carry
-  // totalSpend>0, so filtering on totalSpend=0 isolates user-logged
-  // payments/credits. Both rebate-applied AND logged payments retire capital.
-  const loggedPaymentAgg = await prisma.contractPeriod.aggregate({
-    where: {
-      contractId: contract.id,
-      totalSpend: 0,
-      rebateEarned: 0,
-      paymentActual: { gt: 0 },
-    },
-    _sum: { paymentActual: true },
-  })
-  const paymentsAppliedToCapital = Number(
-    loggedPaymentAgg._sum.paymentActual ?? 0,
-  )
+  // `paymentsAppliedToCapital` (logged Payment + Credit rows) was computed
+  // above the line-item check. Both rebate-applied AND logged payments/credits
+  // retire capital.
   const paidToDate = rebateAppliedToCapital + paymentsAppliedToCapital
   const remainingBalance = Math.max(0, financedPrincipal - paidToDate)
 

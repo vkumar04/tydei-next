@@ -310,8 +310,13 @@ const BASELINE_HITS = new Set<string>([
   // these re-reads.
   // bumped 2026-06-18 after computeSyntheticContractPeriods gained the
   // precomputedCogUniverse perf param (+ if-block) shifted these re-reads.
+  // bumped 2026-06-20 after getContractCreditsAndPayments + the credit/payment
+  // dedicated-table write were added above the delete (Charles capital-credit
+  // ledger fix), shifting the guarded rebate.delete from 715 → 790. The delete
+  // still verifies ownership via the contractOwnershipWhere find + the scoped
+  // findFirstOrThrow on {id, contractId} immediately above it.
   "lib/actions/contract-periods.ts:484",
-  "lib/actions/contract-periods.ts:715",
+  "lib/actions/contract-periods.ts:790",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:96",

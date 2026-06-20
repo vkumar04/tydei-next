@@ -47,8 +47,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate, formatCalendarDate } from "@/lib/formatting"
 import {
   getContractRebates,
+  getContractCreditsAndPayments,
   updateContractTransaction,
   deleteContractTransaction,
+  type LedgerCreditPayment,
 } from "@/lib/actions/contract-periods"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
@@ -422,6 +424,76 @@ function TransactionTable({
   )
 }
 
+// Charles 2026-06-20: logged credits + payments (dedicated Credit/Payment
+// tables), shown in the ledger's Credits/Payments/All views. Distinct from
+// the rebate-shaped TransactionTable above — these carry a date, amount, and
+// the user's note.
+function CreditPaymentTable({
+  rows,
+  filter,
+}: {
+  rows: LedgerCreditPayment[]
+  filter: "all" | TransactionType
+}) {
+  const filtered = rows.filter((r) =>
+    filter === "all"
+      ? true
+      : filter === "credit"
+        ? r.kind === "credit"
+        : filter === "payment"
+          ? r.kind === "payment"
+          : false,
+  )
+  if (filtered.length === 0) {
+    // In the "all" view the rebate table renders the empty state; only the
+    // dedicated credit/payment tabs show their own empty message.
+    if (filter === "credit" || filter === "payment") {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            No {filter}s recorded yet.
+          </p>
+        </div>
+      )
+    }
+    return null
+  }
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead className="text-right">Amount</TableHead>
+            <TableHead>Notes</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((r) => (
+            <TableRow key={r.id}>
+              <TableCell className="font-medium">
+                {formatCalendarDate(r.date)}
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline">
+                  {r.kind === "credit" ? "Credit" : "Payment"}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-blue-600 dark:text-blue-400">
+                {formatCurrency(r.amount)}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {r.notes ?? "—"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
 export function ContractTransactions({ contractId, contractType }: ContractTransactionsProps) {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<"all" | TransactionType>("all")
@@ -437,6 +509,19 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
     queryFn: () => getContractRebates(contractId),
     enabled: !!contractId,
   })
+
+  // Logged credits + payments (dedicated Credit/Payment tables). Surfaced in
+  // the ledger so a "Log Credit / Payment" entry is visibly recorded
+  // (Charles 2026-06-20). Shares the periods key so createContractTransaction's
+  // invalidate refreshes it.
+  const { data: creditPaymentData } = useQuery({
+    queryKey: queryKeys.contracts.periods(contractId),
+    queryFn: () => getContractCreditsAndPayments(contractId),
+    enabled: !!contractId,
+  })
+  const creditPayments = creditPaymentData ?? []
+  const creditCount = creditPayments.filter((r) => r.kind === "credit").length
+  const paymentCount = creditPayments.filter((r) => r.kind === "payment").length
 
   // Charles W1.X-A: row-level mutations for the actions dropdown.
   // Invalidate the same four keys as `createContractTransaction` so
@@ -761,21 +846,30 @@ export function ContractTransactions({ contractId, contractType }: ContractTrans
             onValueChange={(v) => setActiveTab(v as typeof activeTab)}
           >
             <TabsList className="mb-4">
-              <TabsTrigger value="all">All ({rows.length})</TabsTrigger>
+              <TabsTrigger value="all">
+                All ({rows.length + creditPayments.length})
+              </TabsTrigger>
               <TabsTrigger value="rebate">Rebates ({rows.length})</TabsTrigger>
-              <TabsTrigger value="credit">Credits (0)</TabsTrigger>
-              <TabsTrigger value="payment">Payments (0)</TabsTrigger>
-              {/* credit/payment counts stay at 0 until separate transaction
-                  types are first-class; every row in `rows` is sourced
-                  from the Rebate table post W1.P. */}
+              <TabsTrigger value="credit">Credits ({creditCount})</TabsTrigger>
+              <TabsTrigger value="payment">Payments ({paymentCount})</TabsTrigger>
             </TabsList>
 
-            <TabsContent value={activeTab} className="m-0">
-              <TransactionTable
-                rows={rows}
-                filter={activeTab}
-                onAction={handleAction}
-              />
+            <TabsContent value={activeTab} className="m-0 space-y-4">
+              {/* Rebate-table rows (the "all" and "rebate" views). */}
+              {(activeTab === "all" || activeTab === "rebate") && (
+                <TransactionTable
+                  rows={rows}
+                  filter="rebate"
+                  onAction={handleAction}
+                />
+              )}
+              {/* Logged credits + payments (Credit/Payment tables). */}
+              {activeTab !== "rebate" && (
+                <CreditPaymentTable
+                  rows={creditPayments}
+                  filter={activeTab}
+                />
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

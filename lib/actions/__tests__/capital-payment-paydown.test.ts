@@ -1,10 +1,12 @@
 /**
- * BUG (Charles 2026-06-20): "when I log a payment it does not record or count
- * toward the balance" on a pure CAPITAL contract. Capital contracts earn no
- * rebates — they're paid off by logged payments/credits, which land in
- * ContractPeriod with totalSpend=0 and the amount on paymentActual. This test
- * locks that those logged payments flow into paidToDate / remainingBalance /
- * paymentsAppliedToCapital in getContractCapitalSchedule.
+ * BUG (Charles 2026-06-20): "credit not recording against the balance" on a
+ * pure CAPITAL contract. Capital contracts earn no rebates — they're paid off
+ * by logged payments/credits, now stored in the dedicated Payment/Credit
+ * tables (contract.payments / contract.creditEntries). These tests lock that:
+ *   1. logged payments + credits flow into paidToDate / remainingBalance /
+ *      paymentsAppliedToCapital when there IS a financing schedule, and
+ *   2. a pure capital contract with NO line items (cost = totalValue) still
+ *      produces a balance that payments/credits pay down (the user's case).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -19,14 +21,15 @@ interface ContractRow {
   performancePeriod: string | null
   rebatePayPeriod: string | null
   capitalLineItems: Array<Record<string, unknown>>
+  totalValue: number
+  payments: Array<{ paymentAmount: number }>
+  creditEntries: Array<{ creditAmount: number }>
   rebates: never[]
   vendorId: string
   terms: never[]
 }
 
 let contractRow: ContractRow | null = null
-// The amount the user "logged" as a payment (ContractPeriod.paymentActual).
-let loggedPaymentSum = 0
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -35,14 +38,7 @@ vi.mock("@/lib/db", () => ({
       aggregate: vi.fn(async () => ({ _sum: { extendedPrice: 0 } })),
     },
     contractPeriod: {
-      aggregate: vi.fn(async (args: { _sum?: { paymentActual?: boolean } }) => {
-        // The logged-payment aggregate asks for _sum.paymentActual; the
-        // rolling-12 spend aggregate asks for _sum.totalSpend.
-        if (args?._sum?.paymentActual) {
-          return { _sum: { paymentActual: loggedPaymentSum } }
-        }
-        return { _sum: { totalSpend: 0 } }
-      }),
+      aggregate: vi.fn(async () => ({ _sum: { totalSpend: 0 } })),
     },
     rebate: { findMany: vi.fn(async () => []) },
   },
@@ -64,7 +60,7 @@ vi.mock("@/lib/serialize", () => ({ serialize: <T,>(x: T) => x }))
 const CONTRACT_ID = "cap-1"
 const CAPITAL = 200_000
 
-function capitalContract(): ContractRow {
+function baseContract(): ContractRow {
   return {
     id: CONTRACT_ID,
     name: "Capital",
@@ -90,6 +86,9 @@ function capitalContract(): ContractRow {
         paymentCadence: "quarterly",
       },
     ],
+    totalValue: CAPITAL,
+    payments: [],
+    creditEntries: [],
     rebates: [],
     vendorId: "v-test",
     terms: [],
@@ -98,11 +97,10 @@ function capitalContract(): ContractRow {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  contractRow = capitalContract()
-  loggedPaymentSum = 0
+  contractRow = baseContract()
 })
 
-describe("capital payment paydown", () => {
+describe("capital payment paydown (with financing schedule)", () => {
   it("with no payments logged, balance is the full financed principal", async () => {
     const { getContractCapitalSchedule } = await import(
       "@/lib/actions/contracts/tie-in"
@@ -113,16 +111,47 @@ describe("capital payment paydown", () => {
     expect(r.remainingBalance).toBe(CAPITAL)
   })
 
-  it("counts a logged payment toward paidToDate, remainingBalance, and paymentsAppliedToCapital", async () => {
-    loggedPaymentSum = 50_000
+  it("counts logged payments AND credits toward paidToDate / remainingBalance", async () => {
+    contractRow!.payments = [{ paymentAmount: 30_000 }]
+    contractRow!.creditEntries = [{ creditAmount: 20_000 }]
     const { getContractCapitalSchedule } = await import(
       "@/lib/actions/contracts/tie-in"
     )
     const r = await getContractCapitalSchedule(CONTRACT_ID)
-    expect(r.paymentsAppliedToCapital).toBe(50_000)
-    // No rebates on a pure capital contract → paidToDate is the payment.
+    expect(r.paymentsAppliedToCapital).toBe(50_000) // 30k payment + 20k credit
     expect(r.rebateAppliedToCapital).toBe(0)
     expect(r.paidToDate).toBe(50_000)
     expect(r.remainingBalance).toBe(CAPITAL - 50_000)
+  })
+})
+
+describe("capital balance with NO line items (cost = totalValue) — the user's case", () => {
+  beforeEach(() => {
+    contractRow = baseContract()
+    contractRow.capitalLineItems = [] // pure capital contract, no financing schedule
+  })
+
+  it("derives the balance from totalValue and pays it down with credits", async () => {
+    contractRow!.creditEntries = [{ creditAmount: 75_000 }]
+    const { getContractCapitalSchedule } = await import(
+      "@/lib/actions/contracts/tie-in"
+    )
+    const r = await getContractCapitalSchedule(CONTRACT_ID)
+    expect(r.hasSchedule).toBe(false)
+    expect(r.capitalCost).toBe(CAPITAL) // from totalValue
+    expect(r.paymentsAppliedToCapital).toBe(75_000)
+    expect(r.paidToDate).toBe(75_000)
+    expect(r.remainingBalance).toBe(CAPITAL - 75_000)
+  })
+
+  it("a usage contract with no line items still returns empty (no capital balance)", async () => {
+    contractRow!.contractType = "usage"
+    contractRow!.creditEntries = [{ creditAmount: 75_000 }]
+    const { getContractCapitalSchedule } = await import(
+      "@/lib/actions/contracts/tie-in"
+    )
+    const r = await getContractCapitalSchedule(CONTRACT_ID)
+    expect(r.capitalCost).toBe(0)
+    expect(r.hasSchedule).toBe(false)
   })
 })
