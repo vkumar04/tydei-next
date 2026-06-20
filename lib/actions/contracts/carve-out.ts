@@ -216,6 +216,13 @@ async function _buildCarveOutRebate(
         const rebateEarned = spend * fraction
         const result = zeroResult("CARVE_OUT", null)
         result.rebateEarned = rebateEarned
+        // eligibleSpend = the carved-out spend basis (engine: Σ line
+        // totalSpend). The performance card reads it for the "eligible spend"
+        // figure AND gates the effective-rate line on `eligibleSpend > 0`, so
+        // without this the rebate showed with "$0 eligible spend" and NO rate
+        // — the exact number Charles needs to judge whether the carve-out is
+        // "enough." Effective rate then renders as rebateEarned / spend.
+        result.eligibleSpend = spend
         result.carveOutLines = [
           {
             referenceNumber: carveOutTerm.termName || "Carve-out (spend rebate)",
