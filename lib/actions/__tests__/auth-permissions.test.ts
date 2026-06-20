@@ -25,6 +25,13 @@ const { authGetSessionMock, memberFindFirstMock, userFindUniqueMock } =
     userFindUniqueMock: vi.fn(),
   }))
 
+// tests/setup.ts globally stubs the access-tier gates so the ~100 action
+// tests don't need to mock the session boundary. THIS suite tests the REAL
+// gate logic, so undo that global mock for this file (vi.unmock is hoisted
+// and, per the Vitest docs, is meant for unmocking modules defined in
+// setupFiles). Our static imports below then resolve to the real module.
+vi.unmock("@/lib/actions/auth-permissions")
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     member: { findFirst: memberFindFirstMock },
