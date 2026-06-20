@@ -152,6 +152,13 @@ a new invariant, add a row.
 | Pricing-file header detection (SKU / description / price column aliases) | `ITEM_NUMBER_ALIASES` / `DESCRIPTION_ALIASES` / `UNIT_PRICE_ALIASES` / `CATEGORY_ALIASES` (+ `detectPricingColumnMapping`) | `lib/utils/parse-pricing-file.ts` | contract import + AI-extract review (`parsePricingFile`), prospective proposal & pricing tabs (`pricingRowsToItems` in `components/facility/analysis/prospective/pricing-file-reader.ts`), vendor Benchmarks-tab import (`mapBenchmarkRows` in `app/vendor/prospective/sections/benchmark-file-reader.ts`, 2026-06-12 — benchmark-only columns like percentiles/min/max/sample-size keep local lists there since no other surface reads them), vendor proposal-builder pricing/usage uploads (`mapPricingRows`/`mapUsageRows` in `components/vendor/prospective/builder/file-handlers.ts` via `readPricingRows`, 2026-06-13 — builder-only columns like proposed_price/cost-basis/usage extended-cost keep SECONDARY local aliases behind the canonical lists; regression-guarded by `components/vendor/prospective/builder/__tests__/file-handlers.test.ts`), shared `<PricingFileDropzone>` column-mapper fallback (`components/shared/uploads/` — `resolveMapping` in `field-spec.ts` consumes per-surface `UploadFieldSpec[]` whose aliases IMPORT the canonical lists: `BENCHMARK_UPLOAD_SPECS`, `BUILDER_PRICING_UPLOAD_SPECS`/`BUILDER_USAGE_UPLOAD_SPECS`, `ANALYZER_PRICE_FILE_SPECS`; the canonical reader `readPricingRows` now lives in `components/shared/uploads/read-tabular-file.ts` with a re-export at the old pricing-file-reader path; unmapped-header telemetry via `logUploadHeaderEvent` in `lib/actions/upload-telemetry.ts` → `UploadHeaderEvent`, uploader improvements 1+2 2026-06-13; regression-guarded by `components/shared/uploads/__tests__/field-spec.test.ts`). **Why it exists:** the 2026-06-10 proposal analyzer hand-rolled a 7-alias copy that missed "ReferenceNumber" — the Arthrex price file parsed to 0 items ("No items found in the price file", Vick 2026-06-10). The canonical list carries every real-world alias fix (Stryker "Catalog Item", DePuy "PROD CD", SYK "Reference numer" typo). NEVER inline a header-alias list; import these. Regression-guarded by `components/facility/analysis/prospective/__tests__/pricing-file-reader.test.ts` |
 | Case reimbursement backfill (CPT payor-rate estimate when `Case.totalReimbursement` is 0) | `buildCptRateSchedule` + `resolveCaseReimbursement` (date-aware) — plus `buildCptRateMap` (flat highest-wins, display only) | `lib/case-costing/cpt-rate-map.ts` | `getCases` (cases list), `getCaseCostingReportData` (case-costing report header), `getFacilityAveragesForFacility` (hero card), `calculatePayorMargins` (`lib/actions/payor-contracts.ts` — migrated to `buildCptRateSchedule` + `rateAsOf(c.dateOfSurgery)`), `getTrueMarginReport` (`lib/actions/case-costing/true-margin.ts` — the per-procedure True-Margin table's **Revenue** column; was a drift reading raw `Number(c.totalReimbursement)` → $0 on every row, Vick "Revenue is reimbursement" 2026-06-16; regression-guarded by the "Revenue backfill" block in `true-margin.test.ts`). **Why it exists (audit H5):** the rate-map builder was copy-pasted 3× and the report used raw stored reimbursement, so "Avg Margin" contradicted the tables beside it. SKU-class rule: never hand-roll a `cptRates` JSON parse — both `{cpt, rate}` and `{cptCode, rate}` shapes must be tolerated. **Date-aware (2026-06-17, Lighthouse Anthem):** multi-year payor contracts list one rate per CPT PER contract year; each year's rate persists as a separate `cptRates` row with its own `effectiveDate` (window start). `resolveCaseReimbursement` takes the case's `dateOfSurgery` and picks the rate effective as of that date (latest `effectiveFrom ≤ caseDate`, else earliest); rows WITHOUT an `effectiveDate` keep the legacy "highest rate wins" so seeded single-rate contracts are unaffected. NEVER feed undated highest-wins into a per-case number when the contract has year-columns — that inflates a Year-1 case to the Year-3 rate. Regression-guarded by `lib/case-costing/__tests__/cpt-rate-map.test.ts`. Coverage note: only cases whose CPT exists in a loaded payor contract get a non-zero estimate (prod: ~237/674 via the single Anthem contract); the rest stay $0 until more payor CPT rates load — a data limit, not a bug. |
 
+| Access tier (Settings/Users — who can do what: Super=full incl Settings, Advanced=all but Settings, User=read-only) | `can()` matrix (pure) → `requireCan(perm)` / `requireCanMutate()` (session gates) | `lib/auth/permissions.ts` + `lib/actions/auth-permissions.ts` | EVERY mutating server action should gate with `requireCanMutate()` (read-only `user` tier blocked); Settings/member writes use `requireCan("settings.manage")` / `requireCan("members.manage")` (Super only); settings `page.tsx` server-redirects non-Super; client affordances via `<Can>`/`<ReadOnlyGuard>` + `AccessProvider` (`components/shared/auth/`). Tier lives on `Member.accessTier` (orthogonal to org role owner/admin/member). `getCurrentAccessContext` defaults to `super` when no Member row (admins/platform). Regression-guarded by `lib/auth/__tests__/permissions.test.ts`, `lib/actions/__tests__/auth-permissions.test.ts` + `settings-access-tier.test.ts`. **Memory: feedback_default_to_superpowers / the Settings/Users build.** |
+| Vendor division scope (hard isolation — "each division behaves like a separate company") | `callerVendorDivisionIds(userId, vendorId)` (undefined=enterprise/Super, []=nothing, [ids]=restricted) + `divisionScopeWhere` + the EXTENDED `contractsOwnedByVendor(vendorId, divisionIds)` / `contractOwnershipWhereVendor(id, vendorId, divisionIds)` | `lib/actions/division-auth.ts` + `lib/actions/contracts-vendor-auth.ts` | every vendor-side read scopes to the caller's attached `DivisionMember` divisions; `divisionIds === undefined` is byte-identical to pre-feature behavior (opt-in). Division CRUD + user attach in `lib/actions/division-members.ts` (super-only via `requireCan("members.manage")`, vendor-scoped IDOR). Regression-guarded by `contracts-vendor-auth.test.ts` + `division-members-auth.test.ts`. |
+| Vendor 1-/2-way mode + contract-flow gate (a vendor's contract reaches a facility ONLY when an `accepted` connection exists AND `mode === two_way`) | `vendorContractsVisibleToFacility(facilityId)` + `get/setConnectionMode` (vendor-only) | `lib/actions/connection-mode.ts` | mode lives on `Connection.mode` (per facility–vendor pair); 1-way vendors self-serve contracts (no facility approval) + may enter own COG. Regression-guarded by `connection-mode-gate` / `connection-mode.test.ts`. |
+| Vendor-owned COG (1-way) — NEVER merged into facility-scoped `COGRecord` | `vendorCogScopedByDivisions(vendorId, divisionIds)` | `lib/contracts/vendor-cog-scope.ts` (+ `lib/actions/vendor-cog.ts`, `lib/actions/imports/vendor-cog-import.ts` reusing the canonical pricing-file aliases) | new `VendorCogRecord` table, vendor-owned + division-scoped; the facility `COGRecord` "always facility-scoped" invariant is untouched. Regression-guarded by `vendor-cog-scope.test.ts` + `vendor-cog-isolation.test.ts`. |
+| Facility enterprise vs assigned scope (enterprise user sees all facilities in their HealthSystem; scoped user sees only assigned) | `getCallerFacilityIds()` + `contractsOwnedByFacilities(facilityIds[])` (+ bounded `facilityScopeClause("all", id, facilityIds)`) | `lib/actions/facility-assignment.ts` + `lib/actions/contracts-auth.ts` | new `FacilityAssignment` join; assign/unassign super-only + HealthSystem/org IDOR guards. Regression-guarded by `facility-assignment-scope.test.ts` + `facility-assignment-auth.test.ts`. |
+| Uniform table filtering (one shared table) | `<DataTable enableColumnFilters>` + per-column `meta.filterVariant` (`text`/`select`/`range`/`none`) | `components/shared/tables/data-table.tsx` + `column-filter.tsx` | the ONE table wrapper for every filterable list (TanStack v8: sort + faceted column filters + pagination). `range` columns need a numeric `accessorFn`; `select` faceted via `getFacetedUniqueValues`. Legacy `useTableSort`/`SortableHead` + the orphaned `cpt-analysis-table` were deleted. Financial-statement / inline-editor / print / comparison tables stay bespoke shadcn `<Table>` on purpose. |
+
 ## Release hygiene
 
 - **After file-rename or server-action-heavy days** (e.g., W1.T's tie-in refactor),
@@ -296,3 +303,68 @@ grouped/pricing_only).
 - `normalizeCategoryKey` (case/whitespace key-normalizer, distinct from the
   matching-oriented `canonicalizeCategoryName`) lives in ONE pure module
   `lib/categories/normalize-key.ts` — import it, never re-inline.
+
+## Settings / Users + access tiers (2026-06-19/20)
+
+The vendor + facility Settings areas have a real users/permissions system. Built
+on the existing better-auth organization plugin (User → Member → Organization →
+Facility|Vendor). All schema changes were **additive + nullable** (one migration
+`…_settings_users_access_divisions_modes`); defaults mean **zero behavior change**
+for existing rows until a caller opts in.
+
+- **Three access tiers** (`Member.accessTier` enum `super|advanced|user`,
+  `@default(super)`): Super=full incl Settings, Advanced=all but Settings,
+  User=read-only. Orthogonal to the org role (owner/admin/member + vendor
+  `admin:owner` colon sub-roles). The permission layer + every helper is in the
+  invariants table (`can()` / `requireCan` / division / mode / vendor-cog /
+  facility-assignment). Member tier is changed via `updateMemberAccessTier`
+  (Super-only, owner-protected). Two distinct "admin" concepts: **platform
+  super-admin** = `UserRole: admin` → the `/admin` operator console (cross-tenant,
+  `requireRole("admin")`); **access tier `Super`** = top tier WITHIN one
+  facility/vendor org. Don't conflate.
+- **New tabs:** facility Settings adds **Facility Access** (`FacilityAssignment`
+  enterprise/scoped) + **Alerts** (renewal alerts); vendor Settings adds
+  **Divisions** (`VendorDivision`/`DivisionMember`) + **COGS** (1-way
+  `VendorCogRecord` upload) + **Alerts**. Per-user **Profile** (name/email/
+  password) is a shared `AccountProfileCard` wired to the better-auth client
+  (`authClient.updateUser/changeEmail/changePassword`) — replaced the old mocked
+  profile blocks. Self-profile is NOT tier-gated.
+- **Demo logins** (`lib/auth/demo-accounts.ts`): per-tier accounts seeded by
+  `scripts/seed-demo-roles.ts` (idempotent; safe on existing local/prod DB) +
+  `prisma/seeds/users.ts`. The sign-in quick-login buttons are **server-gated by
+  the `SHOW_DEMO_LOGINS` env var** (NOT `NEXT_PUBLIC` — evaluated in the login
+  server component; when off, the accounts/credentials are never passed to the
+  client). **LAUNCH HARDENING: set `SHOW_DEMO_LOGINS=false` AND delete the demo
+  users from the DB.** New tier passwords are `demo-2024`.
+
+## Reports + tables (2026-06-19/20)
+
+- **Price Discrepancy Report** reads **matched COG spend, not invoices.**
+  `getPriceDiscrepancies` (`lib/actions/reports.ts`) queries `COGRecord` where
+  `matchStatus IN (price_variance, off_contract_item)` — the SAME source the
+  off-contract/price-variance ALERTS use (`lib/alerts/synthesizer.ts`). It used
+  to read the (usually empty) `invoiceLineItem`, so the report sat empty while
+  alerts had data. Keep these two surfaces on the one source.
+- **Report PDF export** (server-side, table-only — no charts): `/api/reports/pdf`
+  `type: "report"` with `scope: facility|vendor` → `generateReportPerformancePDF`
+  (`lib/pdf.ts`, jsPDF/autotable, reuses `getReportData`/`getVendorReportData`).
+  Shared `<ReportPdfButton>` (`components/shared/reports/`) on both hubs;
+  vendor scope does NOT require a facility membership (the action enforces).
+- **Reports Hub tab auto-route:** when a contract is selected the hub narrows
+  tabs (Overview / type / Calculations) and auto-routes to the type tab — that
+  effect must fire ONLY on SELECTION change (tracked by a ref), not on every
+  `activeTab` change, or Overview/Calculations bounce back and are unreachable
+  (`reports-client.tsx` + `vendor-reports-hub-client.tsx`).
+
+## Mobile / responsive conventions
+
+- **Tab bars scroll, don't clip.** The shared `TabsList`
+  (`components/ui/tabs.tsx`) is `max-w-full overflow-x-auto scrollbar-none` so a
+  wide tab bar swipes on mobile (Tailwind v4 native `scrollbar-none` utility).
+- **Page headers with action buttons stack on mobile:** `flex flex-col gap-4
+  sm:flex-row sm:items-center sm:justify-between` + `flex-wrap` on the button row
+  (not a fixed `flex items-center justify-between`, which overlaps the title).
+- **Truncate inside a grid/flex needs `min-w-0` on the grid ITEM** (grid items
+  default to `min-width:auto`), or the card grows to the un-truncated content and
+  blows the page past the viewport (the admin-dashboard Recent-Activity overflow).
+  Use `[&>*]:min-w-0` on the grid.
