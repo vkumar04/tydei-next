@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
@@ -95,16 +95,23 @@ export function VendorReportsHubClient({
     [contracts, selectedContractId],
   )
 
-  // Auto-route to a matching tab when a specific contract is picked,
-  // and fall back to overview when the current tab isn't in the
-  // available set.
+  // Auto-route to a matching tab when a specific contract is picked, and
+  // fall back to overview when the current tab isn't in the available set.
+  // Fires ONLY when the contract SELECTION changes (by id), not on every
+  // activeTab change — otherwise Overview/Calculations snap back to the type
+  // tab and are unreachable while a contract is selected.
+  const lastRoutedContractId = useRef<string | null>(null)
   useEffect(() => {
     const available = new Set(computeAvailableVendorTabs(selectedContract))
-    if (selectedContract) {
-      const typeTab = TYPE_TO_TAB[selectedContract.contractType]
-      if (typeTab && available.has(typeTab)) {
-        setActiveTab(typeTab)
-        return
+    const currentId = selectedContract?.id ?? null
+    if (currentId !== lastRoutedContractId.current) {
+      lastRoutedContractId.current = currentId
+      if (selectedContract) {
+        const typeTab = TYPE_TO_TAB[selectedContract.contractType]
+        if (typeTab && available.has(typeTab)) {
+          setActiveTab(typeTab)
+          return
+        }
       }
     }
     if (!available.has(activeTab)) {

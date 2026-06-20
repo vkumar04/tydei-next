@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { queryKeys } from "@/lib/query-keys"
@@ -114,18 +114,29 @@ export function ReportsClient({ facilityId }: ReportsClientProps) {
     [contracts, selectedContractId],
   )
 
-  // Auto-route to a matching tab when a specific contract is picked,
-  // and fall back to overview when the current tab isn't in the
-  // available set.
+  // Auto-route to a matching tab when a specific contract is picked, and
+  // fall back to overview when the current tab isn't in the available set.
+  //
+  // The auto-route fires ONLY when the contract SELECTION changes (tracked by
+  // id), not on every activeTab change. Previously this effect re-routed to
+  // the contract's type tab whenever `activeTab` changed too, so with a
+  // contract selected, clicking Overview or Calculations snapped straight
+  // back to the type tab — those two tabs were unreachable.
+  const lastRoutedContractId = useRef<string | null>(null)
   useEffect(() => {
     const available = new Set(computeAvailableTabs(selectedContract))
-    if (selectedContract) {
-      const typeTab = TYPE_TO_TAB[selectedContract.contractType]
-      if (typeTab && available.has(typeTab)) {
-        setActiveTab(typeTab)
-        return
+    const currentId = selectedContract?.id ?? null
+    if (currentId !== lastRoutedContractId.current) {
+      lastRoutedContractId.current = currentId
+      if (selectedContract) {
+        const typeTab = TYPE_TO_TAB[selectedContract.contractType]
+        if (typeTab && available.has(typeTab)) {
+          setActiveTab(typeTab)
+          return
+        }
       }
     }
+    // Only correct an activeTab that isn't valid for the current selection.
     if (!available.has(activeTab)) {
       setActiveTab("overview")
     }
