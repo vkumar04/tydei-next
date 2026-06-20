@@ -21,13 +21,24 @@ import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { calculateCarveOut } from "@/lib/rebates/engine/carve-out"
+import { zeroResult } from "@/lib/rebates/engine/types"
 import type {
   CarveOutConfig,
   PeriodData,
   PurchaseRecord,
   RebateResult,
 } from "@/lib/rebates/engine/types"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { serialize } from "@/lib/serialize"
+
+/** Term shape pulled by CARVE_OUT_TERM_SELECT. */
+interface CarveOutTermLike {
+  termType: string
+  termName: string
+  appliesTo: string | null
+  categories: string[]
+  tiers: Array<{ rebateValue: unknown; rebateType: string }>
+}
 
 /**
  * Returns the current carve-out rebate state for a contract. Callers:
@@ -61,11 +72,26 @@ export async function getCarveOutRebate(
       // spend-rebate contract whose pricing file happened to carry
       // carveOutPercent values was showing a phantom carve-out rebate
       // card. Gate on the term's presence below.
-      terms: { select: { termType: true } },
+      terms: { select: CARVE_OUT_TERM_SELECT },
     },
   })
   return _buildCarveOutRebate(contract, facility.id)
 }
+
+// Term fields needed to evaluate BOTH carve-out shapes: per-SKU
+// (carveOutPercent pricing rows) and the spend-rebate carve_out term
+// (a percent-of-spend tier scoped to a category) — Charles 2026-06-20.
+const CARVE_OUT_TERM_SELECT = {
+  termType: true,
+  termName: true,
+  appliesTo: true,
+  categories: true,
+  tiers: {
+    select: { rebateValue: true, rebateType: true },
+    orderBy: { tierNumber: "desc" as const },
+    take: 1,
+  },
+} as const
 
 /**
  * Vendor-scoped carve-out rebate read — 2026-06-09 facility→vendor feature
@@ -83,7 +109,7 @@ export async function getVendorCarveOutRebate(
       vendorId: true,
       additionalVendorIds: true,
       facilityId: true,
-      terms: { select: { termType: true } },
+      terms: { select: CARVE_OUT_TERM_SELECT },
     },
   })
   return _buildCarveOutRebate(contract, contract.facilityId)
@@ -94,7 +120,7 @@ async function _buildCarveOutRebate(
     id: string
     vendorId: string | null
     additionalVendorIds: string[]
-    terms: Array<{ termType: string }>
+    terms: CarveOutTermLike[]
   },
   facilityId: string | null,
 ): Promise<RebateResult> {
@@ -162,9 +188,46 @@ async function _buildCarveOutRebate(
       rebatePercent: Number(p.carveOutPercent),
     }))
 
-  // Empty-case short-circuit: keep the engine call for shape
-  // consistency, but skip the COG scan when there's nothing to compute.
+  // No per-SKU carveOutPercent rows. Before returning empty, handle the
+  // SPEND-REBATE carve-out shape Charles flagged 2026-06-20 ("a Carve out
+  // with a spend rebate … not sure where the calculations for the carve out
+  // are … does not seem like enough"): a `carve_out` term whose tier is
+  // percent-of-spend, scoped to a category, with NO per-SKU pricing lines.
+  // The per-SKU engine can't price it (it has no reference numbers), so the
+  // card showed $0. Compute it from category-scoped matched COG spend.
   if (lines.length === 0) {
+    const carveOutTerm = contract.terms.find((t) => t.termType === "carve_out")
+    const topTier = carveOutTerm?.tiers?.[0]
+    if (carveOutTerm && topTier && topTier.rebateType === "percent_of_spend") {
+      // percent_of_spend stores a FRACTION (0.02 = 2%); applied directly to
+      // dollar spend it is NOT scaled ×100 (CLAUDE.md rebate-units caveat).
+      const fraction = Number(topTier.rebateValue)
+      const scopedCategories =
+        carveOutTerm.appliesTo === "specific_category"
+          ? carveOutTerm.categories.map(canonicalizeCategoryName)
+          : null
+      const inScope = (cat: string | null) =>
+        scopedCategories === null ||
+        scopedCategories.includes(canonicalizeCategoryName(cat ?? ""))
+      const spend = cogRecords
+        .filter((r) => inScope(r.category))
+        .reduce((s, r) => s + Number(r.extendedPrice ?? 0), 0)
+      if (fraction > 0 && spend > 0) {
+        const rebateEarned = spend * fraction
+        const result = zeroResult("CARVE_OUT", null)
+        result.rebateEarned = rebateEarned
+        result.carveOutLines = [
+          {
+            referenceNumber: carveOutTerm.termName || "Carve-out (spend rebate)",
+            rateType: "PERCENT_OF_SPEND",
+            totalSpend: spend,
+            totalUnits: 0,
+            lineRebate: rebateEarned,
+          },
+        ]
+        return serialize(result)
+      }
+    }
     const empty = calculateCarveOut(
       { type: "CARVE_OUT", lines: [] },
       { purchases: [], totalSpend: 0, periodLabel: "no carve-out lines" },

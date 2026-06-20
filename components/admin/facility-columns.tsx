@@ -9,7 +9,8 @@ import type { AdminFacilityRow } from "@/lib/actions/admin/facilities"
 
 export function getFacilityColumns(
   onEdit: (facility: AdminFacilityRow) => void,
-  onDelete: (facility: AdminFacilityRow) => void
+  onDelete: (facility: AdminFacilityRow) => void,
+  onManageUsers: (facility: AdminFacilityRow) => void
 ): ColumnDef<AdminFacilityRow>[] {
   return [
     {
@@ -85,7 +86,7 @@ export function getFacilityColumns(
         <TableActionMenu
           actions={[
             { label: "Edit", icon: Pencil, onClick: () => onEdit(row.original) },
-            { label: "Manage Users", icon: Users, onClick: () => {} },
+            { label: "Manage Users", icon: Users, onClick: () => onManageUsers(row.original) },
             { label: "Delete", icon: Trash2, onClick: () => onDelete(row.original), variant: "destructive" },
           ]}
         />

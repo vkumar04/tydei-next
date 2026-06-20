@@ -108,6 +108,19 @@ export const extractedContractSchema = z.object({
     .describe(
       "Capital payment cadence. Look for 'monthly payments', 'quarterly installments', 'annual draw'.",
     ),
+  // Charles 2026-06-20: the AI captured every other term but never the
+  // contract-level rebate pay period, so the form always fell back to its
+  // "monthly" default. The single-PDF route extracts via jsonTool mode, which
+  // the route comment notes "avoids the 24-optional-param limit", so this can
+  // be optional without tripping the cap — and optional keeps legacy
+  // constructors/merger paths from having to thread the field.
+  rebatePayPeriod: z
+    .enum(["monthly", "quarterly", "semi_annual", "annual"])
+    .nullable()
+    .optional()
+    .describe(
+      "CONTRACT-LEVEL rebate pay period — how often rebates are PAID OUT / performance is evaluated for the whole agreement (the 'Performance & Rebate Pay Period'). Look for 'rebates paid quarterly', 'paid semi-annually', 'settled annually', 'evaluated every 6 months'. This is DISTINCT from the capital paymentCadence above. Return null only if no rebate/performance cadence is stated anywhere.",
+    ),
   downPayment: coerceOptionalNumber().describe(
     "Up-front payment on a capital contract before financing kicks in (dollars).",
   ),

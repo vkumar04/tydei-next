@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ContractFilters } from "@/components/contracts/contract-filters"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import type { FacilityScope } from "@/lib/actions/contracts-auth"
 
 /**
@@ -97,12 +98,14 @@ export function ContractsControlBar({
         >
           <Download className="mr-2 h-4 w-4" /> CSV
         </Button>
-        <Button asChild size="sm">
-          <Link href="/dashboard/contracts/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Contract
-          </Link>
-        </Button>
+        <ReadOnlyGuard title="Read-only access can't create contracts">
+          <Button asChild size="sm">
+            <Link href="/dashboard/contracts/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Contract
+            </Link>
+          </Button>
+        </ReadOnlyGuard>
       </div>
     </div>
   )

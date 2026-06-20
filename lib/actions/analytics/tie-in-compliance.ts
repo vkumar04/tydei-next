@@ -16,6 +16,8 @@ import {
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 import { selectBundleBaseRate } from "@/lib/contracts/bundle-base-rate"
+import { buildUnionCategoryWhereClause } from "@/lib/contracts/cog-category-filter"
+import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 
 export interface TieInComplianceResult {
   mode: "all_or_nothing" | "proportional"
@@ -63,6 +65,8 @@ async function _getTieInComplianceImpl(
         select: {
           termName: true,
           minimumPurchaseCommitment: true,
+          appliesTo: true,
+          categories: true,
           tiers: {
             select: { spendMin: true, rebateValue: true, rebateType: true },
             orderBy: { tierNumber: "desc" },
@@ -73,14 +77,34 @@ async function _getTieInComplianceImpl(
     },
   })
 
-  // YTD vendor spend.
+  // Trailing-12-month, category-scoped vendor spend.
+  //
+  // Charles 2026-06-20 ("not sure why it is showing not compliant"): this used
+  // a YTD window with NO category scope, so the basis was both far smaller than
+  // (and scoped differently from) the contract header's "Current Spend (Last 12
+  // Months)". With ~5 months of YTD spend the bundle never met its minimums and
+  // read 0.00% / Not compliant despite real trailing-12mo spend. Align the
+  // window with the header (trailing 12mo) and route the category scope through
+  // the canonical union helper so unrelated vendor spend isn't over-counted.
   const today = new Date()
-  const startOfYear = new Date(today.getFullYear(), 0, 1)
+  const twelveMonthsAgo = new Date(today)
+  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1)
+  const cogCategoryUniverse = contract.facilityId
+    ? await facilityCogCategoryUniverse(contract.facilityId)
+    : []
+  const unionCategoryWhere = buildUnionCategoryWhereClause(
+    contract.terms.map((t) => ({
+      appliesTo: t.appliesTo,
+      categories: t.categories,
+    })),
+    cogCategoryUniverse,
+  )
   const cog = await prisma.cOGRecord.aggregate({
     where: {
       facilityId: { in: scope.cogScopeFacilityIds },
       vendorId: contract.vendorId,
-      transactionDate: { gte: startOfYear, lte: today },
+      transactionDate: { gte: twelveMonthsAgo, lte: today },
+      ...unionCategoryWhere,
     },
     _sum: { extendedPrice: true },
   })

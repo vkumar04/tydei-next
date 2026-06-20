@@ -98,6 +98,26 @@ describe("extractedContractSchema — variable pay periods", () => {
     expect(parsed.terms[0]!.hasVariablePayPeriods).toBeUndefined()
     expect(parsed.terms[0]!.payPeriodDetail).toBeUndefined()
   })
+
+  // BUG 8 (Charles 2026-06-20): the contract-level rebate pay period was
+  // absent from the extraction schema, so the model could never return it and
+  // the form always fell back to "monthly". Lock it in (and its null/omitted
+  // tolerance for backward compat).
+  it("round-trips the contract-level rebatePayPeriod", () => {
+    const parsed = extractedContractSchema.parse({
+      ...baseContract,
+      rebatePayPeriod: "semi_annual",
+    })
+    expect(parsed.rebatePayPeriod).toBe("semi_annual")
+  })
+
+  it("tolerates a null or omitted rebatePayPeriod", () => {
+    expect(
+      extractedContractSchema.parse({ ...baseContract, rebatePayPeriod: null })
+        .rebatePayPeriod,
+    ).toBeNull()
+    expect(extractedContractSchema.parse(baseContract).rebatePayPeriod).toBeUndefined()
+  })
 })
 
 describe("mergeExtractedContracts — variable pay periods survive merge", () => {

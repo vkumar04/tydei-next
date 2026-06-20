@@ -82,4 +82,28 @@ describe("buildSurgeonVendorSpend", () => {
     expect(rows[0]!.vendorName).toBe("Stryker")
     expect(rows[rows.length - 1]!.surgeonName).toBe(UNKNOWN_SURGEON)
   })
+
+  // BUG 11 (Charles 2026-06-20 "the Stryker spend does not come up here"):
+  // the prod symptom — every row Unknown vendor / $0 on-contract / 0%
+  // compliance — is DIAGNOSTIC of missing attribution data (CaseSupply rows
+  // with contractId=null AND a SKU absent from COG), NOT a builder bug. This
+  // test pins that signature so a future "fix" can't mask the data gap in code.
+  it("missing contractId + unmatched SKU → Unknown vendor / 0% compliance (data-gap signature)", () => {
+    const orphan = buildSurgeonVendorSpend(
+      [
+        {
+          surgeonName: "Dr. Jones",
+          supplies: [
+            { isOnContract: false, contractId: null, vendorItemNo: "NOPE-1", extendedCost: 30_118 },
+          ],
+        },
+      ],
+      resolve,
+    )
+    expect(orphan).toHaveLength(1)
+    expect(orphan[0]!.vendorName).toBe(UNKNOWN_VENDOR)
+    expect(orphan[0]!.totalSpend).toBe(30_118)
+    expect(orphan[0]!.onContractSpend).toBe(0)
+    expect(orphan[0]!.compliancePercent).toBe(0)
+  })
 })

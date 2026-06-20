@@ -24,8 +24,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Send, Clock, X, Check, CheckCircle2, Link2 } from "lucide-react"
 import type { ConnectionData } from "@/lib/actions/connections"
+import type { ConnectionMode } from "@/lib/generated/prisma/client"
 
 export interface ConnectionsTabProps {
   connectionData: ConnectionData[] | undefined
@@ -40,6 +48,8 @@ export interface ConnectionsTabProps {
   onAcceptConnection: (id: string) => void
   onRejectConnection: (id: string) => void
   onRemoveConnection: (id: string) => void
+  /** Vendor sets 1-way vs 2-way mode for an accepted connection. */
+  onSetConnectionMode: (id: string, mode: ConnectionMode) => void
 }
 
 export function ConnectionsTab({
@@ -55,6 +65,7 @@ export function ConnectionsTab({
   onAcceptConnection,
   onRejectConnection,
   onRemoveConnection,
+  onSetConnectionMode,
 }: ConnectionsTabProps) {
   const accepted = connectionData?.filter((c) => c.status === "accepted") ?? []
   const pendingIncoming =
@@ -222,6 +233,7 @@ export function ConnectionsTab({
                       <TableHead>Facility</TableHead>
                       <TableHead>Connected Since</TableHead>
                       <TableHead>Initiated By</TableHead>
+                      <TableHead>Data sharing</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -249,6 +261,25 @@ export function ConnectionsTab({
                               ? "You"
                               : connection.facilityName}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {/* 1-way = contracts stay private, vendor uses own
+                              COGs; 2-way = contracts flow to the facility.
+                              (Charles: vendor had no place to choose this.) */}
+                          <Select
+                            value={connection.mode}
+                            onValueChange={(v) =>
+                              onSetConnectionMode(connection.id, v as ConnectionMode)
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-[170px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="two_way">2-way (share contracts)</SelectItem>
+                              <SelectItem value="one_way">1-way (private, own COGs)</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell className="text-right">
                           <Button

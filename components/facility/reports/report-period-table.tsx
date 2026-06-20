@@ -108,7 +108,10 @@ export function ReportPeriodTable({
               {isTieIn && (
                 <>
                   <td className="px-3 py-3 text-right">{formatCurrency(row.totalSpend)}</td>
-                  <td className="px-3 py-3 text-right">{formatCurrency(row.paymentActual)}</td>
+                  {/* Spend Actual = realized spend (totalSpend); tie-in spend periods
+                      carry no paymentActual, so reading it here always showed $0
+                      while the footer (line ~153) correctly used totalSpend. */}
+                  <td className="px-3 py-3 text-right">{formatCurrency(row.totalSpend)}</td>
                   <td className="px-3 py-3 text-right">{row.totalVolume}</td>
                   <td className="px-3 py-3 text-right">{row.totalVolume}</td>
                   <td className="px-3 py-3 text-right">{formatCurrency(row.rebateEarned)}</td>

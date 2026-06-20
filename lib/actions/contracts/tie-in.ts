@@ -204,11 +204,17 @@ export interface ContractCapitalScheduleResult {
   paidToDate: number
   /**
    * Sum of collected rebate that has been applied to the capital balance
-   * (Charles W1.Y-C). Equal to `paidToDate` on tie-in contracts; surfaced
-   * separately so the UI can label the number unambiguously (tie-in
-   * capital retires via rebate, not cash).
+   * (Charles W1.Y-C). Surfaced separately so the UI can label the number
+   * unambiguously (tie-in capital retires via rebate, not cash).
    */
   rebateAppliedToCapital: number
+  /**
+   * Sum of user-logged payments/credits applied to the capital balance
+   * (Charles 2026-06-20: "payments and credits are how things are paid
+   * off"). These are the `Log Credit / Payment` entries — on a pure capital
+   * contract (no rebates) this is the ONLY paydown. Part of `paidToDate`.
+   */
+  paymentsAppliedToCapital: number
   /**
    * Projected capital balance at the contract's scheduled expiration
    * given the trailing-rebate paydown velocity. $0 means the paydown is
@@ -472,6 +478,7 @@ export async function getContractCapitalSchedule(
     remainingBalance: 0,
     paidToDate: 0,
     rebateAppliedToCapital: 0,
+    paymentsAppliedToCapital: 0,
     projectedEndOfTermBalance: null,
     contractType: contract?.contractType ?? "usage",
     minAnnualPurchase: null,
@@ -644,7 +651,27 @@ export async function getContractCapitalSchedule(
     allRebates,
     isCapital ? "tie_in" : contract.contractType,
   )
-  const paidToDate = rebateAppliedToCapital
+
+  // Charles 2026-06-20 ("when I log a payment it does not record or count
+  // toward the balance"): a pure CAPITAL contract earns no rebates — it is
+  // paid off by logged payments/credits. Those land in ContractPeriod with
+  // totalSpend=0 / rebateEarned=0 and the amount on `paymentActual`
+  // (createContractTransaction). Seeded invoice rows always carry
+  // totalSpend>0, so filtering on totalSpend=0 isolates user-logged
+  // payments/credits. Both rebate-applied AND logged payments retire capital.
+  const loggedPaymentAgg = await prisma.contractPeriod.aggregate({
+    where: {
+      contractId: contract.id,
+      totalSpend: 0,
+      rebateEarned: 0,
+      paymentActual: { gt: 0 },
+    },
+    _sum: { paymentActual: true },
+  })
+  const paymentsAppliedToCapital = Number(
+    loggedPaymentAgg._sum.paymentActual ?? 0,
+  )
+  const paidToDate = rebateAppliedToCapital + paymentsAppliedToCapital
   const remainingBalance = Math.max(0, financedPrincipal - paidToDate)
 
   // Projected end-of-term balance: how much capital remains at the
@@ -829,6 +856,7 @@ export async function getContractCapitalSchedule(
     remainingBalance,
     paidToDate,
     rebateAppliedToCapital,
+    paymentsAppliedToCapital,
     projectedEndOfTermBalance,
     contractType: contract.contractType,
     minAnnualPurchase,
@@ -895,6 +923,7 @@ export async function getVendorContractCapitalSchedule(
     remainingBalance: 0,
     paidToDate: 0,
     rebateAppliedToCapital: 0,
+    paymentsAppliedToCapital: 0,
     projectedEndOfTermBalance: null,
     contractType: contract?.contractType ?? "usage",
     minAnnualPurchase: null,
@@ -1012,7 +1041,27 @@ export async function getVendorContractCapitalSchedule(
     allRebates,
     isCapital ? "tie_in" : contract.contractType,
   )
-  const paidToDate = rebateAppliedToCapital
+
+  // Charles 2026-06-20 ("when I log a payment it does not record or count
+  // toward the balance"): a pure CAPITAL contract earns no rebates — it is
+  // paid off by logged payments/credits. Those land in ContractPeriod with
+  // totalSpend=0 / rebateEarned=0 and the amount on `paymentActual`
+  // (createContractTransaction). Seeded invoice rows always carry
+  // totalSpend>0, so filtering on totalSpend=0 isolates user-logged
+  // payments/credits. Both rebate-applied AND logged payments retire capital.
+  const loggedPaymentAgg = await prisma.contractPeriod.aggregate({
+    where: {
+      contractId: contract.id,
+      totalSpend: 0,
+      rebateEarned: 0,
+      paymentActual: { gt: 0 },
+    },
+    _sum: { paymentActual: true },
+  })
+  const paymentsAppliedToCapital = Number(
+    loggedPaymentAgg._sum.paymentActual ?? 0,
+  )
+  const paidToDate = rebateAppliedToCapital + paymentsAppliedToCapital
   const remainingBalance = Math.max(0, financedPrincipal - paidToDate)
 
   // Vendor doesn't get COG / spend metrics — those are facility-side
@@ -1030,6 +1079,7 @@ export async function getVendorContractCapitalSchedule(
     remainingBalance,
     paidToDate,
     rebateAppliedToCapital,
+    paymentsAppliedToCapital,
     projectedEndOfTermBalance: null,
     contractType: contract.contractType,
     minAnnualPurchase: null,

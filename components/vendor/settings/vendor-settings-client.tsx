@@ -29,7 +29,9 @@ import {
   useAcceptConnection,
   useRejectConnection,
   useRemoveConnection,
+  useSetConnectionMode,
 } from "@/hooks/use-connections"
+import type { ConnectionMode } from "@/lib/generated/prisma/client"
 import { useCredits, useUsageHistory } from "@/hooks/use-ai-credits"
 import { toast } from "sonner"
 
@@ -68,10 +70,23 @@ export function VendorSettingsClient({
   const acceptConn = useAcceptConnection(vendorId)
   const rejectConn = useRejectConnection(vendorId)
   const removeConn = useRemoveConnection(vendorId)
+  const setMode = useSetConnectionMode(vendorId)
   const creditsQuery = useCredits(vendorId, "vendor")
   const usageQuery = useUsageHistory(creditsQuery.data?.id)
 
   const displayName = profile.data?.name ?? vendorName
+
+  // A vendor uses "facility data" only when it has an ACCEPTED two-way
+  // connection; otherwise it operates 1-way and manages its own COGs. So the
+  // COGS upload is available by default (incl. standalone vendors with no
+  // connections) and hides only once the vendor goes two-way with a facility.
+  // Previously `isOneWay` was hardcoded true (Charles: vendor had no place to
+  // choose facility-connection vs own COGs).
+  const hasTwoWayConnection =
+    connections.data?.some(
+      (c) => c.status === "accepted" && c.mode === "two_way",
+    ) ?? false
+  const isOneWay = !hasTwoWayConnection
 
   const handleSendInvite = () => {
     const name = newInviteFacilityName.trim()
@@ -80,7 +95,8 @@ export function VendorSettingsClient({
     // hiding server failures (e.g. "Facility not found with that email").
     sendInvite.mutate(
       {
-        toEmail: `admin@${name.toLowerCase().replace(/\s/g, "")}.com`,
+        // Resolved by facility NAME server-side — no fabricated email.
+        toEmail: "",
         toName: name,
         message: newInviteMessage || undefined,
       },
@@ -200,6 +216,23 @@ export function VendorSettingsClient({
             onAcceptConnection={(id) => acceptConn.mutate(id)}
             onRejectConnection={(id) => rejectConn.mutate(id)}
             onRemoveConnection={(id) => removeConn.mutate(id)}
+            onSetConnectionMode={(id, mode: ConnectionMode) =>
+              setMode.mutate(
+                { connectionId: id, mode },
+                {
+                  onSuccess: () =>
+                    toast.success(
+                      mode === "two_way"
+                        ? "Now sharing contracts with this facility"
+                        : "Contracts kept private — using your own COGs",
+                    ),
+                  onError: (err) =>
+                    toast.error(
+                      err instanceof Error ? err.message : "Failed to update mode",
+                    ),
+                },
+              )
+            }
           />
         </TabsContent>
 
@@ -208,7 +241,7 @@ export function VendorSettingsClient({
         </TabsContent>
 
         <TabsContent value="cogs" className="space-y-6">
-          <CogsTab vendorId={vendorId} isOneWay />
+          <CogsTab vendorId={vendorId} isOneWay={isOneWay} />
         </TabsContent>
 
         <TabsContent value="alerts" className="space-y-6">

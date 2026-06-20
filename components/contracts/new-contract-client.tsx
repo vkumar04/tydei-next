@@ -376,6 +376,15 @@ export function NewContractClient({
     // action (lib/actions/contracts.ts) converts "" back to null.
     form.setValue("effectiveDate", data.effectiveDate ?? "")
     form.setValue("expirationDate", data.expirationDate ?? "")
+    // Bug 8 (Charles 2026-06-20: "on the performance rebate the AI never
+    // captures it… always has it as monthly"). Wire the contract-level
+    // rebate pay period the extractor now returns. The dates card keeps
+    // performancePeriod + rebatePayPeriod in lockstep, so set BOTH; when the
+    // model returns null we leave the form default untouched.
+    if (data.rebatePayPeriod) {
+      form.setValue("performancePeriod", data.rebatePayPeriod)
+      form.setValue("rebatePayPeriod", data.rebatePayPeriod)
+    }
     if (data.totalValue) {
       form.setValue("totalValue", data.totalValue)
       // Auto-compute annual value via calendar-month math so whole-year
