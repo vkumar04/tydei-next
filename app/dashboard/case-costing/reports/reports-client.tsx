@@ -349,29 +349,30 @@ export function CaseCostingReportsClient({ facilityId }: CaseCostingReportsClien
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      {/* Header — stacks on mobile so the actions don't overflow the title */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <Button
             asChild
             variant="ghost"
             size="icon"
+            className="shrink-0"
             aria-label="Back to Case Costing"
           >
             <Link href="/dashboard/case-costing">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight">
               Case Costing Reports
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Surgeon performance, procedure analytics, and cost analysis
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm">
             <Printer className="mr-2 h-4 w-4" />
             Print
