@@ -18,7 +18,10 @@ import {
 } from "@/lib/contracts/tie-in"
 import { buildTieInAmortizationSchedule } from "@/lib/rebates/engine/amortization"
 import type { AmortizationEntry } from "@/lib/rebates/engine/types"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import {
+  contractOwnershipWhere,
+  contractsOwnedByFacility,
+} from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { sumRebateAppliedToCapital } from "@/lib/contracts/rebate-capital-filter"
 import { selectMinAnnualPurchase } from "@/lib/contracts/min-annual-selection"
@@ -34,8 +37,16 @@ import {
 export async function getContractTieInBundle(contractId: string) {
   const { facility } = await requireFacility()
 
-  const bundle = await prisma.tieInBundle.findUnique({
-    where: { primaryContractId: contractId },
+  // Tenant isolation: scope the bundle read to a primary contract the caller's
+  // facility actually owns. `findUnique({ primaryContractId })` alone is a
+  // cross-tenant IDOR — any facility could read another's bundle structure +
+  // member contract/tier config by passing a foreign contractId. (Security
+  // audit 2026-06-21.)
+  const bundle = await prisma.tieInBundle.findFirst({
+    where: {
+      primaryContractId: contractId,
+      primaryContract: { is: contractsOwnedByFacility(facility.id) },
+    },
     include: {
       primaryContract: { select: { id: true, name: true, vendorId: true } },
       members: {

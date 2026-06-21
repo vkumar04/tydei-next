@@ -424,6 +424,9 @@ export async function recomputeSupplyContractStatus(): Promise<{
   flippedOff: number
 }> {
   const { facility } = await requireFacility()
+  // Writes CaseSupply.isOnContract/contractId — block read-only `user` tier
+  // (every sibling mutation in this file gates the same way; audit 2026-06-21).
+  await requireCanMutate()
   return recomputeCaseSupplyContractStatus(prisma, facility.id)
 }
 

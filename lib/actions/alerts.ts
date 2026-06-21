@@ -270,6 +270,9 @@ export async function synthesizeAndPersistAlerts(): Promise<{
   resolved: number
 }> {
   const session = await requireFacility()
+  // Creates/resolves Alert rows — block read-only `user` tier, consistent with
+  // every other alert mutation in this file (audit 2026-06-21).
+  await requireCanMutate()
   return runAlertSynthesisForFacility(session.facility.id, {
     auditUserId: session.user.id,
   })
