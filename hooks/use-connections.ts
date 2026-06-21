@@ -9,7 +9,11 @@ import {
   rejectConnection,
   removeConnection,
 } from "@/lib/actions/connections"
-import { setConnectionMode } from "@/lib/actions/connection-mode"
+import {
+  setConnectionMode,
+  getVendorOperatingMode,
+  setVendorOperatingMode,
+} from "@/lib/actions/connection-mode"
 import type { ConnectionStatus, ConnectionMode } from "@/lib/generated/prisma/client"
 
 export function useConnections(
@@ -81,6 +85,27 @@ export function useSetConnectionMode(entityId: string) {
       setConnectionMode(connectionId, mode),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.settings.connections(entityId) })
+    },
+  })
+}
+
+// Vendor-level operating mode (the standalone-vendor choice). Distinct from the
+// per-connection toggle above.
+export function useVendorOperatingMode(vendorId: string) {
+  return useQuery({
+    queryKey: queryKeys.settings.vendorOperatingMode(vendorId),
+    queryFn: () => getVendorOperatingMode(),
+  })
+}
+
+export function useSetVendorOperatingMode(vendorId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (mode: ConnectionMode) => setVendorOperatingMode(mode),
+    onSuccess: () => {
+      void qc.invalidateQueries({
+        queryKey: queryKeys.settings.vendorOperatingMode(vendorId),
+      })
     },
   })
 }

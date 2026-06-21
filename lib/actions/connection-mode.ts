@@ -76,3 +76,34 @@ export async function setConnectionMode(
   if (result.count === 0) throw new Error("Connection not found")
   return { id: connectionId, mode }
 }
+
+// ─── Vendor-level operating mode (Charles 2026-06-20) ──────────────
+//
+// A STANDALONE vendor (no facility connections) has no Connection to set a
+// mode on, so it had no way to choose 1-way (own contracts + own COGs) vs
+// 2-way. `Vendor.defaultMode` is that vendor-level choice. Null = derive from
+// connections as before (pre-feature behavior). The COGS tab + the
+// connection-flow gate read this when set.
+
+/** Read the calling vendor's explicit operating mode (null = not chosen). */
+export async function getVendorOperatingMode(): Promise<ConnectionMode | null> {
+  const { vendor } = await requireVendor()
+  const row = await prisma.vendor.findUnique({
+    where: { id: vendor.id },
+    select: { defaultMode: true },
+  })
+  return row?.defaultMode ?? null
+}
+
+/** The calling vendor sets its operating mode. Read-only-gated, own-vendor scoped. */
+export async function setVendorOperatingMode(
+  mode: ConnectionMode,
+): Promise<{ mode: ConnectionMode }> {
+  await requireCanMutate()
+  const { vendor } = await requireVendor()
+  await prisma.vendor.update({
+    where: { id: vendor.id },
+    data: { defaultMode: mode },
+  })
+  return { mode }
+}

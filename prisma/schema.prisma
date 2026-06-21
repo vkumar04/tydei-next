@@ -576,6 +576,11 @@ model Vendor {
   zip            String?
   status         String     @default("active")
   tier           VendorTier @default(standard)
+  // Vendor-level operating mode (Charles 2026-06-20). Lets a STANDALONE
+  // vendor (no facility connections) explicitly choose 1-way (own contracts +
+  // own COGs) vs 2-way (facility connection). Nullable: when null the mode is
+  // derived from connections as before (byte-identical pre-feature behavior).
+  defaultMode    ConnectionMode?
   organizationId String?    @unique
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
