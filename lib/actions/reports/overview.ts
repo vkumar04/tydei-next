@@ -8,38 +8,18 @@
  *   - 12-month spend + rebate trend
  *   - Top-line stats (total contracts, total value, total rebates)
  *
- * Aggregation math lives in pure helpers (`lib/reports/lifecycle.ts`,
- * `lib/reports/monthly-trend.ts`). This file is the thin server-action
- * wrapper: scope → load → delegate → serialize.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.0
+ * Thin facility wrapper: gate (`requireFacility`) → build the
+ * facility-scoped Prisma `where` clauses → fetch → delegate ALL math to the
+ * shared pure core `buildReportOverview` (`lib/reports/overview-core.ts`),
+ * which the vendor mirror also uses so the two surfaces can never drift.
  */
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
-import {
-  computeContractLifecycleDistribution,
-  type ContractForLifecycle,
-  type LifecycleDistribution,
-} from "@/lib/reports/lifecycle"
-import {
-  buildMonthlySpendRebateTrend,
-  type MonthlyTrendPoint,
-  type SpendRecord,
-  type RebateRecord,
-} from "@/lib/reports/monthly-trend"
-import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { buildReportOverview } from "@/lib/reports/overview-core"
 
-export interface ReportsOverviewPayload {
-  lifecycle: LifecycleDistribution
-  monthlyTrend: MonthlyTrendPoint[]
-  stats: {
-    totalContracts: number
-    totalValue: number
-    totalRebates: number
-  }
-}
+export type { ReportsOverviewPayload } from "@/lib/reports/overview-core"
 
 /**
  * Return the composed Overview payload for the caller's active facility.
@@ -52,7 +32,7 @@ export interface ReportsOverviewPayload {
 export async function getReportsOverview(input?: {
   dateFrom?: Date
   dateTo?: Date
-}): Promise<ReportsOverviewPayload> {
+}) {
   const { facility } = await requireFacility()
   const referenceDate = input?.dateTo ?? new Date()
 
@@ -66,22 +46,7 @@ export async function getReportsOverview(input?: {
     },
   })
 
-  const lifecycleInput: ContractForLifecycle[] = contractRows.map((c) => ({
-    status: c.status as ContractForLifecycle["status"],
-    expirationDate: c.expirationDate ?? null,
-  }))
-  const lifecycle = computeContractLifecycleDistribution(
-    lifecycleInput,
-    referenceDate,
-  )
-
-  const totalContracts = contractRows.length
-  const totalValue = contractRows.reduce(
-    (sum, c) => sum + Number(c.totalValue ?? 0),
-    0,
-  )
-
-  // ─── COG spend + Rebates (monthly trend) ──────────────────────
+  // ─── COG spend (monthly trend) ────────────────────────────────
   const cogWhere: {
     facilityId: string
     transactionDate?: { gte?: Date; lte?: Date }
@@ -97,11 +62,7 @@ export async function getReportsOverview(input?: {
     select: { transactionDate: true, extendedPrice: true },
   })
 
-  const spend: SpendRecord[] = cogRows.map((r) => ({
-    transactionDate: r.transactionDate,
-    extendedPrice: Number(r.extendedPrice ?? 0),
-  }))
-
+  // ─── Rebates (monthly trend + stat) ───────────────────────────
   const rebateWhere: {
     facilityId: string
     payPeriodEnd?: { gte?: Date; lte?: Date }
@@ -117,35 +78,7 @@ export async function getReportsOverview(input?: {
     select: { payPeriodEnd: true, rebateEarned: true },
   })
 
-  const rebates: RebateRecord[] = rebateRows.map((r) => ({
-    periodEndDate: r.payPeriodEnd,
-    rebateEarned: Number(r.rebateEarned ?? 0),
-  }))
-
-  const monthlyTrend = buildMonthlySpendRebateTrend(spend, rebates, {
-    referenceDate,
-  })
-
-  // Charles W1.U-B: route through the canonical helper so reports'
-  // "Total Rebates" stat applies the same `payPeriodEnd <= today`
-  // closed-period rule as every other Earned surface. The date-range
-  // filter above already narrows the query; the helper adds the
-  // future-period safety net for unbounded callers.
-  const totalRebates = sumEarnedRebatesLifetime(
-    rebateRows.map((r) => ({
-      payPeriodEnd: r.payPeriodEnd,
-      rebateEarned: r.rebateEarned,
-    })),
-    referenceDate,
+  return serialize(
+    buildReportOverview({ contractRows, cogRows, rebateRows, referenceDate }),
   )
-
-  return serialize({
-    lifecycle,
-    monthlyTrend,
-    stats: {
-      totalContracts,
-      totalValue,
-      totalRebates,
-    },
-  })
 }

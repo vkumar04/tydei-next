@@ -3,9 +3,8 @@
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
-import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { computeSyntheticContractPeriods } from "@/lib/actions/contract-periods"
+import { buildReportDataRows } from "@/lib/reports/report-data-core"
 import {
   contractsOwnedByVendor,
   contractOwnershipWhereVendor,
@@ -201,25 +200,9 @@ export async function getVendorReportData(input: {
   const windowEnd = new Date(dateTo)
   const windowStart = new Date(dateFrom)
 
-  // Per-period shape the report tabs (reports-per-type-tab / report-period-table
-  // → ContractPeriodRow) consume. Built from persisted ContractPeriod rows
-  // when present, otherwise from the synthetic COG-derived fallback.
-  interface ReportPeriodRow {
-    id: string
-    periodStart: string
-    periodEnd: string
-    totalSpend: number
-    totalVolume: number
-    rebateEarned: number
-    rebateCollected: number
-    paymentExpected: number
-    paymentActual: number
-    tierAchieved: number | null
-  }
-
-  // 2026-06-18 perf audit: the synthetic-period fallback below runs a
-  // full-COG groupBy per contract. Vendor contracts span multiple facilities,
-  // so fetch each DISTINCT facility's COG-category universe ONCE up front
+  // 2026-06-18 perf audit: the synthetic-period fallback runs a full-COG
+  // groupBy per contract. Vendor contracts span multiple facilities, so
+  // fetch each DISTINCT facility's COG-category universe ONCE up front
   // (usually 1–3 facilities) and reuse it — turning N full-COG groupBys into
   // D, where D = distinct facilities.
   const { facilityCogCategoryUniverse } = await import(
@@ -239,128 +222,31 @@ export async function getVendorReportData(input: {
     }),
   )
 
-  const contractRows = await Promise.all(
-    contracts.map(async (c) => {
-      const rebateEarnedCanonical = sumEarnedRebatesLifetime(
-        c.rebates,
-        windowEnd,
-      )
-      // Margin = canonical earned rebate − payments actually made over
-      // the returned periods. For usage/pricing/grouped contracts (no
-      // payment ledger) the payment sum is 0, so margin === earned.
-      const paymentActualSum = c.periods.reduce(
-        (s, p) => s + Number(p.paymentActual),
-        0,
-      )
-
-      // Per-period rows: prefer persisted ContractPeriod; when a contract
-      // has ZERO persisted periods, fall back to the same COG-derived
-      // synthetic periods the vendor / Transactions surfaces use, filtered
-      // to the requested window (the persisted path filters via the Prisma
-      // `where` on periodStart/periodEnd — we replicate that filter here on
-      // the synthetic rows). COG is per-facility, so the fallback is scoped
-      // to the contract's OWN facilityId, never the vendor id.
-      // Exclude payment/credit-shaped legacy ContractPeriod rows so the real
-      // spend/rebate periods (or synthetic fallback) surface — same fix as the
-      // facility report (Charles 2026-06-20).
-      const spendPeriods = c.periods.filter(
-        (p) =>
-          !(
-            Number(p.totalSpend) === 0 &&
-            Number(p.rebateEarned) === 0 &&
-            Number(p.paymentActual) > 0
-          ),
-      )
-      let periodRows: ReportPeriodRow[] = []
-      if (spendPeriods.length > 0) {
-        periodRows = spendPeriods.map((p) => ({
-          id: p.id,
-          periodStart: p.periodStart.toISOString(),
-          periodEnd: p.periodEnd.toISOString(),
-          totalSpend: Number(p.totalSpend),
-          totalVolume: p.totalVolume,
-          rebateEarned: Number(p.rebateEarned),
-          rebateCollected: Number(p.rebateCollected),
-          paymentExpected: Number(p.paymentExpected),
-          paymentActual: Number(p.paymentActual),
-          tierAchieved: p.tierAchieved,
-        }))
-      } else if (c.facilityId) {
-        // Synthetic-period fallback scopes COG per-facility, so it needs
-        // the contract's own facilityId (nullable on the vendor side —
-        // a facility-less contract has no COG to synthesize from).
-        const synthetic = await computeSyntheticContractPeriods(
-          c,
-          c.facilityId,
-          universeByFacility.get(c.facilityId),
-        )
-        periodRows = synthetic
-          .filter(
-            (p) => p.periodStart >= windowStart && p.periodEnd <= windowEnd,
+  // Per-contract row assembly lives in the shared pure core
+  // `buildReportDataRows` (lib/reports/report-data-core.ts), which the
+  // facility original also uses so the two surfaces can never drift. The
+  // vendor wrapper injects its own per-facility synthetic-period fallback
+  // and the vendor-scoped capital balance.
+  const contractRows = await buildReportDataRows({
+    contracts,
+    windowStart,
+    windowEnd,
+    // COG is per-facility, so the synthetic fallback is scoped to the
+    // contract's OWN facilityId, never the vendor id. A facility-less
+    // contract has no COG to synthesize from → return null so the core
+    // leaves periods empty (mirrors the original `else if (c.facilityId)`).
+    computeSynthetic: (c) =>
+      c.facilityId
+        ? computeSyntheticContractPeriods(
+            c,
+            c.facilityId,
+            universeByFacility.get(c.facilityId),
           )
-          .map((p) => ({
-            id: p.id,
-            periodStart: p.periodStart.toISOString(),
-            periodEnd: p.periodEnd.toISOString(),
-            // Synthetic rows carry real per-month spend, rebate earned, and
-            // tier; fields they cannot derive (volume, collected, payments)
-            // are 0 — the canonical Rebate-table totals below remain the
-            // source of truth for earned/collected aggregates.
-            totalSpend: p.totalSpend,
-            totalVolume: 0,
-            rebateEarned: p.rebateEarned,
-            rebateCollected: 0,
-            paymentExpected: 0,
-            paymentActual: 0,
-            tierAchieved: p.tierAchieved,
-          }))
-      }
-
-      // Capital balance for capital/tie-in contracts — mirrors the facility
-      // report (Charles 2026-06-20 "the balances are not coming in"). Vendor-
-      // scoped because the facility action can't run under a vendor session.
-      let capitalCost: number | null = null
-      let capitalPaidToDate: number | null = null
-      let capitalRemainingBalance: number | null = null
-      if (c.contractType === "capital" || c.contractType === "tie_in") {
-        try {
-          const bal = await getVendorContractCapitalBalance(c.id, vendor.id)
-          if (bal && bal.capitalCost > 0) {
-            capitalCost = bal.capitalCost
-            capitalPaidToDate = bal.paidToDate
-            capitalRemainingBalance = bal.remainingBalance
-          }
-        } catch {
-          // leave nulls — header simply omits the capital balance row
-        }
-      }
-
-      return {
-        id: c.id,
-        name: c.name,
-        // Contract identifier for display — may be null, callers fall
-        // back to `name`.
-        contractNumber: c.contractNumber,
-        vendor: c.vendor.name,
-        vendorId: c.vendor.id,
-        contractType: c.contractType,
-        effectiveDate: c.effectiveDate.toISOString(),
-        expirationDate: c.expirationDate.toISOString(),
-        totalValue: Number(c.totalValue),
-        // Canonical per-contract rebate totals over the report window.
-        // These are what all downstream tabs should display — the raw
-        // `periods[].rebateEarned/Collected` reducers drift.
-        rebateEarnedCanonical,
-        rebateCollectedCanonical: sumCollectedRebates(c.rebates),
-        marginCanonical: rebateEarnedCanonical - paymentActualSum,
-        // Capital balance trio (null for non-capital contracts).
-        capitalCost,
-        capitalPaidToDate,
-        capitalRemainingBalance,
-        periods: periodRows,
-      }
-    }),
-  )
+        : Promise.resolve(null),
+    // Vendor-scoped capital balance — the facility action can't run under a
+    // vendor session.
+    resolveCapital: (c) => getVendorContractCapitalBalance(c.id, vendor.id),
+  })
 
   return serialize({
     // Vendor reports span every facility the vendor's contracts belong

@@ -3,10 +3,9 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
-import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { computeSyntheticContractPeriods } from "@/lib/actions/contract-periods"
 import { getContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
+import { buildReportDataRows } from "@/lib/reports/report-data-core"
 
 // ─── Contracts List (for report selector) ───────────────────────
 
@@ -108,22 +107,6 @@ export async function getReportData(input: {
   const windowEnd = new Date(dateTo)
   const windowStart = new Date(dateFrom)
 
-  // Per-period shape the report tabs (reports-per-type-tab / report-period-table
-  // → ContractPeriodRow) consume. Built from persisted ContractPeriod rows
-  // when present, otherwise from the synthetic COG-derived fallback.
-  interface ReportPeriodRow {
-    id: string
-    periodStart: string
-    periodEnd: string
-    totalSpend: number
-    totalVolume: number
-    rebateEarned: number
-    rebateCollected: number
-    paymentExpected: number
-    paymentActual: number
-    tierAchieved: number | null
-  }
-
   // 2026-06-18 perf audit: fetch the facility COG-category universe ONCE (it's
   // facility-scoped, identical across all contracts) and thread it into the
   // per-contract synthetic-period fallback below — instead of that fallback
@@ -134,132 +117,31 @@ export async function getReportData(input: {
   )
   const reportsCogUniverse = await facilityCogCategoryUniverse(facilityId)
 
-  const contractRows = await Promise.all(
-    contracts.map(async (c) => {
-      const rebateEarnedCanonical = sumEarnedRebatesLifetime(
-        c.rebates,
-        windowEnd,
-      )
-      // Margin = canonical earned rebate − payments actually made over
-      // the returned periods. For usage/pricing/grouped contracts (no
-      // payment ledger) the payment sum is 0, so margin === earned.
-      const paymentActualSum = c.periods.reduce(
-        (s, p) => s + Number(p.paymentActual),
-        0,
-      )
-
-      // Per-period rows: prefer persisted ContractPeriod; when a contract
-      // has ZERO persisted periods (the facility-Reports-empty bug), fall
-      // back to the same COG-derived synthetic periods the vendor /
-      // Transactions surfaces use, filtered to the requested window (the
-      // persisted path filters via the Prisma `where` on periodStart/
-      // periodEnd — we replicate that filter here on the synthetic rows).
-      // Charles 2026-06-20 ("not all the numbers for this contract are coming
-      // up in reports"): exclude payment/credit-shaped legacy ContractPeriod
-      // rows (totalSpend=0 ∧ rebateEarned=0 ∧ paymentActual>0, a single-day
-      // window) from the spend/rebate period set. Those are stray logged
-      // payments (pre-PR#72 storage); leaving them in made a contract with one
-      // such row take the persisted branch and render ONLY that $0-spend row,
-      // hiding the real COG-derived spend + rebate (the synthetic fallback
-      // below produces it).
-      const spendPeriods = c.periods.filter(
-        (p) =>
-          !(
-            Number(p.totalSpend) === 0 &&
-            Number(p.rebateEarned) === 0 &&
-            Number(p.paymentActual) > 0
-          ),
-      )
-      let periodRows: ReportPeriodRow[]
-      if (spendPeriods.length > 0) {
-        periodRows = spendPeriods.map((p) => ({
-          id: p.id,
-          periodStart: p.periodStart.toISOString(),
-          periodEnd: p.periodEnd.toISOString(),
-          totalSpend: Number(p.totalSpend),
-          totalVolume: p.totalVolume,
-          rebateEarned: Number(p.rebateEarned),
-          rebateCollected: Number(p.rebateCollected),
-          paymentExpected: Number(p.paymentExpected),
-          paymentActual: Number(p.paymentActual),
-          tierAchieved: p.tierAchieved,
-        }))
-      } else {
-        const synthetic = await computeSyntheticContractPeriods(
-          c,
-          facilityId,
-          reportsCogUniverse,
-        )
-        periodRows = synthetic
-          .filter(
-            (p) => p.periodStart >= windowStart && p.periodEnd <= windowEnd,
-          )
-          .map((p) => ({
-            id: p.id,
-            periodStart: p.periodStart.toISOString(),
-            periodEnd: p.periodEnd.toISOString(),
-            // Synthetic rows carry real per-month spend, rebate earned, and
-            // tier; fields they cannot derive (volume, collected, payments)
-            // are 0 — the canonical Rebate-table totals below remain the
-            // source of truth for earned/collected aggregates.
-            totalSpend: p.totalSpend,
-            totalVolume: 0,
-            rebateEarned: p.rebateEarned,
-            rebateCollected: 0,
-            paymentExpected: 0,
-            paymentActual: 0,
-            tierAchieved: p.tierAchieved,
-          }))
-      }
-
-      // Capital balance for capital/tie-in contracts (Charles 2026-06-20 "the
-      // balances are not coming in"). Route through the canonical
-      // getContractCapitalSchedule — capitalCost (line items or totalValue),
-      // paidToDate (rebate applied + logged payments/credits), and the
-      // remaining balance. Best-effort: a schedule failure must not fail the
-      // whole report.
-      let capitalCost: number | null = null
-      let capitalPaidToDate: number | null = null
-      let capitalRemainingBalance: number | null = null
-      if (c.contractType === "capital" || c.contractType === "tie_in") {
-        try {
-          const sched = await getContractCapitalSchedule(c.id)
-          if (sched.capitalCost > 0) {
-            capitalCost = sched.capitalCost
-            capitalPaidToDate = sched.paidToDate
-            capitalRemainingBalance = sched.remainingBalance
-          }
-        } catch {
-          // leave nulls — header simply omits the capital balance row
-        }
-      }
-
+  // Per-contract row assembly lives in the shared pure core
+  // `buildReportDataRows` (lib/reports/report-data-core.ts), which the
+  // vendor mirror also uses so the two surfaces can never drift. The
+  // facility wrapper injects its own facility-scoped synthetic-period
+  // fallback and the facility-gated capital schedule.
+  const contractRows = await buildReportDataRows({
+    contracts,
+    windowStart,
+    windowEnd,
+    // Facility COG is facility-scoped; the synthetic fallback always runs
+    // for the active facility (matching the original always-call behavior).
+    computeSynthetic: (c) =>
+      computeSyntheticContractPeriods(c, facilityId, reportsCogUniverse),
+    // Route through the canonical facility-gated getContractCapitalSchedule —
+    // capitalCost (line items or totalValue), paidToDate (rebate applied +
+    // logged payments/credits), and the remaining balance.
+    resolveCapital: async (c) => {
+      const sched = await getContractCapitalSchedule(c.id)
       return {
-        id: c.id,
-        name: c.name,
-        // Contract identifier for display — may be null, callers fall
-        // back to `name`.
-        contractNumber: c.contractNumber,
-        vendor: c.vendor.name,
-        vendorId: c.vendor.id,
-        contractType: c.contractType,
-        effectiveDate: c.effectiveDate.toISOString(),
-        expirationDate: c.expirationDate.toISOString(),
-        totalValue: Number(c.totalValue),
-        // Canonical per-contract rebate totals over the report window.
-        // These are what all downstream tabs should display — the raw
-        // `periods[].rebateEarned/Collected` reducers drift.
-        rebateEarnedCanonical,
-        rebateCollectedCanonical: sumCollectedRebates(c.rebates),
-        marginCanonical: rebateEarnedCanonical - paymentActualSum,
-        // Capital balance trio (null for non-capital contracts).
-        capitalCost,
-        capitalPaidToDate,
-        capitalRemainingBalance,
-        periods: periodRows,
+        capitalCost: sched.capitalCost,
+        paidToDate: sched.paidToDate,
+        remainingBalance: sched.remainingBalance,
       }
-    }),
-  )
+    },
+  })
 
   return serialize({
     // Active facility name — surfaced once at the top level (not
