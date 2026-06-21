@@ -57,12 +57,17 @@ export async function deleteFile(key: string) {
 export async function getUploadPresignedUrl(
   key: string,
   contentType: string,
-  expiresIn = 300
+  expiresIn = 300,
+  contentLength?: number
 ) {
   const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: key,
     ContentType: contentType,
+    // When provided, ContentLength is a SIGNED header — the client must PUT
+    // exactly this many bytes, so a presigned URL can't be reused to upload an
+    // oversized object (storage-abuse guard; security audit 2026-06-21).
+    ...(contentLength != null ? { ContentLength: contentLength } : {}),
   })
   const uploadUrl = await awsGetSignedUrl(s3, command, { expiresIn })
   return { uploadUrl, key }

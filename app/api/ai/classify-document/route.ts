@@ -236,6 +236,16 @@ export async function POST(request: Request) {
       return Response.json({ error: "No file provided" }, { status: 400 })
     }
 
+    // Cap upload size (cost/DoS guard) — matches the sibling extract routes
+    // (security audit 2026-06-21).
+    const MAX_BYTES = 25 * 1024 * 1024
+    if (file.size > MAX_BYTES) {
+      return Response.json(
+        { error: "File too large. Maximum size is 25MB." },
+        { status: 413 },
+      )
+    }
+
     const ext = fileName.split(".").pop()?.toLowerCase()
     const { year, quarter, month, dataPeriod } = extractDatePeriod(fileName)
 

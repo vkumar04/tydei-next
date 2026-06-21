@@ -34,6 +34,16 @@ export async function POST(request: Request) {
       return Response.json({ error: "No file provided" }, { status: 400 })
     }
 
+    // Cap upload size before reading into memory / shipping to the model
+    // (cost/DoS guard) — matches the sibling extract routes (audit 2026-06-21).
+    const MAX_BYTES = 25 * 1024 * 1024
+    if (file.size > MAX_BYTES) {
+      return Response.json(
+        { error: "File too large. Maximum size is 25MB." },
+        { status: 413 },
+      )
+    }
+
     const arrayBuffer = await file.arrayBuffer()
     const fileData = new Uint8Array(arrayBuffer)
 

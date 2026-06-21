@@ -117,6 +117,23 @@ export async function POST(request: Request) {
         defval: "",
         raw: false,
       })
+      // Bound the materialized matrix (decompression/large-sheet DoS guard) —
+      // mirrors parseXlsxMatrixBounded's caps for the legacy .xls path so a
+      // crafted BIFF can't OOM the container (security audit 2026-06-21).
+      const XLS_MAX_ROWS = 1_048_576
+      const XLS_MAX_CELLS = 20_000_000
+      if (raw.length > XLS_MAX_ROWS) {
+        throw new XlsxLimitError(
+          `Spreadsheet exceeds the maximum of ${XLS_MAX_ROWS.toLocaleString()} rows.`,
+        )
+      }
+      let xlsCellCount = 0
+      for (const row of raw) xlsCellCount += row?.length ?? 0
+      if (xlsCellCount > XLS_MAX_CELLS) {
+        throw new XlsxLimitError(
+          `Spreadsheet exceeds the maximum of ${XLS_MAX_CELLS.toLocaleString()} cells.`,
+        )
+      }
       matrix = raw.map((row) =>
         (row ?? []).map((v) => coerceCellToString(v).trim()),
       )
