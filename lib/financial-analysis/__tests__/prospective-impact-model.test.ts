@@ -115,3 +115,51 @@ describe("discountedCashFlow", () => {
     expect(pv).toBeGreaterThan(0)
   })
 })
+
+import { computeDealScenarioSavings } from "../prospective-impact-model"
+
+describe("computeDealScenarioSavings (facility deal-scenario lens)", () => {
+  it("savings = spend × conversion × (1+growth) × price-cut", () => {
+    expect(
+      computeDealScenarioSavings({
+        currentVendorSpend: 10_000_000,
+        priceChangePct: -0.05, // 5% cut
+        conversionPct: 0.5,
+        volumeGrowthPct: 0,
+      }),
+    ).toBeCloseTo(250_000, 0) // 10M × 0.5 × 0.05
+  })
+
+  it("volume growth scales the converted base", () => {
+    expect(
+      computeDealScenarioSavings({
+        currentVendorSpend: 10_000_000,
+        priceChangePct: -0.1,
+        conversionPct: 1,
+        volumeGrowthPct: 0.2,
+      }),
+    ).toBeCloseTo(1_200_000, 0) // 10M × 1 × 1.2 × 0.1
+  })
+
+  it("a price increase (or no cut) yields zero savings", () => {
+    expect(
+      computeDealScenarioSavings({
+        currentVendorSpend: 10_000_000,
+        priceChangePct: 0.05,
+        conversionPct: 1,
+        volumeGrowthPct: 0,
+      }),
+    ).toBe(0)
+  })
+
+  it("conversion clamps to [0,1]", () => {
+    expect(
+      computeDealScenarioSavings({
+        currentVendorSpend: 1_000_000,
+        priceChangePct: -0.1,
+        conversionPct: 2,
+        volumeGrowthPct: 0,
+      }),
+    ).toBeCloseTo(100_000, 0) // clamped to conversion=1
+  })
+})
