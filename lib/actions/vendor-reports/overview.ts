@@ -17,27 +17,17 @@
  *     `contract: contractsOwnedByVendor(vendor.id)` filter) instead of
  *     `facilityId`.
  *
- * Aggregation math lives in pure helpers (`lib/reports/lifecycle.ts`,
- * `lib/reports/monthly-trend.ts`). This file is the thin server-action
- * wrapper: scope → load → delegate → serialize. The "Total Rebates" stat
- * routes through the canonical `sumEarnedRebatesLifetime` helper so it
- * applies the same `payPeriodEnd <= today` closed-period rule as every
- * other Earned surface.
+ * Thin vendor wrapper: gate (`requireVendor`) → build the vendor-scoped
+ * Prisma `where` clauses → fetch → delegate ALL math to the same shared
+ * pure core `buildReportOverview` (`lib/reports/overview-core.ts`). The
+ * "Total Rebates" stat routes through the canonical
+ * `sumEarnedRebatesLifetime` helper inside the core.
  */
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 import { serialize } from "@/lib/serialize"
-import {
-  computeContractLifecycleDistribution,
-  type ContractForLifecycle,
-} from "@/lib/reports/lifecycle"
-import {
-  buildMonthlySpendRebateTrend,
-  type SpendRecord,
-  type RebateRecord,
-} from "@/lib/reports/monthly-trend"
-import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { buildReportOverview } from "@/lib/reports/overview-core"
 import type { ReportsOverviewPayload } from "@/lib/actions/reports/overview"
 
 /**
@@ -65,22 +55,7 @@ export async function getVendorReportsOverview(input?: {
     },
   })
 
-  const lifecycleInput: ContractForLifecycle[] = contractRows.map((c) => ({
-    status: c.status as ContractForLifecycle["status"],
-    expirationDate: c.expirationDate ?? null,
-  }))
-  const lifecycle = computeContractLifecycleDistribution(
-    lifecycleInput,
-    referenceDate,
-  )
-
-  const totalContracts = contractRows.length
-  const totalValue = contractRows.reduce(
-    (sum, c) => sum + Number(c.totalValue ?? 0),
-    0,
-  )
-
-  // ─── COG spend + Rebates (monthly trend) ──────────────────────
+  // ─── COG spend (monthly trend) — the vendor's own COG rows ─────
   const cogWhere: {
     vendorId: string
     transactionDate?: { gte?: Date; lte?: Date }
@@ -96,11 +71,7 @@ export async function getVendorReportsOverview(input?: {
     select: { transactionDate: true, extendedPrice: true },
   })
 
-  const spend: SpendRecord[] = cogRows.map((r) => ({
-    transactionDate: r.transactionDate,
-    extendedPrice: Number(r.extendedPrice ?? 0),
-  }))
-
+  // ─── Rebates (monthly trend + stat) — rows on vendor's contracts ─
   const rebateWhere: {
     contract: ReturnType<typeof contractsOwnedByVendor>
     payPeriodEnd?: { gte?: Date; lte?: Date }
@@ -116,35 +87,7 @@ export async function getVendorReportsOverview(input?: {
     select: { payPeriodEnd: true, rebateEarned: true },
   })
 
-  const rebates: RebateRecord[] = rebateRows.map((r) => ({
-    periodEndDate: r.payPeriodEnd,
-    rebateEarned: Number(r.rebateEarned ?? 0),
-  }))
-
-  const monthlyTrend = buildMonthlySpendRebateTrend(spend, rebates, {
-    referenceDate,
-  })
-
-  // Charles W1.U-B: route through the canonical helper so reports'
-  // "Total Rebates" stat applies the same `payPeriodEnd <= today`
-  // closed-period rule as every other Earned surface. The date-range
-  // filter above already narrows the query; the helper adds the
-  // future-period safety net for unbounded callers.
-  const totalRebates = sumEarnedRebatesLifetime(
-    rebateRows.map((r) => ({
-      payPeriodEnd: r.payPeriodEnd,
-      rebateEarned: r.rebateEarned,
-    })),
-    referenceDate,
+  return serialize(
+    buildReportOverview({ contractRows, cogRows, rebateRows, referenceDate }),
   )
-
-  return serialize({
-    lifecycle,
-    monthlyTrend,
-    stats: {
-      totalContracts,
-      totalValue,
-      totalRebates,
-    },
-  })
 }
