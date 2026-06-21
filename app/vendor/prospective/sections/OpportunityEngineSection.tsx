@@ -1,0 +1,536 @@
+"use client"
+
+import { useMemo, useState } from "react"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import { Slider } from "@/components/ui/slider"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Rocket,
+  TrendingUp,
+  Boxes,
+  PieChart,
+  MapPin,
+  Cpu,
+  Sparkles,
+  Target,
+} from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Loader2, AlertTriangle } from "lucide-react"
+import { formatPercent } from "@/lib/formatting"
+import { cn } from "@/lib/utils"
+import {
+  computeOpportunityEngine,
+  DEFAULT_OPPORTUNITY_SCENARIO,
+} from "@/lib/prospective-analysis/opportunity-engine"
+import {
+  computeVendorOpportunityScore,
+  type ScoreDimension,
+} from "@/lib/prospective-analysis/vendor-opportunity-score"
+import {
+  useVendorOpportunityData,
+  useVendorOpportunityInsights,
+} from "@/hooks/use-analysis-insights"
+import type { VendorInsightSnapshot } from "@/lib/ai/analysis-insight-schemas"
+
+// ─── Types ─────────────────────────────────────────────────────
+
+interface FacilityOption {
+  id: string
+  name: string
+}
+
+interface OpportunityEngineSectionProps {
+  vendorId: string
+  /** Optional — not required; the engine is assumption-driven. */
+  facilities?: FacilityOption[]
+}
+
+const VENDOR_OPTIONS = [
+  "Arthrex",
+  "Stryker",
+  "Zimmer Biomet",
+  "Medtronic",
+  "Smith & Nephew",
+] as const
+
+const BAND_SUBLABEL: Record<
+  ReturnType<typeof computeOpportunityEngine>["winProbabilityBand"],
+  string
+> = {
+  long_shot: "Long-shot likelihood",
+  competitive: "Competitive",
+  likely: "Likely to convert",
+}
+
+// Compact USD: $6.9M / $803K / $420.
+function usd(n: number): string {
+  const sign = n < 0 ? "-" : ""
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${sign}$${Math.round(abs / 1_000)}K`
+  return `${sign}$${Math.round(abs)}`
+}
+
+// ─── Section ───────────────────────────────────────────────────
+
+export function OpportunityEngineSection({
+  vendorId,
+}: OpportunityEngineSectionProps) {
+  const [vendor, setVendor] = useState<string>(VENDOR_OPTIONS[0])
+  // Slider state is held as integer percentages; mapped to fractions below.
+  const [priceChangePctInt, setPriceChangePctInt] = useState(
+    Math.round(DEFAULT_OPPORTUNITY_SCENARIO.priceChangePct * 100),
+  )
+  const [targetSharePctInt, setTargetSharePctInt] = useState(
+    Math.round(DEFAULT_OPPORTUNITY_SCENARIO.targetShare * 100),
+  )
+  const [volumeGrowthPctInt, setVolumeGrowthPctInt] = useState(
+    Math.round(DEFAULT_OPPORTUNITY_SCENARIO.expectedVolumeGrowthPct * 100),
+  )
+
+  const priceChangePct = priceChangePctInt / 100
+  const targetShare = targetSharePctInt / 100
+  const expectedVolumeGrowthPct = volumeGrowthPctInt / 100
+
+  // Real DB seed: the vendor's trailing-12mo ASP, addressable market, share.
+  const { data: dbData } = useVendorOpportunityData(vendorId)
+  const aiInsights = useVendorOpportunityInsights()
+
+  const engine = useMemo(
+    () =>
+      computeOpportunityEngine({
+        ...DEFAULT_OPPORTUNITY_SCENARIO,
+        // DB-seeded measurables (fall back to defaults when the vendor has no
+        // sales yet).
+        currentAsp:
+          dbData?.hasData && dbData.currentAsp > 0
+            ? dbData.currentAsp
+            : DEFAULT_OPPORTUNITY_SCENARIO.currentAsp,
+        addressableSpend:
+          dbData?.hasData && dbData.addressableSpend > 0
+            ? dbData.addressableSpend
+            : DEFAULT_OPPORTUNITY_SCENARIO.addressableSpend,
+        currentShare: dbData?.hasData
+          ? dbData.currentShare
+          : DEFAULT_OPPORTUNITY_SCENARIO.currentShare,
+        priceChangePct,
+        targetShare,
+        expectedVolumeGrowthPct,
+      }),
+    [dbData, priceChangePct, targetShare, expectedVolumeGrowthPct],
+  )
+
+  const score = useMemo(
+    () =>
+      computeVendorOpportunityScore({
+        engine,
+        rebateCostPct: 0.1,
+        shareOfWalletGainPct: 0.2,
+        competitiveDisplacementScore: 60,
+        multiBuPenetrationScore: 55,
+        technologyAdoptionScore: 50,
+        competitiveThreat: "Stryker",
+        hasCapital: engine.capitalRoboticRevenue > 0,
+      }),
+    [engine],
+  )
+
+  // AI snapshot — sent to Claude on demand for the richer win-prob / offer read.
+  const aiSnapshot: VendorInsightSnapshot = {
+    currentAsp: engine.currentRevenue > 0 ? engine.currentRevenue / Math.max(1, engine.currentUnits) : DEFAULT_OPPORTUNITY_SCENARIO.currentAsp,
+    priceChangePct,
+    currentShare: dbData?.currentShare ?? DEFAULT_OPPORTUNITY_SCENARIO.currentShare,
+    targetShare,
+    expectedVolumeGrowthPct,
+    addressableSpend: engine.addressableSpend,
+    currentRevenue: engine.currentRevenue,
+    targetRevenue: engine.targetRevenue,
+    incrementalRevenue: engine.incrementalRevenue,
+    netUnitImpact: engine.netUnitImpact,
+    blendedMarketShare: engine.blendedMarketShare,
+    territoryRecurringRevenue: engine.territoryRecurringRevenue,
+    capitalRoboticRevenue: engine.capitalRoboticRevenue,
+    deterministicWinProbabilityPct: engine.winProbability * 100,
+    opportunityScoreOverall: score.overall,
+    competitiveThreat: score.winProbability.competitiveThreat,
+  }
+
+  const ai = aiInsights.data
+  const winColor =
+    engine.winProbabilityBand === "likely"
+      ? "text-emerald-600"
+      : "text-amber-600"
+
+  return (
+    <div className="space-y-4">
+      {/* Heading block */}
+      <div className="space-y-1">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Rocket className="h-5 w-5 text-primary" />
+          Opportunity Engine
+        </h2>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Score a prospective deal by ASP impact, category growth (in dollars
+          and market share), and net unit impact. Capital / robotic revenue is
+          separated because it does not carry recurring service that hits the
+          territory number.
+        </p>
+      </div>
+
+      {/* Deal Scenario */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Deal Scenario</CardTitle>
+          <CardDescription>
+            Model the levers — vendor, price vs current ASP, target share, and
+            expected category growth.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="oe-vendor">Vendor</Label>
+              <Select value={vendor} onValueChange={setVendor}>
+                <SelectTrigger id="oe-vendor">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {VENDOR_OPTIONS.map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {v}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <SliderControl
+              label="Price change vs current ASP"
+              value={priceChangePctInt}
+              onChange={setPriceChangePctInt}
+              min={-20}
+              max={20}
+              step={1}
+              format={(v) => `${v > 0 ? "+" : ""}${v}%`}
+            />
+
+            <SliderControl
+              label="Target market share"
+              value={targetSharePctInt}
+              onChange={setTargetSharePctInt}
+              min={0}
+              max={100}
+              step={1}
+              format={(v) => `${v}%`}
+            />
+
+            <SliderControl
+              label="Expected volume growth"
+              value={volumeGrowthPctInt}
+              onChange={setVolumeGrowthPctInt}
+              min={-10}
+              max={30}
+              step={1}
+              format={(v) => `${v > 0 ? "+" : ""}${v}%`}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Six output stat cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          icon={Target}
+          label="Win Probability"
+          value={formatPercent(engine.winProbability * 100)}
+          valueClassName={winColor}
+          sublabel={BAND_SUBLABEL[engine.winProbabilityBand]}
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Incremental Revenue"
+          value={`+${usd(engine.incrementalRevenue)}`}
+          valueClassName="text-emerald-600"
+          sublabel={`${usd(engine.currentRevenue)} → ${usd(engine.targetRevenue)}`}
+        />
+        <StatCard
+          icon={Boxes}
+          label="Net Unit Impact"
+          value={`+${Math.round(engine.netUnitImpact)}`}
+          valueClassName="text-emerald-600"
+          sublabel="units vs current run-rate"
+        />
+        <StatCard
+          icon={PieChart}
+          label="Blended Market Share"
+          value={formatPercent(engine.blendedMarketShare * 100)}
+          sublabel={`of ${usd(engine.addressableSpend)} addressable`}
+        />
+        <StatCard
+          icon={MapPin}
+          label="Territory Recurring Revenue"
+          value={usd(engine.territoryRecurringRevenue)}
+          valueClassName="text-emerald-600"
+          sublabel="Counts toward the rep's territory number"
+        />
+        <StatCard
+          icon={Cpu}
+          label="Capital / Robotic Revenue"
+          value={usd(engine.capitalRoboticRevenue)}
+          sublabel="Does not hit territory number"
+        />
+      </div>
+
+      {/* AI Win Probability & Recommended Offer */}
+      <Card className="border-primary/30">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="h-4 w-4 text-primary" />
+              AI Win Probability &amp; Recommended Offer
+            </CardTitle>
+            <CardDescription>
+              {ai
+                ? "Claude's read of this scenario."
+                : "Deterministic estimate — generate the AI read for richer rationale."}
+            </CardDescription>
+          </div>
+          <Button
+            onClick={() => aiInsights.mutate(aiSnapshot)}
+            disabled={aiInsights.isPending}
+            className="shrink-0"
+          >
+            {aiInsights.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating…
+              </>
+            ) : ai ? (
+              "Regenerate AI insights"
+            ) : (
+              "Generate AI insights"
+            )}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {aiInsights.error && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{aiInsights.error.message}</span>
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <MiniStat
+              label="Win Probability"
+              value={formatPercent(
+                (ai
+                  ? ai.winProbability.probabilityPct
+                  : score.winProbability.probability * 100),
+              )}
+            />
+            <MiniStat
+              label="Risk Level"
+              value={ai ? ai.winProbability.riskLevel : score.winProbability.riskLevel}
+            />
+            <MiniStat
+              label="Competitive Threat"
+              value={
+                ai
+                  ? ai.winProbability.competitiveThreat
+                  : score.winProbability.competitiveThreat
+              }
+            />
+            <MiniStat
+              label="Recommended Action"
+              value={
+                ai
+                  ? ai.winProbability.recommendedAction
+                  : score.winProbability.recommendedAction
+              }
+            />
+          </div>
+
+          {ai?.winProbability.rationale && (
+            <p className="text-sm text-muted-foreground">
+              {ai.winProbability.rationale}
+            </p>
+          )}
+
+          <div className="rounded-md border bg-muted/20 p-4">
+            <p className="text-sm font-medium">Recommended Offer Structure</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              To achieve{" "}
+              {ai
+                ? ai.recommendedOffer.targetConversionPct
+                : score.recommendedOffer.targetConversionPct}
+              % likelihood of conversion, recommend:
+            </p>
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {(ai ? ai.recommendedOffer.items : score.recommendedOffer.items).map(
+                (item, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                    <span>{item}</span>
+                  </li>
+                ),
+              )}
+            </ul>
+            {ai?.recommendedOffer.rationale && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                {ai.recommendedOffer.rationale}
+              </p>
+            )}
+          </div>
+
+          {ai?.opportunityScoreRead && (
+            <p className="text-sm text-muted-foreground">
+              {ai.opportunityScoreRead}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Vendor Opportunity Score */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Vendor Opportunity Score</CardTitle>
+          <CardDescription>
+            Weighted across financial and strategic dimensions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-bold">{score.overall}</span>
+            <span className="text-lg text-muted-foreground">/ 100</span>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <DimensionColumn title="Financial" dimensions={score.financial} />
+            <DimensionColumn title="Strategic" dimensions={score.strategic} />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ─── Sub-components ────────────────────────────────────────────
+
+function SliderControl({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  format,
+}: {
+  label: string
+  value: number
+  onChange: (v: number) => void
+  min: number
+  max: number
+  step: number
+  format: (v: number) => string
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>{label}</Label>
+        <span className="text-sm font-semibold tabular-nums">
+          {format(value)}
+        </span>
+      </div>
+      <Slider
+        value={[value]}
+        min={min}
+        max={max}
+        step={step}
+        onValueChange={(vals) => onChange(vals[0] ?? min)}
+      />
+    </div>
+  )
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  valueClassName,
+  sublabel,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  value: string
+  valueClassName?: string
+  sublabel: string
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-1 pt-6">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Icon className="h-4 w-4" />
+          {label}
+        </div>
+        <p className={cn("text-2xl font-bold", valueClassName)}>{value}</p>
+        <p className="text-xs text-muted-foreground">{sublabel}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold">{value}</p>
+    </div>
+  )
+}
+
+function DimensionColumn({
+  title,
+  dimensions,
+}: {
+  title: string
+  dimensions: ScoreDimension[]
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-medium">{title}</p>
+      <div className="space-y-3">
+        {dimensions.map((d) => (
+          <div key={d.key} className="space-y-1">
+            <div className="flex items-center justify-between text-sm">
+              <span>{d.label}</span>
+              <span className="text-xs text-muted-foreground">
+                weight {d.weight}
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${Math.min(100, Math.max(0, d.score))}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
