@@ -1,0 +1,42 @@
+"use client"
+
+import { useMutation, useQuery } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/query-keys"
+import { generateFacilityAnalysisInsights } from "@/lib/actions/ai/facility-analysis-insights"
+import { generateVendorOpportunityInsights } from "@/lib/actions/ai/vendor-opportunity-insights"
+import { getVendorOpportunityData } from "@/lib/actions/vendor-opportunity-data"
+import type {
+  FacilityAnalysisInsights,
+  FacilityInsightSnapshot,
+  VendorInsightSnapshot,
+  VendorOpportunityInsights,
+} from "@/lib/ai/analysis-insight-schemas"
+
+/**
+ * On-demand AI insight mutations — fired by a "Generate AI insights" button so
+ * the deterministic sliders stay snappy (AI never runs on every drag).
+ * `retry: false`: AI errors aren't transient/user-fixable.
+ */
+export function useFacilityAnalysisInsights() {
+  return useMutation<FacilityAnalysisInsights, Error, FacilityInsightSnapshot>({
+    mutationFn: (snapshot) => generateFacilityAnalysisInsights(snapshot),
+    retry: false,
+  })
+}
+
+export function useVendorOpportunityInsights() {
+  return useMutation<VendorOpportunityInsights, Error, VendorInsightSnapshot>({
+    mutationFn: (snapshot) => generateVendorOpportunityInsights(snapshot),
+    retry: false,
+  })
+}
+
+/** Vendor Opportunity Engine DB seed (addressable spend, current share, ASP). */
+export function useVendorOpportunityData(vendorId: string) {
+  return useQuery({
+    queryKey: queryKeys.prospectiveAnalysis.vendorOpportunityData(vendorId),
+    queryFn: () => getVendorOpportunityData(),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  })
+}

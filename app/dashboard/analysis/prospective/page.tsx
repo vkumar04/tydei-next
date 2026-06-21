@@ -1,35 +1,18 @@
 import { requireFacility } from "@/lib/actions/auth"
-import { getVendors } from "@/lib/actions/vendors"
-import { ProspectiveClient } from "@/components/facility/analysis/prospective/prospective-client"
-
-interface ProspectivePageProps {
-  searchParams?: Promise<{ compare?: string; vendor?: string; tab?: string }>
-}
+import { getFacilityAnalysisData } from "@/lib/actions/facility-analysis-data"
+import { AnalysisDashboardClient } from "@/components/facility/analysis/dashboard/analysis-dashboard-client"
 
 /**
- * Prospective analysis page — server component shell.
+ * Facility Analysis dashboard — server component shell.
  *
- * Responsibilities:
- *   - Auth: require facility session
- *   - Seed the orchestrator with facility id + vendor list (for vendor-bound
- *     spend-pattern + pricing-file lookups)
- *   - Forward URL params (compare / vendor / tab) so the client can hydrate
- *     the correct initial state without a round-trip
+ * Charles 2026-06-21: rebuilt from the old proposal-scoring hub into the CFO
+ * financial dashboard (Current State → Prospective Impact → AI Prospective
+ * Impact Engine). Measurable inputs are loaded from the facility's real data
+ * (`getFacilityAnalysisData`); the deterministic engines recalc live on the
+ * sliders, and Claude adds the narrative/recommendation layer on demand.
  */
-export default async function ProspectivePage({
-  searchParams,
-}: ProspectivePageProps) {
-  const { facility } = await requireFacility()
-  const params = (await searchParams) ?? {}
-  const vendors = await getVendors()
-
-  return (
-    <ProspectiveClient
-      facilityId={facility.id}
-      vendors={vendors}
-      initialCompareId={params.compare ?? null}
-      initialVendorId={params.vendor ?? null}
-      initialTab={params.tab ?? null}
-    />
-  )
+export default async function AnalysisPage() {
+  await requireFacility()
+  const data = await getFacilityAnalysisData()
+  return <AnalysisDashboardClient data={data} />
 }

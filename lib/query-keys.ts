@@ -366,4 +366,29 @@ export const queryKeys = {
     purchaseCompliance: (facilityId: string, range: DateRange) =>
       ["analytics", "purchaseCompliance", facilityId, range] as const,
   },
+  prospectiveAnalysis: {
+    // Facility Analysis dashboard — real DB data seed.
+    facilityData: (facilityId: string) =>
+      ["prospectiveAnalysis", "facilityData", facilityId] as const,
+    // On-demand AI insight layers (facility dashboard + vendor opportunity
+    // engine). Keyed by a hash of the snapshot so a changed scenario refetches.
+    facilityInsightsBase: ["prospectiveAnalysis", "facilityInsights"] as const,
+    facilityInsights: (facilityId: string, snapshotHash: string) =>
+      [
+        "prospectiveAnalysis",
+        "facilityInsights",
+        facilityId,
+        snapshotHash,
+      ] as const,
+    vendorOpportunityData: (vendorId: string) =>
+      ["prospectiveAnalysis", "vendorOpportunityData", vendorId] as const,
+    vendorInsightsBase: ["prospectiveAnalysis", "vendorInsights"] as const,
+    vendorInsights: (vendorId: string, snapshotHash: string) =>
+      [
+        "prospectiveAnalysis",
+        "vendorInsights",
+        vendorId,
+        snapshotHash,
+      ] as const,
+  },
 } as const
