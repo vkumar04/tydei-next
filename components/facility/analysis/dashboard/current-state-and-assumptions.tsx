@@ -110,6 +110,7 @@ export function FinancialAssumptionsCard({
           step={100_000}
           format={usdCompact}
           onChange={(v) => set("netRevenue", v)}
+          hint="Total annual top-line revenue the facility collects. EBITDA, DCF, and enterprise value all scale from this."
         />
         <SliderField
           label="Current vendor spend"
@@ -119,6 +120,7 @@ export function FinancialAssumptionsCard({
           step={100_000}
           format={usdCompact}
           onChange={(v) => set("currentVendorSpend", v)}
+          hint="Total annual supply / vendor (COG) spend. The base the negotiated saving is calculated against."
         />
         <SliderField
           label="Annual case volume"
@@ -128,6 +130,7 @@ export function FinancialAssumptionsCard({
           step={25}
           format={(v) => v.toLocaleString("en-US")}
           onChange={(v) => set("annualCaseVolume", v)}
+          hint="Number of surgical cases per year. Used to spread the dollar impact down to a per-case figure."
         />
         <SliderField
           label="Supply cost % of revenue"
@@ -137,6 +140,7 @@ export function FinancialAssumptionsCard({
           step={0.01}
           format={pct}
           onChange={(v) => set("supplyCostPctOfRevenue", v)}
+          hint="Supply spend as a share of revenue (vendor spend ÷ net revenue). A common benchmark is ~25–35% for an ASC."
         />
         <SliderField
           label="EBITDA margin"
@@ -146,6 +150,7 @@ export function FinancialAssumptionsCard({
           step={0.01}
           format={pct}
           onChange={(v) => set("ebitdaMarginPct", v)}
+          hint="Operating profit (EBITDA) as a share of net revenue. EBITDA = net revenue × this margin."
         />
         <SliderField
           label="Distributable cash flow % of EBITDA"
@@ -155,6 +160,7 @@ export function FinancialAssumptionsCard({
           step={0.01}
           format={pct}
           onChange={(v) => set("dcfPctOfEbitda", v)}
+          hint="Share of EBITDA that converts to distributable cash flow each year (after tax, capex, working capital). Drives the DCF base."
         />
         <SliderField
           label="Discount rate"
@@ -164,6 +170,7 @@ export function FinancialAssumptionsCard({
           step={0.005}
           format={pct}
           onChange={(v) => set("discountRatePct", v)}
+          hint="Annual rate that converts future cash flows to today's dollars in the DCF. Higher rate → future cash worth less now → lower DCF and enterprise value. Typically 8–12% for an ASC."
         />
         <SliderField
           label="Cash flow growth"
@@ -173,6 +180,7 @@ export function FinancialAssumptionsCard({
           step={0.005}
           format={pct}
           onChange={(v) => set("cashFlowGrowthPct", v)}
+          hint="Expected annual growth of distributable cash flow over the projection window. Each year's cash flow grows at this rate before discounting."
         />
         <SliderField
           label="DCF projection years"
@@ -182,6 +190,7 @@ export function FinancialAssumptionsCard({
           step={1}
           format={(v) => `${v} yrs`}
           onChange={(v) => set("dcfProjectionYears", v)}
+          hint="Number of years of cash flow included in the discounted cash flow calculation."
         />
       </CardContent>
     </Card>
