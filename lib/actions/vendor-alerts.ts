@@ -129,3 +129,46 @@ export async function bulkDismissVendorAlerts(ids: string[]) {
   })
   return { dismissed: result.count }
 }
+
+// ─── Mark Read (cosmetic — parity with facility) ────────────────
+// Reading an alert is cosmetic: it does NOT change the canonical open count
+// (only resolve/dismiss does), mirroring the facility side. So these are
+// deliberately NOT gated by requireCanMutate (read-only `user` tier may clear
+// its own view). They only flip `new_alert`→`read`, never un-resolving a
+// resolved/dismissed row. Vendor-scoped. (2026-06-21 alerts refactor.)
+
+export async function markVendorAlertRead(id: string) {
+  // read-only-guard-skip: cosmetic read-state only; never un-resolves.
+  const { vendor } = await requireVendor()
+  await prisma.alert.updateMany({
+    where: { id, vendorId: vendor.id, status: "new_alert" },
+    data: { status: "read", readAt: new Date() },
+  })
+}
+
+export async function bulkMarkVendorAlertsRead(ids: string[]) {
+  // read-only-guard-skip: cosmetic read-state only; only new_alert→read.
+  const { vendor } = await requireVendor()
+  const result = await prisma.alert.updateMany({
+    where: { id: { in: ids }, vendorId: vendor.id, status: "new_alert" },
+    data: { status: "read", readAt: new Date() },
+  })
+  return { updated: result.count }
+}
+
+export async function markAllVendorAlertsRead(): Promise<{ updated: number }> {
+  // read-only-guard-skip: cosmetic read-state only; flips all unread → read.
+  const { vendor } = await requireVendor()
+  const result = await prisma.alert.updateMany({
+    where: {
+      AND: [
+        { vendorId: vendor.id },
+        { portalType: "vendor" },
+        { status: "new_alert" },
+        excludeVendorProposalAlerts(),
+      ],
+    },
+    data: { status: "read", readAt: new Date() },
+  })
+  return { updated: result.count }
+}

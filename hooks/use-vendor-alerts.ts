@@ -8,6 +8,8 @@ import {
   dismissVendorAlert,
   bulkResolveVendorAlerts,
   bulkDismissVendorAlerts,
+  bulkMarkVendorAlertsRead,
+  markAllVendorAlertsRead,
 } from "@/lib/actions/vendor-alerts"
 import type { AlertType, AlertSeverity, AlertStatus } from "@/lib/generated/prisma/client"
 import { toast } from "sonner"
@@ -73,5 +75,33 @@ export function useBulkDismissVendorAlerts() {
       toast.success(`${data.dismissed} alert(s) dismissed`)
     },
     onError: (e) => toast.error(e.message || "Failed to dismiss alerts"),
+  })
+}
+
+export function useBulkMarkVendorAlertsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: bulkMarkVendorAlertsRead,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      toast.success(
+        data.updated > 0 ? `${data.updated} alert(s) marked read` : "No unread alerts",
+      )
+    },
+    onError: (e) => toast.error(e.message || "Failed to mark read"),
+  })
+}
+
+export function useMarkAllVendorAlertsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => markAllVendorAlertsRead(),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      toast.success(
+        data.updated > 0 ? `${data.updated} alert(s) marked read` : "No unread alerts",
+      )
+    },
+    onError: (e) => toast.error(e.message || "Failed to mark all read"),
   })
 }
