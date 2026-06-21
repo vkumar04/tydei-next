@@ -1,12 +1,13 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useMemo, useState } from "react"
 import { AlertTriangle, Bell, CheckCircle2 } from "lucide-react"
 
-import { AlertsList } from "@/components/shared/alerts/alerts-list"
+import { AlertsInbox } from "@/components/shared/alerts/alerts-inbox"
+import type { AlertRowItem } from "@/components/shared/alerts/alerts-row"
+import type { StatusFilterValue } from "@/components/shared/alerts/alerts-toolbar"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { AlertFilters } from "@/lib/validators/alerts"
 import {
   useBulkDismissVendorAlerts,
   useBulkResolveVendorAlerts,
@@ -15,22 +16,31 @@ import {
   useVendorAlerts,
 } from "@/hooks/use-vendor-alerts"
 
-type StatusTab = "all" | "active" | "resolved"
+const PAGE_SIZE = 100
 
-const PAGE_SIZE = 20
+function serverStatusFor(
+  status: StatusFilterValue,
+): AlertFilters["status"] | undefined {
+  switch (status) {
+    case "resolved":
+      return "resolved"
+    case "dismissed":
+      return "dismissed"
+    case "open":
+    case "all":
+    default:
+      return undefined
+  }
+}
 
 export function VendorAlertsClient() {
-  const [tab, setTab] = useState<StatusTab>("active")
-  const [page, setPage] = useState(1)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("open")
 
-  const { data: activeData, isLoading: activeLoading } = useVendorAlerts("", {
-    page,
-    pageSize: PAGE_SIZE,
-  })
-  const { data: resolvedData, isLoading: resolvedLoading } = useVendorAlerts("", {
-    status: "resolved",
-    page,
+  // One query drives the list; `counts` is the full-population server aggregate
+  // (active + resolved) regardless of the status filter, so the hero stays
+  // accurate. (Audit M10.)
+  const { data, isLoading } = useVendorAlerts("", {
+    status: serverStatusFor(statusFilter),
     pageSize: PAGE_SIZE,
   })
 
@@ -39,61 +49,16 @@ export function VendorAlertsClient() {
   const bulkResolve = useBulkResolveVendorAlerts()
   const bulkDismiss = useBulkDismissVendorAlerts()
 
-  const activeAlerts = activeData?.alerts ?? []
-  const resolvedAlerts = resolvedData?.alerts ?? []
+  const alerts = useMemo(
+    () => (data?.alerts ?? []) as AlertRowItem[],
+    [data?.alerts],
+  )
 
-  // Audit M10: hero numbers come from the server-side groupBy aggregate
-  // (`counts`) so they cover the full vendor population — the previous
-  // client-side reducers capped every stat at the first 20 rows.
-  const counts = activeData?.counts
+  const counts = data?.counts
   const highCount = counts?.bySeverity?.high ?? 0
   const mediumCount = counts?.bySeverity?.medium ?? 0
   const unresolvedCount = counts?.activeTotal ?? 0
   const resolvedCount = counts?.byStatus?.resolved ?? 0
-
-  const activePageCount = Math.max(
-    1,
-    Math.ceil((activeData?.total ?? 0) / PAGE_SIZE),
-  )
-  const resolvedPageCount = Math.max(
-    1,
-    Math.ceil((resolvedData?.total ?? 0) / PAGE_SIZE),
-  )
-  const pageCount =
-    tab === "resolved"
-      ? resolvedPageCount
-      : tab === "active"
-        ? activePageCount
-        : Math.max(activePageCount, resolvedPageCount)
-
-  const visibleAlerts =
-    tab === "resolved"
-      ? resolvedAlerts
-      : tab === "active"
-        ? activeAlerts
-        : [...activeAlerts, ...resolvedAlerts]
-  const isLoading =
-    tab === "resolved"
-      ? resolvedLoading
-      : tab === "active"
-        ? activeLoading
-        : activeLoading || resolvedLoading
-
-  const handleSelect = useCallback((id: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (checked) next.add(id)
-      else next.delete(id)
-      return next
-    })
-  }, [])
-
-  const handleSelectAll = useCallback(
-    (checked: boolean) => {
-      setSelectedIds(checked ? new Set(visibleAlerts.map((a) => a.id)) : new Set())
-    },
-    [visibleAlerts],
-  )
 
   const hasCritical = highCount > 0
   const hasAny = unresolvedCount > 0
@@ -170,96 +135,19 @@ export function VendorAlertsClient() {
         </div>
       </section>
 
-      {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3">
-          <span className="text-sm text-muted-foreground">
-            {selectedIds.size} selected
-          </span>
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={() => bulkResolve.mutate(Array.from(selectedIds))}>
-              Resolve ({selectedIds.size})
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => bulkDismiss.mutate(Array.from(selectedIds))}
-            >
-              Dismiss ({selectedIds.size})
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <Tabs
-        value={tab}
-        onValueChange={(v) => {
-          setTab(v as StatusTab)
-          setPage(1)
-          setSelectedIds(new Set())
-        }}
-      >
-        <TabsList>
-          <TabsTrigger value="all">
-            All
-            <Badge variant="secondary" className="ml-2">
-              {unresolvedCount + resolvedCount}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="active">
-            Active
-            <Badge variant="secondary" className="ml-2">
-              {unresolvedCount}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="resolved">
-            Resolved
-            <Badge variant="secondary" className="ml-2">
-              {resolvedCount}
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      <div className={tab === "resolved" ? "opacity-60" : undefined}>
-        <AlertsList
-          alerts={visibleAlerts}
-          isLoading={isLoading}
-          selectedIds={selectedIds}
-          onSelect={handleSelect}
-          onSelectAll={handleSelectAll}
-          onResolve={(id) => resolve.mutate(id)}
-          onDismiss={(id) => dismiss.mutate(id)}
-          onNavigate={() => {}}
-          emptyMessage={tab === "resolved" ? "Resolved alerts will appear here" : undefined}
-        />
-      </div>
-
-      {/* Audit M10: rows past the first 20 used to be unreachable. */}
-      {pageCount > 1 ? (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {pageCount}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= pageCount}
-              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <AlertsInbox
+        alerts={alerts}
+        total={data?.total ?? 0}
+        isLoading={isLoading}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        onResolve={(id) => resolve.mutate(id)}
+        onDismiss={(id) => dismiss.mutate(id)}
+        onBulkResolve={(ids) => bulkResolve.mutate(ids)}
+        onBulkDismiss={(ids) => bulkDismiss.mutate(ids)}
+        isBulkPending={bulkResolve.isPending || bulkDismiss.isPending}
+        detailHrefFor={(a) => a.actionLink ?? undefined}
+      />
     </div>
   )
 }

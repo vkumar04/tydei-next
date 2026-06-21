@@ -27,8 +27,12 @@ interface AlertsRowProps {
   selected: boolean
   onSelect: (checked: boolean) => void
   onResolve: () => void
-  onNavigate: () => void
+  /** Optional — when omitted the title is plain text (no detail page). */
+  onNavigate?: () => void
   onDismiss?: () => void
+  /** Optional "View" target. When omitted, no View link renders (portal-
+   *  agnostic: facility passes its detail route, vendor passes actionLink). */
+  detailHref?: string
 }
 
 export function AlertsRow({
@@ -38,6 +42,7 @@ export function AlertsRow({
   onResolve,
   onNavigate,
   onDismiss,
+  detailHref,
 }: AlertsRowProps) {
   const typeConfig = alertTypeIconConfig[alert.alertType]
   const severityConfig = alertSeverityBadgeConfig[alert.severity]
@@ -67,16 +72,27 @@ export function AlertsRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className={cn(
-              "truncate text-left text-sm font-medium hover:underline",
-              isNew ? "text-foreground" : "text-muted-foreground",
-            )}
-            onClick={onNavigate}
-          >
-            {alert.title}
-          </button>
+          {onNavigate ? (
+            <button
+              type="button"
+              className={cn(
+                "truncate text-left text-sm font-medium hover:underline",
+                isNew ? "text-foreground" : "text-muted-foreground",
+              )}
+              onClick={onNavigate}
+            >
+              {alert.title}
+            </button>
+          ) : (
+            <span
+              className={cn(
+                "truncate text-left text-sm font-medium",
+                isNew ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {alert.title}
+            </span>
+          )}
           {isNew ? (
             <span
               className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
@@ -149,9 +165,11 @@ export function AlertsRow({
             <span className="sr-only">Dismiss</span>
           </Button>
         ) : null}
-        <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs">
-          <Link href={`/dashboard/alerts/${alert.id}`}>View</Link>
-        </Button>
+        {detailHref ? (
+          <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs">
+            <Link href={detailHref}>View</Link>
+          </Button>
+        ) : null}
       </div>
     </div>
   )
