@@ -31,6 +31,7 @@ import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/audit"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { recomputeMatchStatusesForVendorCog } from "@/lib/cog/vendor-cog-recompute"
 import { parseMoney, parseDate } from "./shared"
 import {
   ITEM_NUMBER_ALIASES,
@@ -254,6 +255,23 @@ export async function bulkImportVendorCogRecords(
   }
 
   const result = await prisma.vendorCogRecord.createMany({ data: records })
+
+  // Match the imported (+ existing) vendor COG against the vendor's OWN
+  // contracts so the COGS tab's "On Contract" count + savings populate —
+  // previously nothing ever set isOnContract, so it was structurally 0
+  // (Charles 2026-06-20). Best-effort: a match failure must not fail the
+  // import. Mirrors how the facility importer fires its recompute.
+  try {
+    await recomputeMatchStatusesForVendorCog(
+      vendorId,
+      divisionId ? [divisionId] : undefined,
+    )
+  } catch (err) {
+    console.error("[vendor-cog-import] match recompute failed", err, {
+      vendorId,
+      divisionId,
+    })
+  }
 
   await logAudit({
     userId,

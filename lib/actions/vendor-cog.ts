@@ -16,10 +16,12 @@
  */
 
 import { requireVendor } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { callerVendorDivisionIds } from "@/lib/actions/division-auth"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { vendorCogScopedByDivisions } from "@/lib/contracts/vendor-cog-scope"
+import { recomputeMatchStatusesForVendorCog } from "@/lib/cog/vendor-cog-recompute"
 
 export interface VendorCogRecordRow {
   id: string
@@ -151,4 +153,27 @@ export async function getVendorCogStats(): Promise<VendorCogStats> {
       ? latest.transactionDate.toISOString()
       : null,
   }
+}
+
+/**
+ * Re-match the caller-vendor's COG against its OWN contracts so "On Contract"
+ * + savings populate (Charles 2026-06-20). Division-scoped + read-only-gated.
+ * Used by the COGS-tab "Recompute" button for COG imported before the matcher
+ * existed.
+ */
+export async function recomputeVendorCogMatches(): Promise<{
+  total: number
+  onContract: number
+}> {
+  await requireCanMutate()
+  const session = await requireVendor()
+  const divisionIds = await callerVendorDivisionIds(
+    session.user.id,
+    session.vendor.id,
+  )
+  const summary = await recomputeMatchStatusesForVendorCog(
+    session.vendor.id,
+    divisionIds,
+  )
+  return { total: summary.total, onContract: summary.onContract }
 }

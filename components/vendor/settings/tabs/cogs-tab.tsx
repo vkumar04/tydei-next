@@ -20,10 +20,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Boxes, Loader2, Lock, Upload } from "lucide-react"
+import { Boxes, Loader2, Lock, RefreshCw, Upload } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import {
   useImportVendorCog,
+  useRecomputeVendorCog,
   useVendorCogRecords,
   useVendorCogStats,
 } from "@/hooks/use-vendor-cog"
@@ -157,6 +158,7 @@ export function CogsTab({ vendorId, isOneWay, activeDivisionId }: CogsTabProps) 
   const { data: records, isLoading } = useVendorCogRecords(vendorId)
   const { data: stats } = useVendorCogStats(vendorId)
   const importMutation = useImportVendorCog(vendorId)
+  const recomputeMutation = useRecomputeVendorCog(vendorId)
 
   const handleImport = useCallback(
     async (
@@ -280,7 +282,22 @@ export function CogsTab({ vendorId, isOneWay, activeDivisionId }: CogsTabProps) 
             stored privately to your organization and scoped to your active
             division.
           </CardDescription>
-          <CardAction>
+          <CardAction className="flex items-center gap-2">
+            {/* Re-match existing COG against the vendor's own contracts so
+                "On Contract" populates for rows imported before the matcher. */}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || recomputeMutation.isPending}
+              onClick={() => recomputeMutation.mutate()}
+            >
+              {recomputeMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Recompute matches
+            </Button>
             <PricingFileDropzone
               ref={dropzoneRef}
               specs={VENDOR_COG_UPLOAD_SPECS}

@@ -6,6 +6,7 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   getVendorCogRecords,
   getVendorCogStats,
+  recomputeVendorCogMatches,
   type VendorCogFilters,
 } from "@/lib/actions/vendor-cog"
 import {
@@ -57,6 +58,24 @@ export function useImportVendorCog(vendorId: string) {
       toast.error(err.message || "Failed to import COG records"),
     // vendorId is carried in meta only so the mutation is identifiable per
     // vendor in devtools; the action resolves the owning vendor server-side.
+    meta: { vendorId },
+  })
+}
+
+// Re-match the vendor's COG against its own contracts (populates "On
+// Contract" for COG imported before the matcher existed).
+export function useRecomputeVendorCog(vendorId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => recomputeVendorCogMatches(),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: queryKeys.vendorCog.base })
+      toast.success(
+        `Matched ${result.onContract.toLocaleString()} of ${result.total.toLocaleString()} COG rows to a contract`,
+      )
+    },
+    onError: (err) =>
+      toast.error(err.message || "Failed to recompute COG matches"),
     meta: { vendorId },
   })
 }
