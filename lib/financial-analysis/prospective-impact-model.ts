@@ -47,6 +47,12 @@ export interface FacilityModelAssumptions {
   cashFlowGrowthPct: number
   /** Number of years projected in the DCF. */
   dcfProjectionYears: number
+  /**
+   * New-account only: total implant/supply cost per case. With case volume it
+   * derives vendor spend (cost/case × volume) when the facility has no COG yet.
+   * Optional — existing accounts source vendor spend from tracked data.
+   */
+  implantCostPerCase?: number
 }
 
 /** The three Enterprise Value multiple scenarios. */
@@ -245,4 +251,5 @@ export const DEFAULT_FACILITY_ASSUMPTIONS: FacilityModelAssumptions = {
   discountRatePct: 0.1,
   cashFlowGrowthPct: 0.03,
   dcfProjectionYears: 5,
+  implantCostPerCase: 2_500,
 }

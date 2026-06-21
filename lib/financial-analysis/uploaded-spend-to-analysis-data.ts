@@ -46,25 +46,34 @@ export function aggregateUploadedSpend(
   let totalSpend = 0
   const categoryAgg = new Map<string, { spend: number; qty: number }>()
   const vendorAgg = new Map<string, { name: string; spend: number }>()
+  const cvAgg = new Map<string, { category: string; vendor: string; spend: number }>()
 
   for (const l of lines) {
     const spend = lineSpend(l)
     if (spend <= 0) continue
     totalSpend += spend
     const qty = l.quantity != null && l.quantity > 0 ? l.quantity : 1
+    const category =
+      l.category && l.category.trim() ? canonicalizeCategoryName(l.category) : null
+    const vendor = l.vendor && l.vendor.trim() ? l.vendor.trim() : null
 
-    if (l.category && l.category.trim()) {
-      const key = canonicalizeCategoryName(l.category)
-      const cur = categoryAgg.get(key) ?? { spend: 0, qty: 0 }
+    if (category) {
+      const cur = categoryAgg.get(category) ?? { spend: 0, qty: 0 }
       cur.spend += spend
       cur.qty += qty
-      categoryAgg.set(key, cur)
+      categoryAgg.set(category, cur)
     }
-    if (l.vendor && l.vendor.trim()) {
-      const key = l.vendor.trim().toLowerCase()
-      const cur = vendorAgg.get(key) ?? { name: l.vendor.trim(), spend: 0 }
+    if (vendor) {
+      const key = vendor.toLowerCase()
+      const cur = vendorAgg.get(key) ?? { name: vendor, spend: 0 }
       cur.spend += spend
       vendorAgg.set(key, cur)
+    }
+    if (category && vendor) {
+      const k = `${category}|||${vendor}`
+      const cur = cvAgg.get(k) ?? { category, vendor, spend: 0 }
+      cur.spend += spend
+      cvAgg.set(k, cur)
     }
   }
 
@@ -97,6 +106,7 @@ export function aggregateUploadedSpend(
     avgMarginPct: DEFAULT_MARGIN_PCT,
     categories,
     vendors,
+    categoryVendorSpend: [...cvAgg.values()],
     topVendorConcentrationPct: vendors[0]?.spendShare ?? 0,
     hasData: totalSpend > 0,
   }

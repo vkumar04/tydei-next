@@ -11,7 +11,7 @@
  * growth) stay as sliders. Claude adds the narrative layer on demand.
  */
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   DEFAULT_FACILITY_ASSUMPTIONS,
   type FacilityModelAssumptions,
@@ -31,6 +31,9 @@ import {
   IndividualImpactTable,
 } from "./analysis-tables"
 import { ProspectiveImpactSection } from "./prospective-impact-section"
+import { computeScopedSpendFraction } from "@/lib/financial-analysis/scoped-spend"
+import { usdCompact } from "./format"
+import type { TableSelection } from "./analysis-tables"
 import {
   OpportunityScoreCard,
   EbitdaEvWaterfallCard,
@@ -55,13 +58,21 @@ import { downloadAnalysisCsv, downloadAnalysisPdf } from "./export-analysis"
 function seedAssumptions(
   data: FacilityAnalysisData,
 ): FacilityModelAssumptions {
+  const currentVendorSpend =
+    data.currentVendorSpend || DEFAULT_FACILITY_ASSUMPTIONS.currentVendorSpend
+  const annualCaseVolume =
+    data.annualCaseVolume || DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume
   return {
     ...DEFAULT_FACILITY_ASSUMPTIONS,
     netRevenue: data.netRevenue || DEFAULT_FACILITY_ASSUMPTIONS.netRevenue,
-    currentVendorSpend:
-      data.currentVendorSpend || DEFAULT_FACILITY_ASSUMPTIONS.currentVendorSpend,
-    annualCaseVolume:
-      data.annualCaseVolume || DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume,
+    currentVendorSpend,
+    annualCaseVolume,
+    // Seed implant cost/case from tracked spend ÷ volume; the new-account input
+    // path (no data) keeps the default so the user types it in.
+    implantCostPerCase:
+      data.hasData && annualCaseVolume > 0
+        ? currentVendorSpend / annualCaseVolume
+        : DEFAULT_FACILITY_ASSUMPTIONS.implantCostPerCase,
   }
 }
 
@@ -154,6 +165,60 @@ export function AnalysisDashboardClient({
     [assumptions, savings, effectiveData],
   )
 
+  // ── Deal-scope selection (categories ∩ vendors) ─────────────────
+  // null = everything selected. Reset whenever the data source changes.
+  const [selectedCategories, setSelectedCategories] = useState<Set<string> | null>(null)
+  const [selectedVendors, setSelectedVendors] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    setSelectedCategories(null)
+    setSelectedVendors(null)
+  }, [effectiveData])
+
+  const categoryNames = useMemo(
+    () => model.categoryAsp.map((c) => c.category),
+    [model.categoryAsp],
+  )
+  const vendorNames = useMemo(
+    () => model.vendorShare.map((v) => v.vendor),
+    [model.vendorShare],
+  )
+
+  const makeSelection = (
+    selected: Set<string> | null,
+    setSelected: (s: Set<string> | null) => void,
+    allNames: string[],
+  ): TableSelection => ({
+    isSelected: (name) => selected === null || selected.has(name),
+    allSelected: selected === null,
+    onToggle: (name) => {
+      const base = selected ?? new Set(allNames)
+      const next = new Set(base)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      setSelected(next.size === allNames.length ? null : next)
+    },
+    onToggleAll: () => setSelected(selected === null ? new Set() : null),
+  })
+
+  const scopedFraction = useMemo(
+    () =>
+      computeScopedSpendFraction(
+        effectiveData.categoryVendorSpend ?? [],
+        selectedCategories,
+        selectedVendors,
+      ),
+    [effectiveData.categoryVendorSpend, selectedCategories, selectedVendors],
+  )
+  const scopedVendorSpend = assumptions.currentVendorSpend * scopedFraction
+
+  const selCatCount = selectedCategories?.size ?? categoryNames.length
+  const selVenCount = selectedVendors?.size ?? vendorNames.length
+  const scopeNote =
+    effectiveData.hasData &&
+    (selectedCategories !== null || selectedVendors !== null)
+      ? `Modeling on ${selCatCount}/${categoryNames.length} categories · ${selVenCount}/${vendorNames.length} vendors · ${usdCompact(scopedVendorSpend)} of ${usdCompact(assumptions.currentVendorSpend)} spend`
+      : undefined
+
   const insights = useFacilityAnalysisInsights()
 
   return (
@@ -210,11 +275,30 @@ export function AnalysisDashboardClient({
       <FinancialAssumptionsCard
         assumptions={assumptions}
         onChange={setAssumptions}
+        hasData={effectiveData.hasData}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <CategoryAspTable rows={model.categoryAsp} />
-        <VendorMarketShareTable rows={model.vendorShare} />
+        <CategoryAspTable
+          rows={model.categoryAsp}
+          selection={
+            effectiveData.hasData
+              ? makeSelection(
+                  selectedCategories,
+                  setSelectedCategories,
+                  categoryNames,
+                )
+              : undefined
+          }
+        />
+        <VendorMarketShareTable
+          rows={model.vendorShare}
+          selection={
+            effectiveData.hasData
+              ? makeSelection(selectedVendors, setSelectedVendors, vendorNames)
+              : undefined
+          }
+        />
       </div>
 
       <ContributionMarginTable rows={model.contributionMargin} />
@@ -222,7 +306,8 @@ export function AnalysisDashboardClient({
       {/* ── Prospective Impact ──────────────────────────────── */}
       <ProspectiveImpactSection
         impact={model.prospective.impact}
-        currentVendorSpend={assumptions.currentVendorSpend}
+        dealBaseSpend={scopedVendorSpend}
+        scopeNote={scopeNote}
         onSavingsChange={setSavings}
       />
 

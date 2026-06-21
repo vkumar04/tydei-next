@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   usdCompact,
   usdDelta,
@@ -38,18 +39,38 @@ import type {
 
 const NUM = "text-right tabular-nums"
 
+/**
+ * Optional row-selection for scoping the deal base to chosen categories/vendors
+ * (Vick 2026-06-21). When provided, the table grows a leading checkbox column +
+ * a select-all header checkbox. Omit it and the table renders exactly as before.
+ */
+export interface TableSelection {
+  isSelected: (name: string) => boolean
+  onToggle: (name: string) => void
+  allSelected: boolean
+  onToggleAll: () => void
+}
+
 /** Fixed-height scroll region so the side-by-side cards stay aligned while a
  *  long list scrolls. The header stays pinned via sticky positioning. */
 const SCROLL = "h-[360px] overflow-y-auto"
 const STICKY_HEAD = "sticky top-0 z-10 bg-card"
 
-export function CategoryAspTable({ rows }: { rows: CategoryAspRow[] }) {
+export function CategoryAspTable({
+  rows,
+  selection,
+}: {
+  rows: CategoryAspRow[]
+  selection?: TableSelection
+}) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Category Spend &amp; ASP</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Average selling price and spend by category.
+          {selection
+            ? "Average selling price and spend by category. Check the categories to include in the deal model."
+            : "Average selling price and spend by category."}
         </p>
       </CardHeader>
       <CardContent>
@@ -57,6 +78,15 @@ export function CategoryAspTable({ rows }: { rows: CategoryAspRow[] }) {
         <Table>
           <TableHeader className={STICKY_HEAD}>
             <TableRow>
+              {selection ? (
+                <TableHead className="w-8">
+                  <Checkbox
+                    checked={selection.allSelected}
+                    onCheckedChange={selection.onToggleAll}
+                    aria-label="Select all categories"
+                  />
+                </TableHead>
+              ) : null}
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Spend</TableHead>
               <TableHead className="text-right">ASP</TableHead>
@@ -66,6 +96,15 @@ export function CategoryAspTable({ rows }: { rows: CategoryAspRow[] }) {
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.category}>
+                {selection ? (
+                  <TableCell className="w-8">
+                    <Checkbox
+                      checked={selection.isSelected(row.category)}
+                      onCheckedChange={() => selection.onToggle(row.category)}
+                      aria-label={`Include ${row.category}`}
+                    />
+                  </TableCell>
+                ) : null}
                 <TableCell className="font-medium">{row.category}</TableCell>
                 <TableCell className={NUM}>{usdCompact(row.spend)}</TableCell>
                 <TableCell className={NUM}>
@@ -84,13 +123,21 @@ export function CategoryAspTable({ rows }: { rows: CategoryAspRow[] }) {
   )
 }
 
-export function VendorMarketShareTable({ rows }: { rows: VendorShareRow[] }) {
+export function VendorMarketShareTable({
+  rows,
+  selection,
+}: {
+  rows: VendorShareRow[]
+  selection?: TableSelection
+}) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Vendor Market Share</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Spend concentration across suppliers.
+          {selection
+            ? "Spend concentration across suppliers. Check the vendors to include in the deal model."
+            : "Spend concentration across suppliers."}
         </p>
       </CardHeader>
       <CardContent>
@@ -98,6 +145,15 @@ export function VendorMarketShareTable({ rows }: { rows: VendorShareRow[] }) {
         <Table>
           <TableHeader className={STICKY_HEAD}>
             <TableRow>
+              {selection ? (
+                <TableHead className="w-8">
+                  <Checkbox
+                    checked={selection.allSelected}
+                    onCheckedChange={selection.onToggleAll}
+                    aria-label="Select all vendors"
+                  />
+                </TableHead>
+              ) : null}
               <TableHead>Vendor</TableHead>
               <TableHead className="text-right">Spend</TableHead>
               <TableHead className="text-right">Share</TableHead>
@@ -106,6 +162,15 @@ export function VendorMarketShareTable({ rows }: { rows: VendorShareRow[] }) {
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.vendor}>
+                {selection ? (
+                  <TableCell className="w-8">
+                    <Checkbox
+                      checked={selection.isSelected(row.vendor)}
+                      onCheckedChange={() => selection.onToggle(row.vendor)}
+                      aria-label={`Include ${row.vendor}`}
+                    />
+                  </TableCell>
+                ) : null}
                 <TableCell className="font-medium">{row.vendor}</TableCell>
                 <TableCell className={NUM}>{usdCompact(row.spend)}</TableCell>
                 <TableCell className={NUM}>
