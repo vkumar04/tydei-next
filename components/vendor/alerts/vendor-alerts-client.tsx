@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { AlertTriangle, Bell, Check, CheckCircle2 } from "lucide-react"
 
 import { AlertsInbox } from "@/components/shared/alerts/alerts-inbox"
+import { HeroStat } from "@/components/shared/stats/hero-stat"
 import type { AlertRowItem } from "@/components/shared/alerts/alerts-row"
 import {
   serverStatusFor,
@@ -156,45 +157,6 @@ export function VendorAlertsClient() {
         }
         detailHrefFor={(a) => a.actionLink ?? undefined}
       />
-    </div>
-  )
-}
-
-interface HeroStatProps {
-  label: string
-  value: string
-  sublabel: string
-  tone?: "positive" | "negative" | "warning" | "muted"
-  icon?: React.ReactNode
-}
-
-function HeroStat({ label, value, sublabel, tone, icon }: HeroStatProps) {
-  const valueClass =
-    tone === "positive"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-600 dark:text-red-400"
-        : tone === "warning"
-          ? "text-amber-600 dark:text-amber-400"
-          : ""
-  const sublabelClass =
-    tone === "positive"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-700 dark:text-red-400"
-        : tone === "warning"
-          ? "text-amber-700 dark:text-amber-400"
-          : "text-muted-foreground"
-  return (
-    <div className="space-y-1">
-      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-        {icon}
-        {label}
-      </p>
-      <p className={`text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl ${valueClass}`}>
-        {value}
-      </p>
-      <p className={`text-xs ${sublabelClass}`}>{sublabel}</p>
     </div>
   )
 }

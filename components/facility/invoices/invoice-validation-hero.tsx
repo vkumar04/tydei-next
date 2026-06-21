@@ -1,6 +1,7 @@
 "use client"
 
 import { FileCheck2 } from "lucide-react"
+import { HeroStat } from "@/components/shared/stats/hero-stat"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
@@ -85,6 +86,7 @@ export function InvoiceValidationHero({
           label="Total Invoices"
           value={loading ? null : totalInvoices.toString()}
           sublabel="under validation"
+          skeleton={<Skeleton className="h-9 w-28 sm:h-10" />}
         />
         <HeroStat
           label="Awaiting Review"
@@ -95,6 +97,7 @@ export function InvoiceValidationHero({
               : "nothing pending"
           }
           tone={awaitingReview > 0 ? "negative" : "muted"}
+          skeleton={<Skeleton className="h-9 w-28 sm:h-10" />}
         />
         <HeroStat
           label="Flagged Variance"
@@ -105,45 +108,16 @@ export function InvoiceValidationHero({
               : "within contract pricing"
           }
           tone={flaggedVariance > 0 ? "negative" : "muted"}
+          skeleton={<Skeleton className="h-9 w-28 sm:h-10" />}
         />
         <HeroStat
           label="Recovered"
           value={loading ? null : formatCurrency(recovered)}
           sublabel="from resolved disputes"
           tone={recovered > 0 ? "positive" : "muted"}
+          skeleton={<Skeleton className="h-9 w-28 sm:h-10" />}
         />
       </div>
     </section>
-  )
-}
-
-interface HeroStatProps {
-  label: string
-  value: string | null
-  sublabel: string
-  tone?: "positive" | "negative" | "muted"
-}
-
-function HeroStat({ label, value, sublabel, tone }: HeroStatProps) {
-  const sublabelClass =
-    tone === "positive"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-700 dark:text-red-400"
-        : "text-muted-foreground"
-  return (
-    <div className="space-y-1">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      {value === null ? (
-        <Skeleton className="h-9 w-28 sm:h-10" />
-      ) : (
-        <p className="text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl">
-          {value}
-        </p>
-      )}
-      <p className={`text-xs ${sublabelClass}`}>{sublabel}</p>
-    </div>
   )
 }

@@ -10,6 +10,7 @@
  */
 
 import { Building2, ShieldCheck } from "lucide-react"
+import { HeroStat } from "@/components/shared/stats/hero-stat"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatNumber } from "@/lib/formatting"
@@ -80,11 +81,13 @@ export function VendorDashboardHero({
           value={isLoading ? null : formatNumber(activeContracts)}
           sublabel={`of ${formatNumber(totalContracts)} total`}
           tone="positive"
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         <HeroStat
           label="Active Facilities"
           value={isLoading ? null : formatNumber(activeFacilities)}
           sublabel="With active contracts"
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         {/* 2026-06-09 audit: primary sales figure is now trailing-12mo
             (same window as the facility side's "Current Spend"); the
@@ -94,12 +97,14 @@ export function VendorDashboardHero({
           value={isLoading ? null : formatCurrency(salesTrailing12Mo)}
           sublabel={`lifetime ${formatCurrency(totalSpend)} · ${marketSharePercent.toFixed(1)}% market share`}
           tone={marketSharePercent >= 10 ? "positive" : "muted"}
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         <HeroStat
           label="Rebates Paid"
           value={isLoading ? null : formatCurrency(totalRebates)}
           sublabel="Lifetime across facilities"
           tone="positive"
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
       </div>
 
@@ -108,36 +113,5 @@ export function VendorDashboardHero({
         competitor details are not visible.
       </p>
     </section>
-  )
-}
-
-interface HeroStatProps {
-  label: string
-  value: string | null
-  sublabel: string
-  tone?: "positive" | "negative" | "muted"
-}
-
-function HeroStat({ label, value, sublabel, tone }: HeroStatProps) {
-  const sublabelClass =
-    tone === "positive"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-700 dark:text-red-400"
-        : "text-muted-foreground"
-  return (
-    <div className="space-y-1">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      {value === null ? (
-        <Skeleton className="h-9 w-28" />
-      ) : (
-        <p className="text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl">
-          {value}
-        </p>
-      )}
-      <p className={`text-xs ${sublabelClass}`}>{sublabel}</p>
-    </div>
   )
 }
