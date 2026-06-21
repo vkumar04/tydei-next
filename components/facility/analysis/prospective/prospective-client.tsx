@@ -19,6 +19,7 @@ import type {
   VendorOption,
 } from "./types"
 import { ProspectiveTabs } from "./prospective-tabs"
+import { usePersistedState } from "@/hooks/use-persisted-state"
 
 interface ProspectiveClientProps {
   facilityId: string
@@ -50,18 +51,21 @@ export function ProspectiveClient({
   initialVendorId,
   initialTab,
 }: ProspectiveClientProps) {
-  void facilityId // reserved — future persist-to-DB hook
-
   const router = useRouter()
   const searchParams = useSearchParams()
 
   const [activeTab, setActiveTab] = useState<ProspectiveTabId>(() =>
     asTab(initialTab ?? (initialCompareId ? "compare" : null)),
   )
-  const [scoredProposals, setScoredProposals] = useState<ScoredProposal[]>([])
-  const [pricingAnalyses, setPricingAnalyses] = useState<
+  // Persist scored proposals + pricing analyses to localStorage (keyed by
+  // facility) so they survive leaving the page / reloading — they used to be
+  // session-only React state and vanished on navigation (Vick 2026-06-21).
+  const [scoredProposals, setScoredProposals] = usePersistedState<
+    ScoredProposal[]
+  >(`tydei:prospective:proposals:${facilityId}`, [])
+  const [pricingAnalyses, setPricingAnalyses] = usePersistedState<
     PricingFileAnalysisRecord[]
-  >([])
+  >(`tydei:prospective:pricing:${facilityId}`, [])
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(
     initialVendorId,
   )
