@@ -28,17 +28,12 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { chartTooltipStyle } from "@/lib/chart-config"
+import { formatCompactCurrency } from "@/lib/formatting"
 import type { MonthlyTrendPoint } from "@/lib/reports/monthly-trend"
 import { v0SpendTrend } from "@/lib/v0-spec/cog"
 
 interface DashboardSpendTrendChartProps {
   data: MonthlyTrendPoint[]
-}
-
-function formatCurrencyShort(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`
-  return `$${value.toFixed(0)}`
 }
 
 /** Convert YYYY-MM to a compact "Mon YY" label. */
@@ -116,7 +111,7 @@ export function DashboardSpendTrendChart({
                 className="text-xs"
               />
               <YAxis
-                tickFormatter={formatCurrencyShort}
+                tickFormatter={(value) => formatCompactCurrency(Number(value))}
                 className="text-xs"
                 width={60}
               />
@@ -126,7 +121,7 @@ export function DashboardSpendTrendChart({
                   typeof label === "string" ? formatMonthLabel(label) : label
                 }
                 formatter={(value, name) => [
-                  formatCurrencyShort(Number(value)),
+                  formatCompactCurrency(Number(value)),
                   String(name),
                 ]}
               />

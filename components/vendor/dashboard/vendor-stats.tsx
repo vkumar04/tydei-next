@@ -9,6 +9,7 @@ import {
 import { motion } from "motion/react"
 import { MetricCard } from "@/components/shared/cards/metric-card"
 import { staggerContainer } from "@/lib/animations"
+import { formatCompactCurrency } from "@/lib/formatting"
 
 interface VendorStatsProps {
   stats: {
@@ -19,12 +20,6 @@ interface VendorStatsProps {
     activeFacilities: number
     marketSharePercent: number
   }
-}
-
-function formatCurrencyShort(value: number): string {
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
-  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`
-  return `$${value.toFixed(0)}`
 }
 
 export function VendorStats({ stats }: VendorStatsProps) {
@@ -47,7 +42,7 @@ export function VendorStats({ stats }: VendorStatsProps) {
           sales ~2×. Label it for what it measures. */}
       <MetricCard
         title="Total Sales"
-        value={formatCurrencyShort(stats.totalSpend)}
+        value={formatCompactCurrency(stats.totalSpend)}
         icon={DollarSign}
         description="all recorded purchases"
       />
@@ -59,7 +54,7 @@ export function VendorStats({ stats }: VendorStatsProps) {
       />
       <MetricCard
         title="Rebates Paid"
-        value={formatCurrencyShort(stats.totalRebates)}
+        value={formatCompactCurrency(stats.totalRebates)}
         icon={TrendingUp}
         description={`across ${stats.activeFacilities} facilities`}
       />

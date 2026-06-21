@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { requireCan } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
+import { divisionInputSchema } from "@/lib/validators/divisions"
 
 /**
  * Vendor division membership — super-user managed (Settings/Users feature).
@@ -42,12 +43,6 @@ export interface DivisionWithMembers {
 }
 
 // ─── Validators ──────────────────────────────────────────────────
-
-const divisionInputSchema = z.object({
-  name: z.string().min(1).max(100),
-  code: z.string().min(1).max(50),
-  categories: z.array(z.string()).optional().default([]),
-})
 
 const idSchema = z.string().min(1)
 

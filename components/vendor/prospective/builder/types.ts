@@ -91,9 +91,6 @@ export const PRODUCT_CATEGORIES = [
   "General Surgery",
 ]
 
-export function formatCurrencyShort(value: number) {
-  if (isNaN(value) || value === null || value === undefined) return "$0"
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
-  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`
-  return `$${value.toFixed(0)}`
-}
+/** @deprecated Re-export of the canonical `formatCompactCurrency`; kept so
+ *  builder components needn't change their import. */
+export { formatCompactCurrency as formatCurrencyShort } from "@/lib/formatting"

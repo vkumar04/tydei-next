@@ -8,7 +8,9 @@
  * confirms instead of typing.
  */
 
-const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ")
+import { normalizeCategoryKey } from "@/lib/categories/normalize-key"
+
+const normalize = normalizeCategoryKey
 
 // Generic/structural tokens that shouldn't drive a match on their own.
 const STOP = new Set(["and", "the", "of", "ortho", "general"])

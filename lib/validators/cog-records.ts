@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { createPaginationSchema } from "./pagination"
 
 // ─── COG Record Input (for import) ──────────────────────────────
 
@@ -56,8 +57,7 @@ export const cogFiltersSchema = z.object({
   dateTo: z.string().optional(),
   sortBy: z.string().optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  ...createPaginationSchema(100),
 })
 
 export type COGFilters = z.infer<typeof cogFiltersSchema>

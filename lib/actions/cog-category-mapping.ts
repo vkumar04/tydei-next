@@ -23,10 +23,11 @@ import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh
 import { suggestTarget } from "@/lib/categories/category-suggest"
 import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { normalizeCategoryKey } from "@/lib/categories/normalize-key"
 import { serialize } from "@/lib/serialize"
 import { revalidatePath } from "next/cache"
 
-const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ")
+const normalize = normalizeCategoryKey
 
 export interface CogCategoryMapping {
   /** The raw category string as it appears in COG/pricing rows. */

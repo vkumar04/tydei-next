@@ -7,6 +7,7 @@ import type { ProductCategory } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
 import { mappedCategoryUniverse } from "@/lib/contracts/mapped-category-universe"
+import { normalizeCategoryKey } from "@/lib/categories/normalize-key"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ export async function getCategories(opts?: { includeSuperseded?: boolean }) {
     where: { isConfirmed: true, contractCategory: { not: null } },
     select: { cogCategory: true, contractCategory: true },
   })
-  const normKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ")
+  const normKey = normalizeCategoryKey
   const presentNames = new Set(categories.map((c) => normKey(c.name)))
   const superseded = new Set(
     confirmedSources

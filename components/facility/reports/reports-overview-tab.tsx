@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { getReportsOverview } from "@/lib/actions/reports/overview"
+import { StatCard } from "@/components/shared/stats/stat-card"
 import type { ReportsDateRange } from "./reports-types"
 
 /**
@@ -190,24 +191,5 @@ export function ReportsOverviewTab({
         </Card>
       </div>
     </div>
-  )
-}
-
-function StatCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string
-  value: string
-  accent?: string
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className={`text-2xl font-bold ${accent ?? ""}`}>{value}</p>
-      </CardContent>
-    </Card>
   )
 }

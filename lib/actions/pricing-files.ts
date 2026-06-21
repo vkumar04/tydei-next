@@ -10,6 +10,7 @@ import {
   removeInverseCategoryMapping,
 } from "@/lib/categories/resolve"
 import { applyCategoryRemap } from "@/lib/categories/apply-category-remap"
+import { normalizeCategoryKey } from "@/lib/categories/normalize-key"
 import {
   pricingFiltersSchema,
   bulkImportPricingSchema,
@@ -208,7 +209,7 @@ export async function bulkImportPricingFiles(input: BulkImportPricingInput) {
     const effective = applyCategoryRemap(raw, remap)
     // Bug 5: "0" / numeric / placeholder is not a category.
     if (!effective || isPlaceholderCategory(effective)) return null
-    const key = effective.trim().toLowerCase().replace(/\s+/g, " ")
+    const key = normalizeCategoryKey(effective)
     return canonicalCategoryMap.get(key) ?? (effective.trim() || null)
   }
 
@@ -575,7 +576,7 @@ export async function importContractPricing(input: {
     const effective = applyCategoryRemap(raw, remap)
     // Bug 5: "0" / numeric / placeholder is not a category.
     if (!effective || isPlaceholderCategory(effective)) return undefined
-    const key = effective.trim().toLowerCase().replace(/\s+/g, " ")
+    const key = normalizeCategoryKey(effective)
     return categoryMap.get(key) ?? (effective.trim() || undefined)
   }
 

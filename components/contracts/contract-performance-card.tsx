@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatPercent } from "@/lib/formatting"
 import { Activity, AlertTriangle, PieChart, Target } from "lucide-react"
 import { getContractPerformance } from "@/lib/actions/contracts/performance-read"
 import { getCategoryMarketShareForVendor } from "@/lib/actions/cog/category-market-share"
@@ -157,7 +157,7 @@ export function ContractPerformanceCard({
                 Rebate utilization
               </div>
               <span className="text-lg font-semibold tabular-nums">
-                {util.utilizationPct.toFixed(1)}%
+                {formatPercent(util.utilizationPct)}
               </span>
             </div>
             <Progress value={Math.min(100, util.utilizationPct)} />
@@ -321,7 +321,7 @@ export function ContractPerformanceCard({
                       </div>
                       {row ? (
                         <span className="text-lg font-semibold tabular-nums">
-                          {row.sharePct.toFixed(1)}%
+                          {formatPercent(row.sharePct)}
                         </span>
                       ) : (
                         <span className="text-sm text-muted-foreground">—</span>
@@ -339,13 +339,13 @@ export function ContractPerformanceCard({
                           {row.commitmentPct != null && (
                             <>
                               {" "}
-                              · target {row.commitmentPct.toFixed(1)}%
+                              · target {formatPercent(row.commitmentPct)}
                               {row.sharePct >= row.commitmentPct ? (
                                 <span className="text-emerald-600"> (met)</span>
                               ) : (
                                 <span className="text-amber-600">
                                   {" "}
-                                  ({(row.commitmentPct - row.sharePct).toFixed(1)}% short)
+                                  ({formatPercent(row.commitmentPct - row.sharePct)} short)
                                 </span>
                               )}
                             </>

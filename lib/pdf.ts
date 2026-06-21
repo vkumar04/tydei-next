@@ -5,6 +5,7 @@ import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { deriveContractCadence } from "@/lib/contracts/contract-cadence"
 import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
+import { formatCurrency } from "@/lib/formatting"
 
 // ─── jspdf-autotable extends the doc with lastAutoTable ──────────
 
@@ -23,14 +24,7 @@ function toBytes(doc: jsPDF): Uint8Array {
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
-function fmtCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
-}
+const fmtCurrency = formatCurrency
 
 function fmtDate(date: Date | string): string {
   return new Intl.DateTimeFormat("en-US", {

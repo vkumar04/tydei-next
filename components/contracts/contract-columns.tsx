@@ -6,7 +6,6 @@ import type { Contract, Vendor, ProductCategory, Facility } from "@/lib/generate
 import {
   ArrowUpDown,
   HelpCircle,
-  MoreHorizontal,
   Eye,
   Pencil,
   Trash2,
@@ -14,16 +13,9 @@ import {
 import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
+import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Tooltip,
   TooltipContent,
@@ -361,44 +353,30 @@ export function getContractColumns(
       header: () => <span className="sr-only">Actions</span>,
       meta: { filterVariant: "none" },
       cell: ({ row }) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation()
-                actions.onView(row.original.id)
-              }}
-            >
-              <Eye className="mr-2 h-4 w-4" />
-              View Details
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation()
-                actions.onEdit(row.original.id)
-              }}
-            >
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-red-600 dark:text-red-400"
-              onClick={(e) => {
-                e.stopPropagation()
-                actions.onDelete(row.original)
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <TableActionMenu
+          stopPropagation
+          triggerSize="icon"
+          triggerClassName="h-8 w-8"
+          actions={[
+            {
+              label: "View Details",
+              icon: Eye,
+              onClick: () => actions.onView(row.original.id),
+            },
+            {
+              label: "Edit",
+              icon: Pencil,
+              onClick: () => actions.onEdit(row.original.id),
+            },
+            {
+              label: "Delete",
+              icon: Trash2,
+              variant: "destructive",
+              separatorBefore: true,
+              onClick: () => actions.onDelete(row.original),
+            },
+          ]}
+        />
       ),
     },
   ]

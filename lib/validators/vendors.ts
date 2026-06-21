@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { createPaginationSchema } from "./pagination"
 import { VendorTierSchema } from "@/lib/validators"
 
 // ─── Create Vendor ──────────────────────────────────────────────
@@ -29,8 +30,7 @@ export type UpdateVendorInput = z.infer<typeof updateVendorSchema>
 export const vendorFiltersSchema = z.object({
   search: z.string().optional(),
   status: z.string().optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  ...createPaginationSchema(100),
 })
 
 export type VendorFilters = z.infer<typeof vendorFiltersSchema>

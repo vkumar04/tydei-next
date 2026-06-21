@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Trash2 } from "lucide-react"
 import type { TeamMember } from "@/lib/actions/settings"
 import { ACCESS_TIERS, ACCESS_TIER_LABELS } from "@/lib/auth/permissions"
+import { formatDate } from "@/lib/formatting"
 
 interface TeamTableProps {
   members: TeamMember[]
@@ -130,7 +131,7 @@ export function TeamTable({
               </TableCell>
             )}
             <TableCell className="text-sm text-muted-foreground">
-              {new Date(m.createdAt).toLocaleDateString()}
+              {formatDate(m.createdAt)}
             </TableCell>
             {isAdmin && (
               <TableCell>

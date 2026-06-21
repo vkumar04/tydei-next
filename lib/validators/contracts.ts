@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { createPaginationSchema } from "./pagination"
 import {
   ContractTypeSchema,
   ContractStatusSchema,
@@ -13,8 +14,7 @@ export const contractFiltersSchema = z.object({
   type: ContractTypeSchema.optional(),
   facilityId: z.string().optional(),
   facilityScope: z.enum(["this", "all", "shared"]).optional().default("this"),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  ...createPaginationSchema(100),
 })
 
 export type ContractFilters = z.input<typeof contractFiltersSchema>

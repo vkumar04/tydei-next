@@ -2,19 +2,11 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Contract, Facility, ProductCategory } from "@/lib/generated/prisma/client"
-import { Eye, MoreHorizontal, FileText, Building2, Trash2 } from "lucide-react"
+import { Eye, FileText, Building2, Trash2 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { contractStatusConfig } from "@/lib/constants"
 import { StatusBadge } from "@/components/shared/badges/status-badge"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
 
 export type ContractWithFacility = Contract & {
   facility: Pick<Facility, "id" | "name"> | null
@@ -115,54 +107,42 @@ export function getVendorContractColumns(
         const deletable =
           row.original.pendingStatus !== undefined &&
           row.original.pendingStatus !== "approved"
+        // stopPropagation: the row itself navigates on click (B2
+        // click-through); menu interactions must not.
         return (
           <div className="text-right">
-            <DropdownMenu>
-              {/* stopPropagation: the row itself navigates on click
-                  (B2 click-through); menu interactions must not. */}
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="sm">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onView(row.original.id)
-                  }}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  View Details
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onView(row.original.id)
-                  }}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Download PDF
-                </DropdownMenuItem>
-                {deletable && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDelete({ id: row.original.id, name: row.original.name })
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <TableActionMenu
+              stopPropagation
+              triggerSize="sm"
+              label="Actions"
+              actions={[
+                {
+                  label: "View Details",
+                  icon: Eye,
+                  onClick: () => onView(row.original.id),
+                },
+                {
+                  label: "Download PDF",
+                  icon: FileText,
+                  onClick: () => onView(row.original.id),
+                },
+                ...(deletable
+                  ? [
+                      {
+                        label: "Delete",
+                        icon: Trash2,
+                        variant: "destructive" as const,
+                        separatorBefore: true,
+                        onClick: () =>
+                          onDelete({
+                            id: row.original.id,
+                            name: row.original.name,
+                          }),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </div>
         )
       },

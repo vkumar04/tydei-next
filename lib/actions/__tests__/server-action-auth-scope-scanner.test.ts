@@ -291,9 +291,10 @@ const BASELINE_HITS = new Set<string>([
   // already exempts requireAdmin functions but these are public
   // reads / user-create paths
   // bumped 2026-06-09 after removeInverseCategoryMapping import + the
-  // confirm-mapping cycle guard added lines.
-  "lib/actions/categories.ts:150",
-  "lib/actions/categories.ts:195",
+  // confirm-mapping cycle guard added lines; bumped again after the
+  // normalizeCategoryKey import (DRY cleanup) shifted both by one line.
+  "lib/actions/categories.ts:151",
+  "lib/actions/categories.ts:196",
   // change-proposals.ts: post-mutation re-read
   "lib/actions/change-proposals.ts:177",
   // contract-periods.ts: post-period-mutation re-reads. Lines drift
