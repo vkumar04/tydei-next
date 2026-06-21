@@ -52,15 +52,11 @@ function ImpactCard({
 
 export function ProspectiveImpactSection({
   impact,
-  dealBaseSpend,
-  scopeNote,
+  currentVendorSpend,
   onSavingsChange,
 }: {
   impact: ProspectiveImpact
-  /** Spend the deal models against — scoped to the selected categories/vendors. */
-  dealBaseSpend: number
-  /** One-line note describing the scoped base, e.g. "Modeling on 3 of 8…". */
-  scopeNote?: string
+  currentVendorSpend: number
   /** Called with an absolute $ savings figure. */
   onSavingsChange: (savings: number) => void
 }) {
@@ -72,7 +68,7 @@ export function ProspectiveImpactSection({
   const [volumeGrowthPct, setVolumeGrowthPct] = useState(0)
 
   const derivedSavings = computeDealScenarioSavings({
-    currentVendorSpend: dealBaseSpend,
+    currentVendorSpend,
     priceChangePct: priceChangePct / 100,
     conversionPct: conversionPct / 100,
     volumeGrowthPct: volumeGrowthPct / 100,
@@ -82,8 +78,7 @@ export function ProspectiveImpactSection({
     onSavingsChange(derivedSavings)
   }, [derivedSavings, onSavingsChange])
 
-  const savingsPctOfBase =
-    dealBaseSpend > 0 ? (derivedSavings / dealBaseSpend) * 100 : 0
+  const savingsPctOfSpend = impact.savingsPctOfSpend * 100
 
   return (
     <Card>
@@ -99,15 +94,10 @@ export function ProspectiveImpactSection({
         {/* Deal Scenario levers */}
         <div className="rounded-lg border p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold">Deal Scenario</span>
-              {scopeNote ? (
-                <span className="text-xs text-muted-foreground">{scopeNote}</span>
-              ) : null}
-            </div>
+            <span className="text-sm font-semibold">Deal Scenario</span>
             <span className="text-sm font-semibold tabular-nums text-emerald-600">
               {usdCompact(impact.annualSupplySavings)} saving ·{" "}
-              {savingsPctOfBase.toFixed(1)}% of scoped spend
+              {savingsPctOfSpend.toFixed(1)}% of spend
             </span>
           </div>
           <div className="grid gap-x-8 gap-y-5 md:grid-cols-3">

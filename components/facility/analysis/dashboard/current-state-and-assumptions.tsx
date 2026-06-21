@@ -84,12 +84,9 @@ export function CurrentStateCards({
 export function FinancialAssumptionsCard({
   assumptions,
   onChange,
-  hasData,
 }: {
   assumptions: FacilityModelAssumptions
   onChange: (next: FacilityModelAssumptions) => void
-  /** True when the facility has tracked COG. False → new-account input mode. */
-  hasData: boolean
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -100,83 +97,34 @@ export function FinancialAssumptionsCard({
 
   const pct = (v: number) => `${Math.round(v * 100)}%`
 
-  // New-account mode: vendor spend is derived from implant cost/case × volume,
-  // since there's no tracked COG to read it from (Vick 2026-06-21).
-  const implantCostPerCase = assumptions.implantCostPerCase ?? 2_500
-  const setNewAccountSpend = (costPerCase: number, volume: number) =>
-    onChange({
-      ...assumptions,
-      implantCostPerCase: costPerCase,
-      annualCaseVolume: volume,
-      currentVendorSpend: costPerCase * volume,
-    })
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>Financial Assumptions</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {hasData
-            ? "Vendor spend and case volume come from your tracked data. Set the few figures only you know — every number on this page recalculates instantly."
-            : "No tracked data yet — enter your implant cost per case and volume to derive spend, plus the figures only you know. Every number recalculates instantly."}
+          Vendor spend and case volume come from your tracked data. Set the few
+          figures only you know — every number on this page recalculates
+          instantly.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
-        {hasData ? (
-          /* Tracked from the system — not editable here */
-          <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-sm">
-            <span className="text-muted-foreground">
-              Vendor spend{" "}
-              <span className="font-semibold tabular-nums text-foreground">
-                {usdCompact(assumptions.currentVendorSpend)}
-              </span>{" "}
-              <span className="text-xs">· from your data</span>
-            </span>
-            <span className="text-muted-foreground">
-              Annual cases{" "}
-              <span className="font-semibold tabular-nums text-foreground">
-                {assumptions.annualCaseVolume.toLocaleString("en-US")}
-              </span>{" "}
-              <span className="text-xs">· from your data</span>
-            </span>
-          </div>
-        ) : (
-          /* New account: type implant cost/case + volume → derives spend */
-          <div className="space-y-3 rounded-md border border-dashed p-3">
-            <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
-              <SliderField
-                label="Implant / supply cost per case"
-                value={implantCostPerCase}
-                min={0}
-                max={50_000}
-                step={250}
-                format={usdCompact}
-                onChange={(v) => setNewAccountSpend(v, assumptions.annualCaseVolume)}
-                hint="Total implant/supply cost for a typical case. Multiplied by annual volume to derive your vendor spend."
-              />
-              <SliderField
-                label="Annual case volume"
-                value={assumptions.annualCaseVolume}
-                min={0}
-                max={20_000}
-                step={25}
-                format={(v) => v.toLocaleString("en-US")}
-                onChange={(v) => setNewAccountSpend(implantCostPerCase, v)}
-                hint="Surgical cases per year. With cost/case this derives total vendor spend."
-              />
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Derived vendor spend{" "}
-              <span className="font-semibold tabular-nums text-foreground">
-                {usdCompact(assumptions.currentVendorSpend)}
-              </span>{" "}
-              <span className="text-xs">
-                = {usdCompact(implantCostPerCase)}/case ×{" "}
-                {assumptions.annualCaseVolume.toLocaleString("en-US")} cases
-              </span>
-            </div>
-          </div>
-        )}
+        {/* Tracked from the system — not editable here */}
+        <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-sm">
+          <span className="text-muted-foreground">
+            Vendor spend{" "}
+            <span className="font-semibold tabular-nums text-foreground">
+              {usdCompact(assumptions.currentVendorSpend)}
+            </span>{" "}
+            <span className="text-xs">· from your data</span>
+          </span>
+          <span className="text-muted-foreground">
+            Annual cases{" "}
+            <span className="font-semibold tabular-nums text-foreground">
+              {assumptions.annualCaseVolume.toLocaleString("en-US")}
+            </span>{" "}
+            <span className="text-xs">· from your data</span>
+          </span>
+        </div>
 
         {/* The three figures only the facility knows */}
         <div className="grid gap-x-8 gap-y-5 md:grid-cols-3">
