@@ -11,7 +11,7 @@
  * growth) stay as sliders. Claude adds the narrative layer on demand.
  */
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   DEFAULT_FACILITY_ASSUMPTIONS,
   type FacilityModelAssumptions,
@@ -41,6 +41,7 @@ import {
 } from "./ai-layer"
 import { GrowthSimulatorCard } from "./growth-simulator-card"
 import { AiInsightsPanel } from "./ai-insights-panel"
+import { UploadedDataControl } from "./uploaded-data-control"
 
 function seedAssumptions(
   data: FacilityAnalysisData,
@@ -103,6 +104,12 @@ export function AnalysisDashboardClient({
 }: {
   data: FacilityAnalysisData
 }) {
+  // Optional uploaded-file override — lets the CFO model from contract/pricing
+  // data they upload instead of live COG (Vick 2026-06-21). null = live COG.
+  const [override, setOverride] = useState<FacilityAnalysisData | null>(null)
+  const [overrideFileName, setOverrideFileName] = useState<string | null>(null)
+  const effectiveData = override ?? data
+
   const [assumptions, setAssumptions] = useState<FacilityModelAssumptions>(() =>
     seedAssumptions(data),
   )
@@ -111,9 +118,31 @@ export function AnalysisDashboardClient({
     () => seedAssumptions(data).currentVendorSpend * 0.05,
   )
 
+  const reseedFrom = useCallback((d: FacilityAnalysisData) => {
+    const seeded = seedAssumptions(d)
+    setAssumptions(seeded)
+    setSavings(seeded.currentVendorSpend * 0.05)
+  }, [])
+
+  const handleApplyUpload = useCallback(
+    (d: FacilityAnalysisData, fileName: string) => {
+      setOverride(d)
+      setOverrideFileName(fileName)
+      reseedFrom(d)
+    },
+    [reseedFrom],
+  )
+
+  const handleResetSource = useCallback(() => {
+    setOverride(null)
+    setOverrideFileName(null)
+    reseedFrom(data)
+  }, [data, reseedFrom])
+
   const model = useMemo(
-    () => buildDashboardModel(assumptions, savings, DEFAULT_AI_INPUTS, data),
-    [assumptions, savings, data],
+    () =>
+      buildDashboardModel(assumptions, savings, DEFAULT_AI_INPUTS, effectiveData),
+    [assumptions, savings, effectiveData],
   )
 
   const insights = useFacilityAnalysisInsights()
@@ -121,15 +150,24 @@ export function AnalysisDashboardClient({
   return (
     <div className="space-y-8 p-6">
       {/* ── Current State ───────────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-bold">Current State Analysis</h1>
-        <p className="text-muted-foreground">
-          Administrator / CFO view.{" "}
-          {data.hasData
-            ? "Modeled from your facility's live spend and case data."
-            : "No facility data yet — showing a representative model you can tune."}{" "}
-          Tune any assumption and every figure recalculates instantly.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Current State Analysis</h1>
+          <p className="text-muted-foreground">
+            Administrator / CFO view.{" "}
+            {override
+              ? `Modeled from uploaded file ${overrideFileName}.`
+              : data.hasData
+                ? "Modeled from your facility's live spend and case data."
+                : "No facility data yet — showing a representative model you can tune."}{" "}
+            Tune any assumption and every figure recalculates instantly.
+          </p>
+        </div>
+        <UploadedDataControl
+          activeFileName={overrideFileName}
+          onApply={handleApplyUpload}
+          onReset={handleResetSource}
+        />
       </div>
 
       <CurrentStateCards current={model.prospective.current} />
@@ -169,7 +207,7 @@ export function AnalysisDashboardClient({
         isPending={insights.isPending}
         error={insights.error}
         onGenerate={() =>
-          insights.mutate(buildSnapshot(model, data.revenueIsImplied))
+          insights.mutate(buildSnapshot(model, effectiveData.revenueIsImplied))
         }
       />
 
