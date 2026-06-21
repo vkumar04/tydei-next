@@ -257,6 +257,8 @@ export const queryKeys = {
       ["settings", "featureFlags", facilityId] as const,
     connections: (entityId: string) =>
       ["settings", "connections", entityId] as const,
+    vendorOperatingMode: (vendorId: string) =>
+      ["settings", "vendorOperatingMode", vendorId] as const,
     vendorDivisions: () => ["vendor-divisions"] as const,
     // Settings/Users feature ───────────────────────────────────────
     memberAccessTiers: (orgId: string) =>

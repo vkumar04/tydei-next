@@ -30,6 +30,8 @@ import {
   useRejectConnection,
   useRemoveConnection,
   useSetConnectionMode,
+  useVendorOperatingMode,
+  useSetVendorOperatingMode,
 } from "@/hooks/use-connections"
 import type { ConnectionMode } from "@/lib/generated/prisma/client"
 import { useCredits, useUsageHistory } from "@/hooks/use-ai-credits"
@@ -71,22 +73,26 @@ export function VendorSettingsClient({
   const rejectConn = useRejectConnection(vendorId)
   const removeConn = useRemoveConnection(vendorId)
   const setMode = useSetConnectionMode(vendorId)
+  const operatingMode = useVendorOperatingMode(vendorId)
+  const setOperatingMode = useSetVendorOperatingMode(vendorId)
   const creditsQuery = useCredits(vendorId, "vendor")
   const usageQuery = useUsageHistory(creditsQuery.data?.id)
 
   const displayName = profile.data?.name ?? vendorName
 
-  // A vendor uses "facility data" only when it has an ACCEPTED two-way
-  // connection; otherwise it operates 1-way and manages its own COGs. So the
-  // COGS upload is available by default (incl. standalone vendors with no
-  // connections) and hides only once the vendor goes two-way with a facility.
-  // Previously `isOneWay` was hardcoded true (Charles: vendor had no place to
-  // choose facility-connection vs own COGs).
+  // Operating mode (Charles 2026-06-20): the vendor's EXPLICIT vendor-level
+  // choice (Vendor.defaultMode) wins when set; otherwise derive it — a vendor
+  // uses "facility data" only when it has an ACCEPTED two-way connection,
+  // else it operates 1-way and manages its own COGs. So a standalone vendor
+  // gets the COGS upload by default AND can now explicitly pick 1-way/2-way.
   const hasTwoWayConnection =
     connections.data?.some(
       (c) => c.status === "accepted" && c.mode === "two_way",
     ) ?? false
-  const isOneWay = !hasTwoWayConnection
+  const explicitMode = operatingMode.data ?? null
+  const isOneWay = explicitMode
+    ? explicitMode === "one_way"
+    : !hasTwoWayConnection
 
   const handleSendInvite = () => {
     const name = newInviteFacilityName.trim()
@@ -203,6 +209,63 @@ export function VendorSettingsClient({
         </TabsContent>
 
         <TabsContent value="connections" className="space-y-6">
+          {/* Vendor-level operating mode — the standalone-vendor choice
+              (Charles 2026-06-20: "the setting for the vendor to choose to load
+              its own contracts… or use that facility data"). */}
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold">Operating mode</h3>
+                <p className="text-sm text-muted-foreground">
+                  {isOneWay
+                    ? "1-way — you load your own contracts and COGs; facility data is not used."
+                    : "2-way — connected to a facility; your contracts flow to them and you use their purchase data."}
+                  {explicitMode === null && (
+                    <span className="ml-1 italic">
+                      (auto, from your connections — pick one to set it
+                      explicitly)
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  variant={isOneWay ? "default" : "outline"}
+                  size="sm"
+                  disabled={setOperatingMode.isPending}
+                  onClick={() =>
+                    setOperatingMode.mutate("one_way" as ConnectionMode, {
+                      onSuccess: () =>
+                        toast.success("Operating in 1-way mode (own contracts + COGs)"),
+                      onError: (err) =>
+                        toast.error(
+                          err instanceof Error ? err.message : "Failed to set mode",
+                        ),
+                    })
+                  }
+                >
+                  1-way
+                </Button>
+                <Button
+                  variant={!isOneWay ? "default" : "outline"}
+                  size="sm"
+                  disabled={setOperatingMode.isPending}
+                  onClick={() =>
+                    setOperatingMode.mutate("two_way" as ConnectionMode, {
+                      onSuccess: () =>
+                        toast.success("Operating in 2-way mode (facility connection)"),
+                      onError: (err) =>
+                        toast.error(
+                          err instanceof Error ? err.message : "Failed to set mode",
+                        ),
+                    })
+                  }
+                >
+                  2-way
+                </Button>
+              </div>
+            </div>
+          </div>
           <ConnectionsTab
             connectionData={connections.data}
             connectionIsLoading={connections.isLoading}
