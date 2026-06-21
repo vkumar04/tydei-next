@@ -1,6 +1,7 @@
 "use client"
 
 import { AlertTriangle, Stethoscope } from "lucide-react"
+import { HeroStat } from "@/components/shared/stats/hero-stat"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
@@ -75,56 +76,29 @@ export function CaseCostingHero({
           label="Total Cases"
           value={isLoading ? null : totalCases.toLocaleString()}
           sublabel="Across current scope"
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         <HeroStat
           label="Avg Cost / Case"
           value={isLoading ? null : formatCurrency(avgCostPerCase)}
           sublabel="Supply + implant spend"
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         <HeroStat
           label="Avg Margin"
           value={isLoading ? null : formatPercent(avgMarginPct)}
           sublabel="Reimbursement − spend"
           tone={marginTone}
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         <HeroStat
           label="On-Contract Rate"
           value={isLoading ? null : formatPercent(onContractPct)}
           sublabel="Supply spend under contract"
           tone={complianceTone}
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
       </div>
     </section>
-  )
-}
-
-interface HeroStatProps {
-  label: string
-  value: string | null
-  sublabel: string
-  tone?: "positive" | "negative" | "muted"
-}
-
-function HeroStat({ label, value, sublabel, tone }: HeroStatProps) {
-  const sublabelClass =
-    tone === "positive"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-700 dark:text-red-400"
-        : "text-muted-foreground"
-  return (
-    <div className="space-y-1">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      {value === null ? (
-        <Skeleton className="h-9 w-28" />
-      ) : (
-        <p className="text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl">
-          {value}
-        </p>
-      )}
-      <p className={`text-xs ${sublabelClass}`}>{sublabel}</p>
-    </div>
   )
 }

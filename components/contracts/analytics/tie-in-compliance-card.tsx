@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getTieInCompliance } from "@/lib/actions/analytics/tie-in-compliance"
+import { toneSublabelClass } from "@/lib/ui/tone-colors"
 
 const fmtUsd = (n: number) =>
   `$${Math.round(n).toLocaleString("en-US")}`
@@ -201,12 +202,7 @@ function Stat({
   tone?: "positive" | "negative"
   badge?: React.ReactNode
 }) {
-  const valClass =
-    tone === "positive"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-700 dark:text-red-400"
-        : ""
+  const valClass = tone ? toneSublabelClass(tone) : ""
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>

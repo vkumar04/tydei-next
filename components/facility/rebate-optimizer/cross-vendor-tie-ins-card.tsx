@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { getCrossVendorTieIns } from "@/lib/actions/analytics/cross-vendor-tie-in"
+import { toneValueClass } from "@/lib/ui/tone-colors"
 
 export function CrossVendorTieInsCard() {
   const { data, isLoading } = useQuery({
@@ -127,12 +128,7 @@ function Stat({
   value: string
   tone?: "positive" | "muted"
 }) {
-  const valClass =
-    tone === "positive"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : tone === "muted"
-        ? "text-muted-foreground"
-        : ""
+  const valClass = tone ? toneValueClass(tone) : ""
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>

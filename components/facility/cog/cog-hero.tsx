@@ -2,6 +2,7 @@
 
 import { Database } from "lucide-react"
 import { format } from "date-fns"
+import { HeroStat } from "@/components/shared/stats/hero-stat"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 
@@ -92,6 +93,7 @@ export function CogHero({
           label="Total Spend"
           value={isLoading ? null : formatCurrency(totalSpend)}
           sublabel="Lifetime cost of goods"
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         <HeroStat
           label="On-Contract"
@@ -102,6 +104,7 @@ export function CogHero({
               : "No records yet"
           }
           tone={onContractPct > 0 ? "positive" : "muted"}
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         <HeroStat
           label="Total Records"
@@ -111,6 +114,7 @@ export function CogHero({
               ? `${offContractCount.toLocaleString()} off-contract`
               : "All matched or pending"
           }
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
         <HeroStat
           label="Data Range"
@@ -118,39 +122,9 @@ export function CogHero({
           sublabel={
             minPODate && maxPODate ? dateRangeLabel : "Import data to begin"
           }
+          skeleton={<Skeleton className="h-9 w-28" />}
         />
       </div>
     </section>
-  )
-}
-
-interface HeroStatProps {
-  label: string
-  value: string | null
-  sublabel: string
-  tone?: "positive" | "negative" | "muted"
-}
-
-function HeroStat({ label, value, sublabel, tone }: HeroStatProps) {
-  const sublabelClass =
-    tone === "positive"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-700 dark:text-red-400"
-        : "text-muted-foreground"
-  return (
-    <div className="space-y-1">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      {value === null ? (
-        <Skeleton className="h-9 w-28" />
-      ) : (
-        <p className="text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl">
-          {value}
-        </p>
-      )}
-      <p className={`text-xs ${sublabelClass}`}>{sublabel}</p>
-    </div>
   )
 }

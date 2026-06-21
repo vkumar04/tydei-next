@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { evaluateServiceSla } from "@/lib/actions/analytics/service-sla"
+import { toneSublabelClass } from "@/lib/ui/tone-colors"
 
 const fmtUsd = (n: number) =>
   `$${Math.round(n).toLocaleString("en-US")}`
@@ -166,12 +167,7 @@ function Stat({
   badge?: React.ReactNode
   sublabel?: string
 }) {
-  const valClass =
-    tone === "positive"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-700 dark:text-red-400"
-        : ""
+  const valClass = tone ? toneSublabelClass(tone) : ""
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>

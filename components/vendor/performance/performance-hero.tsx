@@ -1,6 +1,7 @@
 "use client"
 
 import { Activity, ArrowUpRight, CheckCircle2, Target } from "lucide-react"
+import { HeroStat } from "@/components/shared/stats/hero-stat"
 import { Badge } from "@/components/ui/badge"
 import { formatPerfCurrency } from "./performance-types"
 
@@ -171,32 +172,5 @@ export function PerformanceHero({
         </div>
       </div>
     </section>
-  )
-}
-
-interface HeroStatProps {
-  label: string
-  value: string
-  sublabel: string
-  tone?: "positive" | "negative" | "muted"
-}
-
-function HeroStat({ label, value, sublabel, tone }: HeroStatProps) {
-  const sublabelClass =
-    tone === "positive"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "negative"
-        ? "text-red-700 dark:text-red-400"
-        : "text-muted-foreground"
-  return (
-    <div className="space-y-1">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      <p className="text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl">
-        {value}
-      </p>
-      <p className={`text-xs ${sublabelClass}`}>{sublabel}</p>
-    </div>
   )
 }
