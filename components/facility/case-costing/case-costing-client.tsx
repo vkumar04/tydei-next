@@ -20,7 +20,7 @@
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
-import { Upload, BarChart3, Trash2, Loader2 } from "lucide-react"
+import { Upload, BarChart3, Trash2, Loader2, PencilLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useDeleteAllCases } from "@/hooks/use-case-costing"
 import { CaseImportDialog } from "./case-import-dialog"
+import { ManualCaseEntryDialog } from "./manual-case-entry-dialog"
 import { CaseCostingHero } from "./case-costing-hero"
 import { CaseCostingTabs } from "./case-costing-tabs"
 import { PayorContractMarginCard } from "./payor-contract-margin-card"
@@ -58,6 +59,7 @@ export function CaseCostingClient({
   facilityName,
 }: CaseCostingClientProps) {
   const [importOpen, setImportOpen] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const deleteAll = useDeleteAllCases()
 
@@ -195,6 +197,10 @@ export function CaseCostingClient({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        <Button variant="outline" onClick={() => setManualOpen(true)}>
+          <PencilLine className="mr-2 h-4 w-4" />
+          Manual entry
+        </Button>
         <Button onClick={() => setImportOpen(true)}>
           <Upload className="mr-2 h-4 w-4" />
           Upload Data
@@ -232,6 +238,13 @@ export function CaseCostingClient({
         facilityId={facilityId}
         open={importOpen}
         onOpenChange={setImportOpen}
+        onComplete={refetchAll}
+      />
+
+      <ManualCaseEntryDialog
+        facilityId={facilityId}
+        open={manualOpen}
+        onOpenChange={setManualOpen}
         onComplete={refetchAll}
       />
     </div>
