@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { formatDate } from "@/lib/formatting"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -189,7 +190,7 @@ export function ConnectionsTab({
                           <p className="font-medium">{connection.facilityName}</p>
                           <p className="text-sm text-muted-foreground">
                             Invited by {connection.invitedByEmail} &bull;{" "}
-                            {new Date(connection.invitedAt).toLocaleDateString()}
+                            {formatDate(connection.invitedAt)}
                           </p>
                           {connection.message && (
                             <p className="mt-1 text-sm italic">&quot;{connection.message}&quot;</p>
@@ -251,9 +252,7 @@ export function ConnectionsTab({
                           </div>
                         </TableCell>
                         <TableCell>
-                          {new Date(
-                            connection.respondedAt || connection.invitedAt
-                          ).toLocaleDateString()}
+                          {formatDate(connection.respondedAt || connection.invitedAt)}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
@@ -319,7 +318,7 @@ export function ConnectionsTab({
                         <div>
                           <p className="font-medium">{connection.facilityName}</p>
                           <p className="text-sm text-muted-foreground">
-                            Sent {new Date(connection.invitedAt).toLocaleDateString()}
+                            Sent {formatDate(connection.invitedAt)}
                           </p>
                         </div>
                       </div>

@@ -10,6 +10,8 @@
  * above-COG pricing can only pull the verdict DOWN, never up.
  */
 
+import { formatCurrency } from "@/lib/formatting"
+
 export interface VerdictPricingSignal {
   /** Mean variance % across COG-matched lines (negative = cheaper). */
   avgVariancePercent: number
@@ -62,12 +64,7 @@ export interface ProposalVerdict {
   missingInputs: string[]
 }
 
-const fmtUsd = (v: number): string =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(v)
+const fmtUsd = formatCurrency
 
 export function synthesizeProposalVerdict(
   input: ProposalVerdictInput,

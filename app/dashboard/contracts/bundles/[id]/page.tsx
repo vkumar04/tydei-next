@@ -13,14 +13,9 @@ import { Button } from "@/components/ui/button"
 import { BundleImpactAnalysisCard } from "@/components/contracts/bundle-impact-analysis-card"
 import { BundleDeleteButton } from "@/components/contracts/bundle-delete-button"
 import { requireFacility } from "@/lib/actions/auth"
+import { formatCurrency, formatPercent } from "@/lib/formatting"
 
-function fmt(n: number): string {
-  return n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  })
-}
+const fmt = formatCurrency
 
 export default async function BundleDetailPage({
   params,
@@ -104,7 +99,7 @@ export default async function BundleDetailPage({
               />
               <Stat
                 label="Effective rate"
-                value={`${status.proportional.effectiveRate.toFixed(2)}%`}
+                value={formatPercent(status.proportional.effectiveRate, 2)}
               />
               <Stat
                 label="Rebate earned"
@@ -178,11 +173,11 @@ export default async function BundleDetailPage({
                           : "—"}
                       </td>
                       <td className="py-2 pr-3 text-right tabular-nums">
-                        {Number(m.weightPercent).toFixed(0)}%
+                        {formatPercent(Number(m.weightPercent), 0)}
                       </td>
                       <td className="py-2 text-right tabular-nums">
                         {m.rebateContribution != null
-                          ? `${Number(m.rebateContribution).toFixed(2)}%`
+                          ? formatPercent(Number(m.rebateContribution), 2)
                           : "—"}
                       </td>
                     </tr>

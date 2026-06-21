@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
+import { divisionInputSchema } from "@/lib/validators/divisions"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -17,13 +18,7 @@ export interface VendorDivisionRow {
 
 // ─── Validators ──────────────────────────────────────────────────
 
-const divisionItemSchema = z.object({
-  name: z.string().min(1).max(100),
-  code: z.string().min(1).max(50),
-  categories: z.array(z.string()).optional().default([]),
-})
-
-const setVendorDivisionsSchema = z.array(divisionItemSchema)
+const setVendorDivisionsSchema = z.array(divisionInputSchema)
 
 // ─── Actions ─────────────────────────────────────────────────────
 

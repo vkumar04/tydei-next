@@ -96,3 +96,24 @@ export function formatCompactNumber(value: number): string {
     maximumFractionDigits: 1,
   }).format(value)
 }
+
+/**
+ * Compact currency for charts/dashboard cards/tables: $1.2M / $3K / $420.
+ * Signed (negatives keep a leading "-"), with a NaN/non-finite guard.
+ *
+ * `kDecimals` controls the thousands precision: default 0 gives "$3K"
+ * (the chart-axis / vendor-stat style); pass 1 for "$625.9K"
+ * (the analysis-dashboard `usdCompact` style). Sub-$1,000 values fall
+ * back to plain `formatCurrency` (locale integer, e.g. "$420").
+ */
+export function formatCompactCurrency(
+  value: number,
+  { kDecimals = 0 }: { kDecimals?: number } = {},
+): string {
+  if (!Number.isFinite(value)) return "$0"
+  const abs = Math.abs(value)
+  const sign = value < 0 ? "-" : ""
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(kDecimals)}K`
+  return formatCurrency(value)
+}

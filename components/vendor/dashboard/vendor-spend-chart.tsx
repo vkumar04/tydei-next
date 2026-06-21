@@ -18,15 +18,10 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { chartTooltipStyle } from "@/lib/chart-config"
+import { formatCompactCurrency } from "@/lib/formatting"
 
 interface VendorSpendChartProps {
   data: { month: string; spend: number; rebate: number }[]
-}
-
-function formatCurrency(value: number) {
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
-  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`
-  return `$${value.toFixed(0)}`
 }
 
 export function VendorSpendChart({ data }: VendorSpendChartProps) {
@@ -46,10 +41,10 @@ export function VendorSpendChart({ data }: VendorSpendChartProps) {
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="month" className="text-xs" />
-              <YAxis tickFormatter={formatCurrency} className="text-xs" />
+              <YAxis tickFormatter={(value) => formatCompactCurrency(Number(value))} className="text-xs" />
               <Tooltip
                 contentStyle={chartTooltipStyle}
-                formatter={(value) => [formatCurrency(Number(value)), "Sales"]}
+                formatter={(value) => [formatCompactCurrency(Number(value)), "Sales"]}
                 labelFormatter={(label) => `Month: ${label}`}
               />
               <Line

@@ -19,6 +19,7 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { toast } from "sonner"
+import { formatCurrency } from "@/lib/formatting"
 
 interface ExtractedData {
   vendorName?: string
@@ -38,15 +39,6 @@ interface UploadTabProps {
   }) => void
   onNavigateToInputs?: () => void
   onNavigateToAnalysis?: () => void
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
 }
 
 export function UploadTab({ onExtracted, onNavigateToInputs, onNavigateToAnalysis }: UploadTabProps) {

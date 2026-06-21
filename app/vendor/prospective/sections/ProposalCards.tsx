@@ -36,7 +36,7 @@ import {
   Calendar,
   Building2,
 } from "lucide-react"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatDate } from "@/lib/formatting"
 import { StatusBadge, RecommendationBadge, scoreColor } from "./shared"
 import { useDeleteProposal } from "@/hooks/use-prospective"
 import type { VendorProposal } from "@/lib/actions/prospective"
@@ -150,7 +150,7 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
                       </span>
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5" />
-                        {new Date(p.createdAt).toLocaleDateString()}
+                        {formatDate(p.createdAt)}
                       </span>
                       <span className="flex items-center gap-1 font-medium text-foreground">
                         <DollarSign className="h-3.5 w-3.5" />
@@ -217,7 +217,7 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
               <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
                 {[
                   { label: "Status", node: <StatusBadge status={viewTarget.status} /> },
-                  { label: "Created", node: new Date(viewTarget.createdAt).toLocaleDateString() },
+                  { label: "Created", node: formatDate(viewTarget.createdAt) },
                   { label: "Items", node: viewTarget.itemCount },
                   { label: "Facilities", node: viewTarget.facilityIds.length },
                   { label: "Projected Cost", node: formatCurrency(viewTarget.totalProposedCost) },

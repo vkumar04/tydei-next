@@ -6,6 +6,7 @@ import { Building2, CheckCircle, XCircle } from "lucide-react"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
 import { Pencil, Trash2, Users } from "lucide-react"
 import type { AdminVendorRow } from "@/lib/actions/admin/vendors"
+import { formatDate } from "@/lib/formatting"
 
 export function getAdminVendorColumns(
   onEdit: (vendor: AdminVendorRow) => void,
@@ -69,7 +70,7 @@ export function getAdminVendorColumns(
       meta: { filterVariant: "none" },
       cell: ({ row }) => (
         <div className="text-right text-muted-foreground">
-          {new Date(row.original.createdAt).toLocaleDateString()}
+          {formatDate(row.original.createdAt)}
         </div>
       ),
     },

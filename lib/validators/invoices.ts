@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { createPaginationSchema } from "./pagination"
 
 export const invoiceLineItemSchema = z.object({
   inventoryDescription: z.string().min(1),
@@ -35,10 +36,9 @@ export const invoiceFiltersSchema = z.object({
   facilityId: z.string().optional(),
   vendorId: z.string().optional(),
   status: z.string().optional(),
-  page: z.number().int().min(1).optional(),
   // M8: 200 cap — both invoice clients fetch a single page and slice
   // client-side; real server pagination is future work.
-  pageSize: z.number().int().min(1).max(200).optional(),
+  ...createPaginationSchema(200),
 })
 
 export type InvoiceFilters = z.infer<typeof invoiceFiltersSchema>

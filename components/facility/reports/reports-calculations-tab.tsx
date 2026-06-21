@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/tooltip"
 import { formatCurrency, formatDate, formatCalendarDate } from "@/lib/formatting"
 import { getRebateCalculationAudit } from "@/lib/actions/reports/audit-trail"
+import { StatCard } from "@/components/shared/stats/stat-card"
 import { queryKeys } from "@/lib/query-keys"
 import {
   computeTierProgressProjection,
@@ -445,21 +446,8 @@ function CalculationsForContract({
   )
 }
 
-function Stat({
-  label,
-  value,
-  accent,
-}: {
-  label: string
-  value: string
-  accent?: string
-}) {
-  return (
-    <div className="rounded-lg border bg-muted/50 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-lg font-bold ${accent ?? ""}`}>{value}</p>
-    </div>
-  )
+function Stat(props: { label: string; value: string; accent?: string }) {
+  return <StatCard variant="muted" {...props} />
 }
 
 function FormulaBlock({ label, text }: { label: string; text: string }) {

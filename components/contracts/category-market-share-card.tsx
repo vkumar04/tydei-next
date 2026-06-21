@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatPercent } from "@/lib/formatting"
 import { getCategoryMarketShareForVendor } from "@/lib/actions/cog/category-market-share"
 import { queryKeys } from "@/lib/query-keys"
 
@@ -129,7 +129,7 @@ export function CategoryMarketShareCard({
               <div className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="font-medium">{row.category}</span>
                 <span className="tabular-nums">
-                  <span className="font-semibold">{row.sharePct.toFixed(1)}%</span>
+                  <span className="font-semibold">{formatPercent(row.sharePct)}</span>
                   {row.commitmentPct != null && (
                     <span
                       className={
@@ -139,7 +139,7 @@ export function CategoryMarketShareCard({
                       }
                     >
                       {" "}
-                      / {row.commitmentPct.toFixed(1)}% commitment
+                      / {formatPercent(row.commitmentPct)} commitment
                     </span>
                   )}
                   <span className="text-muted-foreground">
@@ -157,7 +157,7 @@ export function CategoryMarketShareCard({
                 {row.commitmentPct != null &&
                   (meetingCommitment
                     ? ` · meeting commitment`
-                    : ` · ${(row.commitmentPct - row.sharePct).toFixed(1)}% short of commitment`)}
+                    : ` · ${formatPercent(row.commitmentPct - row.sharePct)} short of commitment`)}
               </p>
             </div>
           )

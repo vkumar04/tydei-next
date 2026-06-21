@@ -3,6 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { PriceProjection, VendorSpendTrend } from "@/lib/actions/analysis"
 import { CheckCircle2, AlertTriangle } from "lucide-react"
+import { formatPercent } from "@/lib/formatting"
 
 interface YearlyProjection {
   year: number
@@ -114,14 +115,14 @@ export function SummaryReportTab({
               <p className="text-sm text-muted-foreground">
                 Internal Rate of Return
               </p>
-              <p className="text-lg font-bold">{irr.toFixed(1)}%</p>
+              <p className="text-lg font-bold">{formatPercent(irr)}</p>
             </div>
             <div className="space-y-1 rounded-lg border p-4">
               <p className="text-sm text-muted-foreground">
                 Discount Rate
               </p>
               <p className="text-lg font-bold">
-                {discountRate.toFixed(1)}%
+                {formatPercent(discountRate)}
               </p>
             </div>
             <div className="space-y-1 rounded-lg border p-4">
@@ -256,11 +257,11 @@ export function SummaryReportTab({
               </span>{" "}
               and an IRR of{" "}
               <span className="font-medium text-foreground">
-                {irr.toFixed(1)}%
+                {formatPercent(irr)}
               </span>{" "}
               which exceeds the discount rate of{" "}
               <span className="font-medium text-foreground">
-                {discountRate.toFixed(1)}%
+                {formatPercent(discountRate)}
               </span>
               . The contract is projected to generate value above the
               required rate of return, making it a financially favorable
@@ -282,14 +283,14 @@ export function SummaryReportTab({
               </span>{" "}
               and an IRR of{" "}
               <span className="font-medium text-foreground">
-                {irr.toFixed(1)}%
+                {formatPercent(irr)}
               </span>
               .{" "}
               {npv < 0
                 ? "The negative NPV suggests the contract may not generate sufficient returns to justify the investment at the current discount rate. "
                 : ""}
               {irr <= discountRate
-                ? `The IRR does not exceed the discount rate of ${discountRate.toFixed(1)}%, indicating the return may be below the required threshold. `
+                ? `The IRR does not exceed the discount rate of ${formatPercent(discountRate)}, indicating the return may be below the required threshold. `
                 : ""}
               Consider negotiating better terms, increasing the rebate
               percentage, or reducing the contract total to improve the

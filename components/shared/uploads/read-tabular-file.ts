@@ -22,42 +22,11 @@
  */
 
 import { matrixToHeadersAndRows } from "@/lib/utils/tabular/detect-headers"
+import { parseCsvRow } from "@/lib/csv/parse-row"
 
 // Mirror of the route's 100MB cap (Bug #27, 2026-05-11): real-facility
 // COG dumps run 50-200MB on quarterly exports.
 const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
-
-function parseCsvRow(line: string): string[] {
-  const fields: string[] = []
-  let current = ""
-  let inQuotes = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!
-    if (inQuotes) {
-      if (ch === '"') {
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"'
-          i++
-        } else {
-          inQuotes = false
-        }
-      } else {
-        current += ch
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true
-      } else if (ch === ",") {
-        fields.push(current.trim())
-        current = ""
-      } else {
-        current += ch
-      }
-    }
-  }
-  fields.push(current.trim())
-  return fields
-}
 
 export async function readPricingRows(
   file: File,

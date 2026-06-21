@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { createPaginationSchema } from "./pagination"
 
 // ─── Pricing File Input (for import) ────────────────────────────
 
@@ -22,8 +23,7 @@ export type PricingFileInput = z.infer<typeof pricingFileInputSchema>
 export const pricingFiltersSchema = z.object({
   facilityId: z.string().optional(),
   vendorId: z.string().optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(10000).optional(),
+  ...createPaginationSchema(10000),
 })
 
 export type PricingFilters = z.infer<typeof pricingFiltersSchema>

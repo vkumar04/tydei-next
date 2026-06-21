@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Target, TrendingUp, Plus } from "lucide-react"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatDate } from "@/lib/formatting"
 import { StatusBadge } from "./shared"
 import type { VendorProposal } from "@/lib/actions/prospective"
 
@@ -82,7 +82,7 @@ export function OpportunitiesSection({
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {p.facilityIds.length} facilities &middot;{" "}
-                        {new Date(p.createdAt).toLocaleDateString()}
+                        {formatDate(p.createdAt)}
                       </p>
                     </div>
                   </div>

@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { formatDate } from "@/lib/formatting"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -178,7 +179,7 @@ export function ConnectionsTab({
                           <div>
                             <p className="font-medium">{connection.vendorName}</p>
                             <p className="text-sm text-muted-foreground">
-                              Invited by {connection.invitedByEmail} &bull; {new Date(connection.invitedAt).toLocaleDateString()}
+                              Invited by {connection.invitedByEmail} &bull; {formatDate(connection.invitedAt)}
                             </p>
                             {connection.message && (
                               <p className="text-sm mt-1 italic">&quot;{connection.message}&quot;</p>
@@ -243,7 +244,7 @@ export function ConnectionsTab({
                               <span className="font-medium">{connection.vendorName}</span>
                             </div>
                           </TableCell>
-                          <TableCell>{new Date(connection.respondedAt || connection.invitedAt).toLocaleDateString()}</TableCell>
+                          <TableCell>{formatDate(connection.respondedAt || connection.invitedAt)}</TableCell>
                           <TableCell>
                             <Badge variant="outline">
                               {connection.inviteType === "facility_to_vendor" ? "You" : connection.vendorName}
@@ -286,7 +287,7 @@ export function ConnectionsTab({
                           <div>
                             <p className="font-medium">{connection.vendorName}</p>
                             <p className="text-sm text-muted-foreground">
-                              Sent {new Date(connection.invitedAt).toLocaleDateString()}
+                              Sent {formatDate(connection.invitedAt)}
                             </p>
                           </div>
                         </div>

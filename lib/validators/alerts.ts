@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { createPaginationSchema } from "./pagination"
 import { AlertTypeSchema, AlertStatusSchema, AlertSeveritySchema } from "@/lib/validators"
 
 export const alertFiltersSchema = z.object({
@@ -8,8 +9,7 @@ export const alertFiltersSchema = z.object({
   alertType: AlertTypeSchema.optional(),
   severity: AlertSeveritySchema.optional(),
   status: AlertStatusSchema.optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  ...createPaginationSchema(100),
 })
 
 export type AlertFilters = z.infer<typeof alertFiltersSchema>

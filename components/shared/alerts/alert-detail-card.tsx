@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import type { Alert, Contract, Vendor, Facility } from "@/lib/generated/prisma/client"
-import { formatCurrency } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 
 type AlertDetail = Alert & {
   contract?: Pick<
@@ -157,7 +157,7 @@ export function AlertDetailCard({ alert, onResolve, onDismiss }: AlertDetailCard
                     <p className="text-sm text-muted-foreground">Expiration Date</p>
                     <p className="font-medium">
                       {alert.contract?.expirationDate
-                        ? new Date(alert.contract.expirationDate).toLocaleDateString()
+                        ? formatCalendarDate(alert.contract.expirationDate)
                         : (meta(alert, "expiration_date") as string)}
                     </p>
                   </div>

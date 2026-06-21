@@ -5,24 +5,15 @@ import { useQuery } from "@tanstack/react-query"
 import { ChartFrame } from "@/components/contracts/chart-frame"
 import { getContractPerformanceHistory } from "@/lib/actions/contracts/performance-history"
 import { queryKeys } from "@/lib/query-keys"
+import { formatCompactCurrency, formatCurrency } from "@/lib/formatting"
 
-const formatAxisCurrency = (n: number) =>
-  n >= 1_000_000
-    ? `$${(n / 1_000_000).toFixed(1)}M`
-    : n >= 1_000
-      ? `$${Math.round(n / 1_000)}K`
-      : `$${n}`
+const formatAxisCurrency = (n: number) => formatCompactCurrency(n)
 
 // Charles W1.W-C2: the recharts default Tooltip renders the raw
 // dataKey (`spend`) and un-formatted number. Format as US currency and
 // label the line so the hover bubble reads "Monthly spend on this
 // contract: $123,456" instead of "spend: 123456".
-const formatTooltipCurrency = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  })
+const formatTooltipCurrency = (n: number) => formatCurrency(n)
 
 export function ContractPerformanceCharts({
   contractId,

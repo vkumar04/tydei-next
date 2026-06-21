@@ -60,6 +60,7 @@ import {
 } from "@/lib/actions/admin/payor-contracts"
 import { adminGetFacilities } from "@/lib/actions/admin/facilities"
 import { queryKeys } from "@/lib/query-keys"
+import { formatCalendarDate } from "@/lib/formatting"
 
 interface PayorContractRate {
   cptCode: string
@@ -101,17 +102,8 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 0,
   }).format(value)
 
-const formatDate = (dateStr: string) => {
-  try {
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-  } catch {
-    return dateStr
-  }
-}
+// Payor contract effective/expiration dates are @db.Date — render UTC-pinned.
+const formatDate = formatCalendarDate
 
 export function PayorContractTable() {
   const qc = useQueryClient()

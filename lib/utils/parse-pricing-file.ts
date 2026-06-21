@@ -7,6 +7,7 @@
  */
 
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
+import { parseCsvRow } from "@/lib/csv/parse-row"
 
 // ─── Normalise helper ────────────────────────────────────────────
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
@@ -210,40 +211,6 @@ export function buildPricingItems(
 }
 
 // ─── CSV row parser that respects quoted fields ────────────────
-function parseCSVRow(line: string): string[] {
-  const fields: string[] = []
-  let current = ""
-  let inQuotes = false
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!
-    if (inQuotes) {
-      if (ch === '"') {
-        // Escaped quote ("") inside a quoted field
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"'
-          i++ // skip the second quote
-        } else {
-          inQuotes = false
-        }
-      } else {
-        current += ch
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true
-      } else if (ch === ",") {
-        fields.push(current.trim())
-        current = ""
-      } else {
-        current += ch
-      }
-    }
-  }
-  fields.push(current.trim())
-  return fields
-}
-
 // ─── Parse a raw file (CSV or Excel via /api/parse-file) ─────────
 export interface ParsedPricingFile {
   items: ContractPricingItem[]
@@ -286,8 +253,8 @@ export async function parsePricingFile(file: File): Promise<ParsedPricingFile> {
     }
     // Normalise line endings and filter empty rows
     const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.trim())
-    rawHeaders = parseCSVRow(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, ""))
-    dataRows = lines.slice(1).map((line) => parseCSVRow(line))
+    rawHeaders = parseCsvRow(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, ""))
+    dataRows = lines.slice(1).map((line) => parseCsvRow(line))
   }
 
   const autoMap = detectPricingColumnMapping(rawHeaders)

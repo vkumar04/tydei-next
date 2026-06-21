@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { createPaginationSchema } from "./pagination"
 
 // ─── Case Input (for import) ───────────────────────────────────
 
@@ -43,8 +44,7 @@ export const caseFiltersSchema = z.object({
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   cptCode: z.string().optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  ...createPaginationSchema(100),
 })
 
 export type CaseFilters = z.infer<typeof caseFiltersSchema>

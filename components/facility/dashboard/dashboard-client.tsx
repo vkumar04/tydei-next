@@ -38,6 +38,7 @@ import { DashboardBundleShortfallsCard } from "./dashboard-bundle-shortfalls-car
 import { DashboardSpendConcentrationCard } from "./dashboard-spend-concentration-card"
 import { DashboardCategorySpendCard } from "./dashboard-category-spend-card"
 import { DashboardSpendProjection } from "./dashboard-spend-projection"
+import { formatCurrency } from "@/lib/formatting"
 
 export interface DashboardInitialData {
   kpiSummary: DashboardKPISummary
@@ -199,12 +200,7 @@ function DashboardSpendSummaryStrip({
   const onContractPct = total > 0 ? (onContract / total) * 100 : 0
   const earned = kpi.totalRebatesEarned ?? 0
   const rebateYield = onContract > 0 ? (earned / onContract) * 100 : 0
-  const fmt = (n: number) =>
-    n.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    })
+  const fmt = formatCurrency
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-lg border bg-card p-4">

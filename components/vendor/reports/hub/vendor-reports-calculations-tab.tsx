@@ -29,6 +29,7 @@ import {
 import { formatCurrency, formatDate, formatCalendarDate } from "@/lib/formatting"
 import { queryKeys } from "@/lib/query-keys"
 import { getVendorRebateCalculationAudit } from "@/lib/actions/vendor-reports/audit-trail"
+import { StatCard } from "@/components/shared/stats/stat-card"
 import {
   computeTierProgressProjection,
   type TierRow,
@@ -440,21 +441,8 @@ function CalculationsForContract({
   )
 }
 
-function Stat({
-  label,
-  value,
-  accent,
-}: {
-  label: string
-  value: string
-  accent?: string
-}) {
-  return (
-    <div className="rounded-lg border bg-muted/50 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-lg font-bold ${accent ?? ""}`}>{value}</p>
-    </div>
-  )
+function Stat(props: { label: string; value: string; accent?: string }) {
+  return <StatCard variant="muted" {...props} />
 }
 
 function FormulaBlock({ label, text }: { label: string; text: string }) {

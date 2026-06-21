@@ -1,15 +1,13 @@
-import { formatCurrency } from "@/lib/formatting"
+import { formatCompactCurrency } from "@/lib/formatting"
 
 /**
  * Compact USD for dashboard cards/tables: $41.7M, $625.9K, $444.
- * Falls back to plain `formatCurrency` under $1,000.
+ * Falls back to plain `formatCurrency` under $1,000. Thin wrapper over the
+ * canonical `formatCompactCurrency` (1-decimal thousands) — kept so its
+ * importers (and the `usdDelta` helper below) are unaffected.
  */
 export function usdCompact(value: number): string {
-  const abs = Math.abs(value)
-  const sign = value < 0 ? "-" : ""
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`
-  return formatCurrency(value)
+  return formatCompactCurrency(value, { kDecimals: 1 })
 }
 
 /** Signed compact USD with an explicit leading + for positive deltas. */
