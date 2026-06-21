@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { getContractMarginAnalysis } from "@/lib/actions/contracts/margin"
+import { queryKeys } from "@/lib/query-keys"
 
 interface ContractMarginCardProps {
   contractId: string
@@ -15,7 +16,7 @@ interface ContractMarginCardProps {
 
 export function ContractMarginCard({ contractId, limit = 5 }: ContractMarginCardProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contract-margin-analysis", contractId],
+    queryKey: queryKeys.contracts.marginAnalysis(contractId),
     queryFn: () => getContractMarginAnalysis(contractId),
   })
 

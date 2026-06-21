@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query"
 import { getOffContractSpend } from "@/lib/actions/contracts/off-contract-spend"
 import type { OffContractSpendItem } from "@/lib/actions/contracts/off-contract-spend"
 import { formatCurrency } from "@/lib/formatting"
+import { queryKeys } from "@/lib/query-keys"
 
 function BucketDrilldown({
   title,
@@ -76,7 +77,7 @@ function BucketDrilldown({
 
 export function OffContractSpendCard({ contractId }: { contractId: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contracts", "off-contract-spend", contractId] as const,
+    queryKey: queryKeys.contracts.offContractSpend(contractId),
     queryFn: () => getOffContractSpend(contractId),
   })
 

@@ -832,10 +832,12 @@ export function MassUpload({
 
     // Invalidate relevant caches so whatever page is in view refreshes.
     queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all })
-    queryClient.invalidateQueries({ queryKey: ["invoices"] })
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] })
-    queryClient.invalidateQueries({ queryKey: ["vendors"] })
-    queryClient.invalidateQueries({ queryKey: ["cases"] })
+    queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all })
+    queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all })
+    queryClient.invalidateQueries({ queryKey: queryKeys.vendors.all })
+    queryClient.invalidateQueries({ queryKey: queryKeys.cases.all })
+    // case-costing reads aren't on the factory yet; keep the literal so it
+    // stays prefix-aligned with case-costing-client's queries.
     queryClient.invalidateQueries({ queryKey: ["case-costing"] })
 
     // Reset + close the dialog

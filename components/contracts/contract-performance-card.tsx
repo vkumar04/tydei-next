@@ -50,7 +50,7 @@ export function ContractPerformanceCard({
   productCategories?: string[]
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contract-performance", contractId],
+    queryKey: queryKeys.contracts.performance(contractId),
     queryFn: () => getContractPerformance(contractId),
   })
 
@@ -78,7 +78,7 @@ export function ContractPerformanceCard({
   // here so a carve-out / tie-in contract's Performance tab surfaces the
   // earned carve-out rebate alongside utilization + share.
   const { data: carveOut } = useQuery({
-    queryKey: ["contract-performance-carveout", contractId],
+    queryKey: queryKeys.contracts.performanceCarveout(contractId),
     queryFn: () => getCarveOutRebate(contractId),
   })
 

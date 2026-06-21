@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { getVendorCarveOutRebate } from "@/lib/actions/contracts/carve-out"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * 2026-06-09 facility→vendor feature port ("copy similar features from
@@ -18,7 +19,7 @@ import { getVendorCarveOutRebate } from "@/lib/actions/contracts/carve-out"
  */
 export function VendorCarveOutCard({ contractId }: { contractId: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["vendor-carve-out", contractId],
+    queryKey: queryKeys.contracts.vendorCarveOut(contractId),
     queryFn: () => getVendorCarveOutRebate(contractId),
     staleTime: 5 * 60_000,
   })

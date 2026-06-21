@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Layers } from "lucide-react"
 import { getBundleMembershipsForContract } from "@/lib/actions/bundles"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * Bundle-memberships card for the contract detail page. Shows every
@@ -29,7 +30,7 @@ export function ContractBundleMembershipsCard({
   contractId: string
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["bundle-memberships", contractId],
+    queryKey: queryKeys.contracts.bundleMemberships(contractId),
     queryFn: () => getBundleMembershipsForContract(contractId),
   })
 

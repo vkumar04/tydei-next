@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getContracts } from "@/lib/actions/contracts"
+import { queryKeys } from "@/lib/query-keys"
 
 interface TieInCapitalPickerProps {
   value: string | null
@@ -38,7 +39,7 @@ export function TieInCapitalPicker({ value, onChange }: TieInCapitalPickerProps)
   // the counterpart was typed. The label still calls out capital contracts
   // first so the primary use case remains obvious.
   const { data, isLoading } = useQuery({
-    queryKey: ["contracts", "tie-in-candidates"] as const,
+    queryKey: queryKeys.contracts.tieInCandidates(),
     queryFn: () => getContracts({ pageSize: 200 }),
   })
 

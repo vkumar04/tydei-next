@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { getContractInsights } from "@/lib/actions/contracts/insights"
+import { queryKeys } from "@/lib/query-keys"
 
 interface ContractInsightsCardsProps {
   contractId: string
@@ -14,7 +15,7 @@ interface ContractInsightsCardsProps {
 
 export function ContractInsightsCards({ contractId }: ContractInsightsCardsProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contract-insights", contractId],
+    queryKey: queryKeys.contracts.insights(contractId),
     queryFn: () => getContractInsights(contractId),
   })
 

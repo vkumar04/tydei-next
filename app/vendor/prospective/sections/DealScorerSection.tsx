@@ -18,6 +18,7 @@ import { Gauge, AlertTriangle, TrendingUp, Sparkles, DollarSign } from "lucide-r
 import { toast } from "sonner"
 
 import { formatCurrency, formatPercent } from "@/lib/formatting"
+import { queryKeys } from "@/lib/query-keys"
 import {
   getVendorProspectiveAnalysis,
   type VendorProspectiveAnalysisInput,
@@ -93,7 +94,7 @@ export function DealScorerSection({ facilities, proposals }: DealScorerSectionPr
       if (input.proposalRowId) {
         // The score was persisted onto the proposal row — refresh the
         // proposals list so the card shows it.
-        queryClient.invalidateQueries({ queryKey: ["prospective"] })
+        queryClient.invalidateQueries({ queryKey: queryKeys.prospective.all })
         toast.success("Score attached to the selected proposal")
       }
     },

@@ -112,19 +112,19 @@ export function UserTable() {
 
   const createMut = useMutation({
     mutationFn: adminCreateUser,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin", "users"] }); resetAddForm(); toast.success("User created") },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase }); resetAddForm(); toast.success("User created") },
     onError: onMutationError("create"),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, input }: { id: string; input: Record<string, string> }) => adminUpdateUser(id, input),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin", "users"] }); setEditing(null); toast.success("User updated") },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase }); setEditing(null); toast.success("User updated") },
     onError: onMutationError("update"),
   })
 
   const deleteMut = useMutation({
     mutationFn: adminDeleteUser,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin", "users"] }); setDeleting(null); toast.success("User deleted") },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase }); setDeleting(null); toast.success("User deleted") },
     onError: onMutationError("delete"),
   })
 

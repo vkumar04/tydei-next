@@ -178,7 +178,7 @@ export function ContractFormBasicInfo({
 
   // Fetch existing contracts for tie-in / capital linking
   const { data: contractsData } = useQuery({
-    queryKey: ["contracts", "link-options"],
+    queryKey: queryKeys.contracts.linkOptions(),
     queryFn: () => getContracts({ pageSize: 100 }),
     enabled: contractType === "capital",
   })
@@ -224,13 +224,12 @@ export function ContractFormBasicInfo({
     [selectedCategoryIds, categories],
   )
   const metricsQuery = useQuery({
-    queryKey: [
-      "contract-derived-metrics",
+    queryKey: queryKeys.contracts.derivedMetrics(
       vendorId,
       [...selectedCategoryNames].sort(),
       effectiveDateStr,
       expirationDateStr,
-    ],
+    ),
     queryFn: () =>
       computeContractMetrics({
         vendorId: vendorId!,

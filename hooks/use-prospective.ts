@@ -30,7 +30,7 @@ const BENCHMARK_CHUNK_SIZE = 2000
 
 export function useCreateProposal() {
   return useToastMutation(createProposal, {
-    invalidate: [["prospective"]],
+    invalidate: [queryKeys.prospective.all],
     success: "Proposal draft created",
     error: "Failed to create proposal",
   })
@@ -45,7 +45,7 @@ export function useVendorProposals(vendorId: string) {
 
 export function useVendorBenchmarks(vendorId: string) {
   return useQuery({
-    queryKey: ["prospective", "vendorBenchmarks", vendorId],
+    queryKey: queryKeys.prospective.vendorBenchmarks(vendorId),
     queryFn: () => getVendorBenchmarks(),
     enabled: !!vendorId,
   })
@@ -75,7 +75,7 @@ export function useImportVendorBenchmarks(vendorId: string) {
         onProgress: input.onProgress,
       }),
     {
-      invalidate: [["prospective", "vendorBenchmarks", vendorId]],
+      invalidate: [queryKeys.prospective.vendorBenchmarks(vendorId)],
       success: (res) =>
         `Imported ${res.inserted} benchmark row${res.inserted === 1 ? "" : "s"}` +
         (res.replaced > 0
@@ -87,7 +87,7 @@ export function useImportVendorBenchmarks(vendorId: string) {
 
 export function useDeleteProposal() {
   return useToastMutation((id: string) => deleteProposal(id), {
-    invalidate: [["prospective"]],
+    invalidate: [queryKeys.prospective.all],
     success: "Proposal deleted",
     error: "Failed to delete proposal",
   })

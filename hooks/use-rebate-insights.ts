@@ -13,12 +13,10 @@ import type {
   RebateInsightsResponse,
 } from "@/lib/ai/rebate-optimizer-schemas"
 import { useToastMutation } from "@/hooks/use-toast-mutation"
+import { queryKeys } from "@/lib/query-keys"
 
-const insightsQueryKey = (facilityId: string) =>
-  ["rebateOptimizer", "insights", facilityId] as const
-
-const flagsQueryKey = (facilityId: string) =>
-  ["rebateOptimizer", "insightFlags", facilityId] as const
+const insightsQueryKey = queryKeys.rebateOptimizer.insights
+const flagsQueryKey = queryKeys.rebateOptimizer.insightFlags
 
 /**
  * Lazy query for AI Smart Recommendations. Disabled by default — the UI flips

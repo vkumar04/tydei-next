@@ -526,7 +526,7 @@ function TieInMinPurchaseBlock({
  */
 function ShortfallLedgerSection({ contractId }: { contractId: string }) {
   const { data } = useQuery({
-    queryKey: ["tie-in-shortfall-ledger", contractId],
+    queryKey: queryKeys.contracts.tieInShortfallLedger(contractId),
     queryFn: () => getTieInShortfallLedger(contractId),
   })
 

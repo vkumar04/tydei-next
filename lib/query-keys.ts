@@ -45,16 +45,89 @@ export const queryKeys = {
     capitalScheduleBase: ["contract-capital-schedule"] as const,
     capitalSchedule: (scope: string, contractId: string) =>
       ["contract-capital-schedule", scope, contractId] as const,
+    // ── Contract-detail single-card reads (keyed by contractId) ────────
+    // Each card below is a standalone query with its own queryFn. They were
+    // inline literals scattered across components/contracts/*; centralized
+    // here so reads and the multi-invalidate blocks (edit-contract,
+    // terms-page, transactions) stay prefix-aligned.
+    performance: (contractId: string) =>
+      ["contract-performance", contractId] as const,
+    performanceCarveout: (contractId: string) =>
+      ["contract-performance-carveout", contractId] as const,
+    tieInBundle: (contractId: string) =>
+      ["contract-tie-in-bundle", contractId] as const,
+    offContractSpend: (contractId: string) =>
+      ["contracts", "off-contract-spend", contractId] as const,
+    insights: (contractId: string) =>
+      ["contract-insights", contractId] as const,
+    // Tie-in shortfall carry-forward ledger. Read by the amortization card,
+    // invalidated after a transaction recompute.
+    tieInShortfallLedger: (contractId: string) =>
+      ["tie-in-shortfall-ledger", contractId] as const,
+    // Accrual timeline. Read by contract-accrual-timeline; invalidated by
+    // edit-contract + terms-page on save.
+    accrualTimeline: (contractId: string) =>
+      ["contract-accrual-timeline", contractId] as const,
+    capitalProjection: (contractId: string) =>
+      ["contract-capital-projection", contractId] as const,
+    marginAnalysis: (contractId: string) =>
+      ["contract-margin-analysis", contractId] as const,
+    categoryHealth: (contractId: string) =>
+      ["contract-category-health", contractId] as const,
+    bundleMemberships: (contractId: string) =>
+      ["bundle-memberships", contractId] as const,
+    perfHistory: (contractId: string) =>
+      ["contracts", "perf-history", contractId] as const,
+    pricingItems: (contractId: string) =>
+      ["contracts", contractId, "pricing-items"] as const,
+    // Change proposals for a contract (read + invalidated by the proposals
+    // card and the counter-propose dialog).
+    proposals: (contractId: string) =>
+      ["contracts", "proposals", contractId] as const,
+    // Contract-form link/candidate option lists (not contract-scoped).
+    linkOptions: () => ["contracts", "link-options"] as const,
+    tieInCandidates: () => ["contracts", "tie-in-candidates"] as const,
+    // Live derived-metrics preview while filling the contract form (keyed by
+    // vendor + selected categories + the effective/expiration window).
+    derivedMetrics: (
+      vendorId: string | undefined,
+      categoryNames: string[],
+      effectiveDate: string,
+      expirationDate: string,
+    ) =>
+      [
+        "contract-derived-metrics",
+        vendorId,
+        categoryNames,
+        effectiveDate,
+        expirationDate,
+      ] as const,
+    // Tie-in compliance card (analytics namespace; keyed by contract + mode).
+    tieInCompliance: (contractId: string, mode: string) =>
+      ["analytics", "tieInCompliance", contractId, mode] as const,
+    // Vendor-side contract-detail cards.
+    vendorCarveOut: (contractId: string) =>
+      ["vendor-carve-out", contractId] as const,
+    vendorPricing: (contractId: string) =>
+      ["vendor-contract-pricing", contractId] as const,
+    vendorPeriods: (contractId: string) =>
+      ["vendor-contract-periods", contractId] as const,
   },
   contractTerms: {
     all: ["contractTerms"] as const,
     list: (contractId: string) => ["contractTerms", "list", contractId] as const,
+    // CPT-code option list for the contract-terms form picker (static lookup).
+    cptOptions: () => ["contract-terms", "cpt-options"] as const,
   },
   categories: {
     all: ["categories"] as const,
     tree: () => ["categories", "tree"] as const,
     mappings: () => ["categories", "mappings"] as const,
     mappedUniverse: ["categories", "mapped-universe"] as const,
+    // AI category-mapping suggestions for a free-text category name
+    // (contract-form mapping helper).
+    suggestions: (categoryName: string | null) =>
+      ["category-suggestions", categoryName] as const,
   },
   vendors: {
     all: ["vendors"] as const,
@@ -120,6 +193,11 @@ export const queryKeys = {
       ["reports", "periodData", contractId, dateRange] as const,
     priceDiscrepancies: (facilityId: string) =>
       ["reports", "priceDiscrepancies", facilityId] as const,
+    // Rebate-calculation audit trail for a contract (Calculations tab).
+    audit: (contractId: string) =>
+      ["reports", "audit", contractId] as const,
+    // Facility-wide rebate breakdown by rebate type (By-Rebate-Type tab).
+    byRebateType: () => ["reports", "by-rebate-type"] as const,
   },
   vendorReports: {
     contracts: (vendorId: string) =>
@@ -140,8 +218,13 @@ export const queryKeys = {
     detail: (id: string) => ["vendorContracts", "detail", id] as const,
   },
   pendingContracts: {
+    // Family prefix every pending-contract mutation invalidates (covers
+    // vendor + facility lists AND the per-row `detail`). The lists carry
+    // the entityId after the base, so a bare `all` prefix-matches them all.
+    all: ["pendingContracts"] as const,
     vendor: (vendorId: string) => ["pendingContracts", "vendor", vendorId] as const,
     facility: (facilityId: string) => ["pendingContracts", "facility", facilityId] as const,
+    detail: (id: string) => ["pendingContracts", "detail", id] as const,
   },
   vendorDashboard: {
     stats: (vendorId: string) => ["vendorDashboard", "stats", vendorId] as const,
@@ -227,10 +310,18 @@ export const queryKeys = {
       ["renewals", "notes", contractId] as const,
   },
   rebateOptimizer: {
+    // Family prefix the set-spend-target mutation invalidates — prefix-matches
+    // opportunities, spendTargets, insights, and insightFlags.
+    all: ["rebateOptimizer"] as const,
     opportunities: (facilityId: string) =>
       ["rebateOptimizer", "opportunities", facilityId] as const,
     spendTargets: (facilityId: string) =>
       ["rebateOptimizer", "spendTargets", facilityId] as const,
+    // AI Smart Recommendations (lazy) + the flagged-insights follow-up feed.
+    insights: (facilityId: string) =>
+      ["rebateOptimizer", "insights", facilityId] as const,
+    insightFlags: (facilityId: string) =>
+      ["rebateOptimizer", "insightFlags", facilityId] as const,
   },
   analysis: {
     depreciation: (contractId: string, input?: Record<string, unknown>) =>
@@ -245,8 +336,17 @@ export const queryKeys = {
       ["analysis", "proposalAnalysis", facilityId] as const,
   },
   prospective: {
+    // Family prefix the proposal create/delete mutations invalidate — it
+    // prefix-matches `vendorProposals`, `vendorBenchmarks`, and
+    // `vendorCogPatterns` below.
+    all: ["prospective"] as const,
     vendorProposals: (vendorId: string) =>
       ["prospective", "vendorProposals", vendorId] as const,
+    vendorBenchmarksBase: ["prospective", "vendorBenchmarks"] as const,
+    vendorBenchmarks: (vendorId: string) =>
+      ["prospective", "vendorBenchmarks", vendorId] as const,
+    vendorCogPatterns: (vendorId: string | null) =>
+      ["prospective", "vendorCOGPatterns", vendorId] as const,
   },
   settings: {
     facilityProfile: (facilityId: string) =>
@@ -303,8 +403,17 @@ export const queryKeys = {
     forOrg: (orgId: string) => ["facilityAssignment", "forOrg", orgId] as const,
   },
   ai: {
+    // Family prefix the consume-credits mutation invalidates — prefix-matches
+    // every per-entity `credits(entityId)` read.
+    creditsBase: ["ai", "credits"] as const,
     credits: (entityId: string) => ["ai", "credits", entityId] as const,
     usageHistory: (creditId: string) => ["ai", "usageHistory", creditId] as const,
+    // Per-action rollup over the credit's full billing period (AI Credits tab
+    // "Total Credits" column). Distinct queryFn from usageHistory.
+    breakdown: (creditId: string) => ["ai", "breakdown", creditId] as const,
+    // Pre-flight credit availability check, keyed by entity + action.
+    check: (entityId: string, action: string) =>
+      ["ai", "check", entityId, action] as const,
   },
   admin: {
     stats: () => ["admin", "stats"] as const,
@@ -314,6 +423,7 @@ export const queryKeys = {
       ["admin", "facilities", filters] as const,
     vendors: (filters?: Record<string, unknown>) =>
       ["admin", "vendors", filters] as const,
+    usersBase: ["admin", "users"] as const,
     users: (filters?: Record<string, unknown>) =>
       ["admin", "users", filters] as const,
     subscriptions: (filters?: Record<string, unknown>) =>

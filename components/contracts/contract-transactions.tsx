@@ -217,7 +217,7 @@ function AddTransactionButtons({
       })
       // E2: refresh the shortfall carry-forward ledger section.
       queryClient.invalidateQueries({
-        queryKey: ["tie-in-shortfall-ledger", contractId],
+        queryKey: queryKeys.contracts.tieInShortfallLedger(contractId),
       })
     },
     onError: () => {

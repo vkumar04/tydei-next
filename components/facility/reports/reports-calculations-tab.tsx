@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/tooltip"
 import { formatCurrency, formatDate, formatCalendarDate } from "@/lib/formatting"
 import { getRebateCalculationAudit } from "@/lib/actions/reports/audit-trail"
+import { queryKeys } from "@/lib/query-keys"
 import {
   computeTierProgressProjection,
   type TierRow,
@@ -96,7 +97,7 @@ function CalculationsForContract({
   onClear: () => void
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["reports", "audit", contractId] as const,
+    queryKey: queryKeys.reports.audit(contractId),
     queryFn: () => getRebateCalculationAudit(contractId),
   })
 

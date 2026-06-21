@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatNumber } from "@/lib/formatting"
 import { formatRebateMethodLabel } from "@/lib/contracts/rebate-method-label"
 import { getAccrualTimeline } from "@/lib/actions/contracts/accrual"
+import { queryKeys } from "@/lib/query-keys"
 
 interface ContractAccrualTimelineProps {
   contractId: string
@@ -29,7 +30,7 @@ export function ContractAccrualTimeline({
   hasCarveOutTerm = false,
 }: ContractAccrualTimelineProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contract-accrual-timeline", contractId],
+    queryKey: queryKeys.contracts.accrualTimeline(contractId),
     queryFn: () => fetcher(contractId),
   })
 

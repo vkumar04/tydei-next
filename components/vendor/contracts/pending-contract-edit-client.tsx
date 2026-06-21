@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "next/navigation"
+import { queryKeys } from "@/lib/query-keys"
 import {
   getVendorPendingContract,
   updatePendingContract,
@@ -187,7 +188,7 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
   const queryClient = useQueryClient()
 
   const { data: contract, isLoading } = useQuery({
-    queryKey: ["pendingContracts", "detail", pendingContractId],
+    queryKey: queryKeys.pendingContracts.detail(pendingContractId),
     queryFn: () => getVendorPendingContract(pendingContractId),
   })
 
@@ -363,7 +364,7 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
         await resubmitPendingContract(pendingContractId)
       }
       await queryClient.invalidateQueries({
-        queryKey: ["pendingContracts"],
+        queryKey: queryKeys.pendingContracts.all,
       })
       toast.success(
         needsResubmit

@@ -42,7 +42,7 @@ export function useUsageHistory(creditId: string | undefined) {
  */
 export function useUsageBreakdown(creditId: string | undefined) {
   return useQuery({
-    queryKey: ["ai", "breakdown", creditId ?? ""],
+    queryKey: queryKeys.ai.breakdown(creditId ?? ""),
     queryFn: () => getAIUsageBreakdown(creditId!),
     enabled: !!creditId,
     staleTime: 60_000,
@@ -56,7 +56,7 @@ export function useConsumeCredits() {
     mutationFn: useAICredits,
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["ai", "credits"],
+        queryKey: queryKeys.ai.creditsBase,
       })
       if (!_data.success) {
         toast.error("Insufficient AI credits")
@@ -71,7 +71,7 @@ export function useCheckCredits(
   action: AIAction
 ) {
   return useQuery({
-    queryKey: ["ai", "check", entityId, action],
+    queryKey: queryKeys.ai.check(entityId, action),
     queryFn: () =>
       checkAICredits({
         ...(type === "facility"
