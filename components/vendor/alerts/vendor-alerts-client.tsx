@@ -1,17 +1,20 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { AlertTriangle, Bell, CheckCircle2 } from "lucide-react"
+import { AlertTriangle, Bell, Check, CheckCircle2 } from "lucide-react"
 
 import { AlertsInbox } from "@/components/shared/alerts/alerts-inbox"
 import type { AlertRowItem } from "@/components/shared/alerts/alerts-row"
 import type { StatusFilterValue } from "@/components/shared/alerts/alerts-toolbar"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import type { AlertFilters } from "@/lib/validators/alerts"
 import {
   useBulkDismissVendorAlerts,
+  useBulkMarkVendorAlertsRead,
   useBulkResolveVendorAlerts,
   useDismissVendorAlert,
+  useMarkAllVendorAlertsRead,
   useResolveVendorAlert,
   useVendorAlerts,
 } from "@/hooks/use-vendor-alerts"
@@ -48,6 +51,8 @@ export function VendorAlertsClient() {
   const dismiss = useDismissVendorAlert()
   const bulkResolve = useBulkResolveVendorAlerts()
   const bulkDismiss = useBulkDismissVendorAlerts()
+  const bulkMarkRead = useBulkMarkVendorAlertsRead()
+  const markAllRead = useMarkAllVendorAlertsRead()
 
   const alerts = useMemo(
     () => (data?.alerts ?? []) as AlertRowItem[],
@@ -59,6 +64,7 @@ export function VendorAlertsClient() {
   const mediumCount = counts?.bySeverity?.medium ?? 0
   const unresolvedCount = counts?.activeTotal ?? 0
   const resolvedCount = counts?.byStatus?.resolved ?? 0
+  const unreadCount = counts?.unread ?? 0
 
   const hasCritical = highCount > 0
   const hasAny = unresolvedCount > 0
@@ -82,27 +88,39 @@ export function VendorAlertsClient() {
               Contract expirations, compliance issues, and action items
             </p>
           </div>
-          {hasAny ? (
-            <Badge
-              variant="secondary"
-              className={
-                hasCritical
-                  ? "gap-1.5 bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100"
-                  : "gap-1.5 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
-              }
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={unreadCount === 0 || markAllRead.isPending}
+              onClick={() => markAllRead.mutate()}
             >
-              <Bell className="h-3.5 w-3.5" />
-              {hasCritical ? "Action needed" : "Review pending"}
-            </Badge>
-          ) : (
-            <Badge
-              variant="secondary"
-              className="gap-1.5 bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              All clear
-            </Badge>
-          )}
+              <Check className="h-3.5 w-3.5" />
+              Mark all read
+            </Button>
+            {hasAny ? (
+              <Badge
+                variant="secondary"
+                className={
+                  hasCritical
+                    ? "gap-1.5 bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100"
+                    : "gap-1.5 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+                }
+              >
+                <Bell className="h-3.5 w-3.5" />
+                {hasCritical ? "Action needed" : "Review pending"}
+              </Badge>
+            ) : (
+              <Badge
+                variant="secondary"
+                className="gap-1.5 bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                All clear
+              </Badge>
+            )}
+          </div>
         </div>
 
         <div className="mt-8 grid gap-6 border-y py-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -145,7 +163,10 @@ export function VendorAlertsClient() {
         onDismiss={(id) => dismiss.mutate(id)}
         onBulkResolve={(ids) => bulkResolve.mutate(ids)}
         onBulkDismiss={(ids) => bulkDismiss.mutate(ids)}
-        isBulkPending={bulkResolve.isPending || bulkDismiss.isPending}
+        onBulkMarkRead={(ids) => bulkMarkRead.mutate(ids)}
+        isBulkPending={
+          bulkResolve.isPending || bulkDismiss.isPending || bulkMarkRead.isPending
+        }
         detailHrefFor={(a) => a.actionLink ?? undefined}
       />
     </div>
