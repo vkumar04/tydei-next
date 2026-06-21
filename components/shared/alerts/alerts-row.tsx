@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
-import { CheckCircle, ChevronRight } from "lucide-react"
+import { CheckCircle2, X } from "lucide-react"
 import type { Alert } from "@/lib/generated/prisma/client"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
+import { extractAlertAmount, formatAlertAmount } from "@/lib/alerts/alert-amount"
 
 import {
   alertColorBg,
@@ -27,6 +28,7 @@ interface AlertsRowProps {
   onSelect: (checked: boolean) => void
   onResolve: () => void
   onNavigate: () => void
+  onDismiss?: () => void
 }
 
 export function AlertsRow({
@@ -35,6 +37,7 @@ export function AlertsRow({
   onSelect,
   onResolve,
   onNavigate,
+  onDismiss,
 }: AlertsRowProps) {
   const typeConfig = alertTypeIconConfig[alert.alertType]
   const severityConfig = alertSeverityBadgeConfig[alert.severity]
@@ -42,81 +45,113 @@ export function AlertsRow({
   const iconClasses =
     alertColorBg[alert.alertType] ?? "text-muted-foreground bg-muted"
   const isNew = alert.status === "new_alert"
+  const amount = extractAlertAmount(alert.metadata)
 
   return (
     <div
       className={cn(
-        "flex items-start gap-4 px-4 py-4 border-b transition-colors hover:bg-muted/50",
+        "flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50",
         isNew && "bg-muted/30",
       )}
     >
       <Checkbox
+        className="mt-1.5"
         checked={selected}
         onCheckedChange={(checked) => onSelect(Boolean(checked))}
         aria-label={`Select alert ${alert.title}`}
       />
 
-      <div className={cn("p-2 rounded-lg", iconClasses)}>
-        {Icon ? <Icon className="h-5 w-5" /> : null}
+      <div className={cn("mt-0.5 rounded-lg p-2", iconClasses)}>
+        {Icon ? <Icon className="h-4 w-4" /> : null}
       </div>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              type="button"
-              className={cn(
-                "text-left font-medium truncate hover:underline",
-                isNew ? "text-foreground" : "text-muted-foreground",
-              )}
-              onClick={onNavigate}
-            >
-              {alert.title}
-            </button>
-            {isNew && severityConfig ? (
-              <Badge className={severityConfig.className}>
-                {severityConfig.label.toLowerCase()}
-              </Badge>
-            ) : null}
-          </div>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {formatDistanceToNow(new Date(alert.createdAt), { addSuffix: true })}
-          </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={cn(
+              "truncate text-left text-sm font-medium hover:underline",
+              isNew ? "text-foreground" : "text-muted-foreground",
+            )}
+            onClick={onNavigate}
+          >
+            {alert.title}
+          </button>
+          {isNew ? (
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+              aria-label="New"
+            />
+          ) : null}
         </div>
 
         {alert.description ? (
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
             {alert.description}
           </p>
         ) : null}
 
-        <div className="flex flex-wrap gap-2 mt-2">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-muted-foreground">
+            {typeConfig?.label ?? alert.alertType}
+          </span>
           {alert.vendor?.name ? (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-[11px] font-normal">
               {alert.vendor.name}
             </Badge>
           ) : null}
           {alert.contract?.name ? (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-[11px] font-normal">
               {alert.contract.name}
             </Badge>
           ) : null}
-        </div>
-
-        <div className="flex items-center gap-2 mt-3">
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/dashboard/alerts/${alert.id}`}>
-              View Details
-              <ChevronRight className="ml-1 h-3 w-3" />
-            </Link>
-          </Button>
-          {alert.status !== "resolved" ? (
-            <Button size="sm" variant="ghost" onClick={onResolve}>
-              <CheckCircle className="mr-1 h-3 w-3" />
-              Resolve
-            </Button>
+          {amount != null ? (
+            <Badge
+              variant="outline"
+              className="text-[11px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-400"
+            >
+              {formatAlertAmount(amount)}
+            </Badge>
           ) : null}
+          <span className="text-[11px] text-muted-foreground">
+            {formatDistanceToNow(new Date(alert.createdAt), { addSuffix: true })}
+          </span>
         </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        {severityConfig ? (
+          <Badge className={cn("hidden sm:inline-flex", severityConfig.className)}>
+            {severityConfig.label}
+          </Badge>
+        ) : null}
+        {alert.status !== "resolved" ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 px-2"
+            onClick={onResolve}
+            title="Resolve"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            <span className="sr-only">Resolve</span>
+          </Button>
+        ) : null}
+        {onDismiss ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 px-2"
+            onClick={onDismiss}
+            title="Dismiss"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Dismiss</span>
+          </Button>
+        ) : null}
+        <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs">
+          <Link href={`/dashboard/alerts/${alert.id}`}>View</Link>
+        </Button>
       </div>
     </div>
   )
