@@ -42,6 +42,15 @@ import {
 import { GrowthSimulatorCard } from "./growth-simulator-card"
 import { AiInsightsPanel } from "./ai-insights-panel"
 import { UploadedDataControl } from "./uploaded-data-control"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Download } from "lucide-react"
+import { downloadAnalysisCsv, downloadAnalysisPdf } from "./export-analysis"
 
 function seedAssumptions(
   data: FacilityAnalysisData,
@@ -163,11 +172,37 @@ export function AnalysisDashboardClient({
             Tune any assumption and every figure recalculates instantly.
           </p>
         </div>
-        <UploadedDataControl
-          activeFileName={overrideFileName}
-          onApply={handleApplyUpload}
-          onReset={handleResetSource}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <UploadedDataControl
+            activeFileName={overrideFileName}
+            onApply={handleApplyUpload}
+            onReset={handleResetSource}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Download className="h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() =>
+                  void downloadAnalysisPdf(
+                    model,
+                    assumptions,
+                    override ? `Uploaded file: ${overrideFileName}` : "Live COG",
+                  )
+                }
+              >
+                Export PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => downloadAnalysisCsv(model)}>
+                Export CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <CurrentStateCards current={model.prospective.current} />

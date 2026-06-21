@@ -29,7 +29,17 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Loader2, AlertTriangle } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Loader2, AlertTriangle, Download } from "lucide-react"
+import {
+  downloadOpportunityCsv,
+  downloadOpportunityPdf,
+} from "./export-opportunity"
 import { formatPercent } from "@/lib/formatting"
 import { cn } from "@/lib/utils"
 import {
@@ -178,17 +188,53 @@ export function OpportunityEngineSection({
   return (
     <div className="space-y-4">
       {/* Heading block */}
-      <div className="space-y-1">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Rocket className="h-5 w-5 text-primary" />
-          Opportunity Engine
-        </h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Score a prospective deal by ASP impact, category growth (in dollars
-          and market share), and net unit impact. Capital / robotic revenue is
-          separated because it does not carry recurring service that hits the
-          territory number.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Rocket className="h-5 w-5 text-primary" />
+            Opportunity Engine
+          </h2>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            Score a prospective deal by ASP impact, category growth (in dollars
+            and market share), and net unit impact. Capital / robotic revenue is
+            separated because it does not carry recurring service that hits the
+            territory number.
+          </p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={() =>
+                void downloadOpportunityPdf(engine, score, {
+                  vendor,
+                  priceChangePct,
+                  targetShare,
+                  expectedVolumeGrowthPct,
+                })
+              }
+            >
+              Export PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
+                downloadOpportunityCsv(engine, score, {
+                  vendor,
+                  priceChangePct,
+                  targetShare,
+                  expectedVolumeGrowthPct,
+                })
+              }
+            >
+              Export CSV
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Deal Scenario */}
