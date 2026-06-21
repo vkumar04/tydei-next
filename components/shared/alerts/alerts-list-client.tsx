@@ -10,33 +10,17 @@ import {
   useMarkAllAlertsRead,
   useResolveAlert,
 } from "@/hooks/use-alerts"
-import type { AlertFilters } from "@/lib/validators/alerts"
 
 import { AlertsHero } from "./alerts-hero"
 import { AlertsInbox } from "./alerts-inbox"
 import type { AlertRowItem } from "./alerts-row"
-import type { StatusFilterValue } from "./alerts-toolbar"
+import { serverStatusFor, type StatusFilterValue } from "./alerts-toolbar"
 
 interface AlertsListClientProps {
   facilityId: string
 }
 
 const PAGE_SIZE = 100
-
-function serverStatusFor(
-  status: StatusFilterValue,
-): AlertFilters["status"] | undefined {
-  switch (status) {
-    case "resolved":
-      return "resolved"
-    case "dismissed":
-      return "dismissed"
-    case "open":
-    case "all":
-    default:
-      return undefined
-  }
-}
 
 export function AlertsListClient({ facilityId }: AlertsListClientProps) {
   const router = useRouter()

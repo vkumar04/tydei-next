@@ -7,24 +7,9 @@ import type { AlertFilters } from "@/lib/validators/alerts"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { excludeVendorProposalAlerts } from "@/lib/alerts/vendor-proposal-filter"
+import { aggregateAlertCounts } from "@/lib/alerts/alert-counts"
 
 // ─── Vendor Alerts ──────────────────────────────────────────────
-
-/**
- * Aggregate counts shipped alongside the page of alerts (audit M10) so
- * the vendor hero tiles reflect the FULL vendor-scoped population, not
- * just the rows the current page shows. Mirrors `AlertCounts` in
- * lib/actions/alerts.ts.
- */
-export interface VendorAlertCounts {
-  byStatus: Record<string, number>
-  bySeverity: Record<string, number>
-  byType: Record<string, number>
-  activeTotal: number
-  unread: number
-}
-
-const ACTIVE_STATUSES = new Set(["new_alert", "read"])
 
 export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "portalType"> & { vendorId?: string }) {
   const { vendor } = await requireVendor()
@@ -50,7 +35,7 @@ export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "
 
   const where: Prisma.AlertWhereInput = { AND: conditions }
 
-  const [alerts, total, grouped] = await Promise.all([
+  const [alerts, total, counts] = await Promise.all([
     prisma.alert.findMany({
       where,
       include: {
@@ -62,30 +47,8 @@ export async function getVendorAlerts(input: Omit<AlertFilters, "facilityId" | "
       take: pageSize,
     }),
     prisma.alert.count({ where }),
-    prisma.alert.groupBy({
-      by: ["status", "severity", "alertType"],
-      where: { AND: baseScope },
-      _count: { _all: true },
-    }),
+    aggregateAlertCounts(baseScope),
   ])
-
-  const counts: VendorAlertCounts = {
-    byStatus: {},
-    bySeverity: {},
-    byType: {},
-    activeTotal: 0,
-    unread: 0,
-  }
-  for (const g of grouped) {
-    const n = g._count._all
-    counts.byStatus[g.status] = (counts.byStatus[g.status] ?? 0) + n
-    if (ACTIVE_STATUSES.has(g.status)) {
-      counts.activeTotal += n
-      counts.bySeverity[g.severity] = (counts.bySeverity[g.severity] ?? 0) + n
-      counts.byType[g.alertType] = (counts.byType[g.alertType] ?? 0) + n
-    }
-    if (g.status === "new_alert") counts.unread += n
-  }
 
   return serialize({ alerts, total, page, pageSize, counts })
 }
