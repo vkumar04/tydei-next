@@ -93,48 +93,11 @@ function extractDollarImpact(
   }
 }
 
-// ─── Pending-alerts rubric ───────────────────────────────────────
-//
-// Mirrors getDashboardStats' canonical rule: contracts expiring within
-// 90 days OR active contracts whose commitment progress is < 80%.
-
-function computePendingAlerts(
-  contracts: Array<{
-    status: string
-    expirationDate: Date | null
-    marketShareCommitment: number | null
-    currentMarketShare: number | null
-  }>,
-  referenceDate: Date,
-): number {
-  const ninetyDaysAhead = new Date(referenceDate)
-  ninetyDaysAhead.setDate(ninetyDaysAhead.getDate() + 90)
-
-  let expiringSoon = 0
-  let lowCommitment = 0
-
-  for (const c of contracts) {
-    const isLive = c.status === "active" || c.status === "expiring"
-    if (!isLive) continue
-
-    if (
-      c.expirationDate !== null &&
-      c.expirationDate >= referenceDate &&
-      c.expirationDate <= ninetyDaysAhead
-    ) {
-      expiringSoon += 1
-    }
-
-    const commit = Number(c.marketShareCommitment ?? 0)
-    if (commit > 0) {
-      const current = Number(c.currentMarketShare ?? 0)
-      const progress = (current / commit) * 100
-      if (progress < 80) lowCommitment += 1
-    }
-  }
-
-  return expiringSoon + lowCommitment
-}
+// The "Pending Alerts" KPI is now the unresolved-alert count from the Alert
+// table (alertSummary.totalUnresolved) — see the inline note at its call site.
+// The old `computePendingAlerts` contract heuristic was removed (2026-06-21):
+// it duplicated, and drifted from, the synthesized `expiring_contract` /
+// `compliance_drop` alerts that the badge + Alerts tab already surface.
 
 // ─── getDashboardKPISummary ──────────────────────────────────────
 
@@ -288,16 +251,22 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
     expirationDate: c.expirationDate ?? null,
   }))
 
-  const commitmentContracts = contractRows.map((c) => ({
-    status: c.status,
-    expirationDate: c.expirationDate ?? null,
-    marketShareCommitment:
-      c.marketShareCommitment === null ? null : Number(c.marketShareCommitment),
-    currentMarketShare:
-      c.currentMarketShare === null ? null : Number(c.currentMarketShare),
-  }))
-
-  const pendingAlerts = computePendingAlerts(commitmentContracts, referenceDate)
+  // ─── Alert summary ─────────────────────────────────────────────
+  // The "Pending Alerts" KPI is the canonical unresolved-alert count from the
+  // Alert table — the SAME source the header badge (getUnreadAlertCount) and
+  // the Alerts tab read. It previously used a parallel `computePendingAlerts`
+  // heuristic over contracts (expiring ≤90d + low market-share commitment),
+  // which drifted: those signals are already synthesized as `expiring_contract`
+  // / `compliance_drop` Alert rows, so the hero showed "0 / All clear" while
+  // the badge + Alerts tab showed live alerts (Vick 2026-06-21).
+  const alertSummary = summarizeAlerts({
+    alerts: alertRows.map((a) => ({
+      status: a.status as AlertStatusEnum,
+      severity: a.severity as AlertSeverityEnum,
+      alertType: a.alertType,
+    })),
+  })
+  const pendingAlerts = alertSummary.totalUnresolved
 
   const kpis = computeDashboardKPIs({
     contracts: kpiContracts,
@@ -326,15 +295,6 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
     history,
     currentMonthToDate: Number(currentMonthSpendAgg._sum.extendedPrice ?? 0),
     referenceDate,
-  })
-
-  // ─── Alert summary ─────────────────────────────────────────────
-  const alertSummary = summarizeAlerts({
-    alerts: alertRows.map((a) => ({
-      status: a.status as AlertStatusEnum,
-      severity: a.severity as AlertSeverityEnum,
-      alertType: a.alertType,
-    })),
   })
 
   // ─── Top 5 ranked alerts ───────────────────────────────────────

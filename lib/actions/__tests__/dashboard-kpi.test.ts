@@ -218,38 +218,26 @@ describe("getDashboardKPISummary", () => {
     expect(result.rebateCollectionRate).toBeCloseTo(51_198 / 71_603.49, 4)
   })
 
-  it("counts contracts expiring within 90 days as pendingAlerts", async () => {
-    const soon = new Date()
-    soon.setDate(soon.getDate() + 30)
-    const far = new Date()
-    far.setDate(far.getDate() + 365)
-    contractRows = [
-      mkContract({ status: "active", expirationDate: soon }),
-      mkContract({ status: "active", expirationDate: far }),
+  // pendingAlerts is the canonical unresolved-Alert count (the SAME source as
+  // the header badge + Alerts tab), not the old contract heuristic — Vick
+  // 2026-06-21 "badge shows 1 but the card says 0 / All clear".
+  it("pendingAlerts = count of unresolved alerts (new_alert + read); resolved/dismissed excluded", async () => {
+    alertRows = [
+      mkAlert({ id: "p-1", status: "new_alert", alertType: "off_contract" }),
+      mkAlert({ id: "p-2", status: "read", alertType: "expiring_contract" }),
+      mkAlert({ id: "p-3", status: "resolved", alertType: "rebate_due" }),
+      mkAlert({ id: "p-4", status: "dismissed", alertType: "payment_due" }),
     ]
     const result = await getDashboardKPISummary()
-    expect(result.pendingAlerts).toBe(1)
+    expect(result.pendingAlerts).toBe(2)
+    // Hero card and Alerts tab read the same number — no drift.
+    expect(result.pendingAlerts).toBe(result.alertSummary.totalUnresolved)
   })
 
-  it("counts active contracts with commitment progress < 80% as pendingAlerts", async () => {
-    const far = new Date()
-    far.setDate(far.getDate() + 365)
-    contractRows = [
-      mkContract({
-        status: "active",
-        expirationDate: far,
-        marketShareCommitment: 100,
-        currentMarketShare: 50,
-      }),
-      mkContract({
-        status: "active",
-        expirationDate: far,
-        marketShareCommitment: 100,
-        currentMarketShare: 90,
-      }),
-    ]
+  it("pendingAlerts is 0 (All clear) when no alerts are unresolved", async () => {
+    alertRows = [mkAlert({ id: "r-1", status: "resolved" })]
     const result = await getDashboardKPISummary()
-    expect(result.pendingAlerts).toBe(1)
+    expect(result.pendingAlerts).toBe(0)
   })
 
   it("aggregates rebate totals from the Rebate table", async () => {

@@ -32,18 +32,59 @@ import {
 export function NotificationBell() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  type NotificationsData = Awaited<ReturnType<typeof getMyNotifications>>
+  const NOTIF_KEY = ["my-notifications"] as const
   const { data } = useQuery({
-    queryKey: ["my-notifications"],
+    queryKey: NOTIF_KEY,
     queryFn: () => getMyNotifications(),
     refetchInterval: 30_000,
   })
+
+  const nowIso = () => new Date().toISOString()
+
+  // Optimistic read-state: clear the badge/highlight immediately so the UI
+  // doesn't wait on the server round-trip (or a navigation that closes the
+  // dropdown mid-flight). Roll back on error; reconcile with the server on
+  // settle (Vick 2026-06-21 "these don't clear when read").
   const markRead = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-notifications"] }),
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: NOTIF_KEY })
+      const prev = queryClient.getQueryData<NotificationsData>(NOTIF_KEY)
+      if (prev) {
+        queryClient.setQueryData<NotificationsData>(NOTIF_KEY, {
+          rows: prev.rows.map((r) =>
+            r.id === id && !r.readAt ? { ...r, readAt: nowIso() } : r,
+          ),
+          unreadCount: prev.rows.some((r) => r.id === id && !r.readAt)
+            ? Math.max(0, prev.unreadCount - 1)
+            : prev.unreadCount,
+        })
+      }
+      return { prev }
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(NOTIF_KEY, ctx.prev)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: NOTIF_KEY }),
   })
   const markAll = useMutation({
     mutationFn: () => markAllNotificationsRead(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["my-notifications"] }),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: NOTIF_KEY })
+      const prev = queryClient.getQueryData<NotificationsData>(NOTIF_KEY)
+      if (prev) {
+        queryClient.setQueryData<NotificationsData>(NOTIF_KEY, {
+          rows: prev.rows.map((r) => (r.readAt ? r : { ...r, readAt: nowIso() })),
+          unreadCount: 0,
+        })
+      }
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(NOTIF_KEY, ctx.prev)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: NOTIF_KEY }),
   })
   const unreadCount = data?.unreadCount ?? 0
   const rows = data?.rows ?? []

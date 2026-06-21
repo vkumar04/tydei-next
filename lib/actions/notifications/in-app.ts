@@ -14,7 +14,6 @@
  */
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
-import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 
 export interface NotificationRow {
@@ -78,9 +77,16 @@ export async function getMyNotifications(): Promise<{
   })
 }
 
+// Marking your OWN notification read is a personal read-state action (like
+// self-profile), NOT a tenant business mutation — so it is deliberately NOT
+// gated by requireCanMutate(): a read-only `user`-tier member must still be
+// able to clear their own bell (Vick 2026-06-21 "these don't clear when
+// read"). Scoping stays on `userId` so no one can touch another user's rows.
 export async function markNotificationRead(id: string): Promise<void> {
+  // read-only-guard-skip: personal read-state on the caller's OWN notification
+  // (scoped by userId), not a tenant business mutation — read-only `user` tier
+  // must still be able to clear its bell (like self-profile, which is untiered).
   const userId = await currentUserIdOrThrow()
-  await requireCanMutate()
   await prisma.notification.updateMany({
     where: { id, userId, readAt: null },
     data: { readAt: new Date() },
@@ -88,8 +94,9 @@ export async function markNotificationRead(id: string): Promise<void> {
 }
 
 export async function markAllNotificationsRead(): Promise<{ updated: number }> {
+  // read-only-guard-skip: personal read-state on the caller's OWN notifications
+  // (scoped by userId) — see markNotificationRead.
   const userId = await currentUserIdOrThrow()
-  await requireCanMutate()
   const result = await prisma.notification.updateMany({
     where: { userId, readAt: null },
     data: { readAt: new Date() },
