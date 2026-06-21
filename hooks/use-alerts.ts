@@ -5,7 +5,7 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   getAlerts,
   getAlert,
-  getUnreadAlertCount,
+  getOpenAlertCount,
   markAlertRead,
   resolveAlert,
   dismissAlert,
@@ -16,7 +16,19 @@ import {
 } from "@/lib/actions/alerts"
 import type { AlertFilters } from "@/lib/validators/alerts"
 import type { BulkAlertAction } from "@/lib/alerts/bulk-actions"
+import type { QueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+
+/**
+ * Invalidate every surface an alert mutation affects: the Alerts page +
+ * header badge (`alerts.*`) AND the dashboard "Open Alerts" KPI
+ * (`dashboard.*`). The dashboard KPI has no refetchInterval, so without this
+ * it stayed stale after resolve/dismiss until a full reload (2026-06-21).
+ */
+function invalidateAlertSurfaces(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+  qc.invalidateQueries({ queryKey: queryKeys.dashboard.all })
+}
 
 export function useAlerts(facilityId: string, filters: Partial<AlertFilters> = {}) {
   return useQuery({
@@ -36,7 +48,7 @@ export function useAlert(id: string) {
 export function useUnreadAlertCount(facilityId: string) {
   return useQuery({
     queryKey: queryKeys.alerts.unreadCount("facility", facilityId),
-    queryFn: () => getUnreadAlertCount({ facilityId, portalType: "facility" }),
+    queryFn: () => getOpenAlertCount({ facilityId, portalType: "facility" }),
     refetchInterval: 30_000,
   })
 }
@@ -46,7 +58,7 @@ export function useResolveAlert() {
   return useMutation({
     mutationFn: resolveAlert,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      invalidateAlertSurfaces(qc)
       toast.success("Alert resolved")
     },
     onError: (e) => toast.error(e.message || "Failed to resolve alert"),
@@ -58,7 +70,7 @@ export function useDismissAlert() {
   return useMutation({
     mutationFn: dismissAlert,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      invalidateAlertSurfaces(qc)
       toast.success("Alert dismissed")
     },
     onError: (e) => toast.error(e.message || "Failed to dismiss alert"),
@@ -70,7 +82,7 @@ export function useMarkAlertRead() {
   return useMutation({
     mutationFn: markAlertRead,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      invalidateAlertSurfaces(qc)
     },
   })
 }
@@ -80,7 +92,7 @@ export function useBulkResolveAlerts() {
   return useMutation({
     mutationFn: bulkResolveAlerts,
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      invalidateAlertSurfaces(qc)
       toast.success(`${data.resolved} alert(s) resolved`)
     },
     onError: (e) => toast.error(e.message || "Failed to resolve alerts"),
@@ -92,7 +104,7 @@ export function useBulkDismissAlerts() {
   return useMutation({
     mutationFn: bulkDismissAlerts,
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      invalidateAlertSurfaces(qc)
       toast.success(`${data.dismissed} alert(s) dismissed`)
     },
     onError: (e) => toast.error(e.message || "Failed to dismiss alerts"),
@@ -105,7 +117,7 @@ export function useBulkUpdateAlerts() {
     mutationFn: (input: { alertIds: string[]; action: BulkAlertAction }) =>
       bulkUpdateAlerts(input),
     onSuccess: (data, variables) => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      invalidateAlertSurfaces(qc)
       const verb =
         variables.action === "mark_read"
           ? "marked read"
@@ -124,7 +136,7 @@ export function useMarkAllAlertsRead() {
   return useMutation({
     mutationFn: () => markAllAlertsRead(),
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
+      invalidateAlertSurfaces(qc)
       toast.success(
         data.updated > 0
           ? `${data.updated} alert(s) marked read`

@@ -6,7 +6,7 @@ import { TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
-import { getUnreadAlertCount } from "@/lib/actions/alerts"
+import { getOpenAlertCount } from "@/lib/actions/alerts"
 import { toast } from "sonner"
 import type { PortalRole } from "@/lib/types"
 
@@ -29,7 +29,7 @@ export function AlertBell({
   const { data: count } = useQuery({
     queryKey: queryKeys.alerts.unreadCount(portalType, entityId),
     queryFn: () =>
-      getUnreadAlertCount({
+      getOpenAlertCount({
         facilityId: role !== "vendor" ? facilityId : undefined,
         vendorId: role === "vendor" ? vendorId : undefined,
         portalType,

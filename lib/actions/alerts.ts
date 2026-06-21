@@ -10,6 +10,7 @@ import { logAudit } from "@/lib/audit"
 import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
 import { excludeSpendTargetAlerts } from "@/lib/alerts/spend-target-filter"
 import { excludeVendorProposalAlerts } from "@/lib/alerts/vendor-proposal-filter"
+import { openAlertWhere, inboxAlertScope, type AlertScope } from "@/lib/alerts/alert-scope"
 import {
   planBulkAction,
   type BulkAlertAction,
@@ -148,48 +149,44 @@ export async function getAlert(id: string) {
 
 // ─── Unread Count ────────────────────────────────────────────────
 
-export async function getUnreadAlertCount(input: {
-  /** @deprecated Charles audit round-10: ignored — derived from session. */
+/**
+ * Canonical OPEN-alert count behind the header badge — unresolved
+ * (`new_alert` + `read`) with the non-inbox exclusions, via the shared
+ * {@link openAlertWhere}. This is the SAME number the dashboard "Open Alerts"
+ * KPI and the Alerts-page count show, so they always agree (2026-06-21
+ * refactor). Reading an alert no longer drops the badge — only resolving /
+ * dismissing does (modern task-inbox model).
+ *
+ * Scope is derived from the authenticated session, never client input (the
+ * `facilityId`/`vendorId` args are ignored — kept for call-site compat).
+ */
+export async function getOpenAlertCount(input: {
+  /** @deprecated ignored — derived from session. */
   facilityId?: string
-  /** @deprecated Charles audit round-10: ignored — derived from session. */
+  /** @deprecated ignored — derived from session. */
   vendorId?: string
   portalType: "facility" | "vendor"
 }) {
-  // Charles audit round-10 CONCERN: derive scope from authenticated
-  // session rather than client input. Pre-fix any facility user could
-  // pass another tenant's facilityId (or vendorId + portalType=vendor)
-  // to enumerate their unread-alert count. Counts only — info
-  // disclosure, not data corruption — but the same pattern was the
-  // class for several earlier BLOCKERs.
-  // 2026-06-10 vendor-prospective audit #4: the vendor LIST excludes
-  // legacy proposal-masquerade rows but this badge count didn't — prod
-  // showed a phantom unread count the list never displays (and those
-  // rows can't be marked read by a vendor). Both exclusion helpers
-  // return OR-fragments, so they MUST be AND-composed — spreading both
-  // would silently clobber one (the OR-spread collision class).
-  const where: Prisma.AlertWhereInput = {
-    portalType: input.portalType,
-    status: "new_alert",
-    // Audit H5: spend targets are not alerts — keep the badge honest.
-    AND: [excludeSpendTargetAlerts(), excludeVendorProposalAlerts()],
-  }
+  const scope: AlertScope = { portalType: input.portalType }
   if (input.portalType === "facility") {
     const { facility } = await requireFacility()
-    where.facilityId = facility.id
+    scope.facilityId = facility.id
   } else {
     const { vendor } = await requireVendor()
-    where.vendorId = vendor.id
+    scope.vendorId = vendor.id
   }
-
-  const count = await prisma.alert.count({ where })
-  return count
+  return prisma.alert.count({ where: openAlertWhere(scope) })
 }
 
 // ─── Mark Read ───────────────────────────────────────────────────
 
 export async function markAlertRead(id: string) {
+  // read-only-guard-skip: marking an alert "read" is cosmetic — it does NOT
+  // change the canonical open count (only resolve/dismiss does) and is
+  // auto-fired when a user merely opens an alert. Gating it produced silent
+  // failures for read-only `user`-tier members on every detail view
+  // (2026-06-21 alerts refactor). resolveAlert/dismissAlert stay gated.
   const { facility } = await requireFacility()
-  await requireCanMutate()
   await prisma.alert.update({
     where: { id, facilityId: facility.id },
     data: { status: "read", readAt: new Date() },
@@ -361,8 +358,9 @@ export async function bulkUpdateAlerts(input: {
  * Mark every unread ("new_alert") alert as read for the facility.
  */
 export async function markAllAlertsRead(): Promise<{ updated: number }> {
+  // read-only-guard-skip: cosmetic read-state only (does not change the open
+  // count) — consistent with markAlertRead (2026-06-21 alerts refactor).
   const session = await requireFacility()
-  await requireCanMutate()
   const facilityId = session.facility.id
 
   const rows = await prisma.alert.findMany({

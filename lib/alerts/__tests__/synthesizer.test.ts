@@ -62,7 +62,7 @@ describe("synthesizer: off_contract", () => {
     expect(toResolve).toEqual([])
   })
 
-  it("creates one alert per PO when vendor has multiple POs", () => {
+  it("rolls up multiple POs into ONE vendor-level alert (2026-06-21 refactor)", () => {
     const input = baseInput({
       cogRecords: [
         offRow({ id: "a", poNumber: "PO-100", extendedPrice: 2000 }),
@@ -70,9 +70,18 @@ describe("synthesizer: off_contract", () => {
       ],
     })
     const { toCreate } = synthesizeAlertsForFacility(input)
-    expect(toCreate).toHaveLength(2)
-    const pos = toCreate.map((a) => a.metadata).map((m) => (m as { po_id: string }).po_id)
-    expect(pos.sort()).toEqual(["PO-100", "PO-200"])
+    // One alert per vendor, NOT one per PO.
+    expect(toCreate).toHaveLength(1)
+    const meta = toCreate[0].metadata as {
+      po_id: string
+      item_count: number
+      total_amount: number
+      dedupeKey: string
+    }
+    expect(meta.po_id).toBe("") // rollup, not PO-scoped
+    expect(meta.item_count).toBe(2)
+    expect(meta.total_amount).toBe(4000)
+    expect(meta.dedupeKey).toBe("off_contract:vend-1:rollup")
   })
 
   it("skips vendors below both thresholds", () => {
@@ -83,7 +92,7 @@ describe("synthesizer: off_contract", () => {
     expect(toCreate).toEqual([])
   })
 
-  it("is idempotent when an alert already exists for the same PO", () => {
+  it("is idempotent when a vendor rollup alert already exists", () => {
     const input = baseInput({
       cogRecords: [offRow({ extendedPrice: 5000 })],
       existingAlerts: [
@@ -92,7 +101,7 @@ describe("synthesizer: off_contract", () => {
           alertType: "off_contract",
           contractId: null,
           vendorId: "vend-1",
-          metadata: { dedupeKey: "off_contract:vend-1:PO-100" },
+          metadata: { dedupeKey: "off_contract:vend-1:rollup" },
           status: "new_alert",
         },
       ],
@@ -100,6 +109,49 @@ describe("synthesizer: off_contract", () => {
     const { toCreate, toResolve } = synthesizeAlertsForFacility(input)
     expect(toCreate).toEqual([])
     expect(toResolve).toEqual([])
+  })
+
+  it("auto-resolves a legacy per-PO alert, replacing it with the vendor rollup", () => {
+    const input = baseInput({
+      cogRecords: [offRow({ extendedPrice: 5000 })],
+      existingAlerts: [
+        {
+          id: "legacy-po",
+          alertType: "off_contract",
+          contractId: null,
+          vendorId: "vend-1",
+          metadata: { dedupeKey: "off_contract:vend-1:PO-100" }, // old per-PO key
+          status: "new_alert",
+        },
+      ],
+    })
+    const { toCreate, toResolve } = synthesizeAlertsForFacility(input)
+    // The legacy per-PO row resolves (its key is no longer kept) and ONE
+    // vendor rollup is created in its place.
+    expect(toResolve).toEqual(["legacy-po"])
+    expect(toCreate).toHaveLength(1)
+    expect((toCreate[0].metadata as { dedupeKey: string }).dedupeKey).toBe(
+      "off_contract:vend-1:rollup",
+    )
+  })
+
+  it("does NOT re-create a dismissed off_contract condition (dismiss sticks)", () => {
+    const input = baseInput({
+      cogRecords: [offRow({ extendedPrice: 5000 })],
+      existingAlerts: [
+        {
+          id: "dismissed-1",
+          alertType: "off_contract",
+          contractId: null,
+          vendorId: "vend-1",
+          metadata: { dedupeKey: "off_contract:vend-1:rollup" },
+          status: "dismissed",
+        },
+      ],
+    })
+    const { toCreate, toResolve } = synthesizeAlertsForFacility(input)
+    expect(toCreate).toEqual([]) // suppressed by the dismissed row
+    expect(toResolve).toEqual([]) // dismissed rows are never flipped to resolved
   })
 
   it("resolves an existing off_contract alert when the PO no longer appears", () => {

@@ -96,6 +96,9 @@ export const queryKeys = {
       ["alerts", "unreadCount", portalType, entityId] as const,
   },
   dashboard: {
+    // Prefix for blanket invalidation (e.g. after an alert mutation so the
+    // "Open Alerts" KPI refreshes — the alert mutations don't carry facilityId).
+    all: ["dashboard"] as const,
     // Legacy per-stat keys (stats / monthlySpend / spendByVendor / etc.)
     // were removed 2026-04-23 along with `hooks/use-dashboard.ts` and
     // `lib/actions/dashboard.ts`. Dashboard now reads the canonical
@@ -365,6 +368,12 @@ export const queryKeys = {
       ["analytics", "spendConcentration", facilityId, trailingDays] as const,
     purchaseCompliance: (facilityId: string, range: DateRange) =>
       ["analytics", "purchaseCompliance", facilityId, range] as const,
+  },
+  notifications: {
+    // In-app notification bell (Notification table, scoped by userId). The bell
+    // read + its optimistic mutations both key off this. Distinct from
+    // `settings.notifications` (per-entity notification *preferences*).
+    all: ["my-notifications"] as const,
   },
   prospectiveAnalysis: {
     // Facility Analysis dashboard — real DB data seed.
