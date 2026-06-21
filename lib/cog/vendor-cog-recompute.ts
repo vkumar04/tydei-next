@@ -36,10 +36,27 @@ export interface VendorCogMatchSummary {
   offContract: number
 }
 
+/**
+ * Best SKU to match a vendor-COG row on. Vendor COG carries its item number in
+ * `inventoryNumber` (required); `vendorItemNo`/`manufacturerNo` are optional
+ * alternates (often null — real Stryker exports put the catalog number in
+ * inventoryNumber, e.g. "M2864"). Try the explicit fields first, then fall
+ * back to inventoryNumber.
+ */
+export function vendorCogSkuSource(row: {
+  vendorItemNo: string | null
+  manufacturerNo: string | null
+  inventoryNumber: string | null
+}): string | null {
+  return row.vendorItemNo || row.manufacturerNo || row.inventoryNumber || null
+}
+
 /** Pure per-row classifier — unit-testable without a DB. */
 export function classifyVendorCogRow(
   row: {
     vendorItemNo: string | null
+    manufacturerNo: string | null
+    inventoryNumber: string | null
     vendorName: string | null
     transactionDate: Date
     unitCost: number
@@ -49,6 +66,13 @@ export function classifyVendorCogRow(
   ctx: ResolveContext,
   /** `${contractId}::${normalizedSku}` → contract unitPrice. */
   priceBySkuContract: Map<string, number>,
+  /**
+   * True when ANY of the vendor's contracts has a priced catalog. When true,
+   * a vendor+date-only match (SKU not on any catalog) is genuinely
+   * OFF-contract — mirrors the facility matcher's catalogPresent guard so we
+   * don't flip every row to on-contract via the weak vendor+date signal.
+   */
+  catalogPresent: boolean,
 ): {
   matchStatus: COGMatchStatus
   isOnContract: boolean
@@ -57,30 +81,33 @@ export function classifyVendorCogRow(
   savingsAmount: number | null
   variancePercent: number | null
 } {
+  const skuRaw = vendorCogSkuSource(row)
   const res = resolveContractForCOG(
     {
-      vendorItemNo: row.vendorItemNo,
+      vendorItemNo: skuRaw,
       vendorId,
       transactionDate: row.transactionDate,
       vendorName: row.vendorName,
     },
     ctx,
   )
-  if (!res.contractId) {
-    return {
-      matchStatus: "off_contract_item",
-      isOnContract: false,
-      contractId: null,
-      contractPrice: null,
-      savingsAmount: null,
-      variancePercent: null,
-    }
+  const offContract = {
+    matchStatus: "off_contract_item" as const,
+    isOnContract: false,
+    contractId: null,
+    contractPrice: null,
+    savingsAmount: null,
+    variancePercent: null,
   }
-  const sku = normalizeSku(row.vendorItemNo)
+  if (!res.contractId) return offContract
+
+  const sku = normalizeSku(skuRaw)
   const cp = sku ? priceBySkuContract.get(`${res.contractId}::${sku}`) : undefined
   if (cp == null) {
-    // Matched by vendor + date window but the contract carries no priced
-    // catalog for this SKU — on-contract with no authoritative price.
+    // Matched by vendor + date only (no priced SKU). Trust it as on-contract
+    // ONLY when no contract has a catalog; otherwise the SKU simply isn't on
+    // the priced catalog → off-contract.
+    if (catalogPresent) return offContract
     return {
       matchStatus: "on_contract",
       isOnContract: true,
@@ -167,12 +194,15 @@ export async function recomputeMatchStatusesForVendorCog(
     activeContractsByVendor,
     fuzzyVendorMatch: () => null,
   }
+  const catalogPresent = pricingByVendorItem.size > 0
 
   const records = await prisma.vendorCogRecord.findMany({
     where: vendorCogScopedByDivisions(vendorId, divisionIds),
     select: {
       id: true,
       vendorItemNo: true,
+      manufacturerNo: true,
+      inventoryNumber: true,
       vendorName: true,
       transactionDate: true,
       unitCost: true,
@@ -196,6 +226,8 @@ export async function recomputeMatchStatusesForVendorCog(
     const c = classifyVendorCogRow(
       {
         vendorItemNo: r.vendorItemNo,
+        manufacturerNo: r.manufacturerNo,
+        inventoryNumber: r.inventoryNumber,
         vendorName: r.vendorName,
         transactionDate: r.transactionDate,
         unitCost: Number(r.unitCost),
@@ -204,6 +236,7 @@ export async function recomputeMatchStatusesForVendorCog(
       vendorId,
       ctx,
       priceBySkuContract,
+      catalogPresent,
     )
     if (c.matchStatus === "price_variance") priceVariance++
     else if (c.isOnContract) onContract++
