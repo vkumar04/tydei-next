@@ -150,15 +150,23 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
     sumCaseSpend += Number(c.totalSpend)
   }
 
-  const revenueIsImplied = sumReimbursement <= 0
+  // Net revenue must exceed total supply spend. Measured case reimbursement only
+  // covers cases whose CPT is in a loaded payor contract (often a small subset),
+  // so it routinely understates revenue — e.g. $3.5M "revenue" against $23.7M of
+  // COG spend, which is impossible and made EBITDA/DCF look wrong (Vick
+  // 2026-06-21). Treat revenue as IMPLIED whenever the measured figure is
+  // missing OR implausibly low (≤ supply spend), falling back to the
+  // spend-based proxy (spend ÷ supply-cost-%) so EBITDA/DCF stay coherent.
+  const revenueIsImplied = sumReimbursement <= totalSpend
   const netRevenue = revenueIsImplied
     ? totalSpend / IMPLIED_SUPPLY_COST_PCT
     : sumReimbursement
 
-  const avgMarginPct =
-    sumReimbursement > 0
-      ? Math.max(0, (sumReimbursement - sumCaseSpend) / sumReimbursement)
-      : DEFAULT_MARGIN_PCT
+  // Only trust a measured margin when revenue is coherent (not implied) — a
+  // partial reimbursement total would otherwise yield a garbage margin.
+  const avgMarginPct = !revenueIsImplied
+    ? Math.max(0, (sumReimbursement - sumCaseSpend) / sumReimbursement)
+    : DEFAULT_MARGIN_PCT
 
   // ── Shape rows (sorted desc by spend) ──────────────────────────
   const categories: AnalysisCategoryRow[] = [...categoryAgg.entries()]
