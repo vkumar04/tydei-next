@@ -1,11 +1,15 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Slider } from "@/components/ui/slider"
 import { Gauge, Percent, Banknote, Users } from "lucide-react"
-import type { ProspectiveImpact } from "@/lib/financial-analysis/prospective-impact-model"
+import {
+  computeDealScenarioSavings,
+  type ProspectiveImpact,
+} from "@/lib/financial-analysis/prospective-impact-model"
 import { formatCurrency } from "@/lib/formatting"
 import { usdCompact, usdDelta } from "./format"
+import { SliderField } from "./slider-field"
 
 const SCENARIO_LABEL: Record<string, string> = {
   conservative: "Conservative",
@@ -56,6 +60,24 @@ export function ProspectiveImpactSection({
   /** Called with an absolute $ savings figure. */
   onSavingsChange: (savings: number) => void
 }) {
+  // Deal-scenario levers (the facility/buyer lens on the vendor Opportunity
+  // Engine, Vick 2026-06-21): model a proposed deal instead of a flat savings %.
+  // Levers held as integer percents; the derived saving drives the impact below.
+  const [priceChangePct, setPriceChangePct] = useState(-5)
+  const [conversionPct, setConversionPct] = useState(50)
+  const [volumeGrowthPct, setVolumeGrowthPct] = useState(0)
+
+  const derivedSavings = computeDealScenarioSavings({
+    currentVendorSpend,
+    priceChangePct: priceChangePct / 100,
+    conversionPct: conversionPct / 100,
+    volumeGrowthPct: volumeGrowthPct / 100,
+  })
+  // Push the derived saving up so the impact cards + EV recompute from the deal.
+  useEffect(() => {
+    onSavingsChange(derivedSavings)
+  }, [derivedSavings, onSavingsChange])
+
   const savingsPctOfSpend = impact.savingsPctOfSpend * 100
 
   return (
@@ -63,31 +85,50 @@ export function ProspectiveImpactSection({
       <CardHeader>
         <CardTitle>Prospective Impact Engine</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Model how a negotiated annual supply saving flows to EBITDA, margin,
-          distributable cash flow, and enterprise value.
+          Model a proposed deal — price change, how much spend you convert, and
+          expected volume — and see how the resulting saving flows to EBITDA,
+          margin, distributable cash flow, and enterprise value.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Savings slider */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Negotiated annual supply savings
-            </span>
-            <span className="font-semibold tabular-nums">
-              {usdCompact(impact.annualSupplySavings)} ·{" "}
+        {/* Deal Scenario levers */}
+        <div className="rounded-lg border p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-semibold">Deal Scenario</span>
+            <span className="text-sm font-semibold tabular-nums text-emerald-600">
+              {usdCompact(impact.annualSupplySavings)} saving ·{" "}
               {savingsPctOfSpend.toFixed(1)}% of spend
             </span>
           </div>
-          <Slider
-            value={[savingsPctOfSpend]}
-            min={0}
-            max={25}
-            step={0.1}
-            onValueChange={(v) =>
-              onSavingsChange(((v[0] ?? 0) / 100) * currentVendorSpend)
-            }
-          />
+          <div className="grid gap-x-8 gap-y-5 md:grid-cols-3">
+            <SliderField
+              label="Price change vs current"
+              value={priceChangePct}
+              min={-25}
+              max={5}
+              step={1}
+              format={(v) => `${v > 0 ? "+" : ""}${v}%`}
+              onChange={setPriceChangePct}
+            />
+            <SliderField
+              label="Spend converted to deal"
+              value={conversionPct}
+              min={0}
+              max={100}
+              step={5}
+              format={(v) => `${v}%`}
+              onChange={setConversionPct}
+            />
+            <SliderField
+              label="Expected volume growth"
+              value={volumeGrowthPct}
+              min={-10}
+              max={30}
+              step={1}
+              format={(v) => `${v > 0 ? "+" : ""}${v}%`}
+              onChange={setVolumeGrowthPct}
+            />
+          </div>
         </div>
 
         {/* 4 impact cards */}

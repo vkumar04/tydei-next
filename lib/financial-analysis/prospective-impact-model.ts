@@ -208,6 +208,32 @@ function computeEnterpriseValueScenarios(
   })
 }
 
+/**
+ * Derive the negotiated annual supply saving from a buyer-side DEAL SCENARIO —
+ * the facility lens on the vendor Opportunity Engine's levers:
+ *   savings = currentVendorSpend × conversion × (1 + volumeGrowth) × priceReduction
+ * where priceReduction is the magnitude of a price CUT (a -5% priceChange = 5%
+ * saving on the converted, grown spend base). A price increase yields 0 saving.
+ */
+export interface DealScenarioInput {
+  currentVendorSpend: number
+  /** Price change vs current, fraction (-0.05 = 5% cut). */
+  priceChangePct: number
+  /** Share of spend converted onto the deal, fraction (0–1). */
+  conversionPct: number
+  /** Expected volume growth on the converted base, fraction. */
+  volumeGrowthPct: number
+}
+
+export function computeDealScenarioSavings(input: DealScenarioInput): number {
+  const priceReduction = Math.max(0, -input.priceChangePct)
+  const conversion = Math.min(1, Math.max(0, input.conversionPct))
+  const base =
+    input.currentVendorSpend * conversion * (1 + input.volumeGrowthPct)
+  const savings = base * priceReduction
+  return Number.isFinite(savings) && savings > 0 ? savings : 0
+}
+
 /** Sensible defaults for a mid-size ASC — seeds the sliders on first load. */
 export const DEFAULT_FACILITY_ASSUMPTIONS: FacilityModelAssumptions = {
   netRevenue: 41_700_000,
