@@ -17,6 +17,7 @@
  */
 
 import { prisma } from "@/lib/db"
+import { excludeNonInboxAlerts } from "@/lib/alerts/alert-scope"
 import { ContractStatus } from "@/lib/generated/prisma/client"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
@@ -224,7 +225,10 @@ export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
       _sum: { rebateCollected: true },
     }),
     prisma.alert.findMany({
-      where: { facilityId, portalType: "facility" },
+      // Same non-inbox exclusions as the header badge + Alerts page, so the
+      // dashboard "Open Alerts" KPI agrees with them (spend-target / legacy
+      // vendor-proposal rows are not real alerts). 2026-06-21 refactor.
+      where: { facilityId, portalType: "facility", AND: excludeNonInboxAlerts() },
       select: {
         id: true,
         status: true,

@@ -132,7 +132,11 @@ export async function runAlertSynthesisForFacility(
     prisma.alert.findMany({
       where: {
         facilityId,
-        status: { in: ["new_alert", "read"] },
+        // Include `dismissed` so a condition the user dismissed is NOT
+        // re-created on the next run (findExistingByDedupe sees it). The
+        // resolver explicitly skips dismissed rows, so they are never flipped
+        // to resolved — dismiss sticks. (2026-06-21 alerts refactor.)
+        status: { in: ["new_alert", "read", "dismissed"] },
       },
       select: {
         id: true,

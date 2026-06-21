@@ -16,7 +16,7 @@ export const facilityNav: NavItem[] = [
   { label: "Purchase Orders", href: "/dashboard/purchase-orders", icon: "ShoppingCart" },
   { label: "Invoice Validation", href: "/dashboard/invoice-validation", icon: "FileCheck" },
   { label: "Reports", href: "/dashboard/reports", icon: "BarChart3" },
-  { label: "Alerts", href: "/dashboard/alerts", icon: "AlertTriangle", badgeKey: "alertCount" },
+  { label: "Alerts", href: "/dashboard/alerts", icon: "AlertTriangle" },
   { label: "AI Agent", href: "/dashboard/ai-agent", icon: "Bot" },
   { label: "Settings", href: "/dashboard/settings", icon: "Settings" },
 ]
@@ -32,7 +32,7 @@ export const vendorNav: NavItem[] = [
   { label: "Performance", href: "/vendor/performance", icon: "TrendingUp" },
   { label: "Purchase Orders", href: "/vendor/purchase-orders", icon: "ShoppingCart" },
   { label: "Invoices", href: "/vendor/invoices", icon: "Receipt" },
-  { label: "Alerts", href: "/vendor/alerts", icon: "AlertTriangle", badgeKey: "alertCount" },
+  { label: "Alerts", href: "/vendor/alerts", icon: "AlertTriangle" },
   { label: "Reports", href: "/vendor/reports", icon: "BarChart3" },
   { label: "AI Assistant", href: "/vendor/ai-agent", icon: "Bot" },
   { label: "Settings", href: "/vendor/settings", icon: "Settings" },

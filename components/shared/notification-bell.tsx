@@ -18,6 +18,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/actions/notifications/in-app"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * In-app notification bell (Charles 2026-04-25 audit follow-up).
@@ -33,7 +34,7 @@ export function NotificationBell() {
   const router = useRouter()
   const queryClient = useQueryClient()
   type NotificationsData = Awaited<ReturnType<typeof getMyNotifications>>
-  const NOTIF_KEY = ["my-notifications"] as const
+  const NOTIF_KEY = queryKeys.notifications.all
   const { data } = useQuery({
     queryKey: NOTIF_KEY,
     queryFn: () => getMyNotifications(),

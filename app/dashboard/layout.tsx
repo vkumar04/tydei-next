@@ -3,7 +3,7 @@ import { getCurrentAccessContext } from "@/lib/actions/auth-permissions"
 import { facilityNav } from "@/lib/constants"
 import { PortalShell } from "@/components/shared/shells/portal-shell"
 import { AccessProvider } from "@/components/shared/auth/access-context"
-import { getUnreadAlertCount } from "@/lib/actions/alerts"
+import { getOpenAlertCount } from "@/lib/actions/alerts"
 
 export default async function FacilityLayout({
   children,
@@ -12,7 +12,7 @@ export default async function FacilityLayout({
 }) {
   const result = await requireFacility()
 
-  const alertCount = await getUnreadAlertCount({
+  const alertCount = await getOpenAlertCount({
     facilityId: result.facility.id,
     portalType: "facility",
   })

@@ -190,10 +190,9 @@ export interface SynthResult {
 
 /** Off-contract vendor must exceed this total to raise an alert. */
 export const OFF_CONTRACT_DOLLAR_THRESHOLD = 1000
-/** Above this many distinct POs, a vendor gets ONE rollup alert instead
- * of per-PO alerts (2026-06-09 prod backfill: per-PO exploded to 10k+). */
-export const OFF_CONTRACT_MAX_PO_ALERTS_PER_VENDOR = 5
-/** Cap on line items embedded in alert metadata (top by value). */
+/** Cap on line items embedded in alert metadata (top by value). 2026-06-21:
+ * off_contract now ALWAYS rolls up to one alert per vendor (no per-PO rows),
+ * so the old per-vendor PO cap is gone. */
 export const OFF_CONTRACT_MAX_METADATA_ITEMS = 20
 /** Or meet this item count. */
 export const OFF_CONTRACT_COUNT_THRESHOLD = 3
@@ -280,108 +279,52 @@ function synthOffContract(input: SynthInput): {
       continue
     }
 
-    // Group further by PO so each row can carry its own line items.
-    const byPo = new Map<string, SynthCogRecord[]>()
-    for (const i of items) {
-      const k = i.poNumber ?? "_"
-      const arr = byPo.get(k)
-      if (arr) arr.push(i)
-      else byPo.set(k, [i])
-    }
+    // 2026-06-21 alerts refactor: ALWAYS roll up to ONE alert per vendor.
+    // The old per-PO granularity (with a per-vendor >5-PO rollup cap) let a
+    // facility with many off-contract POs spread thinly across vendors bypass
+    // the cap and accumulate one alert per PO — 168 rows on the demo facility.
+    // One actionable "off-contract spend from <vendor>" alert per vendor, with
+    // the PO count + top items in metadata, is what a buyer acts on. Stale
+    // per-PO rows (key `off_contract:<vendor>:<poId>`) are no longer in
+    // keepKeys, so the next synthesis run auto-resolves them.
+    const poCount = new Set(items.map((i) => i.poNumber ?? "_")).size
+    const dedupeKey = dedupeKeyFor("off_contract", vendorId, "rollup")
+    keepKeys.add(dedupeKey)
+    if (findExistingByDedupe(input.existingAlerts, dedupeKey)) continue
 
-    // 2026-06-09 prod backfill: per-PO alerts exploded into 10,355 rows
-    // (every COG line carries a distinct poNumber at real volume) — the
-    // first live run created 11,309 alerts for one facility. PO-level
-    // granularity is only actionable for a handful of POs; past that,
-    // emit ONE vendor-level rollup. Metadata item lists are capped to
-    // the top entries by value so a rollup row doesn't carry megabytes
-    // of JSON.
-    if (byPo.size > OFF_CONTRACT_MAX_PO_ALERTS_PER_VENDOR) {
-      const dedupeKey = dedupeKeyFor("off_contract", vendorId, "rollup")
-      keepKeys.add(dedupeKey)
-      if (!findExistingByDedupe(input.existingAlerts, dedupeKey)) {
-        const topItems = [...items]
-          .sort(
-            (a, b) =>
-              (b.extendedPrice ?? b.unitCost * b.quantity) -
-              (a.extendedPrice ?? a.unitCost * a.quantity),
-          )
-          .slice(0, OFF_CONTRACT_MAX_METADATA_ITEMS)
-        const meta: OffContractMeta & { dedupeKey: string } = {
-          po_id: "",
-          vendor_name: vendorName,
-          item_count: count,
-          total_amount: total,
-          items: topItems.map((i) => ({
-            sku: i.inventoryNumber,
-            name: i.inventoryDescription,
-            quantity: i.quantity,
-            unitPrice: i.unitCost,
-            contractPrice: i.contractPrice,
-          })),
-          dedupeKey,
-        }
-        create.push({
-          portalType: "facility",
-          alertType: "off_contract",
-          title: `$${Math.round(total).toLocaleString()} off-contract spend from ${vendorName}`,
-          description: `${count.toLocaleString()} off-contract line item${count > 1 ? "s" : ""} across ${byPo.size.toLocaleString()} POs. Top items by value attached.`,
-          severity: total > 50000 ? "high" : total > 10000 ? "medium" : "low",
-          facilityId: input.facilityId,
-          vendorId,
-          actionLink: `/dashboard/purchase-orders`,
-          metadata: meta as unknown as Record<string, unknown>,
-          dedupeKey,
-        })
-      }
-      continue
-    }
-
-    for (const [poId, poItems] of byPo) {
-      const poTotal = poItems.reduce(
-        (s, i) => s + (i.extendedPrice ?? i.unitCost * i.quantity),
-        0,
+    const topItems = [...items]
+      .sort(
+        (a, b) =>
+          (b.extendedPrice ?? b.unitCost * b.quantity) -
+          (a.extendedPrice ?? a.unitCost * a.quantity),
       )
-      const dedupeKey = dedupeKeyFor(
-        "off_contract",
-        vendorId,
-        poId === "_" ? "nopo" : poId,
-      )
-      keepKeys.add(dedupeKey)
-
-      if (findExistingByDedupe(input.existingAlerts, dedupeKey)) continue
-
-      const meta: OffContractMeta & { dedupeKey: string } = {
-        po_id: poId === "_" ? "" : poId,
-        vendor_name: vendorName,
-        item_count: poItems.length,
-        total_amount: poTotal,
-        items: poItems.map((i) => ({
-          sku: i.inventoryNumber,
-          name: i.inventoryDescription,
-          quantity: i.quantity,
-          unitPrice: i.unitCost,
-          contractPrice: i.contractPrice,
-        })),
-        dedupeKey,
-      }
-
-      create.push({
-        portalType: "facility",
-        alertType: "off_contract",
-        title:
-          poId === "_"
-            ? `${poItems.length} off-contract item${poItems.length > 1 ? "s" : ""} from ${vendorName}`
-            : `Off-contract PO ${poId} from ${vendorName}`,
-        description: `$${poTotal.toLocaleString()} in off-contract spend (${poItems.length} line item${poItems.length > 1 ? "s" : ""}).`,
-        severity: poTotal > 50000 ? "high" : poTotal > 10000 ? "medium" : "low",
-        facilityId: input.facilityId,
-        vendorId,
-        actionLink: poId === "_" ? `/dashboard/purchase-orders` : `/dashboard/purchase-orders?po=${encodeURIComponent(poId)}`,
-        metadata: meta as unknown as Record<string, unknown>,
-        dedupeKey,
-      })
+      .slice(0, OFF_CONTRACT_MAX_METADATA_ITEMS)
+    const meta: OffContractMeta & { dedupeKey: string } = {
+      po_id: "",
+      vendor_name: vendorName,
+      item_count: count,
+      total_amount: total,
+      items: topItems.map((i) => ({
+        sku: i.inventoryNumber,
+        name: i.inventoryDescription,
+        quantity: i.quantity,
+        unitPrice: i.unitCost,
+        contractPrice: i.contractPrice,
+      })),
+      dedupeKey,
     }
+    create.push({
+      portalType: "facility",
+      alertType: "off_contract",
+      title: `$${Math.round(total).toLocaleString()} off-contract spend from ${vendorName}`,
+      description: `${count.toLocaleString()} off-contract line item${count > 1 ? "s" : ""}${poCount > 1 ? ` across ${poCount.toLocaleString()} POs` : ""}. Top items by value attached.`,
+      severity: total > 50000 ? "high" : total > 10000 ? "medium" : "low",
+      facilityId: input.facilityId,
+      vendorId,
+      actionLink: `/dashboard/purchase-orders`,
+      metadata: meta as unknown as Record<string, unknown>,
+      dedupeKey,
+    })
   }
 
   return { create, keepKeys }
@@ -529,38 +472,75 @@ function synthRebateDue(input: SynthInput, now: Date): {
   const create: SynthAlert[] = []
   const keepKeys = new Set<string>()
 
+  // 2026-06-21 alerts refactor: roll up to ONE alert per CONTRACT, not one per
+  // past-due period (100 rows on the demo facility). A buyer collects rebates
+  // per contract, so the alert carries total outstanding + the period list in
+  // metadata. Stale per-period rows (key `rebate_due:<contract>:<period>`)
+  // leave keepKeys and auto-resolve next run.
+  const byContract = new Map<
+    string,
+    {
+      contractName: string
+      vendorName: string
+      vendorId: string | undefined
+      outstanding: number
+      periods: { period: string; period_id: string; amount: number }[]
+    }
+  >()
+
   for (const p of input.contractPeriods) {
     if (p.rebateEarned <= 0) continue
     if (p.rebateCollected >= p.rebateEarned) continue
     // Past-due: the period has ended on or before `now`.
     if (p.periodEnd.getTime() > now.getTime()) continue
 
-    const dedupeKey = dedupeKeyFor("rebate_due", p.contractId, p.id)
+    const outstanding = p.rebateEarned - p.rebateCollected
+    const bucket = byContract.get(p.contractId)
+    const periodEntry = {
+      period: `${isoDate(p.periodStart)}..${isoDate(p.periodEnd)}`,
+      period_id: p.id,
+      amount: outstanding,
+    }
+    if (bucket) {
+      bucket.outstanding += outstanding
+      bucket.periods.push(periodEntry)
+    } else {
+      byContract.set(p.contractId, {
+        contractName: p.contractName,
+        vendorName: p.vendorName,
+        vendorId: p.vendorId,
+        outstanding,
+        periods: [periodEntry],
+      })
+    }
+  }
+
+  for (const [contractId, c] of byContract) {
+    const dedupeKey = dedupeKeyFor("rebate_due", contractId)
     keepKeys.add(dedupeKey)
     if (findExistingByDedupe(input.existingAlerts, dedupeKey)) continue
 
-    const periodLabel = `${isoDate(p.periodStart)}..${isoDate(p.periodEnd)}`
-    const outstanding = p.rebateEarned - p.rebateCollected
+    const n = c.periods.length
     const meta: RebateDueMeta & { dedupeKey: string } = {
-      contract_name: p.contractName,
-      contract_id: p.contractId,
-      vendor_name: p.vendorName,
-      amount: outstanding,
-      period: periodLabel,
-      period_id: p.id,
+      contract_name: c.contractName,
+      contract_id: contractId,
+      vendor_name: c.vendorName,
+      amount: c.outstanding,
+      period: n === 1 ? c.periods[0]!.period : `${n} periods`,
+      period_id: n === 1 ? c.periods[0]!.period_id : "",
       dedupeKey,
     }
 
     create.push({
       portalType: "facility",
       alertType: "rebate_due",
-      title: `Rebate due on "${p.contractName}"`,
-      description: `$${outstanding.toLocaleString()} in earned rebates pending collection from ${p.vendorName}.`,
+      title: `Rebate due on "${c.contractName}"`,
+      description: `$${Math.round(c.outstanding).toLocaleString()} in earned rebates pending collection from ${c.vendorName}${n > 1 ? ` across ${n} periods` : ""}.`,
       severity: "medium",
       facilityId: input.facilityId,
-      contractId: p.contractId,
-      vendorId: p.vendorId,
-      actionLink: `/dashboard/contracts/${p.contractId}`,
+      contractId,
+      vendorId: c.vendorId,
+      actionLink: `/dashboard/contracts/${contractId}`,
       metadata: meta as unknown as Record<string, unknown>,
       dedupeKey,
     })
@@ -657,6 +637,10 @@ export function synthesizeAlertsForFacility(input: SynthInput): SynthResult {
   // Any existing alert whose dedupeKey is NOT in keepKeys has no active condition.
   const toResolve: string[] = []
   for (const a of input.existingAlerts) {
+    // Dismissed rows are loaded ONLY so findExistingByDedupe suppresses
+    // re-creating a condition the user dismissed (dismiss must stick). Never
+    // transition a dismissed alert to resolved here. (2026-06-21 refactor.)
+    if (a.status === "dismissed") continue
     const meta = a.metadata as { dedupeKey?: unknown }
     // Only consider alerts we ourselves synthesize (have a dedupeKey).
     if (typeof meta?.dedupeKey !== "string") continue
