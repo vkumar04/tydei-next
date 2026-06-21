@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getVendorPendingContracts,
   createPendingContract,
@@ -24,30 +25,20 @@ export function useVendorPendingContracts(vendorId: string) {
 }
 
 export function useCreatePendingContract() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: createPendingContract,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pendingContracts"] })
-    },
-    // Charles audit round-2 vendor CONCERN 2: success/error toast
-    // moved to the caller (vendor-contract-submission.tsx) so the
-    // multi-facility fan-out can roll up "submitted to N of M
-    // facilities" into one message instead of N stacked toasts.
-    // The caller uses Promise.allSettled and reports per-facility
-    // failures in a single rolled-up error toast.
+  // Charles audit round-2 vendor CONCERN 2: success/error toast moved to the
+  // caller (vendor-contract-submission.tsx) so the multi-facility fan-out can
+  // roll up "submitted to N of M facilities" into one message instead of N
+  // stacked toasts — hence no `success`/`error` here (silent).
+  return useToastMutation(createPendingContract, {
+    invalidate: [["pendingContracts"]],
   })
 }
 
 export function useWithdrawPendingContract() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: withdrawPendingContract,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pendingContracts"] })
-      toast.success("Contract withdrawn")
-    },
-    onError: (e) => toast.error(e.message || "Failed to withdraw"),
+  return useToastMutation(withdrawPendingContract, {
+    invalidate: [["pendingContracts"]],
+    success: "Contract withdrawn",
+    error: "Failed to withdraw",
   })
 }
 
@@ -58,14 +49,10 @@ export function useWithdrawPendingContract() {
  * action guards `approved`, and real Contract rows never reach it.
  */
 export function useDeletePendingContract() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: deletePendingContract,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pendingContracts"] })
-      toast.success("Submission deleted")
-    },
-    onError: (e) => toast.error(e.message || "Failed to delete"),
+  return useToastMutation(deletePendingContract, {
+    invalidate: [["pendingContracts"]],
+    success: "Submission deleted",
+    error: "Failed to delete",
   })
 }
 

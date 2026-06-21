@@ -1,7 +1,8 @@
 "use client"
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getFacilityProfile,
   updateFacilityProfile,
@@ -36,14 +37,11 @@ export function useFacilityProfile(facilityId: string) {
 }
 
 export function useUpdateFacilityProfile(facilityId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: UpdateFacilityProfileInput) =>
+  return useToastMutation(
+    (input: UpdateFacilityProfileInput) =>
       updateFacilityProfile(facilityId, input),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.facilityProfile(facilityId) })
-    },
-  })
+    { invalidate: [queryKeys.settings.facilityProfile(facilityId)] },
+  )
 }
 
 // ─── Vendor Profile ──────────────────────────────────────────────
@@ -56,14 +54,10 @@ export function useVendorProfile(vendorId: string) {
 }
 
 export function useUpdateVendorProfile(vendorId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: UpdateVendorProfileInput) =>
-      updateVendorProfile(vendorId, input),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.vendorProfile(vendorId) })
-    },
-  })
+  return useToastMutation(
+    (input: UpdateVendorProfileInput) => updateVendorProfile(vendorId, input),
+    { invalidate: [queryKeys.settings.vendorProfile(vendorId)] },
+  )
 }
 
 // ─── Notifications ───────────────────────────────────────────────
@@ -76,14 +70,11 @@ export function useNotificationPreferences(entityId: string) {
 }
 
 export function useUpdateNotificationPreferences(entityId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (prefs: NotificationPreferences) =>
+  return useToastMutation(
+    (prefs: NotificationPreferences) =>
       updateNotificationPreferences(entityId, prefs),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.notifications(entityId) })
-    },
-  })
+    { invalidate: [queryKeys.settings.notifications(entityId)] },
+  )
 }
 
 // ─── Team Members ────────────────────────────────────────────────
@@ -97,47 +88,34 @@ export function useTeamMembers(orgId: string) {
 }
 
 export function useInviteTeamMember(orgId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { email: string; role: string }) =>
+  return useToastMutation(
+    (input: { email: string; role: string }) =>
       inviteTeamMember({ organizationId: orgId, ...input }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.team(orgId) })
-    },
-  })
+    { invalidate: [queryKeys.settings.team(orgId)] },
+  )
 }
 
 export function useRemoveTeamMember(orgId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (memberId: string) => removeTeamMember(memberId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.team(orgId) })
-    },
+  return useToastMutation((memberId: string) => removeTeamMember(memberId), {
+    invalidate: [queryKeys.settings.team(orgId)],
   })
 }
 
 export function useUpdateTeamMemberRole(orgId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ memberId, role }: { memberId: string; role: string }) =>
+  return useToastMutation(
+    ({ memberId, role }: { memberId: string; role: string }) =>
       updateTeamMemberRole(memberId, role),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.team(orgId) })
-    },
-  })
+    { invalidate: [queryKeys.settings.team(orgId)] },
+  )
 }
 
 // Settings/Users feature: change a member's access tier (Super only).
 export function useUpdateMemberAccessTier(orgId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ memberId, tier }: { memberId: string; tier: string }) =>
+  return useToastMutation(
+    ({ memberId, tier }: { memberId: string; tier: string }) =>
       updateMemberAccessTier(memberId, tier),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.team(orgId) })
-    },
-  })
+    { invalidate: [queryKeys.settings.team(orgId)] },
+  )
 }
 
 // ─── Feature Flags ───────────────────────────────────────────────
@@ -150,14 +128,10 @@ export function useFeatureFlags(facilityId: string) {
 }
 
 export function useUpdateFeatureFlags(facilityId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (flags: Partial<FeatureFlagData>) =>
-      updateFeatureFlags(facilityId, flags),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.featureFlags(facilityId) })
-    },
-  })
+  return useToastMutation(
+    (flags: Partial<FeatureFlagData>) => updateFeatureFlags(facilityId, flags),
+    { invalidate: [queryKeys.settings.featureFlags(facilityId)] },
+  )
 }
 
 // ─── Vendor Team ─────────────────────────────────────────────────
@@ -171,12 +145,9 @@ export function useVendorTeamMembers(orgId: string) {
 }
 
 export function useInviteVendorTeamMember(orgId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { email: string; role: string; subRole: string }) =>
+  return useToastMutation(
+    (input: { email: string; role: string; subRole: string }) =>
       inviteVendorTeamMember({ organizationId: orgId, ...input }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.team(orgId) })
-    },
-  })
+    { invalidate: [queryKeys.settings.team(orgId)] },
+  )
 }

@@ -1,6 +1,5 @@
 "use client"
 
-import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import {
   createFacilityPayorContract,
@@ -9,78 +8,65 @@ import {
   importPayorContractRates,
 } from "@/lib/actions/facility-payor-contracts"
 import type { CreatePayorContractInput, UpdatePayorContractInput } from "@/lib/validators/payor-contracts"
-import { toast } from "sonner"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
+
+// A payor-contract mutation refreshes the Payor Contracts list
+// (`cases.payorContracts`), the Payor Contract Margin dropdown
+// (`cases.payorMarginOptions`, distinct key — bugs.rtfd 2026-06-14), and the
+// Margin card's summary tiles (`cases.payorMarginSummaryBase`, best-practices
+// sweep 2026-06-17 — nothing was invalidating that key before, so a rate
+// import left the tiles stale until reload).
+const PAYOR_INVALIDATE = [
+  queryKeys.cases.payorContracts(),
+  queryKeys.cases.payorMarginOptions(),
+  queryKeys.cases.payorMarginSummaryBase,
+]
 
 export function useCreatePayorContract() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: CreatePayorContractInput) => createFacilityPayorContract(input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorContracts() })
-      // bugs.rtfd 2026-06-14: also refresh the Payor Contract Margin dropdown
-      // (distinct query key) so a newly added/removed contract appears without
-      // a page reload.
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
-      // best-practices sweep 2026-06-17: refresh the Payor Contract Margin
-      // card's summary tiles (Est. Reimbursement / CPT Matched / Total
-      // Margin) — nothing was invalidating that key before, so a rate
-      // import left the tiles stale until reload.
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginSummaryBase })
-      toast.success("Payor contract created")
+  return useToastMutation(
+    (input: CreatePayorContractInput) => createFacilityPayorContract(input),
+    {
+      invalidate: PAYOR_INVALIDATE,
+      success: "Payor contract created",
+      error: "Failed to create payor contract",
     },
-    onError: (err) => toast.error(err.message || "Failed to create payor contract"),
-  })
+  )
 }
 
 export function useUpdatePayorContract() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdatePayorContractInput }) =>
+  return useToastMutation(
+    ({ id, input }: { id: string; input: UpdatePayorContractInput }) =>
       updateFacilityPayorContract(id, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorContracts() })
-      // bugs.rtfd 2026-06-14: also refresh the Payor Contract Margin dropdown
-      // (distinct query key) so a newly added/removed contract appears without
-      // a page reload.
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginSummaryBase })
-      toast.success("Payor contract updated")
+    {
+      invalidate: PAYOR_INVALIDATE,
+      success: "Payor contract updated",
+      error: "Failed to update payor contract",
     },
-    onError: (err) => toast.error(err.message || "Failed to update payor contract"),
-  })
+  )
 }
 
 export function useDeletePayorContract() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => deleteFacilityPayorContract(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorContracts() })
-      // bugs.rtfd 2026-06-14: also refresh the Payor Contract Margin dropdown
-      // (distinct query key) so a newly added/removed contract appears without
-      // a page reload.
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginSummaryBase })
-      toast.success("Payor contract deleted")
-    },
-    onError: (err) => toast.error(err.message || "Failed to delete payor contract"),
+  return useToastMutation((id: string) => deleteFacilityPayorContract(id), {
+    invalidate: PAYOR_INVALIDATE,
+    success: "Payor contract deleted",
+    error: "Failed to delete payor contract",
   })
 }
 
 export function useImportPayorRates() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ contractId, rates }: { contractId: string; rates: { cptCode: string; description?: string; rate: number }[] }) =>
-      importPayorContractRates(contractId, rates),
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorContracts() })
-      // bugs.rtfd 2026-06-14: also refresh the Payor Contract Margin dropdown
-      // (distinct query key) so a newly added/removed contract appears without
-      // a page reload.
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginOptions() })
-      qc.invalidateQueries({ queryKey: queryKeys.cases.payorMarginSummaryBase })
-      toast.success(`Imported ${result.imported} CPT rates (${result.total} total)`)
+  return useToastMutation(
+    ({
+      contractId,
+      rates,
+    }: {
+      contractId: string
+      rates: { cptCode: string; description?: string; rate: number }[]
+    }) => importPayorContractRates(contractId, rates),
+    {
+      invalidate: PAYOR_INVALIDATE,
+      success: (result) =>
+        `Imported ${result.imported} CPT rates (${result.total} total)`,
+      error: "Failed to import rates",
     },
-    onError: (err) => toast.error(err.message || "Failed to import rates"),
-  })
+  )
 }

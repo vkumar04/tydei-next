@@ -1,6 +1,6 @@
 "use client"
 
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys, type DateRange } from "@/lib/query-keys"
 import {
   calculateDepreciation,
@@ -12,12 +12,11 @@ import {
   getSpendForecast,
   getRebateForecast,
 } from "@/lib/actions/forecasting"
-import { toast } from "sonner"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 
 export function useDepreciation() {
-  return useMutation({
-    mutationFn: calculateDepreciation,
-    onError: (err) => toast.error(err.message || "Depreciation calculation failed"),
+  return useToastMutation(calculateDepreciation, {
+    error: "Depreciation calculation failed",
   })
 }
 

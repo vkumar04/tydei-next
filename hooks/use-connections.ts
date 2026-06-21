@@ -1,7 +1,8 @@
 "use client"
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getConnections,
   sendConnectionInvite,
@@ -32,61 +33,43 @@ export function useConnections(
 }
 
 export function useSendConnectionInvite(entityId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: {
-      toEmail: string
-      toName: string
-      message?: string
-    }) => sendConnectionInvite(input),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.connections(entityId) })
-    },
-  })
+  return useToastMutation(
+    (input: { toEmail: string; toName: string; message?: string }) =>
+      sendConnectionInvite(input),
+    { invalidate: [queryKeys.settings.connections(entityId)] },
+  )
 }
 
 export function useAcceptConnection(entityId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (connectionId: string) => acceptConnection(connectionId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.connections(entityId) })
-    },
-  })
+  return useToastMutation(
+    (connectionId: string) => acceptConnection(connectionId),
+    { invalidate: [queryKeys.settings.connections(entityId)] },
+  )
 }
 
 export function useRejectConnection(entityId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (connectionId: string) => rejectConnection(connectionId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.connections(entityId) })
-    },
-  })
+  return useToastMutation(
+    (connectionId: string) => rejectConnection(connectionId),
+    { invalidate: [queryKeys.settings.connections(entityId)] },
+  )
 }
 
 export function useRemoveConnection(entityId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (connectionId: string) => removeConnection(connectionId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.connections(entityId) })
-    },
-  })
+  return useToastMutation(
+    (connectionId: string) => removeConnection(connectionId),
+    { invalidate: [queryKeys.settings.connections(entityId)] },
+  )
 }
 
 // Vendor 1-/2-way mode toggle (vendor side only). Lets a vendor choose, per
 // connection, whether their contracts flow to the facility (two_way) or stay
 // private while they use their own COGs (one_way).
 export function useSetConnectionMode(entityId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ connectionId, mode }: { connectionId: string; mode: ConnectionMode }) =>
+  return useToastMutation(
+    ({ connectionId, mode }: { connectionId: string; mode: ConnectionMode }) =>
       setConnectionMode(connectionId, mode),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.settings.connections(entityId) })
-    },
-  })
+    { invalidate: [queryKeys.settings.connections(entityId)] },
+  )
 }
 
 // Vendor-level operating mode (the standalone-vendor choice). Distinct from the
@@ -99,13 +82,8 @@ export function useVendorOperatingMode(vendorId: string) {
 }
 
 export function useSetVendorOperatingMode(vendorId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (mode: ConnectionMode) => setVendorOperatingMode(mode),
-    onSuccess: () => {
-      void qc.invalidateQueries({
-        queryKey: queryKeys.settings.vendorOperatingMode(vendorId),
-      })
-    },
-  })
+  return useToastMutation(
+    (mode: ConnectionMode) => setVendorOperatingMode(mode),
+    { invalidate: [queryKeys.settings.vendorOperatingMode(vendorId)] },
+  )
 }

@@ -1,7 +1,8 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getVendorDivisionsWithMembers,
   getAttachableVendorUsers,
@@ -34,59 +35,39 @@ export function useAttachableVendorUsers(vendorId: string) {
 }
 
 export function useCreateVendorDivision() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { name: string; code: string; categories?: string[] }) =>
+  return useToastMutation(
+    (input: { name: string; code: string; categories?: string[] }) =>
       createVendorDivision(input),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.divisionMembers.base })
-    },
-  })
+    { invalidate: [queryKeys.divisionMembers.base] },
+  )
 }
 
 export function useUpdateVendorDivision() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: {
-      id: string
-      name: string
-      code: string
-      categories?: string[]
-    }) => updateVendorDivision(input),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.divisionMembers.base })
-    },
-  })
+  return useToastMutation(
+    (input: { id: string; name: string; code: string; categories?: string[] }) =>
+      updateVendorDivision(input),
+    { invalidate: [queryKeys.divisionMembers.base] },
+  )
 }
 
 export function useDeleteVendorDivision() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => deleteVendorDivision(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.divisionMembers.base })
-    },
+  return useToastMutation((id: string) => deleteVendorDivision(id), {
+    invalidate: [queryKeys.divisionMembers.base],
   })
 }
 
 export function useAttachUserToDivision() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { divisionId: string; userId: string }) =>
+  return useToastMutation(
+    (input: { divisionId: string; userId: string }) =>
       attachUserToDivision(input.divisionId, input.userId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.divisionMembers.base })
-    },
-  })
+    { invalidate: [queryKeys.divisionMembers.base] },
+  )
 }
 
 export function useDetachUserFromDivision() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { divisionId: string; userId: string }) =>
+  return useToastMutation(
+    (input: { divisionId: string; userId: string }) =>
       detachUserFromDivision(input.divisionId, input.userId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.divisionMembers.base })
-    },
-  })
+    { invalidate: [queryKeys.divisionMembers.base] },
+  )
 }

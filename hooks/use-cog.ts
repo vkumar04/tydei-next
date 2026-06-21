@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
+import { toast } from "sonner"
 import {
   getCOGRecords,
   createCOGRecord,
@@ -16,7 +18,16 @@ import {
 import { bulkImportCOGRecords } from "@/lib/actions/cog-import"
 import { backfillCOGEnrichment } from "@/lib/actions/cog-import/backfill"
 import type { COGFilters } from "@/lib/validators/cog-records"
-import { toast } from "sonner"
+
+// Every COG mutation refreshes the COG list/stats (`cogRecords.all`) AND the
+// per-category market-share card (`categoryMarketShareBase`) — COG mutations
+// change the per-category share denominator, and the contract-detail
+// Performance tab + vendor dashboard widget have no refetchInterval, so they'd
+// stay stale otherwise (Charles 2026-04-28 #H follow-up).
+const COG_INVALIDATE = [
+  queryKeys.cogRecords.all,
+  queryKeys.contracts.categoryMarketShareBase,
+]
 
 export function useCOGRecords(
   facilityId: string,
@@ -43,19 +54,10 @@ export function useCOGStats(facilityId: string) {
 }
 
 export function useCreateCOGRecord() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: createCOGRecord,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      // Charles 2026-04-28 #H follow-up: COG mutations change the
-      // per-category share denominator. Invalidate the market-share
-      // card explicitly so the contract-detail Performance tab and
-      // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
-      toast.success("COG record created")
-    },
-    onError: (err) => toast.error(err.message || "Failed to create record"),
+  return useToastMutation(createCOGRecord, {
+    invalidate: COG_INVALIDATE,
+    success: "COG record created",
+    error: "Failed to create record",
   })
 }
 
@@ -64,12 +66,10 @@ export function useImportCOGRecords() {
   return useMutation({
     mutationFn: bulkImportCOGRecords,
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      // Charles 2026-04-28 #H follow-up: COG mutations change the
-      // per-category share denominator. Invalidate the market-share
-      // card explicitly so the contract-detail Performance tab and
-      // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
+      // Kept a bespoke useMutation (not useToastMutation): the conditional
+      // recompute-failure `toast.warning` below is extra logic the factory
+      // doesn't model. Shares COG_INVALIDATE so the keys can't drift.
+      for (const key of COG_INVALIDATE) qc.invalidateQueries({ queryKey: key })
       toast.success(
         `Imported ${result.imported} records (${result.skipped} skipped, ${result.errors} errors)`
       )
@@ -90,107 +90,55 @@ export function useImportCOGRecords() {
 }
 
 export function useDeleteCOGRecord() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: deleteCOGRecord,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      // Charles 2026-04-28 #H follow-up: COG mutations change the
-      // per-category share denominator. Invalidate the market-share
-      // card explicitly so the contract-detail Performance tab and
-      // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
-      toast.success("Record deleted")
-    },
-    onError: (err) => toast.error(err.message || "Failed to delete record"),
+  return useToastMutation(deleteCOGRecord, {
+    invalidate: COG_INVALIDATE,
+    success: "Record deleted",
+    error: "Failed to delete record",
   })
 }
 
 export function useBulkDeleteCOGRecords() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: bulkDeleteCOGRecords,
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      // Charles 2026-04-28 #H follow-up: COG mutations change the
-      // per-category share denominator. Invalidate the market-share
-      // card explicitly so the contract-detail Performance tab and
-      // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
-      toast.success(`Deleted ${result.deleted} records`)
-    },
-    onError: (err) => toast.error(err.message || "Failed to delete records"),
+  return useToastMutation(bulkDeleteCOGRecords, {
+    invalidate: COG_INVALIDATE,
+    success: (result) => `Deleted ${result.deleted} records`,
+    error: "Failed to delete records",
   })
 }
 
 export function useClearAllCOGRecords() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: clearAllCOGRecords,
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      // Charles 2026-04-28 #H follow-up: COG mutations change the
-      // per-category share denominator. Invalidate the market-share
-      // card explicitly so the contract-detail Performance tab and
-      // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
-      toast.success(`Cleared all ${result.deleted.toLocaleString()} COG records`)
-    },
-    onError: (err) => toast.error(err.message || "Failed to clear records"),
+  return useToastMutation(clearAllCOGRecords, {
+    invalidate: COG_INVALIDATE,
+    success: (result) =>
+      `Cleared all ${result.deleted.toLocaleString()} COG records`,
+    error: "Failed to clear records",
   })
 }
 
 export function useDeleteCOGFile() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: deleteCOGFileByDate,
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      // Charles 2026-04-28 #H follow-up: COG mutations change the
-      // per-category share denominator. Invalidate the market-share
-      // card explicitly so the contract-detail Performance tab and
-      // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
-      toast.success(`Deleted ${result.deleted} records`)
-    },
-    onError: (err) => toast.error(err.message || "Failed to delete file"),
+  return useToastMutation(deleteCOGFileByDate, {
+    invalidate: COG_INVALIDATE,
+    success: (result) => `Deleted ${result.deleted} records`,
+    error: "Failed to delete file",
   })
 }
 
 export function useUpdateCOGRecord() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateCOGRecord>[1] }) =>
+  return useToastMutation(
+    ({ id, data }: { id: string; data: Parameters<typeof updateCOGRecord>[1] }) =>
       updateCOGRecord(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      // Charles 2026-04-28 #H follow-up: COG mutations change the
-      // per-category share denominator. Invalidate the market-share
-      // card explicitly so the contract-detail Performance tab and
-      // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
-      toast.success("Record updated")
+    {
+      invalidate: COG_INVALIDATE,
+      success: "Record updated",
+      error: "Failed to update record",
     },
-    onError: (err) => toast.error(err.message || "Failed to update record"),
-  })
+  )
 }
 
 export function useBackfillCOGEnrichment() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: backfillCOGEnrichment,
-    onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      // Charles 2026-04-28 #H follow-up: COG mutations change the
-      // per-category share denominator. Invalidate the market-share
-      // card explicitly so the contract-detail Performance tab and
-      // vendor dashboard widget refetch.
-      qc.invalidateQueries({ queryKey: queryKeys.contracts.categoryMarketShareBase })
-      toast.success(
-        `Enriched ${r.enriched} records (${r.pendingAfter} still pending)`,
-      )
-    },
-    onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Backfill failed"),
+  return useToastMutation(backfillCOGEnrichment, {
+    invalidate: COG_INVALIDATE,
+    success: (r) =>
+      `Enriched ${r.enriched} records (${r.pendingAfter} still pending)`,
+    error: "Backfill failed",
   })
 }

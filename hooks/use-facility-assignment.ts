@@ -1,7 +1,8 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getFacilityAssignments,
   assignFacilityToUser,
@@ -23,23 +24,17 @@ export function useFacilityAssignments(orgId: string) {
 }
 
 export function useAssignFacilityToUser() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { userId: string; facilityId: string }) =>
+  return useToastMutation(
+    (input: { userId: string; facilityId: string }) =>
       assignFacilityToUser(input.userId, input.facilityId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.facilityAssignment.base })
-    },
-  })
+    { invalidate: [queryKeys.facilityAssignment.base] },
+  )
 }
 
 export function useUnassignFacilityFromUser() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { userId: string; facilityId: string }) =>
+  return useToastMutation(
+    (input: { userId: string; facilityId: string }) =>
       unassignFacilityFromUser(input.userId, input.facilityId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.facilityAssignment.base })
-    },
-  })
+    { invalidate: [queryKeys.facilityAssignment.base] },
+  )
 }

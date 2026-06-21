@@ -1,7 +1,8 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getCases,
   getCase,
@@ -21,7 +22,6 @@ import { getTrueMarginReport } from "@/lib/actions/case-costing/true-margin"
 import { getSurgeonRebateContribution } from "@/lib/actions/case-costing/surgeon-rebate-contribution"
 import { getSurgeonVendorSpend } from "@/lib/actions/case-costing/surgeon-vendor-spend"
 import type { CaseInput, CaseSupplyInput } from "@/lib/validators/cases"
-import { toast } from "sonner"
 
 export function useCases(facilityId: string, filters?: Record<string, unknown>) {
   return useQuery({
@@ -39,45 +39,37 @@ export function useCaseDetail(id: string) {
 }
 
 export function useImportCases() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { facilityId: string; cases: CaseInput[] }) =>
-      importCases(input),
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cases.all })
-      toast.success(
-        `Imported ${result.imported} cases (${result.errors} errors)`
-      )
+  return useToastMutation(
+    (input: { facilityId: string; cases: CaseInput[] }) => importCases(input),
+    {
+      invalidate: [queryKeys.cases.all],
+      success: (result) =>
+        `Imported ${result.imported} cases (${result.errors} errors)`,
+      error: "Failed to import cases",
     },
-    onError: (err) => toast.error(err.message || "Failed to import cases"),
-  })
+  )
 }
 
 export function useDeleteAllCases() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => deleteAllCases(),
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cases.all })
-      toast.success(`Cleared ${result.deleted} prior case${result.deleted === 1 ? "" : "s"}`)
-    },
-    onError: (err) => toast.error(err.message || "Failed to clear cases"),
+  return useToastMutation(() => deleteAllCases(), {
+    invalidate: [queryKeys.cases.all],
+    success: (result) =>
+      `Cleared ${result.deleted} prior case${result.deleted === 1 ? "" : "s"}`,
+    error: "Failed to clear cases",
   })
 }
 
 export function useImportCaseSupplies() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { caseId: string; supplies: CaseSupplyInput[] }) =>
+  return useToastMutation(
+    (input: { caseId: string; supplies: CaseSupplyInput[] }) =>
       importCaseSupplies(input),
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.cases.all })
-      toast.success(
-        `Imported ${result.imported} supplies (${result.matched} on-contract)`
-      )
+    {
+      invalidate: [queryKeys.cases.all],
+      success: (result) =>
+        `Imported ${result.imported} supplies (${result.matched} on-contract)`,
+      error: "Failed to import supplies",
     },
-    onError: (err) => toast.error(err.message || "Failed to import supplies"),
-  })
+  )
 }
 
 export function useSurgeonScorecards(facilityId: string) {

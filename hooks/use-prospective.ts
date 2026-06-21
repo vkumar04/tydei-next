@@ -1,7 +1,8 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   createProposal,
   deleteProposal,
@@ -13,7 +14,6 @@ import {
   type VendorBenchmarkImportInput,
 } from "@/lib/actions/benchmarks"
 import { importInChunks } from "@/components/shared/uploads/chunked-import"
-import { toast } from "sonner"
 
 // Feature 5 (uploader improvement 5, 2026-06-13): a benchmark file can be
 // 10k+ rows. Import in 2000-row chunks so each importVendorBenchmarks call
@@ -29,14 +29,10 @@ const BENCHMARK_CHUNK_SIZE = 2000
 // (getVendorProspectiveAnalysis with a proposalRowId).
 
 export function useCreateProposal() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: createProposal,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["prospective"] })
-      toast.success("Proposal draft created")
-    },
-    onError: (err) => toast.error(err.message || "Failed to create proposal"),
+  return useToastMutation(createProposal, {
+    invalidate: [["prospective"]],
+    success: "Proposal draft created",
+    error: "Failed to create proposal",
   })
 }
 
@@ -59,12 +55,16 @@ export function useVendorBenchmarks(vendorId: string) {
 // Vick 2026-06-12). Invalidates the vendorBenchmarks query so the table
 // refreshes with the new rows.
 export function useImportVendorBenchmarks(vendorId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    // Feature 5: chunk the import (2000 rows/call) and surface progress.
-    // The aggregate inserted/replaced is summed across chunks by
-    // importInChunks; importVendorBenchmarks already returns both.
-    mutationFn: (input: {
+  // No `error` here (feature 5): the caller awaits mutateAsync inside the
+  // dropzone's onImport, whose catch shows the single named error toast
+  // (importVendorBenchmarks + importInChunks already produce descriptive
+  // messages). A factory `error` toast would double-toast and re-enable the
+  // dialog's button while the dropzone keeps it open for a retry.
+  return useToastMutation(
+    // Feature 5: chunk the import (2000 rows/call) and surface progress. The
+    // aggregate inserted/replaced is summed across chunks by importInChunks;
+    // importVendorBenchmarks already returns both.
+    (input: {
       items: VendorBenchmarkImportInput[]
       onProgress?: (done: number, total: number) => void
     }) =>
@@ -74,31 +74,21 @@ export function useImportVendorBenchmarks(vendorId: string) {
         importChunk: (chunk) => importVendorBenchmarks(chunk),
         onProgress: input.onProgress,
       }),
-    onSuccess: (res) => {
-      qc.invalidateQueries({
-        queryKey: ["prospective", "vendorBenchmarks", vendorId],
-      })
-      toast.success(
+    {
+      invalidate: [["prospective", "vendorBenchmarks", vendorId]],
+      success: (res) =>
         `Imported ${res.inserted} benchmark row${res.inserted === 1 ? "" : "s"}` +
-          (res.replaced > 0 ? ` (replaced ${res.replaced} prior upload row${res.replaced === 1 ? "" : "s"})` : ""),
-      )
+        (res.replaced > 0
+          ? ` (replaced ${res.replaced} prior upload row${res.replaced === 1 ? "" : "s"})`
+          : ""),
     },
-    // No onError toast here (feature 5): the caller awaits mutateAsync inside
-    // the dropzone's onImport, whose catch shows the single named error toast
-    // (importVendorBenchmarks + importInChunks already produce descriptive
-    // messages). A mutation onError would double-toast and re-enable the
-    // dialog's button while the dropzone keeps it open for a retry.
-  })
+  )
 }
 
 export function useDeleteProposal() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => deleteProposal(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["prospective"] })
-      toast.success("Proposal deleted")
-    },
-    onError: (err) => toast.error(err.message || "Failed to delete proposal"),
+  return useToastMutation((id: string) => deleteProposal(id), {
+    invalidate: [["prospective"]],
+    success: "Proposal deleted",
+    error: "Failed to delete proposal",
   })
 }

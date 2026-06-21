@@ -1,7 +1,8 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getPricingFiles,
   bulkImportPricingFiles,
@@ -9,7 +10,6 @@ import {
   deletePricingFilesByVendor,
   getUploadedPricingFiles,
 } from "@/lib/actions/pricing-files"
-import { toast } from "sonner"
 
 export function usePricingFiles(
   facilityId: string,
@@ -33,44 +33,32 @@ export function usePricingFiles(
 }
 
 export function useImportPricingFiles() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: bulkImportPricingFiles,
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.pricingFiles.all })
-      toast.success(
-        `Imported ${result.imported} pricing entries (${result.errors} errors)`
-      )
-    },
-    onError: (err) => toast.error(err.message || "Import failed"),
+  return useToastMutation(bulkImportPricingFiles, {
+    invalidate: [queryKeys.pricingFiles.all],
+    success: (result) =>
+      `Imported ${result.imported} pricing entries (${result.errors} errors)`,
+    error: "Import failed",
   })
 }
 
 export function useDeletePricingFilesByVendor() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ vendorId, facilityId }: { vendorId: string; facilityId: string }) =>
+  return useToastMutation(
+    ({ vendorId, facilityId }: { vendorId: string; facilityId: string }) =>
       deletePricingFilesByVendor(vendorId, facilityId),
-    onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.pricingFiles.all })
-      qc.invalidateQueries({ queryKey: queryKeys.cogRecords.all })
-      toast.success(
+    {
+      invalidate: [queryKeys.pricingFiles.all, queryKeys.cogRecords.all],
+      success: (result) =>
         `Deleted ${result.deleted.toLocaleString()} pricing rows`,
-      )
+      error: "Failed to delete",
     },
-    onError: (err) => toast.error(err.message || "Failed to delete"),
-  })
+  )
 }
 
 export function useDeletePricingFile() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => deletePricingFile(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.pricingFiles.all })
-      toast.success("Pricing row deleted")
-    },
-    onError: (err) => toast.error(err.message || "Failed to delete"),
+  return useToastMutation((id: string) => deletePricingFile(id), {
+    invalidate: [queryKeys.pricingFiles.all],
+    success: "Pricing row deleted",
+    error: "Failed to delete",
   })
 }
 
