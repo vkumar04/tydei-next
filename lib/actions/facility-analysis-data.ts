@@ -46,14 +46,6 @@ export interface AnalysisVendorRow {
   spendShare: number
 }
 
-/** One category×vendor spend cell (absolute $) — drives the deal-scope
- *  intersection when the user selects categories AND vendors. */
-export interface AnalysisCategoryVendorRow {
-  category: string
-  vendor: string
-  spend: number
-}
-
 export interface FacilityAnalysisData {
   currentVendorSpend: number
   netRevenue: number
@@ -64,8 +56,6 @@ export interface FacilityAnalysisData {
   avgMarginPct: number
   categories: AnalysisCategoryRow[]
   vendors: AnalysisVendorRow[]
-  /** Per category×vendor spend — for scoping the deal base by selection. */
-  categoryVendorSpend: AnalysisCategoryVendorRow[]
   /** Top-vendor share of spend (0–1) — Vendor Concentration Risk input. */
   topVendorConcentrationPct: number
   /** False when the facility has no COG yet (caller falls back to seed). */
@@ -115,36 +105,24 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
   let totalSpend = 0
   const categoryAgg = new Map<string, { spend: number; qty: number }>()
   const vendorAgg = new Map<string, { name: string; spend: number }>()
-  // category×vendor matrix, keyed `${canonCategory}|||${vendorName}` so its
-  // keys match the table rows the user selects.
-  const cvAgg = new Map<string, { category: string; vendor: string; spend: number }>()
 
   for (const r of cogRows) {
     const spend = Number(r.extendedPrice ?? 0)
     totalSpend += spend
-    const category = r.category ? canonicalizeCategoryName(r.category) : null
-    const vendorName = r.vendorId
-      ? (r.vendor?.displayName ?? r.vendor?.name ?? "Unknown vendor")
-      : null
 
-    if (category) {
-      const cur = categoryAgg.get(category) ?? { spend: 0, qty: 0 }
+    if (r.category) {
+      const key = canonicalizeCategoryName(r.category)
+      const cur = categoryAgg.get(key) ?? { spend: 0, qty: 0 }
       cur.spend += spend
       cur.qty += r.quantity ?? 0
-      categoryAgg.set(category, cur)
+      categoryAgg.set(key, cur)
     }
 
-    if (r.vendorId && vendorName) {
-      const cur = vendorAgg.get(r.vendorId) ?? { name: vendorName, spend: 0 }
+    if (r.vendorId) {
+      const name = r.vendor?.displayName ?? r.vendor?.name ?? "Unknown vendor"
+      const cur = vendorAgg.get(r.vendorId) ?? { name, spend: 0 }
       cur.spend += spend
       vendorAgg.set(r.vendorId, cur)
-    }
-
-    if (category && vendorName) {
-      const k = `${category}|||${vendorName}`
-      const cur = cvAgg.get(k) ?? { category, vendor: vendorName, spend: 0 }
-      cur.spend += spend
-      cvAgg.set(k, cur)
     }
   }
 
@@ -215,7 +193,6 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
     avgMarginPct,
     categories,
     vendors,
-    categoryVendorSpend: [...cvAgg.values()],
     topVendorConcentrationPct,
     hasData: cogRows.length > 0,
   })
