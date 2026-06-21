@@ -19,6 +19,7 @@
  */
 
 import { requireFacility } from "@/lib/actions/auth"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
@@ -68,9 +69,7 @@ const DEFAULT_MARGIN_PCT = 0.7
 export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
   const { facility } = await requireFacility()
 
-  const windowEnd = new Date()
-  const windowStart = new Date(windowEnd)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
 
   const [cogRows, cases, payorContracts] = await Promise.all([
     prisma.cOGRecord.findMany({

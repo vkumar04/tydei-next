@@ -58,6 +58,7 @@ import { extractClauses } from "@/lib/contracts/clause-extractor"
 import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 import { normalizeAIRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 // ─── Re-exported types for callers ──────────────────────────────────
 //
@@ -166,8 +167,7 @@ export async function getVendorCOGPatterns(
 ): Promise<SpendPatternAnalysis> {
   const { facility } = await requireFacility()
   try {
-  const twelveMonthsAgo = new Date()
-  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1)
+  const { start: twelveMonthsAgo } = getTrailing12MonthWindow()
 
   const [cogRows, pricingRows, facilityTotalAgg] = await Promise.all([
     prisma.cOGRecord.findMany({
@@ -567,9 +567,7 @@ export async function getVendorLookbackComparison(input: {
     }
 
     // ── Trailing-12-month lookback spend ──────────────────────────────
-    const windowEnd = new Date()
-    const windowStart = new Date(windowEnd)
-    windowStart.setFullYear(windowStart.getFullYear() - 1)
+    const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
     const spendAgg = await prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,

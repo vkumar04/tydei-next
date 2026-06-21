@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
@@ -219,8 +220,7 @@ async function runAnalysis(
   let facilityCurrentVendorRevenue: number | undefined
   let backfillWarning: string | null = null
   if (facilityEstimatedAnnualSpend == null) {
-    const oneYearAgo = new Date()
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+    const { start: oneYearAgo } = getTrailing12MonthWindow()
     // Group-vendor drift (project_group_vendor_drift): this scopes COG by
     // the bare session vendorId. Vendor orgs that span grouped vendor
     // records would under-count here, but there is no established

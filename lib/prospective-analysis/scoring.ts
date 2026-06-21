@@ -30,6 +30,8 @@
  *   minimumSpend = 0  → rebateAttainabilityScore = 10 (trivially attainable)
  */
 
+import { clamp } from "@/lib/math/clamp"
+
 export interface ProposalInput {
   // Spend / pricing
   proposedAnnualSpend: number
@@ -66,12 +68,6 @@ export const SCORE_WEIGHTS = {
   lockInRisk: 0.15,
   tco: 0.15,
 } as const
-
-function clamp(value: number, lo: number, hi: number): number {
-  if (value < lo) return lo
-  if (value > hi) return hi
-  return value
-}
 
 export function calculateProposalScores(input: ProposalInput): ProposalScores {
   // Cost savings — percent saved vs current spend, halved, clamped 0..10.

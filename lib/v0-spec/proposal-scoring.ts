@@ -3,6 +3,8 @@
  * Source: docs/facility-prospective-analysis-functionality.md §17-25.
  */
 
+import { clamp } from "@/lib/math/clamp"
+
 /**
  * Cost-savings score (0-10).
  *   savingsPct = (currentSpend − proposedAnnual) / currentSpend × 100
@@ -16,7 +18,7 @@ export function v0CostSavingsScore(input: {
   if (input.currentSpend <= 0) return { savingsPct: 0, score: 0 }
   const savingsPct =
     ((input.currentSpend - input.proposedAnnual) / input.currentSpend) * 100
-  return { savingsPct, score: clamp010(savingsPct / 2) }
+  return { savingsPct, score: clamp(savingsPct / 2, 0, 10) }
 }
 
 /**
@@ -32,7 +34,7 @@ export function v0PriceCompetitivenessScore(input: {
   if (input.benchmark <= 0) return 5
   const priceVsMarket =
     ((input.benchmark - input.proposedAnnual) / input.benchmark) * 100
-  return clamp010(5 + priceVsMarket / 4)
+  return clamp(5 + priceVsMarket / 4, 0, 10)
 }
 
 /** Rebate attainability score: already-spend-of-minimum × 5, capped at 10. */
@@ -42,7 +44,7 @@ export function v0RebateAttainabilityScore(input: {
 }): number {
   if (input.minimumSpend <= 0) return 10
   const ratio = input.currentSpend / input.minimumSpend
-  return clamp010(ratio * 5)
+  return clamp(ratio * 5, 0, 10)
 }
 
 /**
@@ -82,7 +84,7 @@ export function v0TcoScore(input: {
   if (input.priceProtection) score += 2
   if (input.paymentTerms === "net60" || input.paymentTerms === "net90") score += 1
   if (input.volumeDiscountPct > 5) score += 1
-  return clamp010(score)
+  return clamp(score, 0, 10)
 }
 
 /**
@@ -161,6 +163,3 @@ export function v0TierAttainabilityScore(input: {
   return 50
 }
 
-function clamp010(v: number): number {
-  return Math.max(0, Math.min(10, v))
-}

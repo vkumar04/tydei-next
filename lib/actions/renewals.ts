@@ -15,6 +15,7 @@ import {
   type PerformanceHistoryRow,
 } from "@/lib/renewals/performance-history"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 export interface ExpiringContract {
   id: string
@@ -81,9 +82,7 @@ async function trailing12moSpendByContract(
   const spend = new Map<string, number>()
   if (contractIds.length === 0) return spend
 
-  const windowEnd = new Date()
-  const windowStart = new Date(windowEnd)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
 
   const [periodGroups, cogGroups] = await Promise.all([
     prisma.contractPeriod.groupBy({

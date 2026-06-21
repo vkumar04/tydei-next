@@ -14,6 +14,8 @@
  * a confidence band whose width narrows as the inputs get stronger.
  */
 
+import { clamp01 } from "@/lib/math/clamp"
+
 export interface ManagedCareInput {
   /** Case-mix acuity / complexity, 0–1 (higher = more complex, better leverage). */
   caseMixAcuity: number
@@ -67,9 +69,4 @@ export function computeManagedCarePrediction(
     midpointPct: Math.round(midpointPct),
     insight: `Facility likely qualifies for ${lowPct}%–${highPct}% Medicare equivalent reimbursement based on comparable facilities.`,
   }
-}
-
-function clamp01(n: number): number {
-  if (Number.isNaN(n)) return 0
-  return Math.min(1, Math.max(0, n))
 }

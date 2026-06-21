@@ -5,6 +5,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { serialize } from "@/lib/serialize"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 export interface OffContractSpendItem {
   vendorItemNo: string
@@ -92,9 +93,7 @@ export async function getOffContractSpend(
   // (added so the card reconciled with the header) now lives only in the
   // `onContractLast12mo` sublabel, so both windows stay visible without the
   // main number silently shrinking to the header's window.
-  const windowEnd = new Date()
-  const windowStart = new Date(windowEnd)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
   const trailing12moWindow = {
     transactionDate: { gte: windowStart, lte: windowEnd },
   }

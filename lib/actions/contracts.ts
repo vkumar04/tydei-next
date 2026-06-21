@@ -49,6 +49,7 @@ import {
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 // ─── List Contracts ──────────────────────────────────────────────
 
@@ -152,9 +153,7 @@ export async function getContracts(input: ContractFilters) {
   // this bound (already documented in R5.24) because the alternative is
   // $0 for any contract that lacks ContractPeriod rollups AND has no
   // COG rows enriched with its own contractId.
-  const windowEnd = today
-  const windowStart = new Date(today)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow(today)
   const contractIds = contracts.map((c) => c.id)
   // #2 (Vick 2026-05-31): include every participating vendor of grouped
   // contracts so the tier-3 vendor-window aggregate covers the whole group.
@@ -644,9 +643,7 @@ export async function getContract(
   // If a periodId was passed, constrain the ContractPeriod aggregate to
   // that window so the displayed value matches the period filter
   // (explicit period filter overrides the 12-month default).
-  const windowEnd = new Date()
-  const windowStart = new Date(windowEnd)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
   // #2 (Vick 2026-05-31): the tier-3 vendor-window aggregate (and the
   // per-term fallback below) span the contract's full vendor set so the
   // detail "Current Spend (12mo)" card stays in lockstep with the list and

@@ -10,6 +10,8 @@
  * Reference: docs/superpowers/specs/2026-04-18-facility-dashboard-rewrite.md
  */
 
+import { clamp01 } from "@/lib/math/clamp"
+
 export interface DashboardKPIs {
   totalContractValue: number
   totalSpendYTD: number
@@ -60,13 +62,6 @@ export interface KPIInput {
 
 const EXPIRING_WINDOW_DAYS = 90
 const MS_PER_DAY = 24 * 60 * 60 * 1000
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0
-  if (value < 0) return 0
-  if (value > 1) return 1
-  return value
-}
 
 /**
  * Compute canonical dashboard KPIs from pre-aggregated inputs.

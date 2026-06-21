@@ -9,17 +9,17 @@ import {
   type CreateVendorPOInput,
 } from "@/lib/validators/purchase-orders"
 import type { POStatus, Prisma } from "@/lib/generated/prisma/client"
+import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 
 export type { CreateVendorPOInput } from "@/lib/validators/purchase-orders"
 
 // M11 (2026-06-09 audit): group-vendor drift — a contract can belong to a
-// vendor group via `additionalVendorIds`, so every vendor-relationship
-// check must use this OR clause, never bare `vendorId` equality.
-function vendorContractScope(vendorId: string): Prisma.ContractWhereInput {
-  return {
-    OR: [{ vendorId }, { additionalVendorIds: { has: vendorId } }],
-  }
-}
+// vendor group via `additionalVendorIds`, so every vendor-relationship check
+// must use the canonical ownership predicate, never bare `vendorId` equality.
+// Routed through `contractsOwnedByVendor` (invariants table) so this surface
+// can't drift from the one definition of "owned by this vendor".
+const vendorContractScope = (vendorId: string): Prisma.ContractWhereInput =>
+  contractsOwnedByVendor(vendorId)
 
 export interface VendorPORow {
   id: string

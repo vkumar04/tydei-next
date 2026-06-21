@@ -6,7 +6,112 @@ import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { computeSyntheticContractPeriods } from "@/lib/actions/contract-periods"
-import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
+import {
+  contractsOwnedByVendor,
+  contractOwnershipWhereVendor,
+} from "@/lib/actions/contracts-vendor-auth"
+import {
+  normalizeCapitalLineItems,
+  sumCapitalCost,
+  sumFinancedPrincipal,
+} from "@/lib/contracts/capital-line-items"
+import { sumRebateAppliedToCapital } from "@/lib/contracts/rebate-capital-filter"
+
+// Vendor-scoped capital balance for capital/tie_in contracts. Mirrors the
+// capitalCost / paidToDate / remainingBalance trio that `getReportData`
+// (lib/actions/reports.ts) sources from the facility-gated
+// `getContractCapitalSchedule` — but that action gates with
+// `requireFacility()` + facility ownership, so it can't run under a vendor
+// session. This recomputes ONLY those three fields from the same inputs
+// (capital line items or the capital totalValue fallback; rebate applied via
+// `sumRebateAppliedToCapital`; logged payments + credits), scoped to a
+// contract owned by / grouped with the vendor. Best-effort: a failure leaves
+// nulls and the header simply omits the capital row.
+async function getVendorContractCapitalBalance(
+  contractId: string,
+  vendorId: string,
+): Promise<{
+  capitalCost: number
+  paidToDate: number
+  remainingBalance: number
+} | null> {
+  const contract = await prisma.contract.findFirst({
+    where: contractOwnershipWhereVendor(contractId, vendorId),
+    select: {
+      id: true,
+      name: true,
+      contractType: true,
+      facilityId: true,
+      totalValue: true,
+      capitalLineItems: { orderBy: { createdAt: "asc" } },
+      payments: { select: { paymentAmount: true } },
+      creditEntries: { select: { creditAmount: true } },
+      rebates: { select: { collectionDate: true, rebateCollected: true } },
+    },
+  })
+  if (!contract) return null
+
+  // Logged payments + credits pay down capital regardless of a financing
+  // schedule (mirrors the facility action).
+  const paymentsAppliedToCapital =
+    contract.payments.reduce((s, p) => s + Number(p.paymentAmount), 0) +
+    contract.creditEntries.reduce((s, c) => s + Number(c.creditAmount), 0)
+
+  const lineItems = normalizeCapitalLineItems(contract)
+
+  if (lineItems.length === 0) {
+    // No per-asset line items: only a pure `capital` contract uses
+    // totalValue as the capital cost (a tie_in's totalValue is a commitment
+    // ceiling, not capital). `!(x > 0)` also rejects NaN.
+    const capitalCost =
+      contract.contractType === "capital" ? Number(contract.totalValue) : 0
+    if (!(capitalCost > 0)) return null
+    const rebateAppliedToCapital = sumRebateAppliedToCapital(
+      contract.rebates,
+      contract.contractType === "capital" ? "tie_in" : contract.contractType,
+    )
+    const paidToDate = rebateAppliedToCapital + paymentsAppliedToCapital
+    return {
+      capitalCost,
+      paidToDate,
+      remainingBalance: Math.max(0, capitalCost - paidToDate),
+    }
+  }
+
+  const capitalCost = sumCapitalCost(lineItems)
+  const financedPrincipal = sumFinancedPrincipal(lineItems)
+  if (financedPrincipal <= 0) return null
+
+  // Combine own + sibling rebates: a separate-row `capital` contract is paid
+  // down by the usage contracts that point at it via tieInCapitalContractId
+  // (scoped to the contract's own facility — COG/rebate are per-facility).
+  const isCapital = contract.contractType === "capital"
+  const isTieIn = contract.contractType === "tie_in"
+  const allRebates = isTieIn ? [...contract.rebates] : []
+  if (isCapital) {
+    const siblingRebates = await prisma.rebate.findMany({
+      where: {
+        contract: {
+          tieInCapitalContractId: contract.id,
+          facilityId: contract.facilityId,
+        },
+      },
+      select: { collectionDate: true, rebateCollected: true },
+    })
+    allRebates.push(...siblingRebates)
+    if (contract.rebates.length > 0) allRebates.push(...contract.rebates)
+  }
+  const rebateAppliedToCapital = sumRebateAppliedToCapital(
+    allRebates,
+    isCapital ? "tie_in" : contract.contractType,
+  )
+  const paidToDate = rebateAppliedToCapital + paymentsAppliedToCapital
+  return {
+    capitalCost,
+    paidToDate,
+    remainingBalance: Math.max(0, financedPrincipal - paidToDate),
+  }
+}
 
 // ─── Vendor Report Data ──────────────────────────────────────────
 //
@@ -211,6 +316,25 @@ export async function getVendorReportData(input: {
           }))
       }
 
+      // Capital balance for capital/tie-in contracts — mirrors the facility
+      // report (Charles 2026-06-20 "the balances are not coming in"). Vendor-
+      // scoped because the facility action can't run under a vendor session.
+      let capitalCost: number | null = null
+      let capitalPaidToDate: number | null = null
+      let capitalRemainingBalance: number | null = null
+      if (c.contractType === "capital" || c.contractType === "tie_in") {
+        try {
+          const bal = await getVendorContractCapitalBalance(c.id, vendor.id)
+          if (bal && bal.capitalCost > 0) {
+            capitalCost = bal.capitalCost
+            capitalPaidToDate = bal.paidToDate
+            capitalRemainingBalance = bal.remainingBalance
+          }
+        } catch {
+          // leave nulls — header simply omits the capital balance row
+        }
+      }
+
       return {
         id: c.id,
         name: c.name,
@@ -229,6 +353,10 @@ export async function getVendorReportData(input: {
         rebateEarnedCanonical,
         rebateCollectedCanonical: sumCollectedRebates(c.rebates),
         marginCanonical: rebateEarnedCanonical - paymentActualSum,
+        // Capital balance trio (null for non-capital contracts).
+        capitalCost,
+        capitalPaidToDate,
+        capitalRemainingBalance,
         periods: periodRows,
       }
     }),

@@ -7,6 +7,7 @@
  * debt split). Re-exported from there for backward-compat.
  */
 import { prisma } from "@/lib/db"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
@@ -772,9 +773,7 @@ export async function getContractCapitalSchedule(
 
   // Rolling-12 spend cascade (mirrors `getContract` in lib/actions/
   // contracts.ts so the card agrees with the detail header).
-  const windowEnd = new Date()
-  const windowStart = new Date(windowEnd)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
   const [cogAgg, cogVendorAgg, periodAgg] = await Promise.all([
     prisma.cOGRecord.aggregate({
       where: {

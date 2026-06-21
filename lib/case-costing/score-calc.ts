@@ -8,6 +8,8 @@
  * Pure functions — no DB, no side effects.
  */
 
+import { clamp0100 } from "@/lib/math/clamp"
+
 export type ScoreColor = "green" | "amber" | "red"
 
 export interface ScoreInput {
@@ -47,8 +49,6 @@ export interface SurgeonScoreResult {
   color: ScoreColor
 }
 
-const clamp100 = (v: number): number => Math.max(0, Math.min(100, v))
-
 /**
  * Compute surgeon scores — v0 5-dimension formula
  * (docs/contract-calculations.md §8 + facility-case-costing §14).
@@ -75,8 +75,8 @@ export function calculateSurgeonScores(input: ScoreInput): SurgeonScoreResult {
     input.totalPayors > 0
       ? (input.commercialOrPrivatePayors / input.totalPayors) * 100
       : 0
-  const bmiScore = clamp100(input.bmiUnder40Pct ?? 80)
-  const ageScore = clamp100(input.ageUnder65Pct ?? 70)
+  const bmiScore = clamp0100(input.bmiUnder40Pct ?? 80)
+  const ageScore = clamp0100(input.ageUnder65Pct ?? 70)
   const spendScore = Math.max(0, 100 - input.avgSpendPerCase / 500)
   // Audit M9: missing OR time scores 0 (doc'd behavior). Defaulting the
   // `??` to 0 minutes silently awarded a perfect 100.

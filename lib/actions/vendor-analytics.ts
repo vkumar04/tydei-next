@@ -12,6 +12,7 @@ import {
 } from "@/lib/categories/resolve"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import {
   computeVendorCompliance,
   computeContractCompliance,
@@ -266,8 +267,7 @@ export async function getVendorPerformance(_vendorId?: string): Promise<VendorPe
   // source per CLAUDE.md (cOGRecord, not the sparse ContractPeriod
   // rollup — see `getVendorSpendTrend` rationale).
   const now = new Date()
-  const trailing12MoStart = new Date(now)
-  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+  const { start: trailing12MoStart } = getTrailing12MonthWindow(now)
 
   const [contractCount, activeFacilities, cogAgg, rebateRows, contracts] =
     await Promise.all([
@@ -353,8 +353,7 @@ export async function getVendorPerformanceCategoryBreakdown(
   const vendorId = sessionVendor.id
 
   const now = new Date()
-  const trailing12MoStart = new Date(now)
-  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+  const { start: trailing12MoStart } = getTrailing12MonthWindow(now)
   const prior12MoStart = new Date(trailing12MoStart)
   prior12MoStart.setMonth(prior12MoStart.getMonth() - 12)
 
@@ -426,8 +425,7 @@ export async function getVendorPerformanceMonthlyTrend(
   const vendorId = sessionVendor.id
 
   const now = new Date()
-  const from = new Date(now)
-  from.setMonth(from.getMonth() - 12)
+  const { start: from } = getTrailing12MonthWindow(now)
 
   const [cogRows, rebateRows] = await Promise.all([
     prisma.cOGRecord.findMany({
@@ -483,8 +481,7 @@ export async function getVendorPerformanceTiers(
   const vendorId = sessionVendor.id
 
   const now = new Date()
-  const trailing12MoStart = new Date(now)
-  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+  const { start: trailing12MoStart } = getTrailing12MonthWindow(now)
 
   const contracts = await prisma.contract.findMany({
     where: { vendorId, status: "active" },
@@ -581,8 +578,7 @@ export async function getVendorPerformanceContracts(
   const vendorId = sessionVendor.id
 
   const now = new Date()
-  const trailing12MoStart = new Date(now)
-  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+  const { start: trailing12MoStart } = getTrailing12MonthWindow(now)
 
   const contracts = await prisma.contract.findMany({
     where: { vendorId, status: "active" },
