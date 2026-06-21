@@ -26,7 +26,8 @@ const pct1 = (n: number) => `${n.toFixed(1)}%`
 
 // ─── CSV ────────────────────────────────────────────────────────
 
-export function downloadAnalysisCsv(model: DashboardModel): void {
+/** Pure: build the CSV string for the Current State analysis (testable). */
+export function buildAnalysisCsv(model: DashboardModel): string {
   const { current, impact } = model.prospective
 
   const summary = toCSV({
@@ -105,8 +106,12 @@ export function downloadAnalysisCsv(model: DashboardModel): void {
     ev,
   ].join("\n")
 
+  return csv
+}
+
+export function downloadAnalysisCsv(model: DashboardModel): void {
   triggerDownload(
-    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    new Blob([buildAnalysisCsv(model)], { type: "text/csv;charset=utf-8" }),
     buildReportFilename("Current State Analysis"),
   )
 }

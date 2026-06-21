@@ -29,11 +29,12 @@ function triggerDownload(blob: Blob, filename: string): void {
 
 const pct = (n: number) => formatPercent(n * 100)
 
-export function downloadOpportunityCsv(
+/** Pure: build the CSV string for the deal scenario (testable). */
+export function buildOpportunityCsv(
   engine: OpportunityEngineResult,
   score: VendorOpportunityScore,
   scenario: OpportunityScenarioMeta,
-): void {
+): string {
   const outputs = toCSV({
     columns: [
       { key: "metric", label: "Metric" },
@@ -80,8 +81,18 @@ export function downloadOpportunityCsv(
     score.recommendedOffer.items.map((i) => `,${i.replace(/,/g, ";")}`).join("\n"),
   ].join("\n")
 
+  return csv
+}
+
+export function downloadOpportunityCsv(
+  engine: OpportunityEngineResult,
+  score: VendorOpportunityScore,
+  scenario: OpportunityScenarioMeta,
+): void {
   triggerDownload(
-    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    new Blob([buildOpportunityCsv(engine, score, scenario)], {
+      type: "text/csv;charset=utf-8",
+    }),
     buildReportFilename("Opportunity Engine Scenario"),
   )
 }
