@@ -88,6 +88,10 @@ interface ContractRow {
   // marginCanonical = rebateEarnedCanonical − Σ period.paymentActual
   // (computed server-side in getReportData).
   marginCanonical: number
+  // Capital balance trio — null for non-capital/tie-in contracts.
+  capitalCost?: number | null
+  capitalPaidToDate?: number | null
+  capitalRemainingBalance?: number | null
   periods: ContractPeriodRow[]
 }
 
@@ -211,6 +215,8 @@ export function ReportsPerTypeTab({
           expirationDate={drillDownContract.expirationDate}
           totalValue={drillDownContract.totalValue}
           margin={drillDownContract.marginCanonical}
+          capitalPaidToDate={drillDownContract.capitalPaidToDate}
+          capitalRemainingBalance={drillDownContract.capitalRemainingBalance}
           dateFrom={dateRange.from}
           dateTo={dateRange.to}
         />

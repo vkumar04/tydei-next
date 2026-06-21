@@ -20,6 +20,9 @@ interface ReportContractHeaderProps {
   margin: number
   dateFrom: string
   dateTo: string
+  /** Capital balance trio — present only for capital/tie-in contracts. */
+  capitalPaidToDate?: number | null
+  capitalRemainingBalance?: number | null
 }
 
 // ContractType enum → human label.
@@ -74,6 +77,8 @@ export function ReportContractHeader({
   margin,
   dateFrom,
   dateTo,
+  capitalPaidToDate,
+  capitalRemainingBalance,
 }: ReportContractHeaderProps) {
   return (
     <Card className="mb-6 overflow-hidden p-0">
@@ -93,6 +98,17 @@ export function ReportContractHeader({
         />
         <Field label="Contract Total" value={formatCurrency(totalValue)} />
         <Field label="Contract Margin" value={formatCurrency(margin)} />
+        {/* Capital paydown — only for capital/tie-in contracts that carry a
+            capital cost (Charles 2026-06-20 "the balances are not coming in"). */}
+        {capitalRemainingBalance != null && (
+          <Field
+            label="Capital Balance"
+            value={formatCurrency(capitalRemainingBalance)}
+          />
+        )}
+        {capitalPaidToDate != null && (
+          <Field label="Paid To Date" value={formatCurrency(capitalPaidToDate)} />
+        )}
       </div>
     </Card>
   )

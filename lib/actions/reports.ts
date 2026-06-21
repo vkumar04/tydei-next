@@ -6,6 +6,7 @@ import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { computeSyntheticContractPeriods } from "@/lib/actions/contract-periods"
+import { getContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
 
 // ─── Contracts List (for report selector) ───────────────────────
 
@@ -211,6 +212,28 @@ export async function getReportData(input: {
           }))
       }
 
+      // Capital balance for capital/tie-in contracts (Charles 2026-06-20 "the
+      // balances are not coming in"). Route through the canonical
+      // getContractCapitalSchedule — capitalCost (line items or totalValue),
+      // paidToDate (rebate applied + logged payments/credits), and the
+      // remaining balance. Best-effort: a schedule failure must not fail the
+      // whole report.
+      let capitalCost: number | null = null
+      let capitalPaidToDate: number | null = null
+      let capitalRemainingBalance: number | null = null
+      if (c.contractType === "capital" || c.contractType === "tie_in") {
+        try {
+          const sched = await getContractCapitalSchedule(c.id)
+          if (sched.capitalCost > 0) {
+            capitalCost = sched.capitalCost
+            capitalPaidToDate = sched.paidToDate
+            capitalRemainingBalance = sched.remainingBalance
+          }
+        } catch {
+          // leave nulls — header simply omits the capital balance row
+        }
+      }
+
       return {
         id: c.id,
         name: c.name,
@@ -229,6 +252,10 @@ export async function getReportData(input: {
         rebateEarnedCanonical,
         rebateCollectedCanonical: sumCollectedRebates(c.rebates),
         marginCanonical: rebateEarnedCanonical - paymentActualSum,
+        // Capital balance trio (null for non-capital contracts).
+        capitalCost,
+        capitalPaidToDate,
+        capitalRemainingBalance,
         periods: periodRows,
       }
     }),
