@@ -1,7 +1,8 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useAlertMutation } from "@/hooks/use-alert-mutation"
 import {
   getVendorAlerts,
   resolveVendorAlert,
@@ -12,7 +13,8 @@ import {
   markAllVendorAlertsRead,
 } from "@/lib/actions/vendor-alerts"
 import type { AlertType, AlertSeverity, AlertStatus } from "@/lib/generated/prisma/client"
-import { toast } from "sonner"
+
+const INVALIDATE = [queryKeys.alerts.all]
 
 export function useVendorAlerts(
   vendorId: string,
@@ -31,77 +33,51 @@ export function useVendorAlerts(
 }
 
 export function useResolveVendorAlert() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: resolveVendorAlert,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
-      toast.success("Alert resolved")
-    },
-    onError: (e) => toast.error(e.message || "Failed to resolve alert"),
+  return useAlertMutation(resolveVendorAlert, {
+    invalidate: INVALIDATE,
+    success: () => "Alert resolved",
+    error: "Failed to resolve alert",
   })
 }
 
 export function useDismissVendorAlert() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: dismissVendorAlert,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
-      toast.success("Alert dismissed")
-    },
-    onError: (e) => toast.error(e.message || "Failed to dismiss alert"),
+  return useAlertMutation(dismissVendorAlert, {
+    invalidate: INVALIDATE,
+    success: () => "Alert dismissed",
+    error: "Failed to dismiss alert",
   })
 }
 
 export function useBulkResolveVendorAlerts() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: bulkResolveVendorAlerts,
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
-      toast.success(`${data.resolved} alert(s) resolved`)
-    },
-    onError: (e) => toast.error(e.message || "Failed to resolve alerts"),
+  return useAlertMutation(bulkResolveVendorAlerts, {
+    invalidate: INVALIDATE,
+    success: (d) => `${d.resolved} alert(s) resolved`,
+    error: "Failed to resolve alerts",
   })
 }
 
 export function useBulkDismissVendorAlerts() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: bulkDismissVendorAlerts,
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
-      toast.success(`${data.dismissed} alert(s) dismissed`)
-    },
-    onError: (e) => toast.error(e.message || "Failed to dismiss alerts"),
+  return useAlertMutation(bulkDismissVendorAlerts, {
+    invalidate: INVALIDATE,
+    success: (d) => `${d.dismissed} alert(s) dismissed`,
+    error: "Failed to dismiss alerts",
   })
 }
 
 export function useBulkMarkVendorAlertsRead() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: bulkMarkVendorAlertsRead,
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
-      toast.success(
-        data.updated > 0 ? `${data.updated} alert(s) marked read` : "No unread alerts",
-      )
-    },
-    onError: (e) => toast.error(e.message || "Failed to mark read"),
+  return useAlertMutation(bulkMarkVendorAlertsRead, {
+    invalidate: INVALIDATE,
+    success: (d) =>
+      d.updated > 0 ? `${d.updated} alert(s) marked read` : "No unread alerts",
+    error: "Failed to mark read",
   })
 }
 
 export function useMarkAllVendorAlertsRead() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => markAllVendorAlertsRead(),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
-      toast.success(
-        data.updated > 0 ? `${data.updated} alert(s) marked read` : "No unread alerts",
-      )
-    },
-    onError: (e) => toast.error(e.message || "Failed to mark all read"),
+  return useAlertMutation<void, { updated: number }>(() => markAllVendorAlertsRead(), {
+    invalidate: INVALIDATE,
+    success: (d) =>
+      d.updated > 0 ? `${d.updated} alert(s) marked read` : "No unread alerts",
+    error: "Failed to mark all read",
   })
 }

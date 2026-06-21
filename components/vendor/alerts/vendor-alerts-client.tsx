@@ -5,10 +5,12 @@ import { AlertTriangle, Bell, Check, CheckCircle2 } from "lucide-react"
 
 import { AlertsInbox } from "@/components/shared/alerts/alerts-inbox"
 import type { AlertRowItem } from "@/components/shared/alerts/alerts-row"
-import type { StatusFilterValue } from "@/components/shared/alerts/alerts-toolbar"
+import {
+  serverStatusFor,
+  type StatusFilterValue,
+} from "@/components/shared/alerts/alerts-toolbar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { AlertFilters } from "@/lib/validators/alerts"
 import {
   useBulkDismissVendorAlerts,
   useBulkMarkVendorAlertsRead,
@@ -20,21 +22,6 @@ import {
 } from "@/hooks/use-vendor-alerts"
 
 const PAGE_SIZE = 100
-
-function serverStatusFor(
-  status: StatusFilterValue,
-): AlertFilters["status"] | undefined {
-  switch (status) {
-    case "resolved":
-      return "resolved"
-    case "dismissed":
-      return "dismissed"
-    case "open":
-    case "all":
-    default:
-      return undefined
-  }
-}
 
 export function VendorAlertsClient() {
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("open")

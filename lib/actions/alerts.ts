@@ -11,6 +11,7 @@ import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
 import { excludeSpendTargetAlerts } from "@/lib/alerts/spend-target-filter"
 import { excludeVendorProposalAlerts } from "@/lib/alerts/vendor-proposal-filter"
 import { openAlertWhere, inboxAlertScope, type AlertScope } from "@/lib/alerts/alert-scope"
+import { aggregateAlertCounts } from "@/lib/alerts/alert-counts"
 import {
   planBulkAction,
   type BulkAlertAction,
@@ -42,45 +43,6 @@ import {
  *   - activeTotal    — ACTIVE row count
  *   - unread         — new_alert row count
  */
-export interface AlertCounts {
-  byStatus: Record<string, number>
-  bySeverity: Record<string, number>
-  byType: Record<string, number>
-  activeTotal: number
-  unread: number
-}
-
-const ACTIVE_STATUSES = new Set(["new_alert", "read"])
-
-async function aggregateAlertCounts(
-  baseScope: Prisma.AlertWhereInput[],
-): Promise<AlertCounts> {
-  const grouped = await prisma.alert.groupBy({
-    by: ["status", "severity", "alertType"],
-    where: { AND: baseScope },
-    _count: { _all: true },
-  })
-
-  const counts: AlertCounts = {
-    byStatus: {},
-    bySeverity: {},
-    byType: {},
-    activeTotal: 0,
-    unread: 0,
-  }
-  for (const g of grouped) {
-    const n = g._count._all
-    counts.byStatus[g.status] = (counts.byStatus[g.status] ?? 0) + n
-    if (ACTIVE_STATUSES.has(g.status)) {
-      counts.activeTotal += n
-      counts.bySeverity[g.severity] = (counts.bySeverity[g.severity] ?? 0) + n
-      counts.byType[g.alertType] = (counts.byType[g.alertType] ?? 0) + n
-    }
-    if (g.status === "new_alert") counts.unread += n
-  }
-  return counts
-}
-
 export async function getAlerts(input: AlertFilters) {
   const { facility } = await requireFacility()
   const filters = alertFiltersSchema.parse(input)

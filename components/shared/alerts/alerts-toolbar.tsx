@@ -17,6 +17,26 @@ import { alertTypeIconConfig } from "./alert-config"
 export type StatusFilterValue = "open" | "resolved" | "dismissed" | "all"
 export type SeverityFilterValue = "all" | "high" | "medium" | "low"
 
+/**
+ * Map the inbox status filter to the server `status` param. "open"/"all" →
+ * undefined (server default = new_alert+read). Shared by the facility AND
+ * vendor inbox wrappers so the mapping lives in one place.
+ */
+export function serverStatusFor(
+  status: StatusFilterValue,
+): "resolved" | "dismissed" | undefined {
+  switch (status) {
+    case "resolved":
+      return "resolved"
+    case "dismissed":
+      return "dismissed"
+    case "open":
+    case "all":
+    default:
+      return undefined
+  }
+}
+
 interface AlertsToolbarProps {
   search: string
   onSearchChange: (value: string) => void

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useAlertMutation } from "@/hooks/use-alert-mutation"
 import {
   getAlerts,
   getAlert,
@@ -16,19 +17,12 @@ import {
 } from "@/lib/actions/alerts"
 import type { AlertFilters } from "@/lib/validators/alerts"
 import type { BulkAlertAction } from "@/lib/alerts/bulk-actions"
-import type { QueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
-/**
- * Invalidate every surface an alert mutation affects: the Alerts page +
- * header badge (`alerts.*`) AND the dashboard "Open Alerts" KPI
- * (`dashboard.*`). The dashboard KPI has no refetchInterval, so without this
- * it stayed stale after resolve/dismiss until a full reload (2026-06-21).
- */
-function invalidateAlertSurfaces(qc: QueryClient): void {
-  qc.invalidateQueries({ queryKey: queryKeys.alerts.all })
-  qc.invalidateQueries({ queryKey: queryKeys.dashboard.all })
-}
+// An alert mutation refreshes the Alerts page + header badge (`alerts.*`) AND
+// the dashboard "Open Alerts" KPI (`dashboard.*`) — the dashboard KPI has no
+// refetchInterval, so it would otherwise stay stale after resolve/dismiss.
+const INVALIDATE = [queryKeys.alerts.all, queryKeys.dashboard.all]
 
 export function useAlerts(facilityId: string, filters: Partial<AlertFilters> = {}) {
   return useQuery({
@@ -54,70 +48,50 @@ export function useUnreadAlertCount(facilityId: string) {
 }
 
 export function useResolveAlert() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: resolveAlert,
-    onSuccess: () => {
-      invalidateAlertSurfaces(qc)
-      toast.success("Alert resolved")
-    },
-    onError: (e) => toast.error(e.message || "Failed to resolve alert"),
+  return useAlertMutation(resolveAlert, {
+    invalidate: INVALIDATE,
+    success: () => "Alert resolved",
+    error: "Failed to resolve alert",
   })
 }
 
 export function useDismissAlert() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: dismissAlert,
-    onSuccess: () => {
-      invalidateAlertSurfaces(qc)
-      toast.success("Alert dismissed")
-    },
-    onError: (e) => toast.error(e.message || "Failed to dismiss alert"),
+  return useAlertMutation(dismissAlert, {
+    invalidate: INVALIDATE,
+    success: () => "Alert dismissed",
+    error: "Failed to dismiss alert",
   })
 }
 
+// Silent on purpose: auto-fired when a user opens an alert detail — no toast.
 export function useMarkAlertRead() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: markAlertRead,
-    onSuccess: () => {
-      invalidateAlertSurfaces(qc)
-    },
-  })
+  return useAlertMutation(markAlertRead, { invalidate: INVALIDATE })
 }
 
 export function useBulkResolveAlerts() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: bulkResolveAlerts,
-    onSuccess: (data) => {
-      invalidateAlertSurfaces(qc)
-      toast.success(`${data.resolved} alert(s) resolved`)
-    },
-    onError: (e) => toast.error(e.message || "Failed to resolve alerts"),
+  return useAlertMutation(bulkResolveAlerts, {
+    invalidate: INVALIDATE,
+    success: (d) => `${d.resolved} alert(s) resolved`,
+    error: "Failed to resolve alerts",
   })
 }
 
 export function useBulkDismissAlerts() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: bulkDismissAlerts,
-    onSuccess: (data) => {
-      invalidateAlertSurfaces(qc)
-      toast.success(`${data.dismissed} alert(s) dismissed`)
-    },
-    onError: (e) => toast.error(e.message || "Failed to dismiss alerts"),
+  return useAlertMutation(bulkDismissAlerts, {
+    invalidate: INVALIDATE,
+    success: (d) => `${d.dismissed} alert(s) dismissed`,
+    error: "Failed to dismiss alerts",
   })
 }
 
+// Kept custom: the success message depends on the `action` variable.
 export function useBulkUpdateAlerts() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: { alertIds: string[]; action: BulkAlertAction }) =>
       bulkUpdateAlerts(input),
     onSuccess: (data, variables) => {
-      invalidateAlertSurfaces(qc)
+      for (const key of INVALIDATE) qc.invalidateQueries({ queryKey: key })
       const verb =
         variables.action === "mark_read"
           ? "marked read"
@@ -132,17 +106,10 @@ export function useBulkUpdateAlerts() {
 }
 
 export function useMarkAllAlertsRead() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => markAllAlertsRead(),
-    onSuccess: (data) => {
-      invalidateAlertSurfaces(qc)
-      toast.success(
-        data.updated > 0
-          ? `${data.updated} alert(s) marked read`
-          : "No unread alerts",
-      )
-    },
-    onError: (e) => toast.error(e.message || "Failed to mark all read"),
+  return useAlertMutation<void, { updated: number }>(() => markAllAlertsRead(), {
+    invalidate: INVALIDATE,
+    success: (d) =>
+      d.updated > 0 ? `${d.updated} alert(s) marked read` : "No unread alerts",
+    error: "Failed to mark all read",
   })
 }
