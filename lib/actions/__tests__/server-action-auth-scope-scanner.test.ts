@@ -257,10 +257,13 @@ async function scanFile(
  * fail the test, which is the regression catcher.
  */
 const BASELINE_HITS = new Set<string>([
-  // ai/document-index.ts: helpers called from gated AI actions only
-  "lib/actions/ai/document-index.ts:55",
-  "lib/actions/ai/document-index.ts:80",
-  "lib/actions/ai/document-index.ts:101",
+  // ai/document-index.ts: indexStatus updates (by id) in helpers called from
+  // gated AI actions only. The ownership read at the top is now a single scoped
+  // findFirst (contract: contractsOwnedByFacility) — auto-exempt. Lines bumped
+  // 2026-06-21 after that fold-in added a few lines above these updates.
+  "lib/actions/ai/document-index.ts:59",
+  "lib/actions/ai/document-index.ts:84",
+  "lib/actions/ai/document-index.ts:105",
   // ai-credits.ts: FIXED 2026-06-09 (audit BLOCKER) — all actions now
   // session-tenant-scoped via sessionTenant()/requireOwnedCredit; the
   // remaining by-id ops carry auth-scope-scanner-skip comments.

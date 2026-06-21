@@ -20,16 +20,34 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { filename, contentType, folder = "uploads" } = body as {
+    const { filename, contentType, folder = "uploads", size } = body as {
       filename: string
       contentType: string
       folder?: string
+      size?: number
     }
 
     if (!filename || !contentType) {
       return NextResponse.json(
         { error: "filename and contentType are required" },
         { status: 400 }
+      )
+    }
+
+    // Require a declared size and cap it so the signed URL can't be used to PUT
+    // an unbounded object (storage-cost abuse). ContentLength is bound into the
+    // signature below. (Security audit 2026-06-21.)
+    const MAX_BYTES = 100 * 1024 * 1024
+    if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) {
+      return NextResponse.json(
+        { error: "A positive numeric file size is required" },
+        { status: 400 }
+      )
+    }
+    if (size > MAX_BYTES) {
+      return NextResponse.json(
+        { error: "File too large. Maximum size is 100MB." },
+        { status: 413 }
       )
     }
 
@@ -65,7 +83,7 @@ export async function POST(request: Request) {
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_")
     const key = `${folder}/${userId}/${timestamp}-${safeName}`
 
-    const { uploadUrl } = await getUploadPresignedUrl(key, contentType)
+    const { uploadUrl } = await getUploadPresignedUrl(key, contentType, 300, size)
 
     return NextResponse.json({ uploadUrl, key })
   } catch (error) {

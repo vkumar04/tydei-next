@@ -45,15 +45,27 @@ const CSV_HEADERS = [
   "notes",
 ] as const
 
-// RFC 4180 — quote if value contains comma, quote, CR, or LF.
-// Escape embedded quotes by doubling them.
+// RFC 4180 — quote if value contains comma, quote, CR, or LF; escape embedded
+// quotes by doubling. PLUS formula-injection defense: COG free-text fields
+// (description/category/notes) come from operator-uploaded files, so neutralize
+// any leading =,+,-,@,tab,CR by prefixing a single quote before Excel/Sheets
+// can evaluate it as a formula (security audit 2026-06-21).
 const csvEscape = (raw: unknown): string => {
   if (raw === null || raw === undefined) return ""
-  const s = typeof raw === "string" ? raw : String(raw)
+  let s = typeof raw === "string" ? raw : String(raw)
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
   if (/[",\r\n]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`
   }
   return s
+}
+
+// Parse a query-param date, returning undefined for missing/invalid values
+// (an unguarded `new Date("garbage")` yields an Invalid Date that Prisma rejects).
+const parseQueryDate = (raw: string | undefined): Date | undefined => {
+  if (!raw) return undefined
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? undefined : d
 }
 
 const formatDate = (d: Date | null | undefined): string => {
@@ -99,11 +111,13 @@ export async function GET(request: Request) {
     { facilityId: facility.id },
   ]
   if (vendorId) conditions.push({ vendorId })
-  if (dateFrom) {
-    conditions.push({ transactionDate: { gte: new Date(dateFrom) } })
+  const gteDate = parseQueryDate(dateFrom)
+  const lteDate = parseQueryDate(dateTo)
+  if (gteDate) {
+    conditions.push({ transactionDate: { gte: gteDate } })
   }
-  if (dateTo) {
-    conditions.push({ transactionDate: { lte: new Date(dateTo) } })
+  if (lteDate) {
+    conditions.push({ transactionDate: { lte: lteDate } })
   }
   if (matchStatus === "price_variance" || matchStatus === "off_contract_item") {
     conditions.push({ matchStatus })

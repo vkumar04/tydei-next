@@ -20,7 +20,7 @@ import {
 import { searchIndexedDocuments, type IndexedPage } from "@/lib/ai/document-search"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 
 /**
  * Index the uploaded document. The caller has already:
@@ -41,15 +41,19 @@ export async function indexContractDocument(input: {
   const { facility } = session
   await requireCanMutate()
 
-  // Ownership check via the parent contract.
-  const document = await prisma.contractDocument.findUniqueOrThrow({
-    where: { id: input.documentId },
-    include: { contract: { select: { id: true } } },
-  })
-  await prisma.contract.findUniqueOrThrow({
-    where: contractOwnershipWhere(document.contract.id, facility.id),
+  // Ownership check folded into the document read: one scoped query, so a
+  // foreign documentId can never be fetched (no unscoped-then-check ordering
+  // for a future refactor to trip over). 404 on miss. (Audit 2026-06-21.)
+  const document = await prisma.contractDocument.findFirst({
+    where: {
+      id: input.documentId,
+      contract: { is: contractsOwnedByFacility(facility.id) },
+    },
     select: { id: true },
   })
+  if (!document) {
+    throw new Error("Document not found")
+  }
 
   // Mark as processing.
   await prisma.contractDocument.update({

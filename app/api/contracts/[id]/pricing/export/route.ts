@@ -25,11 +25,14 @@ const CSV_HEADERS = [
   "expirationDate",
 ] as const
 
-// RFC 4180 — quote if value contains comma, quote, CR, or LF; double
-// embedded quotes.
+// RFC 4180 — quote if value contains comma, quote, CR, or LF; double embedded
+// quotes. PLUS formula-injection defense: description/category/uom come from
+// uploaded contract pricing files, so neutralize a leading =,+,-,@,tab,CR by
+// prefixing a single quote (security audit 2026-06-21).
 const csvEscape = (raw: unknown): string => {
   if (raw === null || raw === undefined) return ""
-  const s = typeof raw === "string" ? raw : String(raw)
+  let s = typeof raw === "string" ? raw : String(raw)
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
   if (/[",\r\n]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`
   }
