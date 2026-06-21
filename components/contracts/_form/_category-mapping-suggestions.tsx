@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { getCategorySuggestions as getCategorySuggestionsAction } from "@/lib/actions/contracts/category-suggestions"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * Charles 2026-04-25: surface other contracts at the facility that
@@ -25,7 +26,7 @@ export function CategoryMappingSuggestions({
   const categoryName =
     resolvedCategories.find((c) => c.id === firstCatId)?.name ?? null
   const { data } = useQuery({
-    queryKey: ["category-suggestions", categoryName],
+    queryKey: queryKeys.categories.suggestions(categoryName),
     queryFn: () =>
       categoryName
         ? getCategorySuggestionsAction({ category: categoryName })

@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getTieInCompliance } from "@/lib/actions/analytics/tie-in-compliance"
+import { queryKeys } from "@/lib/query-keys"
 import { toneSublabelClass } from "@/lib/ui/tone-colors"
 
 const fmtUsd = (n: number) =>
@@ -45,7 +46,7 @@ export function TieInComplianceCard({
     useState<"all_or_nothing" | "proportional">("all_or_nothing")
 
   const { data, isLoading } = useQuery({
-    queryKey: ["analytics", "tieInCompliance", contractId, mode],
+    queryKey: queryKeys.contracts.tieInCompliance(contractId, mode),
     queryFn: () => getTieInCompliance(contractId, mode),
     // initialData only seeds when the dialog opens in the default
     // all_or_nothing mode — switching to proportional triggers a

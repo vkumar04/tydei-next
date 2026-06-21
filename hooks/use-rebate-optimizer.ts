@@ -48,6 +48,6 @@ export function useSetSpendTarget() {
       targetSpend: number
       targetDate: string
     }) => setSpendTarget(input),
-    { invalidate: [["rebateOptimizer"]] },
+    { invalidate: [queryKeys.rebateOptimizer.all] },
   )
 }

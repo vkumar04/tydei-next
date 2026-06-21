@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { getCptCodesForFacility } from "@/lib/actions/case-costing/cases-list"
+import { queryKeys } from "@/lib/query-keys"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 
@@ -22,7 +23,7 @@ export function CptCodeList({
 }) {
   const [draft, setDraft] = useState("")
   const { data: caseCptCodes } = useQuery({
-    queryKey: ["contract-terms", "cpt-options"] as const,
+    queryKey: queryKeys.contractTerms.cptOptions(),
     queryFn: () => getCptCodesForFacility(),
     staleTime: 5 * 60_000,
   })

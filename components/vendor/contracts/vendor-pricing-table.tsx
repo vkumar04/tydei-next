@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/lib/formatting"
 import { getVendorContractPricing } from "@/lib/actions/pricing-files"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * 2026-06-09 facility→vendor UI parity ("the UI on vendor side needs to
@@ -19,7 +20,7 @@ import { getVendorContractPricing } from "@/lib/actions/pricing-files"
 export function VendorPricingTable({ contractId }: { contractId: string }) {
   const [search, setSearch] = useState("")
   const { data, isLoading } = useQuery({
-    queryKey: ["vendor-contract-pricing", contractId],
+    queryKey: queryKeys.contracts.vendorPricing(contractId),
     queryFn: () => getVendorContractPricing(contractId),
     staleTime: 5 * 60_000,
   })

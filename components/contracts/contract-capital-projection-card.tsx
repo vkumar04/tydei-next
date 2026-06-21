@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { getContractCapitalProjection } from "@/lib/actions/contracts/tie-in"
+import { queryKeys } from "@/lib/query-keys"
 
 interface ContractCapitalProjectionCardProps {
   contractId: string
@@ -32,7 +33,7 @@ export function ContractCapitalProjectionCard({
   fetcher = getContractCapitalProjection,
 }: ContractCapitalProjectionCardProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contract-capital-projection", contractId],
+    queryKey: queryKeys.contracts.capitalProjection(contractId),
     queryFn: () => fetcher(contractId),
   })
 

@@ -61,6 +61,7 @@ import {
 import { ContractCapitalProjectionCard } from "@/components/contracts/contract-capital-projection-card"
 import { VendorCarveOutCard } from "@/components/vendor/contracts/vendor-carve-out-card"
 import type { getVendorContractDetail } from "@/lib/actions/vendor-contracts"
+import { queryKeys } from "@/lib/query-keys"
 
 type ContractDetail = Awaited<ReturnType<typeof getVendorContractDetail>>
 
@@ -96,7 +97,7 @@ export function VendorContractDetailClient({
   // Achievement, same data the facility Performance tab shows, scoped
   // through getVendorContractPeriods (vendor auth, same builder).
   const { data: periods } = useQuery({
-    queryKey: ["vendor-contract-periods", contract.id],
+    queryKey: queryKeys.contracts.vendorPeriods(contract.id),
     queryFn: () => getVendorContractPeriods(contract.id),
   })
 

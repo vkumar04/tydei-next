@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { getContractTieInBundle } from "@/lib/actions/contracts/tie-in"
+import { queryKeys } from "@/lib/query-keys"
 
 interface ContractTieInCardProps {
   contractId: string
@@ -14,7 +15,7 @@ interface ContractTieInCardProps {
 
 export function ContractTieInCard({ contractId }: ContractTieInCardProps) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contract-tie-in-bundle", contractId],
+    queryKey: queryKeys.contracts.tieInBundle(contractId),
     queryFn: () => getContractTieInBundle(contractId),
   })
 

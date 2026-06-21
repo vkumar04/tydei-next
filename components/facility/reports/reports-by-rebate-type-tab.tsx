@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/lib/formatting"
 import { getRebateBreakdownByType } from "@/lib/actions/reports/by-rebate-type"
+import { queryKeys } from "@/lib/query-keys"
 
 /**
  * Charles 2026-04-25 (audit follow-up): facility-wide rebate
@@ -21,7 +22,7 @@ import { getRebateBreakdownByType } from "@/lib/actions/reports/by-rebate-type"
  */
 export function ReportsByRebateTypeTab() {
   const { data, isLoading } = useQuery({
-    queryKey: ["reports", "by-rebate-type"],
+    queryKey: queryKeys.reports.byRebateType(),
     queryFn: () => getRebateBreakdownByType(),
   })
 

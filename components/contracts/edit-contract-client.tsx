@@ -428,7 +428,7 @@ export function EditContractClient({
           queryKey: queryKeys.contracts.periods(contractId),
         }),
         queryClient.invalidateQueries({
-          queryKey: ["contract-accrual-timeline", contractId],
+          queryKey: queryKeys.contracts.accrualTimeline(contractId),
         }),
         // best-practices sweep 2026-06-17: the capital-schedule READ key is
         // ["contract-capital-schedule", scope, contractId] — this site used

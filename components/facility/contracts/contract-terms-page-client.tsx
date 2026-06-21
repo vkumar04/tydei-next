@@ -49,7 +49,7 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
   // Contract's pricing-file items — passed into the SpecificItemsPicker
   // so users can scope a term to specific vendor item numbers.
   const { data: pricingItems } = useQuery({
-    queryKey: ["contracts", contractId, "pricing-items"] as const,
+    queryKey: queryKeys.contracts.pricingItems(contractId),
     queryFn: () => getContractPricing(contractId),
     enabled: !!contractId,
   })
@@ -189,7 +189,7 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
           queryKey: queryKeys.contracts.periods(contractId),
         }),
         queryClient.invalidateQueries({
-          queryKey: ["contract-accrual-timeline", contractId],
+          queryKey: queryKeys.contracts.accrualTimeline(contractId),
         }),
         // best-practices sweep 2026-06-17: same scope-mismatch fix as
         // edit-contract-client — the read key carries a scope segment, so

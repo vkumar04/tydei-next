@@ -10,6 +10,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { AlertTriangle } from "lucide-react"
 import { getContractCategoryHealth } from "@/lib/actions/cog-category-mapping"
+import { queryKeys } from "@/lib/query-keys"
 import { formatCurrency } from "@/lib/formatting"
 
 export function ContractCategoryHealthBanner({
@@ -18,7 +19,7 @@ export function ContractCategoryHealthBanner({
   contractId: string
 }) {
   const { data } = useQuery({
-    queryKey: ["contract-category-health", contractId],
+    queryKey: queryKeys.contracts.categoryHealth(contractId),
     queryFn: () => getContractCategoryHealth(contractId),
   })
 

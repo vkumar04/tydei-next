@@ -22,6 +22,7 @@ import {
   type ExtractAndAnalyzeCanonicalInput,
   type ExtractAndAnalyzeCanonicalResult,
 } from "@/lib/actions/prospective-analysis"
+import { queryKeys } from "@/lib/query-keys"
 
 export function useAnalyzeProspectiveProposal() {
   return useMutation<AnalyzeProposalResult, Error, AnalyzeProposalInput>({
@@ -34,7 +35,7 @@ export function useAnalyzeProspectiveProposal() {
 
 export function useVendorCOGPatterns(vendorId: string | null) {
   return useQuery<SpendPatternAnalysis>({
-    queryKey: ["prospective", "vendorCOGPatterns", vendorId],
+    queryKey: queryKeys.prospective.vendorCogPatterns(vendorId),
     queryFn: () => {
       if (!vendorId) throw new Error("vendorId required")
       return getVendorCOGPatterns(vendorId)

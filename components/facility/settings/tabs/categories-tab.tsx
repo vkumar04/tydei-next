@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Plus, Pencil, Trash2, Tag, FolderTree } from "lucide-react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getCategories, createCategory, updateCategory, deleteCategory } from "@/lib/actions/categories"
+import { queryKeys } from "@/lib/query-keys"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,25 +35,25 @@ export function CategoriesTab() {
 
   const qc = useQueryClient()
   const { data: categories, isLoading } = useQuery({
-    queryKey: ["categories"],
+    queryKey: queryKeys.categories.all,
     queryFn: () => getCategories(),
   })
 
   const createMut = useMutation({
     mutationFn: createCategory,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["categories"] }); toast.success("Category created"); closeDialog() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success("Category created"); closeDialog() },
     onError: () => toast.error("Failed to create category"),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { name: string; description?: string } }) => updateCategory(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["categories"] }); toast.success("Category updated"); closeDialog() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success("Category updated"); closeDialog() },
     onError: () => toast.error("Failed to update category"),
   })
 
   const deleteMut = useMutation({
     mutationFn: deleteCategory,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["categories"] }); toast.success("Category deleted") },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.categories.all }); toast.success("Category deleted") },
   })
 
   function closeDialog() {

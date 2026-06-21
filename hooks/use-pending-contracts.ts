@@ -30,13 +30,13 @@ export function useCreatePendingContract() {
   // roll up "submitted to N of M facilities" into one message instead of N
   // stacked toasts — hence no `success`/`error` here (silent).
   return useToastMutation(createPendingContract, {
-    invalidate: [["pendingContracts"]],
+    invalidate: [queryKeys.pendingContracts.all],
   })
 }
 
 export function useWithdrawPendingContract() {
   return useToastMutation(withdrawPendingContract, {
-    invalidate: [["pendingContracts"]],
+    invalidate: [queryKeys.pendingContracts.all],
     success: "Contract withdrawn",
     error: "Failed to withdraw",
   })
@@ -50,7 +50,7 @@ export function useWithdrawPendingContract() {
  */
 export function useDeletePendingContract() {
   return useToastMutation(deletePendingContract, {
-    invalidate: [["pendingContracts"]],
+    invalidate: [queryKeys.pendingContracts.all],
     success: "Submission deleted",
     error: "Failed to delete",
   })
@@ -77,7 +77,7 @@ export function useFacilityPendingContracts(facilityId: string) {
  */
 function invalidateAllContractDownstream(qc: ReturnType<typeof useQueryClient>) {
   return Promise.all([
-    qc.invalidateQueries({ queryKey: ["pendingContracts"] }),
+    qc.invalidateQueries({ queryKey: queryKeys.pendingContracts.all }),
     qc.invalidateQueries({ queryKey: queryKeys.contracts.all }),
     qc.invalidateQueries({ queryKey: queryKeys.alerts.all }),
     qc.invalidateQueries({ queryKey: queryKeys.purchaseOrders.all }),
@@ -105,7 +105,7 @@ export function useRejectPendingContract() {
     mutationFn: ({ id, reviewedBy, notes }: { id: string; reviewedBy: string; notes: string }) =>
       rejectPendingContract(id, reviewedBy, notes),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["pendingContracts"] })
+      await qc.invalidateQueries({ queryKey: queryKeys.pendingContracts.all })
       toast.success("Contract rejected")
     },
     onError: (e) => toast.error(e.message || "Failed to reject"),
@@ -118,7 +118,7 @@ export function useRequestRevision() {
     mutationFn: ({ id, reviewedBy, notes }: { id: string; reviewedBy: string; notes: string }) =>
       requestRevision(id, reviewedBy, notes),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["pendingContracts"] })
+      await qc.invalidateQueries({ queryKey: queryKeys.pendingContracts.all })
       toast.success("Revision requested")
     },
     onError: (e) => toast.error(e.message || "Failed to request revision"),

@@ -65,7 +65,7 @@ export function CounterProposeDialog({
       // Proposals list query (contract-change-proposals-card).
       if (contractId) {
         qc.invalidateQueries({
-          queryKey: ["contracts", "proposals", contractId],
+          queryKey: queryKeys.contracts.proposals(contractId),
         })
         qc.invalidateQueries({
           queryKey: queryKeys.contracts.detail(contractId),

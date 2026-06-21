@@ -4,6 +4,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, L
 import { useQuery } from "@tanstack/react-query"
 import { ChartFrame } from "@/components/contracts/chart-frame"
 import { getContractPerformanceHistory } from "@/lib/actions/contracts/performance-history"
+import { queryKeys } from "@/lib/query-keys"
 
 const formatAxisCurrency = (n: number) =>
   n >= 1_000_000
@@ -33,7 +34,7 @@ export function ContractPerformanceCharts({
   fetcher?: typeof getContractPerformanceHistory
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["contracts", "perf-history", contractId] as const,
+    queryKey: queryKeys.contracts.perfHistory(contractId),
     queryFn: () => fetcher(contractId),
   })
   if (isLoading || !data) return <div className="h-72 animate-pulse rounded-md bg-muted" />

@@ -16,6 +16,7 @@ import {
   requestProposalRevision,
 } from "@/lib/actions/contracts/proposals"
 import { CounterProposeDialog } from "@/components/contracts/counter-propose-dialog"
+import { queryKeys } from "@/lib/query-keys"
 
 type ProposalRow = Awaited<
   ReturnType<typeof getPendingProposalsForContract>
@@ -35,13 +36,13 @@ export function ContractChangeProposalsCard({
 }: ContractChangeProposalsCardProps) {
   const qc = useQueryClient()
   const { data: proposals } = useQuery({
-    queryKey: ["contracts", "proposals", contractId] as const,
+    queryKey: queryKeys.contracts.proposals(contractId),
     queryFn: () => getPendingProposalsForContract(contractId),
   })
 
   const invalidate = () =>
     qc.invalidateQueries({
-      queryKey: ["contracts", "proposals", contractId],
+      queryKey: queryKeys.contracts.proposals(contractId),
     })
 
   const approve = useMutation({
