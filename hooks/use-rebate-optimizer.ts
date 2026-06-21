@@ -1,7 +1,8 @@
 "use client"
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getRebateOpportunities,
   setSpendTarget,
@@ -40,17 +41,13 @@ export function useSpendTargets(facilityId: string) {
 }
 
 export function useSetSpendTarget() {
-  const qc = useQueryClient()
-
-  return useMutation({
-    mutationFn: (input: {
+  return useToastMutation(
+    (input: {
       contractId: string
       facilityId: string
       targetSpend: number
       targetDate: string
     }) => setSpendTarget(input),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["rebateOptimizer"] })
-    },
-  })
+    { invalidate: [["rebateOptimizer"]] },
+  )
 }

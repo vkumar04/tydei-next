@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getVendorList,
   getVendor,
@@ -28,14 +29,10 @@ export function useVendorDetail(id: string) {
 }
 
 export function useCreateVendor() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: createVendor,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.vendors.all })
-      toast.success("Vendor created")
-    },
-    onError: (err) => toast.error(err.message || "Failed to create vendor"),
+  return useToastMutation(createVendor, {
+    invalidate: [queryKeys.vendors.all],
+    success: "Vendor created",
+    error: "Failed to create vendor",
   })
 }
 
@@ -61,13 +58,9 @@ export function useUpdateVendor() {
 }
 
 export function useDeactivateVendor() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: deactivateVendor,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.vendors.all })
-      toast.success("Vendor deactivated")
-    },
-    onError: (err) => toast.error(err.message || "Failed to deactivate"),
+  return useToastMutation(deactivateVendor, {
+    invalidate: [queryKeys.vendors.all],
+    success: "Vendor deactivated",
+    error: "Failed to deactivate",
   })
 }

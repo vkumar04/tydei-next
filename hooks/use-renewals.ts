@@ -1,7 +1,8 @@
 "use client"
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getContractPerformanceHistory,
   getExpiringContracts,
@@ -55,10 +56,8 @@ export function useContractPerformanceHistory(contractId: string | null) {
  * docs/superpowers/plans/2026-04-19-renewals-v0-parity.md.
  */
 export function useSubmitRenewalProposal() {
-  const qc = useQueryClient()
-
-  return useMutation({
-    mutationFn: (input: {
+  return useToastMutation(
+    (input: {
       contractId: string
       notes: string
       proposedTerms?: {
@@ -80,9 +79,6 @@ export function useSubmitRenewalProposal() {
           narrative: null,
         },
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["renewals"] })
-      void qc.invalidateQueries({ queryKey: queryKeys.contracts.all })
-    },
-  })
+    { invalidate: [["renewals"], queryKeys.contracts.all] },
+  )
 }

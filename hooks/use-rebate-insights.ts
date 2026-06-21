@@ -12,6 +12,7 @@ import type {
   RebateInsight,
   RebateInsightsResponse,
 } from "@/lib/ai/rebate-optimizer-schemas"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 
 const insightsQueryKey = (facilityId: string) =>
   ["rebateOptimizer", "insights", facilityId] as const
@@ -66,28 +67,17 @@ export function useRebateInsightFlags(facilityId: string) {
 
 /** Flag an insight for review. Invalidates the flags feed on success. */
 export function useFlagRebateInsight(facilityId: string) {
-  const qc = useQueryClient()
-
-  return useMutation<
-    { id: string },
-    Error,
-    { insightId: string; snapshot: RebateInsight }
-  >({
-    mutationFn: (input) => flagRebateInsight(input),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: flagsQueryKey(facilityId) })
-    },
+  return useToastMutation<
+    { insightId: string; snapshot: RebateInsight },
+    { id: string }
+  >((input) => flagRebateInsight(input), {
+    invalidate: [flagsQueryKey(facilityId)],
   })
 }
 
 /** Clear a flagged insight. Invalidates the flags feed on success. */
 export function useClearRebateInsightFlag(facilityId: string) {
-  const qc = useQueryClient()
-
-  return useMutation<void, Error, string>({
-    mutationFn: (id) => clearRebateInsightFlag(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: flagsQueryKey(facilityId) })
-    },
+  return useToastMutation<string, void>((id) => clearRebateInsightFlag(id), {
+    invalidate: [flagsQueryKey(facilityId)],
   })
 }

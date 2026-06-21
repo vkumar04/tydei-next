@@ -1,10 +1,10 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { authClient } from "@/lib/auth"
 import { getMyAccount } from "@/lib/actions/account"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 
 // ─── Read ────────────────────────────────────────────────────────
 
@@ -29,48 +29,38 @@ function unwrap<T>(result: { data: T | null; error: { message?: string } | null 
 // ─── Name ────────────────────────────────────────────────────────
 
 export function useUpdateAccountName() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (name: string) =>
-      unwrap(await authClient.updateUser({ name })),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.account.me() })
-      toast.success("Name updated")
+  return useToastMutation(
+    async (name: string) => unwrap(await authClient.updateUser({ name })),
+    {
+      invalidate: [queryKeys.account.me()],
+      success: "Name updated",
+      error: "Failed to update name",
     },
-    onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Failed to update name"),
-  })
+  )
 }
 
 // ─── Email ───────────────────────────────────────────────────────
 
 export function useChangeAccountEmail() {
-  return useMutation({
-    mutationFn: async (newEmail: string) =>
+  return useToastMutation(
+    async (newEmail: string) =>
       unwrap(
-        await authClient.changeEmail({
-          newEmail,
-          callbackURL: "/dashboard",
-        }),
+        await authClient.changeEmail({ newEmail, callbackURL: "/dashboard" }),
       ),
-    onSuccess: () => {
-      // Email changes go through Resend verification — the new address is
-      // not active until the user clicks the link in their inbox.
-      toast.success("Verification email sent — check your inbox to confirm")
+    {
+      // Email changes go through Resend verification — the new address is not
+      // active until the user clicks the link in their inbox.
+      success: "Verification email sent — check your inbox to confirm",
+      error: "Failed to change email",
     },
-    onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Failed to change email"),
-  })
+  )
 }
 
 // ─── Password ────────────────────────────────────────────────────
 
 export function useChangeAccountPassword() {
-  return useMutation({
-    mutationFn: async (input: {
-      currentPassword: string
-      newPassword: string
-    }) =>
+  return useToastMutation(
+    async (input: { currentPassword: string; newPassword: string }) =>
       unwrap(
         await authClient.changePassword({
           currentPassword: input.currentPassword,
@@ -78,12 +68,6 @@ export function useChangeAccountPassword() {
           revokeOtherSessions: true,
         }),
       ),
-    onSuccess: () => {
-      toast.success("Password changed")
-    },
-    onError: (err) =>
-      toast.error(
-        err instanceof Error ? err.message : "Failed to change password",
-      ),
-  })
+    { success: "Password changed", error: "Failed to change password" },
+  )
 }

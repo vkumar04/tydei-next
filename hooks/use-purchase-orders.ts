@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getPurchaseOrders,
   getPurchaseOrder,
@@ -31,14 +32,10 @@ export function usePurchaseOrder(id: string) {
 }
 
 export function useCreatePurchaseOrder() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: createPurchaseOrder,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.purchaseOrders.all })
-      toast.success("Purchase order created")
-    },
-    onError: (e) => toast.error(e.message || "Failed to create PO"),
+  return useToastMutation(createPurchaseOrder, {
+    invalidate: [queryKeys.purchaseOrders.all],
+    success: "Purchase order created",
+    error: "Failed to create PO",
   })
 }
 

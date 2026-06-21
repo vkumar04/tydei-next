@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   getInvoices,
   getInvoicesForVendor,
@@ -53,14 +54,10 @@ export function useInvoice(id: string) {
 }
 
 export function useImportInvoice() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: importInvoice,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
-      toast.success("Invoice imported successfully")
-    },
-    onError: (e) => toast.error(e.message || "Failed to import invoice"),
+  return useToastMutation(importInvoice, {
+    invalidate: [queryKeys.invoices.all],
+    success: "Invoice imported successfully",
+    error: "Failed to import invoice",
   })
 }
 
@@ -87,67 +84,55 @@ export function useApproveInvoice() {
 }
 
 export function useFlagInvoiceLineItem() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ lineItemId, notes }: { lineItemId: string; notes?: string }) =>
+  return useToastMutation(
+    ({ lineItemId, notes }: { lineItemId: string; notes?: string }) =>
       flagInvoiceLineItem(lineItemId, notes),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
-      toast.success("Item flagged")
+    {
+      invalidate: [queryKeys.invoices.all],
+      success: "Item flagged",
+      error: "Failed to flag item",
     },
-    onError: (e) => toast.error(e.message || "Failed to flag item"),
-  })
+  )
 }
 
 export function useDeleteInvoice() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: deleteInvoice,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
-      toast.success("Invoice deleted")
-    },
-    onError: (e) => toast.error(e.message || "Failed to delete invoice"),
+  return useToastMutation(deleteInvoice, {
+    invalidate: [queryKeys.invoices.all],
+    success: "Invoice deleted",
+    error: "Failed to delete invoice",
   })
 }
 
 export function useResolveInvoiceLineItem() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: resolveInvoiceLineItem,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
-      toast.success("Item resolved")
-    },
-    onError: (e) => toast.error(e.message || "Failed to resolve item"),
+  return useToastMutation(resolveInvoiceLineItem, {
+    invalidate: [queryKeys.invoices.all],
+    success: "Item resolved",
+    error: "Failed to resolve item",
   })
 }
 
 export function useFlagInvoiceAsDisputed() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: { invoiceId: string; note: string }) =>
-      flagInvoiceAsDisputed(input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
-      toast.success("Invoice flagged as disputed")
+  return useToastMutation(
+    (input: { invoiceId: string; note: string }) => flagInvoiceAsDisputed(input),
+    {
+      invalidate: [queryKeys.invoices.all],
+      success: "Invoice flagged as disputed",
+      error: "Failed to flag invoice",
     },
-    onError: (e) => toast.error(e.message || "Failed to flag invoice"),
-  })
+  )
 }
 
 export function useResolveInvoiceDispute() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: {
+  return useToastMutation(
+    (input: {
       invoiceId: string
       resolution: "resolved" | "rejected"
       note?: string
     }) => resolveInvoiceDispute(input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.invoices.all })
-      toast.success("Dispute updated")
+    {
+      invalidate: [queryKeys.invoices.all],
+      success: "Dispute updated",
+      error: "Failed to update dispute",
     },
-    onError: (e) => toast.error(e.message || "Failed to update dispute"),
-  })
+  )
 }
