@@ -38,6 +38,11 @@ import type {
 
 const NUM = "text-right tabular-nums"
 
+/** Fixed-height scroll region so the side-by-side cards stay aligned while a
+ *  long list scrolls. The header stays pinned via sticky positioning. */
+const SCROLL = "h-[360px] overflow-y-auto"
+const STICKY_HEAD = "sticky top-0 z-10 bg-card"
+
 export function CategoryAspTable({ rows }: { rows: CategoryAspRow[] }) {
   return (
     <Card>
@@ -48,8 +53,9 @@ export function CategoryAspTable({ rows }: { rows: CategoryAspRow[] }) {
         </p>
       </CardHeader>
       <CardContent>
+        <div className={SCROLL}>
         <Table>
-          <TableHeader>
+          <TableHeader className={STICKY_HEAD}>
             <TableRow>
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Spend</TableHead>
@@ -72,6 +78,7 @@ export function CategoryAspTable({ rows }: { rows: CategoryAspRow[] }) {
             ))}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   )
@@ -87,8 +94,9 @@ export function VendorMarketShareTable({ rows }: { rows: VendorShareRow[] }) {
         </p>
       </CardHeader>
       <CardContent>
+        <div className={SCROLL}>
         <Table>
-          <TableHeader>
+          <TableHeader className={STICKY_HEAD}>
             <TableRow>
               <TableHead>Vendor</TableHead>
               <TableHead className="text-right">Spend</TableHead>
@@ -107,6 +115,7 @@ export function VendorMarketShareTable({ rows }: { rows: VendorShareRow[] }) {
             ))}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   )

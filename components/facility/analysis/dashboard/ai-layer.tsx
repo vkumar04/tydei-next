@@ -182,9 +182,11 @@ export function EvImpactPredictorCard({
               {usdCompact(waterfall.ev.futureEv)}
             </p>
           </div>
-          <div className="rounded-md border border-emerald-200 bg-emerald-50/50 p-3">
-            <p className="text-xs text-muted-foreground">Incremental EV</p>
-            <p className="text-xl font-bold tabular-nums text-emerald-600">
+          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 dark:bg-emerald-500/15">
+            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              Incremental EV
+            </p>
+            <p className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
               {usdDelta(waterfall.ev.incrementalEv)}
             </p>
           </div>
