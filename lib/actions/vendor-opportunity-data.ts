@@ -18,6 +18,7 @@ import { requireVendor } from "@/lib/actions/auth"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 export interface VendorOpportunityData {
   currentAsp: number
@@ -31,9 +32,7 @@ export interface VendorOpportunityData {
 export async function getVendorOpportunityData(): Promise<VendorOpportunityData> {
   const { vendor } = await requireVendor()
 
-  const windowEnd = new Date()
-  const windowStart = new Date(windowEnd)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
 
   // The vendor's own sales (trailing 12mo) across every facility.
   const vendorRows = await prisma.cOGRecord.findMany({

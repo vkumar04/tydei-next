@@ -13,6 +13,7 @@ import {
   PROSPECTIVE_PROPOSAL_KIND,
 } from "@/lib/prospective/proposal-rows"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -140,9 +141,7 @@ export async function getCogPricingBenchmarks(input: {
   )
   if (wanted.size === 0) return []
 
-  const windowEnd = new Date()
-  const windowStart = new Date(windowEnd)
-  windowStart.setFullYear(windowStart.getFullYear() - 1)
+  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
 
   // Review R2 (prod scale): bound the query to the requested SKUs instead
   // of scanning the facility's full 12-month COG table. The insensitive

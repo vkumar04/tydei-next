@@ -21,6 +21,8 @@
  *   tieInRiskFlag           categoryMarketShare > 0.4
  */
 
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window";
+
 export interface CogPurchase {
   transactionDate: Date;
   extendedPrice: number;
@@ -69,9 +71,7 @@ const TOP_ITEM_COUNT = 5;
  * Mirrors JS Date month arithmetic — Feb-29 input maps to Feb-28 prior year.
  */
 function twelveMonthsBefore(reference: Date): Date {
-  const d = new Date(reference.getTime());
-  d.setFullYear(d.getFullYear() - 1);
-  return d;
+  return getTrailing12MonthWindow(reference).start;
 }
 
 function monthKey(d: Date): string {

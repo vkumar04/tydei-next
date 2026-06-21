@@ -6,6 +6,7 @@ import { serialize } from "@/lib/serialize"
 import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
 import { loadConfirmedCategoryMap } from "@/lib/categories/resolve"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 // ─── Vendor Dashboard Stats ─────────────────────────────────────
 
@@ -20,8 +21,7 @@ export async function getVendorDashboardStats(_vendorId?: string) {
   // getVendorPerformance in vendor-analytics.ts); lifetime is kept as a
   // sublabel so no information is lost.
   const now = new Date()
-  const trailing12MoStart = new Date(now)
-  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+  const { start: trailing12MoStart } = getTrailing12MonthWindow(now)
 
   const [
     activeContracts,

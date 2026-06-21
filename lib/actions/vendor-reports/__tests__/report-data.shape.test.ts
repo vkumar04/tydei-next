@@ -102,6 +102,11 @@ const EXPECTED_CONTRACT_KEYS = [
   "rebateEarnedCanonical",
   "rebateCollectedCanonical",
   "marginCanonical",
+  // Capital balance trio — ported 2026-06-21 to match the facility original
+  // (lib/actions/reports.ts), which has surfaced these since 2026-06-20.
+  "capitalCost",
+  "capitalPaidToDate",
+  "capitalRemainingBalance",
   "periods",
 ].sort()
 

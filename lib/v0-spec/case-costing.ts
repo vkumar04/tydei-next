@@ -4,6 +4,8 @@
  * contract-calculations.md.
  */
 
+import { clamp0100 } from "@/lib/math/clamp"
+
 /** Default rebate estimation by tier number (0-based). 2% per tier. */
 export function v0DefaultTierRebatePct(tierNumber: number): number {
   if (tierNumber < 0) return 0
@@ -59,9 +61,9 @@ export interface V0SurgeonScore {
   overall: number
 }
 export function v0SurgeonScore(input: V0SurgeonScoreInput): V0SurgeonScore {
-  const payor = clamp100(input.payorMixPct)
-  const bmi = clamp100(input.bmiUnder40Pct)
-  const age = clamp100(input.ageUnder65Pct)
+  const payor = clamp0100(input.payorMixPct)
+  const bmi = clamp0100(input.bmiUnder40Pct)
+  const age = clamp0100(input.ageUnder65Pct)
   const spend = Math.max(0, 100 - input.avgSpend / 500)
   const time = Math.max(0, 100 - input.avgCaseTimeMinutes / 5)
   const overall = (payor + bmi + age + spend + time) / 5
@@ -83,6 +85,3 @@ export function v0CMIAdjustedSpend(
   return rawAvgSpend / caseMixIndex
 }
 
-function clamp100(v: number): number {
-  return Math.max(0, Math.min(100, v))
-}

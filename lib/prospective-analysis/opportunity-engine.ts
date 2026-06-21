@@ -18,6 +18,8 @@
  * "robotic does not need service as it doesn't hit territory number."
  */
 
+import { clamp01 } from "@/lib/math/clamp"
+
 // ─── Inputs ────────────────────────────────────────────────────
 
 export interface OpportunityScenarioInput {
@@ -190,11 +192,6 @@ function bandForWinProb(p: number): OpportunityEngineResult["winProbabilityBand"
   if (p >= 0.6) return "likely"
   if (p >= 0.35) return "competitive"
   return "long_shot"
-}
-
-function clamp01(n: number): number {
-  if (Number.isNaN(n)) return 0
-  return Math.min(1, Math.max(0, n))
 }
 
 /** Sensible defaults — seeds the Opportunity Engine sliders on first load. */

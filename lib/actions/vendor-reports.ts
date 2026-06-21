@@ -9,6 +9,7 @@ import {
   sumEarnedRebatesYTD,
 } from "@/lib/contracts/rebate-earned-filter"
 import { computeVendorCompliance } from "@/lib/contracts/vendor-compliance"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 // ─── Private window/spend helpers ────────────────────────────────
 //
@@ -328,8 +329,7 @@ export async function getVendorPerformanceSummary(
   // Trailing-12mo vendor COG per facility — the numerator of the
   // canonical compliance definition (independent of the report window).
   // Bare vendorId here mirrors getVendorPerformance's numerator.
-  const trailing12MoStart = new Date(today)
-  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+  const { start: trailing12MoStart } = getTrailing12MonthWindow(today)
   const spend12ByFacilityRows = await prisma.cOGRecord.groupBy({
     by: ["facilityId"],
     where: {

@@ -33,6 +33,7 @@
  * delete, and tier upsert — in `lib/actions/contract-terms.ts`.
  */
 import { prisma } from "@/lib/db"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
@@ -999,8 +1000,7 @@ export async function _recomputeAccrualForContractWithFacility(
     const loadMarketShareCog = () => {
       if (marketShareCogCachePromise === null) {
         marketShareCogCachePromise = (async () => {
-          const since = new Date()
-          since.setMonth(since.getMonth() - 12)
+          const { start: since } = getTrailing12MonthWindow()
           const cogRows = await prisma.cOGRecord.findMany({
             where: {
               facilityId,

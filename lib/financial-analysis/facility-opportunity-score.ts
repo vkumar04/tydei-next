@@ -18,6 +18,7 @@
  * of historical orthopedic contracts analyzed."
  */
 
+import { clamp01, clamp0100 } from "@/lib/math/clamp"
 import type { FacilityProspectiveModel } from "./prospective-impact-model"
 
 export interface FacilityOpportunityScoreInput {
@@ -148,12 +149,3 @@ function scale01(ratio: number): number {
   return clamp0100(clamp01(ratio) * 100)
 }
 
-function clamp01(n: number): number {
-  if (Number.isNaN(n)) return 0
-  return Math.min(1, Math.max(0, n))
-}
-
-function clamp0100(n: number): number {
-  if (Number.isNaN(n)) return 0
-  return Math.min(100, Math.max(0, n))
-}

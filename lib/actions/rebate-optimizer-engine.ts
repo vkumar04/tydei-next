@@ -25,6 +25,7 @@ import { buildUnionCategoryWhereClause } from "@/lib/contracts/cog-category-filt
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { serialize } from "@/lib/serialize"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import {
   buildRebateOpportunities,
   type DroppedContract,
@@ -167,8 +168,7 @@ export async function getRebateOpportunities(): Promise<RebateOptimizerActionRes
   //     primary vendor but different member sets would collide here —
   //     last write wins; acceptable until the engine keys by contract.)
   const now = new Date()
-  const trailing12MoStart = new Date(now)
-  trailing12MoStart.setMonth(trailing12MoStart.getMonth() - 12)
+  const { start: trailing12MoStart } = getTrailing12MonthWindow(now)
 
   const allVendorIds = Array.from(
     new Set(contracts.flatMap((c) => contractVendorIds(c))),

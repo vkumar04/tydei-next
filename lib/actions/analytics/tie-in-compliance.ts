@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/db"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { serialize } from "@/lib/serialize"
 import {
   v0TieInAllOrNothing,
@@ -86,9 +87,7 @@ async function _getTieInComplianceImpl(
   // read 0.00% / Not compliant despite real trailing-12mo spend. Align the
   // window with the header (trailing 12mo) and route the category scope through
   // the canonical union helper so unrelated vendor spend isn't over-counted.
-  const today = new Date()
-  const twelveMonthsAgo = new Date(today)
-  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1)
+  const { start: twelveMonthsAgo, end: today } = getTrailing12MonthWindow()
   const cogCategoryUniverse = contract.facilityId
     ? await facilityCogCategoryUniverse(contract.facilityId)
     : []

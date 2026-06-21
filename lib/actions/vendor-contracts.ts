@@ -6,6 +6,7 @@ import type { ContractStatus, Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 
 // ─── Vendor Contracts List ──────────────────────────────────────
 
@@ -19,7 +20,11 @@ export async function getVendorContracts(input: {
   const { vendor } = await requireVendor()
   const { status, search, page = 1, pageSize = 20 } = input
 
-  const conditions: Prisma.ContractWhereInput[] = [{ vendorId: vendor.id }]
+  // Scope to contracts owned by OR grouped with this vendor (never bare
+  // vendorId — that drops grouped additionalVendorIds; group-vendor-drift).
+  const conditions: Prisma.ContractWhereInput[] = [
+    contractsOwnedByVendor(vendor.id),
+  ]
 
   if (status && status !== "all") conditions.push({ status })
   if (search) {

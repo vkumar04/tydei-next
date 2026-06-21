@@ -7,6 +7,7 @@ import { serialize } from "@/lib/serialize"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
 import { onlySpendTargetAlerts } from "@/lib/alerts/spend-target-filter"
+import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 export interface RebateOpportunity {
   contractId: string
@@ -67,8 +68,7 @@ export async function getRebateOpportunities(_facilityId?: string): Promise<Reba
   })
 
   // Trailing-12-month spend from canonical COG source (single batched groupBy).
-  const trailingStart = new Date()
-  trailingStart.setMonth(trailingStart.getMonth() - 12)
+  const { start: trailingStart } = getTrailing12MonthWindow()
   const vendorIds = Array.from(
     new Set(
       contracts.map((c) => c.vendorId).filter((v): v is string => Boolean(v)),
