@@ -508,6 +508,14 @@ export const queryKeys = {
       ] as const,
     vendorOpportunityData: (vendorId: string) =>
       ["prospectiveAnalysis", "vendorOpportunityData", vendorId] as const,
+    // Per-facility Current State for the vendor pitch view (Opportunity Engine).
+    vendorFacilityCurrentState: (vendorId: string, facilityId: string) =>
+      [
+        "prospectiveAnalysis",
+        "vendorFacilityCurrentState",
+        vendorId,
+        facilityId,
+      ] as const,
     vendorInsightsBase: ["prospectiveAnalysis", "vendorInsights"] as const,
     vendorInsights: (vendorId: string, snapshotHash: string) =>
       [

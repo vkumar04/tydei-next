@@ -55,6 +55,7 @@ import {
   useVendorOpportunityInsights,
 } from "@/hooks/use-analysis-insights"
 import type { VendorInsightSnapshot } from "@/lib/ai/analysis-insight-schemas"
+import { FacilityCurrentStatePanel } from "@/components/vendor/prospective/facility-current-state"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -99,6 +100,7 @@ function usd(n: number): string {
 
 export function OpportunityEngineSection({
   vendorId,
+  facilities = [],
 }: OpportunityEngineSectionProps) {
   const [vendor, setVendor] = useState<string>(VENDOR_OPTIONS[0])
   // Slider state is held as integer percentages; mapped to fractions below.
@@ -236,6 +238,9 @@ export function OpportunityEngineSection({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Facility Current State — the financial picture of the pitch target */}
+      <FacilityCurrentStatePanel vendorId={vendorId} facilities={facilities} />
 
       {/* Deal Scenario */}
       <Card>

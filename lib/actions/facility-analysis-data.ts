@@ -51,6 +51,15 @@ export interface FacilityAnalysisData {
   netRevenue: number
   /** True when netRevenue was implied from spend (no case reimbursement). */
   revenueIsImplied: boolean
+  /**
+   * Summed case-costing reimbursement across ALL cases (the "Actuals"
+   * revenue figure). Reported raw — even when implausibly low — so the
+   * Net Revenue control can offer it transparently with a coverage caveat
+   * rather than silently substituting the spend-based proxy.
+   */
+  measuredReimbursement: number
+  /** Reimbursement coverage: cases with a non-zero payor rate vs total. */
+  reimbursementCoverage: { withRate: number; totalCases: number }
   annualCaseVolume: number
   /** Facility average contribution-margin %, fraction. */
   avgMarginPct: number
@@ -137,8 +146,9 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
   const cptRateSchedule = buildCptRateSchedule(payorContracts)
   let sumReimbursement = 0
   let sumCaseSpend = 0
+  let casesWithRate = 0
   for (const c of cases) {
-    sumReimbursement += resolveCaseReimbursement(
+    const caseReimbursement = resolveCaseReimbursement(
       {
         storedReimbursement: Number(c.totalReimbursement),
         primaryCptCode: c.primaryCptCode,
@@ -147,6 +157,8 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
       cptRateSchedule,
       c.dateOfSurgery,
     )
+    sumReimbursement += caseReimbursement
+    if (caseReimbursement > 0) casesWithRate += 1
     sumCaseSpend += Number(c.totalSpend)
   }
 
@@ -189,6 +201,8 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
     currentVendorSpend: totalSpend,
     netRevenue,
     revenueIsImplied,
+    measuredReimbursement: sumReimbursement,
+    reimbursementCoverage: { withRate: casesWithRate, totalCases: cases.length },
     annualCaseVolume: cases.length,
     avgMarginPct,
     categories,
