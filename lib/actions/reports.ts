@@ -88,11 +88,18 @@ export async function getReportData(input: {
       // rollups for the per-month ledger AND render canonical totals
       // computed from the Rebate table, guaranteeing Reports agrees
       // with Contract Detail / Dashboard / Contracts List.
+      //
+      // NOT windowed: the canonical earned/collected (and the footer
+      // "Total (to date)" + Contract Margin) are LIFETIME figures — the
+      // same sumEarnedRebatesLifetime / sumCollectedRebates the contracts
+      // list uses. Windowing the fetch hid annual-cadence rebates whose
+      // payPeriodEnd falls outside the report window (e.g. a 2024/2025
+      // rebate viewed in a trailing-90-day window read as $0 collected even
+      // though it was earned, collected, and applied to capital). Vick
+      // 2026-06-22 "rebate collected not there". The per-month detail still
+      // comes from the windowed `periods` above; only the canonical totals
+      // are lifetime.
       rebates: {
-        where: {
-          payPeriodStart: { gte: new Date(dateFrom) },
-          payPeriodEnd: { lte: new Date(dateTo) },
-        },
         select: {
           payPeriodEnd: true,
           rebateEarned: true,

@@ -193,11 +193,11 @@ export async function getVendorReportData(input: {
       // returning them alongside the periods lets the tabs display
       // ContractPeriod rollups for the per-month ledger AND render
       // canonical totals computed from the Rebate table.
+      // NOT windowed — canonical earned/collected (footer "Total (to date)"
+      // + margin) are LIFETIME, matching the contracts list; windowing hid
+      // annual-cadence rebates outside the report window (Vick 2026-06-22
+      // "rebate collected not there"). Per-month detail stays windowed above.
       rebates: {
-        where: {
-          payPeriodStart: { gte: new Date(dateFrom) },
-          payPeriodEnd: { lte: new Date(dateTo) },
-        },
         select: {
           payPeriodEnd: true,
           rebateEarned: true,
