@@ -77,6 +77,44 @@ export function makeEmptyCapitalLineItem(): CapitalLineItemDraft {
   }
 }
 
+export interface SeedCapitalLineItemInput {
+  /** Best-available financed total: capitalCost → totalValue → annualValue. */
+  financedTotal: number
+  description?: string | null
+  contractName?: string | null
+  downPayment?: number | null
+  interestRatePercent?: number | null
+  termMonths?: number | null
+  paymentCadence?: CapitalLineItemDraft["paymentCadence"] | null
+}
+
+/**
+ * Build a prefilled capital line item for a tie_in / capital contract so the
+ * Capital / Leased Items editor never lands empty — an empty editor BLOCKS
+ * save (the submit gate requires >=1 capital item). Shared by BOTH the
+ * AI-extract handler and the manual contractType→tie_in/capital safety-net
+ * seed in new-contract-client.tsx so the two paths can never drift. Builds on
+ * makeEmptyCapitalLineItem() (same `_uid`/defaults), overriding only the
+ * fields we can prefill. Vick "AI not grabbing the capital again on the Tie
+ * in" 2026-06-22.
+ */
+export function buildSeededCapitalLineItem(
+  input: SeedCapitalLineItemInput,
+): CapitalLineItemDraft {
+  return {
+    ...makeEmptyCapitalLineItem(),
+    description:
+      input.description?.slice(0, 80) ||
+      input.contractName ||
+      "Capital equipment",
+    contractTotal: input.financedTotal,
+    initialSales: input.downPayment ?? 0,
+    interestRatePercent: input.interestRatePercent ?? 0,
+    termMonths: input.termMonths ?? 60,
+    paymentCadence: input.paymentCadence ?? "monthly",
+  }
+}
+
 interface CapitalLineItemsEditorProps {
   items: CapitalLineItemDraft[]
   onChange: (next: CapitalLineItemDraft[]) => void
