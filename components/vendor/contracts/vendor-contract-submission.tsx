@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useTransition } from "react"
+import { useState, useCallback, useEffect, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { getUploadUrl } from "@/lib/actions/uploads"
 import { useCreatePendingContract } from "@/hooks/use-pending-contracts"
@@ -32,6 +32,8 @@ import type { FacilityOption, PricingFileData, UploadedDoc } from "./submission"
 import { VendorPhase2FieldsCard } from "./submission/vendor-phase2-fields-card"
 import {
   CapitalLineItemsEditor,
+  buildSeededCapitalLineItem,
+  resolveSeededFinancedTotal,
   type CapitalLineItemDraft,
 } from "@/components/contracts/capital-line-items-editor"
 
@@ -318,6 +320,31 @@ export function VendorContractSubmission({
     }
   }, [capitalItems, contractTotal])
 
+  // Safety net: seed a Capital / Leased Items row whenever contractType
+  // TRANSITIONS into capital/tie_in while the editor is empty — e.g. the AI
+  // classified the contract as `usage` (spend-rebate tiers) and the vendor
+  // corrects the type, or the type is picked manually. Mirrors the facility
+  // new-contract path via the shared builder so capital always "comes up".
+  // Ref-guarded → fires only on an actual type change, not on every edit.
+  const prevContractTypeRef = useRef(contractType)
+  useEffect(() => {
+    const prev = prevContractTypeRef.current
+    prevContractTypeRef.current = contractType
+    if (prev === contractType) return
+    if (contractType !== "tie_in" && contractType !== "capital") return
+    setCapitalItems((items) => {
+      if (items.length > 0) return items
+      const financed = Number(capitalCost) || Number(contractTotal) || 0
+      return [
+        buildSeededCapitalLineItem({
+          financedTotal: financed,
+          contractName,
+          description,
+        }),
+      ]
+    })
+  }, [contractType, capitalCost, contractTotal, contractName, description])
+
   function handleAIExtract(
     data: ExtractedContractData,
     s3Key?: string,
@@ -381,6 +408,29 @@ export function VendorContractSubmission({
     }
     if (data.paymentCadence) setPaymentCadence(data.paymentCadence)
     if (data.downPayment) setDownPayment(String(data.downPayment))
+
+    // Seed the Capital / Leased Items editor for capital/tie_in extractions so
+    // capital is actually "grabbed" into the editor (it previously stayed empty
+    // — the handler set capitalCost but never a line item). Mirrors the facility
+    // new-contract path via the SAME shared builder. Best available financed
+    // total: capitalCost → totalValue → 0. Vick "Not grabbing capital still"
+    // 2026-06-22.
+    if (data.contractType === "tie_in" || data.contractType === "capital") {
+      setCapitalItems([
+        buildSeededCapitalLineItem({
+          financedTotal: resolveSeededFinancedTotal({
+            capitalCost: data.capitalCost,
+            totalValue: data.totalValue,
+          }),
+          description: data.description,
+          contractName: data.contractName,
+          downPayment: data.downPayment,
+          interestRatePercent: data.interestRatePercent,
+          termMonths: data.termMonths,
+          paymentCadence: data.paymentCadence,
+        }),
+      ])
+    }
 
     // Auto-select first facility if none selected
     if (!facilityId && facilities.length > 0) {

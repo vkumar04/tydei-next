@@ -98,6 +98,25 @@ export interface SeedCapitalLineItemInput {
  * fields we can prefill. Vick "AI not grabbing the capital again on the Tie
  * in" 2026-06-22.
  */
+/**
+ * Resolve the financed total to seed a capital line item from an AI
+ * extraction (or form state): prefer the explicit `capitalCost`, then the
+ * `totalValue` commitment, then a caller-supplied fallback (the facility form
+ * passes annualValue; the vendor form passes 0). Both the facility
+ * new-contract handler and the vendor submission handler route through this
+ * one resolver so the fallback order can't drift. Vick "Not grabbing capital
+ * still" 2026-06-22.
+ */
+export function resolveSeededFinancedTotal(input: {
+  capitalCost?: number | null
+  totalValue?: number | null
+  fallback?: number | null
+}): number {
+  if ((input.capitalCost ?? 0) > 0) return input.capitalCost!
+  if ((input.totalValue ?? 0) > 0) return input.totalValue!
+  return Math.max(0, input.fallback ?? 0)
+}
+
 export function buildSeededCapitalLineItem(
   input: SeedCapitalLineItemInput,
 ): CapitalLineItemDraft {

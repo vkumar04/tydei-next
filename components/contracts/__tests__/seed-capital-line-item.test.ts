@@ -1,5 +1,44 @@
 import { describe, it, expect } from "vitest"
-import { buildSeededCapitalLineItem } from "@/components/contracts/capital-line-items-editor"
+import {
+  buildSeededCapitalLineItem,
+  resolveSeededFinancedTotal,
+} from "@/components/contracts/capital-line-items-editor"
+
+// The financed-total fallback (capitalCost → totalValue → fallback) is shared
+// by the facility new-contract handler AND the vendor submission handler, so
+// the Capital editor seeds the same way no matter which form grabs the
+// capital. Vick "Not grabbing capital still" 2026-06-22.
+describe("resolveSeededFinancedTotal", () => {
+  it("prefers an explicit capitalCost", () => {
+    expect(
+      resolveSeededFinancedTotal({
+        capitalCost: 3_260_032.29,
+        totalValue: 5_000_000,
+        fallback: 1_000_000,
+      }),
+    ).toBe(3_260_032.29)
+  })
+
+  it("falls back to totalValue when capitalCost is missing/zero", () => {
+    expect(
+      resolveSeededFinancedTotal({ capitalCost: 0, totalValue: 5_000_000 }),
+    ).toBe(5_000_000)
+    expect(
+      resolveSeededFinancedTotal({ totalValue: 5_000_000, fallback: 9 }),
+    ).toBe(5_000_000)
+  })
+
+  it("falls back to the caller fallback (annualValue / 0) when both are absent", () => {
+    expect(
+      resolveSeededFinancedTotal({ capitalCost: null, totalValue: null, fallback: 750_000 }),
+    ).toBe(750_000)
+    // Vendor form passes no fallback → 0 (never negative / NaN).
+    expect(resolveSeededFinancedTotal({})).toBe(0)
+    expect(
+      resolveSeededFinancedTotal({ capitalCost: -5, totalValue: -1, fallback: -9 }),
+    ).toBe(0)
+  })
+})
 
 // Regression: the Capital / Leased Items editor must NEVER land empty for a
 // tie_in/capital contract — an empty editor blocks save. Both the AI-extract
