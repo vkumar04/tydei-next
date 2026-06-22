@@ -12,7 +12,7 @@
  * (`getFacilityCurrentStateForVendor` → measurable seeds, no competitor mix).
  */
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Select,
@@ -46,15 +46,42 @@ interface FacilityOption {
   name: string
 }
 
+/**
+ * The facility's current financial picture as the export needs it. The panel
+ * emits this to the parent (Opportunity Engine) so the page-level "Export"
+ * includes the Facility Current State, not just the deal scenario.
+ */
+export interface FacilityCurrentStateSnapshot {
+  facilityName: string
+  currentVendorSpend: number
+  netRevenue: number
+  ebitda: number
+  ebitdaMarginPct: number
+  dcf: number
+  dcfExplicit: number
+  dcfTerminalValue: number
+  annualCaseVolume: number
+  revenueMode: RevenueMode
+  avgReimbursementPerCase: number
+  dcfPctOfEbitda: number
+  discountRatePct: number
+  cashFlowGrowthPct: number
+  terminalGrowthPct: number
+  dcfProjectionYears: number
+}
+
 /** Supply cost as a share of revenue for the manual-mode fallback seed. */
 const IMPLIED_SUPPLY_COST_PCT = 0.3
 
 export function FacilityCurrentStatePanel({
   vendorId,
   facilities,
+  onSnapshotChange,
 }: {
   vendorId: string
   facilities: FacilityOption[]
+  /** Emits the current facility model so the parent export can include it. */
+  onSnapshotChange?: (snapshot: FacilityCurrentStateSnapshot | null) => void
 }) {
   const [facilityId, setFacilityId] = useState<string>(
     () => facilities[0]?.id ?? "",
@@ -120,7 +147,11 @@ export function FacilityCurrentStatePanel({
                 </span>
               </div>
             )}
-            <FacilityCurrentStateModel key={facilityId} data={data} />
+            <FacilityCurrentStateModel
+              key={facilityId}
+              data={data}
+              onSnapshotChange={onSnapshotChange}
+            />
           </>
         )}
       </CardContent>
@@ -139,8 +170,10 @@ export function FacilityCurrentStatePanel({
  */
 function FacilityCurrentStateModel({
   data,
+  onSnapshotChange,
 }: {
   data: VendorFacilityCurrentState
+  onSnapshotChange?: (snapshot: FacilityCurrentStateSnapshot | null) => void
 }) {
   // Use the facility's REAL spend + case count — never a fabricated seed —
   // so a sparse facility shows honest (possibly zero) figures, not demo data.
@@ -186,6 +219,37 @@ function FacilityCurrentStateModel({
     () => computeFacilityProspectiveModel(effectiveAssumptions, 0),
     [effectiveAssumptions],
   )
+
+  // Emit the live snapshot so the Opportunity Engine's page-level Export can
+  // include this Facility Current State. Deps are the computed model +
+  // assumptions; onSnapshotChange is a stable setState, so no loop.
+  useEffect(() => {
+    onSnapshotChange?.({
+      facilityName: data.facilityName,
+      currentVendorSpend: model.current.vendorSpend,
+      netRevenue: model.current.netRevenue,
+      ebitda: model.current.ebitda,
+      ebitdaMarginPct: model.current.ebitdaMarginPct,
+      dcf: model.current.dcf,
+      dcfExplicit: model.current.dcfExplicit,
+      dcfTerminalValue: model.current.dcfTerminalValue,
+      annualCaseVolume: effectiveAssumptions.annualCaseVolume,
+      revenueMode,
+      avgReimbursementPerCase,
+      dcfPctOfEbitda: effectiveAssumptions.dcfPctOfEbitda,
+      discountRatePct: effectiveAssumptions.discountRatePct,
+      cashFlowGrowthPct: effectiveAssumptions.cashFlowGrowthPct,
+      terminalGrowthPct: effectiveAssumptions.terminalGrowthPct ?? 0.03,
+      dcfProjectionYears: effectiveAssumptions.dcfProjectionYears,
+    })
+  }, [
+    onSnapshotChange,
+    data.facilityName,
+    model,
+    effectiveAssumptions,
+    revenueMode,
+    avgReimbursementPerCase,
+  ])
 
   return (
     <div className="space-y-4">

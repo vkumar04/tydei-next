@@ -57,7 +57,10 @@ import {
 } from "@/hooks/use-analysis-insights"
 import { useVendorDivisionsWithMembers } from "@/hooks/use-divisions"
 import type { VendorInsightSnapshot } from "@/lib/ai/analysis-insight-schemas"
-import { FacilityCurrentStatePanel } from "@/components/vendor/prospective/facility-current-state"
+import {
+  FacilityCurrentStatePanel,
+  type FacilityCurrentStateSnapshot,
+} from "@/components/vendor/prospective/facility-current-state"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -103,6 +106,10 @@ export function OpportunityEngineSection({
   const divisionOptions = divisions ?? []
   const [division, setDivision] = useState<string>("")
   const [facility, setFacility] = useState<string>("")
+  // The Facility Current State panel emits its live model here so the
+  // page-level Export includes it alongside the deal scenario.
+  const [facilitySnapshot, setFacilitySnapshot] =
+    useState<FacilityCurrentStateSnapshot | null>(null)
   const effectiveDivision =
     division || divisionOptions[0]?.name || "All divisions"
   // Slider state is held as integer percentages; mapped to fractions below.
@@ -229,26 +236,36 @@ export function OpportunityEngineSection({
           <DropdownMenuContent align="end">
             <DropdownMenuItem
               onSelect={() =>
-                void downloadOpportunityPdf(engine, score, {
-                  division: effectiveDivision,
-                  facility: facility.trim() || "Unspecified facility",
-                  priceChangePct,
-                  targetShare,
-                  expectedVolumeGrowthPct,
-                })
+                void downloadOpportunityPdf(
+                  engine,
+                  score,
+                  {
+                    division: effectiveDivision,
+                    facility: facility.trim() || "Unspecified facility",
+                    priceChangePct,
+                    targetShare,
+                    expectedVolumeGrowthPct,
+                  },
+                  facilitySnapshot,
+                )
               }
             >
               Export PDF
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() =>
-                downloadOpportunityCsv(engine, score, {
-                  division: effectiveDivision,
-                  facility: facility.trim() || "Unspecified facility",
-                  priceChangePct,
-                  targetShare,
-                  expectedVolumeGrowthPct,
-                })
+                downloadOpportunityCsv(
+                  engine,
+                  score,
+                  {
+                    division: effectiveDivision,
+                    facility: facility.trim() || "Unspecified facility",
+                    priceChangePct,
+                    targetShare,
+                    expectedVolumeGrowthPct,
+                  },
+                  facilitySnapshot,
+                )
               }
             >
               Export CSV
@@ -258,7 +275,11 @@ export function OpportunityEngineSection({
       </div>
 
       {/* Facility Current State — the financial picture of the pitch target */}
-      <FacilityCurrentStatePanel vendorId={vendorId} facilities={facilities} />
+      <FacilityCurrentStatePanel
+        vendorId={vendorId}
+        facilities={facilities}
+        onSnapshotChange={setFacilitySnapshot}
+      />
 
       {/* Deal Scenario */}
       <Card>

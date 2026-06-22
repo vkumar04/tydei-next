@@ -251,7 +251,9 @@ export function AnalysisDashboardClient({
               >
                 Export PDF
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => downloadAnalysisCsv(model)}>
+              <DropdownMenuItem
+                onSelect={() => downloadAnalysisCsv(model, effectiveAssumptions)}
+              >
                 Export CSV
               </DropdownMenuItem>
             </DropdownMenuContent>
