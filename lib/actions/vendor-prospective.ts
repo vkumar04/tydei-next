@@ -8,6 +8,10 @@ import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 import { onlyProspectiveProposalRows } from "@/lib/prospective/proposal-rows"
 import {
+  buildCptRateSchedule,
+  resolveCaseReimbursement,
+} from "@/lib/case-costing/cpt-rate-map"
+import {
   analyzeVendorProspective,
   type BenchmarkDataPoint,
   type CapitalDealDetails,
@@ -99,6 +103,102 @@ export async function getVendorRelatedFacilities(): Promise<
     orderBy: { name: "asc" },
   })
   return serialize(facilities)
+}
+
+// ─── Per-facility Current State (vendor pitch view) ────────────
+
+/**
+ * The facility-Analysis "Current State" measurable seeds, for ONE facility
+ * the calling vendor is pitching (Vick 2026-06-22: "these numbers are
+ * relevant for each facility a vendor is pitching"). Mirrors the measurable
+ * inputs of `getFacilityAnalysisData` (total supply spend + case volume +
+ * reimbursement coverage) so the vendor surface can run the SAME
+ * `computeFacilityProspectiveModel` (EBITDA / DCF) for the target facility.
+ *
+ * Deliberately OMITS the category / vendor breakdown the facility-side action
+ * returns — the vendor sees only the top-line state of the prize, not the
+ * facility's competitive supplier mix.
+ *
+ * IDOR-safe: scoped through `vendorRelatedFacilityWhere`, so a vendor can
+ * only pull a facility it actually has a relationship with.
+ */
+export interface VendorFacilityCurrentState {
+  facilityId: string
+  facilityName: string
+  /** Total facility supply spend, trailing 12 months (the addressable prize). */
+  currentVendorSpend: number
+  annualCaseVolume: number
+  /** Summed case-costing reimbursement (the "Actuals" revenue figure). */
+  measuredReimbursement: number
+  reimbursementCoverage: { withRate: number; totalCases: number }
+  hasData: boolean
+}
+
+export async function getFacilityCurrentStateForVendor(
+  facilityId: string,
+): Promise<VendorFacilityCurrentState> {
+  const { vendor } = await requireVendor()
+
+  const facility = await prisma.facility.findFirst({
+    where: { id: facilityId, ...vendorRelatedFacilityWhere(vendor.id) },
+    select: { id: true, name: true },
+  })
+  if (!facility) {
+    throw new Error(
+      "Facility not found or not related to your organization",
+    )
+  }
+
+  const { start, end } = getTrailing12MonthWindow()
+  const [cogRows, cases, payorContracts] = await Promise.all([
+    prisma.cOGRecord.findMany({
+      where: { facilityId, transactionDate: { gte: start, lte: end } },
+      select: { extendedPrice: true },
+    }),
+    prisma.case.findMany({
+      where: { facilityId },
+      select: {
+        totalReimbursement: true,
+        primaryCptCode: true,
+        dateOfSurgery: true,
+        procedures: { select: { cptCode: true } },
+      },
+    }),
+    prisma.payorContract.findMany({
+      where: { facilityId, status: "active" },
+      select: { cptRates: true },
+    }),
+  ])
+
+  let totalSpend = 0
+  for (const r of cogRows) totalSpend += Number(r.extendedPrice ?? 0)
+
+  const cptRateSchedule = buildCptRateSchedule(payorContracts)
+  let measuredReimbursement = 0
+  let casesWithRate = 0
+  for (const c of cases) {
+    const v = resolveCaseReimbursement(
+      {
+        storedReimbursement: Number(c.totalReimbursement),
+        primaryCptCode: c.primaryCptCode,
+        procedureCptCodes: c.procedures.map((p) => p.cptCode),
+      },
+      cptRateSchedule,
+      c.dateOfSurgery,
+    )
+    measuredReimbursement += v
+    if (v > 0) casesWithRate += 1
+  }
+
+  return serialize({
+    facilityId: facility.id,
+    facilityName: facility.name,
+    currentVendorSpend: totalSpend,
+    annualCaseVolume: cases.length,
+    measuredReimbursement,
+    reimbursementCoverage: { withRate: casesWithRate, totalCases: cases.length },
+    hasData: cogRows.length > 0,
+  })
 }
 
 // ─── Action ────────────────────────────────────────────────────
