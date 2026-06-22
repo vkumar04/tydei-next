@@ -13,6 +13,7 @@ import type {
   CurrentFinancialState,
   FacilityModelAssumptions,
 } from "@/lib/financial-analysis/prospective-impact-model"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { usdCompact } from "./format"
 import { SliderField } from "./slider-field"
@@ -200,14 +201,15 @@ export function FinancialAssumptionsCard({
       <CardHeader>
         <CardTitle>Financial Assumptions</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Vendor spend and case volume come from your tracked data. Set the few
-          figures only you know — every number on this page recalculates
-          instantly.
+          Vendor spend comes from your tracked data; annual cases default from
+          your case-costing data but can be overridden. Set the few figures only
+          you know — every number on this page recalculates instantly.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Tracked from the system — not editable here */}
-        <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-sm">
+        {/* Vendor spend is tracked; annual cases seed from case-costing data
+            but are editable so you can enter an actual / projected volume. */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
           <span className="text-muted-foreground">
             Vendor spend{" "}
             <span className="font-semibold tabular-nums text-foreground">
@@ -215,13 +217,23 @@ export function FinancialAssumptionsCard({
             </span>{" "}
             <span className="text-xs">· from your data</span>
           </span>
-          <span className="text-muted-foreground">
-            Annual cases{" "}
-            <span className="font-semibold tabular-nums text-foreground">
-              {assumptions.annualCaseVolume.toLocaleString("en-US")}
-            </span>{" "}
-            <span className="text-xs">· from your data</span>
-          </span>
+          <label className="flex items-center gap-2 text-muted-foreground">
+            Annual cases
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={assumptions.annualCaseVolume}
+              onChange={(e) =>
+                set(
+                  "annualCaseVolume",
+                  Math.max(0, Math.round(Number(e.target.value) || 0)),
+                )
+              }
+              className="h-7 w-24 font-semibold tabular-nums"
+            />
+            <span className="text-xs">· default from your data, editable</span>
+          </label>
         </div>
 
         {/* The three figures only the facility knows */}
