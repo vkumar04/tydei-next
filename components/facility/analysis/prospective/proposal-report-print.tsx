@@ -21,6 +21,7 @@ import type { PricingFileAnalysis } from "@/lib/prospective-analysis/pricing-fil
 import type { VendorLookbackComparison } from "@/lib/actions/prospective-analysis"
 import type { PDFContractAnalysisResult } from "@/lib/contracts/clause-risk-analyzer"
 import type { ScoredProposal } from "./types"
+import { buildProposalNarrative } from "./proposal-narrative"
 
 const VERDICT_LABELS: Record<ProposalVerdict["verdict"], string> = {
   good_deal: "Good deal",
@@ -80,6 +81,17 @@ export function ProposalReportPrint({
   legal,
 }: ProposalReportPrintProps) {
   const predicted = lookback?.predicted ?? null
+  const narrative =
+    verdict || scored || pricing || lookback || legal
+      ? buildProposalNarrative({
+          vendorName,
+          verdict,
+          scored,
+          lookback,
+          pricing,
+          legal,
+        })
+      : null
 
   return (
     <div className="proposal-report-print hidden bg-white p-8 text-black print:block">
@@ -94,6 +106,14 @@ export function ProposalReportPrint({
           {formatDate(scored?.createdAt ?? new Date().toISOString())}
         </p>
       </div>
+
+      {/* ── Summary narrative (tells the story before the tables) ────── */}
+      {narrative ? (
+        <>
+          <SectionTitle>Summary</SectionTitle>
+          <p className="text-sm leading-relaxed">{narrative}</p>
+        </>
+      ) : null}
 
       {/* ── Verdict ─────────────────────────────────────────────────── */}
       {verdict ? (
