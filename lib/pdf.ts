@@ -6,6 +6,7 @@ import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { deriveContractCadence } from "@/lib/contracts/contract-cadence"
 import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
 import { formatCurrency } from "@/lib/formatting"
+import { computeRunningCapitalBalances } from "@/lib/reports/running-capital-balance"
 
 // ─── jspdf-autotable extends the doc with lastAutoTable ──────────
 
@@ -311,6 +312,8 @@ interface ReportPerfContract {
   rebateEarnedCanonical: number
   rebateCollectedCanonical: number
   marginCanonical: number
+  /** Tie-in / capital remaining capital balance — drives the Balance column. */
+  capitalRemainingBalance?: number | null
   periods: ReportPerfPeriod[]
 }
 
@@ -353,6 +356,7 @@ function periodColumnsFor(
         { header: "Spend", value: (p) => money(p.totalSpend), align: "right" },
         { header: "Volume", value: (p) => p.totalVolume.toLocaleString(), align: "right" },
         { header: "Rebate Earned", value: (p) => money(p.rebateEarned), align: "right" },
+        { header: "Rebate Collected", value: (p) => money(p.rebateCollected), align: "right" },
         { header: "Payment Actual", value: (p) => money(p.paymentActual), align: "right" },
       ]
     case "grouped":
@@ -375,7 +379,11 @@ export function generateReportPerformancePDF(
   input: ReportPerformanceInput,
 ): Uint8Array {
   const { entityName, reportType, dateFrom, dateTo, contracts } = input
-  const doc = new jsPDF()
+  // Landscape — the per-period tables run up to ~8 columns (tie-in: Spend,
+  // Volume, Rebate Earned, Rebate Collected, Payment Actual, Balance + Period),
+  // which overflow/clip in portrait (Vick 2026-06-22 "exported report doesn't
+  // have all the data, it's not landscape").
+  const doc = new jsPDF({ orientation: "landscape" })
   addHeader(
     doc,
     "Contract Performance Details",
@@ -433,11 +441,24 @@ export function generateReportPerformancePDF(
 
     y = getFinalY(doc, y) + 8
 
+    // Balance column for capital-like contracts — running remaining capital
+    // balance, anchored to the contract's current balance (mirrors the
+    // on-screen ReportPeriodTable so the PDF carries the same data).
+    const isCapitalLike =
+      c.contractType === "tie_in" || c.contractType === "capital"
+    const balances =
+      isCapitalLike && c.capitalRemainingBalance != null
+        ? computeRunningCapitalBalances(c.periods, c.capitalRemainingBalance)
+        : null
+
     // Per-period table.
-    const head = [["Period", ...cols.map((col) => col.header)]]
-    const body = c.periods.map((p) => [
+    const head = [
+      ["Period", ...cols.map((col) => col.header), ...(balances ? ["Balance"] : [])],
+    ]
+    const body = c.periods.map((p, i) => [
       `${fmtDate(p.periodStart)} - ${fmtDate(p.periodEnd)}`,
       ...cols.map((col) => col.value(p)),
+      ...(balances ? [fmtCurrency(balances[i])] : []),
     ])
 
     // Totals row — canonical rebate figures where applicable.
@@ -459,6 +480,13 @@ export function generateReportPerformancePDF(
     body.push([
       "TOTAL",
       ...cols.map((col) => totalsByHeader[col.header] ?? ""),
+      ...(balances
+        ? [
+            c.capitalRemainingBalance != null
+              ? fmtCurrency(c.capitalRemainingBalance)
+              : "",
+          ]
+        : []),
     ])
 
     autoTable(doc, {
@@ -471,6 +499,8 @@ export function generateReportPerformancePDF(
       columnStyles: cols.reduce<Record<number, { halign: "right" }>>(
         (acc, col, i) => {
           if (col.align === "right") acc[i + 1] = { halign: "right" }
+          // Right-align the appended Balance column when present.
+          if (balances) acc[cols.length + 1] = { halign: "right" }
           return acc
         },
         {},
