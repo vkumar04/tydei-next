@@ -10,7 +10,10 @@ import type { OpportunityEngineResult } from "@/lib/prospective-analysis/opportu
 import type { VendorOpportunityScore } from "@/lib/prospective-analysis/vendor-opportunity-score"
 
 export interface OpportunityScenarioMeta {
-  vendor: string
+  /** The pitching entity — the vendor's division. */
+  division: string
+  /** The target facility (chosen from related facilities or written in). */
+  facility: string
   priceChangePct: number
   targetShare: number
   expectedVolumeGrowthPct: number
@@ -40,7 +43,8 @@ export function downloadOpportunityCsv(
       { key: "value", label: "Value" },
     ],
     rows: [
-      { metric: "Vendor", value: scenario.vendor },
+      { metric: "Division", value: scenario.division },
+      { metric: "Facility", value: scenario.facility },
       { metric: "Price change vs ASP", value: pct(scenario.priceChangePct) },
       { metric: "Target market share", value: pct(scenario.targetShare) },
       { metric: "Expected volume growth", value: pct(scenario.expectedVolumeGrowthPct) },
@@ -104,7 +108,7 @@ export async function downloadOpportunityPdf(
   doc.setFontSize(10)
   doc.setTextColor(120)
   doc.text(
-    `${scenario.vendor} · ${new Date().toLocaleDateString("en-US")}`,
+    `${scenario.division} · ${scenario.facility} · ${new Date().toLocaleDateString("en-US")}`,
     margin,
     y,
   )
@@ -119,6 +123,8 @@ export async function downloadOpportunityPdf(
     startY: y,
     head: [["Lever", "Value"]],
     body: [
+      ["Division", scenario.division],
+      ["Facility", scenario.facility],
       ["Price change vs ASP", pct(scenario.priceChangePct)],
       ["Target market share", pct(scenario.targetShare)],
       ["Expected volume growth", pct(scenario.expectedVolumeGrowthPct)],

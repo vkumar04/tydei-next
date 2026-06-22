@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
 import {
   Select,
@@ -54,6 +55,7 @@ import {
   useVendorOpportunityData,
   useVendorOpportunityInsights,
 } from "@/hooks/use-analysis-insights"
+import { useVendorDivisionsWithMembers } from "@/hooks/use-divisions"
 import type { VendorInsightSnapshot } from "@/lib/ai/analysis-insight-schemas"
 import { FacilityCurrentStatePanel } from "@/components/vendor/prospective/facility-current-state"
 
@@ -69,14 +71,6 @@ interface OpportunityEngineSectionProps {
   /** Optional — not required; the engine is assumption-driven. */
   facilities?: FacilityOption[]
 }
-
-const VENDOR_OPTIONS = [
-  "Arthrex",
-  "Stryker",
-  "Zimmer Biomet",
-  "Medtronic",
-  "Smith & Nephew",
-] as const
 
 const BAND_SUBLABEL: Record<
   ReturnType<typeof computeOpportunityEngine>["winProbabilityBand"],
@@ -102,7 +96,15 @@ export function OpportunityEngineSection({
   vendorId,
   facilities = [],
 }: OpportunityEngineSectionProps) {
-  const [vendor, setVendor] = useState<string>(VENDOR_OPTIONS[0])
+  // The pitching entity is the vendor's DIVISION; the target facility can be
+  // chosen from related facilities OR written in (this only labels the
+  // exported report — it is never shown to the facility). Vick 2026-06-22.
+  const { data: divisions } = useVendorDivisionsWithMembers(vendorId)
+  const divisionOptions = divisions ?? []
+  const [division, setDivision] = useState<string>("")
+  const [facility, setFacility] = useState<string>("")
+  const effectiveDivision =
+    division || divisionOptions[0]?.name || "All divisions"
   // Slider state is held as integer percentages; mapped to fractions below.
   const [priceChangePctInt, setPriceChangePctInt] = useState(
     Math.round(DEFAULT_OPPORTUNITY_SCENARIO.priceChangePct * 100),
@@ -214,7 +216,8 @@ export function OpportunityEngineSection({
             <DropdownMenuItem
               onSelect={() =>
                 void downloadOpportunityPdf(engine, score, {
-                  vendor,
+                  division: effectiveDivision,
+                  facility: facility.trim() || "Unspecified facility",
                   priceChangePct,
                   targetShare,
                   expectedVolumeGrowthPct,
@@ -226,7 +229,8 @@ export function OpportunityEngineSection({
             <DropdownMenuItem
               onSelect={() =>
                 downloadOpportunityCsv(engine, score, {
-                  vendor,
+                  division: effectiveDivision,
+                  facility: facility.trim() || "Unspecified facility",
                   priceChangePct,
                   targetShare,
                   expectedVolumeGrowthPct,
@@ -254,19 +258,43 @@ export function OpportunityEngineSection({
         <CardContent className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="oe-vendor">Vendor</Label>
-              <Select value={vendor} onValueChange={setVendor}>
-                <SelectTrigger id="oe-vendor">
-                  <SelectValue />
+              <Label htmlFor="oe-division">Division</Label>
+              <Select value={effectiveDivision} onValueChange={setDivision}>
+                <SelectTrigger id="oe-division">
+                  <SelectValue placeholder="Select a division" />
                 </SelectTrigger>
                 <SelectContent>
-                  {VENDOR_OPTIONS.map((v) => (
-                    <SelectItem key={v} value={v}>
-                      {v}
-                    </SelectItem>
-                  ))}
+                  {divisionOptions.length === 0 ? (
+                    <SelectItem value="All divisions">All divisions</SelectItem>
+                  ) : (
+                    divisionOptions.map((d) => (
+                      <SelectItem key={d.id} value={d.name}>
+                        {d.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="oe-facility">Facility</Label>
+              <Input
+                id="oe-facility"
+                list="oe-facility-options"
+                value={facility}
+                onChange={(e) => setFacility(e.target.value)}
+                placeholder="Choose or type a facility"
+              />
+              <datalist id="oe-facility-options">
+                {facilities.map((f) => (
+                  <option key={f.id} value={f.name} />
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground">
+                For your report only — choose a facility you serve or write in a
+                new prospect. Not shared with the facility.
+              </p>
             </div>
 
             <SliderControl
