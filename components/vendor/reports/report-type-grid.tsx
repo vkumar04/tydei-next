@@ -8,12 +8,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { FileBarChart } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { FileBarChart, FileText, Sheet } from "lucide-react"
 import type { ReportType } from "./reports-types"
 
 export interface ReportTypeGridProps {
   reportTypes: ReportType[]
-  onGenerate: (report: ReportType) => void
+  onGenerate: (report: ReportType, format: "pdf" | "csv") => void
 }
 
 /**
@@ -42,19 +48,42 @@ export function ReportTypeGrid({ reportTypes, onGenerate }: ReportTypeGridProps)
             <p className="text-sm text-muted-foreground mb-3">
               {report.description}
             </p>
-            <Button
-              type="button"
-              size="sm"
-              className="w-full"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onGenerate(report)
-              }}
-            >
-              <FileBarChart className="h-4 w-4 mr-2" />
-              Generate Report
-            </Button>
+            {report.id === "leakage" ? (
+              // Leakage has no tabular export — the button scrolls to its
+              // live audit card (handled in the parent).
+              <Button
+                type="button"
+                size="sm"
+                className="w-full"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onGenerate(report, "pdf")
+                }}
+              >
+                <FileBarChart className="h-4 w-4 mr-2" />
+                View audit
+              </Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" size="sm" className="w-full">
+                    <FileBarChart className="h-4 w-4 mr-2" />
+                    Generate Report
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                  <DropdownMenuItem onSelect={() => onGenerate(report, "pdf")}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onGenerate(report, "csv")}>
+                    <Sheet className="h-4 w-4 mr-2" />
+                    Download CSV
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </CardContent>
         </Card>
       ))}

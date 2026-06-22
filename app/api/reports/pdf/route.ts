@@ -8,10 +8,21 @@ import {
   generateRebateReport,
   generateSurgeonScorecard,
   generateReportPerformancePDF,
+  generateTableReportPDF,
   type ReportPerfType,
 } from "@/lib/pdf"
 import { getReportData } from "@/lib/actions/reports"
 import { getVendorReportData } from "@/lib/actions/vendor-reports/report-data"
+import {
+  getVendorRebateStatement,
+  getVendorPerformanceSummary,
+  getVendorContractRoster,
+} from "@/lib/actions/vendor-reports"
+import {
+  formatExportDate,
+  formatExportDollars,
+  formatExportPercent,
+} from "@/lib/reports/export-formatters"
 
 const REPORT_PERF_TYPES: ReportPerfType[] = [
   "usage",
@@ -61,8 +72,9 @@ export async function POST(request: NextRequest) {
       scope,
       reportType,
       contractId,
+      vendorReport,
     } = body as {
-      type: "contract" | "rebate" | "surgeon" | "report"
+      type: "contract" | "rebate" | "surgeon" | "report" | "vendor-report"
       id?: string
       facilityId?: string
       surgeonName?: string
@@ -70,6 +82,7 @@ export async function POST(request: NextRequest) {
       scope?: "facility" | "vendor"
       reportType?: ReportPerfType
       contractId?: string
+      vendorReport?: "rebates" | "performance" | "roster"
     }
 
     let pdfBytes: Uint8Array
@@ -139,6 +152,96 @@ export async function POST(request: NextRequest) {
         headers: {
           "Content-Type": "application/pdf",
           "Content-Disposition": `attachment; filename="${filename}"`,
+          "Content-Length": String(pdfBytes.byteLength),
+        },
+      })
+    }
+
+    // ── Vendor Reports cards (Rebate Statement / Performance / Roster) ──
+    // Vendor-scoped; the actions enforce ownership via requireVendor, so this
+    // must NOT require a facility membership. Renders via the shared
+    // server-side generator (generateTableReportPDF) — same data the CSV
+    // cards fetch, now as a real PDF (Vick 2026-06-22).
+    if (type === "vendor-report") {
+      if (!userVendor) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      const from = dateRange?.from
+      const to = dateRange?.to
+      const periodLabel = from && to ? `  ·  ${from} to ${to}` : ""
+
+      let title: string
+      let head: string[]
+      let rows: string[][]
+      let numericColumns: number[]
+
+      if (vendorReport === "rebates") {
+        if (!from || !to) {
+          return NextResponse.json({ error: "dateRange is required" }, { status: 400 })
+        }
+        const data = await getVendorRebateStatement(from, to)
+        title = "Vendor Rebate Statement"
+        head = ["Contract", "Facility", "Earned This Period", "Collected This Period", "Outstanding"]
+        rows = data.map((r) => [
+          r.contractName,
+          r.facilityName,
+          formatExportDollars(r.earnedThisPeriod),
+          formatExportDollars(r.collectedThisPeriod),
+          formatExportDollars(r.outstanding),
+        ])
+        numericColumns = [2, 3, 4]
+      } else if (vendorReport === "performance") {
+        if (!from || !to) {
+          return NextResponse.json({ error: "dateRange is required" }, { status: 400 })
+        }
+        const data = await getVendorPerformanceSummary(from, to)
+        title = "Vendor Performance Summary"
+        head = ["Facility", "Spend", "Rebate Earned", "Rebate Collected", "Compliance %", "Market Share %"]
+        rows = data.map((r) => [
+          r.facilityName,
+          formatExportDollars(r.spend),
+          formatExportDollars(r.earned),
+          formatExportDollars(r.collected),
+          formatExportPercent(r.compliancePercent),
+          formatExportPercent(r.marketSharePercent),
+        ])
+        numericColumns = [1, 2, 3, 4, 5]
+      } else if (vendorReport === "roster") {
+        const data = await getVendorContractRoster()
+        title = "Vendor Contract Roster"
+        head = [
+          "Contract", "Contract #", "Facility", "Status", "Effective",
+          "Expiration", "Rebate Method", "Last Activity", "Earned YTD", "Earned Lifetime",
+        ]
+        rows = data.map((r) => [
+          r.contractName,
+          r.contractNumber ?? "",
+          r.facilityName,
+          r.status,
+          formatExportDate(new Date(r.effectiveDate)),
+          formatExportDate(new Date(r.expirationDate)),
+          r.rebateMethod,
+          r.lastActivity ? formatExportDate(new Date(r.lastActivity)) : "",
+          formatExportDollars(r.rebateEarnedYTD),
+          formatExportDollars(r.rebateEarnedLifetime),
+        ])
+        numericColumns = [8, 9]
+      } else {
+        return NextResponse.json({ error: "Invalid vendorReport" }, { status: 400 })
+      }
+
+      const pdfBytes = generateTableReportPDF({
+        title,
+        subtitle: `${userVendor.name}${periodLabel}`,
+        head,
+        rows,
+        numericColumns,
+      })
+      return new Response(Buffer.from(pdfBytes), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${title.replace(/\s+/g, "-").toLowerCase()}.pdf"`,
           "Content-Length": String(pdfBytes.byteLength),
         },
       })
