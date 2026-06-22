@@ -410,6 +410,28 @@ for existing rows until a caller opts in.
 
 ## Reports + tables (2026-06-19/20)
 
+- **Contract Performance Details: canonical rebate totals are LIFETIME, never
+  windowed.** `getReportData` / `getVendorReportData` fetch the contract's
+  `rebates` WITHOUT a `payPeriodStart/End` window — `rebateEarnedCanonical`,
+  `rebateCollectedCanonical`, and `marginCanonical` feed the period-table footer
+  "Total (to date)" + Contract Margin, which are lifetime figures that must
+  agree with the Contracts List / Contract Detail (same `sumEarnedRebatesLifetime`
+  / `sumCollectedRebates` helpers). Windowing the fetch hid annual-cadence
+  rebates whose `payPeriodEnd` fell outside the report window — a 2024/2025
+  rebate viewed in a trailing-90-day window read as $0 earned/collected/margin
+  even though it was earned, collected, and applied to capital (Vick 2026-06-22,
+  prod contract 0010126879). The per-month ROWS still come from the windowed
+  `periods` (ContractPeriod, or COG-derived synthetic when none exist); only the
+  totals are lifetime. Do NOT re-add a window to that rebates fetch.
+- **`ReportPeriodTable` footer earned/collected fall back to the period rollup
+  with `||` (not `??`)** so a $0 canonical never hides a non-zero ContractPeriod
+  rollup (CLAUDE.md: earned/collected come from Rebate rows OR ContractPeriod
+  rollups). The tie-in/capital **Balance** column shows a running remaining
+  capital balance via `computeRunningCapitalBalances`
+  (`lib/reports/running-capital-balance.ts`) — anchored so the most-recent period
+  equals the contract's current `capitalRemainingBalance` (the header figure),
+  reconciling regardless of the report window. Was rendering `paymentExpected`
+  (always $0). Regression: `lib/reports/__tests__/running-capital-balance.test.ts`.
 - **Price Discrepancy Report** reads **matched COG spend, not invoices.**
   `getPriceDiscrepancies` (`lib/actions/reports.ts`) queries `COGRecord` where
   `matchStatus IN (price_variance, off_contract_item)` — the SAME source the
