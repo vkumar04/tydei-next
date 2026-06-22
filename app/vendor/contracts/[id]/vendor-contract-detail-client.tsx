@@ -4,14 +4,11 @@ import Link from "next/link"
 import { Pencil } from "lucide-react"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
-import { VendorContractOverview } from "@/components/vendor/contracts/vendor-contract-overview"
+import {
+  VendorContractOverview,
+  type VendorContractExtraTab,
+} from "@/components/vendor/contracts/vendor-contract-overview"
 import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
@@ -111,87 +108,59 @@ export function VendorContractDetailClient({
     !tierTerm &&
     (contract.terms?.some((t) => t.termType === "carve_out") ?? false)
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title={contract.name}
-        description="Contract details"
-        action={
-          <div className="flex items-center gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/vendor/contracts/${contract.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Propose Changes
-              </Link>
-            </Button>
-          </div>
-        }
-      />
+  // The capital tie-in split that used to sit at the bottom of the Overview tab.
+  const overviewExtra = isCapitalLike ? (
+    <TieInRebateSplit
+      contractId={contract.id}
+      fetcher={getVendorContractCapitalSchedule}
+      scope="vendor"
+    />
+  ) : null
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {/* Charles 2026-04-26 #62: Accruals tab for vendor parity
-              with the facility surface. Pulls the same monthly
-              accrual timeline the facility sees, scoped through
-              getVendorAccrualTimeline. */}
-          <TabsTrigger value="accruals">Accruals</TabsTrigger>
-          {/* Charles 2026-04-26 #65: dedicated Amortization tab for
-              capital-like contracts so vendors get the same surface
-              the facility side has. Previously the schedule was
-              tucked at the bottom of Overview and easy to miss. */}
-          {isCapitalLike && (
-            <TabsTrigger value="amortization">Amortization</TabsTrigger>
-          )}
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          {/* 2026-06-09 facility→vendor UI parity: vendors can now see
-              the price list governing their own contract (read-only —
-              pricing mutations stay facility-gated). */}
-          <TabsTrigger value="pricing">Pricing</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="mt-6 space-y-6">
-          <VendorContractOverview contract={contract} />
-          {isCapitalLike && (
-            <TieInRebateSplit
-              contractId={contract.id}
-              fetcher={getVendorContractCapitalSchedule}
-              scope="vendor"
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="accruals" className="mt-6 space-y-6">
-          <ContractAccrualTimeline
-            contractId={contract.id}
-            fetcher={getVendorAccrualTimeline}
-          />
-        </TabsContent>
-
-        {isCapitalLike && (
-          <TabsContent value="amortization" className="mt-6 space-y-6">
-            <TieInRebateSplit
-              contractId={contract.id}
-              fetcher={getVendorContractCapitalSchedule}
-              scope="vendor"
-            />
-            {/* 2026-06-09 facility→vendor port: Capital Payoff Projection
-                (run-rate velocity + months-to-payoff) — same card the
-                facility Amortization surface shows, vendor-scoped fetcher. */}
-            <ContractCapitalProjectionCard
-              contractId={contract.id}
-              fetcher={getVendorContractCapitalProjection}
-            />
-            <ContractAmortizationCard
-              contractId={contract.id}
-              fetcher={getVendorContractCapitalSchedule}
-              scope="vendor"
-            />
-          </TabsContent>
-        )}
-
-        <TabsContent value="performance" className="mt-6 space-y-6">
+  // Parity surfaces merged into the ONE tab bar VendorContractOverview owns
+  // (was a second, nested outer Tabs → doubled bar / duplicate "Overview").
+  const extraTabs: VendorContractExtraTab[] = [
+    {
+      value: "accruals",
+      label: "Accruals",
+      content: (
+        <ContractAccrualTimeline
+          contractId={contract.id}
+          fetcher={getVendorAccrualTimeline}
+        />
+      ),
+    },
+    ...(isCapitalLike
+      ? [
+          {
+            value: "amortization",
+            label: "Amortization",
+            content: (
+              <>
+                <TieInRebateSplit
+                  contractId={contract.id}
+                  fetcher={getVendorContractCapitalSchedule}
+                  scope="vendor"
+                />
+                <ContractCapitalProjectionCard
+                  contractId={contract.id}
+                  fetcher={getVendorContractCapitalProjection}
+                />
+                <ContractAmortizationCard
+                  contractId={contract.id}
+                  fetcher={getVendorContractCapitalSchedule}
+                  scope="vendor"
+                />
+              </>
+            ),
+          },
+        ]
+      : []),
+    {
+      value: "performance",
+      label: "Performance",
+      content: (
+        <>
           {contract.contractType === "tie_in" ? (
             <TieInComplianceCard
               contractId={contract.id}
@@ -201,16 +170,11 @@ export function VendorContractDetailClient({
           {contract.contractType === "service" ? (
             <ServiceSlaCard contractId={contract.id} />
           ) : null}
-          {/* 2026-06-09 facility→vendor port: per-SKU carve-out rebate +
-              effective rate — the vendor's flagship contract is a carve-out
-              tie-in and had no carve-out surface. Self-hides when empty. */}
           <VendorCarveOutCard contractId={contract.id} />
           <RebateForecastCard
             contractId={contract.id}
             initialData={initialPerformanceBundle?.forecast}
           />
-          {/* 2026-06-09 facility→vendor UI parity: Monthly Spend +
-              Rebate by Quarter charts, vendor-scoped fetcher. */}
           <ContractPerformanceCharts
             contractId={contract.id}
             fetcher={getVendorContractPerformanceHistory}
@@ -234,19 +198,51 @@ export function VendorContractDetailClient({
               })) ?? []
             }
           />
-        </TabsContent>
+        </>
+      ),
+    },
+    {
+      value: "pricing",
+      label: "Pricing",
+      content: <VendorPricingTable contractId={contract.id} />,
+    },
+    {
+      value: "documents",
+      label: "Documents",
+      content: (
+        <ContractDocumentsList
+          documents={contract.documents}
+          contractId={contract.id}
+        />
+      ),
+    },
+  ]
 
-        <TabsContent value="pricing" className="mt-6">
-          <VendorPricingTable contractId={contract.id} />
-        </TabsContent>
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={contract.name}
+        description="Contract details"
+        action={
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/vendor/contracts/${contract.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Propose Changes
+              </Link>
+            </Button>
+          </div>
+        }
+      />
 
-        <TabsContent value="documents" className="mt-6">
-          <ContractDocumentsList
-            documents={contract.documents}
-            contractId={contract.id}
-          />
-        </TabsContent>
-      </Tabs>
+      {/* ONE tab bar — VendorContractOverview owns Overview/Terms/Transactions/
+          Amendments; the detail-page parity surfaces are merged in via
+          extraTabs (previously a second, nested outer Tabs → doubled bar). */}
+      <VendorContractOverview
+        contract={contract}
+        overviewExtra={overviewExtra}
+        extraTabs={extraTabs}
+      />
     </div>
   )
 }
