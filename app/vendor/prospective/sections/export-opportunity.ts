@@ -8,6 +8,7 @@ import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
 import { formatPercent, formatCompactCurrency } from "@/lib/formatting"
 import type { OpportunityEngineResult } from "@/lib/prospective-analysis/opportunity-engine"
 import type { VendorOpportunityScore } from "@/lib/prospective-analysis/vendor-opportunity-score"
+import type { FacilityCurrentStateSnapshot } from "@/components/vendor/prospective/facility-current-state"
 
 export interface OpportunityScenarioMeta {
   /** The pitching entity — the vendor's division. */
@@ -32,10 +33,43 @@ function triggerDownload(blob: Blob, filename: string): void {
 
 const pct = (n: number) => formatPercent(n * 100)
 
+/**
+ * Label/value rows for the Facility Current State section — the financial
+ * picture of the pitch target (spend → revenue → EBITDA → DCF + the
+ * assumptions behind them). Shared by the CSV and PDF exporters so the page's
+ * Export carries everything shown on the Opportunity Engine, not just the
+ * deal scenario. Vick 2026-06-22.
+ */
+export function facilityCurrentStateRows(
+  f: FacilityCurrentStateSnapshot,
+): [string, string][] {
+  const revenueBasis =
+    f.revenueMode === "actuals"
+      ? "case-costing actuals"
+      : `manual: ${formatCompactCurrency(f.avgReimbursementPerCase)}/case × ${f.annualCaseVolume.toLocaleString("en-US")} cases`
+  return [
+    ["Facility", f.facilityName],
+    ["Current vendor spend", formatCompactCurrency(f.currentVendorSpend)],
+    ["Net revenue", `${formatCompactCurrency(f.netRevenue)} (${revenueBasis})`],
+    ["EBITDA", `${formatCompactCurrency(f.ebitda)} (${pct(f.ebitdaMarginPct)} margin)`],
+    [
+      "DCF enterprise value",
+      `${formatCompactCurrency(f.dcf)} (${formatCompactCurrency(f.dcfExplicit)} explicit + ${formatCompactCurrency(f.dcfTerminalValue)} terminal)`,
+    ],
+    ["Annual cases", f.annualCaseVolume.toLocaleString("en-US")],
+    ["DCF % of EBITDA", pct(f.dcfPctOfEbitda)],
+    ["Discount rate", pct(f.discountRatePct)],
+    ["Cash flow growth", pct(f.cashFlowGrowthPct)],
+    ["Terminal growth", pct(f.terminalGrowthPct)],
+    ["DCF projection years", `${f.dcfProjectionYears} yrs`],
+  ]
+}
+
 export function downloadOpportunityCsv(
   engine: OpportunityEngineResult,
   score: VendorOpportunityScore,
   scenario: OpportunityScenarioMeta,
+  facility?: FacilityCurrentStateSnapshot | null,
 ): void {
   const outputs = toCSV({
     columns: [
@@ -73,7 +107,25 @@ export function downloadOpportunityCsv(
     ],
   })
 
+  const facilityBlock = facility
+    ? [
+        "Facility Current State",
+        toCSV({
+          columns: [
+            { key: "metric", label: "Metric" },
+            { key: "value", label: "Value" },
+          ],
+          rows: facilityCurrentStateRows(facility).map(([metric, value]) => ({
+            metric,
+            value,
+          })),
+        }),
+        "",
+      ]
+    : []
+
   const csv = [
+    ...facilityBlock,
     "Opportunity Engine — Deal Scenario",
     outputs,
     "",
@@ -94,6 +146,7 @@ export async function downloadOpportunityPdf(
   engine: OpportunityEngineResult,
   score: VendorOpportunityScore,
   scenario: OpportunityScenarioMeta,
+  facility?: FacilityCurrentStateSnapshot | null,
 ): Promise<void> {
   const { jsPDF } = await import("jspdf")
   const autoTable = (await import("jspdf-autotable")).default
@@ -118,6 +171,21 @@ export async function downloadOpportunityPdf(
   const after = (fallback: number) =>
     (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
       ?.finalY ?? fallback + 20
+
+  // Facility Current State — the financial picture of the pitch target.
+  if (facility) {
+    doc.setFontSize(12)
+    doc.text(`Facility Current State — ${facility.facilityName}`, margin, y + 6)
+    autoTable(doc, {
+      startY: y + 12,
+      head: [["Metric", "Value"]],
+      body: facilityCurrentStateRows(facility),
+      theme: "striped",
+      headStyles: { fillColor: [30, 41, 59] },
+      styles: { fontSize: 9 },
+    })
+    y = after(y)
+  }
 
   autoTable(doc, {
     startY: y,
