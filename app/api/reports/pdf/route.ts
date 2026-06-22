@@ -174,6 +174,11 @@ export async function POST(request: NextRequest) {
       let head: string[]
       let rows: string[][]
       let numericColumns: number[]
+      let intro: string
+      const sum = <T,>(arr: T[], pick: (t: T) => number) =>
+        arr.reduce((s, t) => s + pick(t), 0)
+      const plural = (n: number, one: string, many: string) =>
+        `${n} ${n === 1 ? one : many}`
 
       if (vendorReport === "rebates") {
         if (!from || !to) {
@@ -190,6 +195,11 @@ export async function POST(request: NextRequest) {
           formatExportDollars(r.outstanding),
         ])
         numericColumns = [2, 3, 4]
+        intro =
+          `Across ${plural(data.length, "contract", "contracts")}, ${userVendor.name} earned ` +
+          `${formatExportDollars(sum(data, (r) => r.earnedThisPeriod))} and collected ` +
+          `${formatExportDollars(sum(data, (r) => r.collectedThisPeriod))} in rebates for ${from} → ${to}, ` +
+          `with ${formatExportDollars(sum(data, (r) => r.outstanding))} still outstanding.`
       } else if (vendorReport === "performance") {
         if (!from || !to) {
           return NextResponse.json({ error: "dateRange is required" }, { status: 400 })
@@ -206,6 +216,14 @@ export async function POST(request: NextRequest) {
           formatExportPercent(r.marketSharePercent),
         ])
         numericColumns = [1, 2, 3, 4, 5]
+        const avgComp = data.length ? sum(data, (r) => r.compliancePercent) / data.length : 0
+        const avgShare = data.length ? sum(data, (r) => r.marketSharePercent) / data.length : 0
+        intro =
+          `Across ${plural(data.length, "facility", "facilities")}, ${userVendor.name} drove ` +
+          `${formatExportDollars(sum(data, (r) => r.spend))} of spend with ` +
+          `${formatExportDollars(sum(data, (r) => r.earned))} earned / ` +
+          `${formatExportDollars(sum(data, (r) => r.collected))} collected — averaging ` +
+          `${formatExportPercent(avgComp)} compliance and ${formatExportPercent(avgShare)} market share for ${from} → ${to}.`
       } else if (vendorReport === "roster") {
         const data = await getVendorContractRoster()
         title = "Vendor Contract Roster"
@@ -226,6 +244,11 @@ export async function POST(request: NextRequest) {
           formatExportDollars(r.rebateEarnedLifetime),
         ])
         numericColumns = [8, 9]
+        const active = data.filter((r) => r.status === "active").length
+        intro =
+          `${userVendor.name} holds ${plural(data.length, "contract", "contracts")} ` +
+          `(${active} active) — ${formatExportDollars(sum(data, (r) => r.rebateEarnedYTD))} earned YTD, ` +
+          `${formatExportDollars(sum(data, (r) => r.rebateEarnedLifetime))} lifetime.`
       } else {
         return NextResponse.json({ error: "Invalid vendorReport" }, { status: 400 })
       }
@@ -233,6 +256,7 @@ export async function POST(request: NextRequest) {
       const pdfBytes = generateTableReportPDF({
         title,
         subtitle: `${userVendor.name}${periodLabel}`,
+        intro,
         head,
         rows,
         numericColumns,

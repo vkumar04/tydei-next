@@ -496,6 +496,11 @@ export function generateReportPerformancePDF(
 export interface TableReportInput {
   title: string
   subtitle?: string
+  /**
+   * Plain-English explainer rendered above the table — tells the story of the
+   * numbers (totals, counts) instead of leaving the reader to add up columns.
+   */
+  intro?: string
   /** Column headers, left → right. */
   head: string[]
   /** Pre-formatted string cells (caller applies $/%/date formatting). */
@@ -517,11 +522,26 @@ export function generateTableReportPDF(input: TableReportInput): Uint8Array {
   )
   addHeader(doc, input.title, input.subtitle)
 
+  // Narrative explainer above the table — tells the story before the numbers.
+  let startY = 56
+  if (input.intro) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(60, 60, 60)
+    const lines = doc.splitTextToSize(
+      input.intro,
+      doc.internal.pageSize.getWidth() - 28,
+    ) as string[]
+    doc.text(lines, 14, startY)
+    startY += lines.length * 4.6 + 6
+    doc.setTextColor(0, 0, 0)
+  }
+
   const columnStyles: Record<number, { halign: "right" }> = {}
   for (const i of input.numericColumns ?? []) columnStyles[i] = { halign: "right" }
 
   autoTable(doc, {
-    startY: 56,
+    startY,
     head: [input.head],
     body:
       input.rows.length > 0
