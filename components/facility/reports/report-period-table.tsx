@@ -54,12 +54,18 @@ export function ReportPeriodTable({
   )
 
   const totalSpend = periods.reduce((s, p) => s + p.totalSpend, 0)
-  const totalRebateEarned =
-    canonicalTotals?.rebateEarned ??
-    periods.reduce((s, p) => s + p.rebateEarned, 0)
+  const totalVolume = periods.reduce((s, p) => s + p.totalVolume, 0)
+  const periodRebateEarned = periods.reduce((s, p) => s + p.rebateEarned, 0)
+  const periodRebateCollected = periods.reduce((s, p) => s + p.rebateCollected, 0)
+  // Prefer the canonical Rebate-table total, but fall back to the displayed
+  // ContractPeriod rollup when it is absent OR zero — otherwise a contract
+  // whose earned/collected lives only in ContractPeriod rollups (no Rebate
+  // rows yet) showed a $0 footer total under non-zero period rows (Vick
+  // 2026-06-22). CLAUDE.md: earned/collected come from Rebate rows OR
+  // ContractPeriod rollups — `||` honors both; `??` wrongly trusted a 0.
+  const totalRebateEarned = canonicalTotals?.rebateEarned || periodRebateEarned
   const totalRebateCollected =
-    canonicalTotals?.rebateCollected ??
-    periods.reduce((s, p) => s + p.rebateCollected, 0)
+    canonicalTotals?.rebateCollected || periodRebateCollected
   const totalPaymentExpected = periods.reduce((s, p) => s + p.paymentExpected, 0)
   const totalPaymentActual = periods.reduce((s, p) => s + p.paymentActual, 0)
 
@@ -180,9 +186,14 @@ export function ReportPeriodTable({
             )}
             {isTieIn && (
               <>
+                {/* Columns: Spend Target | Spend Actual | Vol Target | Vol
+                    Actual | Rebate Earned | Rebate Collected | Payment Actual
+                    | Balance — each total aligned to its column (was
+                    misaligned: spend total fell under Vol Actual). */}
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalSpend)}</td>
-                <td colSpan={2} className="px-3 py-3 text-right font-medium">-</td>
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalSpend)}</td>
+                <td className="px-3 py-3 text-right font-medium">-</td>
+                <td className="px-3 py-3 text-right font-medium">{totalVolume.toLocaleString()}</td>
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalRebateEarned)}</td>
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalRebateCollected)}</td>
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalPaymentActual)}</td>
