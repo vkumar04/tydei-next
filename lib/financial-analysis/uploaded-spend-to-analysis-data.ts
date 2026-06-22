@@ -93,6 +93,10 @@ export function aggregateUploadedSpend(
     currentVendorSpend: totalSpend,
     netRevenue: totalSpend / IMPLIED_SUPPLY_COST_PCT,
     revenueIsImplied: true,
+    // Uploaded spend files carry no case reimbursement — Actuals is empty,
+    // so the Net Revenue control opens in Manual mode.
+    measuredReimbursement: 0,
+    reimbursementCoverage: { withRate: 0, totalCases: 0 },
     annualCaseVolume: 0,
     avgMarginPct: DEFAULT_MARGIN_PCT,
     categories,

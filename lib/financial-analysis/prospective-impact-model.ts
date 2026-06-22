@@ -14,14 +14,24 @@
  * `__tests__/prospective-impact-model.test.ts`.
  *
  * ── Verified against the screenshot ($41.7M net revenue, 30% EBITDA
- *    margin, 80% DCF, 10% discount, 3% growth, 5 yrs, $625.9K savings):
+ *    margin, 80% DCF, 10% discount, 3% growth, 3% terminal growth, 5 yrs,
+ *    $625.9K savings):
  *   - EBITDA            = 41.7M × 0.30          = $12.51M
  *   - Distributable/yr  = 12.51M × 0.80         = $10.0M
- *   - DCF (growing PV)  ≈ $40.1M
+ *   - DCF explicit PV   ≈ $40.1M
+ *   - DCF terminal PV   ≈ $102.9M  (Gordon Growth, discounted back)
+ *   - DCF (enterprise)  ≈ $143.0M  = explicit + terminal
  *   - ΔEBITDA           = S                      = +$625.9K
  *   - ΔMargin pts       = S / netRevenue × 100   = +1.50 pts
  *   - ΔDCF              = S × 0.80               = +$500.7K
  *   - EV impact         = S × {10, 12, 14}       = +$6.3M / $7.5M / $8.8M
+ *
+ * DCF rationale (Vick/John 2026-06-22): a finite N-year sum of discounted
+ * cash flow omits the terminal value — the value of every cash flow beyond
+ * the projection window — which in a standard DCF is 60–80% of enterprise
+ * value. The old engine returned only the explicit-period PV (~$40M on the
+ * screenshot), which read as "wrong." We now add the Gordon-Growth terminal
+ * value: TV = FCF_N × (1+g) / (r − g), discounted back N years.
  */
 
 // ─── Inputs ────────────────────────────────────────────────────
@@ -47,7 +57,18 @@ export interface FacilityModelAssumptions {
   cashFlowGrowthPct: number
   /** Number of years projected in the DCF. */
   dcfProjectionYears: number
+  /**
+   * Perpetuity (terminal) growth rate for the Gordon-Growth terminal value,
+   * fraction. Anchored to long-run GDP (~2–3%). Optional — defaults to
+   * {@link DEFAULT_TERMINAL_GROWTH_PCT} so existing callers/tests keep
+   * compiling. Must stay below the discount rate or the perpetuity diverges
+   * (the engine clamps it just under `discountRatePct`).
+   */
+  terminalGrowthPct?: number
 }
+
+/** Default perpetuity growth for the terminal value (≈ long-run GDP). */
+export const DEFAULT_TERMINAL_GROWTH_PCT = 0.03
 
 /** The three Enterprise Value multiple scenarios. */
 export const EV_MULTIPLES = {
@@ -66,8 +87,15 @@ export interface CurrentFinancialState {
   ebitda: number
   /** Distributable cash flow in year 1 (EBITDA × dcfPct). */
   distributableCashFlowPerYear: number
-  /** Discounted cash flow over the projection window. */
+  /**
+   * Discounted cash flow = enterprise value: PV of the explicit-period cash
+   * flows PLUS the present value of the Gordon-Growth terminal value.
+   */
   dcf: number
+  /** PV of the explicit N-year projection window only (no terminal value). */
+  dcfExplicit: number
+  /** PV of the terminal value (the perpetuity beyond year N). */
+  dcfTerminalValue: number
   ebitdaMarginPct: number
 }
 
@@ -135,6 +163,49 @@ export function discountedCashFlow(
   return pv
 }
 
+export interface DcfBreakdown {
+  /** PV of the explicit N-year growing-annuity cash flows. */
+  explicitPv: number
+  /** PV of the Gordon-Growth terminal value (perpetuity beyond year N). */
+  terminalValuePv: number
+  /** explicitPv + terminalValuePv — the DCF enterprise value. */
+  total: number
+}
+
+/**
+ * Full DCF enterprise value: the explicit-period PV {@link discountedCashFlow}
+ * plus the present value of a Gordon-Growth terminal value.
+ *
+ *   TV (at end of year N) = FCF_N × (1 + g_terminal) / (r − g_terminal)
+ *   PV(TV)                = TV / (1 + r)^N
+ *
+ * where FCF_N is the final explicit-year cash flow (`base × (1+g)^(N-1)`).
+ * The perpetuity requires `r > g_terminal`; we clamp the terminal growth to
+ * just under the discount rate so the value stays finite and positive rather
+ * than diverging or flipping negative when a user drags the sliders together.
+ */
+export function discountedCashFlowWithTerminalValue(
+  baseCashFlow: number,
+  years: number,
+  discount: number,
+  growth: number,
+  terminalGrowth: number,
+): DcfBreakdown {
+  const n = Math.max(0, Math.floor(years))
+  const explicitPv = discountedCashFlow(baseCashFlow, n, discount, growth)
+  if (n === 0 || baseCashFlow <= 0) {
+    return { explicitPv, terminalValuePv: 0, total: explicitPv }
+  }
+  const fcfFinalYear = baseCashFlow * Math.pow(1 + growth, n - 1)
+  // Keep the perpetuity convergent: terminal growth must stay below r.
+  const safeTerminalGrowth = Math.min(terminalGrowth, discount - 0.005)
+  const spread = discount - safeTerminalGrowth // ≥ 0.005 whenever discount > 0
+  const terminalValue =
+    spread > 0 ? (fcfFinalYear * (1 + safeTerminalGrowth)) / spread : 0
+  const terminalValuePv = terminalValue / Math.pow(1 + discount, n)
+  return { explicitPv, terminalValuePv, total: explicitPv + terminalValuePv }
+}
+
 export function computeFacilityProspectiveModel(
   assumptions: FacilityModelAssumptions,
   annualSupplySavings: number,
@@ -148,16 +219,18 @@ export function computeFacilityProspectiveModel(
     discountRatePct,
     cashFlowGrowthPct,
     dcfProjectionYears,
+    terminalGrowthPct,
   } = assumptions
 
   // ── Current state ──────────────────────────────────────────
   const ebitda = netRevenue * ebitdaMarginPct
   const distributableCashFlowPerYear = ebitda * dcfPctOfEbitda
-  const dcf = discountedCashFlow(
+  const dcfBreakdown = discountedCashFlowWithTerminalValue(
     distributableCashFlowPerYear,
     dcfProjectionYears,
     discountRatePct,
     cashFlowGrowthPct,
+    terminalGrowthPct ?? DEFAULT_TERMINAL_GROWTH_PCT,
   )
 
   const current: CurrentFinancialState = {
@@ -165,7 +238,9 @@ export function computeFacilityProspectiveModel(
     netRevenue,
     ebitda,
     distributableCashFlowPerYear,
-    dcf,
+    dcf: dcfBreakdown.total,
+    dcfExplicit: dcfBreakdown.explicitPv,
+    dcfTerminalValue: dcfBreakdown.terminalValuePv,
     ebitdaMarginPct,
   }
 
@@ -245,4 +320,5 @@ export const DEFAULT_FACILITY_ASSUMPTIONS: FacilityModelAssumptions = {
   discountRatePct: 0.1,
   cashFlowGrowthPct: 0.03,
   dcfProjectionYears: 5,
+  terminalGrowthPct: DEFAULT_TERMINAL_GROWTH_PCT,
 }

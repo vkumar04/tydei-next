@@ -2,9 +2,39 @@ import { describe, it, expect } from "vitest"
 import {
   computeFacilityProspectiveModel,
   discountedCashFlow,
+  discountedCashFlowWithTerminalValue,
   DEFAULT_FACILITY_ASSUMPTIONS,
   type FacilityModelAssumptions,
 } from "../prospective-impact-model"
+
+describe("discountedCashFlowWithTerminalValue", () => {
+  it("adds a Gordon-Growth terminal value on top of the explicit PV", () => {
+    const explicit = discountedCashFlow(10_008_000, 5, 0.1, 0.03)
+    const dcf = discountedCashFlowWithTerminalValue(10_008_000, 5, 0.1, 0.03, 0.03)
+    expect(dcf.explicitPv).toBeCloseTo(explicit, 0)
+    // TV = FCF_5 × (1+g)/(r−g), discounted back 5 yrs ≈ $102.9M.
+    expect(dcf.terminalValuePv).toBeGreaterThan(102_000_000)
+    expect(dcf.terminalValuePv).toBeLessThan(103_500_000)
+    expect(dcf.total).toBeCloseTo(dcf.explicitPv + dcf.terminalValuePv, 0)
+  })
+
+  it("clamps terminal growth below the discount rate so the perpetuity stays finite", () => {
+    // terminalGrowth ≥ discount would diverge / flip negative — must not.
+    const dcf = discountedCashFlowWithTerminalValue(1_000_000, 5, 0.05, 0.03, 0.08)
+    expect(Number.isFinite(dcf.total)).toBe(true)
+    expect(dcf.terminalValuePv).toBeGreaterThan(0)
+  })
+
+  it("returns explicit-only (no terminal) for zero years or non-positive base", () => {
+    expect(discountedCashFlowWithTerminalValue(1_000_000, 0, 0.1, 0.03, 0.03)).toEqual({
+      explicitPv: 0,
+      terminalValuePv: 0,
+      total: 0,
+    })
+    const zeroBase = discountedCashFlowWithTerminalValue(0, 5, 0.1, 0.03, 0.03)
+    expect(zeroBase.terminalValuePv).toBe(0)
+  })
+})
 
 // Screenshot baseline: $41.7M net revenue, 30% EBITDA margin, 80% DCF,
 // 10% discount, 3% growth, 5 yrs; $625,879 negotiated annual savings.
@@ -32,10 +62,24 @@ describe("computeFacilityProspectiveModel — current state (screenshot parity)"
     expect(current.distributableCashFlowPerYear).toBeCloseTo(10_008_000, 0)
   })
 
-  it("DCF (growing annuity PV) ≈ $40.1M", () => {
-    // Within $0.5M of the rendered $40.1M.
-    expect(current.dcf).toBeGreaterThan(39_600_000)
-    expect(current.dcf).toBeLessThan(40_600_000)
+  it("DCF explicit-period PV (growing annuity) ≈ $40.1M", () => {
+    // Within $0.5M of the prior rendered $40.1M (now the explicit-only leg).
+    expect(current.dcfExplicit).toBeGreaterThan(39_600_000)
+    expect(current.dcfExplicit).toBeLessThan(40_600_000)
+  })
+
+  it("DCF terminal value (Gordon Growth, discounted back) ≈ $102.9M", () => {
+    expect(current.dcfTerminalValue).toBeGreaterThan(102_000_000)
+    expect(current.dcfTerminalValue).toBeLessThan(103_500_000)
+  })
+
+  it("DCF enterprise value = explicit + terminal ≈ $143.0M", () => {
+    expect(current.dcf).toBeCloseTo(
+      current.dcfExplicit + current.dcfTerminalValue,
+      0,
+    )
+    expect(current.dcf).toBeGreaterThan(142_000_000)
+    expect(current.dcf).toBeLessThan(144_000_000)
   })
 })
 

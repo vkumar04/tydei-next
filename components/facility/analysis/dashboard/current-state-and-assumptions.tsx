@@ -73,8 +73,104 @@ export function CurrentStateCards({
         icon={Banknote}
         label="DCF Estimate"
         value={usdCompact(current.dcf)}
-        sublabel="Discounted distributable cash flow"
+        sublabel={`Enterprise value · ${usdCompact(
+          current.dcfExplicit,
+        )} explicit + ${usdCompact(current.dcfTerminalValue)} terminal`}
       />
+    </div>
+  )
+}
+
+// ─── Net Revenue control (Actuals vs Manual) ────────────────────
+
+export type RevenueMode = "actuals" | "manual"
+
+export interface RevenueControl {
+  mode: RevenueMode
+  onModeChange: (mode: RevenueMode) => void
+  /** Manual mode input: average reimbursement per case. */
+  avgReimbursementPerCase: number
+  onAvgReimbursementChange: (value: number) => void
+  /** Actuals figure: summed case-costing reimbursement. */
+  measuredReimbursement: number
+  coverage: { withRate: number; totalCases: number }
+  annualCaseVolume: number
+  /** The effective net revenue currently driving the model. */
+  netRevenue: number
+}
+
+function ModeToggle({
+  mode,
+  onModeChange,
+}: {
+  mode: RevenueMode
+  onModeChange: (m: RevenueMode) => void
+}) {
+  return (
+    <div className="inline-flex rounded-md border p-0.5 text-xs">
+      {(["actuals", "manual"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => onModeChange(m)}
+          className={cn(
+            "rounded px-2 py-0.5 font-medium capitalize transition-colors",
+            mode === m
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {m}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function RevenueField({ revenue }: { revenue: RevenueControl }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">Revenue</span>
+        <ModeToggle mode={revenue.mode} onModeChange={revenue.onModeChange} />
+      </div>
+
+      {revenue.mode === "actuals" ? (
+        <div>
+          <div className="text-lg font-bold tabular-nums">
+            {usdCompact(revenue.measuredReimbursement)}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Summed case-costing reimbursement ·{" "}
+            {revenue.coverage.withRate.toLocaleString("en-US")} of{" "}
+            {revenue.coverage.totalCases.toLocaleString("en-US")} cases have a
+            payor CPT rate.
+            {revenue.coverage.withRate < revenue.coverage.totalCases
+              ? " Load more payor contracts to raise coverage, or switch to Manual."
+              : ""}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <SliderField
+            label="Avg reimbursement / case"
+            value={revenue.avgReimbursementPerCase}
+            min={0}
+            max={100_000}
+            step={500}
+            format={(v) => usdCompact(v)}
+            onChange={revenue.onAvgReimbursementChange}
+            hint="Average revenue collected per surgical case. Net revenue = this × annual cases. Set the figure your CFO knows."
+          />
+          <p className="text-xs text-muted-foreground tabular-nums">
+            × {revenue.annualCaseVolume.toLocaleString("en-US")} cases ={" "}
+            <span className="font-semibold text-foreground">
+              {usdCompact(revenue.netRevenue)}
+            </span>{" "}
+            net revenue
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -84,9 +180,11 @@ export function CurrentStateCards({
 export function FinancialAssumptionsCard({
   assumptions,
   onChange,
+  revenue,
 }: {
   assumptions: FacilityModelAssumptions
   onChange: (next: FacilityModelAssumptions) => void
+  revenue: RevenueControl
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -128,16 +226,7 @@ export function FinancialAssumptionsCard({
 
         {/* The three figures only the facility knows */}
         <div className="grid gap-x-8 gap-y-5 md:grid-cols-3">
-          <SliderField
-            label="Revenue"
-            value={assumptions.netRevenue}
-            min={1_000_000}
-            max={150_000_000}
-            step={100_000}
-            format={usdCompact}
-            onChange={(v) => set("netRevenue", v)}
-            hint="Total annual top-line revenue the facility collects. EBITDA, DCF, and enterprise value all scale from this."
-          />
+          <RevenueField revenue={revenue} />
           <SliderField
             label="Current EBITDA margin"
             value={assumptions.ebitdaMarginPct}
@@ -206,6 +295,16 @@ export function FinancialAssumptionsCard({
                 format={(v) => `${v} yrs`}
                 onChange={(v) => set("dcfProjectionYears", v)}
                 hint="Number of years of cash flow included in the discounted cash flow calculation."
+              />
+              <SliderField
+                label="Terminal growth"
+                value={assumptions.terminalGrowthPct ?? 0.03}
+                min={0}
+                max={0.05}
+                step={0.0025}
+                format={(v) => `${(v * 100).toFixed(2)}%`}
+                onChange={(v) => set("terminalGrowthPct", v)}
+                hint="Perpetuity growth rate for the terminal value (the value of all cash flow beyond the projection window). Anchored to long-run GDP, typically 2–3%. Must stay below the discount rate; the terminal value is TV = FCF × (1 + g) / (discount − g)."
               />
             </div>
           ) : null}

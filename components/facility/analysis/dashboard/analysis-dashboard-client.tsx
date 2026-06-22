@@ -23,6 +23,7 @@ import { buildDashboardModel, DEFAULT_AI_INPUTS, type DashboardModel } from "./m
 import {
   CurrentStateCards,
   FinancialAssumptionsCard,
+  type RevenueMode,
 } from "./current-state-and-assumptions"
 import {
   CategoryAspTable,
@@ -62,6 +63,30 @@ function seedAssumptions(
       data.currentVendorSpend || DEFAULT_FACILITY_ASSUMPTIONS.currentVendorSpend,
     annualCaseVolume:
       data.annualCaseVolume || DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume,
+  }
+}
+
+/**
+ * Seed the Net Revenue control. Default to Actuals only when the measured
+ * reimbursement is coherent (exceeds supply spend → `!revenueIsImplied`);
+ * otherwise Manual, with the per-case figure seeded from the REAL average of
+ * covered cases (`measuredReimbursement ÷ casesWithRate`), extrapolated to
+ * all cases. That data-grounded seed is NOT the old spend÷30% proxy, so EBITDA
+ * no longer collapses onto vendor spend (Vick 2026-06-22).
+ */
+function seedRevenue(data: FacilityAnalysisData): {
+  mode: RevenueMode
+  avgReimbursementPerCase: number
+} {
+  const cases = data.annualCaseVolume || DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume
+  const coveredAvg =
+    data.reimbursementCoverage.withRate > 0
+      ? data.measuredReimbursement / data.reimbursementCoverage.withRate
+      : 0
+  const fallbackPerCase = cases > 0 ? data.netRevenue / cases : 0
+  return {
+    mode: data.revenueIsImplied ? "manual" : "actuals",
+    avgReimbursementPerCase: coveredAvg > 0 ? coveredAvg : fallbackPerCase,
   }
 }
 
@@ -122,6 +147,14 @@ export function AnalysisDashboardClient({
   const [assumptions, setAssumptions] = useState<FacilityModelAssumptions>(() =>
     seedAssumptions(data),
   )
+  // Net Revenue control: Actuals (case-costing reimbursement) vs Manual
+  // (avg reimbursement/case × cases). Seeded from the data's coverage.
+  const [revenueMode, setRevenueMode] = useState<RevenueMode>(
+    () => seedRevenue(data).mode,
+  )
+  const [avgReimbursementPerCase, setAvgReimbursementPerCase] = useState<number>(
+    () => seedRevenue(data).avgReimbursementPerCase,
+  )
   // Negotiated annual supply saving, stored as an absolute $ figure.
   const [savings, setSavings] = useState<number>(
     () => seedAssumptions(data).currentVendorSpend * 0.05,
@@ -131,6 +164,9 @@ export function AnalysisDashboardClient({
     const seeded = seedAssumptions(d)
     setAssumptions(seeded)
     setSavings(seeded.currentVendorSpend * 0.05)
+    const rev = seedRevenue(d)
+    setRevenueMode(rev.mode)
+    setAvgReimbursementPerCase(rev.avgReimbursementPerCase)
   }, [])
 
   const handleApplyUpload = useCallback(
@@ -148,10 +184,28 @@ export function AnalysisDashboardClient({
     reseedFrom(data)
   }, [data, reseedFrom])
 
+  // Effective net revenue from the Net Revenue control feeds the model — it
+  // overrides the seed `assumptions.netRevenue` so EBITDA/DCF reflect the
+  // chosen revenue source rather than the spend-derived proxy.
+  const effectiveNetRevenue =
+    revenueMode === "actuals"
+      ? effectiveData.measuredReimbursement
+      : avgReimbursementPerCase * assumptions.annualCaseVolume
+
+  const effectiveAssumptions = useMemo<FacilityModelAssumptions>(
+    () => ({ ...assumptions, netRevenue: effectiveNetRevenue }),
+    [assumptions, effectiveNetRevenue],
+  )
+
   const model = useMemo(
     () =>
-      buildDashboardModel(assumptions, savings, DEFAULT_AI_INPUTS, effectiveData),
-    [assumptions, savings, effectiveData],
+      buildDashboardModel(
+        effectiveAssumptions,
+        savings,
+        DEFAULT_AI_INPUTS,
+        effectiveData,
+      ),
+    [effectiveAssumptions, savings, effectiveData],
   )
 
   const insights = useFacilityAnalysisInsights()
@@ -190,7 +244,7 @@ export function AnalysisDashboardClient({
                 onSelect={() =>
                   void downloadAnalysisPdf(
                     model,
-                    assumptions,
+                    effectiveAssumptions,
                     override ? `Uploaded file: ${overrideFileName}` : "Live COG",
                   )
                 }
@@ -208,8 +262,18 @@ export function AnalysisDashboardClient({
       <CurrentStateCards current={model.prospective.current} />
 
       <FinancialAssumptionsCard
-        assumptions={assumptions}
+        assumptions={effectiveAssumptions}
         onChange={setAssumptions}
+        revenue={{
+          mode: revenueMode,
+          onModeChange: setRevenueMode,
+          avgReimbursementPerCase,
+          onAvgReimbursementChange: setAvgReimbursementPerCase,
+          measuredReimbursement: effectiveData.measuredReimbursement,
+          coverage: effectiveData.reimbursementCoverage,
+          annualCaseVolume: assumptions.annualCaseVolume,
+          netRevenue: effectiveNetRevenue,
+        }}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
