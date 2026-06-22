@@ -491,6 +491,52 @@ export function generateReportPerformancePDF(
   return toBytes(doc)
 }
 
+// ─── Generic tabular report ───────────────────────────────────────
+
+export interface TableReportInput {
+  title: string
+  subtitle?: string
+  /** Column headers, left → right. */
+  head: string[]
+  /** Pre-formatted string cells (caller applies $/%/date formatting). */
+  rows: string[][]
+  /** Indices of columns to right-align (numeric/currency). */
+  numericColumns?: number[]
+}
+
+/**
+ * One generic table → PDF, reusing the branded header/footer. Backs the vendor
+ * Reports cards (Rebate Statement / Performance Summary / Contract Roster) so
+ * they emit a real PDF server-side instead of only a CSV (Vick 2026-06-22).
+ * Empty result sets render an explicit "No data for this period." row so the
+ * PDF is never blank. Wide tables (>6 cols, e.g. the roster) go landscape.
+ */
+export function generateTableReportPDF(input: TableReportInput): Uint8Array {
+  const doc = new jsPDF(
+    input.head.length > 6 ? { orientation: "landscape" } : {},
+  )
+  addHeader(doc, input.title, input.subtitle)
+
+  const columnStyles: Record<number, { halign: "right" }> = {}
+  for (const i of input.numericColumns ?? []) columnStyles[i] = { halign: "right" }
+
+  autoTable(doc, {
+    startY: 56,
+    head: [input.head],
+    body:
+      input.rows.length > 0
+        ? input.rows
+        : [["No data for this period.", ...input.head.slice(1).map(() => "")]],
+    theme: "striped",
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+    columnStyles,
+  })
+
+  addFooter(doc)
+  return toBytes(doc)
+}
+
 // ─── Rebate Report ────────────────────────────────────────────────
 
 export async function generateRebateReport(

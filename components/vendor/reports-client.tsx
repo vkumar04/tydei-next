@@ -276,8 +276,72 @@ export function VendorReportsClient({
     },
   })
 
-  const handleGenerateReport = (report: ReportType) => {
-    generateMutation.mutate(report)
+  // PDF path — renders server-side via the shared generator (lib/pdf.ts →
+  // /api/reports/pdf "vendor-report"). Same data the CSV cards fetch, now a
+  // real PDF (Vick 2026-06-22 "not making this into a PDF").
+  const pdfMutation = useMutation({
+    mutationFn: async (report: ReportType) => {
+      const { start, end } = defaultPeriod()
+      const startISO = start.toISOString().slice(0, 10)
+      const endISO = end.toISOString().slice(0, 10)
+      const res = await fetch("/api/reports/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "vendor-report",
+          vendorReport: report.id,
+          dateRange: { from: startISO, to: endISO },
+        }),
+      })
+      if (!res.ok) {
+        const msg = await res.json().catch(() => null)
+        throw new Error(msg?.error ?? `Export failed (${res.status})`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${report.id}-report.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      return {
+        report: {
+          id: `gen-${Date.now()}`,
+          name: `${report.name} — ${startISO} → ${endISO}`,
+          type: report.id,
+          date: new Date().toISOString().slice(0, 10),
+          status: "ready",
+          size: formatBytes(blob.size),
+        } satisfies RecentReport,
+      }
+    },
+    onSuccess: ({ report }) => {
+      setGeneratedReports((prev) => [report, ...prev])
+      toast.success(`Generated ${report.name}`, {
+        description: "PDF saved to your downloads folder.",
+      })
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Unknown error"
+      toast.error("Could not generate report", { description: msg })
+    },
+  })
+
+  const handleGenerateReport = (
+    report: ReportType,
+    format: "pdf" | "csv" = "pdf",
+  ) => {
+    // Purchase Leakage has no tabular action — scroll to its live audit card.
+    if (report.id === "leakage") {
+      const el = document.getElementById("vendor-purchase-leakage")
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+      toast.info("Scrolled to the live Purchase Leakage audit below.")
+      return
+    }
+    if (format === "pdf") pdfMutation.mutate(report)
+    else generateMutation.mutate(report)
   }
 
   const handleDownload = (report: RecentReport) => {
