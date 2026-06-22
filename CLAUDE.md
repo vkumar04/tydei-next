@@ -137,6 +137,7 @@ a new invariant, add a row.
 | Category-name match (case/word-order/plural insensitive) | `canonicalizeCategoryName` (JS boundary) + `expandCategoriesToCogVariants` (SQL `IN` boundary) | `lib/contracts/category-canonical.ts` + `lib/contracts/cog-category-filter.ts` | match-engine eligibility gate `cogCategoryCoveredByContract` (`match.ts`), every `buildCategoryWhereClause`/`buildUnionCategoryWhereClause` caller, `derived-metrics.ts` market-share scope, `volume.ts`, threshold writer market-share COG scope (`lib/contracts/recompute/threshold.ts`, fixed 2026-06-10 — was raw `in`, computed 0% share → $0 rows), category-mapping retro term rewrite (`lib/actions/cog-category-mapping.ts`). **Why it exists:** Prisma `category: { in }` and raw `Set.has` are case-SENSITIVE, so a COG row "Joint replacement" never matched the selected "Joint Replacement" → under-counted eligible spend AND inflated "Pre-Match" out_of_scope (Charles 2026-06-09 "I selected every category, not all the spend is brought in"). NEVER compare category names with raw `===`/`in`; canonicalize both sides (mirrors `normalizeSku`). Regression-guarded by `lib/contracts/__tests__/cog-category-filter.test.ts` + `match.test.ts` |
 | Contract ownership (facility) | `contractOwnershipWhere` / `contractsOwnedByFacility` | `lib/actions/contracts-auth.ts` | every read in `lib/actions/` that takes a `contractId` |
 | Contract ownership (vendor) — scope by `vendorId` OR grouped `additionalVendorIds`, NEVER bare `vendorId` | `contractsOwnedByVendor` / `contractOwnershipWhereVendor` | `lib/actions/contracts-vendor-auth.ts` | every vendor-side contract read — all of `lib/actions/vendor-reports/*` (report-data, overview, by-rebate-type, audit-trail, contracts-list), and any new vendor surface. **Why it exists:** bare `{ vendorId }` drops grouped contracts where the vendor is only in `additionalVendorIds` (memory: group-vendor-drift). Mirrors the facility helper; `contractOwnershipWhereVendor` returns a `ContractWhereInput` (OR predicate, not unique) so pair with `findFirst`, not `findUnique`. Regression-guarded by `lib/actions/__tests__/contracts-vendor-auth.test.ts` |
+| Vendor facility-filter narrowing (AND a single facility onto a vendor-ownership predicate) | `scopeContractWhereToFacility(base, facilityId?)` | `lib/actions/contracts-vendor-auth.ts` | the Vendor Reports Hub facility selector — `getVendorReportsOverview` / `getVendorReportData` / `getVendorRebateBreakdownByType` (each takes optional `facilityId`); query keys carry it. **Why it exists:** the selector existed but the data actions ignored it. The helper only NARROWS an already vendor-scoped predicate (tenant-safe — a bad facilityId returns empty, never another vendor's data); `undefined`/`"all"` returns the base unchanged. Regression-guarded by `lib/actions/__tests__/contracts-vendor-auth.test.ts` |
 | Rebate-units scaling (per `rebateType` — `percent_of_spend` ×100, all others unchanged) | `scaleRebateValueForEngine` (the owner) → consumed by `computeRebateFromPrismaTiers` + `formatTierRebateLabel` | `lib/rebates/calculate.ts` + `lib/contracts/tier-rebate-label.ts` | every Prisma→engine feed (`recompute-accrual.ts`, `accrual.ts`, `vendor-analytics.ts`, `prisma-engine-bridge.ts`, `scripts/regen-all-accruals.ts`) + every surface displaying % or earned from `ContractTier.rebateValue`. **Never blanket-×100** — inflates `fixed_rebate`/per-unit tiers 100×. Regression-guarded by `lib/contracts/__tests__/rebate-value-scaling-drift.test.ts` |
 | Rebate applied to capital (tie-in) | `sumRebateAppliedToCapital` | `lib/contracts/rebate-capital-filter.ts` | contract-header applied-to-capital sublabel (`tie-in-rebate-split.tsx`), Capital Amortization card Paid-to-Date + Rebates-Applied + Balance-Due (`contract-amortization-card.tsx` via `getContractCapitalSchedule.rebateAppliedToCapital`) |
 | Per-supply rebate rule (what an on-contract supply contributes, by matching its product to the contract's rebate term) | `buildSupplyRebateRuleMap` (contractId→rule) + `applySupplyRebateRule` (apply per supply, ≤extendedCost clamp) | `lib/actions/case-costing/supply-rebate-rules.ts` + `lib/case-costing/attribute-surgeon-rebates.ts` | `getSurgeonRebateContribution` (surgeon Rebate-Contribution report) AND `getTrueMarginReport` (case-costing True-Margin per-procedure **Rebate Allocation** column — Vick 2026-06-16 "take the products the surgeons used, check the product numbers with the contracts, see what rebate they're contributing"). **Why it exists:** True Margin used to distribute each vendor's *earned* Rebate-table total proportionally by spend share; that surfaced inflated/seed rebate ($1.49M on prod from a $1.5M S&N earned row that's inconsistent with $46K actual on-contract spend) instead of real per-product contribution. The rule is derived from the contract's highest-yielding term vs its realized on-contract totals: spend_rebate ladder → `extendedCost × pctRate`; volume_rebate → `quantity × $/unit`; carve_out / pricing_only / market_share / below-threshold → 0. Both surfaces MUST route through the one builder so they never drift. Regression-guarded by `true-margin.test.ts` + `surgeon-rebate-contribution` tests. |
@@ -208,6 +209,41 @@ Details" report is `components/facility/reports/report-period-table.tsx` +
 (per-contract-type columns already wired for usage/service/capital/tie_in/
 grouped/pricing_only).
 
+## Analysis / Prospective financial model (2026-06-22)
+
+- **DCF MUST include a terminal value.** `computeFacilityProspectiveModel`
+  (`lib/financial-analysis/prospective-impact-model.ts`) returns
+  `current.dcf` = explicit-period PV **plus** a Gordon-Growth terminal value:
+  `TV = FCF_N × (1+g) / (r − g)`, discounted back N years (helper
+  `discountedCashFlowWithTerminalValue`, with `dcfExplicit` + `dcfTerminalValue`
+  split). Terminal value is 60–80% of a real DCF — an explicit-only sum reads
+  as "wrong" (John 2026-06-22). New `terminalGrowthPct` knob clamps just below
+  the discount rate so the perpetuity can't diverge. Do NOT revert to the
+  explicit-only sum. Regression: `__tests__/prospective-impact-model.test.ts`.
+- **Net Revenue is an Actuals / Manual control — NEVER `spend ÷ 30%`.** The old
+  implied proxy (`netRevenue = vendorSpend ÷ IMPLIED_SUPPLY_COST_PCT`) made
+  EBITDA exactly equal vendor spend whenever the EBITDA-margin slider matched
+  the 30% supply-cost ratio (Vick 2026-06-22). `getFacilityAnalysisData` now
+  also returns `measuredReimbursement` + `reimbursementCoverage`; the dashboard
+  Revenue control is **Actuals** (summed `resolveCaseReimbursement`, with a
+  coverage caveat) or **Manual** (avg reimbursement/case × cases, seeded from
+  the real per-covered-case average). The implied proxy survives only as a
+  last-resort manual seed, never as the silent default.
+- **Vendor Opportunity Engine strategic inputs are DB-derived, not hardcoded.**
+  `getVendorOpportunityData` (`lib/actions/vendor-opportunity-data.ts`) returns
+  `competitiveThreat` (top competing vendor by spend in the vendor's categories
+  at its facilities), `topCompetitorSharePct`, `rebateCostPct` (earned rebates ÷
+  revenue), `contractTypeCount`, `hasCapitalContract`. The Opportunity Engine
+  feeds these into `computeVendorOpportunityScore` (was hardcoded
+  `competitiveThreat: "Stryker"`, scores 60/55/50). Both the Opportunity Engine
+  and the vendor per-facility **Facility Current State** panel
+  (`components/vendor/prospective/facility-current-state.tsx`, fed by
+  `getFacilityCurrentStateForVendor` — IDOR-scoped via `vendorRelatedFacilityWhere`)
+  show an honest amber "modeled from defaults — no history" banner instead of
+  presenting seed defaults as real data. The Opportunity Engine "Deal Scenario"
+  picks a **division** (real `VendorDivision` list) and a **facility** that can
+  be chosen or written-in (report label only, never shown to the facility).
+
 ## Key surfaces added recently (2026-06)
 
 - **Vendor Reports Hub** (`components/vendor/reports/hub/` + `lib/actions/vendor-reports/`)
@@ -221,6 +257,9 @@ grouped/pricing_only).
   (invariants table). The hub mounts inside `components/vendor/reports-client.tsx`
   as the "Contract Performance Details" section above the CSV export cards
   (those CSVs are separate and still display-only on their facility filter).
+  The hub's **facility selector** now scopes Overview / per-type / By-Rebate-Type
+  (and the PDF export) to one facility via `scopeContractWhereToFacility`
+  (invariants table) — it previously only filtered the contract dropdown.
 - **Case-costing True-Margin (per-procedure)** table —
   `app/dashboard/case-costing/reports/reports-client.tsx`, fed by
   `getTrueMarginReport` (`lib/actions/case-costing/true-margin.ts`). **Revenue**
@@ -240,6 +279,20 @@ grouped/pricing_only).
   BLOCKS save (the submit gate requires ≥1 capital item). The render gate and
   persist loop both use `tie_in || capital` (not `tie_in` alone). Vick "No
   capital coming up" 2026-06-16.
+- **The capital seed ALSO fires on a manual contractType→tie_in/capital change**
+  (not only during AI extract). The AI routinely misclassifies an
+  equipment-contribution contract as `usage` (its spend-rebate tiers match the
+  "usage" rule), so when the user corrects the type the editor would otherwise
+  land empty and block save. A ref-guarded transition effect in
+  `new-contract-client.tsx` seeds when the type transitions INTO tie_in/capital
+  while the editor is empty. Both paths build the row through the ONE shared
+  factory **`buildSeededCapitalLineItem`** (`capital-line-items-editor.tsx`,
+  built on `makeEmptyCapitalLineItem`) so they can't drift — never inline a
+  second seed builder. The AI prompt + `extractedContractSchema` also now
+  classify financed/placed/contributed-equipment contracts as `tie_in` even
+  with spend/volume tiers ("Equipment Contribution Schedule" = tie_in). Vick
+  "AI not grabbing the capital again on the Tie in" 2026-06-22. Regression:
+  `components/contracts/__tests__/seed-capital-line-item.test.ts`.
 
 ## File parsing & security hardening (2026-06-17 audit)
 
