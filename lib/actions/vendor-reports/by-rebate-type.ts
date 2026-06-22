@@ -32,20 +32,29 @@
  */
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
-import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
+import {
+  contractsOwnedByVendor,
+  scopeContractWhereToFacility,
+} from "@/lib/actions/contracts-vendor-auth"
 import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { bucketRebatesByType } from "@/lib/reports/infer-type"
 
 export type { RebateTypeBucket } from "@/lib/reports/infer-type"
 
-export async function getVendorRebateBreakdownByType() {
+export async function getVendorRebateBreakdownByType(input?: {
+  facilityId?: string
+}) {
   try {
     const { vendor } = await requireVendor()
 
     // Pull every Rebate row across the vendor's contracts plus the
-    // contract-term map so we can resolve termType per row.
-    const baseWhere = contractsOwnedByVendor(vendor.id)
+    // contract-term map so we can resolve termType per row. Optionally
+    // narrowed to a single facility (Reports Hub facility selector).
+    const baseWhere = scopeContractWhereToFacility(
+      contractsOwnedByVendor(vendor.id),
+      input?.facilityId,
+    )
     const rebates = await prisma.rebate.findMany({
       where: {
         contract: baseWhere,

@@ -60,6 +60,32 @@ function withDivisionScope(
 }
 
 /**
+ * Narrow a vendor-ownership where-input to a single facility. A vendor's
+ * contracts span many facilities, so the Reports Hub facility selector
+ * (and any vendor surface that filters by facility) routes its scoping
+ * through here so the "AND a facility" rule lives in exactly one place.
+ *
+ *   - `facilityId` undefined or the "all" sentinel → returns `base`
+ *     unchanged (byte-identical to the un-filtered, all-facilities view).
+ *   - otherwise → adds `facilityId` as a sibling top-level key (ANDed by
+ *     Prisma alongside the ownership `OR`/`AND`). Contract has exactly one
+ *     `facilityId` and `contractsOwnedByVendor` never sets it, so a plain
+ *     spread is safe and composes with extra top-level keys (contractType,
+ *     status) at the call site.
+ *
+ * Tenant-safe: this only NARROWS an already vendor-scoped predicate, so a
+ * caller cannot reach another vendor's data by passing an arbitrary
+ * facilityId — at worst the result is empty.
+ */
+export function scopeContractWhereToFacility(
+  base: Prisma.ContractWhereInput,
+  facilityId?: string,
+): Prisma.ContractWhereInput {
+  if (!facilityId || facilityId === "all") return base
+  return { ...base, facilityId }
+}
+
+/**
  * Returns a Prisma where-input that scopes `id` to a contract owned by
  * (or grouped with) `vendorId`. Use with findFirst / update / delete.
  * Composes with any select/include.

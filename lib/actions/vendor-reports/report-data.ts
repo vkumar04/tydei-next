@@ -8,6 +8,7 @@ import { buildReportDataRows } from "@/lib/reports/report-data-core"
 import {
   contractsOwnedByVendor,
   contractOwnershipWhereVendor,
+  scopeContractWhereToFacility,
 } from "@/lib/actions/contracts-vendor-auth"
 import {
   normalizeCapitalLineItems,
@@ -127,8 +128,12 @@ async function getVendorContractCapitalBalance(
 //   2. Contracts scoped via `contractsOwnedByVendor(vendor.id)` — covers
 //      both the primary `vendorId` AND grouped `additionalVendorIds`
 //      membership (group-vendor-drift class). NEVER hand-roll the OR.
-//   3. `facilityName` is "All Facilities" — vendor reports span every
-//      facility the vendor's contracts belong to.
+//   3. `facilityName` is "All Facilities" when unfiltered — vendor reports
+//      span every facility the vendor's contracts belong to. When the
+//      optional `facilityId` filter is set (Reports Hub facility selector),
+//      the rows are narrowed to that facility and the header shows its name
+//      (derived from the matched rows — never a separate facility read, so
+//      no cross-tenant name leak).
 //   4. The synthetic-period COG fallback is scoped to EACH CONTRACT'S OWN
 //      `facilityId` (COG is per-facility; a contract belongs to exactly
 //      one facility) — never the vendor id.
@@ -138,18 +143,25 @@ export async function getVendorReportData(input: {
   reportType: "usage" | "service" | "tie_in" | "capital" | "grouped"
   dateFrom: string
   dateTo: string
+  facilityId?: string
 }) {
   const { vendor } = await requireVendor()
-  const { reportType, dateFrom, dateTo } = input
+  const { reportType, dateFrom, dateTo, facilityId } = input
 
   const contracts = await prisma.contract.findMany({
     where: {
-      ...contractsOwnedByVendor(vendor.id),
+      ...scopeContractWhereToFacility(
+        contractsOwnedByVendor(vendor.id),
+        facilityId,
+      ),
       contractType: reportType === "grouped" ? "grouped" : reportType,
       status: { in: ["active", "expiring"] },
     },
     include: {
       vendor: { select: { id: true, name: true } },
+      // Facility name powers the report header band when a single facility
+      // is selected (derived from the rows the vendor already owns).
+      facility: { select: { name: true } },
       // Mirror PERIODS_CONTRACT_SELECT.terms so the synthetic-period
       // fallback (computeSyntheticContractPeriods) can scope the COG query
       // to the categories the contract's terms cover and qualify the
@@ -248,11 +260,18 @@ export async function getVendorReportData(input: {
     resolveCapital: (c) => getVendorContractCapitalBalance(c.id, vendor.id),
   })
 
+  // Unfiltered → "All Facilities"; filtered → the selected facility's name,
+  // read off the matched rows (which the vendor already owns) so we never
+  // do an unscoped facility lookup. Falls back to "Selected Facility" only
+  // if the filter matched zero contracts (empty-state header).
+  const isFacilityFiltered = Boolean(facilityId && facilityId !== "all")
+  const facilityName = isFacilityFiltered
+    ? (contracts.find((c) => c.facility?.name)?.facility?.name ??
+      "Selected Facility")
+    : "All Facilities"
+
   return serialize({
-    // Vendor reports span every facility the vendor's contracts belong
-    // to, so the header band shows "All Facilities" rather than a single
-    // facility name (the facility original surfaces `facility.name`).
-    facilityName: "All Facilities",
+    facilityName,
     contracts: contractRows,
     reportType,
     dateFrom,

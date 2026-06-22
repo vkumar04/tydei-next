@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   contractsOwnedByVendor,
   contractOwnershipWhereVendor,
+  scopeContractWhereToFacility,
 } from "@/lib/actions/contracts-vendor-auth"
 
 describe("contracts-vendor-auth", () => {
@@ -59,6 +60,33 @@ describe("contracts-vendor-auth", () => {
         { id: "c1", OR: [{ vendorId: "v1" }, { additionalVendorIds: { has: "v1" } }] },
         { vendorDivisionId: { in: ["d1"] } },
       ],
+    })
+  })
+
+  describe("scopeContractWhereToFacility", () => {
+    const base = contractsOwnedByVendor("v1")
+
+    it("returns the base unchanged for undefined / 'all' (all-facilities view)", () => {
+      expect(scopeContractWhereToFacility(base, undefined)).toBe(base)
+      expect(scopeContractWhereToFacility(base, "all")).toBe(base)
+    })
+
+    it("AND-narrows to a single facility as a sibling top-level key", () => {
+      expect(scopeContractWhereToFacility(base, "f1")).toEqual({
+        OR: [{ vendorId: "v1" }, { additionalVendorIds: { has: "v1" } }],
+        facilityId: "f1",
+      })
+    })
+
+    it("preserves a division-scoped AND base when narrowing by facility", () => {
+      const scoped = contractsOwnedByVendor("v1", ["d1"])
+      expect(scopeContractWhereToFacility(scoped, "f1")).toEqual({
+        AND: [
+          { OR: [{ vendorId: "v1" }, { additionalVendorIds: { has: "v1" } }] },
+          { vendorDivisionId: { in: ["d1"] } },
+        ],
+        facilityId: "f1",
+      })
     })
   })
 })

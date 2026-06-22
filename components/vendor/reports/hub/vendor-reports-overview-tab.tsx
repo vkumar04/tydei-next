@@ -32,6 +32,8 @@ import type { ReportsDateRange } from "./vendor-reports-types"
 export interface VendorReportsOverviewTabProps {
   vendorId: string
   dateRange: ReportsDateRange
+  /** "all" or a specific facility id (Reports Hub facility selector). */
+  facilityId: string
 }
 
 const LIFECYCLE_COLORS: Record<string, string> = {
@@ -44,13 +46,15 @@ const LIFECYCLE_COLORS: Record<string, string> = {
 export function VendorReportsOverviewTab({
   vendorId,
   dateRange,
+  facilityId,
 }: VendorReportsOverviewTabProps) {
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.vendorReports.overview(vendorId, dateRange),
+    queryKey: queryKeys.vendorReports.overview(vendorId, facilityId, dateRange),
     queryFn: () =>
       getVendorReportsOverview({
         dateFrom: new Date(dateRange.from),
         dateTo: new Date(dateRange.to),
+        facilityId: facilityId === "all" ? undefined : facilityId,
       }),
   })
 

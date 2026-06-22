@@ -22,6 +22,12 @@ interface ReportPdfButtonProps {
   scope: "facility" | "vendor"
   reportType: ReportPdfType | null
   dateRange: { from: string; to: string }
+  /**
+   * Vendor scope only: narrow the export to a single facility ("all" or a
+   * specific id). Ignored on facility scope (the action is already facility-
+   * scoped) and when "all".
+   */
+  facilityId?: string
   /** Drill-down: export a single contract instead of all of this type. */
   contractId?: string
 }
@@ -30,6 +36,7 @@ export function ReportPdfButton({
   scope,
   reportType,
   dateRange,
+  facilityId,
   contractId,
 }: ReportPdfButtonProps) {
   const [loading, setLoading] = useState(false)
@@ -46,6 +53,10 @@ export function ReportPdfButton({
           scope,
           reportType,
           dateRange,
+          facilityId:
+            scope === "vendor" && facilityId && facilityId !== "all"
+              ? facilityId
+              : undefined,
           contractId: contractId && contractId !== "all" ? contractId : undefined,
         }),
       })

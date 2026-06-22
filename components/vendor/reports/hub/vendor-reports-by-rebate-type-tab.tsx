@@ -22,14 +22,20 @@ import { getVendorRebateBreakdownByType } from "@/lib/actions/vendor-reports/by-
  */
 export interface VendorReportsByRebateTypeTabProps {
   vendorId: string
+  /** "all" or a specific facility id (Reports Hub facility selector). */
+  facilityId: string
 }
 
 export function VendorReportsByRebateTypeTab({
   vendorId,
+  facilityId,
 }: VendorReportsByRebateTypeTabProps) {
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.vendorReports.byRebateType(vendorId),
-    queryFn: () => getVendorRebateBreakdownByType(),
+    queryKey: queryKeys.vendorReports.byRebateType(vendorId, facilityId),
+    queryFn: () =>
+      getVendorRebateBreakdownByType({
+        facilityId: facilityId === "all" ? undefined : facilityId,
+      }),
   })
 
   if (isLoading) {

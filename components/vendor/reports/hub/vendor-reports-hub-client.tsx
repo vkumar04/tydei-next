@@ -149,6 +149,7 @@ export function VendorReportsHubClient({
               scope="vendor"
               reportType={tabToPdfReportType(activeTab)}
               dateRange={dateRange}
+              facilityId={selectedFacilityId}
               contractId={selectedContractId}
             />
           </div>
@@ -157,6 +158,7 @@ export function VendorReportsHubClient({
             <VendorReportsOverviewTab
               vendorId={vendorId}
               dateRange={dateRange}
+              facilityId={selectedFacilityId}
             />
           </TabsContent>
 
@@ -168,13 +170,17 @@ export function VendorReportsHubClient({
                 tab={tab}
                 vendorId={vendorId}
                 dateRange={dateRange}
+                facilityId={selectedFacilityId}
                 selectedContract={selectedContract}
               />
             </TabsContent>
           ))}
 
           <TabsContent value="by_rebate_type" className="mt-4">
-            <VendorReportsByRebateTypeTab vendorId={vendorId} />
+            <VendorReportsByRebateTypeTab
+              vendorId={vendorId}
+              facilityId={selectedFacilityId}
+            />
           </TabsContent>
 
           <TabsContent value="calculations" className="mt-4">

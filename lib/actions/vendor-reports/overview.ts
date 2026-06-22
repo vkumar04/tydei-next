@@ -25,7 +25,10 @@
  */
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
-import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
+import {
+  contractsOwnedByVendor,
+  scopeContractWhereToFacility,
+} from "@/lib/actions/contracts-vendor-auth"
 import { serialize } from "@/lib/serialize"
 import { buildReportOverview } from "@/lib/reports/overview-core"
 import type { ReportsOverviewPayload } from "@/lib/actions/reports/overview"
@@ -37,17 +40,25 @@ import type { ReportsOverviewPayload } from "@/lib/actions/reports/overview"
  * spend + rebate window used for the trend chart and the rebates stat.
  * `dateTo` is the reference date for the lifecycle bucketing and for
  * the trend window's "end month". When omitted, both fall back to "now".
+ * `facilityId` (optional) narrows every scope to a single facility the
+ * vendor serves — the Reports Hub facility selector. Omitted / "all"
+ * keeps the all-facilities view.
  */
 export async function getVendorReportsOverview(input?: {
   dateFrom?: Date
   dateTo?: Date
+  facilityId?: string
 }): Promise<ReportsOverviewPayload> {
   const { vendor } = await requireVendor()
   const referenceDate = input?.dateTo ?? new Date()
+  const contractScope = scopeContractWhereToFacility(
+    contractsOwnedByVendor(vendor.id),
+    input?.facilityId,
+  )
 
   // ─── Contracts (lifecycle + stats) ────────────────────────────
   const contractRows = await prisma.contract.findMany({
-    where: contractsOwnedByVendor(vendor.id),
+    where: contractScope,
     select: {
       status: true,
       expirationDate: true,
@@ -58,8 +69,11 @@ export async function getVendorReportsOverview(input?: {
   // ─── COG spend (monthly trend) — the vendor's own COG rows ─────
   const cogWhere: {
     vendorId: string
+    facilityId?: string
     transactionDate?: { gte?: Date; lte?: Date }
   } = { vendorId: vendor.id }
+  if (input?.facilityId && input.facilityId !== "all")
+    cogWhere.facilityId = input.facilityId
   if (input?.dateFrom || input?.dateTo) {
     cogWhere.transactionDate = {}
     if (input?.dateFrom) cogWhere.transactionDate.gte = input.dateFrom
@@ -75,7 +89,7 @@ export async function getVendorReportsOverview(input?: {
   const rebateWhere: {
     contract: ReturnType<typeof contractsOwnedByVendor>
     payPeriodEnd?: { gte?: Date; lte?: Date }
-  } = { contract: contractsOwnedByVendor(vendor.id) }
+  } = { contract: contractScope }
   if (input?.dateFrom || input?.dateTo) {
     rebateWhere.payPeriodEnd = {}
     if (input?.dateFrom) rebateWhere.payPeriodEnd.gte = input.dateFrom

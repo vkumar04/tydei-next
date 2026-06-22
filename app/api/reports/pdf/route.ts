@@ -104,6 +104,10 @@ export async function POST(request: NextRequest) {
             reportType,
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
+            // Vendor-scoped: narrow to the selected facility when present.
+            // The action only NARROWS the vendor's own contracts, so a
+            // bad facilityId can't reach another tenant's data.
+            facilityId,
           })
         : await getReportData({
             reportType,
