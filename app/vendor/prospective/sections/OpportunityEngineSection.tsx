@@ -152,15 +152,29 @@ export function OpportunityEngineSection({
     () =>
       computeVendorOpportunityScore({
         engine,
-        rebateCostPct: 0.1,
-        shareOfWalletGainPct: 0.2,
-        competitiveDisplacementScore: 60,
-        multiBuPenetrationScore: 55,
-        technologyAdoptionScore: 50,
-        competitiveThreat: "Stryker",
+        // Strategic inputs are now DERIVED FROM REAL DB DATA
+        // (getVendorOpportunityData), not hardcoded. They fall back to
+        // neutral values only when the vendor has no sales/contract history.
+        rebateCostPct: dbData?.rebateCostPct ?? 0.1,
+        // Share-of-wallet gain = the move this scenario actually models.
+        shareOfWalletGainPct: Math.max(
+          0,
+          targetShare - (dbData?.currentShare ?? 0),
+        ),
+        // Displaceable incumbent share (0–100).
+        competitiveDisplacementScore: Math.round(
+          (dbData?.topCompetitorSharePct ?? 0) * 100,
+        ),
+        // Breadth of product lines already held (count ÷ 6 ContractTypes).
+        multiBuPenetrationScore: Math.round(
+          ((dbData?.contractTypeCount ?? 0) / 6) * 100,
+        ),
+        // Equipment/technology footprint: capital/tie-in contracts present.
+        technologyAdoptionScore: dbData?.hasCapitalContract ? 80 : 40,
+        competitiveThreat: dbData?.competitiveThreat ?? "Incumbent supplier",
         hasCapital: engine.capitalRoboticRevenue > 0,
       }),
-    [engine],
+    [engine, dbData, targetShare],
   )
 
   // AI snapshot — sent to Claude on demand for the richer win-prob / offer read.
@@ -329,6 +343,19 @@ export function OpportunityEngineSection({
           </div>
         </CardContent>
       </Card>
+
+      {/* Honesty banner: when the vendor has no COG/contract history, the
+          seeds are default assumptions, not real data — say so plainly. */}
+      {dbData && !dbData.hasData && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            No sales or contract history found for your organization yet — the
+            figures below are modeled from default assumptions, not your data.
+            Tune the levers to explore a scenario.
+          </span>
+        </div>
+      )}
 
       {/* Six output stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
