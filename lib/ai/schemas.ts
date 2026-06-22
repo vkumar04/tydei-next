@@ -73,7 +73,7 @@ export const extractedContractSchema = z.object({
   vendorName: z.string().describe("The vendor/manufacturer name"),
   contractType: z
     .enum(["usage", "capital", "service", "tie_in", "grouped", "pricing_only"])
-    .describe("The type of contract. Use 'usage' if the contract has rebate tiers based on spend or volume. Use 'pricing_only' ONLY if the contract is purely a price list with no rebates or performance terms. Use 'capital' for equipment purchases. Use 'grouped' for GPO/multi-vendor agreements. Use 'tie_in' for bundled product deals. Use 'service' for service-level agreements."),
+    .describe("The type of contract. Use 'usage' if the contract has spend- or volume-based rebate tiers and NO financed/contributed capital equipment. Use 'tie_in' whenever the contract finances, places, loans, consigns, or CONTRIBUTES capital equipment that is paid off through (or tied to) consumable purchase commitments — choose 'tie_in' over 'usage' even when the rebate tiers are spend- or volume-based (e.g. an 'Equipment Contribution Schedule', 'equipment placement', or 'capital paid down by purchases' IS a tie_in, not usage). Use 'capital' for straight equipment purchases with a payment schedule and no consumable rebate tiers. Use 'pricing_only' ONLY if the contract is purely a price list with no rebates or performance terms. Use 'grouped' for GPO/multi-vendor agreements. Use 'service' for service-level agreements."),
   effectiveDate: z
     .string()
     .nullable()

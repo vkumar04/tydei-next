@@ -41,6 +41,8 @@ export interface VendorReportsPerTypeTabProps {
   tab: PerTypeTab
   vendorId: string
   dateRange: ReportsDateRange
+  /** "all" or a specific facility id (Reports Hub facility selector). */
+  facilityId: string
   selectedContract: VendorReportsContract | null
 }
 
@@ -112,17 +114,24 @@ export function VendorReportsPerTypeTab({
   tab,
   vendorId,
   dateRange,
+  facilityId,
   selectedContract,
 }: VendorReportsPerTypeTabProps) {
   const serverType = TAB_TO_SERVER_TYPE[tab]
 
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.vendorReports.data(vendorId, serverType, dateRange),
+    queryKey: queryKeys.vendorReports.data(
+      vendorId,
+      serverType,
+      facilityId,
+      dateRange,
+    ),
     queryFn: () =>
       getVendorReportData({
         reportType: serverType,
         dateFrom: dateRange.from,
         dateTo: dateRange.to,
+        facilityId: facilityId === "all" ? undefined : facilityId,
       }),
   })
 

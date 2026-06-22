@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo, useRef } from "react"
+import { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
@@ -33,6 +33,7 @@ import { AIExtractDialog } from "@/components/contracts/ai-extract-dialog"
 import { EntryModeTabs } from "@/components/vendor/contracts/submission"
 import {
   CapitalLineItemsEditor,
+  buildSeededCapitalLineItem,
   type CapitalLineItemDraft,
 } from "@/components/contracts/capital-line-items-editor"
 import { createCapitalLineItemSafe } from "@/lib/actions/contracts/capital-line-items"
@@ -148,6 +149,39 @@ export function NewContractClient({
   // Charles audit suggestion #4 (v0-port): per-asset capital line items.
   // Persisted via createCapitalLineItem after the contract is created.
   const [capitalItems, setCapitalItems] = useState<CapitalLineItemDraft[]>([])
+
+  // Safety net: seed a capital line item whenever the contract type TRANSITIONS
+  // into tie_in/capital while the editor is empty. The AI-extract handler
+  // already seeds when it CLASSIFIES a contract as tie_in/capital, but it
+  // routinely mis-classifies an equipment-contribution contract as `usage`
+  // (its spend-rebate tiers match the "usage" rule), so when the user corrects
+  // the type the Capital / Leased Items editor would land empty — which BLOCKS
+  // save (the submit gate requires >=1 item). Seeding here makes capital "come
+  // up" no matter how the type was set. Mirrors the AI-extract seed via the
+  // same shared builder. Fires only on an actual transition (prev-type ref),
+  // not on mount or on capitalItems changes. Vick "AI not grabbing the capital
+  // again on the Tie in" 2026-06-22.
+  const watchedContractType = form.watch("contractType")
+  const prevContractTypeRef = useRef(watchedContractType)
+  useEffect(() => {
+    const prev = prevContractTypeRef.current
+    prevContractTypeRef.current = watchedContractType
+    if (prev === watchedContractType) return
+    if (watchedContractType !== "tie_in" && watchedContractType !== "capital")
+      return
+    setCapitalItems((items) => {
+      if (items.length > 0) return items
+      const totalValue = form.getValues("totalValue") ?? 0
+      return [
+        buildSeededCapitalLineItem({
+          financedTotal:
+            totalValue > 0 ? totalValue : form.getValues("annualValue") || 0,
+          contractName: form.getValues("name"),
+          description: form.getValues("description"),
+        }),
+      ]
+    })
+  }, [watchedContractType, form])
 
   // Charles W1.W-E1 — one idempotency key per form session.
   const idempotencyKeyRef = useRef<string>(
@@ -421,25 +455,21 @@ export function NewContractClient({
           : (data.totalValue ?? 0) > 0
             ? data.totalValue!
             : form.getValues("annualValue") || 0
-      const seeded: CapitalLineItemDraft = {
-        _uid: crypto.randomUUID(),
-        description:
-          data.description?.slice(0, 80) ||
-          data.contractName ||
-          "Capital equipment",
-        itemNumber: "",
-        serialNumber: "",
-        contractTotal: seededTotal,
-        initialSales: data.downPayment ?? 0,
-        interestRatePercent: data.interestRatePercent ?? 0,
-        termMonths: data.termMonths ?? 60,
-        paymentType: "fixed",
-        paymentCadence: data.paymentCadence ?? "monthly",
-      }
       // Replace the editor's contents with the AI-seeded item rather than
       // appending — extraction runs once at the top of the form, before the
-      // user has touched the editor.
-      setCapitalItems([seeded])
+      // user has touched the editor. Built via the shared helper so this and
+      // the manual-type-change safety net below can never drift.
+      setCapitalItems([
+        buildSeededCapitalLineItem({
+          financedTotal: seededTotal,
+          description: data.description,
+          contractName: data.contractName,
+          downPayment: data.downPayment,
+          interestRatePercent: data.interestRatePercent,
+          termMonths: data.termMonths,
+          paymentCadence: data.paymentCadence,
+        }),
+      ])
     }
 
     // 2026-06-08 (Charles "when using AI assist to add a contract categories

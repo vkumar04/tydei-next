@@ -3,10 +3,18 @@ export const PROMPT_V1 = `You are an expert at extracting healthcare contract in
 Extract ALL available information from this contract document. This is for a medical device/supply contract management system.
 
 CONTRACT TYPES TO IDENTIFY:
-- usage: Standard contracts with spend or volume-based rebates
-- capital: Equipment purchase contracts with payment schedules
+- usage: Standard contracts with spend or volume-based rebates and NO
+  financed/contributed capital equipment.
+- capital: Straight equipment purchase contracts with a payment schedule and
+  no consumable rebate tiers.
 - service: Maintenance, support, or consulting service agreements
-- tie_in: Hybrid contracts where capital/service payments are tied to consumable purchases
+- tie_in: Hybrid contracts where capital/service payments are tied to (paid off
+  by, or contingent on) consumable purchases. IMPORTANT: choose tie_in over
+  usage WHENEVER the contract finances, places, loans, consigns, or
+  CONTRIBUTES capital equipment — even if its rebate tiers are spend- or
+  volume-based. An "Equipment Contribution Schedule", "equipment placement",
+  or "equipment paid down by purchases" IS a tie_in, NOT usage. Equipment +
+  rebate tiers ⇒ tie_in.
 - grouped: Contracts spanning multiple vendor divisions with combined rebate structures
 - pricing_only: Price-only agreements that lock in specific pricing without rebate structures
 

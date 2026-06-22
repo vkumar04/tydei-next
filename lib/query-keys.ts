@@ -202,12 +202,19 @@ export const queryKeys = {
   vendorReports: {
     contracts: (vendorId: string) =>
       ["vendorReports", "contracts", vendorId] as const,
-    data: (vendorId: string, reportType: string, dateRange: DateRange) =>
-      ["vendorReports", "data", vendorId, reportType, dateRange] as const,
-    overview: (vendorId: string, dateRange: DateRange) =>
-      ["vendorReports", "overview", vendorId, dateRange] as const,
-    byRebateType: (vendorId: string) =>
-      ["vendorReports", "byRebateType", vendorId] as const,
+    // facilityId ("all" or a specific id) participates in the cache key so
+    // the Reports Hub facility selector refetches per facility.
+    data: (
+      vendorId: string,
+      reportType: string,
+      facilityId: string,
+      dateRange: DateRange,
+    ) =>
+      ["vendorReports", "data", vendorId, reportType, facilityId, dateRange] as const,
+    overview: (vendorId: string, facilityId: string, dateRange: DateRange) =>
+      ["vendorReports", "overview", vendorId, facilityId, dateRange] as const,
+    byRebateType: (vendorId: string, facilityId: string) =>
+      ["vendorReports", "byRebateType", vendorId, facilityId] as const,
     audit: (vendorId: string, contractId: string) =>
       ["vendorReports", "audit", vendorId, contractId] as const,
   },
