@@ -416,11 +416,32 @@ for existing rows until a caller opts in.
   off-contract/price-variance ALERTS use (`lib/alerts/synthesizer.ts`). It used
   to read the (usually empty) `invoiceLineItem`, so the report sat empty while
   alerts had data. Keep these two surfaces on the one source.
+- **All PDF reports render SERVER-SIDE via `lib/pdf.ts` — never a new
+  client-side jsPDF generator.** `lib/pdf.ts` is the one place jsPDF/autotable
+  lives server-side (returns `Uint8Array`); `/api/reports/pdf` is the one route
+  that dispatches by `type` and the client downloads the blob. Generators:
+  `generateContractReport`, `generateReportPerformancePDF`, `generateRebateReport`,
+  `generateSurgeonScorecard`, and the generic `generateTableReportPDF(title,
+  subtitle, head, rows, numericColumns)` (any tabular report — empty → explicit
+  "No data" row, >6 cols → landscape). When you need a new PDF, add a generator
+  here + a route branch, and POST from the client — do NOT spin up a client jsPDF
+  helper (Vick 2026-06-22 "we have a server side pdf generator").
 - **Report PDF export** (server-side, table-only — no charts): `/api/reports/pdf`
   `type: "report"` with `scope: facility|vendor` → `generateReportPerformancePDF`
   (`lib/pdf.ts`, jsPDF/autotable, reuses `getReportData`/`getVendorReportData`).
   Shared `<ReportPdfButton>` (`components/shared/reports/`) on both hubs;
   vendor scope does NOT require a facility membership (the action enforces).
+- **Vendor Reports cards = PDF + CSV.** The Rebate Statement / Performance
+  Summary / Contract Roster cards (`components/vendor/reports/report-type-grid.tsx`
+  → `reports-client.tsx`) offer **Download PDF** (POST `/api/reports/pdf`
+  `type: "vendor-report"`, `vendorReport: rebates|performance|roster` →
+  `generateTableReportPDF`) AND **Download CSV** (client `toCSV`). Both pull the
+  SAME data actions (`getVendorRebateStatement` / `getVendorPerformanceSummary` /
+  `getVendorContractRoster`); the route is vendor-scoped (`requireVendor`, no
+  facility membership). Purchase Leakage has no tabular export — its button
+  scrolls to the live audit card. The facility "Evaluate Proposals" report
+  (`proposal-report-print.tsx`, `window.print()`) leads with a `buildProposalNarrative`
+  Summary (`proposal-narrative.ts`) so the prospective report tells the story too.
 - **Reports Hub tab auto-route:** when a contract is selected the hub narrows
   tabs (Overview / type / Calculations) and auto-routes to the type tab — that
   effect must fire ONLY on SELECTION change (tracked by a ref), not on every
