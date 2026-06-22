@@ -447,6 +447,20 @@ for existing rows until a caller opts in.
   effect must fire ONLY on SELECTION change (tracked by a ref), not on every
   `activeTab` change, or Overview/Calculations bounce back and are unreachable
   (`reports-client.tsx` + `vendor-reports-hub-client.tsx`).
+- **Vendor contract detail has ONE tab bar — never nest a second.**
+  `VendorContractOverview` (`components/vendor/contracts/vendor-contract-overview.tsx`)
+  OWNS the tab bar (Overview/Terms/Transactions/Amendments) AND the contract
+  header + KPI cards. The detail page
+  (`app/vendor/contracts/[id]/vendor-contract-detail-client.tsx`) merges its
+  parity surfaces (Accruals / [Amortization, capital-like only] / Performance /
+  Pricing / Documents) into that ONE bar via the component's optional
+  `extraTabs: VendorContractExtraTab[]` prop, plus `overviewExtra` for extra
+  content inside the Overview tab — it must NOT wrap `VendorContractOverview` in
+  its own `<Tabs>` (that produced a doubled tab bar with a duplicate "Overview",
+  Vick 2026-06-22 "the contract UI changed on the vendor side when you click
+  in"). The OTHER consumer, `vendor-contract-edit-client.tsx`, renders
+  `<VendorContractOverview contract={…} />` with neither prop (standalone) — so
+  both props default empty and that surface is unchanged.
 
 ## Mobile / responsive conventions
 
