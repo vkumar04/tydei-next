@@ -243,6 +243,24 @@ grouped/pricing_only).
   presenting seed defaults as real data. The Opportunity Engine "Deal Scenario"
   picks a **division** (real `VendorDivision` list) and a **facility** that can
   be chosen or written-in (report label only, never shown to the facility).
+- **Annual cases is an editable assumption.** In `FinancialAssumptionsCard`
+  (`current-state-and-assumptions.tsx`) the "Annual cases" value is an inline
+  number input seeded from case-costing data but overridable — it drives manual
+  Net Revenue (avg/case × cases), impact-per-case, and the category breakdowns.
+  Vendor spend stays a tracked, read-only display. Used by both the facility
+  Analysis dashboard and the vendor Facility Current State panel.
+- **Both exports carry the full picture / tell the story.** The vendor
+  Opportunity Engine export (`export-opportunity.ts`) leads with a **Facility
+  Current State** block (spend → revenue w/ actuals-or-manual basis → EBITDA →
+  DCF explicit+terminal + every assumption) — the panel emits a live
+  `FacilityCurrentStateSnapshot` to the section via `onSnapshotChange`. The
+  facility Analysis export (`export-analysis.ts`) leads with a plain-English
+  **Narrative** (`buildNarrative`, spend→revenue→EBITDA→DCF→saving lift) plus a
+  DCF-breakdown section and the contribution-margin / individual-impact tables.
+  Regression: `dashboard/__tests__/export-story.test.ts`. When you add a figure
+  to either surface, add it to the matching exporter so the report stays
+  complete (Vick 2026-06-22 "the export does not incorporate all the
+  information / does not tell the story").
 
 ## Key surfaces added recently (2026-06)
 
