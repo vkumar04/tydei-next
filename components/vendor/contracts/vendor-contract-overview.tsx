@@ -39,8 +39,26 @@ import type { getVendorContractDetail } from "@/lib/actions/vendor-contracts"
 
 type ContractDetail = Awaited<ReturnType<typeof getVendorContractDetail>>
 
+/**
+ * Extra tab merged into this component's single tab bar by the detail page
+ * (Accruals / Amortization / Performance / Pricing / Documents). Keeping ONE
+ * tab bar here — instead of the detail page wrapping this in a second outer
+ * Tabs — fixes the doubled tab bar / duplicate "Overview" (Vick 2026-06-22
+ * "the contract UI changed on the vendor side when you click in").
+ */
+export interface VendorContractExtraTab {
+  value: string
+  label: string
+  icon?: React.ElementType
+  content: React.ReactNode
+}
+
 interface VendorContractOverviewProps {
   contract: ContractDetail
+  /** Appended to this component's tab bar (detail page parity surfaces). */
+  extraTabs?: VendorContractExtraTab[]
+  /** Extra content appended inside the Overview tab (e.g. tie-in split). */
+  overviewExtra?: React.ReactNode
 }
 
 function InfoRow({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon?: React.ElementType }) {
@@ -55,7 +73,11 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: React.Rea
   )
 }
 
-export function VendorContractOverview({ contract }: VendorContractOverviewProps) {
+export function VendorContractOverview({
+  contract,
+  extraTabs = [],
+  overviewExtra,
+}: VendorContractOverviewProps) {
   const [activeTab, setActiveTab] = useState("overview")
 
   // Charles audit round-1 vendor C4: lifetime totals come from the
@@ -206,6 +228,12 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
             <History className="h-3.5 w-3.5 mr-1" />
             Amendments
           </TabsTrigger>
+          {extraTabs.map((t) => (
+            <TabsTrigger key={t.value} value={t.value}>
+              {t.icon && <t.icon className="h-3.5 w-3.5 mr-1" />}
+              {t.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         {/* Overview Tab */}
@@ -262,6 +290,7 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
               )}
             </CardContent>
           </Card>
+          {overviewExtra}
         </TabsContent>
 
         {/* Terms Tab */}
@@ -520,6 +549,16 @@ export function VendorContractOverview({ contract }: VendorContractOverviewProps
             </CardContent>
           </Card>
         </TabsContent>
+
+        {extraTabs.map((t) => (
+          <TabsContent
+            key={t.value}
+            value={t.value}
+            className="mt-6 space-y-6"
+          >
+            {t.content}
+          </TabsContent>
+        ))}
       </Tabs>
     </div>
   )
