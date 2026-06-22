@@ -24,7 +24,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Label } from "@/components/ui/label"
-import { Building } from "lucide-react"
+import { Building, AlertTriangle } from "lucide-react"
 import { queryKeys } from "@/lib/query-keys"
 import {
   getFacilityCurrentStateForVendor,
@@ -110,7 +110,18 @@ export function FacilityCurrentStatePanel({
         ) : isLoading || !data ? (
           <Skeleton className="h-[360px] rounded-xl" />
         ) : (
-          <FacilityCurrentStateModel key={facilityId} data={data} />
+          <>
+            {!data.hasData && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  No supply spend recorded for this facility in the last 12
+                  months — the figures below are zero until COG data loads.
+                </span>
+              </div>
+            )}
+            <FacilityCurrentStateModel key={facilityId} data={data} />
+          </>
         )}
       </CardContent>
     </Card>
@@ -131,7 +142,9 @@ function FacilityCurrentStateModel({
 }: {
   data: VendorFacilityCurrentState
 }) {
-  const cases = data.annualCaseVolume || DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume
+  // Use the facility's REAL spend + case count — never a fabricated seed —
+  // so a sparse facility shows honest (possibly zero) figures, not demo data.
+  const cases = data.annualCaseVolume
   const coveredAvg =
     data.reimbursementCoverage.withRate > 0
       ? data.measuredReimbursement / data.reimbursementCoverage.withRate
@@ -146,8 +159,7 @@ function FacilityCurrentStateModel({
   const [assumptions, setAssumptions] = useState<FacilityModelAssumptions>(
     () => ({
       ...DEFAULT_FACILITY_ASSUMPTIONS,
-      currentVendorSpend:
-        data.currentVendorSpend || DEFAULT_FACILITY_ASSUMPTIONS.currentVendorSpend,
+      currentVendorSpend: data.currentVendorSpend,
       annualCaseVolume: cases,
     }),
   )
