@@ -1,6 +1,8 @@
 "use client"
 
+import { useMemo } from "react"
 import { formatCurrency } from "@/lib/formatting"
+import { computeRunningCapitalBalances } from "@/lib/reports/running-capital-balance"
 import type { ContractPeriodRow } from "./report-columns"
 
 interface ReportPeriodTableProps {
@@ -17,16 +19,39 @@ interface ReportPeriodTableProps {
     rebateEarned: number
     rebateCollected: number
   }
+  /**
+   * Current remaining capital balance for tie-in/capital contracts (the same
+   * figure the header band shows). When provided, the tie-in "Balance" column
+   * shows the running remaining balance per period — anchored so the most
+   * recent period equals this value — instead of the always-$0 paymentExpected
+   * (Vick 2026-06-22 "balance not coming over").
+   */
+  capitalRemainingBalance?: number | null
 }
 
 export function ReportPeriodTable({
   periods,
   reportType,
   canonicalTotals,
+  capitalRemainingBalance,
 }: ReportPeriodTableProps) {
   const isUsage = reportType === "usage"
   const isService = reportType === "service" || reportType === "capital"
   const isTieIn = reportType === "tie_in"
+
+  // Running remaining capital balance per period (tie-in). Each period's
+  // capital paydown ≈ paymentActual + rebateEarned (rebate is applied to
+  // capital on a tie-in). Anchor the most-recent period's ENDING balance to
+  // the contract's current remaining balance, then add each later period's
+  // paydown back as we walk to older periods — so the column reconciles with
+  // the header's Capital Balance regardless of the report window.
+  const endingBalanceByIndex = useMemo<number[] | null>(
+    () =>
+      capitalRemainingBalance == null
+        ? null
+        : computeRunningCapitalBalances(periods, capitalRemainingBalance),
+    [periods, capitalRemainingBalance],
+  )
 
   const totalSpend = periods.reduce((s, p) => s + p.totalSpend, 0)
   const totalRebateEarned =
@@ -117,7 +142,11 @@ export function ReportPeriodTable({
                   <td className="px-3 py-3 text-right">{formatCurrency(row.rebateEarned)}</td>
                   <td className="px-3 py-3 text-right">{formatCurrency(row.rebateCollected)}</td>
                   <td className="px-3 py-3 text-right">{formatCurrency(row.paymentActual)}</td>
-                  <td className="px-3 py-3 text-right">{formatCurrency(row.paymentExpected)}</td>
+                  <td className="px-3 py-3 text-right">
+                    {endingBalanceByIndex
+                      ? formatCurrency(endingBalanceByIndex[index])
+                      : formatCurrency(row.paymentExpected)}
+                  </td>
                 </>
               )}
               {reportType === "grouped" && (
@@ -157,7 +186,11 @@ export function ReportPeriodTable({
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalRebateEarned)}</td>
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalRebateCollected)}</td>
                 <td className="px-3 py-3 text-right font-medium">{formatCurrency(totalPaymentActual)}</td>
-                <td className="px-3 py-3" aria-label="Actions" />
+                <td className="px-3 py-3 text-right font-medium">
+                  {capitalRemainingBalance != null
+                    ? formatCurrency(capitalRemainingBalance)
+                    : ""}
+                </td>
               </>
             )}
             {reportType === "grouped" && (

@@ -82,6 +82,7 @@ interface ContractRow {
   rebateEarnedCanonical: number
   rebateCollectedCanonical: number
   marginCanonical: number
+  capitalRemainingBalance?: number | null
   periods: ContractPeriodRow[]
 }
 
@@ -210,6 +211,7 @@ export function VendorReportsPerTypeTab({
                 rebateEarned: drillDownContract.rebateEarnedCanonical,
                 rebateCollected: drillDownContract.rebateCollectedCanonical,
               }}
+              capitalRemainingBalance={drillDownContract.capitalRemainingBalance}
             />
             <div className="mt-6">
               <ReportTrendChart
