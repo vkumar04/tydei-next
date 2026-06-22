@@ -233,6 +233,7 @@ export function ReportsPerTypeTab({
                 rebateEarned: drillDownContract.rebateEarnedCanonical,
                 rebateCollected: drillDownContract.rebateCollectedCanonical,
               }}
+              capitalRemainingBalance={drillDownContract.capitalRemainingBalance}
             />
             <div className="mt-6">
               <ReportTrendChart
