@@ -34,6 +34,7 @@ import { EntryModeTabs } from "@/components/vendor/contracts/submission"
 import {
   CapitalLineItemsEditor,
   buildSeededCapitalLineItem,
+  resolveSeededFinancedTotal,
   type CapitalLineItemDraft,
 } from "@/components/contracts/capital-line-items-editor"
 import { createCapitalLineItemSafe } from "@/lib/actions/contracts/capital-line-items"
@@ -171,11 +172,12 @@ export function NewContractClient({
       return
     setCapitalItems((items) => {
       if (items.length > 0) return items
-      const totalValue = form.getValues("totalValue") ?? 0
       return [
         buildSeededCapitalLineItem({
-          financedTotal:
-            totalValue > 0 ? totalValue : form.getValues("annualValue") || 0,
+          financedTotal: resolveSeededFinancedTotal({
+            totalValue: form.getValues("totalValue"),
+            fallback: form.getValues("annualValue"),
+          }),
           contractName: form.getValues("name"),
           description: form.getValues("description"),
         }),
@@ -449,19 +451,17 @@ export function NewContractClient({
     // annualValue), so the row is present and prefilled for the user to
     // correct rather than an empty, un-saveable editor.
     if (data.contractType === "tie_in" || data.contractType === "capital") {
-      const seededTotal =
-        (data.capitalCost ?? 0) > 0
-          ? data.capitalCost!
-          : (data.totalValue ?? 0) > 0
-            ? data.totalValue!
-            : form.getValues("annualValue") || 0
       // Replace the editor's contents with the AI-seeded item rather than
       // appending — extraction runs once at the top of the form, before the
       // user has touched the editor. Built via the shared helper so this and
       // the manual-type-change safety net below can never drift.
       setCapitalItems([
         buildSeededCapitalLineItem({
-          financedTotal: seededTotal,
+          financedTotal: resolveSeededFinancedTotal({
+            capitalCost: data.capitalCost,
+            totalValue: data.totalValue,
+            fallback: form.getValues("annualValue"),
+          }),
           description: data.description,
           contractName: data.contractName,
           downPayment: data.downPayment,
