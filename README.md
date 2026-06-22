@@ -271,8 +271,9 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 
 - **Contracts** — per-type terms/tiers (usage/service/capital/tie-in/grouped/pricing), AI contract extraction (PDF → terms + capital line items, with OCR for scanned docs), rebate accrual engine, tie-in capital amortization.
 - **Case Costing** — surgeon scorecards, payor-mix, and a per-procedure **True-Margin** report (revenue from CPT payor-rate reimbursement, rebate allocated by matching each supply's product number to its contract's rebate terms).
-- **Reports** — facility Reports Hub and a vendor-scoped **Vendor Reports Hub** at full parity (Overview / per-contract-type / By Rebate Type / Calculations), reusing the same presentational components.
-- **Prospective analysis** — unified proposal analyzer (PDF terms + price file + lookback + legal scan → one verdict).
+- **Reports** — facility Reports Hub and a vendor-scoped **Vendor Reports Hub** at full parity (Overview / per-contract-type / By Rebate Type / Calculations), reusing the same presentational components. The vendor hub's **facility filter** scopes every trend/table to one facility the vendor serves (`scopeContractWhereToFacility`).
+- **Analysis (facility CFO dashboard)** — assumption-driven current-state model: Current Vendor Spend, Net Revenue, EBITDA, and a **DCF enterprise value** (explicit-period PV **plus a Gordon-Growth terminal value** — `TV = FCF_N × (1+g) / (r − g)`). Net Revenue is an **Actuals / Manual** control (summed case-costing reimbursement, or avg-reimbursement-per-case × cases) — never the old spend ÷ 30% proxy.
+- **Prospective analysis** — unified proposal analyzer (PDF terms + price file + lookback + legal scan → one verdict), plus a vendor **Opportunity Engine**: per-facility **Current State** panel (reuses the facility DCF model) and a deal scorer whose strategic inputs (top competitor, incumbent share, rebate cost, multi-BU breadth) are **derived from the vendor's real COG/contract data**, not hardcoded.
 
 ## Deployment (Railway)
 
