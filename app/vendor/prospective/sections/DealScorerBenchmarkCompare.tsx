@@ -95,7 +95,22 @@ export function DealScorerBenchmarkCompare({ vendorId, scenarios }: Props) {
     .map((id) => benchmarkById.get(id))
     .filter((b): b is VendorBenchmarkRow => Boolean(b))
 
-  if (!isLoading && (benchmarks?.length ?? 0) === 0) {
+  // While the benchmarks query is in flight, show a loading hint — NEVER the
+  // picker, which would open to cmdk's "No matches." with nothing to select
+  // ("can't pick a product from the list", Vick 2026-06-23). The picker only
+  // renders once benchmarks have loaded AND at least one exists.
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        <Label>Compare against benchmarks</Label>
+        <p className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+          Loading your uploaded benchmarks…
+        </p>
+      </div>
+    )
+  }
+
+  if ((benchmarks?.length ?? 0) === 0) {
     return (
       <div className="space-y-2">
         <Label>Compare against benchmarks</Label>
