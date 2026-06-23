@@ -262,6 +262,68 @@ grouped/pricing_only).
   complete (Vick 2026-06-22 "the export does not incorporate all the
   information / does not tell the story").
 
+### Prospective audit fixes (2026-06-23)
+
+- **Prospective benchmarks come ONLY from uploaded files.** Every prospective
+  benchmark read uses the vendor's OWN `ProductBenchmark` rows
+  (`where: { vendorId: vendor.id }`) — NEVER the seeded / national rows
+  (`vendorId: null`). Applies to `getVendorBenchmarks` (Benchmarks tab,
+  `lib/actions/prospective.ts`), the proposal analyzer
+  `getVendorProspectiveAnalysis` (`lib/actions/vendor-prospective.ts`, was
+  `OR: [{vendorId}, {vendorId: null}]`), and the Deal Scenario
+  `categoryBenchmarks` in `getVendorOpportunityData`. Do NOT re-add the
+  `{ vendorId: null }` branch in any prospective surface (Vick 2026-06-22
+  "Benchmark should only come from uploaded files"). The seeded/national rows
+  still feed non-prospective surfaces (admin `ProductBenchmark`, COG
+  categorize-from-benchmark) — this rule is prospective-only.
+- **Deal Scenario "Benchmark Position".** `getVendorOpportunityData` returns
+  `categoryBenchmarks: { category, currentAsp, benchmarkAvg | null }[]` —
+  per-category the vendor's ACTUAL trailing-12mo ASP (spend ÷ qty) and the
+  UPLOADED benchmark average. `BenchmarkPositionCard`
+  (`components/vendor/prospective/benchmark-position-card.tsx`) renders, per
+  category, **Benchmark vs Current ASP (actual) vs Proposed ASP (assumption =
+  current × (1+priceChange)) + % gap / above-below**. Honest empty state when
+  nothing is uploaded. There are TWO benchmark surfaces on the vendor side — this
+  Opportunity-Engine per-category ASP card AND the Deal Scorer's
+  `DealScorerBenchmarkCompare` (per-scenario percentile, informational only,
+  does NOT feed the score) — keep both consistent on uploaded-only sourcing.
+- **Proposal tier extraction mirrors the contract flow.** The facility "Evaluate
+  Proposals" upload (`components/facility/analysis/prospective/upload-proposal-tab.tsx`)
+  uses ONE shared `isSpendDollarTerm(termType)` predicate (exported) to gate BOTH
+  the 12-month lookback's `extractedTiers` AND `buildScoringInput`'s top-tier
+  rate/min-spend. It was a too-narrow allow-list (`{spend_rebate, growth_rebate,
+  ""}`) that dropped the AI's varied labels (`percent_of_spend`, `spend_based`,
+  `usage`, `"Spend Rebate"`) → "tiers not picked up like contracts" (Vick
+  2026-06-22). Broadened to include those, case/space-insensitive; market_share /
+  volume / carve-out / fixed / per-procedure stay EXCLUDED. Regression:
+  `__tests__/spend-dollar-term.test.ts`.
+- **Proposal score baseline = real actuals.** The score's `currentSpend` seeds
+  from the vendor's trailing-12mo COG (the lookback runs FIRST, then scoring),
+  not the proposed contract total (which inflated savings on known vendors);
+  unknown vendors fall back to the proposed total. The manual-entry tab has a
+  **"Load actuals"** button that seeds the baseline from the typed vendor's
+  trailing-12mo spend via `getVendorLookbackComparison`.
+- **`proposedRebateRate` is a PERCENT in the proposal score — do NOT normalize
+  it.** The scoring engine reads `proposedRebateRate` / `priceVsMarket` as
+  percents (`scoring.ts:42` "top-tier rate as percent"), so `buildScoringInput`
+  passes the raw AI `tier.rebateValue` (AI emits "3" for 3%). The LOOKBACK path
+  is different: `computeRebateFromPrismaTiers` wants a FRACTION, so the lookback
+  already calls `normalizeAIRebateValue("percent_of_spend", …)` ("3" → 0.03).
+  Never "normalize the score's tier rate to match contracts" — that's the
+  fraction engine, not the percent scorer (caught as an audit false positive
+  2026-06-23).
+- **`priceVsMarket` in the proposal scorer is POSITIVE when CHEAPER** (a
+  discount → higher competitiveness; `priceCompetitiveness = clamp(5 +
+  priceVsMarket/4, 0, 10)`, sign locked by `scoring.test.ts`). The price file's
+  `PricingFileSummary.avgVariancePercent` is `(proposed − current)/current`,
+  which is NEGATIVE when cheaper — so the helper `priceVsMarketFromAnalysis`
+  (exported from `upload-proposal-tab.tsx`) **negates** it into a savings% before
+  feeding the score (audit P1#6 — was hardcoded `0`; feeding it raw scores
+  cheaper proposals LOWER). The proposal re-scores when a COG-matched price file
+  is analyzed (PDF-then-pricing) and reads an already-analyzed file at PDF-score
+  time (pricing-then-PDF). The manual-entry "Discount vs market %" field is
+  **positive = cheaper** to match. Regression: `__tests__/spend-dollar-term.test.ts`.
+
 ## Key surfaces added recently (2026-06)
 
 - **Vendor Reports Hub** (`components/vendor/reports/hub/` + `lib/actions/vendor-reports/`)
@@ -453,6 +515,12 @@ for existing rows until a caller opts in.
   (`lib/pdf.ts`, jsPDF/autotable, reuses `getReportData`/`getVendorReportData`).
   Shared `<ReportPdfButton>` (`components/shared/reports/`) on both hubs;
   vendor scope does NOT require a facility membership (the action enforces).
+  **It renders LANDSCAPE and its per-period columns MUST match the on-screen
+  `ReportPeriodTable`** — for tie-in/capital that means Rebate Collected AND a
+  running **Balance** column (`computeRunningCapitalBalances`, anchored to the
+  contract's `capitalRemainingBalance`, passed on `ReportPerfContract`). Was
+  portrait + missing those columns → "the exported report doesn't have all the
+  data" (Vick 2026-06-22). Don't drop back to portrait or a thinner column set.
 - **Vendor Reports cards = PDF + CSV.** The Rebate Statement / Performance
   Summary / Contract Roster cards (`components/vendor/reports/report-type-grid.tsx`
   → `reports-client.tsx`) offer **Download PDF** (POST `/api/reports/pdf`
