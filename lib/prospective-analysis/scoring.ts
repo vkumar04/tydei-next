@@ -9,7 +9,9 @@
  *   savingsPercent            = ((currentSpend - proposedAnnualSpend) / currentSpend) × 100
  *   costSavingsScore          = clamp(savingsPercent / 2, 0, 10)
  *   priceCompetitivenessScore = clamp(5 + priceVsMarket / 4, 0, 10)
- *                               (priceVsMarket is negative when cheaper → higher score)
+ *                               (priceVsMarket is POSITIVE when cheaper/a discount
+ *                                → higher score; negative = priced above the
+ *                                reference. Sign locked by scoring.test.ts.)
  *   rebateAttainabilityScore  = clamp((currentSpend / minimumSpend) × 5, 0, 10)
  *   lockInRiskScore           = max(0, 10 - lockInPenalty)
  *                               penalties additive:
@@ -36,7 +38,7 @@ export interface ProposalInput {
   // Spend / pricing
   proposedAnnualSpend: number
   currentSpend: number // baseline vendor spend at this facility
-  priceVsMarket: number // -10..+10, % above/below market (negative = cheaper)
+  priceVsMarket: number // -10..+10, % discount vs reference (POSITIVE = cheaper)
   // Rebate
   minimumSpend: number
   proposedRebateRate: number // top-tier rate as percent
@@ -83,8 +85,8 @@ export function calculateProposalScores(input: ProposalInput): ProposalScores {
         )
       : 0
 
-  // Price competitiveness — negative priceVsMarket means cheaper than
-  // market, so it pushes the score UP from the neutral 5.
+  // Price competitiveness — POSITIVE priceVsMarket means cheaper than the
+  // reference (a discount), so it pushes the score UP from the neutral 5.
   const priceCompetitiveness = clamp(5 + input.priceVsMarket / 4, 0, 10)
 
   // Rebate attainability — ratio of current spend to minimum required.

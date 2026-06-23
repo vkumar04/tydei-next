@@ -233,7 +233,7 @@ export function ManualEntryTab({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="priceVsMarket">
-                Price vs market % (neg = cheaper)
+                Discount vs market % (positive = cheaper)
               </Label>
               <Input
                 id="priceVsMarket"

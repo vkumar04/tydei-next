@@ -189,6 +189,21 @@ export function isSpendDollarTerm(termType: string | null | undefined): boolean 
 }
 
 /**
+ * Proposal price competitiveness fed to the scoring engine (audit P1#6 — was
+ * hardcoded 0). The engine's `priceVsMarket` is POSITIVE when cheaper (a
+ * discount → higher competitiveness; sign locked by scoring.test.ts). The
+ * price file's `avgVariancePercent` is (proposed − current)/current, which is
+ * NEGATIVE when cheaper — so NEGATE it into a savings%. Returns 0 when no
+ * COG-matched price file has been analyzed.
+ */
+export function priceVsMarketFromAnalysis(
+  analysis: PricingFileAnalysis | null,
+): number {
+  if (!analysis || analysis.summary.itemsWithCOGMatch <= 0) return 0
+  return -(Math.round(analysis.summary.avgVariancePercent * 10) / 10)
+}
+
+/**
  * Map AI-extracted contract data to a scoring input with reasonable
  * fallbacks. Users can re-enter via the manual tab if any field needs
  * refinement — this path optimizes for "drop a PDF, see a verdict".
@@ -196,6 +211,14 @@ export function isSpendDollarTerm(termType: string | null | undefined): boolean 
 function buildScoringInput(
   extracted: ExtractedContract,
   currentSpend: number,
+  /**
+   * Proposal price vs the facility's current COG price, as a percent (negative
+   * = cheaper than current = better score). Sourced from the uploaded price
+   * file's COG-matched variance (PricingFileSummary.avgVariancePercent) when
+   * available; 0 when no price file has been analyzed (audit P1#6 — was
+   * hardcoded 0). The scoring engine reads priceVsMarket as a percent.
+   */
+  priceVsMarketPct = 0,
 ): AnalyzeProposalInput {
   const proposedAnnualSpend = extracted.totalValue ?? currentSpend * 1
   // Only spend-dollar terms contribute the top-tier rate / min-spend — a
@@ -225,7 +248,7 @@ function buildScoringInput(
   return {
     proposedAnnualSpend,
     currentSpend,
-    priceVsMarket: 0,
+    priceVsMarket: priceVsMarketPct,
     minimumSpend: topTierMinSpend,
     proposedRebateRate: topTierRate,
     termYears,
@@ -375,6 +398,17 @@ export function UploadProposalTab({
   // legitimately resolves to nothing for that selection.
   const lookbackRequestedVendorRef = useRef<string | null>(null)
 
+  // Refs to feed price-vs-market into the deal score without stale closures /
+  // dep churn (audit P1#6). `pricingAnalysisRef` lets the PDF handler read an
+  // already-analyzed price file (pricing-then-PDF order); `lastScoredRef` +
+  // `onProposalScoredRef` let the price-file handler re-score the existing
+  // upload proposal (PDF-then-pricing order).
+  const pricingAnalysisRef = useRef<PricingFileAnalysis | null>(null)
+  const lastScoredRef = useRef(lastScored)
+  lastScoredRef.current = lastScored
+  const onProposalScoredRef = useRef(onProposalScored)
+  onProposalScoredRef.current = onProposalScored
+
   // ── Price file: COG join → variance analysis (re-runnable) ──────────
   // Which vendor drove the most recent join — lets the re-join effect below
   // fire only when the analysis vendor actually changed.
@@ -448,13 +482,47 @@ export function UploadProposalTab({
       if (resetGenRef.current !== gen) return // Start over won the race
       setPricingVendorMismatch(mismatch)
       setPricingAnalysis(result)
+      pricingAnalysisRef.current = result
       setPricingFileName(fileName)
       setPricingFileItems({ items, fileName })
       toast.success(
         `Price file analyzed — ${result.summary.itemsWithCOGMatch} of ${result.summary.totalItems} lines matched to COG`,
       )
+
+      // Audit P1#6: feed price-vs-market into the deal score. When the file
+      // matched COG and an upload proposal is already scored, re-score it with
+      // the realized avg variance vs current price (negative = cheaper = better
+      // score). Non-fatal — a re-score failure leaves the pricing analysis and
+      // the original score intact.
+      const scored = lastScoredRef.current
+      const priceVsMarket = priceVsMarketFromAnalysis(result)
+      if (scored?.source === "upload" && scored.input) {
+        try {
+          const rescoreInput: AnalyzeProposalInput = {
+            ...scored.input,
+            priceVsMarket,
+          }
+          const rescored = await analyzeMutation.mutateAsync(rescoreInput)
+          if (resetGenRef.current !== gen) return
+          onProposalScoredRef.current({
+            ...scored,
+            input: rescoreInput,
+            result: rescored,
+          })
+          toast.success(
+            priceVsMarket >= 0
+              ? `Deal score updated — proposal is ${priceVsMarket}% cheaper than current price`
+              : `Deal score updated — proposal is ${Math.abs(priceVsMarket)}% above current price`,
+          )
+        } catch (err) {
+          console.error(
+            "[proposal-analyzer] price-vs-market re-score failed:",
+            err,
+          )
+        }
+      }
     },
-    [lookback?.vendorId, lookback?.vendorName, vendors],
+    [lookback?.vendorId, lookback?.vendorName, vendors, analyzeMutation],
   )
 
   // Uploader improvements 1 (2026-06-13): headless shared dropzone —
@@ -707,7 +775,14 @@ export function UploadProposalTab({
         // the proposed total (spec §2: unknown vendors have no actuals).
         const currentSpend =
           trailingSpend > 0 ? trailingSpend : (extracted.totalValue ?? 0)
-        const input = buildScoringInput(extracted, currentSpend)
+        // Feed price-vs-market into the score when a price file was already
+        // analyzed (pricing-then-PDF order); the price-file handler re-scores
+        // for the PDF-then-pricing order.
+        const input = buildScoringInput(
+          extracted,
+          currentSpend,
+          priceVsMarketFromAnalysis(pricingAnalysisRef.current),
+        )
 
         const result = await analyzeMutation.mutateAsync(input)
         if (resetGenRef.current !== gen) return // Start over won the race
@@ -902,6 +977,7 @@ export function UploadProposalTab({
     setPricingFileItems(null)
     lookbackRequestedVendorRef.current = null
     lastPricingJoinVendorRef.current = null
+    pricingAnalysisRef.current = null
     onReset?.()
     onPhaseChange("idle")
     toast.success("Analysis cleared — drop a new contract PDF to start over")
