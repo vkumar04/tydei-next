@@ -1,5 +1,29 @@
 import { describe, it, expect } from "vitest"
-import { isSpendDollarTerm } from "../upload-proposal-tab"
+import {
+  isSpendDollarTerm,
+  priceVsMarketFromAnalysis,
+} from "../upload-proposal-tab"
+import type { PricingFileAnalysis } from "@/lib/prospective-analysis/pricing-file-analysis"
+
+function analysis(
+  avgVariancePercent: number,
+  itemsWithCOGMatch = 5,
+): PricingFileAnalysis {
+  return {
+    lines: [],
+    summary: {
+      totalItems: 5,
+      itemsWithCOGMatch,
+      itemsWithoutCOGMatch: 0,
+      avgVariancePercent,
+      totalProposedAnnualSpend: 0,
+      totalCurrentAnnualSpend: 0,
+      potentialSavings: 0,
+      itemsBelowCOG: 0,
+      itemsAboveCOG: 0,
+    },
+  }
+}
 
 // Guards the broadened spend-dollar term filter — the proposal lookback + the
 // score's top-tier rate both gate on this. Before broadening, only
@@ -41,5 +65,25 @@ describe("isSpendDollarTerm", () => {
   it("treats null/undefined as the empty (default-in) case", () => {
     expect(isSpendDollarTerm(null)).toBe(true)
     expect(isSpendDollarTerm(undefined)).toBe(true)
+  })
+})
+
+// The engine's priceVsMarket is POSITIVE when cheaper (locked by
+// scoring.test.ts); the price file's avgVariancePercent is NEGATIVE when
+// cheaper. This helper must negate so a cheaper proposal scores HIGHER (audit
+// P1#6 — feeding it raw would have scored cheaper proposals lower).
+describe("priceVsMarketFromAnalysis", () => {
+  it("returns 0 when no analysis or no COG-matched lines", () => {
+    expect(priceVsMarketFromAnalysis(null)).toBe(0)
+    expect(priceVsMarketFromAnalysis(analysis(-5, 0))).toBe(0)
+  })
+
+  it("negates: a cheaper proposal (negative variance) → positive (good)", () => {
+    expect(priceVsMarketFromAnalysis(analysis(-5))).toBe(5)
+    expect(priceVsMarketFromAnalysis(analysis(-12.34))).toBe(12.3)
+  })
+
+  it("negates: a pricier proposal (positive variance) → negative (bad)", () => {
+    expect(priceVsMarketFromAnalysis(analysis(8))).toBe(-8)
   })
 })
