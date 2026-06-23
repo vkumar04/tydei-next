@@ -85,6 +85,32 @@ export interface VendorProposal {
   terms?: ProposalTermSummary[]
 }
 
+/** A targeted facility resolved to its display name. */
+export interface ProposalFacilityRef {
+  id: string
+  name: string
+}
+
+/**
+ * The FULL proposal payload for the detail view — everything the builder
+ * tabs captured, read back on demand. The list loader (`getVendorProposals`)
+ * deliberately strips the heavy/extra fields (audit L13: only `itemCount`,
+ * no pricing rows, no start date / payment terms / divisions), so the
+ * "Proposal Details" dialog fetches this richer shape when opened.
+ */
+export interface VendorProposalDetail extends VendorProposal {
+  /** Full per-line pricing rows from the builder Pricing tab. */
+  pricingItems: ProposedPricingItem[]
+  /** Contract terms tab extras (the list only surfaces contractLengthMonths). */
+  startDate?: string
+  paymentTerms?: string
+  termsNotes?: string
+  /** Division names for grouped proposals (audit L13). */
+  divisions?: string[]
+  /** `facilityIds` resolved to names; the "none" placeholder is dropped. */
+  facilities: ProposalFacilityRef[]
+}
+
 // NOTE: The legacy `analyzeProposal` 0-100 scoring action and its UI
 // consumers (`components/facility/analysis/proposal-upload.tsx`,
 // `proposal-comparison-table.tsx`, `useAnalyzeProposal` hook, and the
@@ -422,51 +448,27 @@ export interface VendorBenchmarkRow {
 }
 
 /**
- * Returns benchmark rows scoped to the calling vendor's `vendorItemNo`s.
- * Pulls from `ProductBenchmark` rows tagged with the vendor's id, plus
- * national-benchmark rows that match item numbers the vendor has actually
- * sold (i.e. appear in COGRecord under this vendorId). Vendor scoping is
- * enforced via `requireVendor()` and the `vendorId` filter in both queries.
+ * Returns the vendor's UPLOADED benchmark rows only (`ProductBenchmark` rows
+ * tagged with the vendor's id, from the Benchmarks-tab import). Seeded /
+ * national rows (vendorId = null) are NOT included — prospective benchmarks
+ * come only from uploaded files (Vick 2026-06-22). Vendor scoping via
+ * `requireVendor()` + the `vendorId` filter.
  */
 export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
   const { vendor } = await requireVendor()
 
-  // 1) Direct vendor benchmarks (audit M8: deterministic order + cap)
+  // Uploaded-only (Vick 2026-06-22 "Benchmark should only come from uploaded
+  // files"): prospective benchmarks are the vendor's OWN uploaded rows
+  // (vendorId = vendor.id, from the Benchmarks-tab import). The seeded /
+  // national rows (vendorId = null) are intentionally NOT merged in anymore.
   const direct = await prisma.productBenchmark.findMany({
     where: { vendorId: vendor.id },
     orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
     take: 500,
   })
 
-  // 2) National benchmarks (no vendorId) that match this vendor's catalog
-  // (item numbers seen in COGRecord under this vendor).
-  // Group-vendor drift (project_group_vendor_drift): scoped by the bare
-  // session vendorId — vendor orgs spanning grouped vendor records would
-  // under-count, but no vendor-side "all vendor ids in my group" helper
-  // exists (COGRecord carries a single vendorId). Smallest correct
-  // change: keep the bare id and flag the class.
-  const cogItems = await prisma.cOGRecord.findMany({
-    where: { vendorId: vendor.id },
-    select: { vendorItemNo: true },
-    distinct: ["vendorItemNo"],
-    orderBy: { vendorItemNo: "asc" },
-    take: 500,
-  })
-  const cogItemNos = cogItems
-    .map((r) => r.vendorItemNo)
-    .filter((n): n is string => typeof n === "string" && n.length > 0)
-
-  const national =
-    cogItemNos.length > 0
-      ? await prisma.productBenchmark.findMany({
-          where: { vendorId: null, vendorItemNo: { in: cogItemNos } },
-          orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
-          take: 500,
-        })
-      : []
-
   const seen = new Set<string>()
-  const all = [...direct, ...national].filter((b) => {
+  const all = direct.filter((b) => {
     const k = `${b.vendorItemNo}|${b.source}`
     if (seen.has(k)) return false
     seen.add(k)
@@ -607,4 +609,77 @@ export async function getVendorProposals(
   )
 
   return serialize(proposals)
+}
+
+// ─── Vendor: Get Proposal Detail (full builder payload) ─────────
+
+/**
+ * Read the FULL proposal payload for the detail dialog — the pricing
+ * rows, contract-term extras, divisions, and resolved facility names
+ * that `getVendorProposals` strips for the lean list (audit L13).
+ *
+ * Vendor-scoped (tenant isolation): the row is only returned when it
+ * belongs to the caller's vendor. Mirrors `deleteProposal`'s two-source
+ * read — new draft `PendingContract` rows first, then the legacy
+ * masquerade `Alert` rows so historic proposals still open.
+ */
+export async function getVendorProposalDetail(
+  id: string,
+): Promise<VendorProposalDetail> {
+  const { vendor } = await requireVendor()
+
+  const pending = await prisma.pendingContract.findFirst({
+    where: { id, vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+    select: { id: true, submittedAt: true, pricingData: true },
+  })
+  const legacy = pending
+    ? null
+    : await prisma.alert.findFirst({
+        where: { id, vendorId: vendor.id, ...onlyVendorProposalAlerts() },
+        select: { id: true, createdAt: true, metadata: true },
+      })
+
+  if (!pending && !legacy) throw new Error("Proposal not found")
+
+  const createdAt = pending ? pending.submittedAt : legacy!.createdAt
+  const meta = ((pending ? pending.pricingData : legacy!.metadata) ??
+    {}) as Record<string, unknown>
+
+  const base = payloadToProposal(id, vendor.id, createdAt, meta)
+
+  const terms = meta.terms as
+    | {
+        contractLength?: number
+        startDate?: string
+        paymentTerms?: string
+        notes?: string
+      }
+    | undefined
+  const pricingItems = (meta.pricingItems as ProposedPricingItem[]) ?? []
+  const divisions = (meta.divisions as string[] | undefined)?.filter(Boolean)
+
+  // Resolve targeted facilities to names. The builder writes ["none"]
+  // when no facility was picked (audit M7) — drop that placeholder.
+  const realFacilityIds = base.facilityIds.filter((fid) => fid && fid !== "none")
+  const facilityRows = realFacilityIds.length
+    ? await prisma.facility.findMany({
+        where: { id: { in: realFacilityIds } },
+        select: { id: true, name: true },
+      })
+    : []
+  const nameById = new Map(facilityRows.map((f) => [f.id, f.name]))
+  const facilities: ProposalFacilityRef[] = realFacilityIds.map((fid) => ({
+    id: fid,
+    name: nameById.get(fid) ?? "Unknown facility",
+  }))
+
+  return serialize({
+    ...base,
+    pricingItems,
+    startDate: terms?.startDate,
+    paymentTerms: terms?.paymentTerms,
+    termsNotes: terms?.notes,
+    divisions: divisions && divisions.length ? divisions : undefined,
+    facilities,
+  })
 }
