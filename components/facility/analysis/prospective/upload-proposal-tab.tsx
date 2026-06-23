@@ -163,6 +163,32 @@ interface ExtractedContract {
 }
 
 /**
+ * Spend-dollar rebate terms — the family whose tiers feed BOTH the proposal
+ * score's top-tier rate AND the 12-month lookback projection. Broadened from
+ * the original 3-value set so the AI's varied spend-rebate labels (percent_of_
+ * spend, spend_based, usage, "Spend Rebate", …) aren't silently dropped — that
+ * was why proposal tiers "weren't being picked up like contracts" (Vick
+ * 2026-06-22). market_share / volume / carve-out / fixed / per-procedure tiers
+ * stay EXCLUDED: they store %/count thresholds or pay per-SKU, not spend
+ * dollars (the recurring type-confusion class).
+ */
+const SPEND_DOLLAR_TERM_TYPES = new Set([
+  "spend_rebate",
+  "growth_rebate",
+  "percent_of_spend",
+  "spend_based",
+  "usage",
+  "",
+])
+export function isSpendDollarTerm(termType: string | null | undefined): boolean {
+  const norm = String(termType ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+  return SPEND_DOLLAR_TERM_TYPES.has(norm)
+}
+
+/**
  * Map AI-extracted contract data to a scoring input with reasonable
  * fallbacks. Users can re-enter via the manual tab if any field needs
  * refinement — this path optimizes for "drop a PDF, see a verdict".
@@ -172,28 +198,27 @@ function buildScoringInput(
   currentSpend: number,
 ): AnalyzeProposalInput {
   const proposedAnnualSpend = extracted.totalValue ?? currentSpend * 1
+  // Only spend-dollar terms contribute the top-tier rate / min-spend — a
+  // market_share 50% tier must not masquerade as a spend rebate rate (kept in
+  // lockstep with the lookback's extractedTiers filter below).
+  const spendTiers = extracted.terms
+    .filter((t) => isSpendDollarTerm(t.termType))
+    .flatMap((t) => t.tiers)
   const topTierRate =
-    extracted.terms
-      .flatMap((t) => t.tiers)
-      .map((t) => t.rebateValue ?? 0)
-      .reduce((max, v) => (v > max ? v : max), 0) || 0
+    spendTiers.map((t) => t.rebateValue ?? 0).reduce((max, v) => (v > max ? v : max), 0) || 0
 
   const topTierMinSpend =
-    extracted.terms
-      .flatMap((t) => t.tiers)
-      .map((t) => t.spendMin ?? 0)
-      .reduce((max, v) => (v > max ? v : max), 0) || 0
+    spendTiers.map((t) => t.spendMin ?? 0).reduce((max, v) => (v > max ? v : max), 0) || 0
 
-  // Contract duration in years — rough parse; defaults to 3 if we can't tell.
+  // Contract duration in years — rough parse; clamp to [1, 20] so a
+  // hallucinated / mis-parsed date range can't drive a 500-year term.
   let termYears = 3
   if (extracted.effectiveDate && extracted.expirationDate) {
     const start = new Date(extracted.effectiveDate).getTime()
     const end = new Date(extracted.expirationDate).getTime()
     if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
-      termYears = Math.max(
-        1,
-        Math.round((end - start) / (365.25 * 24 * 3600 * 1000)),
-      )
+      const parsed = Math.round((end - start) / (365.25 * 24 * 3600 * 1000))
+      termYears = Math.min(20, Math.max(1, parsed))
     }
   }
 
@@ -611,9 +636,77 @@ export function UploadProposalTab({
           pdfText?: string
         }
         const extracted = json.extracted
-        // Use proposed total as current-spend fallback (spec §2: no external
-        // benchmark data → current spend = proposed annual on unknown vendors).
-        const currentSpend = extracted.totalValue ?? 0
+
+        // Spend-dollar tiers feed BOTH the lookback projection and the score's
+        // top-tier rate (shared isSpendDollarTerm filter — broadened so the
+        // AI's varied spend-rebate labels aren't dropped).
+        const extractedTiers: LookbackExtractedTier[] = (extracted.terms ?? [])
+          .filter((t) => isSpendDollarTerm(t.termType))
+          .flatMap((t) =>
+            (t.tiers ?? []).map((tier) => ({
+              tierNumber: tier.tierNumber,
+              spendMin: tier.spendMin ?? 0,
+              rebateValue: tier.rebateValue ?? 0,
+            })),
+          )
+        // R2: keep the detection + tiers around so a PDF-vs-selection conflict
+        // is visible and the lookback can re-run on a later vendor change.
+        setDetectedVendorName(extracted.vendorName?.trim() || null)
+        setExtractedSpendTiers(extractedTiers)
+        // Honesty (audit P1): if the PDF had rebate tiers but none are
+        // spend-dollar (e.g. market-share / per-unit), say so — the 12-month
+        // projection covers spend-rebate ladders only, so it'll read empty.
+        const totalTierCount = (extracted.terms ?? []).reduce(
+          (n, t) => n + (t.tiers?.length ?? 0),
+          0,
+        )
+        if (totalTierCount > 0 && extractedTiers.length === 0) {
+          toast.info(
+            "Rebate tiers found, but none are spend-dollar tiers — the 12-month projection covers spend-rebate ladders only.",
+          )
+        }
+
+        // Run the 12-month lookback FIRST so the score's currentSpend baseline
+        // is the facility's REAL trailing-12mo spend with this vendor — not the
+        // proposed contract total, which inflated savings/confidence on known
+        // vendors (audit P0). Lookback failures fall back to the proposed total
+        // and never block scoring.
+        setLookbackLoading(true)
+        setLookback(null)
+        lookbackRequestedVendorRef.current = selectedVendorId
+        let trailingSpend = 0
+        try {
+          const lb = await getVendorLookbackComparison({
+            vendorId: selectedVendorId,
+            vendorName: extracted.vendorName ?? null,
+            extractedTiers,
+          })
+          if (resetGenRef.current !== gen) return
+          setLookback(lb)
+          trailingSpend = lb.trailing12moSpend
+          // PDF auto-detection only FILLS THE GAP — reflect it in the dropdown
+          // so the user sees which vendor the analysis is running as.
+          if (!selectedVendorIdRef.current && lb.vendorId) {
+            const inList = vendors.some((v) => v.id === lb.vendorId)
+            const byName = inList
+              ? null
+              : matchVendorOptionByName(vendors, lb.vendorName)
+            if (inList) onVendorChange(lb.vendorId)
+            else if (byName) onVendorChange(byName.id)
+          }
+        } catch (err) {
+          if (resetGenRef.current !== gen) return
+          toast.error(
+            err instanceof Error ? err.message : "12-month lookback failed",
+          )
+        } finally {
+          setLookbackLoading(false)
+        }
+
+        // Baseline = real trailing-12mo actuals when the vendor is known; else
+        // the proposed total (spec §2: unknown vendors have no actuals).
+        const currentSpend =
+          trailingSpend > 0 ? trailingSpend : (extracted.totalValue ?? 0)
         const input = buildScoringInput(extracted, currentSpend)
 
         const result = await analyzeMutation.mutateAsync(input)
@@ -631,67 +724,6 @@ export function UploadProposalTab({
         onProposalScored(scored)
         onPhaseChange("complete")
         toast.success("Proposal scored")
-
-        // 12-month lookback + existing-contract comparison (Charles
-        // 2026-06-10). Fire-and-render: failures surface inline, never roll
-        // back the score above.
-        setLookbackLoading(true)
-        setLookback(null)
-        // Review R1: only spend-dollar ladders may feed the spend projection
-        // (market_share tiers store % thresholds, carve-out/fixed tiers pay
-        // per-SKU or flat — the recurring type-confusion class). Terms with
-        // no/unknown termType default in (most proposals are spend rebates).
-        const SPEND_DOLLAR_TERM_TYPES = new Set([
-          "spend_rebate",
-          "growth_rebate",
-          "",
-        ])
-        const spendTerms = (extracted.terms ?? []).filter((t) =>
-          SPEND_DOLLAR_TERM_TYPES.has(String(t.termType ?? "").trim()),
-        )
-        const extractedTiers: LookbackExtractedTier[] = spendTerms.flatMap(
-          (t) =>
-            (t.tiers ?? []).map((tier) => ({
-              tierNumber: tier.tierNumber,
-              spendMin: tier.spendMin ?? 0,
-              rebateValue: tier.rebateValue ?? 0,
-            })),
-        )
-        // R2: keep the detection + tiers around so (a) a PDF-vs-selection
-        // conflict is visible, (b) the lookback can re-run if the user
-        // changes the vendor AFTER this analysis (manual pick wins).
-        setDetectedVendorName(extracted.vendorName?.trim() || null)
-        setExtractedSpendTiers(extractedTiers)
-        // Manual selection wins server-side too: vendorId beats vendorName
-        // in getVendorLookbackComparison's resolution order.
-        lookbackRequestedVendorRef.current = selectedVendorId
-        void getVendorLookbackComparison({
-          vendorId: selectedVendorId,
-          vendorName: extracted.vendorName ?? null,
-          extractedTiers,
-        })
-          .then((result) => {
-            if (resetGenRef.current !== gen) return
-            setLookback(result)
-            // R2: PDF auto-detection only FILLS THE GAP — and when it does,
-            // reflect it in the dropdown so the user sees which vendor the
-            // analysis is running as (instead of a silent invisible pick).
-            if (!selectedVendorIdRef.current && result.vendorId) {
-              const inList = vendors.some((v) => v.id === result.vendorId)
-              const byName = inList
-                ? null
-                : matchVendorOptionByName(vendors, result.vendorName)
-              if (inList) onVendorChange(result.vendorId)
-              else if (byName) onVendorChange(byName.id)
-            }
-          })
-          .catch((err) => {
-            if (resetGenRef.current !== gen) return
-            toast.error(
-              err instanceof Error ? err.message : "12-month lookback failed",
-            )
-          })
-          .finally(() => setLookbackLoading(false))
 
         // Legal language scan — auto-runs with the auto-derived variant
         // (manual override from the Advanced section wins).

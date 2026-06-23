@@ -85,7 +85,7 @@ export function AnalyticsSection({ proposals, isLoading }: Props) {
           { icon: FileText, label: "Total Proposals", value: String(metrics.total), color: "text-primary", bg: "bg-primary/10" },
           { icon: Trophy, label: "Avg Score", value: metrics.avgScore > 0 ? String(metrics.avgScore) : "--", color: metrics.avgScore > 0 ? scoreColor(metrics.avgScore) : "", bg: "bg-blue-100 dark:bg-blue-900/30" },
           { icon: DollarSign, label: "Revenue Pipeline", value: formatCurrency(metrics.pipeline), color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30" },
-          { icon: Percent, label: "Win Rate", value: metrics.winRate > 0 ? `${metrics.winRate}%` : "--", color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/30" },
+          { icon: Percent, label: "Win Rate (decided)", value: metrics.winRate > 0 ? `${metrics.winRate}%` : "--", color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/30" },
         ].map((m) => (
           <Card key={m.label}>
             <CardContent className="pt-6">
